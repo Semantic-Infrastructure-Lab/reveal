@@ -1,0 +1,87 @@
+# YAML File Plugin
+# Provides 4-level progressive disclosure for .yaml and .yml files
+
+extension: [.yaml, .yml]
+name: YAML
+description: YAML configuration and data files
+icon: 📝
+
+levels:
+  0:
+    name: metadata
+    description: File statistics and YAML characteristics
+    breadcrumb: "File metadata and YAML info"
+    analyzer: null
+    outputs:
+      - file_size
+      - line_count
+      - encoding
+      - yaml_version
+      - has_anchors
+      - has_aliases
+      - document_count
+    next_levels: [1, 2, 3]
+
+  1:
+    name: structure
+    description: Top-level keys and nested structure
+    breadcrumb: "Top-level keys and nesting depth"
+    analyzer: yaml_structure
+    outputs:
+      - top_level_keys
+      - nesting_depth
+      - key_paths
+      - data_types
+      - anchors
+      - aliases
+    next_levels: [0, 2, 3]
+    tips:
+      - "Use --grep 'database' to find database config"
+      - "See full values with --level 2"
+
+  2:
+    name: preview
+    description: Keys with value summaries
+    breadcrumb: "Keys with abbreviated values"
+    analyzer: yaml_preview
+    outputs:
+      - keys_with_values
+      - value_summaries
+      - list_lengths
+      - object_keys
+    next_levels: [0, 1, 3]
+    tips:
+      - "Long values are truncated - use level 3 for full content"
+
+  3:
+    name: full
+    description: Complete YAML content
+    breadcrumb: "Complete YAML content (paged)"
+    analyzer: null
+    outputs:
+      - full_content
+    next_levels: [0, 1, 2]
+    paging: true
+    page_size: 120
+
+features:
+  grep: true
+  context: true
+  paging: true
+  line_numbers: true
+  syntax_highlighting: true
+
+analyzer_config:
+  max_value_preview_length: 80
+  show_types: true
+  expand_anchors: false
+
+examples:
+  - command: "reveal config.yaml"
+    description: "Show YAML metadata"
+  - command: "reveal config.yaml -l 1"
+    description: "Show top-level structure"
+  - command: "reveal config.yaml -l 2 --grep 'database'"
+    description: "Preview database configuration"
+  - command: "reveal config.yaml -l 3"
+    description: "Show complete YAML content"
