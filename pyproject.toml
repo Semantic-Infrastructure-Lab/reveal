@@ -51,8 +51,10 @@ syntax = [
 [project.urls]
 Homepage = "https://github.com/scottsen/reveal"
 Repository = "https://github.com/scottsen/reveal"
-Documentation = "https://github.com/scottsen/reveal/blob/main/docs/"
-"Issue Tracker" = "https://github.com/scottsen/reveal/issues"
+Documentation = "https://github.com/scottsen/reveal/tree/main/docs"
+"Bug Tracker" = "https://github.com/scottsen/reveal/issues"
+Discussions = "https://github.com/scottsen/reveal/discussions"
+Changelog = "https://github.com/scottsen/reveal/releases"
 
 [project.scripts]
 reveal = "reveal.cli:main"

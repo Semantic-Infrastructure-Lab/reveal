@@ -14,12 +14,20 @@ AI coding assistants waste tokens reading entire files when they only need metad
 
 ## ⚡ Quick Start
 
+**One-line install:**
 ```bash
-# Install
-cd ~/src/projects/reveal
-pip install -e .
+pip install git+https://github.com/scottsen/reveal.git
+```
 
-# Use
+**Or from source:**
+```bash
+git clone https://github.com/scottsen/reveal.git
+cd reveal
+pip install -e .
+```
+
+**Usage:**
+```bash
 reveal app.py                    # Level 0: metadata
 reveal app.py --level 1          # Level 1: structure (imports, classes, functions)
 reveal app.py --level 2          # Level 2: preview (docstrings, signatures)
@@ -96,9 +104,15 @@ Functions: 12 global functions
 ## 📚 Documentation
 
 - [Plugin Development Guide](docs/PLUGIN_GUIDE.md)
-- [AI Integration Patterns](docs/AI_INTEGRATION.md)
 - [Contributing](CONTRIBUTING.md)
+- [Project Status](docs/PROJECT_STATUS.md)
 - [Examples](docs/examples/)
+
+## 🔗 Links
+
+- **GitHub:** https://github.com/scottsen/reveal
+- **Issues:** https://github.com/scottsen/reveal/issues
+- **Discussions:** https://github.com/scottsen/reveal/discussions
 
 ## 🏗️ Architecture
 
@@ -165,4 +179,8 @@ Make `reveal` the standard way for AI agents and developers to progressively exp
 
 ---
 
-**Status:** 🚧 Active Development | **Version:** 0.1.0 | **License:** MIT
+**Status:** 🚀 Active Development | **Version:** 0.1.0 | **License:** MIT
+
+[![GitHub Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/scottsen/reveal)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
