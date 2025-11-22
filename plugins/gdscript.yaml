@@ -1,0 +1,96 @@
+# GDScript File Plugin
+# Provides 4-level progressive disclosure for Godot Engine .gd files
+
+extension: .gd
+name: GDScript
+description: Godot Engine GDScript files with structure analysis
+icon: 🎮
+
+# Hierarchical levels - each level reveals more detail
+levels:
+  0:
+    name: metadata
+    description: File statistics and basic information
+    breadcrumb: "File metadata (size, encoding, line count)"
+    analyzer: null  # Built-in metadata analyzer
+    outputs:
+      - file_size
+      - line_count
+      - encoding
+      - last_modified
+      - file_type
+    next_levels: [1, 2, 3]
+
+  1:
+    name: structure
+    description: Code structure without implementations
+    breadcrumb: "Class, signals, exports, functions (structure only)"
+    analyzer: gdscript_structure
+    outputs:
+      - extends
+      - class_name
+      - signals
+      - exports
+      - constants
+      - variables
+      - functions
+    next_levels: [0, 2, 3]
+    tips:
+      - "Use --grep 'function_name' to filter specific functions"
+      - "Add --context 2 to see surrounding context"
+
+  2:
+    name: preview
+    description: Key elements without full code
+    breadcrumb: "Extends, signals, exports, function signatures"
+    analyzer: gdscript_preview
+    outputs:
+      - class_declaration
+      - signals
+      - exports
+      - function_signatures
+      - constants
+    next_levels: [0, 1, 3]
+    tips:
+      - "See full implementation with --level 3"
+      - "Filter by element name with --grep"
+
+  3:
+    name: full
+    description: Complete source code with paging
+    breadcrumb: "Complete file contents (paged)"
+    analyzer: null  # Built-in full content reader
+    outputs:
+      - full_source
+    next_levels: [0, 1, 2]
+    paging: true
+    page_size: 120
+    tips:
+      - "Use --grep to filter lines"
+      - "Add --context N for surrounding lines"
+
+# Features available at all levels
+features:
+  grep: true
+  context: true
+  paging: true
+  line_numbers: true
+  syntax_highlighting: false
+
+# Analyzer configuration
+analyzer_config:
+  include_lifecycle_funcs: true
+  include_private_vars: true
+  parse_comments: true
+  extract_signals: true
+
+# Examples shown in help text
+examples:
+  - command: "reveal player.gd"
+    description: "Show file metadata (level 0)"
+  - command: "reveal player.gd -l 1"
+    description: "Show code structure (signals, exports, functions)"
+  - command: "reveal player.gd -l 2 --grep '_ready'"
+    description: "Preview _ready function and nearby code"
+  - command: "reveal player.gd -l 3 --grep 'func take_damage' -C 5"
+    description: "Show take_damage function with 5 lines context"
