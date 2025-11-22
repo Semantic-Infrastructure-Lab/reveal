@@ -3,10 +3,12 @@
 import json
 from typing import Dict, Any, List
 from .base import BaseAnalyzer
+from ..registry import register
 
 
+@register(['.json', '.jsonc', '.json5'], name='JSON', icon='📊')
 class JSONAnalyzer(BaseAnalyzer):
-    """Analyzer for JSON files."""
+    """Analyzer for JSON data files"""
 
     def __init__(self, lines: List[str]):
         super().__init__(lines)

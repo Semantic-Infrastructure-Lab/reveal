@@ -133,7 +133,7 @@ reveal/
 
 - [x] Core framework with 4-level hierarchy
 - [x] Python, YAML, JSON, Markdown analyzers
-- [ ] YAML plugin system
+- [x] Decorator-based plugin system with entry points
 - [ ] Breadcrumb navigation
 - [ ] C/C++ header support (.h, .hpp)
 - [ ] Excel support (.xlsx)
@@ -154,6 +154,49 @@ We welcome contributions! This project is designed to grow through community plu
 - Share AI integration patterns
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+### 🔌 Creating Plugins
+
+Reveal uses a Pythonic decorator-based plugin system. Creating a new file type analyzer is simple:
+
+**Minimal Plugin (5 lines):**
+```python
+from reveal import register
+
+@register(['.rs', '.rust'], name='Rust', icon='🦀')
+class RustAnalyzer:
+    def analyze_structure(self, lines):
+        return {'functions': [l for l in lines if 'fn ' in l]}
+
+    def generate_preview(self, lines):
+        return [(i, l) for i, l in enumerate(lines[:20], 1)]
+```
+
+**Install as Package:**
+```python
+# setup.py
+setup(
+    name='reveal-rust',
+    entry_points={
+        'reveal.analyzers': [
+            'rust = reveal_rust:RustAnalyzer',
+        ],
+    },
+)
+```
+
+**Usage:**
+```bash
+pip install reveal-rust
+reveal app.rs --level 1  # Works immediately!
+```
+
+**Benefits:**
+- ✅ No core code changes needed
+- ✅ pip-installable plugins
+- ✅ Auto-discovery via entry points
+- ✅ Type-safe with IDE autocomplete
+- ✅ Community-friendly (like Flask routes, pytest fixtures)
 
 ## 📜 License
 

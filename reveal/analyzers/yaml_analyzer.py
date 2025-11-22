@@ -3,6 +3,7 @@
 import re
 from typing import Dict, Any, List
 from .base import BaseAnalyzer
+from ..registry import register
 
 try:
     import yaml
@@ -11,8 +12,9 @@ except ImportError:
     HAS_YAML = False
 
 
+@register(['.yaml', '.yml'], name='YAML', icon='📋')
 class YAMLAnalyzer(BaseAnalyzer):
-    """Analyzer for YAML files."""
+    """Analyzer for YAML configuration files"""
 
     def __init__(self, lines: List[str]):
         super().__init__(lines)

@@ -6,22 +6,33 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 from .core import FileSummary, create_file_summary
-from .analyzers import YAMLAnalyzer, JSONAnalyzer, MarkdownAnalyzer, PythonAnalyzer, TextAnalyzer
+from .analyzers import TextAnalyzer  # Fallback only
 from .formatters import format_metadata, format_structure, format_preview, format_full_content
 from .grep_filter import apply_grep_filter
+from .registry import get_analyzer as get_analyzer_for_file
 
 
-def get_analyzer(file_type: str, lines: List[str]):
-    """Get appropriate analyzer for file type."""
-    analyzers = {
-        'yaml': YAMLAnalyzer,
-        'json': JSONAnalyzer,
-        'markdown': MarkdownAnalyzer,
-        'python': PythonAnalyzer,
-        'text': TextAnalyzer,
-    }
+def get_analyzer(file_path: str, lines: List[str]):
+    """
+    Get appropriate analyzer for file.
 
-    analyzer_class = analyzers.get(file_type, TextAnalyzer)
+    Uses the plugin registry to find registered analyzers.
+    Falls back to TextAnalyzer if no specific analyzer is registered.
+
+    Args:
+        file_path: Path to the file (used to determine extension)
+        lines: File content lines
+
+    Returns:
+        Analyzer instance
+    """
+    # Get analyzer class from registry (automatically discovers plugins)
+    analyzer_class = get_analyzer_for_file(file_path)
+
+    # Fall back to text analyzer if no specific analyzer registered
+    if not analyzer_class:
+        analyzer_class = TextAnalyzer
+
     return analyzer_class(lines)
 
 
@@ -36,7 +47,7 @@ def reveal_level_1(
     case_sensitive: bool = False
 ) -> List[str]:
     """Generate Level 1 (structure) output."""
-    analyzer = get_analyzer(summary.type, summary.lines)
+    analyzer = get_analyzer(str(summary.path), summary.lines)
     structure = analyzer.analyze_structure()
 
     lines = format_structure(summary, structure, grep_pattern)
@@ -56,7 +67,7 @@ def reveal_level_2(
     context: int = 0
 ) -> List[str]:
     """Generate Level 2 (preview) output."""
-    analyzer = get_analyzer(summary.type, summary.lines)
+    analyzer = get_analyzer(str(summary.path), summary.lines)
     preview = analyzer.generate_preview()
 
     # Apply grep filter if specified

@@ -3,10 +3,12 @@
 import ast
 from typing import Dict, Any, List
 from .base import BaseAnalyzer
+from ..registry import register
 
 
+@register(['.py', '.pyx', '.pyi'], name='Python', icon='🐍')
 class PythonAnalyzer(BaseAnalyzer):
-    """Analyzer for Python files."""
+    """Analyzer for Python source files with AST-based analysis"""
 
     def __init__(self, lines: List[str]):
         super().__init__(lines)

@@ -3,10 +3,12 @@
 import re
 from typing import Dict, Any, List
 from .base import BaseAnalyzer
+from ..registry import register
 
 
+@register(['.md', '.markdown', '.mdown'], name='Markdown', icon='📝')
 class MarkdownAnalyzer(BaseAnalyzer):
-    """Analyzer for Markdown files."""
+    """Analyzer for Markdown documentation files"""
 
     def analyze_structure(self) -> Dict[str, Any]:
         """Analyze Markdown structure."""
