@@ -179,12 +179,19 @@ class AnalyzerRegistry:
             return  # Only load once
 
         try:
-            import pkg_resources
+            from importlib.metadata import entry_points
         except ImportError:
-            # pkg_resources not available, skip plugin discovery
+            # importlib.metadata not available (Python < 3.8), skip plugin discovery
             return
 
-        for entry_point in pkg_resources.iter_entry_points('reveal.analyzers'):
+        try:
+            # Python 3.10+ uses the select method
+            eps = entry_points(group='reveal.analyzers')
+        except TypeError:
+            # Python 3.8-3.9 uses indexing
+            eps = entry_points().get('reveal.analyzers', [])
+
+        for entry_point in eps:
             try:
                 # Load the plugin (this triggers @register decorator)
                 entry_point.load()

@@ -8,6 +8,7 @@ from .markdown_analyzer import MarkdownAnalyzer
 from .python_analyzer import PythonAnalyzer
 from .sql_analyzer import SQLAnalyzer
 from .text_analyzer import TextAnalyzer
+from .gdscript_analyzer import GDScriptAnalyzer
 
 __all__ = [
     'BaseAnalyzer',
@@ -18,4 +19,5 @@ __all__ = [
     'PythonAnalyzer',
     'SQLAnalyzer',
     'TextAnalyzer',
+    'GDScriptAnalyzer',
 ]

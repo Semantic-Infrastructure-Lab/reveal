@@ -61,11 +61,15 @@ reveal = "reveal.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["reveal*"]
+include = ["reveal*", "plugins"]
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
+plugins = ["*.yaml", "*.yml"]
 reveal = ["../plugins/*.yaml"]
+
+[tool.setuptools]
+include-package-data = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

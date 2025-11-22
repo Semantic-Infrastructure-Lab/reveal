@@ -329,7 +329,7 @@ Examples:
     )
 
     parser.add_argument('file', type=str, help='File to reveal (supports file:line or file:start-end)')
-    parser.add_argument('--level', type=int, default=0, choices=[0, 1, 2, 3],
+    parser.add_argument('--level', '-l', type=int, default=0, choices=[0, 1, 2, 3],
                         help='Revelation level (default: 0)')
     parser.add_argument('--grep', '-m', type=str, dest='grep_pattern',
                         help='Filter pattern (regex)')
