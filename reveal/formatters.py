@@ -84,6 +84,13 @@ def format_structure(summary: FileSummary, structure: Dict[str, Any], grep_patte
     if 'error' in structure:
         lines.append(f"Parse error: {structure['error']}")
         lines.append("")
+
+        # Show installation hint if available
+        if 'install' in structure:
+            lines.append(f"💡 Install with: {structure['install']}")
+            lines.append("   Or: pip install 'reveal-cli[treesitter]'")
+            lines.append("")
+
         lines.append("→ Try --level 3 for raw content")
         return lines
 
