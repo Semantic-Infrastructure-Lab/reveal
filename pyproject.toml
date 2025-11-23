@@ -63,7 +63,7 @@ Discussions = "https://github.com/scottsen/reveal/discussions"
 Changelog = "https://github.com/scottsen/reveal/releases"
 
 [project.scripts]
-reveal = "reveal.cli:main"
+reveal = "reveal.new_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

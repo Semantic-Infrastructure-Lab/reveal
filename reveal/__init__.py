@@ -1,18 +1,20 @@
-"""Progressive Reveal CLI - A tool for exploring files at different levels of detail."""
+"""Reveal - Explore code semantically.
 
-__version__ = "0.1.0"
-__author__ = "Progressive Reveal Team"
+A clean, simple tool for progressive code exploration.
+"""
 
-# Export registry functions for plugin development
-from .registry import register, get_analyzer, list_analyzers, list_extensions
+__version__ = "0.2.0"
 
-# Import analyzers to trigger @register decorators
-from . import analyzers  # noqa: F401
+# Import base classes for external use
+from .base import FileAnalyzer, register, get_analyzer
+from .treesitter import TreeSitterAnalyzer
+
+# Import all built-in analyzers to register them
+from .analyzers_new import *
 
 __all__ = [
+    'FileAnalyzer',
+    'TreeSitterAnalyzer',
     'register',
     'get_analyzer',
-    'list_analyzers',
-    'list_extensions',
-    '__version__',
 ]

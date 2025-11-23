@@ -1,144 +1,260 @@
-# reveal - Progressive File Disclosure for Agentic AI
+# reveal - Explore Code Semantically
 
-> **The missing tool for AI code exploration**
+> **The simplest way to understand code**
 >
-> A plugin-based CLI that reveals file contents hierarchically, optimized for AI agents to efficiently navigate and understand codebases.
+> Point it at a directory, file, or function. Get exactly what you need with zero configuration.
 
 ## 🎯 The Problem
 
-AI coding assistants waste tokens reading entire files when they only need metadata, structure, or specific sections. There's no standard way for agents to progressively explore files with breadcrumb navigation.
+Developers and AI agents waste time reading entire files when they only need to understand structure or extract specific functions. There's no standard way to progressively explore code.
 
 ## 💡 The Solution
 
-`reveal` provides a plugin-based system where any file type can be explored through multiple levels of detail, always showing breadcrumbs to other views. Perfect for agentic workflows.
+`reveal` provides smart, semantic exploration of codebases:
+- **Directories** → See what's inside
+- **Files** → See structure (imports, functions, classes)
+- **Elements** → See implementation (extract specific function/class)
+
+All with perfect `filename:line` integration for vim, git, grep, and other tools.
 
 ## ⚡ Quick Start
 
-**One-line install:**
+**Install:**
 ```bash
-pip install git+https://github.com/scottsen/reveal.git
+pip install reveal-cli                    # Basic install
+pip install reveal-cli[treesitter]        # With 50+ language support
 ```
 
-**With advanced language support (Rust, C#, Go, JavaScript, PHP, Bash):**
+**Use:**
 ```bash
-pip install 'git+https://github.com/scottsen/reveal.git#egg=reveal-cli[treesitter]'
+reveal src/                    # Directory → tree view
+reveal app.py                  # File → structure
+reveal app.py load_config      # Element → extraction
 ```
 
-**Or from source:**
-```bash
-git clone https://github.com/scottsen/reveal.git
-cd reveal
-pip install -e .                    # Basic install
-pip install -e '.[treesitter]'     # With tree-sitter languages
-```
+**That's it.** No flags, no configuration, just works.
 
-**Usage:**
-```bash
-reveal app.py                    # Level 0: metadata
-reveal app.py --level 1          # Level 1: structure (imports, classes, functions)
-reveal app.py --level 2          # Level 2: preview (docstrings, signatures)
-reveal app.py --level 3          # Level 3: full content (paged)
+## 🎨 Clean Design
 
-# With filtering
-reveal app.py -l 2 --grep "class" --context 2
-```
-
-## 🔌 Plugin Architecture
-
-Every file type is defined by a YAML plugin that maps to Python analyzers:
-
-```yaml
-# plugins/python.yaml
-extension: .py
-name: Python Source
-description: Python source files with AST analysis
-
-levels:
-  0: {name: metadata, description: "File stats"}
-  1: {name: structure, analyzer: python_structure}
-  2: {name: preview, analyzer: python_preview}
-  3: {name: full, description: "Complete source"}
-
-features: [grep, context, paging, syntax_highlighting]
-```
-
-**Built-in support:** Python, YAML, JSON, TOML, Markdown, SQL, plain text
-
-**With tree-sitter:** Rust, C#, Go, JavaScript, PHP, Bash, GDScript (+ easy to add: Java, TypeScript, C++, and 40+ more)
-
-**Coming soon:** Excel (.xlsx), Jupyter notebooks (.ipynb)
-
-## 🪜 Hierarchical Navigation
-
-Every level shows breadcrumbs to other levels:
-
-```
-📄 app.py (Level 1: Structure)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Imports: 5 modules
-Classes: 3 (UserManager, DatabaseHandler, APIClient)
-Functions: 12 global functions
-
-💡 Navigation:
-   reveal app.py           → metadata (size, encoding, lines)
-   reveal app.py -l 2      → preview (docstrings, signatures)
-   reveal app.py -l 3      → full content
-   reveal app.py -l 1 -m "Database"  → grep filter at this level
-```
-
-## 🔗 Composable with Unix Tools
-
-All analyzers return `filename:line` references, making reveal output work seamlessly with standard CLI tools:
+### Smart Auto-Detection
 
 ```bash
-# Find a function
-$ reveal app.py --level 1 | grep "process_data"
-app.py:42  process_data
+# Directories → tree view
+$ reveal src/
+📁 src/
+├── app.py (247 lines, Python)
+├── database.py (189 lines, Python)
+└── models/
+    ├── user.py (156 lines, Python)
+    └── post.py (203 lines, Python)
 
-# Jump to it in vim
-$ vim app.py:42
+# Files → structure view
+$ reveal app.py
+📄 app.py
 
-# Or check git history
-$ git blame app.py -L 42,50
+Imports (3):
+  app.py:1    import os, sys
+  app.py:2    from typing import Dict
 
-# Use in scripts
-$ reveal config.yaml --level 1 | awk '{print $1}' | xargs -I {} vim {}
+Functions (5):
+  app.py:15   load_config(path: str) -> Dict
+  app.py:28   setup_logging(level: str) -> None
+
+Classes (2):
+  app.py:95   Database
+  app.py:145  RequestHandler
+
+# Elements → extraction
+$ reveal app.py load_config
+app.py:15-27 | load_config
+
+   15  def load_config(path: str) -> Dict:
+   16      """Load configuration from JSON file."""
+   17
+   18      if not os.path.exists(path):
+   19          raise FileNotFoundError(f"Config not found: {path}")
+   20
+   21      with open(path) as f:
+   22          return json.load(f)
 ```
 
-**Universal pattern:** Every structure element shows its source location, making reveal a perfect bridge between exploration and editing.
+### Perfect Unix Integration
 
-## 🤖 Why This Matters for AI
+Every line is `filename:line` format:
 
-**Before reveal:**
-- AI reads entire 500-line file to find one function
-- Wastes tokens on irrelevant content
-- No standard navigation pattern
+```bash
+# Works with vim
+$ reveal app.py | grep "Database"
+  app.py:95     Database
 
-**With reveal:**
-- Start with structure (50 tokens)
-- Identify target function at `app.py:42`
-- Read only that function (20 tokens)
-- Jump directly: `reveal app.py:42 --level 3`
-- 10x token efficiency
+$ vim app.py:95
 
-## 🎨 Features
+# Works with git
+$ reveal app.py | grep "load_config"
+  app.py:15   load_config(path: str) -> Dict
 
-- **Progressive Disclosure** - 4 levels: metadata → structure → preview → full
-- **Universal Line Numbers** - All analyzers show `filename:line` format for seamless tool integration
-- **Composable Output** - Works with vim, grep, git blame, sed, and all CLI tools
-- **Plugin System** - Decorator-based registration, auto-discovery via entry points
-- **Breadcrumb Navigation** - Always show available levels
-- **Rich Filtering** - Regex grep with context at any level
-- **Directory Support** - Recursive analysis with progressive disclosure
-- **AI-Optimized** - Designed for agentic workflows
-- **Extensible** - Add new file types without touching core
+$ git blame app.py -L 15,27
 
-## 📚 Documentation
+# Pipe to other tools
+$ reveal app.py --format=grep | grep "config"
+app.py:15:def load_config(path: str) -> Dict:
+app.py:18:    if not os.path.exists(path):
+```
 
-- [Plugin Development Guide](docs/PLUGIN_GUIDE.md)
-- [Contributing](CONTRIBUTING.md)
-- [Project Status](docs/PROJECT_STATUS.md)
-- [Examples](docs/examples/)
+## 🔌 Adding New File Types (Stupidly Easy)
+
+### Tree-Sitter Languages (10 lines!)
+
+```python
+from reveal import TreeSitterAnalyzer, register
+
+@register('.go', name='Go', icon='🔷')
+class GoAnalyzer(TreeSitterAnalyzer):
+    language = 'go'
+```
+
+**Done!** Full Go support with structure extraction and element access.
+
+Works for: Python, Rust, Go, JavaScript, TypeScript, C#, Java, PHP, Bash, C, C++, Swift, Kotlin, and 40+ more languages!
+
+### Custom Analyzers (20-50 lines)
+
+```python
+from reveal import FileAnalyzer, register
+
+@register('.md', name='Markdown', icon='📝')
+class MarkdownAnalyzer(FileAnalyzer):
+    def get_structure(self):
+        """Extract headings."""
+        headings = []
+        for i, line in enumerate(self.lines, 1):
+            if line.startswith('#'):
+                headings.append({'line': i, 'name': line.strip('# ')})
+        return {'headings': headings}
+
+    def extract_element(self, element_type, name):
+        """Extract a section."""
+        # Custom extraction logic
+        ...
+```
+
+That's it! Your file type now works with reveal.
+
+## 🚀 Features
+
+- ✅ **Smart defaults** - No flags needed for 99% of use cases
+- ✅ **Directory trees** - See what's in a folder
+- ✅ **Structure extraction** - Imports, functions, classes
+- ✅ **Element extraction** - Get specific function/class
+- ✅ **50+ languages** - Via tree-sitter (Python, Rust, Go, JS, TS, C#, Java, PHP, etc.)
+- ✅ **Perfect line numbers** - `filename:line` format everywhere
+- ✅ **Unix composable** - Works with vim, git, grep, sed, awk
+- ✅ **Multiple output formats** - text (default), json, grep
+- ✅ **Easy to extend** - Add new file type in 10-50 lines
+- ✅ **AI-optimized** - Designed for agentic workflows
+
+## 📚 Real-World Examples
+
+### AI Agent Workflow
+```bash
+# Start broad
+$ reveal src/
+# Pick interesting file
+$ reveal src/app.py
+# Deep dive
+$ reveal src/app.py Database
+```
+
+### Developer Quick Lookup
+```bash
+# See function implementation
+$ reveal app.py load_config
+
+# Jump to edit
+$ vim app.py:15
+```
+
+### Integration with Tools
+```bash
+# Find all TODO comments
+$ reveal src/*.py | grep -i "todo"
+
+# Count functions per file
+$ for f in src/*.py; do echo "$f: $(reveal $f | grep -c 'Functions')"; done
+
+# Extract all function names
+$ reveal app.py | awk '/Functions/,/^$/ {if ($2 ~ /:/) print $3}'
+```
+
+## 🎯 Use Cases
+
+**For AI Agents:**
+- Explore unknown codebases efficiently
+- Get structure without reading full files
+- Extract specific elements on demand
+- Standard interface across all file types
+
+**For Developers:**
+- Quick reference without opening editor
+- Understand file structure rapidly
+- Find specific functions/classes
+- Perfect for terminal workflows
+
+**For Scripts:**
+- JSON output for programmatic access
+- Grep-compatible format
+- Composable with Unix tools
+- Reliable filename:line references
+
+## 🏗️ Architecture
+
+```
+reveal/
+├── base.py              # FileAnalyzer base class
+├── treesitter.py        # TreeSitterAnalyzer (50+ languages!)
+├── tree_view.py         # Directory tree view
+├── new_cli.py           # Simple CLI (200 lines)
+└── analyzers_new/
+    ├── python.py        # 15 lines
+    ├── rust.py          # 13 lines
+    ├── go.py            # 13 lines
+    ├── markdown.py      # 79 lines
+    ├── yaml_json.py     # 110 lines
+    └── ...              # Easy to add more!
+```
+
+**Total core:** ~500 lines
+**Per analyzer:** 10-50 lines
+
+## 📖 Optional Flags
+
+```bash
+# Metadata only
+reveal app.py --meta
+
+# JSON output
+reveal app.py --format=json
+
+# Grep-compatible output
+reveal app.py --format=grep
+
+# Directory depth
+reveal src/ --depth=5
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Adding a new file type takes 10-50 lines of code.
+
+**Most wanted:**
+- New language analyzers (TypeScript, Java, Swift, Kotlin)
+- Better extraction logic for existing analyzers
+- Documentation improvements
+- Bug reports and feature requests
+
+## 📜 License
+
+MIT License - See [LICENSE](LICENSE)
 
 ## 🔗 Links
 
@@ -146,121 +262,13 @@ $ reveal config.yaml --level 1 | awk '{print $1}' | xargs -I {} vim {}
 - **Issues:** https://github.com/scottsen/reveal/issues
 - **Discussions:** https://github.com/scottsen/reveal/discussions
 
-## 🏗️ Architecture
-
-```
-reveal/
-├── reveal/              # Core package
-│   ├── cli.py          # Command-line interface
-│   ├── core.py         # Reveal engine
-│   ├── plugin_loader.py # YAML plugin system
-│   ├── breadcrumbs.py  # Navigation hints
-│   └── analyzers/      # Built-in analyzers
-├── plugins/            # Plugin definitions (YAML)
-├── tests/              # Test suite
-└── docs/               # Documentation
-```
-
-## 🚀 Roadmap
-
-- [x] Core framework with 4-level hierarchy
-- [x] Python, YAML, JSON, TOML, Markdown, SQL analyzers
-- [x] Decorator-based plugin system with entry points
-- [x] Universal line number support (composable with CLI tools)
-- [x] Directory analysis with recursive traversal
-- [x] Breadcrumb navigation
-- [x] Tree-sitter integration (universal multi-language support)
-- [x] Rust, C#, Go, JavaScript, PHP, Bash, GDScript analyzers
-- [ ] TypeScript/TSX, Java, Swift, Kotlin analyzers
-- [ ] Plugin-specific arguments (--table, --section, etc.)
-- [ ] C/C++ header support (.h, .hpp)
-- [ ] Excel support (.xlsx)
-- [ ] Jupyter notebook support (.ipynb)
-- [ ] Syntax highlighting
-- [ ] Language server protocol integration
-- [ ] GitHub Action for repo exploration
-- [ ] VSCode extension
-
-## 🤝 Contributing
-
-We welcome contributions! This project is designed to grow through community plugins.
-
-**Ways to contribute:**
-- Add new file type plugins
-- Improve existing analyzers
-- Write documentation
-- Share AI integration patterns
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-### 🔌 Creating Plugins
-
-Reveal uses a Pythonic decorator-based plugin system. Creating a new file type analyzer is simple:
-
-**Minimal Plugin (5 lines):**
-```python
-from reveal import register
-
-@register(['.rs', '.rust'], name='Rust', icon='🦀')
-class RustAnalyzer:
-    def analyze_structure(self, lines):
-        return {'functions': [l for l in lines if 'fn ' in l]}
-
-    def generate_preview(self, lines):
-        return [(i, l) for i, l in enumerate(lines[:20], 1)]
-```
-
-**Install as Package:**
-```python
-# setup.py
-setup(
-    name='reveal-rust',
-    entry_points={
-        'reveal.analyzers': [
-            'rust = reveal_rust:RustAnalyzer',
-        ],
-    },
-)
-```
-
-**Usage:**
-```bash
-pip install reveal-rust
-reveal app.rs --level 1  # Works immediately!
-```
-
-**Benefits:**
-- ✅ No core code changes needed
-- ✅ pip-installable plugins
-- ✅ Auto-discovery via entry points
-- ✅ Type-safe with IDE autocomplete
-- ✅ Community-friendly (like Flask routes, pytest fixtures)
-
-## 📜 License
-
-MIT License - See [LICENSE](LICENSE)
-
-## 🎯 Use Cases
-
-**For AI Agents:**
-- Explore unknown codebases efficiently
-- Read only necessary content
-- Navigate with breadcrumbs
-- Standard interface for all file types
-
-**For Developers:**
-- Quick file overview without full read
-- Understand code structure rapidly
-- Filter and search at appropriate levels
-- Document file navigation patterns
-
 ## 🌟 Vision
 
-Make `reveal` the standard way for AI agents and developers to progressively explore files, with a rich ecosystem of community-contributed plugins for every file type imaginable.
+Make `reveal` the standard way to explore code - for humans and AI agents alike. Clean, simple, powerful.
 
 ---
 
-**Status:** 🚀 Active Development | **Version:** 0.1.0 | **License:** MIT
+**Status:** 🚀 v0.2.0 - Clean Redesign | **License:** MIT
 
 [![GitHub Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/scottsen/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
