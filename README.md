@@ -19,7 +19,7 @@ AI coding assistants waste tokens reading entire files when they only need metad
 pip install git+https://github.com/scottsen/reveal.git
 ```
 
-**With advanced language support (Rust, C#, Go, Java, TypeScript):**
+**With advanced language support (Rust, C#, Go, JavaScript, PHP, Bash):**
 ```bash
 pip install 'git+https://github.com/scottsen/reveal.git#egg=reveal-cli[treesitter]'
 ```
