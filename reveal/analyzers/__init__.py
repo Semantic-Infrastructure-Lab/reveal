@@ -15,7 +15,14 @@ try:
     from .treesitter_base import TreeSitterAnalyzer
     from .rust_analyzer import RustAnalyzer
     from .csharp_analyzer import CSharpAnalyzer
-    TREESITTER_ANALYZERS = ['TreeSitterAnalyzer', 'RustAnalyzer', 'CSharpAnalyzer']
+    from .go_analyzer import GoAnalyzer
+    from .javascript_analyzer import JavaScriptAnalyzer
+    from .php_analyzer import PHPAnalyzer
+    from .bash_analyzer import BashAnalyzer
+    TREESITTER_ANALYZERS = [
+        'TreeSitterAnalyzer', 'RustAnalyzer', 'CSharpAnalyzer', 'GoAnalyzer',
+        'JavaScriptAnalyzer', 'PHPAnalyzer', 'BashAnalyzer'
+    ]
 except ImportError:
     TREESITTER_ANALYZERS = []
 

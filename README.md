@@ -64,9 +64,9 @@ features: [grep, context, paging, syntax_highlighting]
 
 **Built-in support:** Python, YAML, JSON, TOML, Markdown, SQL, plain text
 
-**With tree-sitter:** Rust, C# (+ easy to add: Go, Java, TypeScript, C++, and 40+ more)
+**With tree-sitter:** Rust, C#, Go, JavaScript, PHP, Bash, GDScript (+ easy to add: Java, TypeScript, C++, and 40+ more)
 
-**Coming soon:** Excel (.xlsx), Jupyter notebooks (.ipynb), Shell scripts
+**Coming soon:** Excel (.xlsx), Jupyter notebooks (.ipynb)
 
 ## 🪜 Hierarchical Navigation
 
@@ -169,8 +169,10 @@ reveal/
 - [x] Universal line number support (composable with CLI tools)
 - [x] Directory analysis with recursive traversal
 - [x] Breadcrumb navigation
+- [x] Tree-sitter integration (universal multi-language support)
+- [x] Rust, C#, Go, JavaScript, PHP, Bash, GDScript analyzers
+- [ ] TypeScript/TSX, Java, Swift, Kotlin analyzers
 - [ ] Plugin-specific arguments (--table, --section, etc.)
-- [ ] Shell script support (.sh, .bash)
 - [ ] C/C++ header support (.h, .hpp)
 - [ ] Excel support (.xlsx)
 - [ ] Jupyter notebook support (.ipynb)
