@@ -30,6 +30,12 @@ def read_file_safe(file_path: Path, max_bytes: int = 2 * 1024 * 1024, force: boo
     """
     Safely read a file with size and binary checks.
 
+    Tries multiple encodings in order of likelihood:
+    1. UTF-8 (with BOM handling)
+    2. CP1252 (Windows Western European)
+    3. ISO-8859-1 (Latin-1, never fails but may produce garbage)
+    4. UTF-16 (Windows applications)
+
     Returns:
         tuple: (success, error_message, lines)
     """
@@ -41,16 +47,32 @@ def read_file_safe(file_path: Path, max_bytes: int = 2 * 1024 * 1024, force: boo
     if file_size > max_bytes and not force:
         return False, f"File too large ({file_size} bytes > {max_bytes} bytes). Use --force to override.", []
 
-    try:
-        # Try reading as UTF-8
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            lines = content.splitlines()
-        return True, "", lines
-    except UnicodeDecodeError:
-        return False, "Binary file detected. Use --force for hexdump.", []
-    except Exception as e:
-        return False, f"Error reading file: {str(e)}", []
+    # Try multiple encodings in order of preference
+    encodings_to_try = [
+        'utf-8-sig',  # UTF-8 with BOM handling
+        'utf-8',      # UTF-8 without BOM
+        'cp1252',     # Windows Western European
+        'iso-8859-1', # Latin-1 (fallback, accepts all bytes)
+        'utf-16',     # Windows UTF-16 LE/BE
+    ]
+
+    last_error = None
+
+    for encoding in encodings_to_try:
+        try:
+            with open(file_path, 'r', encoding=encoding) as f:
+                content = f.read()
+                lines = content.splitlines()
+            return True, "", lines
+        except UnicodeDecodeError as e:
+            last_error = e
+            continue
+        except Exception as e:
+            # Other errors (permissions, etc.) should be reported immediately
+            return False, f"Error reading file: {str(e)}", []
+
+    # If all encodings failed, it's likely a binary file
+    return False, "Binary file detected. Use --force for hexdump.", []
 
 
 def compute_sha256(file_path: Path) -> str:

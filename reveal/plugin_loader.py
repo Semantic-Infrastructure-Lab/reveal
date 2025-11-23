@@ -111,7 +111,7 @@ class PluginLoader:
 
     def load_plugin(self, yaml_path: Path):
         """Load a single plugin from YAML file"""
-        with open(yaml_path, "r") as f:
+        with open(yaml_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         plugin = PluginDefinition.from_yaml(data)

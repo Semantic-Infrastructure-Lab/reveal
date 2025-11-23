@@ -285,8 +285,14 @@ def analyze_directory_level_2(dir_path: Path, grep_pattern: Optional[str] = None
                 line_count = "?"
                 try:
                     if size < 1024 * 1024:  # Only for files < 1MB
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            line_count = str(sum(1 for _ in f))
+                        # Try multiple encodings for Windows compatibility
+                        for encoding in ['utf-8-sig', 'utf-8', 'cp1252', 'iso-8859-1']:
+                            try:
+                                with open(file_path, 'r', encoding=encoding) as f:
+                                    line_count = str(sum(1 for _ in f))
+                                break
+                            except UnicodeDecodeError:
+                                continue
                 except:
                     pass
 
