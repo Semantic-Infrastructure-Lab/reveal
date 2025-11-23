@@ -7,6 +7,7 @@ FILE_TYPE_MAP = {
     '.yaml': 'yaml',
     '.yml': 'yaml',
     '.json': 'json',
+    '.ipynb': 'jupyter',
     '.toml': 'toml',
     '.md': 'markdown',
     '.markdown': 'markdown',
