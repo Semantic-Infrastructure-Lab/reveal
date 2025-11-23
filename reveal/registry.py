@@ -178,19 +178,24 @@ class AnalyzerRegistry:
         if self._entry_points_loaded:
             return  # Only load once
 
+        # Use modern importlib.metadata (Python 3.8+) instead of deprecated pkg_resources
         try:
             from importlib.metadata import entry_points
         except ImportError:
-            # importlib.metadata not available (Python < 3.8), skip plugin discovery
-            return
+            # Fallback for Python < 3.8 (though reveal requires 3.8+)
+            try:
+                from importlib_metadata import entry_points
+            except ImportError:
+                # No entry points available, skip plugin discovery
+                return
 
+        # Get entry points for reveal analyzers
+        # Python 3.9+ uses select(), Python 3.8 uses dict-style access
         try:
-            # Python 3.10+ uses the select method
             eps = entry_points(group='reveal.analyzers')
         except TypeError:
-            # Python 3.8-3.9 uses indexing
+            # Python 3.8 compatibility
             eps = entry_points().get('reveal.analyzers', [])
-
         for entry_point in eps:
             try:
                 # Load the plugin (this triggers @register decorator)

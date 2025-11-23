@@ -193,6 +193,235 @@ $ git blame config.yaml -L 12,20
 - `reveal/analyzers/toml_analyzer.py` - Separates sections from keys
 - `reveal/analyzers/python_analyzer.py` - Uses AST node.lineno
 - `reveal/analyzers/sql_analyzer.py` - Complex AST + regex approach
+- `reveal/analyzers/rust_analyzer.py` - Tree-sitter based (see below)
+- `reveal/analyzers/csharp_analyzer.py` - Tree-sitter based (see below)
+
+### 🌳 Tree-Sitter: Multi-Language Support Made Easy
+
+**For compiled languages** (Rust, C#, Go, Java, TypeScript, C++, etc.), tree-sitter provides a **universal parsing solution** that preserves exact line numbers and handles complex syntax.
+
+**Why tree-sitter?**
+- ✅ **50+ languages** supported out of the box
+- ✅ **Native line numbers** - no `find_definition()` workarounds needed
+- ✅ **Fast and accurate** - battle-tested by GitHub, Neovim, etc.
+- ✅ **Consistent API** - one pattern works for all languages
+- ✅ **Easy to extend** - add a new language in ~30 minutes
+
+**Installation:**
+```bash
+pip install 'reveal-cli[treesitter]'
+# Or: pip install tree-sitter==0.21.3 tree-sitter-languages>=1.10.0
+```
+
+#### Creating a Tree-Sitter Analyzer
+
+**Step 1: Inherit from TreeSitterAnalyzer**
+
+```python
+from reveal.analyzers.treesitter_base import TreeSitterAnalyzer
+from reveal.registry import register
+
+@register(['.rs'], name='Rust', icon='🦀')
+class RustAnalyzer(TreeSitterAnalyzer):
+    """Analyzer for Rust source files"""
+
+    # Set the tree-sitter language name
+    language_name = 'rust'
+
+    def __init__(self, lines, **kwargs):
+        """Initialize with node type mappings"""
+        # Map generic names to Rust-specific node types
+        self.node_type_map = {
+            'function': 'function_item',
+            'struct': 'struct_item',
+            'class': 'struct_item',  # Rust uses structs, not classes
+            'import': 'use_declaration',
+        }
+        super().__init__(lines, **kwargs)
+```
+
+**That's it!** The base class automatically:
+- Parses the code using tree-sitter
+- Extracts functions, classes, structs, imports
+- Returns dictionaries with `{'name': ..., 'line': ...}`
+- Provides line numbers from the AST (no searching needed!)
+
+**Step 2: Add Language-Specific Extractions (Optional)**
+
+```python
+    def extract_custom(self):
+        """Extract Rust-specific items beyond the basics"""
+        return {
+            'enums': self._extract_nodes('enum_item', name_field='name'),
+            'traits': self._extract_nodes('trait_item', name_field='name'),
+            'impls': self._extract_impl_blocks(),  # Custom extraction
+            'mods': self._extract_nodes('mod_item', name_field='name'),
+        }
+
+    def _extract_impl_blocks(self):
+        """Custom extraction for trait implementations"""
+        impls = []
+        cursor = self.tree.walk()
+
+        def visit(cursor):
+            node = cursor.node
+            if node.type == 'impl_item':
+                # Get trait and type being implemented
+                trait_node = node.child_by_field_name('trait')
+                type_node = node.child_by_field_name('type')
+
+                if trait_node and type_node:
+                    name = f"{trait_node.text.decode()} for {type_node.text.decode()}"
+                else:
+                    name = type_node.text.decode() if type_node else "<impl>"
+
+                impls.append({
+                    'name': name,
+                    'line': node.start_point[0] + 1  # Tree-sitter uses 0-indexed
+                })
+
+            # Recurse to children
+            if cursor.goto_first_child():
+                visit(cursor)
+                while cursor.goto_next_sibling():
+                    visit(cursor)
+                cursor.goto_parent()
+
+        visit(cursor)
+        return impls
+```
+
+**Step 3: Custom Formatting (Optional)**
+
+```python
+    def format_structure(self, structure):
+        """Custom output formatting for Rust"""
+        lines = []
+
+        # Use statements
+        imports = structure.get('imports', [])
+        if imports:
+            lines.append(f"\nUse statements ({len(imports)}):")
+            for item in imports[:10]:
+                loc = self.format_location(item['line'])
+                lines.append(f"  {loc:30}  {item['name']}")
+
+        # Structs
+        structs = structure.get('structs', [])
+        if structs:
+            lines.append(f"\nStructs ({len(structs)}):")
+            for item in structs:
+                loc = self.format_location(item['line'])
+                lines.append(f"  {loc:30}  {item['name']}")
+
+        # Functions
+        functions = structure.get('functions', [])
+        if functions:
+            lines.append(f"\nFunctions ({len(functions)}):")
+            for item in functions:
+                loc = self.format_location(item['line'])
+                lines.append(f"  {loc:30}  fn {item['name']}()")
+
+        return lines
+```
+
+#### Tree-Sitter Node Types
+
+Each language has its own node types. Find them by exploring:
+
+```python
+from tree_sitter_languages import get_parser
+
+parser = get_parser('rust')
+tree = parser.parse(b'fn main() {}')
+
+# Explore node types
+def print_tree(node, indent=0):
+    print("  " * indent + node.type)
+    for child in node.children:
+        print_tree(child, indent + 1)
+
+print_tree(tree.root_node)
+```
+
+**Common node type patterns:**
+- **Rust**: `function_item`, `struct_item`, `enum_item`, `impl_item`, `use_declaration`
+- **C#**: `class_declaration`, `method_declaration`, `interface_declaration`, `using_directive`
+- **Go**: `function_declaration`, `type_declaration`, `import_declaration`
+- **Java**: `class_declaration`, `method_declaration`, `import_declaration`
+- **TypeScript**: `function_declaration`, `class_declaration`, `interface_declaration`
+
+#### Helper Methods from TreeSitterAnalyzer
+
+```python
+# Extract all nodes of a type
+results = self._extract_nodes('function_item', name_field='name')
+
+# Extract with custom text (for imports)
+imports = self._extract_nodes('use_declaration', use_text=True)
+
+# Access the parse tree directly
+if self.tree:
+    cursor = self.tree.walk()
+    # Walk the tree yourself for complex logic
+```
+
+#### Example: Adding Go Support (15 minutes!)
+
+```python
+from reveal.analyzers.treesitter_base import TreeSitterAnalyzer
+from reveal.registry import register
+
+@register(['.go'], name='Go', icon='🐹')
+class GoAnalyzer(TreeSitterAnalyzer):
+    """Go language analyzer using tree-sitter"""
+
+    language_name = 'go'
+
+    def __init__(self, lines, **kwargs):
+        self.node_type_map = {
+            'function': 'function_declaration',
+            'struct': 'type_declaration',  # Go types
+            'import': 'import_declaration',
+        }
+        super().__init__(lines, **kwargs)
+
+    def extract_custom(self):
+        """Extract Go-specific items"""
+        return {
+            'interfaces': self._extract_nodes('interface_type', name_field='name'),
+            'methods': self._extract_nodes('method_declaration', name_field='name'),
+        }
+```
+
+**That's it!** Go support in ~20 lines of code.
+
+#### Available Languages (50+)
+
+Tree-sitter supports: Rust, C#, Go, Java, JavaScript, TypeScript, Python, C, C++, Ruby, PHP, Swift, Kotlin, Scala, Haskell, OCaml, Bash, Lua, R, HTML, CSS, and many more!
+
+Check available languages:
+```python
+from reveal.analyzers.treesitter_base import TreeSitterAnalyzer
+
+analyzer = TreeSitterAnalyzer([], language_name='dummy')
+print(analyzer.get_supported_languages())
+```
+
+#### Graceful Degradation
+
+Tree-sitter is **optional**. If not installed, files fall back to text analyzer:
+
+```python
+# In your analyzer
+if not TREE_SITTER_AVAILABLE:
+    return {
+        'error': 'tree-sitter not installed',
+        'install': 'pip install reveal-cli[treesitter]'
+    }
+```
+
+Users without tree-sitter can still use reveal, just without advanced language analysis.
 
 ### Basic Analyzer Template
 

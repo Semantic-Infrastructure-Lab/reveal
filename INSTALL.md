@@ -7,6 +7,11 @@
 pip install git+https://github.com/scottsen/reveal.git
 ```
 
+**With advanced language support (Rust, C#, Go, Java, TypeScript):**
+```bash
+pip install 'git+https://github.com/scottsen/reveal.git#egg=reveal-cli[treesitter]'
+```
+
 That's it! The `reveal` command is now available globally.
 
 ## Verify Installation
@@ -49,6 +54,27 @@ pipx install git+https://github.com/scottsen/reveal.git
 
 - **Python:** 3.8 or higher
 - **Dependencies:** Automatically installed (PyYAML, rich)
+
+## Optional Features
+
+### Tree-sitter Language Support
+
+For advanced language analysis (Rust, C#, Go, Java, TypeScript, C++, and 40+ more):
+
+```bash
+# Install with tree-sitter support
+pip install 'git+https://github.com/scottsen/reveal.git#egg=reveal-cli[treesitter]'
+
+# Or upgrade existing install
+pip install --upgrade 'git+https://github.com/scottsen/reveal.git#egg=reveal-cli[treesitter]'
+```
+
+**What you get:**
+- Rust analyzer (functions, structs, enums, traits, impls, modules)
+- C# analyzer (classes, methods, properties, namespaces, interfaces)
+- Easy to add more languages (Go, Java, TypeScript, etc.) - see PLUGIN_GUIDE.md
+
+**Without tree-sitter:** Rust/C# files fall back to text analyzer (still works, just less structured)
 
 ## Troubleshooting
 
