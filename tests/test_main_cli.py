@@ -28,7 +28,7 @@ class TestCLIFlags(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertIn("reveal", result.stdout)
-        self.assertIn("0.3.0", result.stdout)
+        self.assertIn("0.4.0", result.stdout)
 
     def test_version_short_form(self):
         """Should work with python -m reveal.main --version."""

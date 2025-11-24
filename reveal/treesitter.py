@@ -221,10 +221,16 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return nodes
 
     def _get_node_text(self, node) -> str:
-        """Get the source text for a node."""
+        """Get the source text for a node.
+
+        IMPORTANT: Tree-sitter uses byte offsets, not character offsets!
+        Must slice the UTF-8 bytes, not the string, to handle multi-byte characters.
+        """
         start_byte = node.start_byte
         end_byte = node.end_byte
-        return self.content[start_byte:end_byte]
+        # Convert to bytes, slice, then decode back to string
+        content_bytes = self.content.encode('utf-8')
+        return content_bytes[start_byte:end_byte].decode('utf-8')
 
     def _get_node_name(self, node) -> Optional[str]:
         """Get the name of a node (function/class/struct name)."""

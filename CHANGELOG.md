@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2025-11-23
+
+### Fixed
+- **CRITICAL: TreeSitter UTF-8 byte offset handling** - Fixed function/class/import name truncation bug
+  - GitHub Issues #6, #7, #8: Function names, class names, and import statements were truncated or corrupted
+  - Root cause: Tree-sitter uses byte offsets but we were slicing Unicode strings
+  - Multi-byte UTF-8 characters (emoji, non-Latin scripts) caused byte/character offset mismatch
+  - Solution: Convert to bytes for slicing, then decode back to string
+  - Affected all tree-sitter languages (Python, Rust, Go, GDScript, etc.)
+  - Fixed in `reveal/treesitter.py:_get_node_text()`
+- **Test assertion:** Updated version test to expect 0.4.0 (was incorrectly testing for 0.3.0)
+
+### Added
+- **4 comprehensive UTF-8 regression tests** in `test_treesitter_utf8.py`:
+  - Test function names with emoji in docstrings
+  - Test class names with multi-byte characters
+  - Test imports with Unicode strings
+  - Test complex Unicode throughout file (multiple languages, extensive emoji)
+- Extensive code comments explaining UTF-8 byte offset handling
+
+### Technical Details
+**Bug reproduction:**
+- Files with multi-byte UTF-8 characters before function/class/import definitions
+- Tree-sitter returns byte offset 100, but string character offset is 97 (if 3-byte emoji present)
+- Slicing `string[100:]` starts too far, losing first few characters
+
+**Examples of bugs fixed:**
+- ❌ Before: `test_function_name` → `st_function_name` (missing "te")
+- ✅ After: `test_function_name` (complete)
+- ❌ Before: `import numpy as np` → `rt numpy as np\nimp` (garbled)
+- ✅ After: `import numpy as np` (clean)
+- ❌ Before: `TestClassName` → `tClassName` (truncated)
+- ✅ After: `TestClassName` (complete)
+
+**Impact:**
+- All tree-sitter-based analyzers now handle Unicode correctly
+- Python, Rust, Go, GDScript all benefit from this fix
+- Particularly important for codebases with emoji in docstrings or non-Latin comments
+
 ## [0.4.0] - 2025-11-23
 
 ### Added
