@@ -189,8 +189,64 @@ def get_analyzer(path: str) -> Optional[type]:
     Returns:
         Analyzer class or None if not found
     """
-    ext = Path(path).suffix.lower()
-    return _ANALYZER_REGISTRY.get(ext)
+    file_path = Path(path)
+    ext = file_path.suffix.lower()
+
+    # If we have an extension, use it
+    if ext and ext in _ANALYZER_REGISTRY:
+        return _ANALYZER_REGISTRY.get(ext)
+
+    # No extension or not found - check special filenames (Dockerfile, Makefile)
+    filename = file_path.name.lower()
+    if filename in _ANALYZER_REGISTRY:
+        return _ANALYZER_REGISTRY.get(filename)
+
+    # Still no match - check shebang for extensionless scripts
+    if not ext or ext not in _ANALYZER_REGISTRY:
+        shebang_ext = _detect_shebang(path)
+        if shebang_ext:
+            return _ANALYZER_REGISTRY.get(shebang_ext)
+
+    return None
+
+
+def _detect_shebang(path: str) -> Optional[str]:
+    """Detect file type from shebang line.
+
+    Args:
+        path: File path
+
+    Returns:
+        Extension to use (e.g., '.py', '.sh') or None
+    """
+    try:
+        with open(path, 'rb') as f:
+            first_line = f.readline()
+
+        # Decode with error handling
+        try:
+            shebang = first_line.decode('utf-8', errors='ignore').strip()
+        except:
+            return None
+
+        if not shebang.startswith('#!'):
+            return None
+
+        # Map shebangs to extensions
+        shebang_lower = shebang.lower()
+
+        # Python
+        if 'python' in shebang_lower:
+            return '.py'
+
+        # Shell scripts (bash, sh, zsh)
+        if any(shell in shebang_lower for shell in ['bash', '/sh', 'zsh']):
+            return '.sh'
+
+        return None
+
+    except (IOError, OSError):
+        return None
 
 
 def get_all_analyzers() -> Dict[str, Dict[str, Any]]:

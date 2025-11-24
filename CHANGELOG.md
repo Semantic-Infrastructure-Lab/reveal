@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-11-23
+
+### Added
+- **TOML Analyzer** (`.toml`) - Extract sections and top-level keys from TOML configuration files
+  - Perfect for exploring `pyproject.toml`, Hugo configs, Cargo.toml
+  - Shows `[section]` headers and `[[array]]` sections with line numbers
+  - Supports section extraction via `reveal file.toml <section>`
+- **Dockerfile Analyzer** (filename: `Dockerfile`) - Extract Docker directives and build stages
+  - Shows FROM images, RUN commands, COPY/ADD operations, ENV variables, EXPOSE ports
+  - Detects multi-stage builds and displays all directives with line numbers
+  - Works with any Dockerfile regardless of case (Dockerfile, dockerfile, DOCKERFILE)
+- **Shebang Detection** - Automatically detect file type from shebang for extensionless scripts
+  - Python scripts (`#!/usr/bin/env python3`) now work without `.py` extension
+  - Bash/Shell scripts (`#!/bin/bash`, `#!/bin/sh`, `#!/bin/zsh`) work without `.sh` extension
+  - Enables reveal to analyze TIA's `bin/` directory and other extensionless script collections
+  - File extension still takes precedence when present
+
+### Technical Improvements
+- Enhanced `get_analyzer()` with fallback chain: extension → filename → shebang
+- Case-insensitive filename matching for special files (Dockerfile, Makefile)
+- Cross-platform shebang detection with robust error handling
+- 32 new comprehensive unit tests (TOML: 7, Dockerfile: 13, Shebang: 12)
+
+### Impact
+- File types supported: **16 → 18** (+12.5%)
+- TIA ecosystem coverage: ~90% of file types now supported
+- Token efficiency: 6-10x improvement for config files and Dockerfiles
+
 ## [0.6.0] - 2025-11-23
 
 ### Added

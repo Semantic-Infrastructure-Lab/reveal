@@ -146,7 +146,8 @@ That's it! Your file type now works with reveal.
 - ✅ **Directory trees** - See what's in a folder
 - ✅ **Structure extraction** - Imports, functions, classes, signals (GDScript)
 - ✅ **Element extraction** - Get specific function/class
-- ✅ **11 file types built-in** - Python, Rust, Go, GDScript, Jupyter, Markdown, JSON, YAML, Nginx configs, and more
+- ✅ **18 file types built-in** - Python, Rust, Go, JavaScript, TypeScript, GDScript, Bash, Jupyter, Markdown, JSON, YAML, TOML, Nginx, Dockerfile, and more
+- ✅ **Shebang detection** - Extensionless scripts work automatically (detects `#!/usr/bin/env python3`, `#!/bin/bash`)
 - ✅ **50+ languages available** - Via optional tree-sitter (JS, TS, C#, Java, PHP, etc.)
 - ✅ **Perfect line numbers** - `filename:line` format everywhere
 - ✅ **Unix composable** - Works with vim, git, grep, sed, awk

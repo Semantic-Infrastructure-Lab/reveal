@@ -3,7 +3,7 @@
 A clean, simple tool for progressive code exploration.
 """
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 # Import base classes for external use
 from .base import FileAnalyzer, register, get_analyzer

@@ -18,6 +18,8 @@ from .javascript import JavaScriptAnalyzer
 from .typescript import TypeScriptAnalyzer
 from .bash import BashAnalyzer
 from .nginx import NginxAnalyzer
+from .toml import TomlAnalyzer
+from .dockerfile import DockerfileAnalyzer
 
 __all__ = [
     'PythonAnalyzer',
@@ -32,4 +34,6 @@ __all__ = [
     'TypeScriptAnalyzer',
     'BashAnalyzer',
     'NginxAnalyzer',
+    'TomlAnalyzer',
+    'DockerfileAnalyzer',
 ]
