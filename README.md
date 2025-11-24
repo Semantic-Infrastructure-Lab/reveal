@@ -144,14 +144,16 @@ That's it! Your file type now works with reveal.
 
 - ✅ **Smart defaults** - No flags needed for 99% of use cases
 - ✅ **Directory trees** - See what's in a folder
-- ✅ **Structure extraction** - Imports, functions, classes
+- ✅ **Structure extraction** - Imports, functions, classes, signals (GDScript)
 - ✅ **Element extraction** - Get specific function/class
-- ✅ **50+ languages** - Via tree-sitter (Python, Rust, Go, JS, TS, C#, Java, PHP, etc.)
+- ✅ **10 file types built-in** - Python, Rust, Go, GDScript, Jupyter, Markdown, JSON, YAML, and more
+- ✅ **50+ languages available** - Via optional tree-sitter (JS, TS, C#, Java, PHP, etc.)
 - ✅ **Perfect line numbers** - `filename:line` format everywhere
 - ✅ **Unix composable** - Works with vim, git, grep, sed, awk
 - ✅ **Multiple output formats** - text (default), json, grep
 - ✅ **Easy to extend** - Add new file type in 10-50 lines
 - ✅ **AI-optimized** - Designed for agentic workflows
+- ✅ **Windows compatible** - Full UTF-8/emoji support
 
 ## 📚 Real-World Examples
 
@@ -172,6 +174,31 @@ $ reveal app.py load_config
 
 # Jump to edit
 $ vim app.py:15
+```
+
+### Game Development (GDScript)
+```bash
+# Explore Godot scripts
+$ reveal player.gd
+📄 player.gd
+
+Functions (4):
+  player.gd:11    _ready() -> void
+  player.gd:16    take_damage(amount: int) -> void
+  player.gd:24    die() -> void
+
+Signals (2):
+  player.gd:3     health_changed(new_health)
+  player.gd:4     died()
+
+# Extract specific function
+$ reveal player.gd take_damage
+player.gd:16-23 | take_damage
+
+   16  func take_damage(amount: int) -> void:
+   17      """Reduce health by amount."""
+   18      current_health -= amount
+   19      emit_signal("health_changed", current_health)
 ```
 
 ### Integration with Tools
@@ -229,6 +256,10 @@ reveal/
 ## 📖 Optional Flags
 
 ```bash
+# Discovery
+reveal --version              # Show version
+reveal --list-supported       # List all supported file types
+
 # Metadata only
 reveal app.py --meta
 
@@ -268,7 +299,7 @@ Make `reveal` the standard way to explore code - for humans and AI agents alike.
 
 ---
 
-**Status:** 🚀 v0.2.0 - Clean Redesign | **License:** MIT
+**Status:** 🚀 v0.4.0 - Enhanced CLI + Cross-Platform | **License:** MIT
 
 [![GitHub Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/scottsen/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

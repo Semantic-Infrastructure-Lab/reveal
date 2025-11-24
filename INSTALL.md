@@ -2,14 +2,14 @@
 
 ## Quick Install (Recommended)
 
-**One command:**
+**From PyPI (stable release):**
 ```bash
-pip install git+https://github.com/scottsen/reveal.git
+pip install reveal-cli
 ```
 
-**With advanced language support (Rust, C#, Go, Java, TypeScript):**
+**From GitHub (latest development):**
 ```bash
-pip install 'git+https://github.com/scottsen/reveal.git#egg=reveal-cli[treesitter]'
+pip install git+https://github.com/scottsen/reveal.git
 ```
 
 That's it! The `reveal` command is now available globally.
@@ -17,8 +17,9 @@ That's it! The `reveal` command is now available globally.
 ## Verify Installation
 
 ```bash
-reveal --help
-reveal README.md  # Try on any file
+reveal --version          # Check version
+reveal --list-supported   # See supported file types
+reveal README.md          # Try on any file
 ```
 
 ## Alternative Methods
@@ -152,12 +153,13 @@ reveal-cli = {git = "https://github.com/scottsen/reveal.git"}
 
 ```yaml
 - name: Install reveal
-  run: pip install git+https://github.com/scottsen/reveal.git
+  run: pip install reveal-cli
 
 - name: Analyze files
   run: |
-    reveal src/main.py --level 1
-    reveal config.yaml --level 2
+    reveal src/main.py
+    reveal config.yaml
+    reveal src/main.py main --format=json  # Extract main function as JSON
 ```
 
 ## Next Steps
@@ -165,9 +167,10 @@ reveal-cli = {git = "https://github.com/scottsen/reveal.git"}
 After installation:
 
 1. **Try it:** `reveal --help`
-2. **Explore a file:** `reveal README.md --level 1`
-3. **Read docs:** [Plugin Guide](docs/PLUGIN_GUIDE.md)
-4. **Contribute:** [Contributing Guide](CONTRIBUTING.md)
+2. **Explore a file:** `reveal README.md`
+3. **Extract an element:** `reveal app.py function_name`
+4. **Read docs:** See [README](README.md) for examples
+5. **Contribute:** [Contributing Guide](CONTRIBUTING.md)
 
 ## Getting Help
 

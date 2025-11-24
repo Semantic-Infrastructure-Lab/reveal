@@ -191,3 +191,21 @@ def get_analyzer(path: str) -> Optional[type]:
     """
     ext = Path(path).suffix.lower()
     return _ANALYZER_REGISTRY.get(ext)
+
+
+def get_all_analyzers() -> Dict[str, Dict[str, Any]]:
+    """Get all registered analyzers with metadata.
+
+    Returns:
+        Dict mapping extension to analyzer metadata
+        e.g., {'.py': {'name': 'Python', 'icon': '🐍', 'class': PythonAnalyzer}}
+    """
+    result = {}
+    for ext, cls in _ANALYZER_REGISTRY.items():
+        result[ext] = {
+            'extension': ext,
+            'name': getattr(cls, 'type_name', cls.__name__.replace('Analyzer', '')),
+            'icon': getattr(cls, 'icon', '📄'),
+            'class': cls,
+        }
+    return result

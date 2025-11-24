@@ -5,8 +5,9 @@ import os
 import argparse
 from pathlib import Path
 from typing import Optional
-from .base import get_analyzer, FileAnalyzer
+from .base import get_analyzer, get_all_analyzers, FileAnalyzer
 from .tree_view import show_directory_tree
+from . import __version__
 
 
 def main():
@@ -27,28 +28,58 @@ def main():
 def _main_impl():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description='Reveal: Explore code semantically',
+        description='Reveal: Explore code semantically - The simplest way to understand code',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 Examples:
+  # Directory exploration
   reveal src/                    # Show directory tree
-  reveal app.py                  # Show file structure
-  reveal app.py load_config      # Extract function
-  reveal app.py --meta           # Show metadata only
-  reveal app.py --format=json    # JSON output
+  reveal src/ --depth=5          # Deeper tree view
+
+  # File structure
+  reveal app.py                  # Show structure (imports, functions, classes)
+  reveal app.py --meta           # Show metadata (size, lines, encoding)
+  reveal player.gd               # GDScript support (Godot engine)
+
+  # Element extraction
+  reveal app.py load_config      # Extract specific function
+  reveal app.py Database         # Extract class definition
+
+  # Output formats
+  reveal app.py --format=json    # JSON output for scripting
+  reveal app.py --format=grep    # Grep-compatible format
+
+  # Discovery
+  reveal --list-supported        # Show all supported file types
+  reveal --version               # Show version
+
+Perfect filename:line integration - works with vim, git, grep, sed, awk!
         '''
     )
 
-    parser.add_argument('path', help='File or directory to reveal')
+    parser.add_argument('path', nargs='?', help='File or directory to reveal')
     parser.add_argument('element', nargs='?', help='Element to extract (function, class, etc.)')
 
     # Optional flags
+    parser.add_argument('--version', action='version', version=f'reveal {__version__}')
+    parser.add_argument('--list-supported', '-l', action='store_true',
+                        help='List all supported file types')
     parser.add_argument('--meta', action='store_true', help='Show metadata only')
     parser.add_argument('--format', choices=['text', 'json', 'grep'], default='text',
-                        help='Output format')
+                        help='Output format (text, json, grep)')
     parser.add_argument('--depth', type=int, default=3, help='Directory tree depth (default: 3)')
 
     args = parser.parse_args()
+
+    # Handle --list-supported
+    if args.list_supported:
+        list_supported_types()
+        sys.exit(0)
+
+    # Path is required if not using --list-supported
+    if not args.path:
+        parser.print_help()
+        sys.exit(1)
 
     # Check if path exists
     path = Path(args.path)
@@ -71,6 +102,29 @@ Examples:
         sys.exit(1)
 
 
+def list_supported_types():
+    """List all supported file types."""
+    analyzers = get_all_analyzers()
+
+    if not analyzers:
+        print("No file types registered")
+        return
+
+    print(f"📋 Reveal v{__version__} - Supported File Types\n")
+
+    # Sort by name for nice display
+    sorted_analyzers = sorted(analyzers.items(), key=lambda x: x[1]['name'])
+
+    for ext, info in sorted_analyzers:
+        icon = info['icon']
+        name = info['name']
+        print(f"  {icon}  {name:15s} ({ext})")
+
+    print(f"\n✨ Total: {len(analyzers)} file types supported")
+    print(f"\n💡 Use 'reveal <file>' to explore any supported file")
+    print(f"💡 Use 'reveal --help' for usage examples")
+
+
 def handle_file(path: str, element: Optional[str], show_meta: bool, output_format: str):
     """Handle file analysis.
 
@@ -83,8 +137,11 @@ def handle_file(path: str, element: Optional[str], show_meta: bool, output_forma
     # Get analyzer
     analyzer_class = get_analyzer(path)
     if not analyzer_class:
-        print(f"Error: No analyzer found for {path}", file=sys.stderr)
-        print("Hint: File type not supported yet", file=sys.stderr)
+        ext = Path(path).suffix or '(no extension)'
+        print(f"Error: No analyzer found for {path} ({ext})", file=sys.stderr)
+        print(f"\n💡 Hint: File type '{ext}' is not supported yet", file=sys.stderr)
+        print(f"💡 Run 'reveal --list-supported' to see all supported file types", file=sys.stderr)
+        print(f"💡 Visit https://github.com/scottsen/reveal to request new file types", file=sys.stderr)
         sys.exit(1)
 
     analyzer = analyzer_class(path)
