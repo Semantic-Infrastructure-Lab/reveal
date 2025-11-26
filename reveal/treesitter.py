@@ -3,14 +3,7 @@
 import warnings
 from typing import Dict, List, Any, Optional
 from .base import FileAnalyzer
-
-# Optional tree-sitter import
-try:
-    from tree_sitter_languages import get_parser
-    TREE_SITTER_AVAILABLE = True
-except ImportError:
-    TREE_SITTER_AVAILABLE = False
-    get_parser = None
+from tree_sitter_languages import get_parser
 
 
 class TreeSitterAnalyzer(FileAnalyzer):
@@ -39,7 +32,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         super().__init__(path)
         self.tree = None
 
-        if TREE_SITTER_AVAILABLE and self.language:
+        if self.language:
             self._parse_tree()
 
     def _parse_tree(self):

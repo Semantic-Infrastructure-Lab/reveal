@@ -21,9 +21,10 @@ All with perfect `filename:line` integration for vim, git, grep, and other tools
 
 **Install:**
 ```bash
-pip install reveal-cli                    # Basic install
-pip install reveal-cli[treesitter]        # With 50+ language support
+pip install reveal-cli
 ```
+
+Includes full support for 18 file types out of the box (Python, JavaScript, TypeScript, Rust, Go, and more).
 
 **Use:**
 ```bash

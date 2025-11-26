@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reveal-cli"
-version = "0.7.0"
+version = "0.8.0"
 description = "Semantic code exploration with progressive disclosure - explore directories, files, and code elements with smart defaults"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -30,6 +30,8 @@ classifiers = [
 dependencies = [
     "pyyaml>=6.0",
     "rich>=13.0.0",  # For beautiful terminal output
+    "tree-sitter==0.21.3",  # Semantic parsing for all languages
+    "tree-sitter-languages>=1.10.0",  # Language grammar support (JS, TS, Rust, Go, etc.)
 ]
 
 [project.optional-dependencies]
@@ -39,12 +41,9 @@ dev = [
     "black>=23.0",
     "ruff>=0.1.0",
 ]
-# Tree-sitter for advanced language support (Rust, C#, Go, Java, TypeScript, etc.)
-# Note: tree-sitter-languages 1.10.2 requires tree-sitter 0.21.x for compatibility
-treesitter = [
-    "tree-sitter==0.21.3",
-    "tree-sitter-languages>=1.10.0",
-]
+# DEPRECATED in v0.8.0: tree-sitter is now included by default
+# Kept for backward compatibility (install commands with [treesitter] still work)
+treesitter = []
 # Future: xlsx support
 excel = [
     "openpyxl>=3.0",

@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2025-11-25
+
+### Changed
+- **tree-sitter is now a required dependency** (previously optional via `[treesitter]` extra)
+  - JavaScript, TypeScript, Rust, Go, and all tree-sitter languages now work out of the box
+  - No more silent failures when analyzing JS/TS files without extras installed
+  - Simplified installation: just `pip install reveal-cli` (no `[treesitter]` needed)
+  - Package size increased from ~50KB to ~15MB (comparable to numpy, black, pytest)
+
+### Improved
+- **Better user experience**: Code exploration features work by default
+- **Simpler documentation**: One install command instead of two options
+- **Cleaner codebase**: Removed optional import logic and conditional checks
+- **Aligned with tool identity**: "Semantic code exploration" now works for all languages immediately
+
+### Added
+- **Update notifications**: reveal now checks PyPI once per day for newer versions
+  - Shows: "⚠️ Update available: reveal 0.8.1 (you have 0.8.0)"
+  - Includes install hint: "💡 Update: pip install --upgrade reveal-cli"
+  - Non-blocking: 1-second timeout, fails silently on errors
+  - Cached: Only checks once per day (~/.config/reveal/last_update_check)
+  - Opt-out: Set `REVEAL_NO_UPDATE_CHECK=1` environment variable
+
+### Technical
+- Moved `tree-sitter==0.21.3` and `tree-sitter-languages>=1.10.0` from optional to required dependencies
+- Simplified `reveal/treesitter.py` by removing `TREE_SITTER_AVAILABLE` conditionals
+- Updated README.md to show single installation command
+- Kept `[treesitter]` extra as empty for backward compatibility
+- Added update checking using urllib (no new dependencies)
+
+### Migration Notes
+- **Existing users**: No action required - upgrade works seamlessly
+- **New users**: Just `pip install reveal-cli` and everything works
+- **Scripts using `[treesitter]`**: Still work (now redundant but harmless)
+
 ## [0.7.0] - 2025-11-23
 
 ### Added
