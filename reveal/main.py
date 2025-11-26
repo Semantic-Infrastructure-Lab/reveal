@@ -4,7 +4,7 @@ import sys
 import os
 import argparse
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, List, Any
 from datetime import datetime, timedelta
 from .base import get_analyzer, get_all_analyzers, FileAnalyzer
 from .tree_view import show_directory_tree
@@ -64,7 +64,7 @@ def check_for_updates():
             try:
                 if parse_version(latest_version) > parse_version(__version__):
                     print(f"⚠️  Update available: reveal {latest_version} (you have {__version__})")
-                    print(f"💡 Update: pip install --upgrade reveal-cli\n")
+                    print(f"Update available: pip install --upgrade reveal-cli\n")
             except (ValueError, AttributeError):
                 pass  # Version comparison failed, ignore
 
@@ -149,6 +149,8 @@ def _main_impl():
     parser.add_argument('--meta', action='store_true', help='Show metadata only')
     parser.add_argument('--format', choices=['text', 'json', 'grep'], default='text',
                         help='Output format (text, json, grep)')
+    parser.add_argument('--no-fallback', action='store_true',
+                        help='Disable TreeSitter fallback for unknown file types')
     parser.add_argument('--depth', type=int, default=3, help='Directory tree depth (default: 3)')
     parser.add_argument('--god', action='store_true',
                         help='Show only god functions/elements (high complexity or length)')
@@ -212,19 +214,18 @@ def list_supported_types():
         print("No file types registered")
         return
 
-    print(f"📋 Reveal v{__version__} - Supported File Types\n")
+    print(f"Reveal v{__version__} - Supported File Types\n")
 
     # Sort by name for nice display
     sorted_analyzers = sorted(analyzers.items(), key=lambda x: x[1]['name'])
 
     for ext, info in sorted_analyzers:
-        icon = info['icon']
         name = info['name']
-        print(f"  {icon}  {name:15s} ({ext})")
+        print(f"{name:20s} {ext}")
 
-    print(f"\n✨ Total: {len(analyzers)} file types supported")
-    print(f"\n💡 Use 'reveal <file>' to explore any supported file")
-    print(f"💡 Use 'reveal --help' for usage examples")
+    print(f"\nTotal: {len(analyzers)} file types supported")
+    print(f"Usage: reveal <file>")
+    print(f"Help: reveal --help")
 
 
 def handle_file(path: str, element: Optional[str], show_meta: bool, output_format: str, args=None):
@@ -238,13 +239,16 @@ def handle_file(path: str, element: Optional[str], show_meta: bool, output_forma
         args: Full argument namespace (for filter options)
     """
     # Get analyzer
-    analyzer_class = get_analyzer(path)
+    # Check fallback setting
+    allow_fallback = not getattr(args, 'no_fallback', False) if args else True
+
+    analyzer_class = get_analyzer(path, allow_fallback=allow_fallback)
     if not analyzer_class:
         ext = Path(path).suffix or '(no extension)'
         print(f"Error: No analyzer found for {path} ({ext})", file=sys.stderr)
-        print(f"\n💡 Hint: File type '{ext}' is not supported yet", file=sys.stderr)
-        print(f"💡 Run 'reveal --list-supported' to see all supported file types", file=sys.stderr)
-        print(f"💡 Visit https://github.com/scottsen/reveal to request new file types", file=sys.stderr)
+        print(f"\nError: File type '{ext}' is not supported yet", file=sys.stderr)
+        print(f"Run 'reveal --list-supported' to see all supported file types", file=sys.stderr)
+        print(f"Visit https://github.com/scottsen/reveal to request new file types", file=sys.stderr)
         sys.exit(1)
 
     analyzer = analyzer_class(path)
@@ -271,7 +275,7 @@ def show_metadata(analyzer: FileAnalyzer, output_format: str):
         import json
         print(json.dumps(meta, indent=2))
     else:
-        print(f"📄 {meta['name']}\n")
+        print(f"File: {meta['name']}\n")
         print(f"Path:     {meta['path']}")
         print(f"Size:     {meta['size_human']}")
         print(f"Lines:    {meta['lines']}")
@@ -297,6 +301,125 @@ def is_god_element(item: dict, analyzer: FileAnalyzer) -> bool:
             return True
 
     return False
+
+
+def _format_links(items: List[Dict[str, Any]], path: Path, output_format: str) -> None:
+    """Format and display link items grouped by type."""
+    by_type = {}
+    for item in items:
+        link_type = item.get('type', 'unknown')
+        by_type.setdefault(link_type, []).append(item)
+
+    for link_type in ['external', 'internal', 'email']:
+        if link_type not in by_type:
+            continue
+
+        type_items = by_type[link_type]
+        print(f"\n  {link_type.capitalize()} ({len(type_items)}):")
+
+        for item in type_items:
+            line = item.get('line', '?')
+            text = item.get('text', '')
+            url = item.get('url', '')
+            broken = item.get('broken', False)
+
+            if output_format == 'grep':
+                print(f"{path}:{line}:{url}")
+            else:
+                if broken:
+                    print(f"    ❌ Line {line:<4} [{text}]({url}) [BROKEN]")
+                else:
+                    if link_type == 'external':
+                        domain = item.get('domain', '')
+                        print(f"    Line {line:<4} [{text}]({url})")
+                        if domain:
+                            print(f"             → {domain}")
+                    else:
+                        print(f"    Line {line:<4} [{text}]({url})")
+
+
+def _format_code_blocks(items: List[Dict[str, Any]], path: Path, output_format: str) -> None:
+    """Format and display code block items grouped by language."""
+    by_lang = {}
+    for item in items:
+        lang = item.get('language', 'unknown')
+        by_lang.setdefault(lang, []).append(item)
+
+    # Show fenced blocks grouped by language
+    for lang in sorted(by_lang.keys()):
+        if lang == 'inline':
+            continue
+
+        lang_items = by_lang[lang]
+        print(f"\n  {lang.capitalize()} ({len(lang_items)} blocks):")
+
+        for item in lang_items:
+            line_start = item.get('line_start', '?')
+            line_end = item.get('line_end', '?')
+            line_count = item.get('line_count', 0)
+            source = item.get('source', '')
+
+            if output_format == 'grep':
+                first_line = source.split('\n')[0] if source else ''
+                print(f"{path}:{line_start}:{first_line}")
+            else:
+                print(f"    Lines {line_start}-{line_end} ({line_count} lines)")
+                preview_lines = source.split('\n')[:3]
+                for preview_line in preview_lines:
+                    print(f"      {preview_line}")
+                if line_count > 3:
+                    print(f"      ... ({line_count - 3} more lines)")
+
+    # Show inline code if present
+    if 'inline' in by_lang:
+        inline_items = by_lang['inline']
+        print(f"\n  Inline code ({len(inline_items)} snippets):")
+        for item in inline_items[:10]:
+            line = item.get('line', '?')
+            source = item.get('source', '')
+            if output_format == 'grep':
+                print(f"{path}:{line}:{source}")
+            else:
+                print(f"    Line {line:<4} `{source}`")
+        if len(inline_items) > 10:
+            print(f"    ... and {len(inline_items) - 10} more")
+
+
+def _format_standard_items(items: List[Dict[str, Any]], path: Path, output_format: str) -> None:
+    """Format and display standard items (functions, classes, etc.)."""
+    for item in items:
+        line = item.get('line', '?')
+        name = item.get('name', '')
+        signature = item.get('signature', '')
+        content = item.get('content', '')
+
+        # Build metrics display (if available)
+        metrics = ''
+        if 'line_count' in item or 'depth' in item:
+            parts = []
+            if 'line_count' in item:
+                parts.append(f"{item['line_count']} lines")
+            if 'depth' in item:
+                parts.append(f"depth:{item['depth']}")
+            if parts:
+                metrics = f" [{', '.join(parts)}]"
+
+        # Format based on what's available
+        if signature and name:
+            if output_format == 'grep':
+                print(f"{path}:{line}:{name}{signature}")
+            else:
+                print(f"  {path}:{line:<6} {name}{signature}{metrics}")
+        elif name:
+            if output_format == 'grep':
+                print(f"{path}:{line}:{name}")
+            else:
+                print(f"  {path}:{line:<6} {name}{metrics}")
+        elif content:
+            if output_format == 'grep':
+                print(f"{path}:{line}:{content}")
+            else:
+                print(f"  {path}:{line:<6} {content}")
 
 
 def show_structure(analyzer: FileAnalyzer, output_format: str, args=None):
@@ -333,22 +456,39 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None):
                 filtered_structure[category] = god_items
         structure = filtered_structure
 
+    # Check if this is a fallback analyzer
+    is_fallback = getattr(analyzer, 'is_fallback', False)
+    fallback_lang = getattr(analyzer, 'fallback_language', None)
+
     if output_format == 'json':
         import json
         result = {
             'file': str(path),
             'type': analyzer.__class__.__name__.replace('Analyzer', '').lower(),
+            'analyzer': {
+                'type': 'fallback' if is_fallback else 'explicit',
+                'language': fallback_lang if is_fallback else None,
+                'explicit': not is_fallback,
+                'name': analyzer.__class__.__name__
+            },
             'structure': structure
         }
         print(json.dumps(result, indent=2))
         return
 
     if not structure:
-        print(f"📄 {path.name}\n")
+        if is_fallback:
+            print(f"File: {path.name} (fallback: {fallback_lang})\n")
+        else:
+            print(f"File: {path.name}\n")
         print("No structure available for this file type")
         return
 
-    print(f"📄 {path.name}\n")
+    # Show file header with fallback indicator
+    if is_fallback:
+        print(f"File: {path.name} (fallback: {fallback_lang})\n")
+    else:
+        print(f"File: {path.name}\n")
 
     # Show each category
     for category, items in structure.items():
@@ -361,127 +501,13 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None):
 
         # Special handling for links
         if category == 'links':
-            # Group by type for better readability
-            by_type = {}
-            for item in items:
-                link_type = item.get('type', 'unknown')
-                by_type.setdefault(link_type, []).append(item)
-
-            for link_type in ['external', 'internal', 'email']:
-                if link_type not in by_type:
-                    continue
-
-                type_items = by_type[link_type]
-                print(f"\n  {link_type.capitalize()} ({len(type_items)}):")
-
-                for item in type_items:
-                    line = item.get('line', '?')
-                    text = item.get('text', '')
-                    url = item.get('url', '')
-                    broken = item.get('broken', False)
-
-                    if output_format == 'grep':
-                        print(f"{path}:{line}:{url}")
-                    else:
-                        if broken:
-                            print(f"    ❌ Line {line:<4} [{text}]({url}) [BROKEN]")
-                        else:
-                            if link_type == 'external':
-                                domain = item.get('domain', '')
-                                print(f"    Line {line:<4} [{text}]({url})")
-                                if domain:
-                                    print(f"             → {domain}")
-                            else:
-                                print(f"    Line {line:<4} [{text}]({url})")
+            _format_links(items, path, output_format)
 
         elif category == 'code_blocks':
-            # Group by language for better readability
-            by_lang = {}
-            for item in items:
-                lang = item.get('language', 'unknown')
-                by_lang.setdefault(lang, []).append(item)
-
-            # Show fenced blocks grouped by language
-            for lang in sorted(by_lang.keys()):
-                if lang == 'inline':
-                    continue  # Show inline separately
-
-                lang_items = by_lang[lang]
-                print(f"\n  {lang.capitalize()} ({len(lang_items)} blocks):")
-
-                for item in lang_items:
-                    line_start = item.get('line_start', '?')
-                    line_end = item.get('line_end', '?')
-                    line_count = item.get('line_count', 0)
-                    source = item.get('source', '')
-
-                    if output_format == 'grep':
-                        # Show first line of code in grep format
-                        first_line = source.split('\n')[0] if source else ''
-                        print(f"{path}:{line_start}:{first_line}")
-                    else:
-                        # Show code block with preview
-                        print(f"    Lines {line_start}-{line_end} ({line_count} lines)")
-
-                        # Show first 3 lines as preview
-                        preview_lines = source.split('\n')[:3]
-                        for preview_line in preview_lines:
-                            print(f"      {preview_line}")
-                        if line_count > 3:
-                            print(f"      ... ({line_count - 3} more lines)")
-
-            # Show inline code if present
-            if 'inline' in by_lang:
-                inline_items = by_lang['inline']
-                print(f"\n  Inline code ({len(inline_items)} snippets):")
-                for item in inline_items[:10]:  # Limit to first 10
-                    line = item.get('line', '?')
-                    source = item.get('source', '')
-                    if output_format == 'grep':
-                        print(f"{path}:{line}:{source}")
-                    else:
-                        print(f"    Line {line:<4} `{source}`")
-                if len(inline_items) > 10:
-                    print(f"    ... and {len(inline_items) - 10} more")
+            _format_code_blocks(items, path, output_format)
 
         else:
-            # Standard formatting for other entities
-            for item in items:
-                line = item.get('line', '?')
-                name = item.get('name', '')
-                signature = item.get('signature', '')
-                content = item.get('content', '')
-
-                # Build metrics display (if available)
-                metrics = ''
-                if 'line_count' in item or 'depth' in item:
-                    parts = []
-                    if 'line_count' in item:
-                        parts.append(f"{item['line_count']} lines")
-                    if 'depth' in item:
-                        parts.append(f"depth:{item['depth']}")
-                    if parts:
-                        metrics = f" [{', '.join(parts)}]"
-
-                # Format based on what's available
-                if signature and name:
-                    # Function with signature
-                    if output_format == 'grep':
-                        print(f"{path}:{line}:{name}{signature}")
-                    else:
-                        print(f"  {path}:{line:<6} {name}{signature}{metrics}")
-                elif name:
-                    # Just name (class, struct, etc.)
-                    if output_format == 'grep':
-                        print(f"{path}:{line}:{name}")
-                    else:
-                        print(f"  {path}:{line:<6} {name}{metrics}")
-                elif content:
-                    # Just content (import, etc.)
-                    if output_format == 'grep':
-                        print(f"{path}:{line}:{content}")
-                    else:
-                        print(f"  {path}:{line:<6} {content}")
+            _format_standard_items(items, path, output_format)
 
         print()  # Blank line between categories
 

@@ -22,11 +22,11 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False) ->
     if not path.is_dir():
         return f"Error: {path} is not a directory"
 
-    lines = [f"📁 {path.name or path}/\n"]
+    lines = [f"{path.name or path}/\n"]
     _walk_directory(path, lines, depth=depth, show_hidden=show_hidden)
 
     # Add navigation hint
-    lines.append(f"\n→ reveal {path}/<file>")
+    lines.append(f"\nUsage: reveal {path}/<file>")
 
     return '\n'.join(lines)
 

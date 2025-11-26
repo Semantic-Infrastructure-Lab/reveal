@@ -160,7 +160,7 @@ class FileAnalyzer:
 _ANALYZER_REGISTRY: Dict[str, type] = {}
 
 
-def register(*extensions, name: str = '', icon: str = '📄'):
+def register(*extensions, name: str = '', icon: str = ''):
     """Decorator to register an analyzer for file extensions.
 
     Usage:
@@ -186,11 +186,12 @@ def register(*extensions, name: str = '', icon: str = '📄'):
     return decorator
 
 
-def get_analyzer(path: str) -> Optional[type]:
+def get_analyzer(path: str, allow_fallback: bool = True) -> Optional[type]:
     """Get analyzer class for a file path.
 
     Args:
         path: File path
+        allow_fallback: Enable TreeSitter fallback for unknown extensions
 
     Returns:
         Analyzer class or None if not found
@@ -212,6 +213,10 @@ def get_analyzer(path: str) -> Optional[type]:
         shebang_ext = _detect_shebang(path)
         if shebang_ext:
             return _ANALYZER_REGISTRY.get(shebang_ext)
+
+    # TreeSitter fallback for unknown extensions
+    if allow_fallback and ext:
+        return _try_treesitter_fallback(ext)
 
     return None
 
@@ -255,6 +260,94 @@ def _detect_shebang(path: str) -> Optional[str]:
         return None
 
 
+def _guess_treesitter_language(ext: str) -> Optional[str]:
+    """Map file extension to TreeSitter language name.
+
+    Args:
+        ext: File extension (e.g., '.cpp', '.java')
+
+    Returns:
+        TreeSitter language name or None
+    """
+    # Common extension to TreeSitter language mappings
+    EXTENSION_MAP = {
+        '.c': 'c',
+        '.h': 'c',
+        '.cpp': 'cpp',
+        '.cc': 'cpp',
+        '.cxx': 'cpp',
+        '.hpp': 'cpp',
+        '.hxx': 'cpp',
+        '.java': 'java',
+        '.rb': 'ruby',
+        '.php': 'php',
+        '.swift': 'swift',
+        '.kt': 'kotlin',
+        '.kts': 'kotlin',
+        '.scala': 'scala',
+        '.cs': 'c_sharp',
+        '.lua': 'lua',
+        '.r': 'r',
+        '.elm': 'elm',
+        '.ex': 'elixir',
+        '.exs': 'elixir',
+        '.zig': 'zig',
+        '.v': 'verilog',
+        '.sv': 'verilog',
+        '.svh': 'verilog',
+        '.m': 'objc',
+        '.mm': 'objc',
+        '.sql': 'sql',
+        '.hs': 'haskell',
+        '.ml': 'ocaml',
+        '.mli': 'ocaml',
+        '.erl': 'erlang',
+        '.hrl': 'erlang',
+    }
+    return EXTENSION_MAP.get(ext.lower())
+
+
+def _try_treesitter_fallback(ext: str) -> Optional[type]:
+    """Try to create a dynamic TreeSitter analyzer for unknown extension.
+
+    Args:
+        ext: File extension
+
+    Returns:
+        Dynamic analyzer class or None if TreeSitter doesn't support it
+    """
+    language = _guess_treesitter_language(ext)
+    if not language:
+        return None
+
+    try:
+        # Test if parser is available
+        from tree_sitter_languages import get_parser
+        get_parser(language)
+
+        # Import TreeSitterAnalyzer dynamically to avoid circular import
+        from .treesitter import TreeSitterAnalyzer
+
+        # Create dynamic analyzer class
+        class_name = f'Dynamic{language.title().replace("_", "")}Analyzer'
+        dynamic_class = type(
+            class_name,
+            (TreeSitterAnalyzer,),
+            {
+                'language': language,
+                'type_name': language.replace('_', ' ').title(),
+                'is_fallback': True,
+                'fallback_language': language,
+            }
+        )
+
+        return dynamic_class
+
+    except Exception:
+        # Parser not available or import failed
+        return None
+
+
 def get_all_analyzers() -> Dict[str, Dict[str, Any]]:
     """Get all registered analyzers with metadata.
 
@@ -267,7 +360,7 @@ def get_all_analyzers() -> Dict[str, Dict[str, Any]]:
         result[ext] = {
             'extension': ext,
             'name': getattr(cls, 'type_name', cls.__name__.replace('Analyzer', '')),
-            'icon': getattr(cls, 'icon', '📄'),
+            'icon': getattr(cls, 'icon', ''),
             'class': cls,
         }
     return result
