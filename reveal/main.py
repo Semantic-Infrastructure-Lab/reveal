@@ -127,17 +127,27 @@ Examples:
     if has_jq:
         base_help += '''
   # Advanced filtering with jq (powerful!)
-  reveal app.py --format=json | jq '.functions[] | select(.line_count > 100)'
-  reveal app.py --format=json | jq '.functions[] | select(.depth > 3)'
-  reveal app.py --format=json | jq '.functions[] | select(.line_count > 50 and .depth > 2)'
-  reveal src/**/*.py --format=json | jq -r '.functions[] | "\\(.file):\\(.line) \\(.name) [\\(.line_count) lines]"'
+  reveal app.py --format=json | jq '.structure.functions[] | select(.line_count > 100)'
+  reveal app.py --format=json | jq '.structure.functions[] | select(.depth > 3)'
+  reveal app.py --format=json | jq '.structure.functions[] | select(.line_count > 50 and .depth > 2)'
+  reveal src/**/*.py --format=json | jq -r '.structure.functions[] | "\\(.file):\\(.line) \\(.name) [\\(.line_count) lines]"'
 
   # Pipeline + jq (combine the power!)
-  find . -name "*.py" | reveal --stdin --format=json | jq '.functions[] | select(.line_count > 100)'
+  find . -name "*.py" | reveal --stdin --format=json | jq '.structure.functions[] | select(.line_count > 100)'
   git diff --name-only | grep "\\.py$" | reveal --stdin --god --format=grep
 '''
 
     base_help += '''
+  # Markdown-specific features
+  reveal doc.md --links                       # Extract all links
+  reveal doc.md --links --link-type external  # Only external links
+  reveal doc.md --code                        # Extract all code blocks
+  reveal doc.md --code --language python      # Only Python code blocks
+
+File-type specific features:
+  • Markdown: --links, --code (extract links/code blocks with filtering)
+  • Code files: --god, --outline (find complexity, show hierarchical structure)
+
 Perfect filename:line format - works with vim, git, grep, sed, awk!
 Metrics: All code files show [X lines, depth:Y] for complexity analysis
 stdin: Reads file paths from stdin (one per line) - works with find, git, ls, etc.
@@ -170,7 +180,7 @@ def _main_impl():
                         help='Disable TreeSitter fallback for unknown file types')
     parser.add_argument('--depth', type=int, default=3, help='Directory tree depth (default: 3)')
     parser.add_argument('--god', action='store_true',
-                        help='Show only god functions/elements (high complexity or length)')
+                        help='Show only god functions/elements (>50 lines OR depth >4)')
     parser.add_argument('--outline', action='store_true',
                         help='Show hierarchical outline (classes with methods, nested structures)')
 

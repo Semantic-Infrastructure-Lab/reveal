@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2025-11-26
+
+### Fixed
+- **jq examples corrected** - All jq examples in help now use correct `.structure.functions[]` path
+  - Previous examples used `.functions[]` which caused "Cannot iterate over null" errors
+  - Affects all jq filtering examples in `--help` output
+  - Examples now work as documented
+
+### Changed
+- **--god flag help clarified** - Now explicitly shows thresholds: ">50 lines OR depth >4"
+  - Previous description was vague: "high complexity or length"
+  - Users can now understand exactly what qualifies as a "god function"
+
+### Added
+- **Markdown-specific examples** - Added help examples for markdown features
+  - `reveal doc.md --links` - Extract all links
+  - `reveal doc.md --links --link-type external` - Filter by link type
+  - `reveal doc.md --code --language python` - Extract Python code blocks
+- **File-type specific features section** - New help section explaining file-type capabilities
+  - Markdown: --links, --code with filtering options
+  - Code files: --god, --outline for complexity analysis
+  - Improves discoverability of file-specific features
+
 ## [0.10.0] - 2025-11-26
 
 ### Added
