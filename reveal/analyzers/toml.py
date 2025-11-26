@@ -5,7 +5,7 @@ from typing import Dict, List, Any, Optional
 from ..base import FileAnalyzer, register
 
 
-@register('.toml', name='TOML', icon='📋')
+@register('.toml', name='TOML', icon='')
 class TomlAnalyzer(FileAnalyzer):
     """TOML file analyzer.
 

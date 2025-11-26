@@ -116,6 +116,12 @@ Examples:
   # Output formats
   reveal app.py --format=json    # JSON for scripting
   reveal app.py --format=grep    # Pipeable format
+
+  # Pipeline workflows (Unix composability!)
+  find src/ -name "*.py" | reveal --stdin --god
+  git diff --name-only | reveal --stdin --outline
+  git ls-files "*.ts" | reveal --stdin --format=json
+  ls src/*.py | reveal --stdin
 '''
 
     if has_jq:
@@ -125,11 +131,16 @@ Examples:
   reveal app.py --format=json | jq '.functions[] | select(.depth > 3)'
   reveal app.py --format=json | jq '.functions[] | select(.line_count > 50 and .depth > 2)'
   reveal src/**/*.py --format=json | jq -r '.functions[] | "\\(.file):\\(.line) \\(.name) [\\(.line_count) lines]"'
+
+  # Pipeline + jq (combine the power!)
+  find . -name "*.py" | reveal --stdin --format=json | jq '.functions[] | select(.line_count > 100)'
+  git diff --name-only | grep "\\.py$" | reveal --stdin --god --format=grep
 '''
 
     base_help += '''
 Perfect filename:line format - works with vim, git, grep, sed, awk!
 Metrics: All code files show [X lines, depth:Y] for complexity analysis
+stdin: Reads file paths from stdin (one per line) - works with find, git, ls, etc.
 '''
 
     return base_help
@@ -150,6 +161,8 @@ def _main_impl():
     parser.add_argument('--version', action='version', version=f'reveal {__version__}')
     parser.add_argument('--list-supported', '-l', action='store_true',
                         help='List all supported file types')
+    parser.add_argument('--stdin', action='store_true',
+                        help='Read file paths from stdin (one per line) - enables Unix pipeline workflows')
     parser.add_argument('--meta', action='store_true', help='Show metadata only')
     parser.add_argument('--format', choices=['text', 'json', 'grep'], default='text',
                         help='Output format (text, json, grep)')
@@ -186,7 +199,37 @@ def _main_impl():
         list_supported_types()
         sys.exit(0)
 
-    # Path is required if not using --list-supported
+    # Handle --stdin (read file paths from stdin)
+    if args.stdin:
+        if args.element:
+            print("Error: Cannot use element extraction with --stdin", file=sys.stderr)
+            sys.exit(1)
+
+        # Read file paths from stdin (one per line)
+        for line in sys.stdin:
+            file_path = line.strip()
+            if not file_path:
+                continue  # Skip empty lines
+
+            path = Path(file_path)
+
+            # Skip if path doesn't exist (graceful degradation)
+            if not path.exists():
+                print(f"Warning: {file_path} not found, skipping", file=sys.stderr)
+                continue
+
+            # Skip directories (only process files)
+            if path.is_dir():
+                print(f"Warning: {file_path} is a directory, skipping (use reveal {file_path}/ directly)", file=sys.stderr)
+                continue
+
+            # Process the file
+            if path.is_file():
+                handle_file(str(path), None, args.meta, args.format, args)
+
+        sys.exit(0)
+
+    # Path is required if not using --list-supported or --stdin
     if not args.path:
         parser.print_help()
         sys.exit(1)
@@ -225,12 +268,62 @@ def list_supported_types():
     # Sort by name for nice display
     sorted_analyzers = sorted(analyzers.items(), key=lambda x: x[1]['name'])
 
+    print("Built-in Analyzers:")
     for ext, info in sorted_analyzers:
         name = info['name']
-        print(f"{name:20s} {ext}")
+        print(f"  {name:20s} {ext}")
 
-    print(f"\nTotal: {len(analyzers)} file types supported")
-    print(f"Usage: reveal <file>")
+    print(f"\nTotal: {len(analyzers)} file types with full support")
+
+    # Probe tree-sitter for additional languages
+    try:
+        from tree_sitter_languages import get_language
+
+        # Common languages to check (extension -> language name mapping)
+        fallback_languages = {
+            '.java': ('java', 'Java'),
+            '.c': ('c', 'C'),
+            '.cpp': ('cpp', 'C++'),
+            '.cc': ('cpp', 'C++'),
+            '.cxx': ('cpp', 'C++'),
+            '.h': ('c', 'C/C++ Header'),
+            '.hpp': ('cpp', 'C++ Header'),
+            '.cs': ('c_sharp', 'C#'),
+            '.rb': ('ruby', 'Ruby'),
+            '.php': ('php', 'PHP'),
+            '.swift': ('swift', 'Swift'),
+            '.kt': ('kotlin', 'Kotlin'),
+            '.scala': ('scala', 'Scala'),
+            '.lua': ('lua', 'Lua'),
+            '.hs': ('haskell', 'Haskell'),
+            '.elm': ('elm', 'Elm'),
+            '.ocaml': ('ocaml', 'OCaml'),
+            '.ml': ('ocaml', 'OCaml'),
+        }
+
+        # Filter out languages already registered
+        available_fallbacks = []
+        for ext, (lang, display_name) in fallback_languages.items():
+            if ext not in analyzers:  # Not already registered
+                try:
+                    get_language(lang)
+                    available_fallbacks.append((display_name, ext))
+                except:
+                    pass
+
+        if available_fallbacks:
+            print("\nTree-Sitter Auto-Supported (basic):")
+            for name, ext in sorted(available_fallbacks):
+                print(f"  {name:20s} {ext}")
+            print(f"\nTotal: {len(available_fallbacks)} additional languages via fallback")
+            print("Note: These work automatically but may have basic support.")
+            print("Note: Contributions for full analyzers welcome!")
+
+    except Exception:
+        # tree-sitter-languages not available or probe failed
+        pass
+
+    print(f"\nUsage: reveal <file>")
     print(f"Help: reveal --help")
 
 

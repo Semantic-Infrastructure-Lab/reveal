@@ -5,8 +5,8 @@ from ..base import register
 from ..treesitter import TreeSitterAnalyzer
 
 
-@register('.sh', name='Shell Script', icon='🐚')
-@register('.bash', name='Bash Script', icon='🐚')
+@register('.sh', name='Shell Script', icon='')
+@register('.bash', name='Bash Script', icon='')
 class BashAnalyzer(TreeSitterAnalyzer):
     """Bash/Shell script analyzer.
 

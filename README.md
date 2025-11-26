@@ -231,6 +231,32 @@ $ for f in src/*.py; do echo "$f: $(reveal $f | grep -c 'Functions')"; done
 $ reveal app.py | awk '/Functions/,/^$/ {if ($2 ~ /:/) print $3}'
 ```
 
+### Unix Pipeline Workflows (--stdin)
+```bash
+# Analyze files from find
+$ find src/ -name "*.py" | reveal --stdin --god
+
+# Analyze changed files in git
+$ git diff --name-only | reveal --stdin --outline
+
+# Combine with jq for powerful filtering
+$ find . -name "*.py" | \
+  reveal --stdin --format=json | \
+  jq '.functions[] | select(.line_count > 100)'
+
+# CI/CD: Check for god functions in PR
+$ git diff --name-only origin/main | \
+  grep "\.py$" | \
+  reveal --stdin --god --format=grep
+```
+
+The `--stdin` flag enables composability with any tool that outputs file paths:
+- `find` - Complex file discovery
+- `git` - Changed files, file lists
+- `ls` - Simple file lists
+- `grep -l` - Files matching patterns
+- Custom scripts - Dynamic file selection
+
 ## 🎯 Use Cases
 
 **For AI Agents:**

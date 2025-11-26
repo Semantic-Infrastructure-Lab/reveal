@@ -6,7 +6,7 @@ from typing import Dict, List, Any, Optional
 from ..base import FileAnalyzer, register
 
 
-@register('.yaml', '.yml', name='YAML', icon='📋')
+@register('.yaml', '.yml', name='YAML', icon='')
 class YamlAnalyzer(FileAnalyzer):
     """YAML file analyzer.
 
@@ -70,7 +70,7 @@ class YamlAnalyzer(FileAnalyzer):
         }
 
 
-@register('.json', name='JSON', icon='📊')
+@register('.json', name='JSON', icon='')
 class JsonAnalyzer(FileAnalyzer):
     """JSON file analyzer.
 

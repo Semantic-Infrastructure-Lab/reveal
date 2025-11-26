@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 from ..base import FileAnalyzer, register
 
 
-@register('.ipynb', name='Jupyter', icon='📓')
+@register('.ipynb', name='Jupyter', icon='')
 class JupyterAnalyzer(FileAnalyzer):
     """Analyzer for Jupyter Notebook files"""
 

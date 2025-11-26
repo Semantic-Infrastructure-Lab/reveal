@@ -5,7 +5,7 @@ from typing import Dict, List, Any, Optional
 from ..base import FileAnalyzer, register
 
 
-@register('.conf', name='Nginx', icon='🌐')
+@register('.conf', name='Nginx', icon='')
 class NginxAnalyzer(FileAnalyzer):
     """Nginx configuration file analyzer.
 

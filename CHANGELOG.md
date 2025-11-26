@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`--stdin` flag** - Unix pipeline workflows! Read file paths from stdin (one per line)
+  - Enables composability with find, git, ls, and other Unix tools
+  - Works with all existing flags: `--god`, `--outline`, `--format`, etc.
+  - Graceful error handling: skips missing files and directories with warnings
+  - Perfect for dynamic file selection and CI/CD workflows
+  - Examples:
+    - `find src/ -name "*.py" | reveal --stdin --god` - Find complex code in Python files
+    - `git diff --name-only | reveal --stdin --outline` - Analyze changed files
+    - `git ls-files "*.ts" | reveal --stdin --format=json` - Export TypeScript structure
+    - `find . -name "*.py" | reveal --stdin --format=json | jq '.functions[] | select(.line_count > 100)'` - Complex filtering pipeline
+
+- **Enhanced help text** - Pipeline examples with jq integration
+  - Dynamic help: shows jq examples only if jq is installed
+  - Clear documentation of stdin workflows
+  - Real-world pipeline examples combining find/git/grep with reveal
+
+- **README documentation** - Added "Unix Pipeline Workflows" section
+  - Comprehensive stdin examples with find, git, jq
+  - CI/CD integration patterns
+  - Clear explanation of composability benefits
+
+### Changed
+- **Analyzer icons removed** - Completed LLM optimization started in v0.9.0
+  - All emoji icons removed from file type registrations
+  - Consistent with token optimization strategy (30-40% token savings)
+  - Applies to all 18 built-in analyzers
+
 ## [0.9.0] - 2025-11-26
 
 ### 🌟 Major Feature: Hierarchical Outline Mode

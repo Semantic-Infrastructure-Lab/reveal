@@ -6,7 +6,7 @@ from typing import Dict, List, Any, Optional
 from ..base import FileAnalyzer, register
 
 
-@register('.md', '.markdown', name='Markdown', icon='📝')
+@register('.md', '.markdown', name='Markdown', icon='')
 class MarkdownAnalyzer(FileAnalyzer):
     """Markdown file analyzer.
 

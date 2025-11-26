@@ -4,8 +4,8 @@ from ..base import register
 from ..treesitter import TreeSitterAnalyzer
 
 
-@register('.ts', name='TypeScript', icon='🔷')
-@register('.tsx', name='TypeScript React', icon='⚛️')
+@register('.ts', name='TypeScript', icon='')
+@register('.tsx', name='TypeScript React', icon='')
 class TypeScriptAnalyzer(TreeSitterAnalyzer):
     """TypeScript file analyzer.
 

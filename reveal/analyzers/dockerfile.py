@@ -5,7 +5,7 @@ from typing import Dict, List, Any, Optional
 from ..base import FileAnalyzer, register
 
 
-@register('Dockerfile', name='Dockerfile', icon='🐳')
+@register('Dockerfile', name='Dockerfile', icon='')
 class DockerfileAnalyzer(FileAnalyzer):
     """Dockerfile analyzer.
 

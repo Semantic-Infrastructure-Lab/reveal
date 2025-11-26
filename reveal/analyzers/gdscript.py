@@ -5,7 +5,7 @@ from typing import Dict, List, Any, Optional
 from ..base import FileAnalyzer, register
 
 
-@register('.gd', name='GDScript', icon='🎮')
+@register('.gd', name='GDScript', icon='')
 class GDScriptAnalyzer(FileAnalyzer):
     """GDScript file analyzer for Godot Engine.
 

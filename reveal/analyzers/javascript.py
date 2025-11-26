@@ -4,7 +4,7 @@ from ..base import register
 from ..treesitter import TreeSitterAnalyzer
 
 
-@register('.js', name='JavaScript', icon='📜')
+@register('.js', name='JavaScript', icon='')
 class JavaScriptAnalyzer(TreeSitterAnalyzer):
     """JavaScript file analyzer.
 
