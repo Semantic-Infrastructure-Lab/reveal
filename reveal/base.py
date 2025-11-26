@@ -316,6 +316,11 @@ def _try_treesitter_fallback(ext: str) -> Optional[type]:
     Returns:
         Dynamic analyzer class or None if TreeSitter doesn't support it
     """
+    import warnings
+
+    # Suppress tree-sitter deprecation warnings
+    warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
+
     language = _guess_treesitter_language(ext)
     if not language:
         return None

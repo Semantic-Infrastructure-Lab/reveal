@@ -3,6 +3,10 @@
 import warnings
 from typing import Dict, List, Any, Optional
 from .base import FileAnalyzer
+
+# Suppress tree-sitter deprecation warnings globally
+warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
+
 from tree_sitter_languages import get_parser
 
 

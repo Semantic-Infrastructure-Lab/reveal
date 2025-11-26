@@ -277,6 +277,9 @@ def list_supported_types():
 
     # Probe tree-sitter for additional languages
     try:
+        import warnings
+        warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
+
         from tree_sitter_languages import get_language
 
         # Common languages to check (extension -> language name mapping)
