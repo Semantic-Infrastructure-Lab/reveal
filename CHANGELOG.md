@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2025-11-26
+
 ### Added
 - **`--stdin` flag** - Unix pipeline workflows! Read file paths from stdin (one per line)
   - Enables composability with find, git, ls, and other Unix tools
@@ -34,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All emoji icons removed from file type registrations
   - Consistent with token optimization strategy (30-40% token savings)
   - Applies to all 18 built-in analyzers
+
+### Fixed
+- **Suppressed tree-sitter deprecation warnings** - Clean output for end users
+  - No more FutureWarning messages from tree-sitter library
+  - Applied globally across all TreeSitter usage
 
 ## [0.9.0] - 2025-11-26
 
