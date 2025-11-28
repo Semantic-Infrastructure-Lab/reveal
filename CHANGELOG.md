@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2025-11-27
+
+### Fixed
+- **Test suite** - Fixed all failing tests for 100% pass rate (78/78 tests)
+  - Removed 6 obsolete test files testing non-existent modules from old codebase
+  - Fixed nginx analyzer tests to use temp files instead of passing line lists
+  - Updated CLI help text test expectations to match current output format
+  - All test modules now passing: Dockerfile, CLI, Analyzers, Nginx, Shebang, TOML, TreeSitter UTF-8
+
+### Changed
+- **pytest configuration** - Disabled postgresql and redis plugins to prevent import errors
+
 ## [0.11.0] - 2025-11-26
 
 ### 🌐 Major Feature: URI Adapters
