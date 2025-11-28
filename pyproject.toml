@@ -81,7 +81,8 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=reveal --cov-report=term-missing"
+# Disable plugins that reveal doesn't use (prevents auto-load failures)
+addopts = "-v --cov=reveal --cov-report=term-missing -p no:postgresql -p no:redis"
 
 [tool.coverage.run]
 source = ["reveal"]
