@@ -1,176 +1,262 @@
 # Publishing to PyPI
 
-This document explains how to publish `reveal-cli` to PyPI.
+> **📖 For the complete release process, see [RELEASING.md](RELEASING.md)**
+>
+> This document covers PyPI-specific publishing details.
 
-## Prerequisites
+## TL;DR - Quick Release
 
-1. PyPI account: https://pypi.org/account/register/
-2. API token from PyPI: https://pypi.org/manage/account/token/
-3. GitHub repository secrets configured with `PYPI_API_TOKEN`
+**Automated (Recommended):**
+```bash
+./scripts/release.sh 0.11.1
+```
 
-## Automated Publishing (Recommended)
+See [RELEASING.md](RELEASING.md) for complete workflow.
 
-Publishing happens automatically via GitHub Actions when you create a release:
+---
 
-### Steps:
+## How Publishing Works
 
-1. **Update version in `pyproject.toml`**
-   ```toml
-   [project]
-   version = "0.2.0"  # Update this
-   ```
+Publishing to PyPI is **fully automated** via GitHub Actions:
 
-2. **Commit and push changes**
-   ```bash
-   git add pyproject.toml
-   git commit -m "Bump version to 0.2.0"
-   git push
-   ```
+```
+Create GitHub Release → GitHub Actions → PyPI Published
+   (manual/script)        (automatic)      (automatic)
+```
 
-3. **Create a GitHub release**
-   ```bash
-   # Using GitHub CLI
-   gh release create v0.2.0 --title "v0.2.0" --notes "Release notes here"
+**Workflow:** `.github/workflows/publish-to-pypi.yml`
 
-   # Or via GitHub web interface:
-   # Go to: https://github.com/scottsen/reveal/releases/new
-   # Tag: v0.2.0
-   # Title: v0.2.0
-   # Description: Release notes
-   # Click "Publish release"
-   ```
+**Triggers on:**
+- ✅ GitHub Release published
+- ✅ Manual workflow dispatch
 
-4. **GitHub Actions automatically:**
-   - Builds the package
-   - Runs quality checks
-   - Publishes to PyPI
+**What it does:**
+1. Builds package (`python -m build`)
+2. Validates (`twine check dist/*`)
+3. Publishes to PyPI using `PYPI_API_TOKEN` secret
 
-5. **Verify publication**
-   ```bash
-   # Wait a few minutes, then:
-   pip install reveal-cli==0.2.0
-   reveal --help
-   ```
+**Result:** Package live on PyPI in ~1-2 minutes
 
-## Manual Publishing (For Testing)
+---
 
-### Test PyPI First (Recommended)
+## Prerequisites (One-Time Setup)
 
-1. **Get TestPyPI token**: https://test.pypi.org/manage/account/token/
+### 1. PyPI API Token
 
-2. **Build the package**
-   ```bash
-   python -m pip install --upgrade build twine
-   python -m build
-   ```
+**Get token:**
+- Go to: https://pypi.org/manage/account/token/
+- Scope: "Entire account" or project `reveal-cli`
+- Copy the token (starts with `pypi-`)
 
-3. **Check the build**
-   ```bash
-   twine check dist/*
-   ```
-
-4. **Upload to TestPyPI**
-   ```bash
-   twine upload --repository testpypi dist/*
-   # Username: __token__
-   # Password: <your TestPyPI token>
-   ```
-
-5. **Test installation**
-   ```bash
-   pip install --index-url https://test.pypi.org/simple/ reveal-cli
-   reveal --help
-   ```
-
-### Production PyPI
-
-1. **Get PyPI token**: https://pypi.org/manage/account/token/
-
-2. **Build and upload**
-   ```bash
-   rm -rf dist/
-   python -m build
-   twine check dist/*
-   twine upload dist/*
-   # Username: __token__
-   # Password: <your PyPI token>
-   ```
-
-3. **Verify**
-   ```bash
-   pip install reveal-cli
-   reveal --help
-   ```
-
-## Setting up GitHub Secrets
-
-To enable automated publishing:
-
+**Add to GitHub:**
 1. Go to: https://github.com/scottsen/reveal/settings/secrets/actions
 2. Click "New repository secret"
 3. Name: `PYPI_API_TOKEN`
-4. Value: Your PyPI API token (starts with `pypi-`)
-5. Click "Add secret"
+4. Value: Your token
+5. Save
+
+### 2. GitHub CLI
+
+```bash
+# macOS
+brew install gh
+
+# Linux
+# See: https://github.com/cli/cli/blob/trunk/docs/install_linux.md
+
+# Authenticate
+gh auth login
+```
+
+### 3. Python Build Tools
+
+```bash
+pip install --upgrade build twine
+```
+
+---
+
+## Publishing Methods
+
+### Method 1: Automated Script (Recommended)
+
+**See [RELEASING.md](RELEASING.md) for full details.**
+
+```bash
+./scripts/release.sh 0.11.1
+```
+
+Handles version bump, changelog, git tags, GitHub release, and triggers PyPI publish.
+
+### Method 2: Manual GitHub Release
+
+If you've already committed version changes:
+
+```bash
+# Push commits
+git push origin master
+
+# Create and push tag
+git tag v0.11.1
+git push origin v0.11.1
+
+# Create GitHub release (triggers PyPI publish)
+gh release create v0.11.1 \
+  --title "v0.11.1" \
+  --notes "See CHANGELOG.md"
+```
+
+### Method 3: Manual PyPI Upload (Emergency Only)
+
+If GitHub Actions fails:
+
+```bash
+# Build
+rm -rf dist/
+python -m build
+
+# Validate
+twine check dist/*
+
+# Upload
+twine upload dist/*
+# Username: __token__
+# Password: <your PyPI token>
+```
+
+---
+
+## Testing on TestPyPI (Optional)
+
+Before releasing to production, test on TestPyPI:
+
+### 1. Get TestPyPI Token
+- https://test.pypi.org/manage/account/token/
+
+### 2. Build and Upload
+```bash
+# Build
+python -m build
+
+# Upload to TestPyPI
+twine upload --repository testpypi dist/*
+# Username: __token__
+# Password: <your TestPyPI token>
+```
+
+### 3. Test Installation
+```bash
+pip install --index-url https://test.pypi.org/simple/ reveal-cli
+reveal --version
+```
+
+---
 
 ## Troubleshooting
 
-### Build fails with "plugins not found"
+### GitHub Actions Fails to Publish
 
-Ensure `MANIFEST.in` includes:
-```
-include plugins/*.yaml
-```
-
-And `pyproject.toml` has:
-```toml
-[tool.setuptools.packages.find]
-include = ["reveal*", "plugins"]
-
-[tool.setuptools.package-data]
-plugins = ["*.yaml", "*.yml"]
-```
-
-### Upload fails with "File already exists"
-
-You can't replace a version on PyPI. You must:
-1. Increment the version in `pyproject.toml`
-2. Create a new release
-
-### Import errors after installation
-
-Check that plugins are in the wheel:
+**Check workflow logs:**
 ```bash
-python -m zipfile -l dist/reveal_cli-*.whl | grep plugins
+gh run list --limit 5
+gh run view <run-id> --log-failed
 ```
+
+**Common issues:**
+- Missing `PYPI_API_TOKEN` secret → Add in GitHub settings
+- Token expired → Generate new token
+- Network issues → Re-run workflow manually
+
+**Manual fallback:**
+```bash
+python -m build
+twine upload dist/*
+```
+
+### "File already exists" Error
+
+**Cause:** Version already published to PyPI
+
+**Solution:** Bump version number:
+```bash
+# Edit pyproject.toml
+version = "0.11.2"  # Increment
+
+# Release new version
+./scripts/release.sh 0.11.2
+```
+
+**Note:** You cannot replace PyPI versions. Can only "yank" (hide from pip):
+- Go to https://pypi.org/project/reveal-cli/
+- Manage → Yank release
+
+### Verify Package Contents
+
+```bash
+# Build locally
+python -m build
+
+# Check wheel contents
+python -m zipfile -l dist/reveal_cli-*.whl
+
+# Should see:
+# - reveal/ (main package)
+# - reveal/analyzers/
+# - reveal/adapters/
+# - All .py files
+```
+
+---
 
 ## Version Numbering
 
-We use semantic versioning (semver):
-- `MAJOR.MINOR.PATCH` (e.g., `1.2.3`)
-- Major: Breaking changes
-- Minor: New features, backward compatible
-- Patch: Bug fixes
+Follow [Semantic Versioning](https://semver.org/):
 
-Examples:
-- `0.1.0` → `0.1.1` - Bug fix
-- `0.1.1` → `0.2.0` - New GDScript support
-- `0.9.0` → `1.0.0` - First stable release
+- **MAJOR.MINOR.PATCH** (e.g., `1.2.3`)
+- **MAJOR** - Breaking changes
+- **MINOR** - New features (backward compatible)
+- **PATCH** - Bug fixes
 
-## Checklist Before Release
+**Examples:**
+- `0.11.0` → `0.11.1` - Bug fixes (this release)
+- `0.11.1` → `0.12.0` - PostgreSQL adapter (new feature)
+- `0.12.0` → `1.0.0` - Stable API freeze
 
-- [ ] All tests passing
-- [ ] Version updated in `pyproject.toml`
-- [ ] CHANGELOG.md updated
-- [ ] README.md up to date
-- [ ] Test build locally: `python -m build`
-- [ ] Check wheel contents: `python -m zipfile -l dist/*.whl`
-- [ ] Plugins included in build
-- [ ] GitHub Actions workflow configured
-- [ ] PyPI token added to GitHub secrets
+---
+
+## Quick Reference
+
+```bash
+# Automated release
+./scripts/release.sh X.Y.Z
+
+# Manual release
+git push origin master
+git tag vX.Y.Z
+git push origin vX.Y.Z
+gh release create vX.Y.Z --title "vX.Y.Z" --notes "..."
+
+# Check PyPI
+pip index versions reveal-cli
+
+# View releases
+gh release list
+
+# Monitor GitHub Actions
+gh run list --limit 5
+```
+
+---
 
 ## Resources
 
-- PyPI: https://pypi.org/
-- TestPyPI: https://test.pypi.org/
-- Python Packaging Guide: https://packaging.python.org/
-- Twine docs: https://twine.readthedocs.io/
+- **Main Release Guide:** [RELEASING.md](RELEASING.md)
+- **PyPI Project:** https://pypi.org/project/reveal-cli/
+- **TestPyPI:** https://test.pypi.org/
+- **GitHub Actions:** https://github.com/scottsen/reveal/actions
+- **Python Packaging:** https://packaging.python.org/
+- **Twine Docs:** https://twine.readthedocs.io/
+
+---
+
+**Last Updated:** 2025-11-27
