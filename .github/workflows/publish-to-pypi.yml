@@ -12,8 +12,6 @@ jobs:
   # Run tests before publishing
   test:
     uses: ./.github/workflows/test.yml
-    permissions:
-      contents: read
 
   pypi-publish:
     needs: test  # Wait for tests to pass
