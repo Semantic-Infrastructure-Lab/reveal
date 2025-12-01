@@ -9,12 +9,8 @@ permissions:
   id-token: write  # Required for PyPI trusted publishing
 
 jobs:
-  # Run tests before publishing
-  test:
-    uses: ./.github/workflows/test.yml
-
+  # Tests already run on push to master - no need to re-run here
   pypi-publish:
-    needs: test  # Wait for tests to pass
     name: Upload release to PyPI
     runs-on: ubuntu-latest
     environment:
