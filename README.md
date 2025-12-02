@@ -1,114 +1,24 @@
-# reveal - Explore Code Semantically
+# reveal - Semantic Code Explorer
 
-> **The simplest way to understand code**
->
-> Point it at a directory, file, or function. Get exactly what you need with zero configuration.
+**Progressive file disclosure for AI agents and developers**
 
-## 🎯 The Problem
-
-Developers and AI agents waste time reading entire files when they only need to understand structure or extract specific functions. There's no standard way to progressively explore code.
-
-## 💡 The Solution
-
-`reveal` provides smart, semantic exploration of codebases:
-- **Directories** → See what's inside
-- **Files** → See structure (imports, functions, classes)
-- **Elements** → See implementation (extract specific function/class)
-
-All with perfect `filename:line` integration for vim, git, grep, and other tools.
-
----
-
-## Part of the Semantic Infrastructure Lab
-
-**reveal** is a production component of the [Semantic Infrastructure Lab (SIL)](https://github.com/semantic-infrastructure-lab/sil) — building the semantic substrate for intelligent systems.
-
-**Role in the Semantic OS:**
-- **Layer 5:** Human Interfaces / SIM (progressive disclosure of structure)
-
-**SIL Principles Applied:**
-- ✅ **Clarity** — Explicit structure visibility (no hidden complexity)
-- ✅ **Simplicity** — Zero configuration, smart defaults
-- ✅ **Composability** — Unix tool composition (pipes, grep, vim)
-- ✅ **Correctness** — Reliable parsing via Tree-sitter
-- ✅ **Verifiability** — Precise line numbers, reproducible output
-
-**Quick Links:** [SIL Manifesto](https://github.com/semantic-infrastructure-lab/sil/blob/main/docs/canonical/MANIFESTO.md) • [Unified Architecture](https://github.com/semantic-infrastructure-lab/sil/blob/main/docs/architecture/UNIFIED_ARCHITECTURE_GUIDE.md) • [Project Index](https://github.com/semantic-infrastructure-lab/sil/blob/main/projects/PROJECT_INDEX.md)
-
----
-
-## ⚡ Quick Start
-
-**Install:**
 ```bash
 pip install reveal-cli
+reveal src/                    # directory → tree
+reveal app.py                  # file → structure
+reveal app.py load_config      # element → code
 ```
 
-Includes full support for 18 file types out of the box (Python, JavaScript, TypeScript, Rust, Go, and more).
+Zero config. 18 languages built-in. 50+ via tree-sitter.
 
-**Use:**
-```bash
-reveal src/                    # Directory → tree view
-reveal app.py                  # File → structure
-reveal app.py load_config      # Element → extraction
-```
+---
 
-**That's it.** No flags, no configuration, just works.
+## Core Modes
 
-## 🔍 Pattern Detection (v0.13.0+)
-
-Industry-aligned code quality checking with pluggable rules:
+**Auto-detects what you need:**
 
 ```bash
-# Check code quality
-reveal app.py --check
-
-# Select specific categories (B=bugs, S=security, C=complexity, E=errors)
-reveal app.py --check --select B,S
-
-# Ignore specific rules
-reveal app.py --check --ignore E501
-
-# List all available rules
-reveal --rules
-
-# Explain a specific rule
-reveal --explain B001
-```
-
-**Built-in Rules:**
-- **B001**: Bare except clauses (Python)
-- **S701**: Docker :latest tags (Dockerfile)
-- **C901**: Function complexity (Universal)
-- **E501**: Line length (Universal)
-- **U501**: Insecure HTTP URLs (Universal)
-
-**Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered, zero configuration!
-
-## 🤖 AI Agent Support (v0.13.0+)
-
-Built-in comprehensive usage guide for AI agents and LLMs:
-
-```bash
-# Get strategic guidance for AI agents
-reveal --agent-help
-```
-
-**Includes:**
-- **Decision trees** - When to use reveal vs alternatives
-- **Workflow sequences** - Common task patterns (PR review, bug investigation, etc.)
-- **Token efficiency analysis** - Cost comparisons for different approaches
-- **Anti-patterns** - What NOT to do
-- **Pipeline composition** - Combining with git, find, jq, etc.
-
-**Following the `llms.txt` pattern:** Just as websites provide `llms.txt` to guide AI agents, reveal provides `--agent-help` to show CLI tools how to be used effectively by agents.
-
-## 🎨 Clean Design
-
-### Smart Auto-Detection
-
-```bash
-# Directories → tree view
+# Directory → tree view
 $ reveal src/
 📁 src/
 ├── app.py (247 lines, Python)
@@ -117,7 +27,7 @@ $ reveal src/
     ├── user.py (156 lines, Python)
     └── post.py (203 lines, Python)
 
-# Files → structure view
+# File → structure (imports, functions, classes)
 $ reveal app.py
 📄 app.py
 
@@ -133,46 +43,123 @@ Classes (2):
   app.py:95   Database
   app.py:145  RequestHandler
 
-# Elements → extraction
+# Element → extract function/class
 $ reveal app.py load_config
 app.py:15-27 | load_config
 
    15  def load_config(path: str) -> Dict:
    16      """Load configuration from JSON file."""
-   17
-   18      if not os.path.exists(path):
-   19          raise FileNotFoundError(f"Config not found: {path}")
-   20
-   21      with open(path) as f:
-   22          return json.load(f)
+   17      if not os.path.exists(path):
+   18          raise FileNotFoundError(f"Config not found: {path}")
+   19      with open(path) as f:
+   20          return json.load(f)
 ```
 
-### Perfect Unix Integration
+**All output is `filename:line` format** - works with vim, git, grep.
 
-Every line is `filename:line` format:
+---
+
+## Key Features
+
+### 🤖 AI Agent Workflows
 
 ```bash
-# Works with vim
-$ reveal app.py | grep "Database"
-  app.py:95     Database
+# Get comprehensive agent guide
+reveal --agent-help              # Decision trees, workflows, anti-patterns
 
-$ vim app.py:95
-
-# Works with git
-$ reveal app.py | grep "load_config"
-  app.py:15   load_config(path: str) -> Dict
-
-$ git blame app.py -L 15,27
-
-# Pipe to other tools
-$ reveal app.py --format=grep | grep "config"
-app.py:15:def load_config(path: str) -> Dict:
-app.py:18:    if not os.path.exists(path):
+# Typical exploration pattern
+reveal src/                      # Orient: what exists?
+reveal src/app.py                # Navigate: see structure
+reveal src/app.py Database       # Focus: get implementation
 ```
 
-## 🔌 Adding New File Types (Stupidly Easy)
+**Token efficiency:** Structure view = 50 tokens vs 7,500 for full file read.
 
-### Tree-Sitter Languages (10 lines!)
+### 🔍 Code Quality Checks (v0.13.0+)
+
+```bash
+reveal app.py --check            # Find issues (bugs, security, complexity)
+reveal app.py --check --select B,S  # Only bugs + security
+reveal --rules                   # List all rules
+reveal --explain B001            # Explain specific rule
+```
+
+**Built-in rules:** Bare except (B001), :latest tags (S701), complexity (C901), line length (E501), HTTP URLs (U501)
+**Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
+
+### 🌲 Outline Mode (v0.9.0+)
+
+```bash
+reveal app.py --outline
+UserManager (app.py:1)
+  ├─ create_user(self, username) [3 lines, depth:0] (line 4)
+  ├─ delete_user(self, user_id) [3 lines, depth:0] (line 8)
+  └─ UserValidator (nested class, line 12)
+     └─ validate_email(self, email) [2 lines, depth:0] (line 15)
+```
+
+### 🔌 Unix Pipelines
+
+```bash
+# Changed files in git
+git diff --name-only | reveal --stdin --outline
+
+# Find complex functions
+find src/ -name "*.py" | reveal --stdin --format=json | jq '.functions[] | select(.line_count > 100)'
+
+# CI/CD quality gate
+git diff --name-only origin/main | grep "\.py$" | reveal --stdin --check --format=grep
+```
+
+### 🌐 URI Adapters (v0.11.0+)
+
+Explore ANY resource, not just files:
+
+```bash
+reveal env://                    # All environment variables
+reveal env://DATABASE_URL        # Specific variable
+reveal env:// --format=json | jq '.categories.Python'
+
+# Coming: https://, git://, docker://
+```
+
+---
+
+## Quick Reference
+
+### Output Formats
+
+```bash
+reveal app.py                    # text (default)
+reveal app.py --format=json      # structured data
+reveal app.py --format=grep      # grep-compatible
+reveal app.py --meta             # metadata only
+```
+
+### Supported Languages
+
+**Built-in (18):** Python, Rust, Go, JavaScript, TypeScript, GDScript, Bash, Jupyter, Markdown, JSON, YAML, TOML, Nginx, Dockerfile, + more
+
+**Via tree-sitter (50+):** C, C++, C#, Java, PHP, Swift, Kotlin, Ruby, etc.
+
+**Shebang detection:** Extensionless scripts auto-detected (`#!/usr/bin/env python3`)
+
+### Common Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--outline` | Hierarchical structure view |
+| `--check` | Code quality analysis |
+| `--stdin` | Read file paths from stdin |
+| `--depth N` | Directory tree depth |
+| `--agent-help` | AI agent usage guide |
+| `--list-supported` | Show all file types |
+
+---
+
+## Extending reveal
+
+### Tree-Sitter Languages (10 lines)
 
 ```python
 from reveal import TreeSitterAnalyzer, register
@@ -182,9 +169,7 @@ class GoAnalyzer(TreeSitterAnalyzer):
     language = 'go'
 ```
 
-**Done!** Full Go support with structure extraction and element access.
-
-Works for: Python, Rust, Go, JavaScript, TypeScript, C#, Java, PHP, Bash, C, C++, Swift, Kotlin, and 40+ more languages!
+Done. Full Go support with structure + extraction.
 
 ### Custom Analyzers (20-50 lines)
 
@@ -194,284 +179,55 @@ from reveal import FileAnalyzer, register
 @register('.md', name='Markdown', icon='📝')
 class MarkdownAnalyzer(FileAnalyzer):
     def get_structure(self):
-        """Extract headings."""
         headings = []
         for i, line in enumerate(self.lines, 1):
             if line.startswith('#'):
                 headings.append({'line': i, 'name': line.strip('# ')})
         return {'headings': headings}
-
-    def extract_element(self, element_type, name):
-        """Extract a section."""
-        # Custom extraction logic
-        ...
 ```
 
-That's it! Your file type now works with reveal.
-
-## 🚀 Features
-
-- ✅ **URI adapters** - Explore ANY resource via URIs: `env://`, with more coming soon! (NEW in v0.11.0!)
-- ✅ **Hierarchical outline mode** - `--outline` shows code structure as a tree (v0.9.0)
-- ✅ **Smart defaults** - No flags needed for 99% of use cases
-- ✅ **Directory trees** - See what's in a folder
-- ✅ **Structure extraction** - Imports, functions, classes, signals (GDScript)
-- ✅ **Element extraction** - Get specific function/class
-- ✅ **Pattern detection** - `--check` flag finds code quality issues (v0.13.0)
-- ✅ **18 file types built-in** - Python, Rust, Go, JavaScript, TypeScript, GDScript, Bash, Jupyter, Markdown, JSON, YAML, TOML, Nginx, Dockerfile, and more
-- ✅ **Shebang detection** - Extensionless scripts work automatically (detects `#!/usr/bin/env python3`, `#!/bin/bash`)
-- ✅ **50+ languages available** - Via optional tree-sitter (JS, TS, C#, Java, PHP, etc.)
-- ✅ **Perfect line numbers** - `filename:line` format everywhere
-- ✅ **Unix composable** - Works with vim, git, grep, sed, awk
-- ✅ **Multiple output formats** - text (default), json, grep
-- ✅ **Easy to extend** - Add new file type in 10-50 lines
-- ✅ **AI-optimized** - Designed for agentic workflows
-- ✅ **Windows compatible** - Full UTF-8/emoji support
-
-## 📚 Real-World Examples
-
-### Hierarchical Outline (NEW!)
-```bash
-# See code structure as a tree
-$ reveal app.py --outline
-UserManager (app.py:1)
-  ├─ create_user(self, username) [3 lines, depth:0] (line 4)
-  ├─ delete_user(self, user_id) [3 lines, depth:0] (line 8)
-  └─ UserValidator (nested class, line 12)
-     └─ validate_email(self, email) [2 lines, depth:0] (line 15)
-
-# Find complex code with outline view
-$ reveal app.py --outline --check
-```
-
-### AI Agent Workflow
-```bash
-# Start broad
-$ reveal src/
-# Pick interesting file
-$ reveal src/app.py
-# Deep dive
-$ reveal src/app.py Database
-```
-
-### Developer Quick Lookup
-```bash
-# See function implementation
-$ reveal app.py load_config
-
-# Jump to edit
-$ vim app.py:15
-```
-
-### Game Development (GDScript)
-```bash
-# Explore Godot scripts
-$ reveal player.gd
-📄 player.gd
-
-Functions (4):
-  player.gd:11    _ready() -> void
-  player.gd:16    take_damage(amount: int) -> void
-  player.gd:24    die() -> void
-
-Signals (2):
-  player.gd:3     health_changed(new_health)
-  player.gd:4     died()
-
-# Extract specific function
-$ reveal player.gd take_damage
-player.gd:16-23 | take_damage
-
-   16  func take_damage(amount: int) -> void:
-   17      """Reduce health by amount."""
-   18      current_health -= amount
-   19      emit_signal("health_changed", current_health)
-```
-
-### Integration with Tools
-```bash
-# Find all TODO comments
-$ reveal src/*.py | grep -i "todo"
-
-# Count functions per file
-$ for f in src/*.py; do echo "$f: $(reveal $f | grep -c 'Functions')"; done
-
-# Extract all function names
-$ reveal app.py | awk '/Functions/,/^$/ {if ($2 ~ /:/) print $3}'
-```
-
-### Unix Pipeline Workflows (--stdin)
-```bash
-# Analyze files from find
-$ find src/ -name "*.py" | reveal --stdin --check
-
-# Analyze changed files in git
-$ git diff --name-only | reveal --stdin --outline
-
-# Combine with jq for powerful filtering
-$ find . -name "*.py" | \
-  reveal --stdin --format=json | \
-  jq '.functions[] | select(.line_count > 100)'
-
-# CI/CD: Check for code quality issues in PR
-$ git diff --name-only origin/main | \
-  grep "\.py$" | \
-  reveal --stdin --check --format=grep
-```
-
-The `--stdin` flag enables composability with any tool that outputs file paths:
-- `find` - Complex file discovery
-- `git` - Changed files, file lists
-- `ls` - Simple file lists
-- `grep -l` - Files matching patterns
-- Custom scripts - Dynamic file selection
-
-### 🌐 URI Adapters - Explore ANY Resource! (NEW in v0.11!)
-
-reveal isn't just for files anymore. Use URIs to explore any structured resource:
-
-```bash
-# Environment variables
-$ reveal env://
-Environment Variables (82)
-
-System (9):
-  HOME                           /home/user
-  PATH                           /usr/local/bin:/usr/bin
-  SHELL                          /bin/bash
-  ...
-
-Python (2):
-  PYTHONPATH                     /app:/app/lib
-  VIRTUAL_ENV                    /app/venv
-
-# Get specific variable
-$ reveal env://DATABASE_URL
-Environment Variable: DATABASE_URL
-Category: Application
-Value: postgresql://localhost/mydb
-Length: 29 characters
-
-# JSON output for scripting
-$ reveal env:// --format=json | jq '.categories.Python'
-[
-  {
-    "name": "PYTHONPATH",
-    "value": "/app:/app/lib",
-    "sensitive": false,
-    "length": 13
-  }
-]
-
-# Find sensitive variables
-$ reveal env:// | grep "(sensitive)"
-  API_KEY                        *** (sensitive)
-  DATABASE_PASSWORD              *** (sensitive)
-```
-
-**Why use URI adapters?**
-- **Consistent interface** - Same reveal UX for any resource
-- **Progressive disclosure** - Overview → specific element
-- **Multiple formats** - text, json, grep (just like files)
-- **Composable** - Works with jq, grep, and other tools
-
-**Coming soon:** `https://` (REST APIs), `git://` (repositories), `docker://` (containers), and more!
-
-## 🎯 Use Cases
-
-**For AI Agents:**
-- Explore unknown codebases efficiently
-- Get structure without reading full files
-- Extract specific elements on demand
-- Standard interface across all file types
-
-**For Developers:**
-- Quick reference without opening editor
-- Understand file structure rapidly
-- Find specific functions/classes
-- Perfect for terminal workflows
-
-**For Scripts:**
-- JSON output for programmatic access
-- Grep-compatible format
-- Composable with Unix tools
-- Reliable filename:line references
-
-## 🏗️ Architecture
-
-```
-reveal/
-├── base.py              # Registration & analyzer base (~380 lines)
-├── main.py              # CLI & output formatting (~920 lines)
-├── treesitter.py        # TreeSitter integration for 50+ languages (~345 lines)
-├── tree_view.py         # Directory tree rendering (~105 lines)
-├── analyzers/           # File type analyzers
-│   ├── python.py        # 15 lines (tree-sitter)
-│   ├── rust.py          # 13 lines (tree-sitter)
-│   ├── nginx.py         # 186 lines (custom logic)
-│   ├── markdown.py      # 312 lines (custom logic)
-│   └── ...              # 14 analyzers total
-└── adapters/            # URI adapters (NEW!)
-    ├── base.py          # Adapter protocol
-    ├── env.py           # Environment variables (v0.11.0)
-    └── ...              # More coming! (postgres, docker, https)
-```
-
-**Total codebase:** ~3,400 lines
-**Core:** ~1,700 lines
-**Analyzers:** 10-300 lines each (most are < 25 lines!)
-**Adapters:** New system for exploring non-file resources
-
-**See:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for deep dive
-
-## 📖 Optional Flags
-
-```bash
-# Discovery
-reveal --version              # Show version
-reveal --list-supported       # List all supported file types
-
-# Metadata only
-reveal app.py --meta
-
-# JSON output
-reveal app.py --format=json
-
-# Grep-compatible output
-reveal app.py --format=grep
-
-# Directory depth
-reveal src/ --depth=5
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Adding a new file type takes 10-50 lines of code.
-
-**Most wanted:**
-- New language analyzers (TypeScript, Java, Swift, Kotlin)
-- Better extraction logic for existing analyzers
-- Documentation improvements
-- Bug reports and feature requests
-
-## 📜 License
-
-MIT License - See [LICENSE](LICENSE)
-
-## 🔗 Links
-
-- **GitHub:** https://github.com/scottsen/reveal
-- **Issues:** https://github.com/scottsen/reveal/issues
-- **Discussions:** https://github.com/scottsen/reveal/discussions
-
-## 🌟 Vision
-
-Make `reveal` the standard way to explore code - for humans and AI agents alike. Clean, simple, powerful.
+**Custom rules:** Drop in `~/.reveal/rules/` - zero config.
 
 ---
 
-**Status:** 🚀 v0.13.3 - Windows Compatibility | **License:** MIT | **Roadmap:** [ROADMAP.md](ROADMAP.md)
+## Architecture
 
-[![GitHub Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/scottsen/reveal)
+```
+reveal/
+├── base.py          # Core (~380 lines)
+├── main.py          # CLI (~920 lines)
+├── treesitter.py    # 50+ languages (~345 lines)
+├── analyzers/       # 18 file types (10-300 lines each)
+└── adapters/        # URI support (env://, more coming)
+```
+
+**Total:** ~3,400 lines. Most analyzers < 25 lines.
+
+**Deep dive:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+---
+
+## Contributing
+
+Add new languages in 10-50 lines. See `analyzers/` for examples.
+
+**Most wanted:** TypeScript, Java, Swift, better extraction logic, bug reports.
+
+---
+
+## Part of Semantic Infrastructure Lab
+
+**reveal** is production infrastructure from [SIL](https://github.com/semantic-infrastructure-lab/sil) - building the semantic substrate for intelligent systems.
+
+**Role:** Layer 5 (Human Interfaces) - progressive disclosure of structure
+**Principles:** Clarity, Simplicity, Composability, Correctness, Verifiability
+
+[SIL Manifesto](https://github.com/semantic-infrastructure-lab/sil/blob/main/docs/canonical/MANIFESTO.md) • [Architecture](https://github.com/semantic-infrastructure-lab/sil/blob/main/docs/architecture/UNIFIED_ARCHITECTURE_GUIDE.md) • [Projects](https://github.com/semantic-infrastructure-lab/sil/blob/main/projects/PROJECT_INDEX.md)
+
+---
+
+**Status:** v0.13.3 | **License:** MIT | [Roadmap](ROADMAP.md) | [Issues](https://github.com/scottsen/reveal/issues)
+
+[![Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/scottsen/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
