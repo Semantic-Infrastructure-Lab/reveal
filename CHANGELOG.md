@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2025-12-04
+
+### 🎯 NEW: Type System & Semantic Analysis (`--format=typed`)
+
+**Reveal now understands code relationships!** Analyzers can define types and relationships, enabling type-aware queries, call graphs, and dependency tracking.
+
+**New `--format=typed` output:**
+```bash
+reveal app.py --format=typed
+```
+
+**Output includes:**
+- **Entities with explicit types** - Each element tagged (function, method, class, etc.)
+- **Relationships** - Call graphs, inheritance, decorators, imports
+- **Bidirectional edges** - Automatic reverse relationships (calls ↔ called_by)
+- **Type counts** - Summary statistics
+- **Metadata** - Total entities and relationships
+
+**Example output:**
+```json
+{
+  "entities": [
+    {"type": "function", "name": "process", "line": 10, "signature": "..."},
+    {"type": "method", "name": "handle", "line": 50, "parent_class": "Handler"}
+  ],
+  "relationships": {
+    "calls": [{"from": {"type": "method", "name": "handle"}, "to": {"type": "function", "name": "process"}}],
+    "called_by": [{"from": {"type": "function", "name": "process"}, "to": {"type": "method", "name": "handle"}}]
+  },
+  "type_counts": {"function": 10, "method": 5, "class": 3}
+}
+```
+
+**For Analyzer Authors:**
+Analyzers can now optionally define:
+- **Types** - Entity definitions with property validation and inheritance
+- **Relationships** - Relationship definitions (bidirectional, transitive)
+- **Extraction** - `_extract_relationships()` method to build relationship graphs
+
+**Backward Compatible:** Existing analyzers work unchanged. Type system only activates if types are defined. Falls back to standard JSON if no types available.
+
+**New Files:**
+- `reveal/types.py` (617 lines) - Type system core (Entity, RelationshipDef, TypeRegistry, RelationshipRegistry)
+
+**Modified Files:**
+- `reveal/base.py` - Type system integration in FileAnalyzer
+- `reveal/main.py` - `--format=typed` output renderer
+
+---
+
+### 📚 IMPROVED: AI-Friendly Documentation
+
+**README optimized for AI agents:**
+- Progressive disclosure structure (examples first)
+- "For AI Agents" section with usage guide
+- Clear pointers to `--agent-help` and `--agent-help-full`
+
+**Philosophy:** README is already concise and AI-readable - no need for separate llms.txt when documentation is already well-structured.
+
+---
+
+### 🧹 Cleanup: Removed "enhanced" naming debt
+
+**Improved clarity by removing vague "enhanced" terminology:**
+
+- **Documentation:** Replaced "enhanced format" with "typed format" throughout
+- **Code comments:** Updated all references to use "typed" instead of "enhanced"
+- **File cleanup:** Removed unused POC analyzer that registered for fake `.pyenhanced` extension
+
+**Changes:**
+- `reveal/AGENT_HELP.md`: "Typed Format" section now clearer
+- `reveal/main.py`: Updated docstrings and help text for `--format=typed`
+- Deleted: `reveal/analyzers/python_enhanced.py` (unused POC, fake `.pyenhanced` extension)
+
+**Philosophy:** If we need examples later, we'll create real, runnable ones based on actual use cases. Better nothing than fake examples.
+
+**No breaking changes:** All functionality preserved, just clearer naming.
+
 ## [0.15.0] - 2025-12-03
 
 ### 🔍 NEW: Code Query System - Query your codebase like a database!

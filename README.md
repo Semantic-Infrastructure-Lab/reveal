@@ -13,6 +13,20 @@ Zero config. 18 languages built-in. 50+ via tree-sitter.
 
 ---
 
+## 🤖 For AI Agents
+
+**This README is structured for both humans and AI agents.** Progressive disclosure starts at the top with quick examples.
+
+**Using reveal CLI?** Get usage patterns and optimization techniques:
+```bash
+reveal --agent-help          # Quick strategic guide (414 lines)
+reveal --agent-help-full     # Comprehensive patterns (1044 lines)
+```
+
+**Token efficiency:** Structure view = 50 tokens vs 7,500 for reading full file. Validated 7-150x reduction in production.
+
+---
+
 ## Core Modes
 
 **Auto-detects what you need:**
