@@ -10,201 +10,6 @@ from .base import get_analyzer, get_all_analyzers, FileAnalyzer
 from .tree_view import show_directory_tree
 from . import __version__
 
-# AI Agent Best Practices - exposed via --recommend-prompt
-RECOMMENDED_PROMPT = """# Reveal - Semantic Code Explorer Best Practices
-
-## Core Concept: Progressive Disclosure (Orient → Navigate → Focus)
-
-Never read entire files blindly. Use reveal's semantic navigation for token efficiency.
-
-### The Pattern (ALWAYS follow this order):
-
-1. **ORIENT** - What exists?
-   ```bash
-   reveal .                    # Directory tree
-   reveal file.py --outline    # File structure overview
-   ```
-
-2. **NAVIGATE** - What's relevant?
-   ```bash
-   reveal file.py --head 10    # First 10 functions (NEW in v0.12!)
-   reveal file.py --tail 5     # Last 5 functions (bugs cluster here!)
-   reveal file.py --check      # Code quality checks
-   ```
-
-3. **FOCUS** - Get details
-   ```bash
-   reveal file.py function_name  # Extract specific function
-   ```
-
-### Token Efficiency Examples
-
-**❌ BAD - Traditional approach:**
-```bash
-# Read entire 500-line file = ~7,500 tokens
-cat large_file.py
-```
-
-**✅ GOOD - Reveal approach:**
-```bash
-# 1. See structure (50 tokens)
-reveal large_file.py --outline
-
-# 2. Navigate to relevant area (300 tokens)
-reveal large_file.py --tail 5
-
-# 3. Extract what you need (200 tokens)
-reveal large_file.py problematic_function
-
-# Total: ~550 tokens = 13x more efficient!
-```
-
-### When to Use What
-
-**Use `reveal <dir>/` for:**
-- Initial project exploration
-- Understanding codebase structure
-- Finding relevant files
-
-**Use `reveal file.py --outline` for:**
-- Unknown files (don't know what's in them)
-- Large files (>200 lines)
-- Understanding file organization
-
-**Use `reveal file.py --head/--tail/--range` for:**
-- Targeting specific areas (bugs often cluster at end of files)
-- Iterative deepening (explore progressively)
-- Token budget constraints
-
-**Use `reveal file.py --check` for:**
-- Finding code quality issues
-- Identifying complex functions
-- Code review workflows
-
-**Use `reveal file.py element_name` for:**
-- Extracting specific functions/classes
-- Focused code reading
-- After you've oriented and navigated
-
-### Integration with Other Tools
-
-**With AST scanners:**
-```bash
-# Scanner identifies issues with line numbers
-tia ast scan complexity .
-
-# Use reveal to explore the problem files
-reveal problematic_file.py --outline
-reveal problematic_file.py --tail 5
-reveal problematic_file.py bad_function
-```
-
-**With grep/search:**
-```bash
-# Find files
-grep -r "pattern" . --files-with-matches
-
-# Explore structure
-reveal file.py --outline
-
-# Navigate to area
-reveal file.py --head 10
-```
-
-### Output Formats
-
-**Text (default):** Human-readable, perfect for quick exploration
-**JSON (--format=json):** Scriptable, pipe to jq for filtering
-**Grep (--format=grep):** Pipeable, works with vim/git/awk
-
-```bash
-# JSON + jq for advanced filtering
-reveal file.py --format=json | jq '.structure.functions[] | select(.line_count > 50)'
-
-# Grep format for vim integration
-reveal file.py --format=grep | grep "async"
-```
-
-### Common Anti-Patterns to Avoid
-
-❌ **DON'T read files before revealing:**
-```bash
-cat file.py  # Wastes tokens!
-```
-
-✅ **DO reveal first:**
-```bash
-reveal file.py --outline  # See what's there
-reveal file.py func       # Then extract what you need
-```
-
-❌ **DON'T guess what's in a file:**
-```bash
-# Assuming structure without checking
-```
-
-✅ **DO discover structure first:**
-```bash
-reveal file.py --outline  # Know before you act
-```
-
-❌ **DON'T read full files for one function:**
-```bash
-cat 500_line_file.py  # Just to see one function
-```
-
-✅ **DO extract specifically:**
-```bash
-reveal file.py --outline           # Find the function
-reveal file.py specific_function   # Extract only what you need
-```
-
-### Real-World Workflow Example
-
-**Task:** Find and fix a bug in a large codebase
-
-```bash
-# 1. ORIENT - Understand structure
-reveal src/
-
-# 2. NAVIGATE - Find relevant file
-reveal src/problematic_module.py --outline
-
-# 3. NAVIGATE - Target area where bugs cluster
-reveal src/problematic_module.py --tail 5
-
-# 4. FOCUS - Extract the problem function
-reveal src/problematic_module.py buggy_function
-
-# Total tokens: ~1,000 vs. ~15,000 for reading all files
-# Result: 15x token efficiency!
-```
-
-### Best Practices Summary
-
-1. **Always start with --outline** for unknown files
-2. **Use --head/--tail for large files** before reading fully
-3. **Extract specific elements** instead of reading entire files
-4. **Combine with jq** for powerful filtering (--format=json)
-5. **Use --check** for code quality checks
-6. **Progressive disclosure** = Orient → Navigate → Focus
-
-### Version Notes
-
-- v0.11: Added URI adapters (env://)
-- v0.12: Added semantic navigation (--head, --tail, --range)
-- v0.13: Added pattern detectors (--check replaces --sloppy)
-
-### Learn More
-
-```bash
-reveal --help                    # Full help
-reveal --list-supported          # See all supported file types
-reveal --recommend-prompt        # This message
-```
-
-Remember: Reveal is about **semantic understanding**, not raw text. Think in terms of **functions, classes, sections** - not lines.
-"""
 
 
 # ============================================================================
@@ -411,10 +216,35 @@ def handle_uri(uri: str, element: Optional[str], args) -> None:
 
     scheme, resource = uri.split('://', 1)
 
-    # Route to appropriate adapter
+    # Look up adapter from registry (pluggable!)
+    from .adapters.base import get_adapter_class, list_supported_schemes
+    from .adapters import env, ast, help  # Import to trigger registration
+
+    adapter_class = get_adapter_class(scheme)
+    if not adapter_class:
+        print(f"Error: Unsupported URI scheme: {scheme}://", file=sys.stderr)
+        schemes = ', '.join(f"{s}://" for s in list_supported_schemes())
+        print(f"Supported schemes: {schemes}", file=sys.stderr)
+        sys.exit(1)
+
+    # Dispatch to adapter-specific handler
+    _handle_adapter(adapter_class, scheme, resource, element, args)
+
+
+def _handle_adapter(adapter_class: type, scheme: str, resource: str,
+                    element: Optional[str], args) -> None:
+    """Handle adapter-specific logic for different URI schemes.
+
+    Args:
+        adapter_class: The adapter class to instantiate
+        scheme: URI scheme (env, ast, etc.)
+        resource: Resource part of URI
+        element: Optional element to extract
+        args: CLI arguments
+    """
+    # Adapter-specific initialization and rendering
     if scheme == 'env':
-        from .adapters.env import EnvAdapter
-        adapter = EnvAdapter()
+        adapter = adapter_class()
 
         if element or resource:
             # Get specific variable (element takes precedence)
@@ -431,10 +261,41 @@ def handle_uri(uri: str, element: Optional[str], args) -> None:
             result = adapter.get_structure(show_secrets=False)
             render_env_structure(result, args.format)
 
-    else:
-        print(f"Error: Unsupported URI scheme: {scheme}://", file=sys.stderr)
-        print(f"Supported schemes: env://", file=sys.stderr)
-        sys.exit(1)
+    elif scheme == 'ast':
+        # Parse path and query from resource
+        if '?' in resource:
+            path, query = resource.split('?', 1)
+        else:
+            path = resource
+            query = None
+
+        # Default to current directory if no path
+        if not path:
+            path = '.'
+
+        adapter = adapter_class(path, query)
+        result = adapter.get_structure()
+        render_ast_structure(result, args.format)
+
+    elif scheme == 'help':
+        adapter = adapter_class(resource)
+
+        if element or resource:
+            # Get specific help topic (element takes precedence)
+            topic = element if element else resource
+            result = adapter.get_element(topic)
+
+            if result is None:
+                print(f"Error: Help topic '{topic}' not found", file=sys.stderr)
+                available = adapter.get_structure()
+                print(f"\nAvailable topics: {', '.join(available['available_topics'])}", file=sys.stderr)
+                sys.exit(1)
+
+            render_help(result, args.format)
+        else:
+            # List all help topics
+            result = adapter.get_structure()
+            render_help(result, args.format, list_mode=True)
 
 
 def render_env_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -493,6 +354,209 @@ def render_env_variable(data: Dict[str, Any], output_format: str) -> None:
         print(f"⚠️  Sensitive: This variable appears to contain sensitive data")
         print(f"    Use --show-secrets to display actual value")
     print(f"Length: {data['length']} characters")
+
+
+def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
+    """Render AST query results.
+
+    Args:
+        data: AST query results from adapter
+        output_format: Output format (text, json, grep)
+    """
+    if output_format == 'json':
+        import json
+        print(json.dumps(data, indent=2))
+        return
+
+    # Text/grep format
+    query = data.get('query', 'none')
+    total_files = data.get('total_files', 0)
+    total_results = data.get('total_results', 0)
+    results = data.get('results', [])
+
+    if output_format == 'grep':
+        # grep format: file:line:name
+        for result in results:
+            file_path = result.get('file', '')
+            line = result.get('line', 0)
+            name = result.get('name', '')
+            print(f"{file_path}:{line}:{name}")
+        return
+
+    # Text format
+    print(f"AST Query: {data.get('path', '.')}")
+    if query != 'none':
+        print(f"Filter: {query}")
+    print(f"Files scanned: {total_files}")
+    print(f"Results: {total_results}")
+    print()
+
+    if not results:
+        print("No matches found.")
+        return
+
+    # Group by file
+    by_file = {}
+    for result in results:
+        file_path = result.get('file', '')
+        if file_path not in by_file:
+            by_file[file_path] = []
+        by_file[file_path].append(result)
+
+    # Render grouped results
+    for file_path, elements in sorted(by_file.items()):
+        print(f"📄 {file_path}")
+        for elem in elements:
+            category = elem.get('category', 'unknown')
+            name = elem.get('name', '')
+            line = elem.get('line', 0)
+            line_count = elem.get('line_count', 0)
+            complexity = elem.get('complexity')
+
+            # Format output
+            if complexity:
+                print(f"  {file_path}:{line:>4}  {name} [{line_count} lines, complexity: {complexity}]")
+            else:
+                print(f"  {file_path}:{line:>4}  {name} [{line_count} lines]")
+
+        print()
+
+
+def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = False) -> None:
+    """Render help content.
+
+    Args:
+        data: Help data from adapter
+        output_format: Output format (text, json, grep)
+        list_mode: True if listing all topics, False for specific topic
+    """
+    if output_format == 'json':
+        import json
+        print(json.dumps(data, indent=2))
+        return
+
+    # Handle list mode (reveal help://)
+    if list_mode:
+        print("# Reveal Help System")
+        print()
+        print(f"Available help topics ({len(data['available_topics'])} total):")
+        print()
+
+        # Group topics
+        adapters = [a for a in data.get('adapters', []) if a.get('has_help')]
+        static = data.get('static_guides', [])
+
+        if adapters:
+            print("## URI Adapters")
+            for adapter in adapters:
+                scheme = adapter['scheme']
+                desc = adapter.get('description', 'No description')
+                print(f"  {scheme:12} - {desc}")
+                print(f"               Usage: reveal help://{scheme}")
+            print()
+
+        if static:
+            print("## Guides")
+            for topic in static:
+                print(f"  {topic:12} - Static guide")
+                print(f"               Usage: reveal help://{topic}")
+            print()
+
+        print("Examples:")
+        print("  reveal help://ast         # Learn about ast:// adapter")
+        print("  reveal help://adapters    # Summary of all adapters")
+        print("  reveal help://agent       # Agent usage patterns")
+        print()
+        print("Alternative: Use --agent-help and --agent-help-full flags (llms.txt convention)")
+        return
+
+    # Handle specific topic
+    help_type = data.get('type', 'unknown')
+
+    if help_type == 'static_guide':
+        # Static guide from markdown file
+        if 'error' in data:
+            print(f"Error: {data['message']}", file=sys.stderr)
+            sys.exit(1)
+
+        print(data['content'])
+        return
+
+    if help_type == 'adapter_summary':
+        # Summary of all adapters
+        print(f"# URI Adapters ({data['count']} total)")
+        print()
+        for scheme, info in sorted(data['adapters'].items()):
+            print(f"## {scheme}://")
+            print(f"{info['description']}")
+            print(f"Syntax: {info['syntax']}")
+            if info.get('example'):
+                print(f"Example: {info['example']}")
+            print()
+        return
+
+    # Adapter-specific help
+    if 'error' in data:
+        print(f"Error: {data['message']}", file=sys.stderr)
+        sys.exit(1)
+
+    scheme = data.get('scheme', data.get('name', ''))
+    print(f"# {scheme}:// - {data.get('description', '')}")
+    print()
+
+    if data.get('syntax'):
+        print(f"**Syntax:** `{data['syntax']}`")
+        print()
+
+    if data.get('operators'):
+        print("## Operators")
+        for op, desc in data['operators'].items():
+            print(f"  {op:4} - {desc}")
+        print()
+
+    if data.get('filters'):
+        print("## Filters")
+        for name, desc in data['filters'].items():
+            print(f"  {name:12} - {desc}")
+        print()
+
+    if data.get('features'):
+        print("## Features")
+        for feature in data['features']:
+            print(f"  • {feature}")
+        print()
+
+    if data.get('categories'):
+        print("## Categories")
+        for cat, desc in data['categories'].items():
+            print(f"  {cat:12} - {desc}")
+        print()
+
+    if data.get('examples'):
+        print("## Examples")
+        for ex in data['examples']:
+            if isinstance(ex, dict):
+                print(f"  {ex['uri']}")
+                print(f"    → {ex['description']}")
+            else:
+                print(f"  {ex}")
+        print()
+
+    if data.get('notes'):
+        print("## Notes")
+        for note in data['notes']:
+            print(f"  • {note}")
+        print()
+
+    if data.get('output_formats'):
+        print(f"**Output formats:** {', '.join(data['output_formats'])}")
+        print()
+
+    if data.get('see_also'):
+        print("## See Also")
+        for item in data['see_also']:
+            print(f"  • {item}")
+        print()
 
 
 def _build_help_epilog() -> str:
@@ -565,16 +629,22 @@ Examples:
   reveal doc.md --code                        # Extract all code blocks
   reveal doc.md --code --language python      # Only Python code blocks
 
-  # URI adapters - explore ANY resource! (NEW in v0.11!)
+  # URI adapters - explore ANY resource!
+  reveal help://                              # Discover all help topics
+  reveal help://ast                           # Learn about ast:// queries
+  reveal help://adapters                      # Summary of all adapters
+
   reveal env://                               # Show all environment variables
   reveal env://PATH                           # Get specific variable
-  reveal env://DATABASE_URL                   # Check database config
-  reveal env:// --format=json | jq '.categories.Python'  # Filter Python vars
+
+  reveal 'ast://./src?complexity>10'          # Find complex functions
+  reveal 'ast://app.py?lines>50'              # Find long functions
+  reveal 'ast://.?type=function' --format=json  # All functions as JSON
 
 File-type specific features:
   • Markdown: --links, --code (extract links/code blocks with filtering)
   • Code files: --check, --outline (quality checks, show hierarchical structure)
-  • URI adapters: env:// (environment variables) - more coming soon!
+  • URI adapters: help:// (documentation), env:// (environment), ast:// (code queries)
 
 Perfect filename:line format - works with vim, git, grep, sed, awk!
 Metrics: All code files show [X lines, depth:Y] for complexity analysis
@@ -599,8 +669,6 @@ def _main_impl():
     parser.add_argument('--version', action='version', version=f'reveal {__version__}')
     parser.add_argument('--list-supported', '-l', action='store_true',
                         help='List all supported file types')
-    parser.add_argument('--recommend-prompt', action='store_true',
-                        help='Show AI agent best practices for using reveal efficiently')
     parser.add_argument('--agent-help', action='store_true',
                         help='Show agent usage guide (llms.txt-style brief reference)')
     parser.add_argument('--agent-help-full', action='store_true',
@@ -686,11 +754,6 @@ def _main_impl():
     # Handle --list-supported
     if args.list_supported:
         list_supported_types()
-        sys.exit(0)
-
-    # Handle --recommend-prompt
-    if args.recommend_prompt:
-        print(RECOMMENDED_PROMPT)
         sys.exit(0)
 
     # Handle --agent-help
@@ -805,7 +868,7 @@ def _main_impl():
 
         sys.exit(0)
 
-    # Path is required if not using --list-supported, --recommend-prompt, or --stdin
+    # Path is required if not using --list-supported or --stdin
     if not args.path:
         parser.print_help()
         sys.exit(1)

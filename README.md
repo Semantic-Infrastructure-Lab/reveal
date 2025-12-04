@@ -113,15 +113,25 @@ git diff --name-only origin/main | grep "\.py$" | reveal --stdin --check --forma
 
 ### 🌐 URI Adapters (v0.11.0+)
 
-Explore ANY resource, not just files:
+Explore ANY resource - files, environment, code queries:
 
 ```bash
-reveal env://                    # All environment variables
-reveal env://DATABASE_URL        # Specific variable
-reveal env:// --format=json | jq '.categories.Python'
+# Discover what's available
+reveal help://                              # List all help topics
+reveal help://ast                           # Learn about ast:// queries
 
-# Coming: https://, git://, docker://
+# Environment variables
+reveal env://                               # All environment variables
+reveal env://DATABASE_URL                   # Specific variable
+
+# Query code as a database (v0.15.0+)
+reveal 'ast://./src?complexity>10'          # Find complex functions
+reveal 'ast://app.py?lines>50'              # Find long functions
+reveal 'ast://.?lines>30&complexity<5'      # Long but simple
+reveal 'ast://src?type=function' --format=json  # JSON output
 ```
+
+**Self-documenting:** Every adapter exposes help via `reveal help://<scheme>`
 
 ---
 
@@ -200,7 +210,7 @@ reveal/
 ├── main.py          # CLI (~920 lines)
 ├── treesitter.py    # 50+ languages (~345 lines)
 ├── analyzers/       # 18 file types (10-300 lines each)
-└── adapters/        # URI support (env://, more coming)
+└── adapters/        # URI support (help://, env://, ast://)
 ```
 
 **Total:** ~3,400 lines. Most analyzers < 25 lines.

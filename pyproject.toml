@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reveal-cli"
-version = "0.14.0"
+version = "0.15.0"
 description = "Semantic code exploration with progressive disclosure - explore directories, files, and code elements with smart defaults"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -58,12 +58,12 @@ syntax = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/scottsen/reveal"
-Repository = "https://github.com/scottsen/reveal"
-Documentation = "https://github.com/scottsen/reveal/tree/main/docs"
-"Bug Tracker" = "https://github.com/scottsen/reveal/issues"
-Discussions = "https://github.com/scottsen/reveal/discussions"
-Changelog = "https://github.com/scottsen/reveal/releases"
+Homepage = "https://github.com/Semantic-Infrastructure-Lab/reveal"
+Repository = "https://github.com/Semantic-Infrastructure-Lab/reveal"
+Documentation = "https://github.com/Semantic-Infrastructure-Lab/reveal/tree/main/docs"
+"Bug Tracker" = "https://github.com/Semantic-Infrastructure-Lab/reveal/issues"
+Discussions = "https://github.com/Semantic-Infrastructure-Lab/reveal/discussions"
+Changelog = "https://github.com/Semantic-Infrastructure-Lab/reveal/releases"
 
 [project.scripts]
 reveal = "reveal.main:main"

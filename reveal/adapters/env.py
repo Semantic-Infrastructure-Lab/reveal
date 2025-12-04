@@ -2,11 +2,66 @@
 
 import os
 from typing import Dict, List, Any, Optional
-from .base import ResourceAdapter
+from .base import ResourceAdapter, register_adapter
 
 
+@register_adapter('env')
 class EnvAdapter(ResourceAdapter):
     """Adapter for exploring environment variables via env:// URIs."""
+
+    @staticmethod
+    def get_help() -> Dict[str, Any]:
+        """Get help documentation for env:// adapter."""
+        return {
+            'name': 'env',
+            'description': 'Explore environment variables - view all vars or get specific value',
+            'syntax': 'env://[variable_name]',
+            'examples': [
+                {
+                    'uri': 'env://',
+                    'description': 'List all environment variables (grouped by category)'
+                },
+                {
+                    'uri': 'env://PATH',
+                    'description': 'Get value of PATH variable'
+                },
+                {
+                    'uri': 'env://DATABASE_URL',
+                    'description': 'Get database connection string (sensitive values hidden)'
+                },
+                {
+                    'uri': 'env:// --format=json',
+                    'description': 'JSON output for scripting'
+                },
+                {
+                    'uri': "env:// --format=json | jq '.categories.Python'",
+                    'description': 'Filter Python-related variables with jq'
+                }
+            ],
+            'features': [
+                'Auto-categorizes variables (System, Python, Node, Application, Custom)',
+                'Redacts sensitive values (passwords, tokens, API keys)',
+                'Shows variable metadata (category, length, sensitivity)',
+                'Supports JSON and grep output formats'
+            ],
+            'categories': {
+                'System': 'PATH, HOME, SHELL, USER, etc.',
+                'Python': 'PYTHON*, VIRTUAL*, PYTHONPATH',
+                'Node': 'NODE*, NPM*, NVM*',
+                'Application': 'APP_*, DATABASE_*, REDIS_*, API_*',
+                'Custom': 'Everything else'
+            },
+            'notes': [
+                'Sensitive values are automatically redacted (shown as ***)',
+                'Patterns that trigger redaction: PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH',
+                'Use show_secrets parameter (not exposed via CLI) to reveal sensitive values in code'
+            ],
+            'output_formats': ['text', 'json', 'grep'],
+            'see_also': [
+                'reveal help://ast - AST query adapter',
+                'reveal --agent-help - Agent usage patterns'
+            ]
+        }
 
     SENSITIVE_PATTERNS = [
         'PASSWORD', 'SECRET', 'TOKEN', 'KEY', 'CREDENTIAL',

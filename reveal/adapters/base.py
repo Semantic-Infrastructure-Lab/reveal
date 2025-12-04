@@ -34,3 +34,62 @@ class ResourceAdapter(ABC):
             Dict containing metadata (type, size, etc.)
         """
         return {'type': self.__class__.__name__}
+
+    @staticmethod
+    def get_help() -> Optional[Dict[str, Any]]:
+        """Get help documentation for this adapter (optional).
+
+        Returns:
+            Dict containing help metadata, or None if no help available.
+            Expected keys:
+                - name: Adapter scheme name
+                - description: One-line summary
+                - syntax: Usage pattern (optional)
+                - examples: List of example URIs (optional)
+                - filters: Available query filters (optional)
+                - notes: Additional notes or gotchas (optional)
+        """
+        return None
+
+
+# Registry for URI scheme adapters
+_ADAPTER_REGISTRY: Dict[str, type] = {}
+
+
+def register_adapter(scheme: str):
+    """Decorator to register an adapter for a URI scheme.
+
+    Usage:
+        @register_adapter('postgres')
+        class PostgresAdapter(ResourceAdapter):
+            ...
+
+    Args:
+        scheme: URI scheme to register (e.g., 'env', 'ast', 'postgres')
+    """
+    def decorator(cls):
+        _ADAPTER_REGISTRY[scheme.lower()] = cls
+        cls.scheme = scheme
+        return cls
+    return decorator
+
+
+def get_adapter_class(scheme: str) -> Optional[type]:
+    """Get adapter class for a URI scheme.
+
+    Args:
+        scheme: URI scheme (e.g., 'env', 'ast')
+
+    Returns:
+        Adapter class or None if not found
+    """
+    return _ADAPTER_REGISTRY.get(scheme.lower())
+
+
+def list_supported_schemes() -> list:
+    """Get list of supported URI schemes.
+
+    Returns:
+        List of registered scheme names
+    """
+    return sorted(_ADAPTER_REGISTRY.keys())

@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2025-12-03
+
+### 🔍 NEW: Code Query System - Query your codebase like a database!
+
+**ast:// adapter** - Find functions by complexity, size, and type across your entire codebase.
+
+```bash
+reveal 'ast://./src?complexity>10'          # Find complex functions
+reveal 'ast://app.py?lines>50'              # Find long functions
+reveal 'ast://.?lines>30&complexity<5'      # Long but simple functions
+reveal 'ast://src?type=function' --format=json  # All functions as JSON
+```
+
+**Features:**
+- **Query operators:** `>`, `<`, `>=`, `<=`, `==`
+- **Filters:** `lines` (line count), `complexity` (cyclomatic), `type` (function/class/method)
+- **Recursive scanning:** Analyzes entire directories
+- **50+ languages:** Works with all tree-sitter supported languages
+- **Output formats:** text, JSON, grep
+
+**Use cases:**
+- Find technical debt: `ast://src?complexity>10`
+- Find refactor candidates: `ast://src?lines>100`
+- Find good examples: `ast://src?complexity<3&lines<20`
+- Export for analysis: `ast://src --format=json | jq`
+
+### 🆘 NEW: help:// - Self-Documenting Adapter System
+
+**Discover everything reveal can do:**
+
+```bash
+reveal help://                    # List all available help topics
+reveal help://ast                 # Learn about ast:// queries
+reveal help://env                 # Learn about env:// adapter
+reveal help://adapters            # Summary of all adapters
+```
+
+**Features:**
+- **Auto-discovery:** New adapters automatically appear in help://
+- **Extensible:** Every adapter self-documents via `get_help()` method
+- **Consistent:** Same pattern for all adapters (env://, ast://, future adapters)
+- **Integration:** Works with existing `--agent-help` and `--agent-help-full` flags
+
+### 🧹 Cleanup: Removed redundant --recommend-prompt flag
+
+The `--recommend-prompt` flag duplicated content from `--agent-help`. Use `--agent-help` or `reveal help://agent` instead.
+
+**Migration:**
+- ❌ `reveal --recommend-prompt`
+- ✅ `reveal --agent-help` (llms.txt convention)
+- ✅ `reveal help://agent` (URI-based)
+
+### 🏗️ Architecture: Pluggable Adapter System
+
+**Zero main.py edits needed for new adapters:**
+
+```python
+@register_adapter('postgres')  # Auto-registers
+class PostgresAdapter(ResourceAdapter):
+    @staticmethod
+    def get_help():  # Auto-discovered by help://
+        return {...}
+```
+
+Adding new URI schemes (postgres://, diff://, etc.) requires zero changes to core code - just drop in a new adapter file!
+
 ## [0.14.0] - 2025-12-03
 
 ### ⚡ Performance: Graceful handling of large directories (#10)
