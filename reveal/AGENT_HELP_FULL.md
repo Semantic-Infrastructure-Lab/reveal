@@ -1,8 +1,18 @@
-# Reveal: Agent Usage Guide
+# Reveal: Agent Usage Guide (Complete)
 
-**Version:** 0.13.0+
-**Last Updated:** 2025-11-30
+**Version:** 0.17.0
+**Last Updated:** 2025-12-07
 **For:** AI Agents and LLM-based tools
+
+**Token Cost:** ~12,000 tokens (this complete guide)
+**Prefer:** `reveal --agent-help` (~1,500 tokens) + `reveal help://` (progressive discovery)
+
+**Use this guide when:**
+- Cannot make multiple reveal calls (API/token constraints)
+- Working in restricted environment (no file system access)
+- Need complete offline reference
+
+**For interactive usage:** Try `reveal --agent-help` for token-efficient discovery pattern.
 
 ---
 
@@ -377,6 +387,167 @@ reveal path/from/search/result.py specific_function
 
 **v0.11.0+** - URI adapters
 - `reveal env://` for environment variables
+- `reveal ast://` for AST-based code querying (v0.14.0+)
+
+**v0.17.0** - Python runtime adapter
+- `reveal python://` for Python environment inspection
+- Bytecode debugging, package management, venv detection
+- See "URI Adapters" section below for complete documentation
+
+---
+
+## URI Adapters (Self-Documenting System)
+
+**Discovery:** `reveal help://` lists all available adapters (always current)
+
+**As of v0.17.0:**
+
+### help:// - Help System (Meta-Adapter)
+
+Discover available adapters and their documentation.
+
+```bash
+reveal help://                    # List all adapters and guides
+reveal help://python              # Learn about python:// adapter
+reveal help://ast                 # Learn about ast:// adapter
+reveal help://adapters            # Summary of all adapters
+reveal help:// --format=json      # Machine-readable adapter registry
+```
+
+**Use when:** Need to discover what adapters exist or learn their syntax.
+
+---
+
+### python:// - Python Runtime Inspection (NEW in v0.17.0)
+
+**Purpose:** Inspect Python runtime environment and debug common issues.
+
+**Common use case:** "My code changes aren't working!" → stale .pyc bytecode
+
+**Endpoints:**
+```bash
+# Overview
+reveal python://                  # Python version, venv, package count
+
+# Version details
+reveal python://version           # Detailed version (CPython 3.10.12, GCC...)
+
+# Environment
+reveal python://env               # sys.path, flags, encoding
+reveal python://venv              # Virtual environment status/path/type
+
+# Packages
+reveal python://packages          # List all installed packages
+reveal python://packages/requests # Details for specific package
+
+# Runtime inspection
+reveal python://imports           # Currently loaded modules (sys.modules)
+
+# Debugging (KILLER FEATURE)
+reveal python://debug/bytecode    # ⚠️  Detect stale .pyc files
+```
+
+**Bytecode debugging example:**
+```bash
+$ reveal python://debug/bytecode
+⚠️  stale_bytecode
+   File: lib/mymodule.py
+   Problem: .pyc is NEWER than source (stale bytecode)
+   Fix: rm __pycache__/mymodule.cpython-310.pyc
+```
+
+**Separation of concerns:**
+- `env://PYTHONPATH` → Raw environment variable
+- `python://env` → Computed sys.path (PYTHONPATH + defaults + site-packages)
+- `ast://file.py` → Static source analysis
+- `python://imports` → Runtime loaded modules
+
+**Full help:** `reveal help://python`
+
+---
+
+### ast:// - AST Query System (v0.14.0+)
+
+**Purpose:** Query code as a database without reading files.
+
+**Syntax:** `ast://<path>?<filter1>&<filter2>&...`
+
+**Filters:**
+- `type=<element>` - Function, class, method, etc.
+- `complexity>N` - Cyclomatic complexity threshold
+- `lines>N` - Line count threshold
+- `depth>N` - Nesting depth threshold
+
+**Examples:**
+```bash
+# Find complex functions
+reveal 'ast://./src?complexity>10'
+
+# Find long functions
+reveal 'ast://app.py?lines>50'
+
+# Find all functions
+reveal 'ast://.?type=function' --format=json
+
+# Query specific file
+reveal 'ast://main.py?type=class'
+
+# Combined filters
+reveal 'ast://./src?type=function&complexity>5&lines>30'
+```
+
+**Use when:** Need to find code patterns across many files without reading them.
+
+**Full help:** `reveal help://ast`
+
+---
+
+### env:// - Environment Variables
+
+**Purpose:** Explore environment variables (cross-language, raw values).
+
+**Examples:**
+```bash
+# List all environment variables
+reveal env://
+
+# Get specific variable
+reveal env://PATH
+reveal env://PYTHONPATH
+reveal env://HOME
+
+# JSON output
+reveal env://PATH --format=json
+```
+
+**Use when:** Need to check environment configuration.
+
+**Full help:** `reveal help://env`
+
+---
+
+### URI Adapter Workflow Example
+
+```bash
+# 1. Discover what adapters exist
+reveal help://                    # See all: python, ast, env, help
+
+# 2. Learn about Python adapter
+reveal help://python              # Get documentation (~200 tokens)
+
+# 3. Use it
+reveal python://                  # Environment overview
+reveal python://debug/bytecode    # Check for stale .pyc
+
+# 4. Switch to AST queries
+reveal 'ast://./src?complexity>10'  # Find complex code
+
+# 5. Check environment
+reveal env://VIRTUAL_ENV          # Verify venv path
+```
+
+**Key advantage:** URI adapters are self-documenting via `get_help()` methods.
+New adapters automatically appear in `reveal help://` output.
 
 ---
 

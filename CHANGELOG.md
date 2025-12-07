@@ -7,6 +7,194 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2025-12-07
+
+### 🐍 NEW: Python Runtime Adapter (`python://`)
+
+**Inspect Python runtime environment and debug common issues!** The new `python://` adapter provides runtime inspection capabilities for Python environments, complementing the existing static analysis tools.
+
+**Key Features:**
+- **Runtime Environment Inspection** - Python version, implementation, executable path
+- **Virtual Environment Detection** - Auto-detect venv, virtualenv, conda
+- **Package Management** - List installed packages, get package details
+- **Import Tracking** - See currently loaded modules from sys.modules
+- **Bytecode Debugging** - Detect stale .pyc files that cause "my changes aren't working" issues
+- **Cross-Platform Support** - Works on Linux, macOS, Windows
+
+**Separation of Concerns:**
+- `env://` - Raw environment variables (cross-language)
+- `ast://` - Static source code analysis (cross-language)
+- `python://` - **Python runtime inspection** (Python-specific) ← NEW
+
+**Usage Examples:**
+```bash
+# Quick environment overview
+reveal python://
+
+# Check Python version details
+reveal python://version
+
+# Verify virtual environment
+reveal python://venv
+
+# List installed packages
+reveal python://packages
+
+# Get specific package info
+reveal python://packages/requests
+
+# See loaded modules
+reveal python://imports
+
+# Debug stale bytecode (fixes "my changes aren't working!")
+reveal python://debug/bytecode
+```
+
+**Output Example:**
+```yaml
+version: "3.10.12"
+implementation: "CPython"
+executable: "/usr/bin/python3"
+virtual_env:
+  active: true
+  path: "/home/user/project/.venv"
+packages_count: 47
+modules_loaded: 247
+platform: "linux"
+architecture: "x86_64"
+```
+
+**Supported Endpoints:**
+- `python://` - Environment overview
+- `python://version` - Detailed version information
+- `python://env` - Python environment (sys.path, flags, encoding)
+- `python://venv` - Virtual environment status
+- `python://packages` - List all packages (like `pip list`)
+- `python://packages/<name>` - Package details
+- `python://imports` - Currently loaded modules
+- `python://debug/bytecode` - Bytecode issues (stale .pyc files)
+
+**Coming Soon (v0.18.0+):**
+- `python://imports/graph` - Import dependency visualization
+- `python://imports/circular` - Circular import detection
+- `python://debug/syntax` - Syntax error detection
+- `python://project` - Auto-detect project type (Django, Flask, etc.)
+- `python://tests` - Test discovery and status
+
+**Use Cases:**
+- Pre-debug environment sanity check
+- Fix "my changes aren't working" (stale bytecode detection)
+- Verify virtual environment activation
+- Check installed package versions
+- Inspect sys.path and import configuration
+- AI agents debugging Python environments
+
+**New Files:**
+- `reveal/adapters/python.py` (478 lines) - Python runtime adapter
+
+**Tests:**
+- `tests/test_adapters.py` - 15 comprehensive tests for Python adapter (76% coverage)
+
+**Documentation:**
+- Self-documenting via `reveal help://python`
+- Integrated with existing help system
+
+---
+
+### 📚 IMPROVED: Help System Redesign (Token-Efficient Discovery)
+
+**Agent help system redesigned for progressive discovery!** The help system now promotes the `help://` URI adapter as the primary discovery mechanism, with --agent-help teaching the discovery pattern instead of dumping full documentation.
+
+**New Architecture:**
+- `--agent-help` - Brief quick start (~1,500 tokens) + teaches `help://` pattern
+- `help://` - Progressive discovery (~50-500 tokens as needed)
+- `--agent-help-full` - Complete offline reference (~12,000 tokens)
+
+**Key Changes:**
+
+**1. `--agent-help` (Now Brief & Educational)**
+```bash
+reveal --agent-help              # Quick start + discovery pattern
+```
+
+**New content focuses on:**
+- Teaching the `help://` progressive discovery pattern
+- Essential workflows (codebase exploration, PR review, Python debugging)
+- When to use `--agent-help-full` (offline fallback)
+- Token efficiency comparison table
+
+**Token cost:** ~1,500 tokens (was ~11,000 tokens)
+**Reduction:** 85% smaller, teaches better patterns
+
+**2. `help://` Promotion (Primary Discovery Method)**
+```bash
+# Progressive discovery workflow
+reveal help://                    # List all adapters (~50 tokens)
+reveal help://python              # Learn specific adapter (~200 tokens)
+reveal python://                  # Use it
+```
+
+**Benefits:**
+- Always up-to-date (queries live adapter registry)
+- Self-documenting (adapters implement `get_help()`)
+- Token-efficient (progressive, not all-at-once)
+- Machine-readable (`--format=json` support)
+
+**3. `--agent-help-full` (Offline Fallback)**
+```bash
+reveal --agent-help-full          # Complete guide when needed
+```
+
+**Updated with:**
+- Token cost warning at top (~12,000 tokens)
+- Complete python:// adapter documentation
+- URI adapter section (help://, python://, ast://, env://)
+- Guidance on when to prefer `help://` vs full guide
+
+**Impact:**
+- Prevents documentation drift (python:// was missing from old guide)
+- Encourages token-efficient discovery patterns
+- Provides fallback for constrained environments
+
+**Modified Files:**
+- `reveal/AGENT_HELP.md` - Complete rewrite (~85% reduction, teaches `help://`)
+- `reveal/AGENT_HELP_FULL.md` - Added python:// docs, token cost warning
+
+---
+
+### 🐛 FIXED: BrokenPipeError When Piping Output
+
+**Fixed crash when piping reveal output to head/tail/grep.**
+
+**Problem:**
+```bash
+reveal python://packages | head -30
+# Traceback: BrokenPipeError: [Errno 32] Broken pipe
+```
+
+**Solution:**
+Added standard Python CLI pattern to handle broken pipe gracefully:
+```python
+try:
+    _main_impl()
+except BrokenPipeError:
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    os.dup2(devnull, sys.stdout.fileno())
+    sys.exit(0)  # Exit cleanly
+```
+
+**Now works:**
+```bash
+reveal python://packages | head -30  # ✅ No error
+reveal python://imports | tail -20   # ✅ Works
+reveal python:// | grep "3.10"       # ✅ Works
+```
+
+**Modified Files:**
+- `reveal/main.py` - Added BrokenPipeError handler in `main()`
+
+---
+
 ## [0.16.0] - 2025-12-04
 
 ### 🎯 NEW: Type System & Semantic Analysis (`--format=typed`)

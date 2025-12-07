@@ -19,8 +19,8 @@ Zero config. 18 languages built-in. 50+ via tree-sitter.
 
 **Using reveal CLI?** Get usage patterns and optimization techniques:
 ```bash
-reveal --agent-help          # Quick strategic guide (414 lines)
-reveal --agent-help-full     # Comprehensive patterns (1044 lines)
+reveal --agent-help          # Quick start + discovery patterns (~336 lines)
+reveal --agent-help-full     # Complete reference (~1215 lines)
 ```
 
 **Token efficiency:** Structure view = 50 tokens vs 7,500 for reading full file. Validated 7-150x reduction in production.
@@ -127,16 +127,26 @@ git diff --name-only origin/main | grep "\.py$" | reveal --stdin --check --forma
 
 ### 🌐 URI Adapters (v0.11.0+)
 
-Explore ANY resource - files, environment, code queries:
+Explore ANY resource - files, environment, code queries, Python runtime:
 
 ```bash
 # Discover what's available
 reveal help://                              # List all help topics
 reveal help://ast                           # Learn about ast:// queries
+reveal help://python                        # Python runtime adapter help
 
 # Environment variables
 reveal env://                               # All environment variables
 reveal env://DATABASE_URL                   # Specific variable
+
+# Python runtime inspection (v0.17.0+)
+reveal python://                            # Python environment overview
+reveal python://version                     # Version details
+reveal python://venv                        # Virtual environment status
+reveal python://packages                    # Installed packages
+reveal python://packages/requests           # Specific package info
+reveal python://imports                     # Loaded modules
+reveal python://debug/bytecode              # Find stale .pyc files
 
 # Query code as a database (v0.15.0+)
 reveal 'ast://./src?complexity>10'          # Find complex functions
@@ -144,6 +154,11 @@ reveal 'ast://app.py?lines>50'              # Find long functions
 reveal 'ast://.?lines>30&complexity<5'      # Long but simple
 reveal 'ast://src?type=function' --format=json  # JSON output
 ```
+
+**Separation of Concerns:**
+- `env://` - Raw environment variables (cross-language)
+- `ast://` - Static source code analysis (cross-language)
+- `python://` - Python runtime inspection (Python-specific)
 
 **Self-documenting:** Every adapter exposes help via `reveal help://<scheme>`
 
@@ -224,7 +239,7 @@ reveal/
 ├── main.py          # CLI (~920 lines)
 ├── treesitter.py    # 50+ languages (~345 lines)
 ├── analyzers/       # 18 file types (10-300 lines each)
-└── adapters/        # URI support (help://, env://, ast://)
+└── adapters/        # URI support (help://, env://, ast://, python://)
 ```
 
 **Total:** ~3,400 lines. Most analyzers < 25 lines.

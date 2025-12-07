@@ -198,7 +198,14 @@ def main():
         if hasattr(sys.stderr, 'reconfigure'):
             sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
-    _main_impl()
+    try:
+        _main_impl()
+    except BrokenPipeError:
+        # Python flushes standard streams on exit; redirect remaining output
+        # to devnull to avoid another BrokenPipeError at shutdown
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        sys.exit(0)  # Exit cleanly
 
 
 def handle_uri(uri: str, element: Optional[str], args) -> None:
@@ -218,7 +225,7 @@ def handle_uri(uri: str, element: Optional[str], args) -> None:
 
     # Look up adapter from registry (pluggable!)
     from .adapters.base import get_adapter_class, list_supported_schemes
-    from .adapters import env, ast, help  # Import to trigger registration
+    from .adapters import env, ast, help, python  # Import to trigger registration
 
     adapter_class = get_adapter_class(scheme)
     if not adapter_class:
@@ -296,6 +303,25 @@ def _handle_adapter(adapter_class: type, scheme: str, resource: str,
             # List all help topics
             result = adapter.get_structure()
             render_help(result, args.format, list_mode=True)
+
+    elif scheme == 'python':
+        adapter = adapter_class()
+
+        if element or resource:
+            # Get specific Python runtime element (element takes precedence)
+            element_name = element if element else resource
+            result = adapter.get_element(element_name)
+
+            if result is None:
+                print(f"Error: Python element '{element_name}' not found", file=sys.stderr)
+                print(f"\nAvailable elements: version, env, venv, packages, imports, debug/bytecode", file=sys.stderr)
+                sys.exit(1)
+
+            render_python_element(result, args.format)
+        else:
+            # Get overview
+            result = adapter.get_structure()
+            render_python_structure(result, args.format)
 
 
 def render_env_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -557,6 +583,175 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
         for item in data['see_also']:
             print(f"  • {item}")
         print()
+
+
+def render_python_structure(data: Dict[str, Any], output_format: str) -> None:
+    """Render Python environment overview.
+
+    Args:
+        data: Python environment data from adapter
+        output_format: Output format (text, json, grep)
+    """
+    if output_format == 'json':
+        import json
+        print(json.dumps(data, indent=2))
+        return
+
+    # Text format
+    print(f"Python Environment")
+    print()
+    print(f"Version:        {data['version']} ({data['implementation']})")
+    print(f"Executable:     {data['executable']}")
+    print(f"Platform:       {data['platform']} ({data['architecture']})")
+    print()
+
+    # Virtual environment
+    venv = data['virtual_env']
+    if venv['active']:
+        print(f"Virtual Env:    ✓ Active")
+        print(f"  Path:         {venv['path']}")
+        print(f"  Type:         {venv.get('type', 'venv')}")
+    else:
+        print(f"Virtual Env:    ✗ Not active")
+    print()
+
+    print(f"Packages:       {data['packages_count']} installed")
+    print(f"Modules:        {data['modules_loaded']} loaded")
+
+
+def render_python_element(data: Dict[str, Any], output_format: str) -> None:
+    """Render specific Python runtime element.
+
+    Args:
+        data: Python element data from adapter
+        output_format: Output format (text, json, grep)
+    """
+    if output_format == 'json':
+        import json
+        print(json.dumps(data, indent=2))
+        return
+
+    # Handle errors
+    if 'error' in data:
+        print(f"Error: {data['error']}", file=sys.stderr)
+        if 'details' in data:
+            print(f"Details: {data['details']}", file=sys.stderr)
+        sys.exit(1)
+
+    # Detect element type and render appropriately
+    if 'packages' in data and 'count' in data:
+        # Package list
+        print(f"Installed Packages ({data['count']})")
+        print()
+        for pkg in data['packages']:
+            print(f"  {pkg['name']:<30s} {pkg['version']:<15s} {pkg['location']}")
+
+    elif 'loaded' in data and 'count' in data:
+        # Imports list
+        print(f"Loaded Modules ({data['count']})")
+        print()
+        for mod in data['loaded'][:50]:  # Limit to first 50
+            file_info = f" ({mod['file']})" if mod['file'] else " (built-in)"
+            print(f"  {mod['name']}{file_info}")
+        if data['count'] > 50:
+            print(f"\n  ... and {data['count'] - 50} more modules")
+
+    elif 'status' in data and 'issues' in data:
+        # Debug bytecode results
+        print(f"Bytecode Check: {data['status'].upper()}")
+        print()
+
+        if data['issues']:
+            print(f"Found {len(data['issues'])} issues:")
+            print()
+            for issue in data['issues']:
+                severity_marker = "⚠️ " if issue['severity'] == 'warning' else "ℹ️ "
+                print(f"{severity_marker} {issue['type']}")
+                print(f"   File: {issue.get('file', issue.get('pyc_file', 'unknown'))}")
+                print(f"   Problem: {issue['problem']}")
+                print(f"   Fix: {issue['fix']}")
+                print()
+        else:
+            print("✓ No bytecode issues found")
+
+    elif 'sys_path' in data:
+        # Environment details
+        print("Python Environment Configuration")
+        print()
+
+        venv = data['virtual_env']
+        if venv['active']:
+            print(f"Virtual Environment: ✓ Active")
+            print(f"  Path: {venv['path']}")
+            print(f"  Type: {venv.get('type', 'venv')}")
+        else:
+            print(f"Virtual Environment: ✗ Not active")
+        print()
+
+        print(f"sys.path ({data['sys_path_count']} entries):")
+        for path in data['sys_path']:
+            print(f"  {path}")
+        print()
+
+        print("Flags:")
+        for flag, value in data['flags'].items():
+            print(f"  {flag}: {value}")
+
+    elif 'executable' in data and 'compiler' in data:
+        # Version details
+        print("Python Version Details")
+        print()
+        print(f"Version:        {data['version']}")
+        print(f"Implementation: {data['implementation']}")
+        print(f"Compiler:       {data['compiler']}")
+        print(f"Build:          {data['build_number']} ({data['build_date']})")
+        print(f"Executable:     {data['executable']}")
+        print(f"Prefix:         {data['prefix']}")
+        print(f"Base Prefix:    {data['base_prefix']}")
+        print(f"Platform:       {data['platform']} ({data['architecture']})")
+
+    elif 'active' in data:
+        # Virtual environment status
+        print("Virtual Environment Status")
+        print()
+        if data['active']:
+            print(f"Status:    ✓ Active")
+            print(f"Path:      {data['path']}")
+            print(f"Type:      {data.get('type', 'venv')}")
+            if 'prompt' in data:
+                print(f"Prompt:    {data['prompt']}")
+            if 'python_version' in data:
+                print(f"Python:    {data['python_version']}")
+        else:
+            print(f"Status:    ✗ Not active")
+            print()
+            print("No virtual environment detected.")
+            print("Checked: VIRTUAL_ENV, sys.prefix, CONDA_DEFAULT_ENV")
+
+    elif 'name' in data and 'version' in data and 'location' in data:
+        # Package details
+        print(f"Package: {data['name']}")
+        print()
+        print(f"Version:    {data['version']}")
+        print(f"Location:   {data['location']}")
+        if 'summary' in data:
+            print(f"Summary:    {data.get('summary', 'N/A')}")
+        if 'author' in data:
+            print(f"Author:     {data.get('author', 'N/A')}")
+        if 'license' in data:
+            print(f"License:    {data.get('license', 'N/A')}")
+        if 'homepage' in data:
+            print(f"Homepage:   {data.get('homepage', 'N/A')}")
+        if 'dependencies' in data and data['dependencies']:
+            print()
+            print(f"Dependencies ({len(data['dependencies'])}):")
+            for dep in data['dependencies']:
+                print(f"  • {dep}")
+
+    else:
+        # Generic rendering
+        import json
+        print(json.dumps(data, indent=2))
 
 
 def _build_help_epilog() -> str:

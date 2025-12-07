@@ -1,267 +1,258 @@
-# Reveal
+# Reveal - Agent Quick Start
 
-> Semantic code exploration tool optimized for token efficiency. Helps AI agents understand code structure before reading files, achieving 10-150x token reduction.
-
-**Key Principle:** Explore structure first (50 tokens), extract what you need (20 tokens), instead of reading full files (7,500+ tokens).
-
-**Supported:** 18 file types including Python, JS/TS, Rust, Go, Bash, Docker, YAML, JSON, Markdown, Jupyter
+**Version:** 0.17.0
+**Token Cost:** ~1,500 tokens (this guide)
+**Alternative:** Use `reveal help://` for progressive discovery (~50-500 tokens)
 
 ---
 
-## Quick Start
+## Token-Efficient Help System ⭐
 
-**Installation:**
+Reveal has a **discoverable help system** via `help://` URIs - always up-to-date, self-documenting.
+
+**Best Practice:** Use `help://` to explore capabilities progressively instead of loading full guides.
+
+---
+
+## Progressive Discovery Pattern
+
 ```bash
-pip install reveal-cli
+# 1. Discover what's available
+reveal help://                    # List all adapters (~50 tokens)
+
+# 2. Learn about specific capability
+reveal help://python              # Python runtime inspection (~200 tokens)
+reveal help://ast                 # AST query system (~250 tokens)
+
+# 3. Use it
+reveal python://                  # Python environment overview
+reveal python://debug/bytecode    # Check for stale .pyc files
+reveal 'ast://./src?complexity>10' # Find complex functions
 ```
 
-**Basic Usage:**
+**Token efficiency:**
+- Progressive exploration: ~50-500 tokens (as needed)
+- This quick start: ~1,500 tokens
+- Full guide (--agent-help-full): ~12,000 tokens
+
+---
+
+## Available Help Topics
+
+**Discover current list:** `reveal help://`
+
+**As of v0.17.0:**
+
+### URI Adapters (Self-Documenting)
+- `help://python` - Python runtime inspection (NEW: bytecode debugging, package info)
+- `help://ast` - Query code as AST database (find functions by complexity/size)
+- `help://env` - Environment variables explorer
+- `help://help` - Help system itself (meta!)
+
+### Guides
+- `help://agent` - Same as this file
+- `help://agent-full` - Complete comprehensive guide (~12K tokens)
+
+**New adapters auto-appear** - `help://` queries the live adapter registry.
+
+---
+
+## Core Reveal Usage (Quick Reference)
+
+### Structure-First Philosophy
+
+**DO THIS:**
 ```bash
-reveal file.py                    # Show structure (functions, classes, imports)
+reveal file.py                    # Structure first (~100 tokens)
+reveal file.py target_function    # Then extract what you need (~50 tokens)
+```
+
+**NOT THIS:**
+```bash
+cat file.py                       # Read entire file (~7,500 tokens) ❌
+```
+
+**Token savings:** 10-150x reduction
+
+---
+
+### Essential Commands
+
+```bash
+# File exploration
 reveal src/                       # Directory tree
-reveal file.py function_name      # Extract specific function
+reveal file.py                    # File structure (functions, classes, imports)
 reveal file.py --outline          # Hierarchical view (classes with methods)
-```
+reveal file.py function_name      # Extract specific function
 
-**Core Workflow:** Explore → Navigate → Focus
+# Code quality
+reveal file.py --check            # Run all quality checks
+reveal file.py --check --select B,S  # Bugs & security only
+
+# Large files (progressive disclosure)
+reveal large.py --head 10         # First 10 functions
+reveal large.py --tail 5          # Last 5 functions
+reveal large.py --range 15-20     # Specific range
+
+# Pipeline workflows
+git diff --name-only | reveal --stdin --outline
+find src/ -name "*.py" | reveal --stdin --check
+
+# Output formats
+reveal file.py --format=json      # JSON (for scripting)
+reveal file.py --format=grep      # Pipeable format
+```
 
 ---
 
-## Core Use Cases
+## Python Runtime Inspection (NEW in v0.17.0)
 
-### Codebase Exploration
+**Common use case:** "My code changes aren't working!" (stale .pyc bytecode)
 
-**Pattern:**
 ```bash
-reveal src/                       # What directories exist?
+# Quick environment check
+reveal python://                  # Python version, venv status, package count
+
+# Debug bytecode issues
+reveal python://debug/bytecode    # ⚠️  Detects stale .pyc files
+
+# Package management
+reveal python://packages          # List all installed packages
+reveal python://packages/requests # Details for specific package
+
+# Environment details
+reveal python://venv              # Virtual environment status
+reveal python://env               # sys.path, flags, encoding
+reveal python://imports           # Currently loaded modules
+```
+
+**Full documentation:** `reveal help://python`
+
+---
+
+## AST Query System
+
+Find code patterns without reading files:
+
+```bash
+# Find complex functions
+reveal 'ast://./src?complexity>10'
+
+# Find long functions
+reveal 'ast://app.py?lines>50'
+
+# Find all functions (JSON output)
+reveal 'ast://.?type=function' --format=json
+
+# Query specific file
+reveal 'ast://main.py?type=class'
+```
+
+**Full syntax:** `reveal help://ast`
+
+---
+
+## Essential Workflows
+
+### Unknown Codebase
+```bash
+reveal help://                    # What adapters exist?
+reveal src/                       # What's the structure?
 reveal src/main.py                # What's in this file?
-reveal src/main.py --outline      # Hierarchical structure
 reveal src/main.py load_config    # Extract specific function
 ```
 
-**Use when:** Unknown codebase, onboarding to project
-
-**Token impact:** Traditional (read all): ~5,000 tokens → With reveal: ~200 tokens (25x reduction)
-
----
-
-### Function Extraction
-
-**Pattern:**
+### PR Review
 ```bash
-reveal file.py                    # See all functions/classes
-reveal file.py target_function    # Extract specific code
-```
-
-**Use when:** Need to understand specific functionality
-
-**Token impact:** Grep + read: ~500 tokens → Reveal: ~70 tokens (7x reduction)
-
----
-
-### Code Quality Review
-
-**Pattern:**
-```bash
-reveal file.py --check                   # Run all quality checks
-reveal file.py --check --select B,S      # Focus on bugs & security
-reveal file.py --outline --check         # Structure + issues
-```
-
-**Use when:** PR review, refactoring, security audit
-
-**Rules:** Bugs (B), Security (S), Complexity (C), Errors (E), Refactoring (R), URLs (U)
-
----
-
-### Large File Navigation
-
-**Pattern:**
-```bash
-reveal large.py --head 10         # First 10 functions
-reveal large.py --tail 5          # Last 5 functions (bugs cluster here!)
-reveal large.py --range 15-20     # Specific range
-reveal large.py specific_func     # Extract target
-```
-
-**Use when:** File too large to view all at once
-
-**Token impact:** View only what's needed (10x+ reduction)
-
----
-
-## Workflows
-
-### PR Review Workflow
-```bash
-# Get changed files
-git diff --name-only origin/main
-
-# Quick structure check
 git diff --name-only | reveal --stdin --outline
-
-# Quality check changed files
 git diff --name-only | grep "\.py$" | reveal --stdin --check
+reveal src/changed_file.py --check
+```
 
-# Deep dive on specific file
-reveal src/auth.py --check
-reveal src/auth.py authenticate_user
+### Python Environment Debugging
+```bash
+reveal python://                  # Environment overview
+reveal python://debug/bytecode    # Check for stale .pyc (common issue!)
+reveal python://venv              # Virtual environment status
+```
+
+### Bug Investigation
+```bash
+reveal file.py --outline          # See structure
+reveal file.py --tail 5           # Last functions (bugs cluster here!)
+reveal file.py suspicious_func    # Extract suspect code
+reveal file.py --check --select B,E  # Check for bugs & errors
 ```
 
 ---
 
-### Bug Investigation Workflow
+## Output Formats
+
 ```bash
-# Find file structure
-reveal src/problematic_file.py --outline
-
-# Check last functions (bugs often at end)
-reveal src/problematic_file.py --tail 5
-
-# Extract suspicious function
-reveal src/problematic_file.py buggy_function
-
-# Check for quality issues
-reveal src/problematic_file.py --check --select B,E
+reveal file.py                    # Text (human-readable)
+reveal file.py --format=json      # JSON (standard structure)
+reveal file.py --format=typed     # JSON with types & relationships
+reveal file.py --format=grep      # Pipeable (name:line format)
 ```
 
----
-
-### New Feature Understanding
-```bash
-# Explore feature directory
-reveal src/features/new_thing/
-
-# See main file structure
-reveal src/features/new_thing/main.py
-
-# Understand key functions
-reveal src/features/new_thing/main.py --outline
-reveal src/features/new_thing/main.py process_request
-```
-
----
-
-## Pipeline Composition
-
-### With Git
-```bash
-# Changed files in PR
-git diff --name-only origin/main | reveal --stdin --outline
-
-# Quality check modified code
-git diff --name-only | grep "\.py$" | reveal --stdin --check
-
-# Find complex changes
-git diff --name-only | reveal --stdin --check --select C
-```
-
-### With Find
-```bash
-# Explore all Python files
-find src/ -name "*.py" | reveal --stdin
-
-# Check all Dockerfiles
-find . -name "Dockerfile*" | reveal --stdin --check
-
-# JSON output for processing
-find src/ -name "*.py" | reveal --stdin --format=json
-```
-
-### With jq (JSON Processing)
+**JSON + jq** (powerful filtering):
 ```bash
 # Find complex functions
 reveal app.py --format=json | jq '.structure.functions[] | select(.depth > 3)'
 
-# Extract all function signatures
-reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name)(\(.line))"'
-
-# Find all imports
+# List all imports
 reveal app.py --format=json | jq '.structure.imports[]'
 ```
 
-### Typed Format
+---
 
-**New in v0.16.0:** Analyzers can define types and relationships for richer semantic analysis.
+## When to Use --agent-help-full
+
+**Use the full guide when:**
+- Cannot make multiple reveal calls (API/token constraints)
+- Working in restricted environment (no file system access)
+- Need complete offline reference
+
+**Cost:** ~12,000 tokens (vs. ~500 for progressive `help://` exploration)
 
 ```bash
-# Standard JSON (backward compatible)
-reveal file.py --format=json
-# Output: { "structure": { "functions": [...], "classes": [...] } }
-
-# Typed JSON (with types and relationships)
-reveal file.py --format=typed
-# Output: { "entities": [...], "relationships": {...}, "type_counts": {...} }
+reveal --agent-help-full          # Complete guide (all workflows, examples, patterns)
 ```
-
-**Typed format includes:**
-- **Entities:** Each element has explicit `type` field (function, method, class, etc.)
-- **Relationships:** Call graphs, inheritance, dependencies (bidirectional)
-- **Type counts:** Summary statistics
-- **Metadata:** Total entities and relationships
-
-**Example output:**
-```json
-{
-  "entities": [
-    {"type": "function", "name": "process", "line": 10, "signature": "..."},
-    {"type": "method", "name": "handle", "line": 50, "parent_class": "Handler"}
-  ],
-  "relationships": {
-    "calls": [{"from": {"type": "method", "name": "handle"}, "to": {"type": "function", "name": "process"}}],
-    "called_by": [{"from": {"type": "function", "name": "process"}, "to": {"type": "method", "name": "handle"}}]
-  },
-  "type_counts": {"function": 10, "method": 5, "class": 3}
-}
-```
-
-**When to use typed format:**
-- Analyzing code relationships (call graphs, dependencies)
-- Type-aware queries and filtering
-- Building code intelligence tools
-- Relationship-based analysis (impact analysis, refactoring)
-
-**Fallback:** If analyzer doesn't define types, automatically falls back to standard JSON format.
 
 ---
 
-## Integration Patterns
+## Decision Tree
 
-### With TIA (The Intelligent Agent)
-```bash
-# Orient: What exists?
-tia search all "authentication"
-tia beth explore "auth"
-
-# Navigate: What's in this file? (Use reveal here!)
-reveal path/from/search/auth.py
-
-# Focus: Get specific code
-reveal path/from/search/auth.py authenticate_user
 ```
+Need help with reveal?
+├─ What adapters exist? → reveal help://
+├─ How does python:// work? → reveal help://python
+├─ How does ast:// work? → reveal help://ast
+├─ Need complete offline guide? → reveal --agent-help-full
+├─ Traditional CLI help? → reveal --help
+└─ Supported file types? → reveal --list-supported
 
-**Reveal fits perfectly in the Navigate phase** - after finding files, before reading them.
-
----
-
-### With Claude Code
-```bash
-# Before reading a file, explore it first
-reveal unknown_file.py            # What's in here?
-# Then use Read tool on specific functions only
+Exploring code?
+├─ Unknown directory → reveal src/
+├─ Unknown file → reveal file.py
+├─ Need specific function → reveal file.py function_name
+├─ Multiple files → find/git | reveal --stdin
+├─ Large file (>300 lines) → reveal file.py --head 10
+└─ Full content needed → Read tool (after structure exploration)
 ```
 
 ---
 
 ## Common Patterns
 
-### ✅ DO: Explore before reading
+### ✅ DO: Progressive exploration
 ```bash
-reveal file.py                    # Structure first (50 tokens)
-reveal file.py target_func        # Then extract (20 tokens)
+reveal file.py                    # Structure first
+reveal file.py --outline          # Hierarchy if needed
+reveal file.py target_func        # Extract what you need
 ```
 
-### ❌ DON'T: Read first
+### ❌ DON'T: Read everything
 ```bash
 cat huge_file.py                  # 10,000 tokens wasted
 ```
@@ -270,145 +261,76 @@ cat huge_file.py                  # 10,000 tokens wasted
 
 ### ✅ DO: Use pipelines
 ```bash
-git diff --name-only | reveal --stdin
+git diff --name-only | reveal --stdin --outline
 ```
 
 ### ❌ DON'T: Manual iteration
 ```bash
-reveal file1.py; reveal file2.py; ...
+reveal file1.py; reveal file2.py; ...  # Use --stdin instead
 ```
 
 ---
 
-### ✅ DO: Progressive disclosure
+### ✅ DO: Use help:// for discovery
 ```bash
-reveal 1000_line_file.py --head 10    # Start small
-reveal 1000_line_file.py --range 20-30 # Expand as needed
+reveal help://                    # See all adapters
+reveal help://python              # Learn specific adapter
 ```
 
-### ❌ DON'T: All at once
+### ❌ DON'T: Load full guide unnecessarily
 ```bash
-reveal 1000_line_file.py          # Overwhelming output
+reveal --agent-help-full          # 12K tokens when help:// costs 50
 ```
 
 ---
 
-### ✅ DO: Semantic extraction
+## Integration Patterns
+
+### With TIA
 ```bash
-reveal file.py function           # Accurate, with context
+tia search all "auth"             # Orient: Find files
+reveal path/to/auth.py            # Navigate: Structure (Use reveal here!)
+reveal path/to/auth.py auth_func  # Focus: Extract specific code
 ```
 
-### ❌ DON'T: Grep with manual counting
+### With Claude Code
 ```bash
-grep -A 20 "def function" file.py # Brittle, error-prone
+# Before using Read tool, explore structure
+reveal unknown_file.py            # What's in here? (~100 tokens)
+# Then use Read tool on specific functions only
 ```
 
 ---
 
-## Key Flags Reference
+## Key Resources
 
-| Flag | Purpose | Token Impact |
-|------|---------|--------------|
-| (none) | Show structure | Minimal (50-100) |
-| `--outline` | Hierarchical view | Low (100-200) |
-| `--head N` | First N elements | Minimal (10-50) |
-| `--tail N` | Last N elements | Minimal (10-50) |
-| `--range M-N` | Specific range | Minimal (20-100) |
-| `--check` | Quality checks | Low (100-300) |
-| `--select RULES` | Filter rules (B,S,C,E,R,U) | Variable |
-| `--format=json` | JSON output (standard) | Same (for scripting) |
-| `--format=typed` | JSON with types/relationships | Same (typed format) |
-| `--stdin` | Pipeline mode | Scales with input |
-| `element_name` | Extract element | Low (20-100) |
-
----
-
-## Token Efficiency
-
-### Scenario: 500-Line Python File
-
-| Approach | Tokens | Time | Use When |
-|----------|--------|------|----------|
-| Read entire file | ~7,500 | Immediate | Never (unless truly needed) |
-| reveal structure | ~50 | <100ms | First step (always) |
-| reveal --outline | ~100 | <100ms | Need hierarchy |
-| reveal + extract | ~70 | <200ms | Need specific code |
-| reveal --check | ~150 | <500ms | Quality review |
-
-**Best Practice:** Start with structure (50 tokens), then extract only what's needed.
-
----
-
-### Scenario: Exploring 50-File Codebase
-
-| Approach | Tokens | Result |
-|----------|--------|--------|
-| Read all files | ~375,000 | Context overflow, expensive |
-| reveal all files | ~2,500 | Complete structure map |
-| reveal + targeted reads | ~5,000 | Deep understanding where needed |
-
-**Savings:** 75x token reduction with better understanding!
-
----
-
-## Supported File Types
-
-**18 Built-in analyzers:**
-- **Code:** Python (.py), JavaScript (.js), TypeScript (.ts, .tsx), Rust (.rs), Go (.go), GDScript (.gd)
-- **Scripts:** Bash/Shell (.sh, .bash)
-- **Config:** YAML (.yaml, .yml), JSON (.json), TOML (.toml), Nginx (nginx.conf)
-- **Containers:** Dockerfile
-- **Docs:** Markdown (.md)
-- **Data:** Jupyter (.ipynb), JSONL (.jsonl)
-- **Fallback:** 30+ languages via Tree-sitter (automatic)
-
-**Check support:**
-```bash
-reveal --list-supported
-```
-
----
-
-## Decision Tree
-
-**When exploring code:**
-
-```
-Need to understand code?
-├─ Unknown directory → reveal src/
-├─ Unknown file → reveal file.py (or --outline for hierarchy)
-├─ Need specific function → reveal file.py function_name
-├─ Multiple files → find/git | reveal --stdin
-├─ Code quality checks → reveal file.py --check
-├─ Large file (>300 lines) → reveal file.py --head N (explore progressively)
-└─ Full content needed → cat/Read tool (after exploring structure)
-```
-
-**Key Rule:** Never read full file without checking structure first!
-
----
-
-## Resources
-
+- **Progressive Help:** `reveal help://` (always current, ~50 tokens)
+- **Complete Guide:** `reveal --agent-help-full` (~12K tokens, offline fallback)
+- **Traditional Help:** `reveal --help` (CLI flags and options)
+- **Supported Types:** `reveal --list-supported`
+- **Version:** `reveal --version`
 - **GitHub:** https://github.com/scottsen/reveal
 - **PyPI:** https://pypi.org/project/reveal-cli/
-- **Full Guide:** `reveal --agent-help-full`
-- **Version:** `reveal --version`
-- **Supported Types:** `reveal --list-supported`
 
 ---
 
-## Optional
+## Quick Comparison
 
-The following sections provide additional depth for agents needing comprehensive understanding:
+| Approach | Tokens | When to Use |
+|----------|--------|-------------|
+| `reveal help://` | ~50 | Discover available adapters |
+| `reveal help://python` | ~200 | Learn specific adapter |
+| `reveal --agent-help` | ~1,500 | Quick start + discovery pattern |
+| `reveal --agent-help-full` | ~12,000 | Complete offline reference |
 
-- **Complete Token Analysis:** Detailed efficiency calculations across multiple scenarios (`reveal --agent-help-full`)
-- **All Rules Reference:** Complete list of 8+ code quality detectors with examples
-- **Advanced Pipeline Patterns:** Complex composition with jq, awk, sed
-- **Anti-patterns Deep Dive:** Common mistakes and solutions explained
-- **Performance Benchmarks:** Speed and accuracy metrics
-- **Version History:** Feature additions by version
-- **Troubleshooting Guide:** Solutions to common issues
-- **Contributing Guide:** How to add new analyzers
+**Best Practice:** Start with `help://` for progressive discovery. Fall back to `--agent-help-full` only when needed.
 
-**Access full documentation:** `reveal --agent-help-full`
+---
+
+## Remember
+
+**Key Principle:** Explore structure before reading files (10-150x token reduction)
+
+**Discovery Pattern:** `help://` → learn → use (most token-efficient)
+
+**When stuck:** `reveal help://` shows you what's possible!
