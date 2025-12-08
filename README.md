@@ -145,6 +145,9 @@ reveal python://version                     # Version details
 reveal python://venv                        # Virtual environment status
 reveal python://packages                    # Installed packages
 reveal python://packages/requests           # Specific package info
+reveal python://module/mypackage            # Module conflict detection 🆕
+reveal python://syspath                     # sys.path analysis 🆕
+reveal python://doctor                      # Automated diagnostics 🆕
 reveal python://imports                     # Loaded modules
 reveal python://debug/bytecode              # Find stale .pyc files
 

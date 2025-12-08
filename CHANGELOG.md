@@ -71,8 +71,46 @@ architecture: "x86_64"
 - `python://venv` - Virtual environment status
 - `python://packages` - List all packages (like `pip list`)
 - `python://packages/<name>` - Package details
+- **`python://module/<name>`** - 🆕 Module conflict detection (CWD shadowing, pip vs import)
 - `python://imports` - Currently loaded modules
+- **`python://syspath`** - 🆕 sys.path analysis with conflict detection
+- **`python://doctor`** - 🆕 Automated environment diagnostics
 - `python://debug/bytecode` - Bytecode issues (stale .pyc files)
+
+**🎯 Enhanced Diagnostic Features:**
+
+**1. Module Conflict Detection (`python://module/<name>`)**
+```bash
+reveal python://module/mypackage
+```
+Detects and diagnoses:
+- **CWD Shadowing**: Local directory masking installed packages
+- **Pip vs Import Mismatch**: Package installed one place, importing from another
+- **Editable Installs**: Development installs vs production packages
+- **Actionable Recommendations**: Commands to fix detected issues
+
+**2. sys.path Analysis (`python://syspath`)**
+```bash
+reveal python://syspath
+```
+Shows:
+- Complete sys.path with priority classification (cwd, site-packages, stdlib, etc.)
+- CWD highlighting (sys.path[0] = highest priority)
+- Conflict detection (when CWD shadows packages)
+- Summary statistics by path type
+
+**3. Automated Environment Diagnostics (`python://doctor`)**
+```bash
+reveal python://doctor
+```
+One-command health check performing 5 automated checks:
+- ✅ Virtual environment activation status
+- ✅ CWD shadowing detection
+- ✅ Stale bytecode (.pyc newer than .py)
+- ✅ Python version compatibility
+- ✅ Editable install detection
+
+Returns health score (0-100) + actionable fix commands.
 
 **Coming Soon (v0.18.0+):**
 - `python://imports/graph` - Import dependency visualization
@@ -90,14 +128,23 @@ architecture: "x86_64"
 - AI agents debugging Python environments
 
 **New Files:**
-- `reveal/adapters/python.py` (478 lines) - Python runtime adapter
+- `reveal/adapters/python.py` (750+ lines) - Python runtime adapter with enhanced diagnostics
+- `reveal/adapters/PYTHON_ADAPTER_GUIDE.md` (250+ lines) - Comprehensive guide with examples
 
 **Tests:**
-- `tests/test_adapters.py` - 15 comprehensive tests for Python adapter (76% coverage)
+- `tests/test_adapters.py` - 19 comprehensive tests for Python adapter (51% coverage)
+  - Module conflict detection tests
+  - sys.path analysis tests
+  - Doctor diagnostics tests
 
 **Documentation:**
 - Self-documenting via `reveal help://python`
 - Integrated with existing help system
+- Complete guide: `reveal/adapters/PYTHON_ADAPTER_GUIDE.md`
+  - Real-world workflows
+  - Multi-shot prompting examples (for LLMs)
+  - Integration patterns (CI/CD, agents)
+  - Troubleshooting guide
 
 ---
 

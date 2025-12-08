@@ -500,6 +500,119 @@ class TestPythonAdapter(unittest.TestCase):
         result = adapter.get_element('debug/syntax')
         self.assertIn('error', result)
 
+    def test_get_module_analysis(self):
+        """Should analyze module import location and detect conflicts."""
+        adapter = PythonAdapter()
+
+        # Test with sys module (always available)
+        result = adapter.get_element('module/sys')
+
+        self.assertIsNotNone(result)
+        self.assertIn('module', result)
+        self.assertIn('status', result)
+        self.assertIn('conflicts', result)
+        self.assertIn('recommendations', result)
+
+        # sys should be importable
+        self.assertEqual(result['status'], 'importable')
+        self.assertIn('import_location', result)
+        self.assertIsInstance(result['conflicts'], list)
+
+        # Test with non-existent module
+        result = adapter.get_element('module/nonexistent_fake_module_12345')
+        self.assertIsNotNone(result)
+        self.assertEqual(result['status'], 'not_found')
+
+    def test_get_module_analysis_pip_package(self):
+        """Should detect pip package metadata for module."""
+        adapter = PythonAdapter()
+
+        # Test with a known package (pytest should be installed)
+        result = adapter.get_element('module/pytest')
+
+        if 'pip_package' in result and result['pip_package']:
+            self.assertIn('name', result['pip_package'])
+            self.assertIn('version', result['pip_package'])
+            self.assertIn('location', result['pip_package'])
+            self.assertIn('install_type', result['pip_package'])
+
+    def test_get_syspath_analysis(self):
+        """Should analyze sys.path with conflict detection."""
+        adapter = PythonAdapter()
+        result = adapter.get_element('syspath')
+
+        self.assertIsNotNone(result)
+        self.assertIn('count', result)
+        self.assertIn('cwd', result)
+        self.assertIn('paths', result)
+        self.assertIn('conflicts', result)
+        self.assertIn('pythonpath', result)
+        self.assertIn('summary', result)
+
+        # Validate paths structure
+        self.assertIsInstance(result['paths'], list)
+        self.assertGreater(len(result['paths']), 0)
+
+        # Each path should have required fields
+        for path_info in result['paths']:
+            self.assertIn('index', path_info)
+            self.assertIn('path', path_info)
+            self.assertIn('is_cwd', path_info)
+            self.assertIn('exists', path_info)
+            self.assertIn('type', path_info)
+            self.assertIn('priority', path_info)
+
+        # Validate summary
+        summary = result['summary']
+        self.assertIn('cwd_entries', summary)
+        self.assertIn('site_packages', summary)
+        self.assertIn('stdlib', summary)
+        self.assertIn('pythonpath', summary)
+        self.assertIn('other', summary)
+
+    def test_run_doctor(self):
+        """Should run automated environment diagnostics."""
+        adapter = PythonAdapter()
+        result = adapter.get_element('doctor')
+
+        self.assertIsNotNone(result)
+        self.assertIn('status', result)
+        self.assertIn('health_score', result)
+        self.assertIn('issues', result)
+        self.assertIn('warnings', result)
+        self.assertIn('info', result)
+        self.assertIn('recommendations', result)
+        self.assertIn('summary', result)
+        self.assertIn('checks_performed', result)
+
+        # Validate status
+        self.assertIn(result['status'], ['healthy', 'caution', 'warning', 'critical'])
+
+        # Validate health score
+        self.assertGreaterEqual(result['health_score'], 0)
+        self.assertLessEqual(result['health_score'], 100)
+
+        # Validate arrays
+        self.assertIsInstance(result['issues'], list)
+        self.assertIsInstance(result['warnings'], list)
+        self.assertIsInstance(result['info'], list)
+        self.assertIsInstance(result['recommendations'], list)
+
+        # Validate summary counts
+        summary = result['summary']
+        self.assertEqual(summary['total_issues'], len(result['issues']))
+        self.assertEqual(summary['total_warnings'], len(result['warnings']))
+        self.assertEqual(summary['total_info'], len(result['info']))
+        self.assertEqual(summary['total_recommendations'], len(result['recommendations']))
+
+        # Should perform expected checks
+        checks = result['checks_performed']
+        self.assertIn('virtual_environment', checks)
+        self.assertIn('cwd_shadowing', checks)
+        self.assertIn('stale_bytecode', checks)
+        self.assertIn('python_version', checks)
+        self.assertIn('editable_installs', checks)
+
     def test_get_help(self):
         """Should provide comprehensive help documentation."""
         help_data = PythonAdapter.get_help()
@@ -520,11 +633,14 @@ class TestPythonAdapter(unittest.TestCase):
         self.assertIn('uri', example)
         self.assertIn('description', example)
 
-        # Check elements
+        # Check elements - including new ones
         elements = help_data['elements']
         self.assertIn('version', elements)
         self.assertIn('venv', elements)
         self.assertIn('packages', elements)
+        self.assertIn('module/<name>', elements)
+        self.assertIn('syspath', elements)
+        self.assertIn('doctor', elements)
 
         # Check separation of concerns
         separation = help_data['separation_of_concerns']
