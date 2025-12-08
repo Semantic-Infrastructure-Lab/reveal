@@ -1,6 +1,6 @@
 # Reveal - Agent Quick Start
 
-**Version:** 0.17.0
+**Version:** 0.18.0
 **Token Cost:** ~1,500 tokens (this guide)
 **Alternative:** Use `reveal help://` for progressive discovery (~50-500 tokens)
 
@@ -41,15 +41,18 @@ reveal 'ast://./src?complexity>10' # Find complex functions
 
 **Discover current list:** `reveal help://`
 
-**As of v0.17.0:**
+**As of v0.18.0:**
 
 ### URI Adapters (Self-Documenting)
 - `help://python` - Python runtime inspection (NEW: bytecode debugging, package info)
-- `help://ast` - Query code as AST database (find functions by complexity/size)
+- `help://ast` - Query code as AST database (NEW: wildcard name patterns)
 - `help://env` - Environment variables explorer
 - `help://help` - Help system itself (meta!)
 
-### Guides
+### Comprehensive Guides (NEW in v0.18.0)
+- `help://python-guide` - Python adapter with multi-shot examples for LLMs
+- `help://anti-patterns` - Stop using grep/find, use reveal instead
+- `help://adapter-authoring` - Create your own adapters with excellent help
 - `help://agent` - Same as this file
 - `help://agent-full` - Complete comprehensive guide (~12K tokens)
 
@@ -140,6 +143,10 @@ reveal 'ast://./src?complexity>10'
 
 # Find long functions
 reveal 'ast://app.py?lines>50'
+
+# Find by name pattern (NEW: wildcard support)
+reveal 'ast://.?name=test_*'        # All test functions
+reveal 'ast://src/?name=*helper*'   # Functions containing "helper"
 
 # Find all functions (JSON output)
 reveal 'ast://.?type=function' --format=json

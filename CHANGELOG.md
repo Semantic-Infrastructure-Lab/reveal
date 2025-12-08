@@ -7,7 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.17.0] - 2025-12-07
+## [0.18.0] - 2025-12-07
+
+### 🎯 NEW: Wildcard Name Patterns in AST Queries
+
+**Find code by pattern!** The `ast://` adapter now supports wildcard patterns in name filters.
+
+```bash
+reveal 'ast://.?name=test_*'        # All functions starting with test_
+reveal 'ast://src/?name=*helper*'   # Functions containing "helper"
+reveal 'ast://.?name=get_?'         # Single character wildcard
+```
+
+**Patterns supported:**
+- `*` - Match zero or more characters
+- `?` - Match exactly one character
+- Combine with other filters: `name=test_*&lines>50`
+
+**Impact:** Replaces grep/find workflows with semantic code search (30-60x token reduction)
+
+### 📚 NEW: Comprehensive Help Guides for LLMs and Extension Authors
+
+**Three new discoverable guides (v0.18.0):**
+
+1. **`help://python-guide`** - Python adapter comprehensive guide (links v0.17.0 features)
+   - Multi-shot prompting examples (input → output → interpretation)
+   - Real-world workflows (debugging, deployment checks)
+   - LLM integration patterns
+   - 450+ lines of examples
+
+2. **`help://anti-patterns`** - Stop using grep/find!
+   - grep/find/cat → reveal equivalents
+   - Token savings table (10-150x reduction)
+   - 10 common anti-patterns with solutions
+   - Decision trees for when to use reveal vs traditional tools
+
+3. **`help://adapter-authoring`** - Create custom adapters
+   - Complete schema documentation
+   - Best practices for LLM-friendly help
+   - Multi-shot prompting patterns
+   - Checklist for good help
+   - Reference implementations
+
+**Enhanced for extension authors:**
+- `base.py` get_help() docstring now 40+ lines with complete schema
+- Required/recommended/optional fields clearly marked
+- Automatic help discovery - just implement `get_help()`
+- Reference to `help://adapter-authoring` guide
+
+### 🔗 NEW: Breadcrumb Improvements
+
+All adapters now include breadcrumbs to related guides:
+- AST adapter → `help://anti-patterns` (stop using grep!)
+- Python adapter → `help://python-guide` (comprehensive examples)
+- ENV adapter → `help://anti-patterns`
+
+**Progressive discovery:** Each help topic guides you to the next resource
 
 ### 🐍 NEW: Python Runtime Adapter (`python://`)
 

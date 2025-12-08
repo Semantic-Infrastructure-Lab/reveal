@@ -39,15 +39,44 @@ class ResourceAdapter(ABC):
     def get_help() -> Optional[Dict[str, Any]]:
         """Get help documentation for this adapter (optional).
 
+        For extension authors: Implement this method to provide discoverable help.
+        Your help will automatically appear in `reveal help://` and `reveal help://yourscheme`
+
         Returns:
             Dict containing help metadata, or None if no help available.
-            Expected keys:
-                - name: Adapter scheme name
-                - description: One-line summary
-                - syntax: Usage pattern (optional)
-                - examples: List of example URIs (optional)
-                - filters: Available query filters (optional)
-                - notes: Additional notes or gotchas (optional)
+
+            Required keys:
+                - name (str): Adapter scheme name (e.g., 'python', 'ast')
+                - description (str): One-line summary (< 80 chars)
+
+            Recommended keys:
+                - syntax (str): Usage pattern (e.g., 'scheme://<resource>[?<filters>]')
+                - examples (List[Dict]): Example URIs with descriptions
+                  [{'uri': 'scheme://example', 'description': 'What it does'}]
+                - notes (List[str]): Important notes, gotchas, limitations
+                - see_also (List[str]): Related adapters, tools, documentation
+
+            Optional keys (for advanced adapters):
+                - operators (Dict[str, str]): Query operators (e.g., '>', '<', '==')
+                - filters (Dict[str, str]): Available filters with descriptions
+                - elements (Dict[str, str]): Available elements (for element-based adapters)
+                - features (List[str]): Feature list
+                - use_cases (List[str]): Common use cases
+                - output_formats (List[str]): Supported formats ('text', 'json', 'grep')
+                - coming_soon (List[str]): Planned features
+
+        Best Practices:
+            - Provide 3-7 examples (simple → complex)
+            - Include multi-shot examples (input + expected output) for LLMs
+            - Add breadcrumbs in see_also to guide users
+            - Create comprehensive guide (ADAPTER_GUIDE.md) for complex adapters
+            - Link guide in see_also: 'reveal help://yourscheme-guide - Comprehensive guide'
+
+        For detailed guidance:
+            reveal help://adapter-authoring - Complete adapter authoring guide
+
+        Examples:
+            See reveal/adapters/python.py, ast.py, env.py for reference implementations
         """
         return None
 

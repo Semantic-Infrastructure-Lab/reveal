@@ -3,6 +3,7 @@
 import os
 import sys
 import warnings
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, register_adapter
@@ -41,7 +42,7 @@ class AstAdapter(ResourceAdapter):
                 'lines': 'Number of lines in function/class (e.g., lines>50)',
                 'complexity': 'Cyclomatic complexity score 1-10 (e.g., complexity>5)',
                 'type': 'Element type: function, class, method (e.g., type=function)',
-                'name': 'Element name pattern - future feature (e.g., name=test_*)'
+                'name': 'Element name pattern with wildcards (e.g., name=test_*, name=*helper*, name=get_?)'
             },
             'examples': [
                 {
@@ -61,6 +62,14 @@ class AstAdapter(ResourceAdapter):
                     'description': 'Only functions (not classes or methods)'
                 },
                 {
+                    'uri': 'ast://.?name=test_*',
+                    'description': 'All functions/classes starting with test_'
+                },
+                {
+                    'uri': 'ast://src/?name=*helper*',
+                    'description': 'All functions/classes containing "helper" in name'
+                },
+                {
                     'uri': 'ast://.?lines>30&complexity<5',
                     'description': 'Long but simple functions (low complexity)'
                 },
@@ -78,6 +87,7 @@ class AstAdapter(ResourceAdapter):
             ],
             'output_formats': ['text', 'json', 'grep'],
             'see_also': [
+                'reveal help://anti-patterns - Stop using grep/find, use reveal instead',
                 'reveal help://env - Environment variable adapter',
                 'reveal --agent-help - Agent usage patterns',
                 'reveal file.py --check - Code quality checks'
@@ -145,11 +155,16 @@ class AstAdapter(ResourceAdapter):
                 filters[key] = {'op': '<', 'value': int(value)}
             elif '=' in param:
                 key, value = param.split('=', 1)
-                # Try to parse as int, otherwise keep as string
-                try:
-                    filters[key] = {'op': '==', 'value': int(value)}
-                except ValueError:
-                    filters[key] = {'op': '==', 'value': value}
+                # Check if value contains wildcards
+                if '*' in value or '?' in value:
+                    # Use glob pattern matching
+                    filters[key] = {'op': 'glob', 'value': value}
+                else:
+                    # Try to parse as int, otherwise keep as string
+                    try:
+                        filters[key] = {'op': '==', 'value': int(value)}
+                    except ValueError:
+                        filters[key] = {'op': '==', 'value': value}
 
         return filters
 
@@ -355,5 +370,8 @@ class AstAdapter(ResourceAdapter):
             return value <= target
         elif op == '==':
             return str(value) == str(target)
+        elif op == 'glob':
+            # Wildcard pattern matching (case-sensitive)
+            return fnmatch(str(value), str(target))
 
         return False

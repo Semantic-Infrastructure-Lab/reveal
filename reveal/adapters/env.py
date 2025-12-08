@@ -58,6 +58,7 @@ class EnvAdapter(ResourceAdapter):
             ],
             'output_formats': ['text', 'json', 'grep'],
             'see_also': [
+                'reveal help://anti-patterns - Stop using grep/env commands, use reveal instead',
                 'reveal help://ast - AST query adapter',
                 'reveal --agent-help - Agent usage patterns'
             ]

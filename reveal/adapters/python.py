@@ -868,6 +868,7 @@ class PythonAdapter(ResourceAdapter):
                 "python://tests - Test discovery (v0.19.0)",
             ],
             "see_also": [
+                "reveal help://python-guide - Comprehensive guide with multi-shot examples",
                 "reveal env:// - Environment variables",
                 "reveal ast:// - Static code analysis",
                 "reveal help://python - This help",

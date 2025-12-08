@@ -135,6 +135,11 @@ reveal help://                              # List all help topics
 reveal help://ast                           # Learn about ast:// queries
 reveal help://python                        # Python runtime adapter help
 
+# Comprehensive guides (v0.18.0+) 🆕
+reveal help://python-guide                  # Multi-shot examples for LLMs
+reveal help://anti-patterns                 # Stop using grep/find!
+reveal help://adapter-authoring             # Create custom adapters
+
 # Environment variables
 reveal env://                               # All environment variables
 reveal env://DATABASE_URL                   # Specific variable
@@ -154,6 +159,8 @@ reveal python://debug/bytecode              # Find stale .pyc files
 # Query code as a database (v0.15.0+)
 reveal 'ast://./src?complexity>10'          # Find complex functions
 reveal 'ast://app.py?lines>50'              # Find long functions
+reveal 'ast://.?name=test_*'                # Wildcard patterns 🆕
+reveal 'ast://src/?name=*helper*'           # Find helpers 🆕
 reveal 'ast://.?lines>30&complexity<5'      # Long but simple
 reveal 'ast://src?type=function' --format=json  # JSON output
 ```
@@ -270,7 +277,7 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 ---
 
-**Status:** v0.13.3 | **License:** MIT | [Roadmap](ROADMAP.md) | [Issues](https://github.com/scottsen/reveal/issues)
+**Status:** v0.18.0 | **License:** MIT | [Roadmap](ROADMAP.md) | [Issues](https://github.com/scottsen/reveal/issues)
 
 [![Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/scottsen/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

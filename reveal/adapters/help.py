@@ -13,6 +13,7 @@ class HelpAdapter(ResourceAdapter):
         help://                    # List all help topics
         help://ast                 # Get ast:// adapter help
         help://env                 # Get env:// adapter help
+        help://python-guide        # Python adapter comprehensive guide (multi-shot examples)
         help://adapters            # List all adapters with help
         help://agent               # Agent usage guide (AGENT_HELP.md)
         help://agent-full          # Full agent guide (AGENT_HELP_FULL.md)
@@ -21,7 +22,10 @@ class HelpAdapter(ResourceAdapter):
     # Static help files (markdown documentation)
     STATIC_HELP = {
         'agent': 'AGENT_HELP.md',
-        'agent-full': 'AGENT_HELP_FULL.md'
+        'agent-full': 'AGENT_HELP_FULL.md',
+        'python-guide': 'adapters/PYTHON_ADAPTER_GUIDE.md',
+        'anti-patterns': 'ANTI_PATTERNS.md',
+        'adapter-authoring': 'adapters/ADAPTER_AUTHORING_GUIDE.md'
     }
 
     @staticmethod
@@ -47,6 +51,10 @@ class HelpAdapter(ResourceAdapter):
                 {
                     'uri': 'help://adapters',
                     'description': 'List all URI adapters with descriptions'
+                },
+                {
+                    'uri': 'help://python-guide',
+                    'description': 'Python adapter comprehensive guide (multi-shot examples, LLM integration)'
                 },
                 {
                     'uri': 'help://agent',
