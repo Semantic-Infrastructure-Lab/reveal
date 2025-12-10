@@ -7,7 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.18.0] - 2025-12-07
+## [0.19.0] - 2025-12-09
+
+### 📋 NEW: Clipboard Integration (`--copy` / `-c`)
+
+**Copy reveal output directly to clipboard!** Cross-platform support with zero dependencies.
+
+```bash
+reveal app.py --copy              # Copy structure to clipboard
+reveal app.py load_config -c      # Copy extracted function
+reveal nginx.conf --check --copy  # Copy check results
+```
+
+**Features:**
+- Tee behavior: Output displays AND copies to clipboard
+- Cross-platform: Linux (xclip/xsel/wl-copy), macOS (pbcopy), Windows (clip)
+- No new dependencies (uses native clipboard utilities)
+- Feedback on stderr: "📋 Copied N chars to clipboard"
+
+### 🔧 NEW: Nginx Configuration Rules (N001-N003)
+
+**Catch nginx misconfigurations before they cause production incidents!**
+
+```bash
+reveal nginx.conf --check              # Run all nginx checks
+reveal nginx.conf --check --select N   # Only nginx rules
+```
+
+**New rules:**
+- **N001** (HIGH): Duplicate backend detection - catches when multiple upstreams share the same server:port
+- **N002** (CRITICAL): Missing SSL certificate - catches `listen 443 ssl` without certificate directives
+- **N003** (MEDIUM): Missing proxy headers - catches `proxy_pass` without `X-Real-IP`, `X-Forwarded-For`
+
+**Background:** These rules were inspired by a production incident where two nginx upstreams pointed to the same port, causing an $8,619/month revenue site to serve wrong content. N001 catches this exact class of bug.
+
+### 📚 NEW: `help://tricks` Guide
+
+**Cool tricks and hidden features now discoverable!**
+
+```bash
+reveal help://tricks    # 560+ lines of advanced workflows
+```
+
+Includes: Self-diagnostic superpowers, AST query wizardry, pipeline magic, token efficiency mastery, and more.
 
 ### 🎯 NEW: Wildcard Name Patterns in AST Queries
 
@@ -63,6 +105,83 @@ All adapters now include breadcrumbs to related guides:
 - ENV adapter → `help://anti-patterns`
 
 **Progressive discovery:** Each help topic guides you to the next resource
+
+### 🗂️ NEW: JSON Adapter (`json://`)
+
+**Navigate and query JSON files with path access, schema discovery, and gron-style output!**
+
+```bash
+reveal json://config.json                    # Pretty-print JSON
+reveal json://config.json/users/0/name       # Navigate to path
+reveal json://config.json/items[-1]          # Negative index
+reveal json://config.json/items[0:3]         # Array slicing
+reveal json://config.json?schema             # Infer type structure
+reveal json://config.json?flatten            # Gron-style output (grep-able)
+reveal json://config.json?gron               # Alias for flatten
+reveal json://config.json?keys               # List keys/indices
+reveal json://config.json?length             # Get length
+```
+
+**Features:**
+- **Path Navigation**: `/key/subkey/0/field` with array indices and slicing
+- **Schema Discovery**: `?schema` infers type structure for large JSON files
+- **Gron-Style Output**: `?flatten` or `?gron` produces grep-able assignment syntax
+- **Query Operations**: `?type`, `?keys`, `?length` for inspection
+
+### 🔀 NEW: OR Logic for AST Type Filters
+
+**Query multiple types at once!** The `ast://` adapter now supports OR logic in type filters.
+
+```bash
+reveal 'ast://.?type=class|function'         # Both classes AND functions
+reveal 'ast://.?type=class,function'         # Same, comma separator
+reveal 'ast://.?type=class|function&lines>50' # Combined with other filters
+```
+
+### 🐛 Fixed: Class Line Count Bug
+
+**Classes now show accurate line counts!** Previously `reveal 'ast://.?type=class'` showed `[0 lines]` for all classes.
+
+**Before:** `AstAdapter [0 lines]`
+**After:** `AstAdapter [413 lines]`
+
+**Root cause:** Classes provide `line_end` but not `line_count`, while functions provide both. Now calculated from `line_end - line + 1` when missing.
+
+### 🐛 Fixed: Tilde Expansion in URI Adapters
+
+**Both `ast://` and `json://` now expand `~` to home directory!**
+
+```bash
+# Before: "Files scanned: 0" or FileNotFoundError
+reveal 'ast://~/src/project?type=class'
+reveal 'json://~/config/settings.json'
+
+# After: Works correctly
+reveal 'ast://~/src/project?type=class'   # ✓ Expands to /home/user/src/project
+reveal 'json://~/config/settings.json'    # ✓ Expands to /home/user/config/settings.json
+```
+
+### 🐛 Fixed: `python://doctor` Text Output
+
+**Doctor now shows full diagnostic output in text mode!** Previously only showed "Bytecode Check: HEALTHY" instead of the complete health report.
+
+```bash
+reveal python://doctor
+# Now shows:
+# Python Environment Health: ✓ HEALTHY
+# Health Score: 90/100
+#
+# Warnings (1):
+#   ⚠️  [environment] No virtual environment detected
+# ...
+```
+
+### 🐛 Fixed: Bytecode Checker Smart Defaults
+
+**Bytecode checking now excludes non-user directories by default!** Skips `.cache/`, `.venv/`, `venv/`, `site-packages/`, `node_modules/`, `.git/`, `.tox/`, `.nox/`, `.pytest_cache/`, `.mypy_cache/`, and `*.egg-info/`.
+
+**Before:** 47,457 issues (mostly in cached/vendored code)
+**After:** 71 issues (actual stale bytecode in user code)
 
 ### 🐍 NEW: Python Runtime Adapter (`python://`)
 

@@ -1,6 +1,6 @@
 # Reveal - Agent Quick Start
 
-**Version:** 0.18.0
+**Version:** 0.19.0
 **Token Cost:** ~1,500 tokens (this guide)
 **Alternative:** Use `reveal help://` for progressive discovery (~50-500 tokens)
 
@@ -41,18 +41,20 @@ reveal 'ast://./src?complexity>10' # Find complex functions
 
 **Discover current list:** `reveal help://`
 
-**As of v0.18.0:**
+**As of v0.19.0:**
 
 ### URI Adapters (Self-Documenting)
 - `help://python` - Python runtime inspection (NEW: bytecode debugging, package info)
-- `help://ast` - Query code as AST database (NEW: wildcard name patterns)
+- `help://ast` - Query code as AST database (NEW: wildcard name patterns, OR logic)
+- `help://json` - Navigate and query JSON files (NEW: path access, schema, gron-style)
 - `help://env` - Environment variables explorer
 - `help://help` - Help system itself (meta!)
 
-### Comprehensive Guides (NEW in v0.18.0)
+### Comprehensive Guides
 - `help://python-guide` - Python adapter with multi-shot examples for LLMs
 - `help://anti-patterns` - Stop using grep/find, use reveal instead
 - `help://adapter-authoring` - Create your own adapters with excellent help
+- `help://tricks` - Cool tricks and hidden features guide
 - `help://agent` - Same as this file
 - `help://agent-full` - Complete comprehensive guide (~12K tokens)
 
@@ -88,9 +90,11 @@ reveal file.py                    # File structure (functions, classes, imports)
 reveal file.py --outline          # Hierarchical view (classes with methods)
 reveal file.py function_name      # Extract specific function
 
-# Code quality
+# Code quality checks
 reveal file.py --check            # Run all quality checks
 reveal file.py --check --select B,S  # Bugs & security only
+reveal nginx.conf --check         # Nginx config validation (N001-N003)
+reveal Dockerfile --check         # Docker best practices (S701)
 
 # Large files (progressive disclosure)
 reveal large.py --head 10         # First 10 functions
@@ -104,6 +108,7 @@ find src/ -name "*.py" | reveal --stdin --check
 # Output formats
 reveal file.py --format=json      # JSON (for scripting)
 reveal file.py --format=grep      # Pipeable format
+reveal file.py --copy             # Copy output to clipboard
 ```
 
 ---
@@ -159,6 +164,29 @@ reveal 'ast://main.py?type=class'
 
 ---
 
+## JSON Navigation (`json://`)
+
+Navigate and query JSON files:
+
+```bash
+# Path navigation
+reveal json://config.json/name           # Access key
+reveal json://config.json/users/0        # Array index
+reveal json://config.json/users[-1]      # Negative index (last item)
+reveal json://config.json/items[0:3]     # Array slice
+
+# Queries
+reveal json://config.json?schema         # Infer type structure
+reveal json://config.json?flatten        # Gron-style grep-able output
+reveal json://config.json?gron           # Alias for flatten
+reveal json://config.json?keys           # List keys/indices
+reveal json://config.json?length         # Get length
+```
+
+**Full syntax:** `reveal help://json`
+
+---
+
 ## Essential Workflows
 
 ### Unknown Codebase
@@ -189,6 +217,17 @@ reveal file.py --outline          # See structure
 reveal file.py --tail 5           # Last functions (bugs cluster here!)
 reveal file.py suspicious_func    # Extract suspect code
 reveal file.py --check --select B,E  # Check for bugs & errors
+```
+
+### Nginx Configuration Validation (NEW in v0.19.0)
+```bash
+reveal nginx.conf --check         # Run all nginx checks
+reveal nginx.conf --check --select N  # Only nginx rules
+
+# Available nginx rules:
+# N001: Duplicate backend detection (upstreams sharing same server:port)
+# N002: Missing SSL certificate (listen 443 ssl without certs)
+# N003: Missing proxy headers (X-Real-IP, X-Forwarded-For)
 ```
 
 ---

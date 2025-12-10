@@ -167,6 +167,47 @@ class TestAstAdapter(unittest.TestCase):
         self.assertIn('lines', help_data['filters'])
         self.assertIn('complexity', help_data['filters'])
 
+    def test_type_filter_or_logic_pipe(self):
+        """Should support OR logic with | in type filter."""
+        adapter = AstAdapter(str(self.test_file), 'type=class|function')
+
+        # OR detected at parse time, should have 'in' operator
+        self.assertEqual(adapter.query['type']['op'], 'in')
+        # Values are raw strings at parse time (normalized during filtering)
+        self.assertIn('class', adapter.query['type']['value'])
+        self.assertIn('function', adapter.query['type']['value'])
+
+    def test_type_filter_or_logic_comma(self):
+        """Should support OR logic with , in type filter."""
+        adapter = AstAdapter(str(self.test_file), 'type=class,function')
+
+        # OR detected at parse time, should have 'in' operator
+        self.assertEqual(adapter.query['type']['op'], 'in')
+        # Values are raw strings at parse time (normalized during filtering)
+        self.assertIn('class', adapter.query['type']['value'])
+        self.assertIn('function', adapter.query['type']['value'])
+
+    def test_type_filter_or_logic_results(self):
+        """Should return both classes and functions with OR filter."""
+        adapter = AstAdapter(str(self.test_file.parent), 'type=class|function')
+        result = adapter.get_structure()
+
+        # Should find both classes and functions
+        categories = {elem.get('category') for elem in result['results']}
+        self.assertIn('classes', categories)
+        self.assertIn('functions', categories)
+
+    def test_class_line_count(self):
+        """Should correctly calculate line count for classes."""
+        adapter = AstAdapter(str(self.test_file.parent), 'type=class')
+        result = adapter.get_structure()
+
+        # All classes should have non-zero line counts
+        for elem in result['results']:
+            if elem.get('category') == 'classes':
+                self.assertGreater(elem.get('line_count', 0), 0,
+                    f"Class {elem.get('name')} has 0 line_count")
+
 
 class TestHelpAdapter(unittest.TestCase):
     """Test help meta-adapter."""

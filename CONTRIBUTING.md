@@ -1,15 +1,36 @@
 # Contributing to reveal
 
-Thank you for your interest in contributing to `reveal`! This project is designed to grow through community contributions, especially new file type analyzers.
+Add new file types in 10-50 lines. Use reveal to explore reveal.
+
+---
+
+## Quick Start
+
+```bash
+# Clone and install
+gh repo fork scottsen/reveal --clone
+cd reveal
+pip install -e .
+
+# Explore the codebase with reveal itself
+reveal reveal/                         # Overall structure
+reveal reveal/base.py --outline        # Registration system
+reveal reveal/analyzers/python.py      # Simplest example (3 lines!)
+
+# Run tests
+pip install pytest
+pytest tests/
+```
+
+---
 
 ## Ways to Contribute
 
-### 1. Add New File Type Analyzers 🔌
+### 1. Add File Type Analyzers (Most Impactful)
 
-**This is the easiest and most impactful way to contribute!**
+Two paths depending on language support:
 
-**For programming languages** (uses tree-sitter, 10 lines of code):
-
+**Tree-sitter languages (10 lines):**
 ```python
 # reveal/analyzers/kotlin.py
 from ..base import register
@@ -17,211 +38,228 @@ from ..treesitter import TreeSitterAnalyzer
 
 @register('.kt', name='Kotlin', icon='🟣')
 class KotlinAnalyzer(TreeSitterAnalyzer):
-    """Kotlin file analyzer."""
     language = 'kotlin'
 ```
 
-**For structured text files** (custom logic, 50-200 lines):
-
+**Custom analyzers (50-200 lines):**
 ```python
 # reveal/analyzers/ini.py
 from ..base import FileAnalyzer, register
 
 @register('.ini', name='INI', icon='📋')
 class IniAnalyzer(FileAnalyzer):
-    """INI configuration file analyzer."""
-
     def get_structure(self):
-        # Extract sections and keys
-        ...
+        # Return: {'sections': [{'line': int, 'name': str}, ...]}
+        pass
 
     def extract_element(self, element_type, name):
-        # Extract specific section
-        ...
+        # Return: {'lines': 'start-end', 'content': str, 'name': str}
+        pass
 ```
 
-**See:** [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for complete guide with examples.
+**Check tree-sitter support:**
+```bash
+python -c "from tree_sitter_languages import get_language; get_language('kotlin')"
+```
 
-### 2. Improve Existing Analyzers
+### 2. Add URI Adapters
 
-- Make them faster
-- Add more detailed structure extraction
-- Improve output formatting
-- Add better error handling
+Extend reveal to explore non-file resources:
 
-### 3. Add Features
+```python
+# reveal/adapters/postgres.py
+from .base import ResourceAdapter, register_adapter
 
-- Syntax highlighting
-- Export to different formats
-- Integration with editors/IDEs
-- Performance improvements
+@register_adapter('postgres')
+class PostgresAdapter(ResourceAdapter):
+    def get_structure(self, **kwargs):
+        # Return: {'tables': [...], 'schemas': [...]}
+        pass
+```
 
-### 4. Documentation
+### 3. Other Contributions
 
-- Improve README
-- Write tutorials
-- Add examples
-- Document AI integration patterns
+- **Bug fixes** - See open issues
+- **Performance** - Profile and optimize
+- **Documentation** - Improve guides, add examples
+- **Pattern detection** - Add new `--check` rules
 
-### 5. Bug Reports & Feature Requests
+---
 
-Open an issue with:
-- Clear description
-- Steps to reproduce (for bugs)
-- Expected vs actual behavior
-- Your environment (OS, Python version)
+## Architecture
 
-## Development Setup
+```
+reveal <path or URI>
+   │
+   ├─ File? → Analyzer System
+   │           ├─ base.py (registry + @register decorator)
+   │           ├─ analyzers/* (18 built-in file types)
+   │           └─ treesitter.py (50+ languages via tree-sitter)
+   │
+   └─ URI?  → Adapter System
+               └─ adapters/* (env://, ast://, python://, help://)
+```
+
+**Key files:**
+
+| File | Purpose |
+|------|---------|
+| `base.py` | Analyzer registration, base classes |
+| `main.py` | CLI, output formatting |
+| `treesitter.py` | Tree-sitter integration |
+| `analyzers/*` | File type handlers |
+| `adapters/*` | URI adapters |
+
+---
+
+## Analyzer Requirements
+
+### Structure Format
+
+```python
+def get_structure(self):
+    return {
+        'functions': [
+            {'line': 15, 'name': 'main', 'signature': 'main()'},
+            # line = 1-indexed (matches vim/editors)
+            # name = required
+        ],
+        'classes': [...],
+        # Group by element type
+    }
+```
+
+### Extract Format
+
+```python
+def extract_element(self, element_type, name):
+    return {
+        'lines': '15-28',      # Range
+        'content': '...',      # Actual code
+        'name': 'main'         # Element name
+    }
+    # Return None if not found
+```
+
+### Common Pitfalls
+
+```python
+# ❌ Zero-indexed lines (editors use 1-indexed)
+{'line': 0, 'name': 'main'}
+
+# ✅ 1-indexed lines
+{'line': 1, 'name': 'main'}
+
+# ❌ No error handling
+data = json.loads(content)
+
+# ✅ Graceful degradation
+try:
+    data = json.loads(content)
+except json.JSONDecodeError:
+    return {'error': 'Invalid JSON'}
+```
+
+---
+
+## Testing
 
 ```bash
-# Clone and install in development mode
-cd ~/src/projects/reveal
-pip install -e ".[dev]"
+# Manual testing
+reveal test.kt                    # Structure
+reveal test.kt MyClass            # Element extraction
+reveal test.kt --format=json      # JSON output
+reveal test.kt --check            # Pattern detection
 
-# Run tests
-pytest
+# Unit tests
+pytest tests/test_your_analyzer.py -v
 
-# Format code
-black reveal/
-ruff check reveal/
-
-# Run specific test
-pytest tests/test_plugin_loader.py -v
+# Full suite
+pytest tests/
 ```
 
-## Analyzer Development Workflow
+**Test template:**
 
-1. **Check tree-sitter support:** Run `reveal --list-supported` to see if your language is already available
-2. **Create analyzer file** in `reveal/analyzers/your_filetype.py`
-3. **Register it** in `reveal/analyzers/__init__.py` by importing your analyzer class
-4. **Add tests** in `tests/test_your_filetype.py`
-5. **Add validation sample** in `validation_samples/sample.your_ext`
-6. **Update README** - add to supported types list
-7. **Submit PR** with examples
+```python
+def test_kotlin_structure():
+    from reveal.analyzers.kotlin import KotlinAnalyzer
 
-**Complete guide:** See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for step-by-step instructions
+    content = "fun main() { println(\"Hello\") }"
+    analyzer = KotlinAnalyzer('/tmp/test.kt', content)
+    structure = analyzer.get_structure()
+
+    assert 'functions' in structure
+    assert structure['functions'][0]['name'] == 'main'
+```
+
+---
+
+## Submitting Changes
+
+1. **Create branch:** `git checkout -b add-kotlin-support`
+2. **Add analyzer** in `reveal/analyzers/`
+3. **Register** in `reveal/analyzers/__init__.py`
+4. **Test** manually and with pytest
+5. **Commit:** `git commit -m "feat: add Kotlin analyzer"`
+6. **Submit PR:** `gh pr create`
+
+**Commit style:** Conventional commits (`feat:`, `fix:`, `docs:`, `test:`)
+
+**PR checklist:**
+- [ ] Analyzer registered in `__init__.py`
+- [ ] Uses 1-indexed line numbers
+- [ ] Includes `name` field in all elements
+- [ ] Handles parse errors gracefully
+- [ ] Tests added (or manual testing documented)
+
+---
 
 ## Code Style
 
-- **Python**: Follow PEP 8, use `black` for formatting
-- **Line length**: 100 characters
-- **Type hints**: Use them for public APIs
-- **Docstrings**: Google style
-- **Comments**: Explain *why*, not *what*
+- **Format:** `black reveal/` (100 char line length)
+- **Lint:** `ruff check reveal/`
+- **Types:** Use type hints for public APIs
+- **Docstrings:** Google style
+- **Comments:** Explain *why*, not *what*
 
-## Testing
+---
 
-```bash
-# Run all tests
-pytest
+## Examples to Study
 
-# Run with coverage
-pytest --cov=reveal --cov-report=html
+**Simplest (tree-sitter):**
+- `analyzers/python.py` - 3 lines
+- `analyzers/rust.py` - 3 lines
 
-# Test specific analyzer
-pytest tests/test_python_analyzer.py -v
-```
+**Custom logic:**
+- `analyzers/markdown.py` - Complex heading extraction
+- `analyzers/nginx.py` - Domain-specific parsing
 
-### Writing Tests
+**Adapters:**
+- `adapters/env.py` - Environment variables
+- `adapters/python.py` - Python runtime inspection
 
-```python
-def test_python_structure_analyzer():
-    """Test Python structure analysis"""
-    from reveal.analyzers.python_analyzer import PythonStructureAnalyzer
-
-    analyzer = PythonStructureAnalyzer()
-    result = analyzer.analyze("test_files/sample.py")
-
-    assert "imports" in result
-    assert len(result["classes"]) == 2
-    assert "UserManager" in result["classes"]
-```
-
-## Commit Messages
-
-Use conventional commits:
-
-```
-feat: add Rust file type plugin
-fix: handle binary files in metadata analyzer
-docs: improve plugin development guide
-test: add C header analyzer tests
-refactor: simplify plugin loader logic
-```
-
-## Pull Request Process
-
-1. **Fork** the repository
-2. **Create branch**: `git checkout -b feature/rust-plugin`
-3. **Make changes** with clear commits
-4. **Add tests** that pass
-5. **Update docs** if needed
-6. **Submit PR** with clear description
-
-### PR Description Template
-
-```markdown
-## Description
-Brief description of changes
-
-## Type of Change
-- [ ] New file type plugin
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Documentation
-- [ ] Performance improvement
-
-## Testing
-- [ ] Tests added/updated
-- [ ] All tests pass
-- [ ] Tested with example files
-
-## Checklist
-- [ ] Code follows style guide
-- [ ] Documentation updated
-- [ ] No breaking changes (or documented)
-```
-
-## Community
-
-- **Questions?** Open a discussion
-- **Ideas?** Open an issue with `[Idea]` tag
-- **Stuck?** Ask for help in your PR
+---
 
 ## Priority Areas
 
 **Most wanted analyzers:**
-- CSV/Excel (.csv, .xlsx) - Data file exploration
-- SQL (.sql) - SQL script parsing
-- Terraform (.tf) - Infrastructure as code
-- Protocol Buffers (.proto) - API definitions
-- GraphQL (.graphql) - Schema exploration
-- XML (.xml) - Structured data
-- Kotlin (.kt) - Android development
-- Swift (.swift) - iOS development
-- Java (.java) - Enterprise apps
+- CSV/Excel (.csv, .xlsx)
+- SQL (.sql)
+- Terraform (.tf)
+- Protocol Buffers (.proto)
+- GraphQL (.graphql)
 
 **Most wanted features:**
-- Call graph analysis (who calls what)
-- Relationship tracking (imports, dependencies)
-- Pattern detection (design patterns)
-- Enhanced outline mode
-- Better error messages
-- Performance improvements
+- Call graph analysis
+- Dependency visualization
+- More pattern detection rules
 
-**Future: URI adapters** - See [ROADMAP.md](ROADMAP.md)
+---
 
 ## License
 
 By contributing, you agree that your contributions will be licensed under the MIT License.
 
-## Recognition
-
-Contributors will be listed in:
-- README.md contributors section
-- Release notes
-- Plugin credits (for plugin authors)
-
 ---
 
-**Thank you for making `reveal` better for the agentic AI community!** 🎉
+**Questions?** Open an issue or discussion. PRs welcome!

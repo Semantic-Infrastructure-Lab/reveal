@@ -41,7 +41,7 @@ class AstAdapter(ResourceAdapter):
             'filters': {
                 'lines': 'Number of lines in function/class (e.g., lines>50)',
                 'complexity': 'Cyclomatic complexity score 1-10 (e.g., complexity>5)',
-                'type': 'Element type: function, class, method (e.g., type=function)',
+                'type': 'Element type: function, class, method. Supports OR with | or , (e.g., type=function, type=class|function)',
                 'name': 'Element name pattern with wildcards (e.g., name=test_*, name=*helper*, name=get_?)'
             },
             'examples': [
@@ -60,6 +60,10 @@ class AstAdapter(ResourceAdapter):
                 {
                     'uri': 'ast://main.py?type=function',
                     'description': 'Only functions (not classes or methods)'
+                },
+                {
+                    'uri': 'ast://.?type=class|function',
+                    'description': 'Both classes and functions (OR logic)'
                 },
                 {
                     'uri': 'ast://.?name=test_*',
@@ -101,7 +105,8 @@ class AstAdapter(ResourceAdapter):
             path: File or directory path to analyze
             query_string: Query parameters (e.g., "lines>50&complexity>10")
         """
-        self.path = path
+        # Expand ~ to home directory
+        self.path = os.path.expanduser(path)
         self.query = self._parse_query(query_string) if query_string else {}
         self.results = []
 
@@ -155,8 +160,13 @@ class AstAdapter(ResourceAdapter):
                 filters[key] = {'op': '<', 'value': int(value)}
             elif '=' in param:
                 key, value = param.split('=', 1)
+                # Check for OR logic (| or , separator) for type filters
+                if key == 'type' and ('|' in value or ',' in value):
+                    separator = '|' if '|' in value else ','
+                    types = [t.strip() for t in value.split(separator)]
+                    filters[key] = {'op': 'in', 'value': types}
                 # Check if value contains wildcards
-                if '*' in value or '?' in value:
+                elif '*' in value or '?' in value:
                     # Use glob pattern matching
                     filters[key] = {'op': 'glob', 'value': value}
                 else:
@@ -177,7 +187,11 @@ class AstAdapter(ResourceAdapter):
         for key, condition in query.items():
             op = condition['op']
             val = condition['value']
-            parts.append(f"{key}{op}{val}")
+            if op == 'in':
+                # Format OR logic nicely: type=class|function
+                parts.append(f"{key}=={'|'.join(val)}")
+            else:
+                parts.append(f"{key}{op}{val}")
         return " AND ".join(parts)
 
     def _collect_structures(self, path: str) -> List[Dict[str, Any]]:
@@ -246,12 +260,17 @@ class AstAdapter(ResourceAdapter):
             # Flatten all elements from structure
             for category, items in structure.items():
                 for item in items:
+                    # Calculate line_count - functions have it, classes need computation from line_end
+                    line_count = item.get('line_count') or (
+                        item.get('line_end', 0) - item.get('line', 0) + 1
+                        if item.get('line_end') else 0
+                    )
                     element = {
                         'file': file_path,
                         'category': category,
                         'name': item.get('name', ''),
                         'line': item.get('line', 0),
-                        'line_count': item.get('line_count', 0),
+                        'line_count': line_count,
                         'signature': item.get('signature', ''),
                     }
 
@@ -333,6 +352,9 @@ class AstAdapter(ResourceAdapter):
             if key == 'type':
                 # Map 'type' to 'category'
                 value = element.get('category', '')
+                # Normalize singular/plural for type filter
+                # Categories are plural (functions, classes) but users may type singular
+                condition = self._normalize_type_condition(condition)
             elif key == 'lines':
                 # Map 'lines' to 'line_count'
                 value = element.get('line_count', 0)
@@ -346,6 +368,37 @@ class AstAdapter(ResourceAdapter):
                 return False
 
         return True
+
+    def _normalize_type_condition(self, condition: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize type condition to handle singular/plural forms.
+
+        Args:
+            condition: Condition dict with 'op' and 'value'
+
+        Returns:
+            Normalized condition (singular -> plural)
+        """
+        # Map singular forms to plural (matching category values)
+        singular_to_plural = {
+            'function': 'functions',
+            'class': 'classes',
+            'method': 'methods',
+            'struct': 'structs',
+            'import': 'imports',
+        }
+
+        # Handle 'in' operator (OR logic) - normalize each type
+        if condition.get('op') == 'in' and isinstance(condition.get('value'), list):
+            normalized = [singular_to_plural.get(t.lower(), t.lower()) for t in condition['value']]
+            return {'op': 'in', 'value': normalized}
+
+        # Handle single type
+        if condition.get('op') == '==' and isinstance(condition.get('value'), str):
+            value = condition['value'].lower()
+            if value in singular_to_plural:
+                return {'op': '==', 'value': singular_to_plural[value]}
+
+        return condition
 
     def _compare(self, value: Any, condition: Dict[str, Any]) -> bool:
         """Compare value against condition.
@@ -370,6 +423,9 @@ class AstAdapter(ResourceAdapter):
             return value <= target
         elif op == '==':
             return str(value) == str(target)
+        elif op == 'in':
+            # OR logic: check if value matches any in target list
+            return str(value) in [str(t) for t in target]
         elif op == 'glob':
             # Wildcard pattern matching (case-sensitive)
             return fnmatch(str(value), str(target))

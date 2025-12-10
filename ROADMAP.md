@@ -1,401 +1,151 @@
 # Reveal Roadmap
 
-> **Vision:** Transform reveal from a code file explorer into a universal resource explorer
+> **Vision:** Universal resource exploration with progressive disclosure
+
+**Current version:** v0.19.0
+**Last updated:** 2025-12-09
 
 ---
 
-## 🎯 The Big Picture
+## What We've Shipped
 
-Reveal already makes exploring code effortless. Imagine extending that same progressive disclosure pattern to **any structured resource**:
+### v0.19.0 - Clipboard & Nginx Rules (Dec 2025)
 
+- `--copy` / `-c` flag: Copy output to clipboard (cross-platform)
+- Nginx configuration rules: N001 (duplicate backends), N002 (missing SSL certs), N003 (missing proxy headers)
+- `help://tricks`: Cool tricks and hidden features guide
+
+### v0.18.0 - Agent-First Improvements (Dec 2025)
+
+- Enhanced help system with progressive discovery
+- Python adapter improvements (bytecode debugging, module inspection)
+- AST adapter enhancements (wildcard patterns, combined queries)
+
+### v0.17.0 - Python Runtime Inspection (Dec 2025)
+
+- `python://` adapter: Inspect Python environment
+- `python://debug/bytecode`: Detect stale .pyc files
+- `python://packages`: Package information
+- `python://module/<name>`: Module conflict detection
+
+### v0.16.0 - Enhanced Help System (Dec 2025)
+
+- Self-documenting `help://` URIs
+- Static guides: `help://agent`, `help://anti-patterns`, `help://python-guide`
+- Adapter authoring guide
+
+### v0.13.0 - Pattern Detection (Nov 2025)
+
+- `--check` flag for code quality analysis
+- Pluggable rule system (B/S/C/E categories)
+- `--select` and `--ignore` for rule filtering
+- Per-file and per-project rules
+
+### v0.12.0 - Semantic Navigation (Nov 2025)
+
+- `--head N`, `--tail N`, `--range START-END`
+- JSONL record navigation
+- Progressive function listing
+
+### v0.11.0 - URI Adapter Foundation (Nov 2025)
+
+- `env://` adapter for environment variables
+- URI routing and adapter protocol
+- Optional dependency system
+
+### Earlier Releases
+
+- v0.9.0: `--outline` mode (hierarchical structure)
+- v0.8.0: Tree-sitter integration (50+ languages)
+- v0.7.0: Cross-platform support
+- v0.1.0-v0.6.0: Core file analysis
+
+---
+
+## What's Next
+
+### Near-term: CLI Polish
+
+**Completed in v0.19.0:**
+- [x] `--copy` clipboard integration
+- [x] `help://tricks` documentation
+- [x] Nginx configuration rules (N001-N003)
+
+**Ready to implement:**
+- [ ] `--watch` mode: Live updates on file changes
+- [ ] Color themes: Light/dark/16-color
+- [ ] `--quiet` mode: Suppress breadcrumbs
+
+### Short-term: Structural Analysis
+
+**`diff://` adapter** - Compare files, environments, or time:
 ```bash
-# Code files (✅ shipped)
-reveal app.py                    # See structure
-reveal app.py load_config        # Extract function
-
-# Environment variables (✅ shipped v0.11.0)
-reveal env://                    # See all variables
-reveal env://DATABASE_URL        # Get specific variable
-
-# Coming soon...
-reveal postgres://prod           # Database schemas
-reveal https://api.github.com    # API endpoints
-reveal docker://container        # Container inspection
+reveal diff://app.py:backup/app.py       # Compare two files
+reveal diff://app.py:HEAD~1              # Compare with git revision
+reveal diff://env://:env://prod          # Compare environments
 ```
 
-**One tool. One pattern. Any resource.**
-
----
-
-## 🚀 What We've Shipped
-
-### ✅ v0.11.0 - URI Adapter Foundation (Nov 2025)
-
-**First non-file adapter: `env://`**
-
+**`stats://` adapter** - Codebase health metrics:
 ```bash
-reveal env://                    # List all environment variables
-reveal env://DATABASE_URL        # Get specific variable
-reveal env:// --format=json      # JSON output for scripting
+reveal stats://./src                     # Lines, functions, complexity
+reveal stats://./src --hotspots          # Largest/most complex files
 ```
 
-**Why this matters:**
-- Proves the adapter architecture works
-- Establishes patterns for future adapters
-- Demonstrates optional dependency system
-- Shows secure credential handling
-
-**What we learned:**
-- URI routing works elegantly
-- Adapter protocol is flexible
-- Output format consistency is key
-- Graceful degradation is critical
-
----
-
-## 🗺️ What's Next
-
-### Phase 1: Database Adapters (v0.12.0 - v0.14.0)
+### Medium-term: Database Adapters
 
 **Goal:** Explore database schemas with the same ease as code files
 
 ```bash
 pip install reveal-cli[database]
 
-# Explore schema
-reveal postgres://prod
-reveal postgres://prod users      # Table structure
-reveal postgres://prod users id   # Column details
-
-# Compare environments
-reveal postgres://prod users > prod.txt
-reveal postgres://staging users > staging.txt
-diff prod.txt staging.txt
+reveal postgres://prod                   # All tables
+reveal postgres://prod users             # Table structure
+reveal mysql://staging orders            # MySQL support
+reveal sqlite:///path/to/db.sqlite       # SQLite files
 ```
 
-**Adapters:**
-- `postgres://` - PostgreSQL schemas, tables, columns
-- `mysql://` - MySQL databases
-- `sqlite://` - SQLite files
-- `redis://` - Redis keys and data structures
+**Design:** MySQL adapter spec complete in `internal-docs/planning/MYSQL_ADAPTER_SPEC.md`
 
-**Status:** Design complete, implementation starting
+### Long-term: Ecosystem
 
----
-
-### Phase 2: API Adapters (v0.15.0 - v0.16.0)
-
-**Goal:** Discover API endpoints before building integrations
-
+**API Adapters:**
 ```bash
-pip install reveal-cli[api]
-
-# REST APIs
-reveal https://api.github.com
-reveal https://api.github.com/users/:username
-
-# OpenAPI/Swagger
-reveal openapi://https://petstore.swagger.io/v2/swagger.json
-
-# GraphQL
-reveal graphql://https://api.github.com/graphql
+reveal https://api.github.com            # REST API exploration
+reveal openapi://petstore.swagger.io     # OpenAPI spec parsing
+reveal graphql://api.github.com/graphql  # GraphQL introspection
 ```
 
-**Adapters:**
-- `https://` - REST API exploration
-- `openapi://` - Swagger/OpenAPI spec parsing
-- `graphql://` - GraphQL schema introspection
-
-**Key features:**
-- Automatic authentication (API keys, Bearer tokens)
-- Rate limit handling
-- Response caching
-- Request/response examples
-
-**Status:** Architecture designed
-
----
-
-### Phase 3: Container & Cloud Adapters (v0.17.0+)
-
-**Goal:** Inspect containers and cloud resources
-
+**Container Adapters:**
 ```bash
-pip install reveal-cli[container]
-
-# Docker
-reveal docker://my-app-prod
-reveal docker://my-app-prod --env     # Environment variables
-reveal docker://my-app-prod --volumes # Volume mounts
-
-# Docker Compose
-reveal docker-compose://web
-
-# Cloud (future)
-reveal s3://my-bucket
-reveal k8s://my-cluster/my-pod
+reveal docker://my-app-prod              # Container inspection
+reveal docker-compose://web              # Compose service details
 ```
 
-**Status:** Early research
-
----
-
-### Phase 4: Plugin Ecosystem (v2.0.0)
-
-**Goal:** Enable community-contributed adapters
-
+**Plugin Ecosystem:**
 ```bash
-# Install third-party adapters
-pip install reveal-adapter-mongodb
-pip install reveal-adapter-elasticsearch
-
-# Use them immediately
-reveal mongodb://prod
-reveal elasticsearch://logs
-```
-
-**Vision:**
-- Adapter marketplace/registry
-- Standard adapter template
-- Plugin discovery system
-- Community governance
-
-**Status:** Design phase
-
----
-
-## 💡 Core Design Principles
-
-### 1. **Progressive Disclosure**
-```bash
-reveal postgres://prod              # Overview: all tables
-reveal postgres://prod users        # Details: table structure
-reveal postgres://prod users email  # Specific: column details
-```
-
-### 2. **Optional Dependencies**
-```bash
-pip install reveal-cli              # Core only (files, env)
-pip install reveal-cli[database]    # Add database adapters
-pip install reveal-cli[all]         # Everything
-```
-
-Keep core lightweight. Add features as needed.
-
-### 3. **Secure by Default**
-```yaml
-# ~/.reveal/config.yaml
-connections:
-  prod:
-    type: postgres
-    host: prod.example.com
-    database: mydb
-    username: readonly
-    password: ${POSTGRES_PROD_PASSWORD}  # From environment
-```
-
-```bash
-# No credentials in shell history!
-reveal postgres://prod
-```
-
-### 4. **Consistent Output**
-Every adapter supports:
-- Text output (human-readable)
-- JSON output (`--format=json`)
-- Grep-compatible output (`--format=grep`)
-
-### 5. **Graceful Degradation**
-```
-❌ Adapter 'postgres' is not available.
-Required packages: psycopg2-binary
-Install with: pip install reveal-cli[database]
-```
-
-Clear errors. Helpful guidance.
-
----
-
-## 🎯 Use Cases
-
-### For Developers
-```bash
-# Quick schema check before migration
-reveal postgres://prod users
-
-# Compare prod vs staging
-diff <(reveal postgres://prod users) <(reveal postgres://staging users)
-
-# Explore API before integration
-reveal https://api.stripe.com
-
-# Debug container environment
-reveal docker://my-app | grep DATABASE_
-```
-
-### For AI Agents
-```bash
-# Token-efficient exploration across resources
-reveal app.py get_user           # Code: how does it work?
-reveal postgres://prod users     # Database: what's the schema?
-reveal https://api.internal user # API: what's the contract?
-
-# Same pattern, consistent output, minimal tokens
-```
-
-### For DevOps
-```bash
-# Verify container configuration
-reveal docker://production-web --env | grep -i secret
-
-# Check database connections
-reveal postgres://prod --meta
-
-# Monitor API health
-watch -n 5 reveal https://api.internal/health
+pip install reveal-adapter-mongodb       # Third-party adapters
+reveal mongodb://prod                    # Just works
 ```
 
 ---
 
-## 🤝 How to Contribute
+## Design Principles
 
-### Pick Your Adventure
-
-**Want to build an adapter?**
-- See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for current file analyzer patterns
-- See [internal planning docs] for URI adapter architecture (ask maintainers)
-- Start with a simple adapter (Redis, SQLite)
-
-**Want to improve existing features?**
-- Better error messages
-- Performance optimizations
-- Documentation improvements
-- Test coverage
-
-**Want to discuss the roadmap?**
-- Open an issue with `[Roadmap]` tag
-- Join discussions
-- Share your use cases
-
-### Good First Issues
-
-- Implement SQLite adapter (simpler than PostgreSQL)
-- Add Redis adapter (key-value exploration)
-- Improve env:// adapter (better categorization)
-- Write adapter developer guide
+1. **Progressive disclosure:** Overview → Details → Specifics
+2. **Optional dependencies:** Core is lightweight, extras add features
+3. **Consistent output:** Text, JSON, and grep-compatible formats
+4. **Secure by default:** No credential leakage, sanitized URIs
+5. **Token efficiency:** 10-150x reduction vs reading full files
 
 ---
 
-## 📊 Success Metrics
+## Contributing
 
-**Technical:**
-- ✅ Core install < 5MB
-- ✅ File operations < 100ms startup
-- ✅ Zero credential leakage
-- ✅ 100% test coverage on adapter protocol
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add analyzers and adapters.
 
-**Adoption:**
-- 🎯 50+ adapters (including community)
-- 🎯 1,000+ downloads of adapter extras
-- 🎯 10+ community-contributed adapters
-- 🎯 Featured in AI agent toolkits
+**Good first issues:**
+- Add SQLite adapter (simpler than PostgreSQL)
+- Add `--watch` mode
+- Improve markdown link extraction
 
-**Quality:**
-- 🎯 Comprehensive docs for each adapter
-- 🎯 Security audit completed
-- 🎯 Performance benchmarks published
-
----
-
-## 🔐 Security First
-
-**Built-in protections:**
-- Never log passwords (sanitized URIs in logs)
-- Named connections prevent shell history exposure
-- Environment variable resolution for secrets
-- Read-only by default (no mutations without explicit flags)
-- Connection timeouts and rate limits
-
-**Security checklist:**
-- [x] Credential protection in env:// adapter
-- [ ] Security docs for adapter developers
-- [ ] Penetration testing (when ecosystem grows)
-- [ ] CVE monitoring for dependencies
-
----
-
-## 🤔 Open Questions
-
-**We'd love your input on:**
-
-1. **Write operations:** Should reveal support mutations?
-   ```bash
-   reveal postgres://prod --execute "CREATE INDEX..."
-   ```
-   Pro: Complete tool | Con: Safety concerns, scope creep
-
-2. **Data preview:** Should reveal show sample data?
-   ```bash
-   reveal postgres://prod users --sample 10
-   ```
-   Pro: More useful | Con: Privacy/security concerns
-
-3. **Interactive mode:** Should there be a REPL?
-   ```bash
-   reveal postgres://prod --interactive
-   ```
-   Pro: Better exploration | Con: Different UX paradigm
-
-4. **Cloud adapters:** Which cloud resources matter most?
-   - AWS (S3, DynamoDB, Lambda)?
-   - GCP (BigQuery, Cloud Storage)?
-   - Azure (Blob Storage, Cosmos DB)?
-
-**Share your thoughts in [Discussions](https://github.com/scottsen/reveal/discussions)!**
-
----
-
-## 📅 Timeline
-
-This is **community-driven** development. Timeline depends on contributor interest and availability.
-
-**Rough estimates:**
-- **Phase 1** (Database adapters): 2-4 months
-- **Phase 2** (API adapters): 2-3 months
-- **Phase 3** (Containers/Cloud): 3-6 months
-- **Phase 4** (Plugin ecosystem): Ongoing
-
-**Want to accelerate?** [Contribute!](CONTRIBUTING.md)
-
----
-
-## 🌟 Why This Matters
-
-**For the reveal project:**
-- Expanded use cases beyond code files
-- Community-driven ecosystem
-- Unique value proposition in the ecosystem
-
-**For developers:**
-- One tool for all exploration needs
-- Consistent UX across resource types
-- Terminal-first, fast, composable
-
-**For AI agents:**
-- Token-efficient progressive disclosure
-- Consistent output format
-- Reduces tool proliferation
-
----
-
-## 💬 Stay Connected
-
-- **Questions?** Open a [Discussion](https://github.com/scottsen/reveal/discussions)
-- **Ideas?** File an [Issue](https://github.com/scottsen/reveal/issues)
-- **Want to help?** See [CONTRIBUTING.md](CONTRIBUTING.md)
-
----
-
-**Last updated:** 2025-11-27
-**Current version:** v0.11.0
-**Next milestone:** v0.12.0 (PostgreSQL adapter)
+**Share ideas:** [GitHub Discussions](https://github.com/scottsen/reveal/discussions)

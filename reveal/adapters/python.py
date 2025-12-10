@@ -343,6 +343,16 @@ class PythonAdapter(ResourceAdapter):
 
         return {"error": f"Unknown debug type: {debug_type}"}
 
+    # Directories to skip by default in bytecode checking
+    # Note: Don't include __pycache__ here - that's where .pyc files live!
+    BYTECODE_SKIP_DIRS = {
+        '.cache', '.venv', 'venv', '.env', 'env',
+        'node_modules', '.git',
+        '.tox', '.nox', '.pytest_cache', '.mypy_cache',
+        'site-packages', 'dist-packages',
+        '.eggs', '*.egg-info',
+    }
+
     def _check_bytecode(self, root_path: str = ".") -> Dict[str, Any]:
         """Check for bytecode issues (stale .pyc files, orphaned bytecode, etc.).
 
@@ -355,9 +365,28 @@ class PythonAdapter(ResourceAdapter):
         issues = []
         root = Path(root_path)
 
+        def should_skip(path: Path) -> bool:
+            """Check if path should be skipped based on directory patterns."""
+            parts = path.parts
+            for part in parts:
+                # Check exact matches
+                if part in self.BYTECODE_SKIP_DIRS:
+                    return True
+                # Check wildcard patterns (e.g., *.egg-info)
+                for pattern in self.BYTECODE_SKIP_DIRS:
+                    if '*' in pattern:
+                        from fnmatch import fnmatch
+                        if fnmatch(part, pattern):
+                            return True
+            return False
+
         try:
             # Find all .pyc files
             for pyc_file in root.rglob("**/*.pyc"):
+                # Skip directories that are typically not user code
+                if should_skip(pyc_file):
+                    continue
+
                 # Skip if not in __pycache__ (old Python 2 style)
                 if "__pycache__" not in pyc_file.parts:
                     issues.append(

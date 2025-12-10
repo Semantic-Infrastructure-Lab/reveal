@@ -98,7 +98,7 @@ reveal --rules                   # List all rules
 reveal --explain B001            # Explain specific rule
 ```
 
-**Built-in rules:** Bare except (B001), :latest tags (S701), complexity (C901), line length (E501), HTTP URLs (U501)
+**Built-in rules:** Bare except (B001), :latest tags (S701), complexity (C901), line length (E501), HTTP URLs (U501), nginx config (N001-N003) 🆕
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
 
 ### 🌲 Outline Mode (v0.9.0+)
@@ -135,10 +135,11 @@ reveal help://                              # List all help topics
 reveal help://ast                           # Learn about ast:// queries
 reveal help://python                        # Python runtime adapter help
 
-# Comprehensive guides (v0.18.0+) 🆕
+# Comprehensive guides (v0.18.0+)
 reveal help://python-guide                  # Multi-shot examples for LLMs
 reveal help://anti-patterns                 # Stop using grep/find!
 reveal help://adapter-authoring             # Create custom adapters
+reveal help://tricks                        # Cool tricks and hidden features 🆕
 
 # Environment variables
 reveal env://                               # All environment variables
@@ -199,6 +200,7 @@ reveal app.py --meta             # metadata only
 |------|---------|
 | `--outline` | Hierarchical structure view |
 | `--check` | Code quality analysis |
+| `--copy` / `-c` | Copy output to clipboard 🆕 |
 | `--stdin` | Read file paths from stdin |
 | `--depth N` | Directory tree depth |
 | `--max-entries N` | Limit directory entries (default: 200, 0=unlimited) |
@@ -254,7 +256,7 @@ reveal/
 
 **Total:** ~3,400 lines. Most analyzers < 25 lines.
 
-**Deep dive:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+**Power users:** [COOL_TRICKS.md](COOL_TRICKS.md) - Hidden features and advanced workflows
 
 ---
 
@@ -277,7 +279,7 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 ---
 
-**Status:** v0.18.0 | **License:** MIT | [Roadmap](ROADMAP.md) | [Issues](https://github.com/scottsen/reveal/issues)
+**Status:** v0.19.0 | **License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](COOL_TRICKS.md) | [Issues](https://github.com/scottsen/reveal/issues)
 
 [![Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/scottsen/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

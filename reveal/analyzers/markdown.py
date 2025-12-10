@@ -1,17 +1,21 @@
-"""Markdown file analyzer with rich entity extraction."""
+"""Markdown file analyzer with rich entity extraction using tree-sitter."""
 
 import re
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from ..base import FileAnalyzer, register
+from ..base import register
+from ..treesitter import TreeSitterAnalyzer
 
 
 @register('.md', '.markdown', name='Markdown', icon='')
-class MarkdownAnalyzer(FileAnalyzer):
-    """Markdown file analyzer.
+class MarkdownAnalyzer(TreeSitterAnalyzer):
+    """Markdown file analyzer using tree-sitter.
 
     Extracts headings, links, images, code blocks, and other entities.
+    Uses tree-sitter for accurate parsing (e.g., ignores # inside code fences).
     """
+
+    language = 'markdown'
 
     def get_structure(self, head: int = None, tail: int = None,
                      range: tuple = None,
@@ -68,7 +72,47 @@ class MarkdownAnalyzer(FileAnalyzer):
         return result
 
     def _extract_headings(self) -> List[Dict[str, Any]]:
-        """Extract markdown headings."""
+        """Extract markdown headings using tree-sitter.
+
+        This correctly ignores # comments inside code fences by using the AST.
+        """
+        headings = []
+
+        if not self.tree:
+            # Fallback to regex if tree-sitter fails
+            return self._extract_headings_regex()
+
+        # Find all atx_heading nodes (# syntax headings)
+        heading_nodes = self._find_nodes_by_type('atx_heading')
+
+        for node in heading_nodes:
+            # Get the heading level (count # symbols)
+            level = None
+            title = None
+
+            # The first child is usually the marker (atx_h1_marker, atx_h2_marker, etc.)
+            # The second child is heading_content
+            for child in node.children:
+                if 'marker' in child.type:
+                    # atx_h1_marker, atx_h2_marker, etc.
+                    level = int(child.type[5])  # Extract number from 'atx_h1_marker'
+                elif child.type == 'heading_content':
+                    title = child.text.decode('utf-8').strip()
+
+            if level and title:
+                headings.append({
+                    'line': node.start_point[0] + 1,  # tree-sitter uses 0-indexed
+                    'level': level,
+                    'name': title,
+                })
+
+        return headings
+
+    def _extract_headings_regex(self) -> List[Dict[str, Any]]:
+        """Fallback regex-based heading extraction.
+
+        Note: This has the code fence bug - only used if tree-sitter fails.
+        """
         headings = []
 
         for i, line in enumerate(self.lines, 1):

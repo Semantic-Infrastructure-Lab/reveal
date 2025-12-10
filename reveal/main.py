@@ -3,12 +3,53 @@
 import sys
 import os
 import argparse
+import subprocess
+import shutil
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 from datetime import datetime, timedelta
 from .base import get_analyzer, get_all_analyzers, FileAnalyzer
 from .tree_view import show_directory_tree
 from . import __version__
+
+
+def copy_to_clipboard(text: str) -> bool:
+    """Copy text to system clipboard.
+
+    Uses native clipboard utilities without external dependencies.
+    Supports: xclip, xsel (Linux), pbcopy (macOS), clip (Windows), wl-copy (Wayland).
+
+    Args:
+        text: Text to copy to clipboard
+
+    Returns:
+        True if successful, False otherwise
+    """
+    # Try clipboard utilities in order of preference
+    clipboard_cmds = [
+        ['xclip', '-selection', 'clipboard'],  # Linux X11
+        ['xsel', '--clipboard', '--input'],     # Linux X11 alternative
+        ['wl-copy'],                             # Linux Wayland
+        ['pbcopy'],                              # macOS
+        ['clip'],                                # Windows
+    ]
+
+    for cmd in clipboard_cmds:
+        if shutil.which(cmd[0]):
+            try:
+                process = subprocess.Popen(
+                    cmd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+                process.communicate(input=text.encode('utf-8'))
+                if process.returncode == 0:
+                    return True
+            except (subprocess.SubprocessError, OSError):
+                continue
+
+    return False
 
 
 
@@ -188,6 +229,8 @@ def check_for_updates():
 
 def main():
     """Main CLI entry point."""
+    import io
+
     # Fix Windows console encoding for emoji/unicode support
     if sys.platform == 'win32':
         # Set environment variable for subprocess compatibility
@@ -198,6 +241,33 @@ def main():
         if hasattr(sys.stderr, 'reconfigure'):
             sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
+    # Check for --copy flag early (before full parsing)
+    copy_mode = '--copy' in sys.argv or '-c' in sys.argv
+
+    if copy_mode:
+        # Capture stdout while still displaying it (tee behavior)
+        captured_output = io.StringIO()
+        original_stdout = sys.stdout
+
+        class TeeWriter:
+            """Write to both original stdout and capture buffer."""
+            def __init__(self, original, capture):
+                self.original = original
+                self.capture = capture
+
+            def write(self, data):
+                self.original.write(data)
+                self.capture.write(data)
+
+            def flush(self):
+                self.original.flush()
+
+            # Support attributes like encoding, isatty, etc.
+            def __getattr__(self, name):
+                return getattr(self.original, name)
+
+        sys.stdout = TeeWriter(original_stdout, captured_output)
+
     try:
         _main_impl()
     except BrokenPipeError:
@@ -206,6 +276,16 @@ def main():
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
         sys.exit(0)  # Exit cleanly
+    finally:
+        if copy_mode:
+            sys.stdout = original_stdout
+            output_text = captured_output.getvalue()
+            if output_text:
+                if copy_to_clipboard(output_text):
+                    print(f"\n📋 Copied {len(output_text)} chars to clipboard", file=sys.stderr)
+                else:
+                    print("\n⚠️  Could not copy to clipboard (no clipboard utility found)", file=sys.stderr)
+                    print("   Install xclip, xsel (Linux), or use pbcopy (macOS)", file=sys.stderr)
 
 
 def handle_uri(uri: str, element: Optional[str], args) -> None:
@@ -225,7 +305,7 @@ def handle_uri(uri: str, element: Optional[str], args) -> None:
 
     # Look up adapter from registry (pluggable!)
     from .adapters.base import get_adapter_class, list_supported_schemes
-    from .adapters import env, ast, help, python  # Import to trigger registration
+    from .adapters import env, ast, help, python, json_adapter  # Import to trigger registration
 
     adapter_class = get_adapter_class(scheme)
     if not adapter_class:
@@ -322,6 +402,100 @@ def _handle_adapter(adapter_class: type, scheme: str, resource: str,
             # Get overview
             result = adapter.get_structure()
             render_python_structure(result, args.format)
+
+    elif scheme == 'json':
+        # Parse path and query from resource
+        if '?' in resource:
+            path, query = resource.split('?', 1)
+        else:
+            path = resource
+            query = None
+
+        adapter = adapter_class(path, query)
+        result = adapter.get_structure()
+        render_json_result(result, args.format)
+
+
+def render_json_result(data: Dict[str, Any], output_format: str) -> None:
+    """Render JSON adapter result.
+
+    Args:
+        data: Result from JSON adapter
+        output_format: Output format (text, json)
+    """
+    import json as json_module
+
+    result_type = data.get('type', 'unknown')
+
+    if output_format == 'json':
+        print(json_module.dumps(data, indent=2))
+        return
+
+    # Handle errors
+    if result_type == 'json-error':
+        print(f"Error: {data.get('error', 'Unknown error')}", file=sys.stderr)
+        if 'valid_queries' in data:
+            print(f"Valid queries: {', '.join(data['valid_queries'])}", file=sys.stderr)
+        sys.exit(1)
+
+    # Text format rendering
+    file_path = data.get('file', '')
+    json_path = data.get('path', '(root)')
+
+    if result_type == 'json-value':
+        value = data.get('value')
+        value_type = data.get('value_type', '')
+        print(f"File: {file_path}")
+        print(f"Path: {json_path}")
+        print(f"Type: {value_type}")
+        print()
+        if isinstance(value, (dict, list)):
+            print(json_module.dumps(value, indent=2))
+        else:
+            print(value)
+
+    elif result_type == 'json-schema':
+        schema = data.get('schema', {})
+        print(f"File: {file_path}")
+        print(f"Path: {json_path}")
+        print()
+        print("Schema:")
+        print(json_module.dumps(schema, indent=2))
+
+    elif result_type == 'json-flatten':
+        print(f"# File: {file_path}")
+        print(f"# Path: {json_path}")
+        print()
+        for line in data.get('lines', []):
+            print(line)
+
+    elif result_type == 'json-type':
+        print(f"File: {file_path}")
+        print(f"Path: {json_path}")
+        print(f"Type: {data.get('value_type', 'unknown')}")
+        if data.get('length') is not None:
+            print(f"Length: {data['length']}")
+
+    elif result_type == 'json-keys':
+        print(f"File: {file_path}")
+        print(f"Path: {json_path}")
+        print(f"Count: {data.get('count', 0)}")
+        print()
+        if 'keys' in data:
+            for key in data['keys']:
+                print(f"  {key}")
+        elif 'indices' in data:
+            print(f"  [0..{data['count'] - 1}]")
+
+    elif result_type == 'json-length':
+        print(f"File: {file_path}")
+        print(f"Path: {json_path}")
+        print(f"Type: {data.get('value_type', 'unknown')}")
+        print(f"Length: {data.get('length', 0)}")
+
+    else:
+        # Fallback: just dump as JSON
+        print(json_module.dumps(data, indent=2))
 
 
 def render_env_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -656,6 +830,46 @@ def render_python_element(data: Dict[str, Any], output_format: str) -> None:
         if data['count'] > 50:
             print(f"\n  ... and {data['count'] - 50} more modules")
 
+    elif 'health_score' in data and 'checks_performed' in data:
+        # Doctor results (environment diagnostics)
+        status_icon = "✓" if data['status'] == 'healthy' else "⚠️"
+        print(f"Python Environment Health: {status_icon} {data['status'].upper()}")
+        print(f"Health Score: {data['health_score']}/100")
+        print()
+
+        if data.get('issues'):
+            print(f"Issues ({len(data['issues'])}):")
+            for issue in data['issues']:
+                print(f"  ❌ [{issue['category']}] {issue['message']}")
+                if 'impact' in issue:
+                    print(f"     Impact: {issue['impact']}")
+            print()
+
+        if data.get('warnings'):
+            print(f"Warnings ({len(data['warnings'])}):")
+            for warn in data['warnings']:
+                print(f"  ⚠️  [{warn['category']}] {warn['message']}")
+                if 'impact' in warn:
+                    print(f"     Impact: {warn['impact']}")
+            print()
+
+        if data.get('info'):
+            print(f"Info ({len(data['info'])}):")
+            for info in data['info']:
+                print(f"  ℹ️  [{info['category']}] {info['message']}")
+            print()
+
+        if data.get('recommendations'):
+            print(f"Recommendations ({len(data['recommendations'])}):")
+            for rec in data['recommendations']:
+                print(f"  💡 {rec['message']}")
+                if 'commands' in rec:
+                    for cmd in rec['commands']:
+                        print(f"     $ {cmd}")
+            print()
+
+        print(f"Checks performed: {', '.join(data['checks_performed'])}")
+
     elif 'status' in data and 'issues' in data:
         # Debug bytecode results
         print(f"Bytecode Check: {data['status'].upper()}")
@@ -791,6 +1005,7 @@ Examples:
   # Output formats
   reveal app.py --format=json    # JSON for scripting
   reveal app.py --format=grep    # Pipeable format
+  reveal app.py --copy           # Copy output to clipboard
 
   # Pipeline workflows (Unix composability!)
   find src/ -name "*.py" | reveal --stdin --check
@@ -827,6 +1042,7 @@ Examples:
   # URI adapters - explore ANY resource!
   reveal help://                              # Discover all help topics
   reveal help://ast                           # Learn about ast:// queries
+  reveal help://tricks                        # Cool tricks and hidden features
   reveal help://adapters                      # Summary of all adapters
 
   reveal env://                               # Show all environment variables
@@ -873,6 +1089,8 @@ def _main_impl():
     parser.add_argument('--meta', action='store_true', help='Show metadata only')
     parser.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default='text',
                         help='Output format (text, json, typed [typed JSON with types/relationships], grep)')
+    parser.add_argument('--copy', '-c', action='store_true',
+                        help='Copy output to clipboard (also prints normally)')
     parser.add_argument('--no-fallback', action='store_true',
                         help='Disable TreeSitter fallback for unknown file types')
     parser.add_argument('--depth', type=int, default=3, help='Directory tree depth (default: 3)')

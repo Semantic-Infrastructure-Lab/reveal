@@ -14,6 +14,7 @@ class HelpAdapter(ResourceAdapter):
         help://ast                 # Get ast:// adapter help
         help://env                 # Get env:// adapter help
         help://python-guide        # Python adapter comprehensive guide (multi-shot examples)
+        help://tricks              # Cool tricks and hidden features
         help://adapters            # List all adapters with help
         help://agent               # Agent usage guide (AGENT_HELP.md)
         help://agent-full          # Full agent guide (AGENT_HELP_FULL.md)
@@ -25,7 +26,8 @@ class HelpAdapter(ResourceAdapter):
         'agent-full': 'AGENT_HELP_FULL.md',
         'python-guide': 'adapters/PYTHON_ADAPTER_GUIDE.md',
         'anti-patterns': 'ANTI_PATTERNS.md',
-        'adapter-authoring': 'adapters/ADAPTER_AUTHORING_GUIDE.md'
+        'adapter-authoring': 'adapters/ADAPTER_AUTHORING_GUIDE.md',
+        'tricks': 'COOL_TRICKS.md'
     }
 
     @staticmethod
@@ -63,6 +65,10 @@ class HelpAdapter(ResourceAdapter):
                 {
                     'uri': 'help://agent-full',
                     'description': 'Comprehensive agent guide (all patterns, examples)'
+                },
+                {
+                    'uri': 'help://tricks',
+                    'description': 'Cool tricks and hidden features guide'
                 }
             ],
             'notes': [
