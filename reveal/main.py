@@ -622,6 +622,44 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
         print()
 
 
+def _render_help_breadcrumbs(scheme: str, data: Dict[str, Any]) -> None:
+    """Render breadcrumbs after help output.
+
+    Args:
+        scheme: Adapter scheme name (e.g., 'ast', 'python')
+        data: Help data dict
+    """
+    if not scheme:
+        return
+
+    print("---")
+    print()
+
+    # Related adapters - suggest complementary tools
+    related = {
+        'ast': ['python', 'env'],
+        'python': ['ast', 'env'],
+        'env': ['python'],
+        'json': ['ast'],
+        'help': ['ast', 'python'],
+    }
+
+    related_adapters = related.get(scheme, [])
+    if related_adapters:
+        print("## Next Steps")
+        print(f"  → reveal help://{related_adapters[0]}  # Related adapter")
+        if len(related_adapters) > 1:
+            print(f"  → reveal help://{related_adapters[1]}  # Another option")
+        print("  → reveal .                   # Start exploring your code")
+        print()
+
+    # Point to deeper content
+    print("## Go Deeper")
+    print("  → reveal help://tricks         # Power user workflows")
+    print("  → reveal help://anti-patterns  # Common mistakes to avoid")
+    print()
+
+
 def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = False) -> None:
     """Render help content.
 
@@ -695,6 +733,50 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
             print()
         return
 
+    if help_type == 'help_section':
+        # Section extraction: help://ast/workflows
+        if 'error' in data:
+            print(f"Error: {data['message']}", file=sys.stderr)
+            sys.exit(1)
+
+        adapter = data.get('adapter', '')
+        section = data.get('section', '')
+        content = data.get('content', [])
+
+        print(f"# {adapter}:// - {section}")
+        print()
+
+        if section == 'workflows':
+            for workflow in content:
+                print(f"## {workflow['name']}")
+                if workflow.get('scenario'):
+                    print(f"Scenario: {workflow['scenario']}")
+                print()
+                for step in workflow.get('steps', []):
+                    print(f"  {step}")
+                print()
+        elif section == 'try-now':
+            print("Run these in your current directory:")
+            print()
+            for cmd in content:
+                print(f"  {cmd}")
+            print()
+        elif section == 'anti-patterns':
+            for ap in content:
+                print(f"❌ {ap['bad']}")
+                print(f"✅ {ap['good']}")
+                if ap.get('why'):
+                    print(f"   Why: {ap['why']}")
+                print()
+
+        # Breadcrumbs for section views
+        print("---")
+        print()
+        print(f"## See Full Help")
+        print(f"  → reveal help://{adapter}")
+        print()
+        return
+
     # Adapter-specific help
     if 'error' in data:
         print(f"Error: {data['message']}", file=sys.stderr)
@@ -742,6 +824,36 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
                 print(f"  {ex}")
         print()
 
+    # NEW: Try Now section - executable examples for current directory
+    if data.get('try_now'):
+        print("## Try Now")
+        print("  Run these in your current directory:")
+        print()
+        for cmd in data['try_now']:
+            print(f"  {cmd}")
+        print()
+
+    # NEW: Workflows section - scenario-based patterns
+    if data.get('workflows'):
+        print("## Workflows")
+        for workflow in data['workflows']:
+            print(f"  **{workflow['name']}**")
+            if workflow.get('scenario'):
+                print(f"  Scenario: {workflow['scenario']}")
+            for step in workflow.get('steps', []):
+                print(f"    {step}")
+            print()
+
+    # NEW: Anti-patterns section - what NOT to do
+    if data.get('anti_patterns'):
+        print("## Don't Do This")
+        for ap in data['anti_patterns']:
+            print(f"  ❌ {ap['bad']}")
+            print(f"  ✅ {ap['good']}")
+            if ap.get('why'):
+                print(f"     Why: {ap['why']}")
+            print()
+
     if data.get('notes'):
         print("## Notes")
         for note in data['notes']:
@@ -757,6 +869,9 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
         for item in data['see_also']:
             print(f"  • {item}")
         print()
+
+    # NEW: Breadcrumbs - guide to next steps
+    _render_help_breadcrumbs(scheme, data)
 
 
 def render_python_structure(data: Dict[str, Any], output_format: str) -> None:

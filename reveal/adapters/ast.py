@@ -82,6 +82,61 @@ class AstAdapter(ResourceAdapter):
                     'description': 'JSON output for scripting'
                 }
             ],
+            # Executable examples for current directory
+            'try_now': [
+                "reveal 'ast://.?complexity>5'",
+                "reveal 'ast://.?name=test_*'",
+                "reveal 'ast://.?type=class'",
+            ],
+            # Scenario-based workflow patterns
+            'workflows': [
+                {
+                    'name': 'Find Refactoring Targets',
+                    'scenario': 'Codebase feels messy, need to find problem areas',
+                    'steps': [
+                        "reveal 'ast://./src?complexity>10'        # Find complex functions",
+                        "reveal 'ast://./src?lines>100'            # Find oversized functions",
+                        "reveal src/problem_file.py --outline      # Understand structure",
+                        "reveal src/problem_file.py big_function   # Extract for refactoring",
+                    ]
+                },
+                {
+                    'name': 'Explore Unknown Codebase',
+                    'scenario': 'New project, need to find entry points and structure',
+                    'steps': [
+                        "reveal 'ast://.?name=main*'               # Find entry points",
+                        "reveal 'ast://.?name=*cli*|*command*'     # Find CLI handlers",
+                        "reveal 'ast://.?type=class'               # See class hierarchy",
+                        "reveal src/core.py --outline              # Drill into key file",
+                    ]
+                },
+                {
+                    'name': 'Pre-PR Review',
+                    'scenario': 'About to review changes, want quick quality check',
+                    'steps': [
+                        "git diff --name-only | grep '\\.py$' | xargs -I{} reveal 'ast://{}?complexity>8'",
+                        "git diff --name-only | reveal --stdin --check",
+                    ]
+                },
+            ],
+            # What NOT to do
+            'anti_patterns': [
+                {
+                    'bad': "grep -r 'class UserManager' .",
+                    'good': "reveal 'ast://.?name=UserManager&type=class'",
+                    'why': 'Semantic search vs text matching - no false positives from comments/strings'
+                },
+                {
+                    'bad': "find . -name '*.py' -exec grep -l 'def process' {} \\;",
+                    'good': "reveal 'ast://.?name=process*&type=function'",
+                    'why': 'One command, structured output with line numbers and complexity'
+                },
+                {
+                    'bad': "grep -rn 'def test_' tests/",
+                    'good': "reveal 'ast://tests/?name=test_*'",
+                    'why': 'Wildcard matching + metadata (find long tests with lines>50)'
+                },
+            ],
             'notes': [
                 'Quote URIs with > or < operators: \'ast://path?lines>50\' (shell interprets > as redirect)',
                 'Complexity is currently heuristic-based (line count). Tree-sitter-based calculation coming soon.',
@@ -91,9 +146,8 @@ class AstAdapter(ResourceAdapter):
             ],
             'output_formats': ['text', 'json', 'grep'],
             'see_also': [
-                'reveal help://anti-patterns - Stop using grep/find, use reveal instead',
-                'reveal help://env - Environment variable adapter',
-                'reveal --agent-help - Agent usage patterns',
+                'reveal help://python - Runtime environment inspection',
+                'reveal help://tricks - Power user workflows',
                 'reveal file.py --check - Code quality checks'
             ]
         }

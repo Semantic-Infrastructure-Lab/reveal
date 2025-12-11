@@ -12,13 +12,19 @@ class HelpAdapter(ResourceAdapter):
     Examples:
         help://                    # List all help topics
         help://ast                 # Get ast:// adapter help
+        help://ast/workflows       # Just the workflows section
+        help://ast/try-now         # Just the try-now examples
+        help://ast/anti-patterns   # Just the anti-patterns
         help://env                 # Get env:// adapter help
-        help://python-guide        # Python adapter comprehensive guide (multi-shot examples)
+        help://python-guide        # Python adapter comprehensive guide
         help://tricks              # Cool tricks and hidden features
         help://adapters            # List all adapters with help
         help://agent               # Agent usage guide (AGENT_HELP.md)
         help://agent-full          # Full agent guide (AGENT_HELP_FULL.md)
     """
+
+    # Valid section names for help://adapter/section queries
+    VALID_SECTIONS = {'workflows', 'try-now', 'anti-patterns'}
 
     # Static help files (markdown documentation)
     STATIC_HELP = {
@@ -106,10 +112,16 @@ class HelpAdapter(ResourceAdapter):
 
         Args:
             topic: Topic name (adapter scheme, 'adapters', 'agent', etc.)
+                   Can also be 'adapter/section' for section extraction
 
         Returns:
             Help content dict or None if not found
         """
+        # Check for section extraction: help://ast/workflows
+        if '/' in topic:
+            adapter_name, section = topic.split('/', 1)
+            return self._get_adapter_section(adapter_name, section)
+
         # Check if it's a static guide
         if topic in self.STATIC_HELP:
             return self._load_static_help(topic)
@@ -123,6 +135,66 @@ class HelpAdapter(ResourceAdapter):
             return self._get_adapter_help(topic)
 
         return None
+
+    def _get_adapter_section(self, adapter_name: str, section: str) -> Optional[Dict[str, Any]]:
+        """Get a specific section from an adapter's help.
+
+        Args:
+            adapter_name: Adapter scheme name (e.g., 'ast')
+            section: Section name (e.g., 'workflows', 'try-now', 'anti-patterns')
+
+        Returns:
+            Dict with section content or error
+        """
+        # Validate section name
+        if section not in self.VALID_SECTIONS:
+            return {
+                'type': 'help_section',
+                'adapter': adapter_name,
+                'section': section,
+                'error': 'Invalid section',
+                'message': f"Unknown section '{section}'. Valid sections: {', '.join(sorted(self.VALID_SECTIONS))}"
+            }
+
+        # Get full adapter help
+        if adapter_name not in _ADAPTER_REGISTRY:
+            return {
+                'type': 'help_section',
+                'adapter': adapter_name,
+                'section': section,
+                'error': 'Unknown adapter',
+                'message': f"No adapter named '{adapter_name}'"
+            }
+
+        help_data = self._get_adapter_help(adapter_name)
+        if not help_data or 'error' in help_data:
+            return help_data
+
+        # Map section names to help dict keys
+        section_key_map = {
+            'workflows': 'workflows',
+            'try-now': 'try_now',
+            'anti-patterns': 'anti_patterns',
+        }
+
+        key = section_key_map.get(section)
+        content = help_data.get(key)
+
+        if not content:
+            return {
+                'type': 'help_section',
+                'adapter': adapter_name,
+                'section': section,
+                'error': 'Section not found',
+                'message': f"Adapter '{adapter_name}' does not have a '{section}' section"
+            }
+
+        return {
+            'type': 'help_section',
+            'adapter': adapter_name,
+            'section': section,
+            'content': content
+        }
 
     def _list_topics(self) -> List[str]:
         """List all available help topics."""

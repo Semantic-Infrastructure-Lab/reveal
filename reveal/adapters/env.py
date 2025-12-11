@@ -51,6 +51,45 @@ class EnvAdapter(ResourceAdapter):
                 'Application': 'APP_*, DATABASE_*, REDIS_*, API_*',
                 'Custom': 'Everything else'
             },
+            # Executable examples
+            'try_now': [
+                "reveal env://",
+                "reveal env://PATH",
+                "reveal env://HOME",
+            ],
+            # Scenario-based workflow patterns
+            'workflows': [
+                {
+                    'name': 'Audit Environment for Secrets',
+                    'scenario': 'Need to check what sensitive data is exposed',
+                    'steps': [
+                        "reveal env://                    # See all vars (sensitive redacted)",
+                        "reveal env:// --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'",
+                    ],
+                },
+                {
+                    'name': 'Debug Python Environment',
+                    'scenario': 'Python not finding packages or using wrong interpreter',
+                    'steps': [
+                        "reveal env://VIRTUAL_ENV         # Is venv active?",
+                        "reveal env://PYTHONPATH          # Extra import paths?",
+                        "reveal python://venv             # More detailed venv info",
+                    ],
+                },
+            ],
+            # What NOT to do
+            'anti_patterns': [
+                {
+                    'bad': "env | grep -i password",
+                    'good': "reveal env://",
+                    'why': "Automatically redacts sensitive values, prevents accidental exposure in logs",
+                },
+                {
+                    'bad': "echo $DATABASE_URL",
+                    'good': "reveal env://DATABASE_URL",
+                    'why': "Redacts sensitive values, shows metadata (category, length)",
+                },
+            ],
             'notes': [
                 'Sensitive values are automatically redacted (shown as ***)',
                 'Patterns that trigger redaction: PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH',
@@ -58,9 +97,9 @@ class EnvAdapter(ResourceAdapter):
             ],
             'output_formats': ['text', 'json', 'grep'],
             'see_also': [
-                'reveal help://anti-patterns - Stop using grep/env commands, use reveal instead',
-                'reveal help://ast - AST query adapter',
-                'reveal --agent-help - Agent usage patterns'
+                'reveal help://python - Python runtime inspection',
+                'reveal help://tricks - Power user workflows',
+                'reveal ast:// - Code structure analysis'
             ]
         }
 

@@ -86,6 +86,46 @@ class JsonAdapter(ResourceAdapter):
                 'Gron-style flattening for grep/search workflows',
                 'Type introspection at any path',
             ],
+            # Executable examples (assumes package.json exists)
+            'try_now': [
+                "reveal json://package.json?schema",
+                "reveal json://package.json/name",
+                "reveal json://package.json?flatten | head -20",
+            ],
+            # Scenario-based workflow patterns
+            'workflows': [
+                {
+                    'name': 'Explore Unknown JSON Structure',
+                    'scenario': 'Large JSON file, need to understand what\'s in it',
+                    'steps': [
+                        "reveal json://data.json?schema       # See type structure",
+                        "reveal json://data.json?keys         # Top-level keys",
+                        "reveal json://data.json/users?schema # Drill into nested",
+                        "reveal json://data.json/users/0      # Sample first element",
+                    ],
+                },
+                {
+                    'name': 'Search JSON Content',
+                    'scenario': 'Find specific values in a large JSON file',
+                    'steps': [
+                        "reveal json://config.json?flatten | grep -i 'database'",
+                        "reveal json://config.json?flatten | grep 'url'",
+                    ],
+                },
+            ],
+            # What NOT to do
+            'anti_patterns': [
+                {
+                    'bad': "cat config.json | jq '.database.host'",
+                    'good': "reveal json://config.json/database/host",
+                    'why': "No jq dependency, consistent syntax with other reveal URIs",
+                },
+                {
+                    'bad': "cat large.json | python -c 'import json,sys; print(json.load(sys.stdin).keys())'",
+                    'good': "reveal json://large.json?keys",
+                    'why': "One command, handles errors gracefully",
+                },
+            ],
             'notes': [
                 'Paths use / separator (like URLs)',
                 'Array indices are 0-based',
@@ -97,7 +137,7 @@ class JsonAdapter(ResourceAdapter):
             'see_also': [
                 'reveal file.json - Basic JSON structure view',
                 'reveal help://ast - Query code as AST',
-                'gron - https://github.com/tomnomnom/gron',
+                'reveal help://tricks - Power user workflows',
             ]
         }
 

@@ -882,6 +882,62 @@ class PythonAdapter(ResourceAdapter):
                 "ast://": "Static source code analysis (cross-language)",
                 "python://": "Python runtime inspection (Python-specific)",
             },
+            # Executable examples for current directory
+            "try_now": [
+                "reveal python://doctor",
+                "reveal python://debug/bytecode",
+                "reveal python://venv",
+            ],
+            # Scenario-based workflow patterns
+            "workflows": [
+                {
+                    "name": "Debug 'My Changes Aren't Working'",
+                    "scenario": "You edited code but Python keeps running the old version",
+                    "steps": [
+                        "reveal python://debug/bytecode     # Check for stale .pyc files",
+                        "reveal python://module/mypackage   # Check import location",
+                        "reveal python://syspath            # See import precedence",
+                        "# If stale bytecode found:",
+                        "find . -type d -name __pycache__ -exec rm -rf {} +",
+                    ],
+                },
+                {
+                    "name": "Debug 'Wrong Package Version'",
+                    "scenario": "pip shows v2.0 but code runs v1.0 behavior",
+                    "steps": [
+                        "reveal python://module/package_name  # Compare pip vs import location",
+                        "reveal python://syspath              # Check CWD shadowing",
+                        "reveal python://venv                 # Verify venv is active",
+                    ],
+                },
+                {
+                    "name": "Environment Health Check",
+                    "scenario": "Setting up new machine or debugging weird behavior",
+                    "steps": [
+                        "reveal python://doctor               # One-command diagnostics",
+                        "reveal python://                     # Environment overview",
+                        "reveal python://packages             # Installed packages",
+                    ],
+                },
+            ],
+            # What NOT to do
+            "anti_patterns": [
+                {
+                    "bad": "python -c \"import pkg; print(pkg.__file__)\"",
+                    "good": "reveal python://module/pkg",
+                    "why": "Structured output with conflict detection and recommendations",
+                },
+                {
+                    "bad": "pip show package && python -c \"import package; print(package.__version__)\"",
+                    "good": "reveal python://packages/package",
+                    "why": "Shows both pip metadata AND import location in one command",
+                },
+                {
+                    "bad": "echo $VIRTUAL_ENV && which python",
+                    "good": "reveal python://venv",
+                    "why": "Comprehensive venv detection including conda, poetry, etc.",
+                },
+            ],
             "notes": [
                 "This adapter inspects the RUNTIME environment, not source code",
                 "Use ast:// for static code analysis",
@@ -898,8 +954,7 @@ class PythonAdapter(ResourceAdapter):
             ],
             "see_also": [
                 "reveal help://python-guide - Comprehensive guide with multi-shot examples",
-                "reveal env:// - Environment variables",
+                "reveal help://tricks - Power user workflows",
                 "reveal ast:// - Static code analysis",
-                "reveal help://python - This help",
             ],
         }

@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2025-12-11
+
+### 📚 NEW: Enhanced Help System with Workflows, Examples & Anti-Patterns
+
+**The help system now teaches reveal methodology, not just syntax!**
+
+Each adapter's help now includes three new sections:
+
+```bash
+reveal help://ast              # Full help with new sections
+reveal help://ast/workflows    # Extract just workflows
+reveal help://ast/try-now      # Extract just executable examples
+reveal help://ast/anti-patterns # Extract just do/don't comparisons
+```
+
+**New sections in adapter help:**
+
+| Section | Purpose | Example |
+|---------|---------|---------|
+| `Try Now` | Executable examples for your cwd | `reveal 'ast://.?complexity>5'` |
+| `Workflows` | Scenario-based patterns | "Find Refactoring Targets" with step-by-step |
+| `Don't Do This` | Bad/good/why comparisons | `grep -r` vs `reveal ast://` |
+
+**Adapters enhanced:**
+- `ast://` - Find Refactoring Targets, Explore Unknown Codebase, Pre-PR Review
+- `python://` - Debug 'My Changes Aren't Working', Wrong Package Version, Environment Health Check
+- `json://` - Explore Unknown JSON, Schema Discovery, Extract Nested Data
+- `env://` - Debug Missing Variables, Compare Environments
+
+**Section extraction for token efficiency:**
+
+```bash
+reveal help://ast/workflows       # ~30 lines (just workflows)
+reveal help://ast                 # ~100 lines (full help)
+```
+
+Each extracted section includes a "See Full Help" breadcrumb pointing back to the complete documentation.
+
+**Impact:** Progressive disclosure now applies to the help system itself - learn what you need, when you need it.
+
 ## [0.19.0] - 2025-12-09
 
 ### 📋 NEW: Clipboard Integration (`--copy` / `-c`)
