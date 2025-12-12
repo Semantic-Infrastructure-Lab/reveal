@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2025-12-11
+
+### 📄 NEW: Office Document Support (6 Formats)
+
+**Analyze Word, Excel, PowerPoint, and LibreOffice documents with reveal!**
+
+```bash
+reveal document.docx           # Word: sections, tables, word count
+reveal spreadsheet.xlsx        # Excel: sheets with dimensions, formulas
+reveal presentation.pptx       # PowerPoint: slides with titles
+
+reveal document.odt            # LibreOffice Writer
+reveal spreadsheet.ods         # LibreOffice Calc
+reveal presentation.odp        # LibreOffice Impress
+```
+
+**Features:**
+- **Zero new dependencies** - pure Python stdlib (`zipfile` + `xml.etree`)
+- **Semantic extraction** - extract sections by heading, sheets by name, slides by number
+- **Progressive disclosure** - overview first, then drill into details
+- **Both format families** - Microsoft OpenXML (.docx/.xlsx/.pptx) and ODF (.odt/.ods/.odp)
+
+**New analyzers:**
+| Format | Extension | Analyzer |
+|--------|-----------|----------|
+| Word | `.docx` | DocxAnalyzer |
+| Excel | `.xlsx` | XlsxAnalyzer |
+| PowerPoint | `.pptx` | PptxAnalyzer |
+| Writer (ODF) | `.odt` | OdtAnalyzer |
+| Calc (ODF) | `.ods` | OdsAnalyzer |
+| Impress (ODF) | `.odp` | OdpAnalyzer |
+
+**Architecture:** Shared `ZipXMLAnalyzer` base class handles ZIP archive operations and XML parsing. Format-specific subclasses know the XML schemas for each format family.
+
+```bash
+reveal document.docx "Introduction"    # Extract section by heading
+reveal spreadsheet.xlsx Sheet1         # Extract sheet with data preview
+reveal presentation.pptx 3             # Extract slide by number
+```
+
+### 🧪 Test Coverage Improvements
+
+**Coverage increased from 56% to 65%** with 95 new tests across 5 test files.
+
+| Module | Before | After |
+|--------|--------|-------|
+| `jupyter_analyzer.py` | 7% | 78% |
+| `markdown.py` | 12% | 96% |
+| `jsonl.py` | 12% | 89% |
+| `tree_view.py` | 10% | 87% |
+| Rules (B001, C901, R913, S701) | 35-47% | 92-100% |
+
+**New test files:**
+- `test_jupyter_analyzer.py` - 14 tests
+- `test_markdown_analyzer.py` - 22 tests
+- `test_jsonl_analyzer.py` - 18 tests
+- `test_tree_view.py` - 14 tests
+- `test_rules.py` - 27 tests
+- `test_office_analyzers.py` - 26 tests (office document support)
+
+### 🐛 Bug Fixes
+
+- Fixed broken internal links in README.md pointing to `COOL_TRICKS.md`
+
 ## [0.20.0] - 2025-12-11
 
 ### 📚 NEW: Enhanced Help System with Workflows, Examples & Anti-Patterns

@@ -188,7 +188,7 @@ reveal app.py --meta             # metadata only
 
 ### Supported Languages
 
-**Built-in (18):** Python, Rust, Go, JavaScript, TypeScript, GDScript, Bash, Jupyter, Markdown, JSON, YAML, TOML, Nginx, Dockerfile, + more
+**Built-in (24):** Python, Rust, Go, JavaScript, TypeScript, GDScript, Bash, Jupyter, Markdown, JSON, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
 
 **Via tree-sitter (50+):** C, C++, C#, Java, PHP, Swift, Kotlin, Ruby, etc.
 
@@ -279,7 +279,7 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 ---
 
-**Status:** v0.19.0 | **License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](reveal/COOL_TRICKS.md) | [Issues](https://github.com/scottsen/reveal/issues)
+**Status:** v0.21.0 | **License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](reveal/COOL_TRICKS.md) | [Issues](https://github.com/scottsen/reveal/issues)
 
 [![Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/scottsen/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
