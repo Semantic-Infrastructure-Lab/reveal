@@ -164,7 +164,15 @@ reveal 'ast://.?name=test_*'                # Wildcard patterns 🆕
 reveal 'ast://src/?name=*helper*'           # Find helpers 🆕
 reveal 'ast://.?lines>30&complexity<5'      # Long but simple
 reveal 'ast://src?type=function' --format=json  # JSON output
+
+# Self-inspection and validation (v0.22.0+) 🆕
+reveal reveal://                            # Inspect reveal's structure
+reveal reveal:// --check                    # Validate completeness (V-series rules)
+reveal help://reveal                        # Learn about reveal:// adapter
 ```
+
+**Extensibility Example:**
+The `reveal://` adapter demonstrates that reveal can inspect **any resource**, not just files. Use it as a reference for creating custom adapters for your own projects (APIs, databases, containers, etc.). See `reveal help://reveal` for the complete guide.
 
 **Separation of Concerns:**
 - `env://` - Raw environment variables (cross-language)

@@ -1663,6 +1663,52 @@ def build_hierarchy(structure: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str
     return [item for item in all_items if not item.get('is_child', False)]
 
 
+def build_heading_hierarchy(headings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Build hierarchical tree from flat heading list with levels.
+
+    Args:
+        headings: List of heading dicts with 'level', 'name', 'line' fields
+
+    Returns:
+        List of root-level headings with 'children' added
+
+    Example:
+        Input:  [{'level': 1, 'name': 'A'}, {'level': 2, 'name': 'B'}]
+        Output: [{'level': 1, 'name': 'A', 'children': [{'level': 2, 'name': 'B', 'children': []}]}]
+    """
+    if not headings:
+        return []
+
+    # Add children field to all items
+    items = [h.copy() for h in headings]
+    for item in items:
+        item['children'] = []
+
+    # Build parent-child relationships based on level hierarchy
+    root_items = []
+    stack = []  # Stack of (level, item) for finding parents
+
+    for item in items:
+        level = item.get('level', 1)
+
+        # Pop stack until we find the parent level (level - 1)
+        while stack and stack[-1][0] >= level:
+            stack.pop()
+
+        if not stack:
+            # This is a root item
+            root_items.append(item)
+        else:
+            # Add to parent's children
+            parent_item = stack[-1][1]
+            parent_item['children'].append(item)
+
+        # Push current item onto stack
+        stack.append((level, item))
+
+    return root_items
+
+
 def render_outline(items: List[Dict[str, Any]], path: Path, indent: str = '', is_root: bool = True) -> None:
     """Render hierarchical outline with tree characters.
 
@@ -2046,6 +2092,11 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None):
     """
     # Build kwargs and get structure
     kwargs = _build_analyzer_kwargs(analyzer, args)
+
+    # Add outline flag for markdown analyzer (Issue #3)
+    if args and hasattr(args, 'outline'):
+        kwargs['outline'] = args.outline
+
     structure = analyzer.get_structure(**kwargs)
     path = analyzer.path
 
@@ -2059,7 +2110,25 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None):
         if not structure:
             print("No structure available for this file type")
             return
-        hierarchy = build_hierarchy(structure)
+
+        # Check if this is markdown with headings
+        if 'headings' in structure and structure.get('headings'):
+            # Markdown outline: use level-based hierarchy
+            hierarchy = build_heading_hierarchy(structure['headings'])
+        # Check if this is TOML with sections (level-based like markdown)
+        elif 'sections' in structure and structure.get('sections'):
+            # Check if sections have 'level' field (TOML outline mode)
+            sections = structure['sections']
+            if sections and 'level' in sections[0]:
+                # TOML outline: use level-based hierarchy like markdown
+                hierarchy = build_heading_hierarchy(sections)
+            else:
+                # Regular TOML: use line-range based hierarchy
+                hierarchy = build_hierarchy(structure)
+        else:
+            # Code outline: use line-range based hierarchy
+            hierarchy = build_hierarchy(structure)
+
         render_outline(hierarchy, path)
         return
 

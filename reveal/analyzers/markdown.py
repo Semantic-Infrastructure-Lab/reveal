@@ -48,8 +48,15 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         """
         result = {}
 
-        # Always extract headings
-        result['headings'] = self._extract_headings()
+        # Determine if specific features requested
+        specific_features_requested = extract_links or extract_code
+
+        # Only include headings if no specific features requested (default case)
+        # OR if outline mode is active (Issue #3 dependency)
+        outline_mode = kwargs.get('outline', False)
+
+        if not specific_features_requested or outline_mode:
+            result['headings'] = self._extract_headings()
 
         # Extract links if requested
         if extract_links:

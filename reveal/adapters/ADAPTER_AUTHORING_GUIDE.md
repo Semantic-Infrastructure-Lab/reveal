@@ -411,6 +411,16 @@ reveal help://myscheme-guide
 
 ## Resources
 
+### Reference Implementation (Start Here!)
+
+- **🆕 reveal:// adapter**: `reveal/adapters/reveal.py` - Complete working example showing:
+  - How to create non-file adapters
+  - How to write validation rules
+  - How to integrate with --check flag
+  - **Guide**: `reveal/REVEAL_ADAPTER_GUIDE.md` or `reveal help://reveal`
+
+### Other Examples
+
 - **Example adapters**: `reveal/adapters/python.py`, `ast.py`, `env.py`
 - **Comprehensive guide example**: `reveal/adapters/PYTHON_ADAPTER_GUIDE.md`
 - **Help system**: `reveal/adapters/help.py`

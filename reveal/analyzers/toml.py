@@ -12,8 +12,13 @@ class TomlAnalyzer(FileAnalyzer):
     Extracts sections ([section]) and key-value pairs.
     """
 
-    def get_structure(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Extract TOML sections and top-level keys."""
+    def get_structure(self, outline: bool = False, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+        """Extract TOML sections and top-level keys.
+
+        Args:
+            outline: If True, add level information for hierarchical display
+            **kwargs: Additional arguments (for compatibility)
+        """
         sections = []
         keys = []
 
@@ -30,10 +35,17 @@ class TomlAnalyzer(FileAnalyzer):
             section_match = re.match(r'^\[+([^\]]+)\]+', stripped)
             if section_match:
                 section_name = section_match.group(1).strip()
-                sections.append({
+                section_info = {
                     'line': i,
                     'name': section_name,
-                })
+                }
+
+                # Add level information for outline mode (similar to markdown headings)
+                # Level is based on dot-notation depth: database=1, database.connection=2, etc.
+                if outline:
+                    section_info['level'] = section_name.count('.') + 1
+
+                sections.append(section_info)
                 current_section = section_name
                 continue
 

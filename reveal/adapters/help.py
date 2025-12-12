@@ -17,6 +17,7 @@ class HelpAdapter(ResourceAdapter):
         help://ast/anti-patterns   # Just the anti-patterns
         help://env                 # Get env:// adapter help
         help://python-guide        # Python adapter comprehensive guide
+        help://markdown            # Markdown features guide
         help://tricks              # Cool tricks and hidden features
         help://adapters            # List all adapters with help
         help://agent               # Agent usage guide (AGENT_HELP.md)
@@ -30,7 +31,10 @@ class HelpAdapter(ResourceAdapter):
     STATIC_HELP = {
         'agent': 'AGENT_HELP.md',
         'agent-full': 'AGENT_HELP_FULL.md',
+        'python': 'adapters/PYTHON_ADAPTER_GUIDE.md',  # Alias for python-guide
         'python-guide': 'adapters/PYTHON_ADAPTER_GUIDE.md',
+        'reveal-guide': 'REVEAL_ADAPTER_GUIDE.md',  # Reference implementation
+        'markdown': 'MARKDOWN_GUIDE.md',
         'anti-patterns': 'ANTI_PATTERNS.md',
         'adapter-authoring': 'adapters/ADAPTER_AUTHORING_GUIDE.md',
         'tricks': 'COOL_TRICKS.md'
