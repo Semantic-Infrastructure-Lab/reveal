@@ -46,3 +46,30 @@ jobs:
         run: |
           reveal --version
           reveal --list-supported
+
+      - name: Reveal self-validation (dogfooding)
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        shell: bash
+        run: |
+          python3 << 'EOF'
+          from reveal.adapters.reveal import RevealAdapter
+          from reveal.rules import RuleRegistry
+
+          # Run reveal:// self-validation
+          adapter = RevealAdapter()
+          structure = adapter.get_structure()
+          detections = RuleRegistry.check_file(
+              file_path='reveal://',
+              structure=structure,
+              content='',
+              select=['V']  # Only validation rules
+          )
+
+          if detections:
+              print('❌ Reveal self-validation failed:')
+              for d in detections:
+                  print(f'  [{d.severity.upper()}] {d.code}: {d.message}')
+              exit(1)
+
+          print('✅ Reveal self-validation passed (all V001-V006 checks)')
+          EOF

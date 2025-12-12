@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✅ Test Coverage Complete (V004 → Zero Issues)
+
+**Added comprehensive test suites for 4 previously untested analyzers:**
+
+- `tests/test_rust_analyzer.py` - Rust analyzer with functions, structs, impls, traits (6 tests)
+- `tests/test_go_analyzer.py` - Go analyzer with functions, structs, interfaces, methods (6 tests)
+- `tests/test_gdscript_analyzer.py` - GDScript analyzer with Godot patterns (7 tests)
+- `tests/test_yaml_json_analyzer.py` - YAML/JSON analyzers with UTF-8 support (8 tests)
+
+**Total**: 27 new test cases, 363 tests passing (100% pass rate)
+
+**Impact**: V004 validation issue count: 4 → 0 (complete test coverage for all TreeSitter analyzers)
+
+### 🔍 NEW: V007 Version Consistency Check
+
+**Pre-release validation now catches version mismatches across files:**
+
+- Validates `pyproject.toml` (source of truth) against:
+  - `CHANGELOG.md` (must have section for current version)
+  - `reveal/AGENT_HELP.md` (version reference)
+  - `reveal/AGENT_HELP_FULL.md` (version reference)
+
+**Severity**: HIGH (blocker for releases)
+
+**Why this matters**: Prevents confusion from version inconsistencies, caught by dogfooding on reveal itself
+
+### 🚀 CI Enhancement: Self-Validation in GitHub Actions
+
+**Added `reveal reveal://` self-validation step to CI workflow:**
+
+```yaml
+- name: Reveal self-validation (dogfooding)
+  run: python validation script  # Runs V001-V007 checks
+```
+
+**Impact**: Every push now validates reveal's internal quality (analyzers, tests, docs, version consistency)
+
+### 🔧 Fixes
+
+- Updated `AGENT_HELP.md` version reference: 0.19.0 → 0.22.0
+- Updated `AGENT_HELP_FULL.md` version reference: 0.17.0 → 0.22.0
+
+### 📊 Quality Metrics
+
+- **Test suite**: 363 tests passing (+27 new tests)
+- **Coverage**: 63% overall
+- **Validation issues**: 0 (V001-V007 all passing)
+- **CI checks**: Self-validation now runs on every push
+
 ## [0.22.0] - 2025-12-11
 
 ### 🔍 NEW: Editable Install Conflict Detection

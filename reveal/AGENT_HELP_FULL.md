@@ -1,6 +1,6 @@
 # Reveal: Agent Usage Guide (Complete)
 
-**Version:** 0.17.0
+**Version:** 0.22.0
 **Last Updated:** 2025-12-07
 **For:** AI Agents and LLM-based tools
 
