@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2025-12-11
+
+### 🔍 NEW: Editable Install Conflict Detection
+
+**`reveal python://doctor` now detects editable install conflicts that can cause version confusion.**
+
+This was added after a real debugging session where `pip install reveal-cli==0.21.0` kept loading v0.20.0 due to stale `.pth` files.
+
+```bash
+reveal python://doctor
+
+# New detections:
+⚠️  [editable_conflict] Multiple editable .pth files for 'mypackage'
+    Impact: Version conflicts - imports may load unexpected version
+
+⚠️  [editable_shadow] Editable 'mypackage' may shadow PyPI install
+    Impact: pip install from PyPI won't take effect
+```
+
+**New checks:**
+- **Duplicate .pth files**: Detects when multiple `__editable__.<pkg>-<version>.pth` files exist for the same package
+- **Editable shadowing PyPI**: Warns when an editable install exists alongside a PyPI dist-info
+
+**Recommendations provided:**
+```bash
+rm ~/.local/lib/python*/site-packages/__editable__.*mypackage*
+pip install mypackage --force-reinstall
+```
+
 ## [0.21.0] - 2025-12-11
 
 ### 📄 NEW: Office Document Support (6 Formats)

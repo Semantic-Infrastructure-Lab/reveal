@@ -763,6 +763,82 @@ class PythonAdapter(ResourceAdapter):
         except Exception:
             pass
 
+        # Check 6: Duplicate/conflicting editable .pth files
+        try:
+            import site
+            from collections import defaultdict
+
+            site_packages_dirs = site.getsitepackages() + [site.getusersitepackages()]
+            pth_by_package = defaultdict(list)
+
+            for sp_dir in site_packages_dirs:
+                sp_path = Path(sp_dir)
+                if not sp_path.exists():
+                    continue
+
+                # Find all editable .pth files
+                for pth_file in sp_path.glob("__editable__.*.pth"):
+                    # Parse package name from __editable__.<pkg>-<version>.pth
+                    name = pth_file.stem  # __editable__.<pkg>-<version>
+                    parts = name.replace("__editable__.", "").rsplit("-", 1)
+                    if len(parts) == 2:
+                        pkg_name, version = parts
+                        pth_by_package[pkg_name].append(
+                            {"version": version, "path": str(pth_file)}
+                        )
+
+            # Check for packages with multiple .pth files
+            for pkg_name, versions in pth_by_package.items():
+                if len(versions) > 1:
+                    issues.append(
+                        {
+                            "category": "editable_conflict",
+                            "message": f"Multiple editable .pth files for '{pkg_name}'",
+                            "impact": "Version conflicts - imports may load unexpected version",
+                            "severity": "high",
+                            "details": versions,
+                        }
+                    )
+                    recommendations.append(
+                        {
+                            "action": "clean_editable",
+                            "message": f"Remove stale editable .pth files for {pkg_name}",
+                            "commands": [
+                                f"rm ~/.local/lib/python*/site-packages/__editable__.*{pkg_name}*",
+                                f"pip install {pkg_name} --force-reinstall",
+                            ],
+                        }
+                    )
+
+            # Check for editable installs shadowing PyPI dist-info
+            for sp_dir in site_packages_dirs:
+                sp_path = Path(sp_dir)
+                if not sp_path.exists():
+                    continue
+
+                for pth_file in sp_path.glob("__editable__.*.pth"):
+                    name = pth_file.stem.replace("__editable__.", "").rsplit("-", 1)[0]
+                    # Look for non-editable dist-info for same package
+                    dist_infos = list(sp_path.glob(f"{name}-*.dist-info"))
+                    # Filter out the editable's own dist-info
+                    non_editable = [
+                        d
+                        for d in dist_infos
+                        if not (d / "direct_url.json").exists()
+                    ]
+                    if non_editable:
+                        warnings.append(
+                            {
+                                "category": "editable_shadow",
+                                "message": f"Editable '{name}' may shadow PyPI install",
+                                "impact": "pip install from PyPI won't take effect",
+                                "editable_pth": str(pth_file),
+                                "pypi_dist_info": [str(d) for d in non_editable],
+                            }
+                        )
+        except Exception:
+            pass
+
         # Overall health score
         health_score = 100
         health_score -= len(issues) * 20
@@ -796,6 +872,7 @@ class PythonAdapter(ResourceAdapter):
                 "stale_bytecode",
                 "python_version",
                 "editable_installs",
+                "editable_conflicts",
             ],
         }
 
