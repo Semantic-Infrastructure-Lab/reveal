@@ -22,6 +22,16 @@ from .nginx import NginxAnalyzer
 from .toml import TomlAnalyzer
 from .dockerfile import DockerfileAnalyzer
 
+# Office document analyzers (ZIP+XML based)
+from .office import (
+    DocxAnalyzer,
+    XlsxAnalyzer,
+    PptxAnalyzer,
+    OdtAnalyzer,
+    OdsAnalyzer,
+    OdpAnalyzer,
+)
+
 __all__ = [
     'PythonAnalyzer',
     'RustAnalyzer',
@@ -38,4 +48,11 @@ __all__ = [
     'NginxAnalyzer',
     'TomlAnalyzer',
     'DockerfileAnalyzer',
+    # Office documents
+    'DocxAnalyzer',
+    'XlsxAnalyzer',
+    'PptxAnalyzer',
+    'OdtAnalyzer',
+    'OdsAnalyzer',
+    'OdpAnalyzer',
 ]

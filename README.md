@@ -256,7 +256,7 @@ reveal/
 
 **Total:** ~3,400 lines. Most analyzers < 25 lines.
 
-**Power users:** [COOL_TRICKS.md](COOL_TRICKS.md) - Hidden features and advanced workflows
+**Power users:** [COOL_TRICKS.md](reveal/COOL_TRICKS.md) - Hidden features and advanced workflows
 
 ---
 
@@ -279,7 +279,7 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 ---
 
-**Status:** v0.19.0 | **License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](COOL_TRICKS.md) | [Issues](https://github.com/scottsen/reveal/issues)
+**Status:** v0.19.0 | **License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](reveal/COOL_TRICKS.md) | [Issues](https://github.com/scottsen/reveal/issues)
 
 [![Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/scottsen/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
