@@ -1180,18 +1180,19 @@ stdin: Reads file paths from stdin (one per line) - works with find, git, ls, et
     return base_help
 
 
-def _main_impl():
-    """Main CLI entry point."""
+def _create_argument_parser() -> argparse.ArgumentParser:
+    """Create and configure the command-line argument parser."""
     parser = argparse.ArgumentParser(
         description='Reveal: Explore code semantically - The simplest way to understand code',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=_build_help_epilog()
     )
 
+    # Positional arguments
     parser.add_argument('path', nargs='?', help='File or directory to reveal')
     parser.add_argument('element', nargs='?', help='Element to extract (function, class, etc.)')
 
-    # Optional flags
+    # Basic flags
     parser.add_argument('--version', action='version', version=f'reveal {__version__}')
     parser.add_argument('--list-supported', '-l', action='store_true',
                         help='List all supported file types')
@@ -1199,6 +1200,8 @@ def _main_impl():
                         help='Show agent usage guide (llms.txt-style brief reference)')
     parser.add_argument('--agent-help-full', action='store_true',
                         help='Show comprehensive agent guide (complete examples, patterns, troubleshooting)')
+
+    # Input/output options
     parser.add_argument('--stdin', action='store_true',
                         help='Read file paths from stdin (one per line) - enables Unix pipeline workflows')
     parser.add_argument('--meta', action='store_true', help='Show metadata only')
@@ -1206,6 +1209,8 @@ def _main_impl():
                         help='Output format (text, json, typed [typed JSON with types/relationships], grep)')
     parser.add_argument('--copy', '-c', action='store_true',
                         help='Copy output to clipboard (also prints normally)')
+
+    # Display options
     parser.add_argument('--no-fallback', action='store_true',
                         help='Disable TreeSitter fallback for unknown file types')
     parser.add_argument('--depth', type=int, default=3, help='Directory tree depth (default: 3)')
@@ -1216,7 +1221,7 @@ def _main_impl():
     parser.add_argument('--outline', action='store_true',
                         help='Show hierarchical outline (classes with methods, nested structures)')
 
-    # Pattern Detection (v0.13.0+) - Industry-aligned linting
+    # Pattern detection (linting)
     parser.add_argument('--check', '--lint', action='store_true',
                         help='Run pattern detectors (code quality, security, complexity checks)')
     parser.add_argument('--select', type=str, metavar='RULES',
@@ -1228,7 +1233,7 @@ def _main_impl():
     parser.add_argument('--explain', type=str, metavar='CODE',
                         help='Explain a specific rule (e.g., "B001")')
 
-    # Semantic navigation (head/tail/range)
+    # Semantic navigation
     parser.add_argument('--head', type=int, metavar='N',
                         help='Show first N semantic units (records, functions, sections)')
     parser.add_argument('--tail', type=int, metavar='N',
@@ -1243,7 +1248,6 @@ def _main_impl():
                         help='Filter links by type (requires --links)')
     parser.add_argument('--domain', type=str,
                         help='Filter links by domain (requires --links)')
-
     parser.add_argument('--code', action='store_true',
                         help='Extract code blocks from markdown files')
     parser.add_argument('--language', type=str,
@@ -1251,9 +1255,12 @@ def _main_impl():
     parser.add_argument('--inline', action='store_true',
                         help='Include inline code snippets (requires --code)')
 
-    args = parser.parse_args()
+    return parser
 
-    # Validate navigation arguments (mutually exclusive)
+
+def _validate_navigation_args(args):
+    """Validate and parse navigation arguments (--head, --tail, --range)."""
+    # Check mutual exclusivity
     nav_args = [args.head, args.tail, args.range]
     nav_count = sum(1 for arg in nav_args if arg is not None)
     if nav_count > 1:
@@ -1276,127 +1283,179 @@ def _main_impl():
             print("Expected format: START-END (e.g., 10-20, 1-indexed)", file=sys.stderr)
             sys.exit(1)
 
+
+def _handle_list_supported():
+    """Handle --list-supported flag."""
+    list_supported_types()
+    sys.exit(0)
+
+
+def _handle_agent_help():
+    """Handle --agent-help flag."""
+    agent_help_path = Path(__file__).parent / 'AGENT_HELP.md'
+    try:
+        with open(agent_help_path, 'r', encoding='utf-8') as f:
+            print(f.read())
+    except FileNotFoundError:
+        print(f"Error: AGENT_HELP.md not found at {agent_help_path}", file=sys.stderr)
+        print("This is a bug - please report it at https://github.com/scottsen/reveal/issues", file=sys.stderr)
+        sys.exit(1)
+    sys.exit(0)
+
+
+def _handle_agent_help_full():
+    """Handle --agent-help-full flag."""
+    agent_help_full_path = Path(__file__).parent / 'AGENT_HELP_FULL.md'
+    try:
+        with open(agent_help_full_path, 'r', encoding='utf-8') as f:
+            print(f.read())
+    except FileNotFoundError:
+        print(f"Error: AGENT_HELP_FULL.md not found at {agent_help_full_path}", file=sys.stderr)
+        print("This is a bug - please report it at https://github.com/scottsen/reveal/issues", file=sys.stderr)
+        sys.exit(1)
+    sys.exit(0)
+
+
+def _handle_rules_list():
+    """Handle --rules flag to list all pattern detection rules."""
+    from .rules import RuleRegistry
+    rules = RuleRegistry.list_rules()
+
+    if not rules:
+        print("No rules discovered")
+        sys.exit(0)
+
+    print(f"Reveal v{__version__} - Pattern Detection Rules\n")
+
+    # Group by category
+    by_category = {}
+    for rule in rules:
+        cat = rule['category']
+        if cat not in by_category:
+            by_category[cat] = []
+        by_category[cat].append(rule)
+
+    # Print by category
+    for category in sorted(by_category.keys()):
+        cat_rules = by_category[category]
+        print(f"{category.upper()} Rules ({len(cat_rules)}):")
+        for rule in sorted(cat_rules, key=lambda r: r['code']):
+            status = "✓" if rule['enabled'] else "✗"
+            severity_icon = {"low": "ℹ️", "medium": "⚠️", "high": "❌", "critical": "🚨"}.get(rule['severity'], "")
+            print(f"  {status} {rule['code']:8s} {severity_icon} {rule['message']}")
+            if rule['file_patterns'] != ['*']:
+                print(f"             Files: {', '.join(rule['file_patterns'])}")
+        print()
+
+    print(f"Total: {len(rules)} rules")
+    print("\nUsage: reveal <file> --check --select B,S --ignore E501")
+    sys.exit(0)
+
+
+def _handle_explain_rule(rule_code: str):
+    """Handle --explain flag to explain a specific rule."""
+    from .rules import RuleRegistry
+    rule = RuleRegistry.get_rule(rule_code)
+
+    if not rule:
+        print(f"Error: Rule '{rule_code}' not found", file=sys.stderr)
+        print("\nUse 'reveal --rules' to list all available rules", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Rule: {rule.code}")
+    print(f"Message: {rule.message}")
+    print(f"Category: {rule.category.value if rule.category else 'unknown'}")
+    print(f"Severity: {rule.severity.value}")
+    print(f"File Patterns: {', '.join(rule.file_patterns)}")
+    if rule.uri_patterns:
+        print(f"URI Patterns: {', '.join(rule.uri_patterns)}")
+    print(f"Version: {rule.version}")
+    print(f"Enabled: {'Yes' if rule.enabled else 'No'}")
+    print(f"\nDescription:")
+    print(f"  {rule.__doc__ or 'No description available.'}")
+    sys.exit(0)
+
+
+def _handle_stdin_mode(args):
+    """Handle --stdin mode to process files from stdin."""
+    if args.element:
+        print("Error: Cannot use element extraction with --stdin", file=sys.stderr)
+        sys.exit(1)
+
+    # Read file paths from stdin (one per line)
+    for line in sys.stdin:
+        file_path = line.strip()
+        if not file_path:
+            continue  # Skip empty lines
+
+        path = Path(file_path)
+
+        # Skip if path doesn't exist (graceful degradation)
+        if not path.exists():
+            print(f"Warning: {file_path} not found, skipping", file=sys.stderr)
+            continue
+
+        # Skip directories (only process files)
+        if path.is_dir():
+            print(f"Warning: {file_path} is a directory, skipping (use reveal {file_path}/ directly)", file=sys.stderr)
+            continue
+
+        # Process the file
+        if path.is_file():
+            handle_file(str(path), None, args.meta, args.format, args)
+
+    sys.exit(0)
+
+
+def _handle_file_or_directory(path_str: str, args):
+    """Handle regular file or directory path."""
+    path = Path(path_str)
+    if not path.exists():
+        print(f"Error: {path_str} not found", file=sys.stderr)
+        sys.exit(1)
+
+    if path.is_dir():
+        # Directory → show tree
+        output = show_directory_tree(str(path), depth=args.depth,
+                                     max_entries=args.max_entries, fast=args.fast)
+        print(output)
+    elif path.is_file():
+        # File → show structure or extract element
+        handle_file(str(path), args.element, args.meta, args.format, args)
+    else:
+        print(f"Error: {path_str} is neither file nor directory", file=sys.stderr)
+        sys.exit(1)
+
+
+def _main_impl():
+    """Main CLI entry point."""
+    # Parse arguments
+    parser = _create_argument_parser()
+    args = parser.parse_args()
+
+    # Validate navigation arguments
+    _validate_navigation_args(args)
+
     # Check for updates (once per day, non-blocking, opt-out available)
     check_for_updates()
 
-    # Handle --list-supported
+    # Handle special modes (exit early)
     if args.list_supported:
-        list_supported_types()
-        sys.exit(0)
-
-    # Handle --agent-help
+        _handle_list_supported()
     if args.agent_help:
-        agent_help_path = Path(__file__).parent / 'AGENT_HELP.md'
-        try:
-            with open(agent_help_path, 'r', encoding='utf-8') as f:
-                print(f.read())
-        except FileNotFoundError:
-            print(f"Error: AGENT_HELP.md not found at {agent_help_path}", file=sys.stderr)
-            print("This is a bug - please report it at https://github.com/scottsen/reveal/issues", file=sys.stderr)
-            sys.exit(1)
-        sys.exit(0)
-
-    # Handle --agent-help-full
+        _handle_agent_help()
     if args.agent_help_full:
-        agent_help_full_path = Path(__file__).parent / 'AGENT_HELP_FULL.md'
-        try:
-            with open(agent_help_full_path, 'r', encoding='utf-8') as f:
-                print(f.read())
-        except FileNotFoundError:
-            print(f"Error: AGENT_HELP_FULL.md not found at {agent_help_full_path}", file=sys.stderr)
-            print("This is a bug - please report it at https://github.com/scottsen/reveal/issues", file=sys.stderr)
-            sys.exit(1)
-        sys.exit(0)
-
-    # Handle --rules (list all pattern detection rules)
+        _handle_agent_help_full()
     if args.rules:
-        from .rules import RuleRegistry
-        rules = RuleRegistry.list_rules()
-
-        if not rules:
-            print("No rules discovered")
-            sys.exit(0)
-
-        print(f"Reveal v{__version__} - Pattern Detection Rules\n")
-
-        # Group by category
-        by_category = {}
-        for rule in rules:
-            cat = rule['category']
-            if cat not in by_category:
-                by_category[cat] = []
-            by_category[cat].append(rule)
-
-        # Print by category
-        for category in sorted(by_category.keys()):
-            cat_rules = by_category[category]
-            print(f"{category.upper()} Rules ({len(cat_rules)}):")
-            for rule in sorted(cat_rules, key=lambda r: r['code']):
-                status = "✓" if rule['enabled'] else "✗"
-                severity_icon = {"low": "ℹ️", "medium": "⚠️", "high": "❌", "critical": "🚨"}.get(rule['severity'], "")
-                print(f"  {status} {rule['code']:8s} {severity_icon} {rule['message']}")
-                if rule['file_patterns'] != ['*']:
-                    print(f"             Files: {', '.join(rule['file_patterns'])}")
-            print()
-
-        print(f"Total: {len(rules)} rules")
-        print("\nUsage: reveal <file> --check --select B,S --ignore E501")
-        sys.exit(0)
-
-    # Handle --explain (explain a specific rule)
+        _handle_rules_list()
     if args.explain:
-        from .rules import RuleRegistry
-        rule = RuleRegistry.get_rule(args.explain)
+        _handle_explain_rule(args.explain)
 
-        if not rule:
-            print(f"Error: Rule '{args.explain}' not found", file=sys.stderr)
-            print("\nUse 'reveal --rules' to list all available rules", file=sys.stderr)
-            sys.exit(1)
-
-        print(f"Rule: {rule.code}")
-        print(f"Message: {rule.message}")
-        print(f"Category: {rule.category.value if rule.category else 'unknown'}")
-        print(f"Severity: {rule.severity.value}")
-        print(f"File Patterns: {', '.join(rule.file_patterns)}")
-        if rule.uri_patterns:
-            print(f"URI Patterns: {', '.join(rule.uri_patterns)}")
-        print(f"Version: {rule.version}")
-        print(f"Enabled: {'Yes' if rule.enabled else 'No'}")
-        print(f"\nDescription:")
-        print(f"  {rule.__doc__ or 'No description available.'}")
-        sys.exit(0)
-
-    # Handle --stdin (read file paths from stdin)
+    # Handle stdin mode
     if args.stdin:
-        if args.element:
-            print("Error: Cannot use element extraction with --stdin", file=sys.stderr)
-            sys.exit(1)
+        _handle_stdin_mode(args)
 
-        # Read file paths from stdin (one per line)
-        for line in sys.stdin:
-            file_path = line.strip()
-            if not file_path:
-                continue  # Skip empty lines
-
-            path = Path(file_path)
-
-            # Skip if path doesn't exist (graceful degradation)
-            if not path.exists():
-                print(f"Warning: {file_path} not found, skipping", file=sys.stderr)
-                continue
-
-            # Skip directories (only process files)
-            if path.is_dir():
-                print(f"Warning: {file_path} is a directory, skipping (use reveal {file_path}/ directly)", file=sys.stderr)
-                continue
-
-            # Process the file
-            if path.is_file():
-                handle_file(str(path), None, args.meta, args.format, args)
-
-        sys.exit(0)
-
-    # Path is required if not using --list-supported or --stdin
+    # Path is required if not using special modes or --stdin
     if not args.path:
         parser.print_help()
         sys.exit(1)
@@ -1406,26 +1465,8 @@ def _main_impl():
         handle_uri(args.path, args.element, args)
         sys.exit(0)
 
-    # Regular file/directory path
-    path = Path(args.path)
-    if not path.exists():
-        print(f"Error: {args.path} not found", file=sys.stderr)
-        sys.exit(1)
-
-    # Route based on path type
-    if path.is_dir():
-        # Directory → show tree
-        output = show_directory_tree(str(path), depth=args.depth,
-                                     max_entries=args.max_entries, fast=args.fast)
-        print(output)
-
-    elif path.is_file():
-        # File → show structure or extract element
-        handle_file(str(path), args.element, args.meta, args.format, args)
-
-    else:
-        print(f"Error: {args.path} is neither file nor directory", file=sys.stderr)
-        sys.exit(1)
+    # Handle regular file/directory path
+    _handle_file_or_directory(args.path, args)
 
 
 def list_supported_types():
