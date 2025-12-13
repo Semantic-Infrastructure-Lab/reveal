@@ -100,6 +100,12 @@ class RulePrefix(Enum):
     # R2xx: Method/function design
     # R9xx: General code smells (too many args, too many locals, etc.)
 
+    # Duplicates (D) - copy-paste detection
+    D = "D"  # Duplicate code detection
+    # D001: Exact duplicate functions (normalized)
+    # D002: Similar functions (fuzzy match)
+    # D003: Duplicate code blocks
+
 
 @dataclass
 class Detection:

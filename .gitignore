@@ -22,14 +22,14 @@ INTERNAL_*.md
 MEETING_*.md
 DRAFT_*.md
 
-# TIA directories
+# TIA directories (root-level only - allows internal-docs/)
 .tia/
 .beth/
-analysis/
-research/
-sessions/
-internal/
-planning/
+/analysis/
+/research/
+/sessions/
+/internal/
+/planning/
 
 # TIA project metadata
 project.yaml
