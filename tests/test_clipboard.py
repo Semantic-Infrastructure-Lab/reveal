@@ -18,7 +18,7 @@ class TestCopyToClipboard(unittest.TestCase):
 
     def setUp(self):
         """Import the function for testing."""
-        from reveal.main import copy_to_clipboard
+        from reveal.utils import copy_to_clipboard
         self.copy_to_clipboard = copy_to_clipboard
 
     @patch('shutil.which')

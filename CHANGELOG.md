@@ -7,6 +7,148 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🎯 IMPROVED: Size Disclosure & LLM-Friendly Quality Checks
+
+**Reveal now shows file size and line count in headers, preventing surprise large reads!**
+
+```bash
+reveal main.py
+# Output: File: main.py (42.3KB, 1,247 lines)
+```
+
+**New --check Rules for Size-Based Quality:**
+- ✅ **C902**: Function too long (warns >50 lines, errors >100 lines)
+- ✅ **C905**: Nesting depth too high (errors >4 levels)
+- ✅ **M101**: File too large (warns >500 lines, errors >1000 lines)
+
+**Benefits:**
+- **Size Awareness**: See file dimensions before loading content (prevents LLM token bloat)
+- **God Function Detection**: Catch unmaintainable functions early
+- **Deep Nesting Alerts**: Identify complex control flow (callback hell, nested conditionals)
+- **Token Cost Estimates**: M101 shows estimated LLM token cost for large files
+
+**Example --check Output:**
+```bash
+reveal massive.py --check
+
+massive.py: Found 2 issues
+
+massive.py:1:1 ❌ M101 File is too large (1,247 lines, 42.3KB)
+  💡 LLM cost: ~18,500 tokens to load entire file.
+      Use 'reveal massive.py' (structure view) instead.
+
+massive.py:45:1 ❌ C902 Function is too long: process_everything (342 lines)
+  💡 Break into smaller functions. Single function costs ~5,100 tokens.
+```
+
+### 📝 NEW: YAML Front Matter Extraction for Markdown
+
+**Reveal can now extract and display YAML front matter from markdown files!** This feature integrates seamlessly with Beth and TIA's semantic infrastructure.
+
+```bash
+reveal README.md --frontmatter                    # Extract front matter metadata
+reveal README.md --frontmatter --format=json      # Full metadata as JSON
+```
+
+**What's Supported:**
+- ✅ YAML front matter parsing (---delimited blocks)
+- ✅ Beth-specific fields (`beth_topics`, `session_id`, `tags`, `related_docs`)
+- ✅ Nested structures and complex YAML
+- ✅ Text and JSON output formats
+- ✅ Graceful error handling for malformed YAML
+- ✅ Line range tracking (shows which lines contain front matter)
+
+**Use Cases:**
+- **Metadata Validation**: Audit front matter consistency and completeness across documentation
+- **Static Site Generation**: Extract metadata for navigation, indexes, and bibliographies
+- **Documentation Analysis**: Aggregate metadata from project documentation
+- **CI/CD Validation**: Ensure required metadata fields are present in pull requests
+- **Semantic Search Integration**: Extract topic metadata for knowledge graph indexing
+
+**Example Output (Text):**
+```
+Frontmatter (6):
+  Lines 1-12:
+    title: Feature Implementation Report
+    author: Development Team
+    date: 2025-12-13
+    tags:
+      - feature
+      - testing
+      - documentation
+    category: development
+    version: 1.0
+```
+
+**Example Output (JSON):**
+```json
+{
+  "frontmatter": {
+    "data": {
+      "title": "Feature Implementation Report",
+      "author": "Development Team",
+      "date": "2025-12-13",
+      "tags": ["feature", "testing", "documentation"]
+    },
+    "line_start": 1,
+    "line_end": 12,
+    "raw": "title: Feature Implementation Report\nauthor: ..."
+  }
+}
+```
+
+**Implementation:**
+- `reveal/analyzers/markdown.py`: Added `_extract_frontmatter()` method and `extract_frontmatter` parameter
+- `reveal/main.py`: Added `--frontmatter` CLI flag, text/JSON formatters, help text
+- `tests/test_markdown_analyzer.py`: 9 comprehensive tests covering nested structures, error handling, edge cases
+- All tests passing (28/28 markdown analyzer tests)
+
+**Real-World Example:**
+The Semantic Infrastructure Lab uses reveal's front matter extraction for their Beth knowledge graph system. [Learn more about the integration](https://semanticinfrastructurelab.org/docs/canonical/REVEAL_BETH_PROGRESSIVE_KNOWLEDGE_SYSTEM).
+
+**Impact**: Enables metadata extraction from markdown documentation for validation, aggregation, and semantic indexing use cases.
+
+### 🐛 FIXED: JSON Serialization for Date Objects
+
+**Fixed a bug where JSON output failed when YAML front matter contained date fields.**
+
+**Problem:**
+- YAML auto-parses date fields (e.g., `date: 2025-12-13`) into Python `datetime.date` objects
+- Python's standard `json.dumps()` cannot serialize date/datetime objects
+- This caused `TypeError: Object of type date is not JSON serializable` when using `--frontmatter --format=json`
+
+**Solution:**
+- Added custom `DateTimeEncoder` class that serializes dates as ISO format strings
+- Created `safe_json_dumps()` helper function used throughout reveal
+- All JSON output now handles date/datetime objects gracefully
+
+**Example:**
+```bash
+# Previously failed with TypeError
+reveal README.md --frontmatter --format=json
+
+# Now works - dates serialize as ISO strings
+{
+  "frontmatter": {
+    "data": {
+      "date": "2025-12-13",           # ✅ Serialized as string
+      "created": "2025-12-10",         # ✅ ISO format
+      "session_id": "stormy-gust-1213"
+    }
+  }
+}
+```
+
+**Files modified:**
+- `reveal/main.py`: Added `DateTimeEncoder` class and `safe_json_dumps()` helper (20 lines)
+- Replaced 13 instances of `json.dumps()` with `safe_json_dumps()`
+
+**Testing:**
+- ✅ Tested on TIA session READMEs with date fields
+- ✅ Tested on SIL documentation with created/updated dates
+- ✅ All 372 tests passing
+- ✅ No regressions
+
 ### 🔍 NEW: reveal:// Meta-Adapter - Self-Inspection System
 
 **Reveal can now inspect itself!** The new `reveal://` adapter demonstrates that reveal can explore **any resource**, not just files.

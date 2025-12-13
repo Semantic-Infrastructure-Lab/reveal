@@ -3,228 +3,24 @@
 import sys
 import os
 import argparse
-import subprocess
-import shutil
 from pathlib import Path
 from typing import Optional, Dict, List, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from .base import get_analyzer, get_all_analyzers, FileAnalyzer
 from .tree_view import show_directory_tree
 from . import __version__
+import json
 
-
-def copy_to_clipboard(text: str) -> bool:
-    """Copy text to system clipboard.
-
-    Uses native clipboard utilities without external dependencies.
-    Supports: xclip, xsel (Linux), pbcopy (macOS), clip (Windows), wl-copy (Wayland).
-
-    Args:
-        text: Text to copy to clipboard
-
-    Returns:
-        True if successful, False otherwise
-    """
-    # Try clipboard utilities in order of preference
-    clipboard_cmds = [
-        ['xclip', '-selection', 'clipboard'],  # Linux X11
-        ['xsel', '--clipboard', '--input'],     # Linux X11 alternative
-        ['wl-copy'],                             # Linux Wayland
-        ['pbcopy'],                              # macOS
-        ['clip'],                                # Windows
-    ]
-
-    for cmd in clipboard_cmds:
-        if shutil.which(cmd[0]):
-            try:
-                process = subprocess.Popen(
-                    cmd,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-                process.communicate(input=text.encode('utf-8'))
-                if process.returncode == 0:
-                    return True
-            except (subprocess.SubprocessError, OSError):
-                continue
-
-    return False
-
-
-
-# ============================================================================
-# Breadcrumb System - Agent-Friendly Navigation Hints
-# ============================================================================
-
-def get_element_placeholder(file_type):
-    """Get appropriate element placeholder for file type.
-
-    Args:
-        file_type: File type string (e.g., 'python', 'yaml')
-
-    Returns:
-        String placeholder like '<function>', '<key>', etc.
-    """
-    mapping = {
-        'python': '<function>',
-        'javascript': '<function>',
-        'typescript': '<function>',
-        'rust': '<function>',
-        'go': '<function>',
-        'bash': '<function>',
-        'gdscript': '<function>',
-        'yaml': '<key>',
-        'json': '<key>',
-        'jsonl': '<entry>',
-        'toml': '<key>',
-        'markdown': '<heading>',
-        'dockerfile': '<instruction>',
-        'nginx': '<directive>',
-        'jupyter': '<cell>',
-    }
-    return mapping.get(file_type, '<element>')
-
-
-def get_file_type_from_analyzer(analyzer):
-    """Get file type string from analyzer class name.
-
-    Args:
-        analyzer: FileAnalyzer instance
-
-    Returns:
-        File type string (e.g., 'python', 'markdown') or None
-    """
-    class_name = type(analyzer).__name__
-    mapping = {
-        'PythonAnalyzer': 'python',
-        'JavaScriptAnalyzer': 'javascript',
-        'TypeScriptAnalyzer': 'typescript',
-        'RustAnalyzer': 'rust',
-        'GoAnalyzer': 'go',
-        'BashAnalyzer': 'bash',
-        'MarkdownAnalyzer': 'markdown',
-        'YamlAnalyzer': 'yaml',
-        'JsonAnalyzer': 'json',
-        'JsonlAnalyzer': 'jsonl',
-        'TomlAnalyzer': 'toml',
-        'DockerfileAnalyzer': 'dockerfile',
-        'NginxAnalyzer': 'nginx',
-        'GDScriptAnalyzer': 'gdscript',
-        'JupyterAnalyzer': 'jupyter',
-        'TreeSitterAnalyzer': None,  # Generic fallback
-    }
-    return mapping.get(class_name, None)
-
-
-def print_breadcrumbs(context, path, file_type=None, **kwargs):
-    """Print navigation breadcrumbs with reveal command suggestions.
-
-    Args:
-        context: 'structure', 'element', 'metadata'
-        path: File or directory path
-        file_type: Optional file type for context-specific suggestions
-        **kwargs: Additional context (element_name, line_count, etc.)
-    """
-    print()  # Blank line before breadcrumbs
-
-    if context == 'metadata':
-        print(f"Next: reveal {path}              # See structure")
-        print(f"      reveal {path} --check      # Quality check")
-
-    elif context == 'structure':
-        element_placeholder = get_element_placeholder(file_type)
-        print(f"Next: reveal {path} {element_placeholder}   # Extract specific element")
-
-        if file_type in ['python', 'javascript', 'typescript', 'rust', 'go', 'bash', 'gdscript']:
-            print(f"      reveal {path} --check      # Check code quality")
-            print(f"      reveal {path} --outline    # Nested structure")
-        elif file_type == 'markdown':
-            print(f"      reveal {path} --links      # Extract links")
-            print(f"      reveal {path} --code       # Extract code blocks")
-        elif file_type in ['yaml', 'json', 'toml', 'jsonl']:
-            print(f"      reveal {path} --check      # Validate syntax")
-        elif file_type in ['dockerfile', 'nginx']:
-            print(f"      reveal {path} --check      # Validate configuration")
-
-    elif context == 'element':
-        element_name = kwargs.get('element_name', '')
-        line_count = kwargs.get('line_count', '')
-
-        info = f"Extracted {element_name}"
-        if line_count:
-            info += f" ({line_count} lines)"
-
-        print(info)
-        print(f"  → Back: reveal {path}          # See full structure")
-        print(f"  → Check: reveal {path} --check # Quality analysis")
-
-
-def check_for_updates():
-    """Check PyPI for newer version (once per day, non-blocking).
-
-    - Checks at most once per day (cached in ~/.config/reveal/last_update_check)
-    - 1-second timeout (doesn't slow down CLI)
-    - Fails silently (no errors shown to user)
-    - Opt-out: Set REVEAL_NO_UPDATE_CHECK=1 environment variable
-    """
-    # Opt-out check
-    if os.environ.get('REVEAL_NO_UPDATE_CHECK'):
-        return
-
-    try:
-        # Setup cache directory (platform-appropriate)
-        if sys.platform == 'win32':
-            # Windows: Use %LOCALAPPDATA%\reveal
-            cache_dir = Path(os.getenv('LOCALAPPDATA', Path.home() / 'AppData' / 'Local')) / 'reveal'
-        else:
-            # Unix/macOS: Use ~/.config/reveal
-            cache_dir = Path.home() / '.config' / 'reveal'
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_file = cache_dir / 'last_update_check'
-
-        # Check if we should update (once per day)
-        if cache_file.exists():
-            last_check_str = cache_file.read_text().strip()
-            try:
-                last_check = datetime.fromisoformat(last_check_str)
-                if datetime.now() - last_check < timedelta(days=1):
-                    return  # Checked recently, skip
-            except (ValueError, OSError):
-                pass  # Invalid cache, continue with check
-
-        # Check PyPI (using urllib to avoid new dependencies)
-        import urllib.request
-        import json
-
-        req = urllib.request.Request(
-            'https://pypi.org/pypi/reveal-cli/json',
-            headers={'User-Agent': f'reveal-cli/{__version__}'}
-        )
-
-        with urllib.request.urlopen(req, timeout=1) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            latest_version = data['info']['version']
-
-        # Update cache file
-        cache_file.write_text(datetime.now().isoformat())
-
-        # Compare versions (simple string comparison works for semver)
-        if latest_version != __version__:
-            # Parse versions for proper comparison
-            def parse_version(v):
-                return tuple(map(int, v.split('.')))
-
-            try:
-                if parse_version(latest_version) > parse_version(__version__):
-                    print(f"⚠️  Update available: reveal {latest_version} (you have {__version__})")
-                    print(f"Update available: pip install --upgrade reveal-cli\n")
-            except (ValueError, AttributeError):
-                pass  # Version comparison failed, ignore
-
-    except Exception:
-        # Fail silently - don't interrupt user's workflow
-        pass
+# Import utilities from utils module
+from .utils import (
+    copy_to_clipboard,
+    DateTimeEncoder,
+    safe_json_dumps,
+    get_element_placeholder,
+    get_file_type_from_analyzer,
+    print_breadcrumbs,
+    check_for_updates,
+)
 
 
 def main():
@@ -571,8 +367,7 @@ def render_env_structure(data: Dict[str, Any], output_format: str) -> None:
         output_format: Output format (text, json, grep)
     """
     if output_format == 'json':
-        import json
-        print(json.dumps(data, indent=2))
+        print(safe_json_dumps(data))
         return
 
     # Text format
@@ -603,8 +398,7 @@ def render_env_variable(data: Dict[str, Any], output_format: str) -> None:
         output_format: Output format (text, json, grep)
     """
     if output_format == 'json':
-        import json
-        print(json.dumps(data, indent=2))
+        print(safe_json_dumps(data))
         return
 
     if output_format == 'grep':
@@ -629,8 +423,7 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
         output_format: Output format (text, json, grep)
     """
     if output_format == 'json':
-        import json
-        print(json.dumps(data, indent=2))
+        print(safe_json_dumps(data))
         return
 
     # Text/grep format
@@ -928,8 +721,7 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
         list_mode: True if listing all topics, False for specific topic
     """
     if output_format == 'json':
-        import json
-        print(json.dumps(data, indent=2))
+        print(safe_json_dumps(data))
         return
 
     if list_mode:
@@ -961,8 +753,7 @@ def render_python_structure(data: Dict[str, Any], output_format: str) -> None:
         output_format: Output format (text, json, grep)
     """
     if output_format == 'json':
-        import json
-        print(json.dumps(data, indent=2))
+        print(safe_json_dumps(data))
         return
 
     # Text format
@@ -1152,8 +943,7 @@ def render_python_element(data: Dict[str, Any], output_format: str) -> None:
         output_format: Output format (text, json, grep)
     """
     if output_format == 'json':
-        import json
-        print(json.dumps(data, indent=2))
+        print(safe_json_dumps(data))
         return
 
     # Handle errors
@@ -1182,8 +972,7 @@ def render_python_element(data: Dict[str, Any], output_format: str) -> None:
         _render_python_package_details(data)
     else:
         # Generic fallback
-        import json
-        print(json.dumps(data, indent=2))
+        print(safe_json_dumps(data))
 
 
 def _build_help_epilog() -> str:
@@ -1256,6 +1045,7 @@ Examples:
   reveal doc.md --links --link-type external  # Only external links
   reveal doc.md --code                        # Extract all code blocks
   reveal doc.md --code --language python      # Only Python code blocks
+  reveal doc.md --frontmatter                 # Extract YAML front matter
 
   # URI adapters - explore ANY resource!
   reveal help://                              # Discover all help topics
@@ -1271,7 +1061,7 @@ Examples:
   reveal 'ast://.?type=function' --format=json  # All functions as JSON
 
 File-type specific features:
-  • Markdown: --links, --code (extract links/code blocks with filtering)
+  • Markdown: --links, --code, --frontmatter (extract links/code/metadata)
   • Code files: --check, --outline (quality checks, show hierarchical structure)
   • URI adapters: help:// (documentation), env:// (environment), ast:// (code queries)
 
@@ -1357,6 +1147,8 @@ def _create_argument_parser() -> argparse.ArgumentParser:
                         help='Filter code blocks by language (requires --code)')
     parser.add_argument('--inline', action='store_true',
                         help='Include inline code snippets (requires --code)')
+    parser.add_argument('--frontmatter', action='store_true',
+                        help='Extract YAML front matter from markdown files')
 
     return parser
 
@@ -1678,7 +1470,7 @@ def run_pattern_detection(analyzer: FileAnalyzer, path: str, output_format: str,
             'detections': [d.to_dict() for d in detections],
             'total': len(detections)
         }
-        print(json.dumps(result, indent=2))
+        print(safe_json_dumps(result))
 
     elif output_format == 'grep':
         # Grep format: file:line:column:code:message
@@ -1744,8 +1536,7 @@ def show_metadata(analyzer: FileAnalyzer, output_format: str):
     meta = analyzer.get_metadata()
 
     if output_format == 'json':
-        import json
-        print(json.dumps(meta, indent=2))
+        print(safe_json_dumps(meta))
     else:
         print(f"File: {meta['name']}\n")
         print(f"Path:     {meta['path']}")
@@ -1912,6 +1703,35 @@ def render_outline(items: List[Dict[str, Any]], path: Path, indent: str = '', is
             render_outline(item['children'], path, child_indent, is_root=False)
 
 
+def _format_frontmatter(fm: Optional[Dict[str, Any]]) -> None:
+    """Format and display YAML front matter."""
+    if fm is None:
+        print("  (No front matter found)")
+        return
+
+    data = fm.get('data', {})
+    lines = f"{fm.get('line_start', '?')}-{fm.get('line_end', '?')}"
+
+    # Display key fields
+    if not data:
+        print("  (Empty front matter)")
+        return
+
+    print(f"  Lines {lines}:")
+    for key, value in data.items():
+        # Format value based on type
+        if isinstance(value, list):
+            print(f"    {key}:")
+            for item in value:
+                print(f"      - {item}")
+        elif isinstance(value, dict):
+            print(f"    {key}:")
+            for sub_key, sub_value in value.items():
+                print(f"      {sub_key}: {sub_value}")
+        else:
+            print(f"    {key}: {value}")
+
+
 def _format_links(items: List[Dict[str, Any]], path: Path, output_format: str) -> None:
     """Format and display link items grouped by type."""
     by_type = {}
@@ -2063,15 +1883,44 @@ def _build_analyzer_kwargs(analyzer: FileAnalyzer, args) -> Dict[str, Any]:
             if args.inline:
                 kwargs['inline_code'] = args.inline
 
+        if args.frontmatter:
+            kwargs['extract_frontmatter'] = True
+
     return kwargs
 
 
 def _print_file_header(path: Path, is_fallback: bool = False, fallback_lang: str = None) -> None:
-    """Print file header with optional fallback indicator."""
+    """Print file header with size metadata and optional fallback indicator."""
+    header = f"File: {path.name}"
+
+    # Add size info if file exists and is a regular file
+    if path.exists() and path.is_file():
+        size_bytes = path.stat().st_size
+
+        # Human-readable size
+        if size_bytes < 1024:
+            size_str = f"{size_bytes}B"
+        elif size_bytes < 1024**2:
+            size_str = f"{size_bytes/1024:.1f}KB"
+        elif size_bytes < 1024**3:
+            size_str = f"{size_bytes/1024**2:.1f}MB"
+        else:
+            size_str = f"{size_bytes/1024**3:.1f}GB"
+
+        # Count lines efficiently
+        try:
+            with open(path, 'rb') as f:
+                line_count = sum(1 for _ in f)
+            header += f" ({size_str}, {line_count:,} lines)"
+        except (OSError, UnicodeDecodeError):
+            # If we can't read the file, just show size
+            header += f" ({size_str})"
+
+    # Add fallback indicator if present
     if is_fallback and fallback_lang:
-        print(f"File: {path.name} (fallback: {fallback_lang})\n")
-    else:
-        print(f"File: {path.name}\n")
+        header += f" (fallback: {fallback_lang})"
+
+    print(f"{header}\n")
 
 
 def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
@@ -2085,6 +1934,16 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
     # Add 'file' field to each element in structure for --stdin compatibility
     enriched_structure = {}
     for category, items in structure.items():
+        # Special handling for frontmatter (single dict, not a list)
+        if category == 'frontmatter':
+            if isinstance(items, dict):
+                enriched_fm = items.copy()
+                enriched_fm['file'] = file_path
+                enriched_structure[category] = enriched_fm
+            else:
+                enriched_structure[category] = items
+            continue
+
         enriched_items = []
         for item in items:
             # Copy item and add file field
@@ -2104,7 +1963,7 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
         },
         'structure': enriched_structure
     }
-    print(json.dumps(result, indent=2))
+    print(safe_json_dumps(result))
 
 
 def _render_typed_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
@@ -2204,7 +2063,7 @@ def _render_typed_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[
     if relationships:
         result['relationships'] = relationships
 
-    print(json.dumps(result, indent=2))
+    print(safe_json_dumps(result))
 
 
 def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
@@ -2216,10 +2075,19 @@ def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
 
         # Format category name (e.g., 'functions' → 'Functions')
         category_name = category.capitalize()
-        print(f"{category_name} ({len(items)}):")
+
+        # Special handling for count (frontmatter is a dict, not a list)
+        if category == 'frontmatter':
+            count = len(items.get('data', {})) if isinstance(items, dict) else 0
+        else:
+            count = len(items)
+
+        print(f"{category_name} ({count}):")
 
         # Special handling for different categories
-        if category == 'links':
+        if category == 'frontmatter':
+            _format_frontmatter(items)
+        elif category == 'links':
             _format_links(items, path, output_format)
         elif category == 'code_blocks':
             _format_code_blocks(items, path, output_format)
@@ -2323,7 +2191,7 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str):
     # Format output
     if output_format == 'json':
         import json
-        print(json.dumps(result, indent=2))
+        print(safe_json_dumps(result))
         return
 
     path = analyzer.path

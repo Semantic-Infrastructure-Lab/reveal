@@ -3,6 +3,7 @@
 import unittest
 import tempfile
 import os
+import datetime
 from reveal.analyzers.markdown import MarkdownAnalyzer
 
 
@@ -427,6 +428,289 @@ plain code here
             self.assertEqual(headings[0]['line'], 1)
             self.assertEqual(headings[1]['line'], 3)
             self.assertEqual(headings[2]['line'], 5)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_frontmatter_extraction_basic(self):
+        """Test extraction of basic YAML front matter."""
+        content = """---
+title: Test Document
+author: Test Author
+date: 2025-12-13
+---
+
+# Heading
+
+Content here.
+"""
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            structure = analyzer.get_structure(extract_frontmatter=True)
+
+            self.assertIn('frontmatter', structure)
+            fm = structure['frontmatter']
+
+            self.assertIsNotNone(fm)
+            self.assertIn('data', fm)
+            self.assertEqual(fm['data']['title'], 'Test Document')
+            self.assertEqual(fm['data']['author'], 'Test Author')
+            # YAML parses dates as date objects
+            import datetime
+            self.assertEqual(fm['data']['date'], datetime.date(2025, 12, 13))
+            self.assertEqual(fm['line_start'], 1)
+            self.assertEqual(fm['line_end'], 5)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_frontmatter_complex_nested_fields(self):
+        """Test extraction of complex nested front matter structures."""
+        content = """---
+title: Complex Example
+project: reveal
+tags:
+  - testing
+  - metadata
+  - nested-structures
+related_docs:
+  - path/to/doc1.md
+  - path/to/doc2.md
+author:
+  name: Test Author
+  email: test@example.com
+category: documentation
+created: 2025-12-13
+---
+
+# Complex Example Document
+
+Content with complex front matter.
+"""
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            structure = analyzer.get_structure(extract_frontmatter=True)
+
+            self.assertIn('frontmatter', structure)
+            fm = structure['frontmatter']
+
+            self.assertIsNotNone(fm)
+            data = fm['data']
+
+            # Check complex nested fields
+            self.assertEqual(data['title'], 'Complex Example')
+            self.assertEqual(data['project'], 'reveal')
+            self.assertEqual(data['tags'], ['testing', 'metadata', 'nested-structures'])
+            self.assertEqual(data['related_docs'], ['path/to/doc1.md', 'path/to/doc2.md'])
+            self.assertEqual(data['category'], 'documentation')
+            self.assertEqual(data['created'], datetime.date(2025, 12, 13))
+            # Check nested object
+            self.assertIsInstance(data['author'], dict)
+            self.assertEqual(data['author']['name'], 'Test Author')
+            self.assertEqual(data['author']['email'], 'test@example.com')
+
+        finally:
+            self.teardown_file(path)
+
+    def test_frontmatter_no_frontmatter(self):
+        """Test handling when no front matter is present."""
+        content = """# Regular Markdown
+
+No front matter here.
+"""
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            structure = analyzer.get_structure(extract_frontmatter=True)
+
+            self.assertIn('frontmatter', structure)
+            self.assertIsNone(structure['frontmatter'])
+
+        finally:
+            self.teardown_file(path)
+
+    def test_frontmatter_malformed_yaml(self):
+        """Test graceful handling of malformed YAML."""
+        content = """---
+title: Test
+invalid yaml structure:
+  - item1
+  - item2
+  missing colon here
+tags: [unclosed bracket
+---
+
+# Content
+"""
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            structure = analyzer.get_structure(extract_frontmatter=True)
+
+            # Should gracefully return None for malformed YAML
+            self.assertIn('frontmatter', structure)
+            self.assertIsNone(structure['frontmatter'])
+
+        finally:
+            self.teardown_file(path)
+
+    def test_frontmatter_not_at_start(self):
+        """Test that front matter not at file start is ignored."""
+        content = """# Heading First
+
+---
+title: This should be ignored
+---
+
+Content.
+"""
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            structure = analyzer.get_structure(extract_frontmatter=True)
+
+            # Should not extract front matter that's not at file start
+            self.assertIn('frontmatter', structure)
+            self.assertIsNone(structure['frontmatter'])
+
+        finally:
+            self.teardown_file(path)
+
+    def test_frontmatter_missing_closing(self):
+        """Test handling of front matter with missing closing delimiter."""
+        content = """---
+title: Test Document
+author: Test Author
+
+# Heading
+
+Content without closing front matter delimiter.
+"""
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            structure = analyzer.get_structure(extract_frontmatter=True)
+
+            # Should gracefully return None when closing --- is missing
+            self.assertIn('frontmatter', structure)
+            self.assertIsNone(structure['frontmatter'])
+
+        finally:
+            self.teardown_file(path)
+
+    def test_frontmatter_complex_nested(self):
+        """Test extraction of complex nested YAML structures."""
+        content = """---
+title: Complex Document
+metadata:
+  status: active
+  priority: high
+  nested:
+    deep: value
+    list:
+      - item1
+      - item2
+authors:
+  - name: Author 1
+    email: author1@example.com
+  - name: Author 2
+    email: author2@example.com
+---
+
+# Content
+"""
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            structure = analyzer.get_structure(extract_frontmatter=True)
+
+            self.assertIn('frontmatter', structure)
+            fm = structure['frontmatter']
+
+            self.assertIsNotNone(fm)
+            data = fm['data']
+
+            # Check nested structures
+            self.assertEqual(data['title'], 'Complex Document')
+            self.assertEqual(data['metadata']['status'], 'active')
+            self.assertEqual(data['metadata']['priority'], 'high')
+            self.assertEqual(data['metadata']['nested']['deep'], 'value')
+            self.assertEqual(data['metadata']['nested']['list'], ['item1', 'item2'])
+            self.assertEqual(len(data['authors']), 2)
+            self.assertEqual(data['authors'][0]['name'], 'Author 1')
+            self.assertEqual(data['authors'][1]['email'], 'author2@example.com')
+
+        finally:
+            self.teardown_file(path)
+
+    def test_frontmatter_with_headings(self):
+        """Test that both front matter and headings can be extracted together."""
+        content = """---
+title: Test Document
+beth_topics:
+  - testing
+---
+
+# Main Title
+
+## Section 1
+
+Content.
+
+## Section 2
+
+More content.
+"""
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            structure = analyzer.get_structure(extract_frontmatter=True)
+
+            # Both frontmatter and headings should be present
+            self.assertIn('frontmatter', structure)
+            self.assertIn('headings', structure)
+
+            fm = structure['frontmatter']
+            self.assertIsNotNone(fm)
+            self.assertEqual(fm['data']['title'], 'Test Document')
+            self.assertEqual(fm['data']['beth_topics'], ['testing'])
+
+            headings = structure['headings']
+            self.assertEqual(len(headings), 3)
+            self.assertEqual(headings[0]['name'], 'Main Title')
+            self.assertEqual(headings[1]['name'], 'Section 1')
+            self.assertEqual(headings[2]['name'], 'Section 2')
+
+        finally:
+            self.teardown_file(path)
+
+    def test_frontmatter_json_output(self):
+        """Test front matter in JSON output structure."""
+        content = """---
+title: JSON Test
+tags: [test1, test2]
+---
+
+# Content
+"""
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            structure = analyzer.get_structure(extract_frontmatter=True)
+
+            # Verify JSON-compatible structure
+            fm = structure['frontmatter']
+            self.assertIsInstance(fm, dict)
+            self.assertIsInstance(fm['data'], dict)
+            self.assertIsInstance(fm['line_start'], int)
+            self.assertIsInstance(fm['line_end'], int)
+            self.assertIsInstance(fm['raw'], str)
+
+            # Verify raw YAML is preserved
+            self.assertIn('title: JSON Test', fm['raw'])
+            self.assertIn('tags: [test1, test2]', fm['raw'])
 
         finally:
             self.teardown_file(path)

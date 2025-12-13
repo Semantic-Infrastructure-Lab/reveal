@@ -19,11 +19,13 @@ Zero config. 18 languages built-in. 50+ via tree-sitter.
 
 **Using reveal CLI?** Get usage patterns and optimization techniques:
 ```bash
-reveal --agent-help          # Quick start + discovery patterns (~336 lines)
+reveal --agent-help          # Quick start + discovery patterns (~382 lines)
 reveal --agent-help-full     # Complete reference (~1215 lines)
 ```
 
 **Token efficiency:** Structure view = 50 tokens vs 7,500 for reading full file. Validated 7-150x reduction in production.
+
+**Documentation:** [User Guides](reveal/) • [Installation](INSTALL.md) • [Contributing](CONTRIBUTING.md) • [Changelog](CHANGELOG.md)
 
 ---
 
@@ -86,8 +88,6 @@ reveal src/                      # Orient: what exists?
 reveal src/app.py                # Navigate: see structure
 reveal src/app.py Database       # Focus: get implementation
 ```
-
-**Token efficiency:** Structure view = 50 tokens vs 7,500 for full file read.
 
 ### 🔍 Code Quality Checks (v0.13.0+)
 
@@ -199,7 +199,7 @@ reveal app.py --meta             # metadata only
 
 ### Supported Languages
 
-**Built-in (24):** Python, Rust, Go, JavaScript, TypeScript, GDScript, Bash, Jupyter, Markdown, JSON, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
+**Built-in (25):** Python, Rust, Go, JavaScript, TypeScript, GDScript, Bash, Jupyter, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
 
 **Via tree-sitter (50+):** C, C++, C#, Java, PHP, Swift, Kotlin, Ruby, etc.
 
@@ -212,6 +212,7 @@ reveal app.py --meta             # metadata only
 | `--outline` | Hierarchical structure view |
 | `--check` | Code quality analysis |
 | `--copy` / `-c` | Copy output to clipboard 🆕 |
+| `--frontmatter` | Extract YAML front matter (markdown) 🆕 |
 | `--stdin` | Read file paths from stdin |
 | `--depth N` | Directory tree depth |
 | `--max-entries N` | Limit directory entries (default: 200, 0=unlimited) |
@@ -258,14 +259,14 @@ class MarkdownAnalyzer(FileAnalyzer):
 
 ```
 reveal/
-├── base.py          # Core (~380 lines)
-├── main.py          # CLI (~920 lines)
-├── treesitter.py    # 50+ languages (~345 lines)
-├── analyzers/       # 18 file types (10-300 lines each)
+├── base.py          # Core analyzer framework
+├── main.py          # CLI and output formatters
+├── treesitter.py    # Universal language support (50+ langs)
+├── analyzers/       # 25 file types (Python, Rust, Markdown, etc.)
 └── adapters/        # URI support (help://, env://, ast://, python://)
 ```
 
-**Total:** ~3,400 lines. Most analyzers < 25 lines.
+**Clean architecture:** Most analyzers < 50 lines. Extensible via plugins.
 
 **Power users:** [COOL_TRICKS.md](reveal/COOL_TRICKS.md) - Hidden features and advanced workflows
 
@@ -290,7 +291,7 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 ---
 
-**Status:** v0.22.0 | **License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](reveal/COOL_TRICKS.md) | [Issues](https://github.com/scottsen/reveal/issues)
+**License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](reveal/COOL_TRICKS.md) | [Issues](https://github.com/scottsen/reveal/issues)
 
 [![Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/scottsen/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

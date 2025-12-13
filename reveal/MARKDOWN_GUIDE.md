@@ -40,6 +40,7 @@ reveal README.md --links --format json
 | Domain Filtering | `reveal doc.md --links --domain github.com` | Links to specific domain |
 | Code Block Extraction | `reveal doc.md --code` | Extract code examples |
 | Language Filtering | `reveal doc.md --code --language python` | Python code only |
+| **Front Matter Extraction** | `reveal doc.md --frontmatter` | **Extract YAML metadata** |
 | Broken Link Detection | `reveal doc.md --links` | **Find broken internal links** |
 | Progressive Disclosure | `reveal doc.md --head 5` | First 5 headings |
 
@@ -336,6 +337,173 @@ Code Blocks (5):
     Line 25: `pip install`
     Line 40: `myproject.run()`
 ```
+
+## Front Matter Extraction
+
+Extract YAML front matter metadata from markdown files. Front matter is metadata at the beginning of a file, delimited by `---`:
+
+```markdown
+---
+title: Document Title
+author: Author Name
+date: 2025-12-13
+beth_topics:
+  - topic1
+  - topic2
+tags: [tag1, tag2]
+---
+
+# Document Content
+```
+
+### Basic Front Matter Extraction
+
+```bash
+reveal README.md --frontmatter
+```
+
+**Output**:
+```
+Frontmatter (5):
+  Lines 1-8:
+    title: Document Title
+    author: Author Name
+    date: 2025-12-13
+    beth_topics:
+      - topic1
+      - topic2
+    tags:
+      - tag1
+      - tag2
+```
+
+### JSON Output
+
+```bash
+reveal README.md --frontmatter --format=json
+```
+
+**Output**:
+```json
+{
+  "structure": {
+    "frontmatter": {
+      "data": {
+        "title": "Document Title",
+        "author": "Author Name",
+        "date": "2025-12-13",
+        "beth_topics": ["topic1", "topic2"],
+        "tags": ["tag1", "tag2"]
+      },
+      "line_start": 1,
+      "line_end": 8,
+      "raw": "title: Document Title\nauthor: Author Name\n..."
+    }
+  }
+}
+```
+
+### Advanced Examples
+
+#### Aggregate Metadata Across Documents
+
+Extract and analyze tags from all documentation:
+
+```bash
+# Count tag frequency across all docs
+find docs/ -name "*.md" | while read f; do
+  reveal "$f" --frontmatter --format=json 2>/dev/null | \
+    jq -r '.structure.frontmatter.data.tags[]?' 2>/dev/null
+done | sort | uniq -c | sort -rn
+
+# Find all unique authors
+find docs/ -name "*.md" | while read f; do
+  reveal "$f" --frontmatter --format=json 2>/dev/null | \
+    jq -r '.structure.frontmatter.data.author?' 2>/dev/null
+done | sort -u
+
+# Validate required fields are present
+reveal README.md --frontmatter --format=json | \
+  jq '.structure.frontmatter.data | keys'
+```
+
+#### Find Documents by Metadata
+
+Search for documents matching specific criteria:
+
+```bash
+# Find all tutorial documents
+find docs/ -name "*.md" | while read f; do
+  if reveal "$f" --frontmatter --format=json | \
+     jq -e '.structure.frontmatter.data.tags[]? | select(. == "tutorial")' >/dev/null 2>&1; then
+    echo "$f"
+  fi
+done
+
+# Find documents by category
+find docs/ -name "*.md" | while read f; do
+  if reveal "$f" --frontmatter --format=json | \
+     jq -e '.structure.frontmatter.data.category == "api"' >/dev/null 2>&1; then
+    echo "$f"
+  fi
+done
+```
+
+#### Real-World Integration Example
+
+The Semantic Infrastructure Lab uses reveal for metadata extraction in their Beth knowledge graph system:
+
+```bash
+# Extract semantic topics for indexing
+reveal sessions/*/README*.md --frontmatter --format=json | \
+  jq -r '.structure.frontmatter.data.beth_topics[]?' | \
+  sort | uniq -c | sort -rn
+```
+
+[Learn more about semantic search integration with reveal](https://semanticinfrastructurelab.org/docs/canonical/REVEAL_BETH_PROGRESSIVE_KNOWLEDGE_SYSTEM)
+
+### Combined with Other Features
+
+Front matter extraction combines with headings by default:
+
+```bash
+reveal README.md --frontmatter
+# Shows both front matter AND document structure
+```
+
+Combine with other features:
+
+```bash
+# Front matter + links
+reveal README.md --frontmatter --links --format=json
+
+# Front matter + code blocks
+reveal README.md --frontmatter --code
+```
+
+### Error Handling
+
+Reveal handles malformed front matter gracefully:
+
+- **Missing closing delimiter**: Returns `null`
+- **Invalid YAML syntax**: Returns `null` (does not crash)
+- **Not at file start**: Front matter must begin at line 1
+- **Non-dict content**: Only dict-style YAML is recognized
+
+```bash
+# File without front matter
+reveal no-frontmatter.md --frontmatter
+# Output: Frontmatter (0):
+#           (No front matter found)
+```
+
+### Use Cases
+
+1. **Metadata Validation**: Audit front matter consistency across documentation
+2. **Topic Analysis**: Extract and analyze `beth_topics` distribution
+3. **Bibliography Generation**: Collect author/date metadata for citations
+4. **Documentation Indexes**: Build metadata-driven navigation
+5. **Quality Checks**: Ensure required fields present in all docs
 
 ## Progressive Disclosure
 

@@ -1,6 +1,7 @@
 """Markdown file analyzer with rich entity extraction using tree-sitter."""
 
 import re
+import yaml
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from ..base import register
@@ -25,6 +26,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                      extract_code: bool = False,
                      language: Optional[str] = None,
                      inline_code: bool = False,
+                     extract_frontmatter: bool = False,
                      **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract markdown structure.
 
@@ -38,24 +40,31 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             extract_code: Include code block extraction
             language: Filter code blocks by language
             inline_code: Include inline code snippets
+            extract_frontmatter: Include YAML front matter extraction
             **kwargs: Additional parameters (unused)
 
         Returns:
-            Dict with headings and optionally links/code
+            Dict with headings and optionally links/code/frontmatter
 
         Note: Slicing applies to each category independently
         (e.g., --head 5 shows first 5 headings AND first 5 links)
         """
         result = {}
 
+        # Extract front matter if requested (always first, not affected by slicing)
+        if extract_frontmatter:
+            result['frontmatter'] = self._extract_frontmatter()
+
         # Determine if specific features requested
+        # Note: frontmatter is metadata, not structure, so it doesn't exclude headings
         specific_features_requested = extract_links or extract_code
 
         # Only include headings if no specific features requested (default case)
         # OR if outline mode is active (Issue #3 dependency)
+        # OR if only frontmatter was requested (frontmatter + headings is the default combo)
         outline_mode = kwargs.get('outline', False)
 
-        if not specific_features_requested or outline_mode:
+        if not specific_features_requested or outline_mode or (extract_frontmatter and not extract_links and not extract_code):
             result['headings'] = self._extract_headings()
 
         # Extract links if requested
@@ -69,12 +78,13 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 include_inline=inline_code
             )
 
-        # Apply semantic slicing to each category
+        # Apply semantic slicing to each category (but not frontmatter - it's unique)
         if head or tail or range:
             for category in result:
-                result[category] = self._apply_semantic_slice(
-                    result[category], head, tail, range
-                )
+                if category != 'frontmatter':
+                    result[category] = self._apply_semantic_slice(
+                        result[category], head, tail, range
+                    )
 
         return result
 
@@ -331,6 +341,70 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 })
 
         return inline_blocks
+
+    def _extract_frontmatter(self) -> Optional[Dict[str, Any]]:
+        """Extract YAML front matter from markdown file.
+
+        Front matter is YAML metadata at the start of the file, delimited by ---:
+
+        ---
+        title: Document Title
+        beth_topics:
+          - topic1
+          - topic2
+        tags: [tag1, tag2]
+        ---
+
+        Returns:
+            Dict with front matter metadata, or None if not present/malformed
+        """
+        content = '\n'.join(self.lines)
+
+        # Front matter must start at beginning of file
+        if not content.startswith('---'):
+            return None
+
+        # Find closing delimiter (must be at start of line)
+        # Look for \n---\n pattern (closing delimiter on its own line)
+        end_marker = content.find('\n---\n', 3)
+        if end_marker == -1:
+            # Also try end of file case
+            end_marker = content.find('\n---', 3)
+            if end_marker == -1 or end_marker + 4 < len(content):
+                # Not at end of file, invalid front matter
+                return None
+
+        try:
+            # Extract YAML content (skip opening ---)
+            frontmatter_text = content[4:end_marker]
+
+            # Parse YAML
+            metadata = yaml.safe_load(frontmatter_text)
+
+            if not isinstance(metadata, dict):
+                # Invalid front matter (not a dict)
+                return None
+
+            # Calculate line range
+            line_start = 1
+            line_end = content[:end_marker].count('\n') + 2  # +2 for closing ---
+
+            # Add metadata about the front matter block itself
+            result = {
+                'data': metadata,
+                'line_start': line_start,
+                'line_end': line_end,
+                'raw': frontmatter_text.strip(),
+            }
+
+            return result
+
+        except yaml.YAMLError:
+            # Malformed YAML - return None (graceful degradation)
+            return None
+        except Exception:
+            # Any other error - graceful degradation
+            return None
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a markdown section.
