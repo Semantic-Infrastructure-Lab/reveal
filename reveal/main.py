@@ -305,7 +305,7 @@ def handle_uri(uri: str, element: Optional[str], args) -> None:
 
     # Look up adapter from registry (pluggable!)
     from .adapters.base import get_adapter_class, list_supported_schemes
-    from .adapters import env, ast, help, python, json_adapter  # Import to trigger registration
+    from .adapters import env, ast, help, python, json_adapter, reveal  # Import to trigger registration
 
     adapter_class = get_adapter_class(scheme)
     if not adapter_class:
@@ -411,9 +411,74 @@ def _handle_adapter(adapter_class: type, scheme: str, resource: str,
             path = resource
             query = None
 
-        adapter = adapter_class(path, query)
+        try:
+            adapter = adapter_class(path, query)
+            result = adapter.get_structure()
+            render_json_result(result, args.format)
+        except ValueError as e:
+            # User error (e.g., wrong file type) - show friendly message without traceback
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+
+    elif scheme == 'reveal':
+        # reveal:// - Self-inspection
+        adapter = adapter_class(resource if resource else None)
         result = adapter.get_structure()
-        render_json_result(result, args.format)
+        render_reveal_structure(result, args.format)
+
+
+def render_reveal_structure(data: Dict[str, Any], output_format: str) -> None:
+    """Render reveal:// adapter result.
+
+    Args:
+        data: Result from reveal adapter
+        output_format: Output format (text, json)
+    """
+    import json as json_module
+
+    if output_format == 'json':
+        print(json_module.dumps(data, indent=2))
+        return
+
+    # Text format - show structure nicely
+    print("Reveal Internal Structure\n")
+
+    # Analyzers
+    analyzers = data.get('analyzers', [])
+    print(f"Analyzers ({len(analyzers)}):")
+    for analyzer in analyzers:
+        print(f"  • {analyzer['name']:<20} ({analyzer['path']})")
+
+    # Adapters
+    adapters = data.get('adapters', [])
+    print(f"\nAdapters ({len(adapters)}):")
+    for adapter in adapters:
+        help_marker = '✓' if adapter.get('has_help') else ' '
+        print(f"  {help_marker} {adapter['scheme'] + '://':<15} ({adapter['class']})")
+
+    # Rules
+    rules = data.get('rules', [])
+    print(f"\nRules ({len(rules)}):")
+    # Group by category
+    by_category = {}
+    for rule in rules:
+        category = rule.get('category', 'unknown')
+        if category not in by_category:
+            by_category[category] = []
+        by_category[category].append(rule)
+
+    for category in sorted(by_category.keys()):
+        rules_in_cat = by_category[category]
+        codes = ', '.join(r['code'] for r in rules_in_cat)
+        print(f"  • {category:<15} ({len(rules_in_cat):2}): {codes}")
+
+    # Metadata
+    metadata = data.get('metadata', {})
+    print(f"\nMetadata:")
+    print(f"  Root: {metadata.get('root')}")
+    print(f"  Total: {metadata.get('analyzers_count')} analyzers, "
+          f"{metadata.get('adapters_count')} adapters, "
+          f"{metadata.get('rules_count')} rules")
 
 
 def render_json_result(data: Dict[str, Any], output_format: str) -> None:

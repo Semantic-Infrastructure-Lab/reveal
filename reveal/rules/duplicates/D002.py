@@ -36,6 +36,9 @@ class D002(BaseRule):
     # Similarity threshold (0.0 to 1.0)
     SIMILARITY_THRESHOLD = 0.75  # Report if >75% similar
 
+    # Minimum function size to check (avoid false positives from tiny stubs)
+    MIN_FUNCTION_SIZE = 10  # Lines (not counting signature)
+
     # Maximum pairs to report (prevent spam)
     MAX_PAIRS = 10
 
@@ -65,7 +68,14 @@ class D002(BaseRule):
         func_vectors = []
         for func in functions:
             func_body = self._extract_function_body(func, content)
+
+            # Skip tiny functions (false positives from stubs)
             if not func_body or len(func_body.strip()) < 20:
+                continue
+
+            # Skip functions smaller than minimum size
+            line_count = len(func_body.splitlines())
+            if line_count < self.MIN_FUNCTION_SIZE:
                 continue
 
             vector = self._vectorize(func_body)

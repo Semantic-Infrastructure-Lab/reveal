@@ -217,8 +217,33 @@ class JsonAdapter(ResourceAdapter):
         if not self.file_path.exists():
             raise FileNotFoundError(f"JSON file not found: {self.file_path}")
 
-        with open(self.file_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            # Detect file type and provide helpful error message
+            file_ext = self.file_path.suffix.lower()
+            file_type_hints = {
+                '.toml': ('TOML', 'a TOML configuration file'),
+                '.yaml': ('YAML', 'a YAML file'),
+                '.yml': ('YAML', 'a YAML file'),
+                '.xml': ('XML', 'an XML file'),
+                '.ini': ('INI', 'an INI configuration file'),
+                '.cfg': ('Config', 'a configuration file'),
+            }
+
+            if file_ext in file_type_hints:
+                file_type, description = file_type_hints[file_ext]
+                raise ValueError(
+                    f"Error: {self.file_path.name} is {description}, not JSON.\n"
+                    f"Suggestion: Use 'reveal {self.file_path}' instead of 'reveal json://{self.file_path}'"
+                ) from e
+            else:
+                raise ValueError(
+                    f"Error: {self.file_path.name} is not valid JSON.\n"
+                    f"Parse error at line {e.lineno}, column {e.colno}: {e.msg}\n"
+                    f"Suggestion: Check file format or use 'reveal {self.file_path}' for structure analysis"
+                ) from e
 
     def _navigate_to_path(self, data: Any = None) -> Any:
         """Navigate to the specified JSON path."""
