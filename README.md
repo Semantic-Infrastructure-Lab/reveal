@@ -98,7 +98,7 @@ reveal --rules                   # List all rules
 reveal --explain B001            # Explain specific rule
 ```
 
-**Built-in rules:** Bare except (B001), :latest tags (S701), complexity (C901), line length (E501), HTTP URLs (U501), nginx config (N001-N003) 🆕
+**18 built-in rules** across 7 categories: bugs (B), complexity (C), duplicates (D), style (E), nginx (N), refactoring (R), security (S), URLs (U), validation (V). Examples: bare except (B001), :latest tags (S701), complexity (C901), line length (E501), duplicates (D001-D002), nginx config (N001-N003).
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
 
 ### 🌲 Outline Mode (v0.9.0+)
@@ -174,10 +174,13 @@ reveal help://reveal                        # Learn about reveal:// adapter
 **Extensibility Example:**
 The `reveal://` adapter demonstrates that reveal can inspect **any resource**, not just files. Use it as a reference for creating custom adapters for your own projects (APIs, databases, containers, etc.). See `reveal help://reveal` for the complete guide.
 
-**Separation of Concerns:**
-- `env://` - Raw environment variables (cross-language)
-- `ast://` - Static source code analysis (cross-language)
-- `python://` - Python runtime inspection (Python-specific)
+**6 Built-in Adapters:**
+- `help://` - Self-documenting help system (discover all adapters)
+- `env://` - Environment variables (cross-language)
+- `ast://` - Static code analysis & queries (cross-language)
+- `json://` - JSON navigation with path access & schema (v0.20.0+)
+- `python://` - Python runtime inspection & diagnostics (v0.17.0+)
+- `reveal://` - Self-inspection & validation (v0.22.0+)
 
 **Self-documenting:** Every adapter exposes help via `reveal help://<scheme>`
 
@@ -287,7 +290,7 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 ---
 
-**Status:** v0.21.0 | **License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](reveal/COOL_TRICKS.md) | [Issues](https://github.com/scottsen/reveal/issues)
+**Status:** v0.22.0 | **License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](reveal/COOL_TRICKS.md) | [Issues](https://github.com/scottsen/reveal/issues)
 
 [![Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/scottsen/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
