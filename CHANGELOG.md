@@ -7,6 +7,147 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔍 NEW: reveal:// Meta-Adapter - Self-Inspection System
+
+**Reveal can now inspect itself!** The new `reveal://` adapter demonstrates that reveal can explore **any resource**, not just files.
+
+```bash
+reveal reveal://                    # Inspect reveal's structure
+reveal reveal:// --check            # Self-validation (V001-V007 rules)
+reveal help://reveal                # Learn about reveal:// adapter
+```
+
+**Why this matters:**
+- **Proves extensibility**: Reference implementation for custom adapters (APIs, databases, containers)
+- **Marketing value**: "Reveal validates itself using its own tools" (dogfooding in action)
+- **Quality forcing function**: Self-validation catches real issues before users see them
+
+**New files:**
+- `reveal/adapters/reveal.py` (291 lines) - Meta-adapter implementation
+- `reveal/REVEAL_ADAPTER_GUIDE.md` (521 lines) - Complete guide with examples (project://, api://, docker://)
+- `reveal/MARKDOWN_GUIDE.md` (654 lines) - Comprehensive markdown analysis guide
+- `docs/REVEAL_SELF_AUDIT_2025-12-11.md` (333 lines) - Full self-audit report
+
+**Total**: 20 files modified/created, 3,719 lines added
+
+### 📋 NEW: V-Series Validation Rules (V001-V007)
+
+**7 new validation rules** for reveal's internal quality assurance:
+
+| Rule | Severity | Description |
+|------|----------|-------------|
+| **V001** | MEDIUM | Help documentation completeness for all adapters |
+| **V002** | HIGH | Analyzer registration validation (prevents silent failures) |
+| **V003** | MEDIUM | Feature matrix coverage (outline, element extraction) |
+| **V004** | LOW | Test coverage gaps for analyzers |
+| **V005** | HIGH | Static help file sync with STATIC_HELP registry |
+| **V006** | MEDIUM | Output format support (text, JSON, grep, typed) |
+| **V007** | HIGH | Version consistency (pyproject.toml vs CHANGELOG/docs) |
+
+**Impact**: V001-V007 all passing (0 issues) after dogfooding fixes
+
+**New files:**
+- `reveal/rules/validation/V001.py` through `V007.py` (~1,000 lines total)
+- Integrated with `reveal reveal:// --check` command
+
+### 🔍 NEW: Duplicate Detection Rules (D001-D002)
+
+**Detect code duplication** with exact and structural similarity matching:
+
+```bash
+reveal src/ --check --select D       # Find duplicates
+reveal app.py --check --select D001  # Exact duplicates only
+reveal app.py --check --select D002  # Structural similarity
+```
+
+**D001 - Exact Duplicate Detection:**
+- Identifies identical function/class implementations
+- Ignores whitespace and comments
+- Reports all duplicate groups with locations
+
+**D002 - Structural Similarity Detection:**
+- AST-based similarity matching (adjustable threshold)
+- Mathematical similarity algorithms
+- Detects refactoring opportunities
+
+**New files:**
+- `reveal/rules/duplicates/D001.py` (184 lines)
+- `reveal/rules/duplicates/D002.py` (217 lines)
+- `reveal/rules/duplicates/base_detector.py` (414 lines) - Universal framework
+- `scripts/analyze_duplicate_detection.py` (307 lines) - Statistical analysis tool
+
+**Documentation** (105KB across 4 files):
+- `internal-docs/planning/DUPLICATE_DETECTION_DESIGN.md` (606 lines) - Architecture
+- `internal-docs/planning/DUPLICATE_DETECTION_GUIDE.md` (542 lines) - User guide
+- `internal-docs/planning/DUPLICATE_DETECTION_OPTIMIZATION.md` (510 lines) - Mathematical framework
+- `internal-docs/planning/DUPLICATE_DETECTION_OVERVIEW.md` (437 lines) - Visual overview
+
+### 🌲 IMPROVED: TOML Outline Support
+
+**TOML files now support hierarchical outline mode!**
+
+```bash
+reveal config.toml --outline
+```
+
+**Features:**
+- Level-based hierarchy from dot-notation (`database.connection.pool`)
+- Tree structure display (like markdown headings)
+- Proper nesting for complex configurations
+
+**Modified files:**
+- `reveal/analyzers/toml.py` - Added `outline` parameter to `get_structure()`
+- `reveal/main.py` - Added `build_heading_hierarchy()` for TOML sections
+
+### 🔧 IMPROVED: Main Module Refactoring
+
+**Reduced `reveal/main.py` complexity** through systematic extraction:
+
+**Phase 1:** Extract `_main_impl` into smaller functions (246→40 lines)
+- `_create_argument_parser()` - Argument parsing
+- `_handle_list_supported()`, `_handle_agent_help()` - Special mode handlers
+- `_handle_stdin_mode()` - Stdin processing
+- `_handle_file_or_directory()` - File/directory handling
+- **Complexity**: Depth 5 → Depth 2
+
+**Phase 2:** Extract rendering functions
+- `render_help()` - Help text rendering (212 lines → extracted)
+- `render_python_element()` - Python element rendering (173 lines → extracted)
+
+**Phase 4-5:** Extract Python adapter helpers
+- `_get_module_analysis()` - Module conflict detection
+- `_run_doctor()` - Diagnostic execution
+- Added comprehensive test coverage for extracted functions
+
+**Impact**: Improved testability, readability, and maintainability
+
+**Modified files:**
+- `reveal/main.py` (460 lines changed across 3 commits)
+
+### 📚 NEW: Documentation Infrastructure
+
+**Comprehensive planning and structure documentation:**
+
+**Core Guides:**
+- `internal-docs/DOCUMENTATION_STRUCTURE_GUIDE.md` (569 lines) - Two-tier doc organization
+- `internal-docs/planning/PENDING_WORK.md` (389 lines) - Master index of pending work
+- `internal-docs/planning/README.md` (135 lines) - Active/shipped/archived plans index
+
+**Planning Documents:**
+- `internal-docs/planning/PYTHON_ADAPTER_ROADMAP.md` (726 lines)
+- `internal-docs/planning/PYTHON_ADAPTER_SPEC.md` (845 lines)
+- `internal-docs/planning/NGINX_ADAPTER_ENHANCEMENTS.md` (424 lines)
+- `internal-docs/planning/CODE_QUALITY_ARCHITECTURE.md` (439 lines)
+- `internal-docs/planning/CODE_QUALITY_REFACTORING.md` (381 lines)
+
+**Engineering Review:**
+- `docs/REVEAL_ENGINEERING_REVIEW_2025-12-12.md` (425 lines) - Comprehensive audit
+  - Quality score: 22/100 (intentional technical debt)
+  - Architecture: 9/10, Documentation: 10/10, SIL Alignment: 10/10
+  - Verdict: Ship-ready for SIL showcase
+
+**Total**: 13 documentation files added (105.6KB)
+
 ### ✅ Test Coverage Complete (V004 → Zero Issues)
 
 **Added comprehensive test suites for 4 previously untested analyzers:**
@@ -19,19 +160,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Total**: 27 new test cases, 363 tests passing (100% pass rate)
 
 **Impact**: V004 validation issue count: 4 → 0 (complete test coverage for all TreeSitter analyzers)
-
-### 🔍 NEW: V007 Version Consistency Check
-
-**Pre-release validation now catches version mismatches across files:**
-
-- Validates `pyproject.toml` (source of truth) against:
-  - `CHANGELOG.md` (must have section for current version)
-  - `reveal/AGENT_HELP.md` (version reference)
-  - `reveal/AGENT_HELP_FULL.md` (version reference)
-
-**Severity**: HIGH (blocker for releases)
-
-**Why this matters**: Prevents confusion from version inconsistencies, caught by dogfooding on reveal itself
 
 ### 🚀 CI Enhancement: Self-Validation in GitHub Actions
 
@@ -48,13 +176,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Updated `AGENT_HELP.md` version reference: 0.19.0 → 0.22.0
 - Updated `AGENT_HELP_FULL.md` version reference: 0.17.0 → 0.22.0
+- Fixed `.gitignore` patterns to allow `internal-docs/` while excluding session artifacts
+- Fixed TOML analyzer to support outline mode
+- Fixed markdown analyzer bugs (documented in `docs/ROOT_CAUSE_ANALYSIS_MARKDOWN_BUGS.md`)
 
 ### 📊 Quality Metrics
 
 - **Test suite**: 363 tests passing (+27 new tests)
 - **Coverage**: 63% overall
+- **Quality rules**: 18 total (10 new: V001-V007, D001-D002)
+- **URI adapters**: 6 (1 new: reveal://)
 - **Validation issues**: 0 (V001-V007 all passing)
 - **CI checks**: Self-validation now runs on every push
+- **Code complexity**: main.py depth 5 → 2
+- **Documentation**: 105.6KB planning docs added
+- **Lines changed**: 11,575+ across 8 commits
 
 ## [0.22.0] - 2025-12-11
 
