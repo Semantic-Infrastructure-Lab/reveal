@@ -461,6 +461,127 @@ class PythonAdapter(ResourceAdapter):
         # Old style: module.pyc -> module.py
         return pyc_file.with_suffix(".py")
 
+    def _find_module_import_location(self, module_name: str) -> Dict[str, Any]:
+        """Find the import location and metadata for a module."""
+        import importlib.util
+
+        try:
+            spec = importlib.util.find_spec(module_name)
+            if spec and spec.origin:
+                return {
+                    "import_location": spec.origin,
+                    "import_path": (
+                        str(Path(spec.origin).parent) if spec.origin != "built-in" else "built-in"
+                    ),
+                    "is_package": spec.submodule_search_locations is not None,
+                    "status": "importable",
+                }
+            else:
+                return {"import_location": None, "status": "not_found"}
+        except (ImportError, ModuleNotFoundError, ValueError):
+            return {"import_location": None, "status": "not_found"}
+        except Exception as e:
+            return {"import_location": None, "status": "error", "error": str(e)}
+
+    def _get_pip_package_metadata(self, module_name: str) -> Optional[Dict[str, Any]]:
+        """Get pip package metadata including editable install detection."""
+        try:
+            import importlib.metadata
+
+            dist = importlib.metadata.distribution(module_name)
+            pip_package = {
+                "name": dist.name,
+                "version": dist.version,
+                "location": str(dist._path.parent) if hasattr(dist, "_path") else "unknown",
+                "install_type": "normal",
+            }
+
+            # Check for editable install
+            try:
+                direct_url_path = dist._path.parent / "direct_url.json"
+                if direct_url_path.exists():
+                    import json
+
+                    with open(direct_url_path) as f:
+                        direct_url = json.load(f)
+                        editable = direct_url.get("dir_info", {}).get("editable", False)
+                        pip_package["editable"] = editable
+                        pip_package["install_type"] = "editable" if editable else "normal"
+            except Exception:
+                pass  # install_type already set to "normal"
+
+            return pip_package
+        except Exception:
+            return None
+
+    def _detect_pip_import_conflicts(
+        self, pip_package: Optional[Dict[str, Any]], import_path: Optional[str]
+    ) -> List[Dict[str, Any]]:
+        """Detect conflicts between pip package location and import location."""
+        if not pip_package or not import_path:
+            return []
+
+        pip_loc = Path(pip_package["location"])
+        import_loc = Path(import_path)
+
+        if not import_loc.is_relative_to(pip_loc):
+            return [
+                {
+                    "type": "location_mismatch",
+                    "severity": "warning",
+                    "message": "Import location differs from pip package location",
+                    "pip_location": str(pip_loc),
+                    "import_location": str(import_loc),
+                }
+            ]
+        return []
+
+    def _detect_cwd_shadowing(
+        self, import_path: Optional[str]
+    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Detect if current working directory is shadowing the module."""
+        conflicts = []
+        recommendations = []
+
+        if not import_path:
+            return conflicts, recommendations
+
+        cwd = Path.cwd()
+        if cwd in Path(import_path).parents or str(cwd) == import_path:
+            conflicts.append(
+                {
+                    "type": "cwd_shadowing",
+                    "severity": "warning",
+                    "message": "Current working directory is shadowing installed package",
+                    "cwd": str(cwd),
+                    "import_location": import_path,
+                }
+            )
+            recommendations.append(
+                {
+                    "action": "change_directory",
+                    "message": "Run from a different directory to use the installed package",
+                    "command": "cd /tmp && python ...",
+                }
+            )
+
+        return conflicts, recommendations
+
+    def _find_module_syspath_index(self, import_path: Optional[str]) -> Dict[str, Any]:
+        """Find the sys.path index where the module was found."""
+        if not import_path:
+            return {}
+
+        cwd = Path.cwd()
+        for i, path in enumerate(sys.path):
+            if import_path.startswith(path if path else str(cwd)):
+                return {
+                    "syspath_index": i,
+                    "syspath_entry": path if path else f"(CWD: {cwd})",
+                }
+
+        return {}
+
     def _get_module_analysis(self, module_name: str, **kwargs) -> Dict[str, Any]:
         """Analyze module import location and detect conflicts.
 
@@ -470,8 +591,6 @@ class PythonAdapter(ResourceAdapter):
         Returns:
             Dict with module location, pip metadata, and conflict detection
         """
-        import importlib.util
-
         result = {
             "module": module_name,
             "status": "unknown",
@@ -479,104 +598,27 @@ class PythonAdapter(ResourceAdapter):
             "recommendations": [],
         }
 
-        # Try to find the module's import location
-        try:
-            spec = importlib.util.find_spec(module_name)
-            if spec and spec.origin:
-                result["import_location"] = spec.origin
-                result["import_path"] = (
-                    str(Path(spec.origin).parent) if spec.origin != "built-in" else "built-in"
-                )
-                result["is_package"] = spec.submodule_search_locations is not None
-                result["status"] = "importable"
-            else:
-                result["import_location"] = None
-                result["status"] = "not_found"
-        except (ImportError, ModuleNotFoundError, ValueError):
-            result["import_location"] = None
-            result["status"] = "not_found"
-        except Exception as e:
-            result["import_location"] = None
-            result["status"] = "error"
-            result["error"] = str(e)
+        # Find module import location
+        import_info = self._find_module_import_location(module_name)
+        result.update(import_info)
 
-        # Try to get pip package metadata
-        try:
-            import importlib.metadata
+        # Get pip package metadata
+        result["pip_package"] = self._get_pip_package_metadata(module_name)
 
-            dist = importlib.metadata.distribution(module_name)
-            result["pip_package"] = {
-                "name": dist.name,
-                "version": dist.version,
-                "location": str(dist._path.parent) if hasattr(dist, "_path") else "unknown",
-            }
+        # Detect conflicts
+        pip_conflicts = self._detect_pip_import_conflicts(
+            result["pip_package"], result.get("import_path")
+        )
+        result["conflicts"].extend(pip_conflicts)
 
-            # Check for editable install (default to normal)
-            result["pip_package"]["install_type"] = "normal"
-            try:
-                direct_url_path = dist._path.parent / "direct_url.json"
-                if direct_url_path.exists():
-                    import json
+        # Check CWD shadowing
+        cwd_conflicts, cwd_recommendations = self._detect_cwd_shadowing(result.get("import_path"))
+        result["conflicts"].extend(cwd_conflicts)
+        result["recommendations"].extend(cwd_recommendations)
 
-                    with open(direct_url_path) as f:
-                        direct_url = json.load(f)
-                        result["pip_package"]["editable"] = direct_url.get("dir_info", {}).get(
-                            "editable", False
-                        )
-                        result["pip_package"]["install_type"] = (
-                            "editable" if result["pip_package"]["editable"] else "normal"
-                        )
-            except Exception:
-                pass  # install_type already set to "normal" above
-
-        except Exception:
-            result["pip_package"] = None
-
-        # Detect conflicts between pip and import locations
-        if result["pip_package"] and result["import_location"]:
-            pip_loc = Path(result["pip_package"]["location"])
-            import_loc = Path(result["import_path"])
-
-            if not import_loc.is_relative_to(pip_loc):
-                result["conflicts"].append(
-                    {
-                        "type": "location_mismatch",
-                        "severity": "warning",
-                        "message": f"Import location differs from pip package location",
-                        "pip_location": str(pip_loc),
-                        "import_location": str(import_loc),
-                    }
-                )
-
-        # Check if CWD is shadowing the module
-        cwd = Path.cwd()
-        if result.get("import_path") and (
-            cwd in Path(result["import_path"]).parents or str(cwd) == result["import_path"]
-        ):
-            result["conflicts"].append(
-                {
-                    "type": "cwd_shadowing",
-                    "severity": "warning",
-                    "message": f"Current working directory is shadowing installed package",
-                    "cwd": str(cwd),
-                    "import_location": result["import_path"],
-                }
-            )
-            result["recommendations"].append(
-                {
-                    "action": "change_directory",
-                    "message": "Run from a different directory to use the installed package",
-                    "command": "cd /tmp && python ...",
-                }
-            )
-
-        # Check sys.path for the module
-        if result.get("import_path"):
-            for i, path in enumerate(sys.path):
-                if result["import_path"].startswith(path if path else str(cwd)):
-                    result["syspath_index"] = i
-                    result["syspath_entry"] = path if path else f"(CWD: {cwd})"
-                    break
+        # Find sys.path index
+        syspath_info = self._find_module_syspath_index(result.get("import_path"))
+        result.update(syspath_info)
 
         return result
 
@@ -649,18 +691,11 @@ class PythonAdapter(ResourceAdapter):
             },
         }
 
-    def _run_doctor(self, **kwargs) -> Dict[str, Any]:
-        """Run automated diagnostics for common Python environment issues.
-
-        Returns:
-            Dict with detected issues, warnings, and recommendations
-        """
-        issues = []
+    def _doctor_check_venv(self) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Check virtual environment status."""
         warnings = []
-        info = []
         recommendations = []
 
-        # Check 1: Virtual environment
         venv = self._detect_venv()
         if not venv["active"]:
             warnings.append(
@@ -682,10 +717,15 @@ class PythonAdapter(ResourceAdapter):
                 }
             )
 
-        # Check 2: CWD in sys.path[0]
+        return warnings, recommendations
+
+    def _doctor_check_cwd_shadowing(self) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Check if CWD is shadowing installed packages."""
+        warnings = []
+        recommendations = []
+
         cwd = Path.cwd()
         if not sys.path[0] or sys.path[0] == ".":
-            # Check if CWD contains Python modules that might shadow
             py_files = list(cwd.glob("*.py"))
             if py_files:
                 warnings.append(
@@ -704,7 +744,14 @@ class PythonAdapter(ResourceAdapter):
                     }
                 )
 
-        # Check 3: Stale .pyc files
+        return warnings, recommendations
+
+    def _doctor_check_stale_bytecode(self) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Check for stale .pyc files."""
+        issues = []
+        recommendations = []
+
+        cwd = Path.cwd()
         bytecode_check = self._check_bytecode(str(cwd))
         if bytecode_check.get("status") == "issues_found":
             stale = [i for i in bytecode_check["issues"] if i["type"] == "stale_bytecode"]
@@ -728,7 +775,12 @@ class PythonAdapter(ResourceAdapter):
                     }
                 )
 
-        # Check 4: Python version
+        return issues, recommendations
+
+    def _doctor_check_python_version(self) -> List[Dict[str, Any]]:
+        """Check if Python version is outdated."""
+        warnings = []
+
         version = sys.version_info
         if version.major < 3 or (version.major == 3 and version.minor < 8):
             warnings.append(
@@ -740,7 +792,12 @@ class PythonAdapter(ResourceAdapter):
                 }
             )
 
-        # Check 5: Editable installs
+        return warnings
+
+    def _doctor_check_editable_installs(self) -> List[Dict[str, Any]]:
+        """Check for editable package installations."""
+        info = []
+
         try:
             import pkg_resources
 
@@ -763,7 +820,16 @@ class PythonAdapter(ResourceAdapter):
         except Exception:
             pass
 
-        # Check 6: Duplicate/conflicting editable .pth files
+        return info
+
+    def _doctor_check_editable_conflicts(
+        self,
+    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Check for duplicate/conflicting editable .pth files."""
+        issues = []
+        warnings = []
+        recommendations = []
+
         try:
             import site
             from collections import defaultdict
@@ -771,15 +837,14 @@ class PythonAdapter(ResourceAdapter):
             site_packages_dirs = site.getsitepackages() + [site.getusersitepackages()]
             pth_by_package = defaultdict(list)
 
+            # Find all editable .pth files
             for sp_dir in site_packages_dirs:
                 sp_path = Path(sp_dir)
                 if not sp_path.exists():
                     continue
 
-                # Find all editable .pth files
                 for pth_file in sp_path.glob("__editable__.*.pth"):
-                    # Parse package name from __editable__.<pkg>-<version>.pth
-                    name = pth_file.stem  # __editable__.<pkg>-<version>
+                    name = pth_file.stem
                     parts = name.replace("__editable__.", "").rsplit("-", 1)
                     if len(parts) == 2:
                         pkg_name, version = parts
@@ -818,13 +883,9 @@ class PythonAdapter(ResourceAdapter):
 
                 for pth_file in sp_path.glob("__editable__.*.pth"):
                     name = pth_file.stem.replace("__editable__.", "").rsplit("-", 1)[0]
-                    # Look for non-editable dist-info for same package
                     dist_infos = list(sp_path.glob(f"{name}-*.dist-info"))
-                    # Filter out the editable's own dist-info
                     non_editable = [
-                        d
-                        for d in dist_infos
-                        if not (d / "direct_url.json").exists()
+                        d for d in dist_infos if not (d / "direct_url.json").exists()
                     ]
                     if non_editable:
                         warnings.append(
@@ -839,7 +900,12 @@ class PythonAdapter(ResourceAdapter):
         except Exception:
             pass
 
-        # Overall health score
+        return issues, warnings, recommendations
+
+    def _calculate_doctor_health_score(
+        self, issues: List[Dict[str, Any]], warnings: List[Dict[str, Any]]
+    ) -> tuple[int, str]:
+        """Calculate health score and status from issues and warnings."""
         health_score = 100
         health_score -= len(issues) * 20
         health_score -= len(warnings) * 10
@@ -852,6 +918,43 @@ class PythonAdapter(ResourceAdapter):
             status = "warning"
         elif health_score < 90:
             status = "caution"
+
+        return health_score, status
+
+    def _run_doctor(self, **kwargs) -> Dict[str, Any]:
+        """Run automated diagnostics for common Python environment issues.
+
+        Returns:
+            Dict with detected issues, warnings, and recommendations
+        """
+        issues = []
+        warnings = []
+        info = []
+        recommendations = []
+
+        # Run all diagnostic checks
+        w, r = self._doctor_check_venv()
+        warnings.extend(w)
+        recommendations.extend(r)
+
+        w, r = self._doctor_check_cwd_shadowing()
+        warnings.extend(w)
+        recommendations.extend(r)
+
+        i, r = self._doctor_check_stale_bytecode()
+        issues.extend(i)
+        recommendations.extend(r)
+
+        warnings.extend(self._doctor_check_python_version())
+        info.extend(self._doctor_check_editable_installs())
+
+        i, w, r = self._doctor_check_editable_conflicts()
+        issues.extend(i)
+        warnings.extend(w)
+        recommendations.extend(r)
+
+        # Calculate health score
+        health_score, status = self._calculate_doctor_health_score(issues, warnings)
 
         return {
             "status": status,
