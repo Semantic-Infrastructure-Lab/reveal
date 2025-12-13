@@ -660,124 +660,108 @@ def _render_help_breadcrumbs(scheme: str, data: Dict[str, Any]) -> None:
     print()
 
 
-def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = False) -> None:
-    """Render help content.
+def _render_help_list_mode(data: Dict[str, Any]) -> None:
+    """Render help system topic list (reveal help://)."""
+    print("# Reveal Help System")
+    print()
+    print(f"Available help topics ({len(data['available_topics'])} total):")
+    print()
 
-    Args:
-        data: Help data from adapter
-        output_format: Output format (text, json, grep)
-        list_mode: True if listing all topics, False for specific topic
-    """
-    if output_format == 'json':
-        import json
-        print(json.dumps(data, indent=2))
-        return
+    # Group topics
+    adapters = [a for a in data.get('adapters', []) if a.get('has_help')]
+    static = data.get('static_guides', [])
 
-    # Handle list mode (reveal help://)
-    if list_mode:
-        print("# Reveal Help System")
+    if adapters:
+        print("## URI Adapters")
+        for adapter in adapters:
+            scheme = adapter['scheme']
+            desc = adapter.get('description', 'No description')
+            print(f"  {scheme:12} - {desc}")
+            print(f"               Usage: reveal help://{scheme}")
         print()
-        print(f"Available help topics ({len(data['available_topics'])} total):")
+
+    if static:
+        print("## Guides")
+        for topic in static:
+            print(f"  {topic:12} - Static guide")
+            print(f"               Usage: reveal help://{topic}")
         print()
 
-        # Group topics
-        adapters = [a for a in data.get('adapters', []) if a.get('has_help')]
-        static = data.get('static_guides', [])
+    print("Examples:")
+    print("  reveal help://ast         # Learn about ast:// adapter")
+    print("  reveal help://adapters    # Summary of all adapters")
+    print("  reveal help://agent       # Agent usage patterns")
+    print()
+    print("Alternative: Use --agent-help and --agent-help-full flags (llms.txt convention)")
 
-        if adapters:
-            print("## URI Adapters")
-            for adapter in adapters:
-                scheme = adapter['scheme']
-                desc = adapter.get('description', 'No description')
-                print(f"  {scheme:12} - {desc}")
-                print(f"               Usage: reveal help://{scheme}")
+
+def _render_help_static_guide(data: Dict[str, Any]) -> None:
+    """Render static guide from markdown file."""
+    if 'error' in data:
+        print(f"Error: {data['message']}", file=sys.stderr)
+        sys.exit(1)
+    print(data['content'])
+
+
+def _render_help_adapter_summary(data: Dict[str, Any]) -> None:
+    """Render summary of all adapters."""
+    print(f"# URI Adapters ({data['count']} total)")
+    print()
+    for scheme, info in sorted(data['adapters'].items()):
+        print(f"## {scheme}://")
+        print(f"{info['description']}")
+        print(f"Syntax: {info['syntax']}")
+        if info.get('example'):
+            print(f"Example: {info['example']}")
+        print()
+
+
+def _render_help_section(data: Dict[str, Any]) -> None:
+    """Render specific help section (help://ast/workflows)."""
+    if 'error' in data:
+        print(f"Error: {data['message']}", file=sys.stderr)
+        sys.exit(1)
+
+    adapter = data.get('adapter', '')
+    section = data.get('section', '')
+    content = data.get('content', [])
+
+    print(f"# {adapter}:// - {section}")
+    print()
+
+    if section == 'workflows':
+        for workflow in content:
+            print(f"## {workflow['name']}")
+            if workflow.get('scenario'):
+                print(f"Scenario: {workflow['scenario']}")
+            print()
+            for step in workflow.get('steps', []):
+                print(f"  {step}")
+            print()
+    elif section == 'try-now':
+        print("Run these in your current directory:")
+        print()
+        for cmd in content:
+            print(f"  {cmd}")
+        print()
+    elif section == 'anti-patterns':
+        for ap in content:
+            print(f"❌ {ap['bad']}")
+            print(f"✅ {ap['good']}")
+            if ap.get('why'):
+                print(f"   Why: {ap['why']}")
             print()
 
-        if static:
-            print("## Guides")
-            for topic in static:
-                print(f"  {topic:12} - Static guide")
-                print(f"               Usage: reveal help://{topic}")
-            print()
+    # Breadcrumbs for section views
+    print("---")
+    print()
+    print(f"## See Full Help")
+    print(f"  → reveal help://{adapter}")
+    print()
 
-        print("Examples:")
-        print("  reveal help://ast         # Learn about ast:// adapter")
-        print("  reveal help://adapters    # Summary of all adapters")
-        print("  reveal help://agent       # Agent usage patterns")
-        print()
-        print("Alternative: Use --agent-help and --agent-help-full flags (llms.txt convention)")
-        return
 
-    # Handle specific topic
-    help_type = data.get('type', 'unknown')
-
-    if help_type == 'static_guide':
-        # Static guide from markdown file
-        if 'error' in data:
-            print(f"Error: {data['message']}", file=sys.stderr)
-            sys.exit(1)
-
-        print(data['content'])
-        return
-
-    if help_type == 'adapter_summary':
-        # Summary of all adapters
-        print(f"# URI Adapters ({data['count']} total)")
-        print()
-        for scheme, info in sorted(data['adapters'].items()):
-            print(f"## {scheme}://")
-            print(f"{info['description']}")
-            print(f"Syntax: {info['syntax']}")
-            if info.get('example'):
-                print(f"Example: {info['example']}")
-            print()
-        return
-
-    if help_type == 'help_section':
-        # Section extraction: help://ast/workflows
-        if 'error' in data:
-            print(f"Error: {data['message']}", file=sys.stderr)
-            sys.exit(1)
-
-        adapter = data.get('adapter', '')
-        section = data.get('section', '')
-        content = data.get('content', [])
-
-        print(f"# {adapter}:// - {section}")
-        print()
-
-        if section == 'workflows':
-            for workflow in content:
-                print(f"## {workflow['name']}")
-                if workflow.get('scenario'):
-                    print(f"Scenario: {workflow['scenario']}")
-                print()
-                for step in workflow.get('steps', []):
-                    print(f"  {step}")
-                print()
-        elif section == 'try-now':
-            print("Run these in your current directory:")
-            print()
-            for cmd in content:
-                print(f"  {cmd}")
-            print()
-        elif section == 'anti-patterns':
-            for ap in content:
-                print(f"❌ {ap['bad']}")
-                print(f"✅ {ap['good']}")
-                if ap.get('why'):
-                    print(f"   Why: {ap['why']}")
-                print()
-
-        # Breadcrumbs for section views
-        print("---")
-        print()
-        print(f"## See Full Help")
-        print(f"  → reveal help://{adapter}")
-        print()
-        return
-
-    # Adapter-specific help
+def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
+    """Render adapter-specific help documentation."""
     if 'error' in data:
         print(f"Error: {data['message']}", file=sys.stderr)
         sys.exit(1)
@@ -824,7 +808,6 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
                 print(f"  {ex}")
         print()
 
-    # NEW: Try Now section - executable examples for current directory
     if data.get('try_now'):
         print("## Try Now")
         print("  Run these in your current directory:")
@@ -833,7 +816,6 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
             print(f"  {cmd}")
         print()
 
-    # NEW: Workflows section - scenario-based patterns
     if data.get('workflows'):
         print("## Workflows")
         for workflow in data['workflows']:
@@ -844,7 +826,6 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
                 print(f"    {step}")
             print()
 
-    # NEW: Anti-patterns section - what NOT to do
     if data.get('anti_patterns'):
         print("## Don't Do This")
         for ap in data['anti_patterns']:
@@ -870,8 +851,41 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
             print(f"  • {item}")
         print()
 
-    # NEW: Breadcrumbs - guide to next steps
     _render_help_breadcrumbs(scheme, data)
+
+
+def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = False) -> None:
+    """Render help content.
+
+    Args:
+        data: Help data from adapter
+        output_format: Output format (text, json, grep)
+        list_mode: True if listing all topics, False for specific topic
+    """
+    if output_format == 'json':
+        import json
+        print(json.dumps(data, indent=2))
+        return
+
+    if list_mode:
+        _render_help_list_mode(data)
+        return
+
+    # Dispatch to specific renderers based on help type
+    help_type = data.get('type', 'unknown')
+
+    renderers = {
+        'static_guide': _render_help_static_guide,
+        'adapter_summary': _render_help_adapter_summary,
+        'help_section': _render_help_section,
+    }
+
+    renderer = renderers.get(help_type)
+    if renderer:
+        renderer(data)
+    else:
+        # Default: adapter-specific help
+        _render_help_adapter_specific(data)
 
 
 def render_python_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -908,6 +922,163 @@ def render_python_structure(data: Dict[str, Any], output_format: str) -> None:
     print(f"Modules:        {data['modules_loaded']} loaded")
 
 
+def _render_python_packages(data: Dict[str, Any]) -> None:
+    """Render list of installed packages."""
+    print(f"Installed Packages ({data['count']})")
+    print()
+    for pkg in data['packages']:
+        print(f"  {pkg['name']:<30s} {pkg['version']:<15s} {pkg['location']}")
+
+
+def _render_python_modules(data: Dict[str, Any]) -> None:
+    """Render list of loaded modules."""
+    print(f"Loaded Modules ({data['count']})")
+    print()
+    for mod in data['loaded'][:50]:  # Limit to first 50
+        file_info = f" ({mod['file']})" if mod['file'] else " (built-in)"
+        print(f"  {mod['name']}{file_info}")
+    if data['count'] > 50:
+        print(f"\n  ... and {data['count'] - 50} more modules")
+
+
+def _render_python_doctor(data: Dict[str, Any]) -> None:
+    """Render Python environment health diagnostics."""
+    status_icon = "✓" if data['status'] == 'healthy' else "⚠️"
+    print(f"Python Environment Health: {status_icon} {data['status'].upper()}")
+    print(f"Health Score: {data['health_score']}/100")
+    print()
+
+    if data.get('issues'):
+        print(f"Issues ({len(data['issues'])}):")
+        for issue in data['issues']:
+            print(f"  ❌ [{issue['category']}] {issue['message']}")
+            if 'impact' in issue:
+                print(f"     Impact: {issue['impact']}")
+        print()
+
+    if data.get('warnings'):
+        print(f"Warnings ({len(data['warnings'])}):")
+        for warn in data['warnings']:
+            print(f"  ⚠️  [{warn['category']}] {warn['message']}")
+            if 'impact' in warn:
+                print(f"     Impact: {warn['impact']}")
+        print()
+
+    if data.get('info'):
+        print(f"Info ({len(data['info'])}):")
+        for info in data['info']:
+            print(f"  ℹ️  [{info['category']}] {info['message']}")
+        print()
+
+    if data.get('recommendations'):
+        print(f"Recommendations ({len(data['recommendations'])}):")
+        for rec in data['recommendations']:
+            print(f"  💡 {rec['message']}")
+            if 'commands' in rec:
+                for cmd in rec['commands']:
+                    print(f"     $ {cmd}")
+        print()
+
+    print(f"Checks performed: {', '.join(data['checks_performed'])}")
+
+
+def _render_python_bytecode(data: Dict[str, Any]) -> None:
+    """Render bytecode debugging information."""
+    print(f"Bytecode Check: {data['status'].upper()}")
+    print()
+
+    if data['issues']:
+        print(f"Found {len(data['issues'])} issues:")
+        print()
+        for issue in data['issues']:
+            severity_marker = "⚠️ " if issue['severity'] == 'warning' else "ℹ️ "
+            print(f"{severity_marker} {issue['type']}")
+            print(f"   File: {issue.get('file', issue.get('pyc_file', 'unknown'))}")
+            print(f"   Problem: {issue['problem']}")
+            print(f"   Fix: {issue['fix']}")
+            print()
+    else:
+        print("✓ No bytecode issues found")
+
+
+def _render_python_env_config(data: Dict[str, Any]) -> None:
+    """Render Python environment configuration details."""
+    print("Python Environment Configuration")
+    print()
+
+    venv = data['virtual_env']
+    if venv['active']:
+        print(f"Virtual Environment: ✓ Active")
+        print(f"  Path: {venv['path']}")
+        print(f"  Type: {venv.get('type', 'venv')}")
+    else:
+        print(f"Virtual Environment: ✗ Not active")
+    print()
+
+    print(f"sys.path ({data['sys_path_count']} entries):")
+    for path in data['sys_path']:
+        print(f"  {path}")
+    print()
+
+    print("Flags:")
+    for flag, value in data['flags'].items():
+        print(f"  {flag}: {value}")
+
+
+def _render_python_version(data: Dict[str, Any]) -> None:
+    """Render Python version details."""
+    print("Python Version Details")
+    print()
+    print(f"Version:        {data['version']}")
+    print(f"Implementation: {data['implementation']}")
+    print(f"Compiler:       {data['compiler']}")
+    print(f"Build:          {data['build_number']} ({data['build_date']})")
+    print(f"Executable:     {data['executable']}")
+    print(f"Prefix:         {data['prefix']}")
+    print(f"Base Prefix:    {data['base_prefix']}")
+    print(f"Platform:       {data['platform']} ({data['architecture']})")
+
+
+def _render_python_venv_status(data: Dict[str, Any]) -> None:
+    """Render virtual environment status."""
+    print("Virtual Environment Status")
+    print()
+    if data['active']:
+        print(f"Status:    ✓ Active")
+        print(f"Path:      {data['path']}")
+        print(f"Type:      {data.get('type', 'venv')}")
+        if 'prompt' in data:
+            print(f"Prompt:    {data['prompt']}")
+        if 'python_version' in data:
+            print(f"Python:    {data['python_version']}")
+    else:
+        print(f"Status:    ✗ Not active")
+        print()
+        print("No virtual environment detected.")
+        print("Checked: VIRTUAL_ENV, sys.prefix, CONDA_DEFAULT_ENV")
+
+
+def _render_python_package_details(data: Dict[str, Any]) -> None:
+    """Render individual package details."""
+    print(f"Package: {data['name']}")
+    print()
+    print(f"Version:    {data['version']}")
+    print(f"Location:   {data['location']}")
+    if 'summary' in data:
+        print(f"Summary:    {data.get('summary', 'N/A')}")
+    if 'author' in data:
+        print(f"Author:     {data.get('author', 'N/A')}")
+    if 'license' in data:
+        print(f"License:    {data.get('license', 'N/A')}")
+    if 'homepage' in data:
+        print(f"Homepage:   {data.get('homepage', 'N/A')}")
+    if 'dependencies' in data and data['dependencies']:
+        print()
+        print(f"Dependencies ({len(data['dependencies'])}):")
+        for dep in data['dependencies']:
+            print(f"  • {dep}")
+
+
 def render_python_element(data: Dict[str, Any], output_format: str) -> None:
     """Render specific Python runtime element.
 
@@ -927,158 +1098,25 @@ def render_python_element(data: Dict[str, Any], output_format: str) -> None:
             print(f"Details: {data['details']}", file=sys.stderr)
         sys.exit(1)
 
-    # Detect element type and render appropriately
+    # Detect element type and dispatch to appropriate renderer
     if 'packages' in data and 'count' in data:
-        # Package list
-        print(f"Installed Packages ({data['count']})")
-        print()
-        for pkg in data['packages']:
-            print(f"  {pkg['name']:<30s} {pkg['version']:<15s} {pkg['location']}")
-
+        _render_python_packages(data)
     elif 'loaded' in data and 'count' in data:
-        # Imports list
-        print(f"Loaded Modules ({data['count']})")
-        print()
-        for mod in data['loaded'][:50]:  # Limit to first 50
-            file_info = f" ({mod['file']})" if mod['file'] else " (built-in)"
-            print(f"  {mod['name']}{file_info}")
-        if data['count'] > 50:
-            print(f"\n  ... and {data['count'] - 50} more modules")
-
+        _render_python_modules(data)
     elif 'health_score' in data and 'checks_performed' in data:
-        # Doctor results (environment diagnostics)
-        status_icon = "✓" if data['status'] == 'healthy' else "⚠️"
-        print(f"Python Environment Health: {status_icon} {data['status'].upper()}")
-        print(f"Health Score: {data['health_score']}/100")
-        print()
-
-        if data.get('issues'):
-            print(f"Issues ({len(data['issues'])}):")
-            for issue in data['issues']:
-                print(f"  ❌ [{issue['category']}] {issue['message']}")
-                if 'impact' in issue:
-                    print(f"     Impact: {issue['impact']}")
-            print()
-
-        if data.get('warnings'):
-            print(f"Warnings ({len(data['warnings'])}):")
-            for warn in data['warnings']:
-                print(f"  ⚠️  [{warn['category']}] {warn['message']}")
-                if 'impact' in warn:
-                    print(f"     Impact: {warn['impact']}")
-            print()
-
-        if data.get('info'):
-            print(f"Info ({len(data['info'])}):")
-            for info in data['info']:
-                print(f"  ℹ️  [{info['category']}] {info['message']}")
-            print()
-
-        if data.get('recommendations'):
-            print(f"Recommendations ({len(data['recommendations'])}):")
-            for rec in data['recommendations']:
-                print(f"  💡 {rec['message']}")
-                if 'commands' in rec:
-                    for cmd in rec['commands']:
-                        print(f"     $ {cmd}")
-            print()
-
-        print(f"Checks performed: {', '.join(data['checks_performed'])}")
-
+        _render_python_doctor(data)
     elif 'status' in data and 'issues' in data:
-        # Debug bytecode results
-        print(f"Bytecode Check: {data['status'].upper()}")
-        print()
-
-        if data['issues']:
-            print(f"Found {len(data['issues'])} issues:")
-            print()
-            for issue in data['issues']:
-                severity_marker = "⚠️ " if issue['severity'] == 'warning' else "ℹ️ "
-                print(f"{severity_marker} {issue['type']}")
-                print(f"   File: {issue.get('file', issue.get('pyc_file', 'unknown'))}")
-                print(f"   Problem: {issue['problem']}")
-                print(f"   Fix: {issue['fix']}")
-                print()
-        else:
-            print("✓ No bytecode issues found")
-
+        _render_python_bytecode(data)
     elif 'sys_path' in data:
-        # Environment details
-        print("Python Environment Configuration")
-        print()
-
-        venv = data['virtual_env']
-        if venv['active']:
-            print(f"Virtual Environment: ✓ Active")
-            print(f"  Path: {venv['path']}")
-            print(f"  Type: {venv.get('type', 'venv')}")
-        else:
-            print(f"Virtual Environment: ✗ Not active")
-        print()
-
-        print(f"sys.path ({data['sys_path_count']} entries):")
-        for path in data['sys_path']:
-            print(f"  {path}")
-        print()
-
-        print("Flags:")
-        for flag, value in data['flags'].items():
-            print(f"  {flag}: {value}")
-
+        _render_python_env_config(data)
     elif 'executable' in data and 'compiler' in data:
-        # Version details
-        print("Python Version Details")
-        print()
-        print(f"Version:        {data['version']}")
-        print(f"Implementation: {data['implementation']}")
-        print(f"Compiler:       {data['compiler']}")
-        print(f"Build:          {data['build_number']} ({data['build_date']})")
-        print(f"Executable:     {data['executable']}")
-        print(f"Prefix:         {data['prefix']}")
-        print(f"Base Prefix:    {data['base_prefix']}")
-        print(f"Platform:       {data['platform']} ({data['architecture']})")
-
+        _render_python_version(data)
     elif 'active' in data:
-        # Virtual environment status
-        print("Virtual Environment Status")
-        print()
-        if data['active']:
-            print(f"Status:    ✓ Active")
-            print(f"Path:      {data['path']}")
-            print(f"Type:      {data.get('type', 'venv')}")
-            if 'prompt' in data:
-                print(f"Prompt:    {data['prompt']}")
-            if 'python_version' in data:
-                print(f"Python:    {data['python_version']}")
-        else:
-            print(f"Status:    ✗ Not active")
-            print()
-            print("No virtual environment detected.")
-            print("Checked: VIRTUAL_ENV, sys.prefix, CONDA_DEFAULT_ENV")
-
+        _render_python_venv_status(data)
     elif 'name' in data and 'version' in data and 'location' in data:
-        # Package details
-        print(f"Package: {data['name']}")
-        print()
-        print(f"Version:    {data['version']}")
-        print(f"Location:   {data['location']}")
-        if 'summary' in data:
-            print(f"Summary:    {data.get('summary', 'N/A')}")
-        if 'author' in data:
-            print(f"Author:     {data.get('author', 'N/A')}")
-        if 'license' in data:
-            print(f"License:    {data.get('license', 'N/A')}")
-        if 'homepage' in data:
-            print(f"Homepage:   {data.get('homepage', 'N/A')}")
-        if 'dependencies' in data and data['dependencies']:
-            print()
-            print(f"Dependencies ({len(data['dependencies'])}):")
-            for dep in data['dependencies']:
-                print(f"  • {dep}")
-
+        _render_python_package_details(data)
     else:
-        # Generic rendering
+        # Generic fallback
         import json
         print(json.dumps(data, indent=2))
 
