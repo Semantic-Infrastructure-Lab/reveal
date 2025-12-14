@@ -1,7 +1,36 @@
 # Reveal - Pending Work Index
 
-**Last Updated:** 2025-12-12
-**Sessions:** infernal-throne-1212, wise-goddess-1212, cyber-phoenix-1212
+**Last Updated:** 2025-12-14
+**Sessions:** infernal-throne-1212, wise-goddess-1212, cyber-phoenix-1212, emerald-hue-1214
+
+---
+
+## Recent Completions (v0.23.0)
+
+**Released:** 2025-12-14
+**Session:** emerald-hue-1214
+
+### ✅ Type-First Architecture (COMPLETE)
+
+The Type-First Architecture is now fully implemented and released in v0.23.0:
+
+- ✅ `--typed` flag for hierarchical code structure with containment
+- ✅ Decorator extraction (`@property`, `@staticmethod`, `@classmethod`, `@dataclass`)
+- ✅ `TypedStructure` and `TypedElement` classes for programmatic navigation
+- ✅ `PythonElement` with decorator-aware properties
+- ✅ AST decorator query (`ast://.?decorator=property`)
+- ✅ Category filtering (`--filter=property`)
+- ✅ Decorator statistics (`--decorator-stats`)
+- ✅ New bug rules: B002, B003, B004 (decorator-related)
+- ✅ 401 tests passing
+
+**Design docs:** `internal-docs/planning/CONTAINMENT_MODEL_DESIGN.md`
+
+### ✅ Architecture Refactoring (COMPLETE)
+
+- ✅ main.py reduced 64% (2,446 → 804 lines)
+- ✅ 7-phase systematic extraction (CLI, display, rendering, adapters)
+- ✅ Clean separation of concerns
 
 ---
 
@@ -96,10 +125,10 @@ time reveal reveal/ --check --select D --show-stats
 
 ## Track 2: Code Quality Refactoring
 
-**Status:** ✅ Phase 1 complete (246→40 lines), Phases 2-3 designed
-**Session:** wise-goddess-1212
-**Priority:** Medium
-**Effort:** 8 hours for Phases 2-3
+**Status:** ✅ COMPLETE - All phases shipped in v0.23.0
+**Session:** wise-goddess-1212, emerald-hue-1214
+**Priority:** ~~Medium~~ Done
+**Effort:** ~~8 hours for Phases 2-3~~ Shipped
 
 ### What's Done ✅
 

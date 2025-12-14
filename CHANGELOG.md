@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [0.23.0] - 2025-12-14
+
 ### 🏗️ NEW: Type-First Architecture with `--typed` Flag
 
 **Reveal now supports typed, navigable code structures with containment relationships!**
@@ -393,8 +397,6 @@ reveal config.toml --outline
 - **Documentation**: 105.6KB planning docs added
 - **Lines changed**: 11,575+ across 8 commits
 
-## [0.23.0] - 2025-12-14
-
 ### 🎯 NEW: Decorator-Aware Code Intelligence
 
 **Reveal now understands decorators semantically — query by decorator, detect decorator-related bugs, and analyze decorator usage across your codebase.**
@@ -473,9 +475,9 @@ reveal src/ --decorator-stats
 
 ### 📊 Quality Metrics
 
-- **Tests**: 401 passing (up from 384)
+- **Tests**: 401 passing (up from 363)
 - **New rules**: B002, B003, B004
-- **New CLI flags**: `--filter`, `--decorator-stats`
+- **New CLI flags**: `--typed`, `--filter`, `--decorator-stats`
 - **AST adapter**: Extended with `decorator=` filter
 
 ## [0.22.0] - 2025-12-11
