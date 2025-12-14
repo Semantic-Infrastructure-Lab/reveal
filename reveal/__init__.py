@@ -12,7 +12,8 @@ except Exception:
     __version__ = "0.8.0-dev"
 
 # Import base classes for external use
-from .base import FileAnalyzer, register, get_analyzer
+from .base import FileAnalyzer
+from .registry import register, get_analyzer, get_all_analyzers
 from .treesitter import TreeSitterAnalyzer
 
 # Import all built-in analyzers to register them
@@ -23,4 +24,5 @@ __all__ = [
     'TreeSitterAnalyzer',
     'register',
     'get_analyzer',
+    'get_all_analyzers',
 ]

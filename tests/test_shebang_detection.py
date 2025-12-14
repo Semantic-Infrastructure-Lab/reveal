@@ -4,7 +4,7 @@ import unittest
 import tempfile
 import os
 from pathlib import Path
-from reveal.base import get_analyzer, _detect_shebang
+from reveal.registry import get_analyzer, _detect_shebang
 
 
 class TestShebangDetection(unittest.TestCase):
