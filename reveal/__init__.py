@@ -17,7 +17,7 @@ from .registry import register, get_analyzer, get_all_analyzers
 from .treesitter import TreeSitterAnalyzer
 
 # Import all built-in analyzers to register them
-from .analyzers import *
+from .analyzers import *  # noqa: F401, F403
 
 # Import type definitions to auto-register them in TypeRegistry
 from .types import python  # noqa: F401

@@ -1,7 +1,7 @@
 """Jupyter Notebook (.ipynb) analyzer."""
 
 import json
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Tuple
 from ..base import FileAnalyzer, register
 
 
@@ -41,17 +41,8 @@ class JupyterAnalyzer(FileAnalyzer):
             cell_type = cell.get('cell_type', 'unknown')
             cell_counts[cell_type] = cell_counts.get(cell_type, 0) + 1
 
-        # Get kernel info
-        kernelspec = self.metadata.get('kernelspec', {})
-        kernel_name = kernelspec.get('display_name', kernelspec.get('name', 'unknown'))
-
-        # Get language info
-        language_info = self.metadata.get('language_info', {})
-        language = language_info.get('name', 'unknown')
-
         # Get cell summaries with line numbers
         cell_summaries = []
-        current_line = 1
 
         # Navigate through JSON to find approximate line numbers
         # This is approximate since JSON formatting varies

@@ -1,7 +1,7 @@
 """Environment variable adapter (env://)."""
 
 import os
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 from .base import ResourceAdapter, register_adapter
 
 

@@ -3,7 +3,6 @@
 Tests the core type system: TypeRegistry, TypedElement, TypedStructure.
 """
 
-import pytest
 from reveal.type_system import EntityDef, RevealType, TypeRegistry
 from reveal.elements import TypedElement, PythonElement
 from reveal.structure import TypedStructure

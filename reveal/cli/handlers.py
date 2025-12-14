@@ -111,7 +111,7 @@ def handle_explain_rule(rule_code: str):
         print(f"URI Patterns: {', '.join(rule.uri_patterns)}")
     print(f"Version: {rule.version}")
     print(f"Enabled: {'Yes' if rule.enabled else 'No'}")
-    print(f"\nDescription:")
+    print("\nDescription:")
     print(f"  {rule.__doc__ or 'No description available.'}")
     sys.exit(0)
 
@@ -264,7 +264,7 @@ def handle_decorator_stats(path: str):
         print()
 
     # Summary
-    print(f"Summary:")
+    print("Summary:")
     print(f"  Total decorators: {sum(decorator_counts.values())}")
     print(f"  Unique decorators: {len(decorator_counts)}")
     print(f"  Files with decorators: {total_decorated}/{total_files} ({100*total_decorated//total_files}%)")

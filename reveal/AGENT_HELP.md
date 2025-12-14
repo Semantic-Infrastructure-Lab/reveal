@@ -1,6 +1,6 @@
 # Reveal - Agent Quick Start
 
-**Version:** 0.22.0
+**Version:** 0.23.0
 **Token Cost:** ~1,500 tokens (this guide)
 **Alternative:** Use `reveal help://` for progressive discovery (~50-500 tokens)
 
@@ -41,13 +41,12 @@ reveal 'ast://./src?complexity>10' # Find complex functions
 
 **Discover current list:** `reveal help://`
 
-**As of v0.19.0:**
-
 ### URI Adapters (Self-Documenting)
-- `help://python` - Python runtime inspection (NEW: bytecode debugging, package info)
-- `help://ast` - Query code as AST database (NEW: wildcard name patterns, OR logic)
-- `help://json` - Navigate and query JSON files (NEW: path access, schema, gron-style)
+- `help://python` - Python runtime inspection (bytecode debugging, package info)
+- `help://ast` - Query code as AST database (wildcard patterns, OR logic)
+- `help://json` - Navigate and query JSON files (path access, schema, gron-style)
 - `help://env` - Environment variables explorer
+- `help://reveal` - Self-inspection and validation (v0.22.0+)
 - `help://help` - Help system itself (meta!)
 
 ### Comprehensive Guides

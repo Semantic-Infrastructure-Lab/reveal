@@ -259,14 +259,17 @@ class MarkdownAnalyzer(FileAnalyzer):
 
 ```
 reveal/
-├── base.py          # Core analyzer framework
-├── main.py          # CLI and output formatters
-├── treesitter.py    # Universal language support (50+ langs)
-├── analyzers/       # 25 file types (Python, Rust, Markdown, etc.)
-└── adapters/        # URI support (help://, env://, ast://, python://)
+├── cli/          # Argument parsing, routing, handlers
+├── display/      # Terminal output formatting
+├── rendering/    # Adapter-specific renderers
+├── rules/        # 24 quality rules (B, C, D, E, M, N, R, S, U, V)
+├── analyzers/    # 25 file types (Python, Rust, Markdown, etc.)
+├── adapters/     # URI support (help://, env://, ast://, python://)
+├── types/        # Type-first architecture (v0.23.0+)
+└── treesitter.py # Universal language support (50+ langs)
 ```
 
-**Clean architecture:** Most analyzers < 50 lines. Extensible via plugins.
+**Clean architecture:** Most analyzers < 50 lines. Modular packages since v0.22.0.
 
 **Power users:** [COOL_TRICKS.md](reveal/COOL_TRICKS.md) - Hidden features and advanced workflows
 
@@ -282,12 +285,9 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 ## Part of Semantic Infrastructure Lab
 
-**reveal** is production infrastructure from [SIL](https://github.com/semantic-infrastructure-lab/sil) - building the semantic substrate for intelligent systems.
+**reveal** is production infrastructure from [SIL](https://github.com/semantic-infrastructure-lab) - building semantic tools for intelligent systems.
 
-**Role:** Layer 5 (Human Interfaces) - progressive disclosure of structure
-**Principles:** Clarity, Simplicity, Composability, Correctness, Verifiability
-
-[SIL Manifesto](https://github.com/semantic-infrastructure-lab/sil/blob/main/docs/canonical/MANIFESTO.md) • [Architecture](https://github.com/semantic-infrastructure-lab/sil/blob/main/docs/architecture/UNIFIED_ARCHITECTURE_GUIDE.md) • [Projects](https://github.com/semantic-infrastructure-lab/sil/blob/main/projects/PROJECT_INDEX.md)
+**Core principles:** Progressive disclosure, composability, semantic clarity.
 
 ---
 

@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 from .base import get_analyzer
 
 
@@ -35,7 +35,7 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
         lines.append(f"⚠️  Large directory detected ({total_entries} entries)")
         lines.append(f"   Showing first {max_entries} entries (use --max-entries 0 for unlimited)")
         if not fast:
-            lines.append(f"   Consider using --fast to skip line counting for better performance\n")
+            lines.append("   Consider using --fast to skip line counting for better performance\n")
 
     # Track how many entries we've shown
     context = {'count': 0, 'max_entries': max_entries, 'truncated': 0}

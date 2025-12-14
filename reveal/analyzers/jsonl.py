@@ -126,7 +126,7 @@ class JsonlAnalyzer(FileAnalyzer):
                 # Track malformed records
                 all_records.append({
                     'line': i,
-                    'name': f'⚠️ Invalid JSON',
+                    'name': '⚠️ Invalid JSON',
                     'preview': f'Parse error: {str(e)[:50]}',
                 })
 

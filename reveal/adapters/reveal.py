@@ -1,6 +1,5 @@
 """Reveal meta-adapter (reveal://) - Self-inspection and validation."""
 
-import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, register_adapter, _ADAPTER_REGISTRY

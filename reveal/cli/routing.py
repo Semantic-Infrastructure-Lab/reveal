@@ -96,7 +96,7 @@ def _handle_python(adapter_class: type, resource: str, element: Optional[str],
 
         if result is None:
             print(f"Error: Python element '{element_name}' not found", file=sys.stderr)
-            print(f"\nAvailable elements: version, env, venv, packages, imports, debug/bytecode", file=sys.stderr)
+            print("\nAvailable elements: version, env, venv, packages, imports, debug/bytecode", file=sys.stderr)
             sys.exit(1)
 
         render_python_element(result, args.format)
@@ -168,7 +168,7 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
 
     # Look up adapter from registry
     from ..adapters.base import get_adapter_class, list_supported_schemes
-    from ..adapters import env, ast, help, python, json_adapter, reveal  # Trigger registration
+    from ..adapters import env, ast, help, python, json_adapter, reveal  # noqa: F401 - Trigger registration
 
     adapter_class = get_adapter_class(scheme)
     if not adapter_class:
@@ -249,8 +249,8 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         ext = Path(path).suffix or '(no extension)'
         print(f"Error: No analyzer found for {path} ({ext})", file=sys.stderr)
         print(f"\nError: File type '{ext}' is not supported yet", file=sys.stderr)
-        print(f"Run 'reveal --list-supported' to see all supported file types", file=sys.stderr)
-        print(f"Visit https://github.com/scottsen/reveal to request new file types", file=sys.stderr)
+        print("Run 'reveal --list-supported' to see all supported file types", file=sys.stderr)
+        print("Visit https://github.com/scottsen/reveal to request new file types", file=sys.stderr)
         sys.exit(1)
 
     analyzer = analyzer_class(path)

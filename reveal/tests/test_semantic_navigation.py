@@ -9,7 +9,6 @@ import json
 from pathlib import Path
 from reveal.analyzers.jsonl import JsonlAnalyzer
 from reveal.analyzers.markdown import MarkdownAnalyzer
-from reveal.treesitter import TreeSitterAnalyzer
 
 
 class TestSemanticSliceHelper(unittest.TestCase):

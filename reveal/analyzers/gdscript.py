@@ -71,7 +71,6 @@ class GDScriptAnalyzer(FileAnalyzer):
                 # Skip if this looks like a function call or other syntax
                 if name and not name.startswith('_'):
                     var_kind = f"{modifier} {var_type}".strip()
-                    type_info = f": {type_hint}" if type_hint else ""
 
                     variables.append({
                         'line': i,

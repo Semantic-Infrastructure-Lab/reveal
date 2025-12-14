@@ -2,7 +2,6 @@
 
 import re
 import yaml
-from pathlib import Path
 from typing import Dict, List, Any, Optional
 from ..base import register
 from ..treesitter import TreeSitterAnalyzer

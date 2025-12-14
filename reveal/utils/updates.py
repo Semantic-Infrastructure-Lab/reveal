@@ -67,7 +67,7 @@ def check_for_updates():
             try:
                 if parse_version(latest_version) > parse_version(__version__):
                     print(f"⚠️  Update available: reveal {latest_version} (you have {__version__})")
-                    print(f"Update available: pip install --upgrade reveal-cli\n")
+                    print("Update available: pip install --upgrade reveal-cli\n")
             except (ValueError, AttributeError):
                 pass  # Version comparison failed, ignore
 

@@ -46,7 +46,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
                 parser = get_parser(self.language)
                 self.tree = parser.parse(self.content.encode('utf-8'))
-        except Exception as e:
+        except Exception:
             # Parsing failed - fall back to text analysis
             self.tree = None
 

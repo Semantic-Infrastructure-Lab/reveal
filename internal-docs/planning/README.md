@@ -47,7 +47,7 @@ Systematic cleanup of large functions (target: 75/100 quality score).
 - **[PENDING_WORK.md](./PENDING_WORK.md)** - 📌 Master index of ALL pending work
 - [CODE_QUALITY_ARCHITECTURE.md](./CODE_QUALITY_ARCHITECTURE.md) - Pattern discovery (12KB)
 - [CODE_QUALITY_REFACTORING.md](./CODE_QUALITY_REFACTORING.md) - Phase-by-phase plan (9.6KB)
-- `../../docs/REVEAL_ENGINEERING_REVIEW_2025-12-12.md` - Engineering audit (16KB)
+- `../archive/REVEAL_ENGINEERING_REVIEW_2025-12-12.md` - Engineering audit (16KB)
 
 **Git Branch:** `refactor/code-quality-wise-goddess`
 
@@ -157,9 +157,9 @@ Systematic modularization of core reveal codebase.
 
 **Status:** Shipped
 
-**Documents:**
-- [PYTHON_ADAPTER_SPEC.md](./PYTHON_ADAPTER_SPEC.md) - Specification
-- [PYTHON_ADAPTER_ROADMAP.md](./PYTHON_ADAPTER_ROADMAP.md) - Implementation plan
+**Documents (archived):**
+- `../archive/PYTHON_ADAPTER_SPEC.md` - Specification
+- `../archive/PYTHON_ADAPTER_ROADMAP.md` - Implementation plan
 
 ```bash
 reveal python://                     # Environment overview

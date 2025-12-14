@@ -1,7 +1,7 @@
 # Reveal: Agent Usage Guide (Complete)
 
-**Version:** 0.22.0
-**Last Updated:** 2025-12-07
+**Version:** 0.23.0
+**Last Updated:** 2025-12-14
 **For:** AI Agents and LLM-based tools
 
 **Token Cost:** ~12,000 tokens (this complete guide)
