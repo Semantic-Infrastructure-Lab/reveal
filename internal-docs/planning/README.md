@@ -57,12 +57,10 @@ Systematic cleanup of large functions (target: 75/100 quality score).
 
 ### MySQL Adapter
 
-**Status:** Design complete
-**Target:** v0.19.0+
+**Status:** Planned (spec not yet written)
+**Target:** v0.23.0+
 
 Database exploration with progressive disclosure.
-
-**Document:** [MYSQL_ADAPTER_SPEC.md](./MYSQL_ADAPTER_SPEC.md)
 
 ```bash
 reveal mysql://prod/users            # Table structure
