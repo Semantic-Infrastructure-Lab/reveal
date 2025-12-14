@@ -1,15 +1,15 @@
-"""D002: Detect similar functions using vector similarity.
+"""D002: Discover potential duplicate functions worth investigating.
 
-Statistical approach:
-- Vectorize function bodies (AST-based feature vectors)
-- Compute pairwise cosine similarity
-- Rank by similarity score
-- Report top-k "most dupey" pairs
+Discovery approach (not threshold-based detection):
+- Vectorize function bodies
+- Compute pairwise similarity
+- Rank by "interestingness" = similarity * sqrt(size)
+- Show top-k most interesting candidates for human review
 
-Optimizations:
-- Uses AST features (already parsed by reveal)
-- No ML dependencies (uses stdlib only)
-- O(n^2) similarity computation (acceptable for <1000 functions)
+Philosophy:
+- No false positive/negative tradeoffs - just ranked discovery
+- Longer similar functions are more interesting (more refactoring payoff)
+- Human makes final call on whether to refactor
 """
 
 import logging
@@ -24,30 +24,34 @@ logger = logging.getLogger(__name__)
 
 
 class D002(BaseRule):
-    """Detect similar functions using statistical similarity."""
+    """Discover potential duplicate functions worth investigating."""
 
     code = "D002"
-    message = "Similar function detected"
+    message = "Potential duplicate candidate"
     category = RulePrefix.D
-    severity = Severity.LOW  # Lower severity than exact duplicates
+    severity = Severity.LOW  # Advisory, not a defect
     file_patterns = ['*']
-    version = "1.0.0"
+    version = "2.0.0"
 
-    # Similarity threshold (0.0 to 1.0)
-    SIMILARITY_THRESHOLD = 0.75  # Report if >75% similar
+    # Minimum function size to consider (skip trivial functions)
+    MIN_FUNCTION_SIZE = 8  # Lines
 
-    # Minimum function size to check (avoid false positives from tiny stubs)
-    MIN_FUNCTION_SIZE = 10  # Lines (not counting signature)
+    # Minimum similarity to even consider (very low bar, ranking does the work)
+    MIN_SIMILARITY = 0.50
 
-    # Maximum pairs to report (prevent spam)
-    MAX_PAIRS = 10
+    # Maximum candidates to report
+    MAX_CANDIDATES = 5
 
     def check(self,
              file_path: str,
              structure: Optional[Dict[str, Any]],
              content: str) -> List[Detection]:
         """
-        Find similar functions and rank by similarity.
+        Discover potential duplicate functions ranked by interestingness.
+
+        Interestingness = similarity * sqrt(combined_size)
+        - Higher similarity = more likely duplicate
+        - Larger functions = more refactoring payoff
 
         Args:
             file_path: Path to file
@@ -55,7 +59,7 @@ class D002(BaseRule):
             content: File content
 
         Returns:
-            List of detections, sorted by similarity (highest first)
+            List of candidates, sorted by interestingness (highest first)
         """
         if not structure or 'functions' not in structure:
             return []
@@ -69,47 +73,50 @@ class D002(BaseRule):
         for func in functions:
             func_body = self._extract_function_body(func, content)
 
-            # Skip tiny functions (false positives from stubs)
             if not func_body or len(func_body.strip()) < 20:
                 continue
 
-            # Skip functions smaller than minimum size
             line_count = len(func_body.splitlines())
             if line_count < self.MIN_FUNCTION_SIZE:
                 continue
 
             vector = self._vectorize(func_body)
-            func_vectors.append((func, vector))
+            func_vectors.append((func, vector, line_count))
 
-        # Compute pairwise similarities
-        similarity_pairs = []
+        # Compute pairwise similarities with interestingness score
+        candidates = []
 
         for i in range(len(func_vectors)):
             for j in range(i + 1, len(func_vectors)):
-                func1, vec1 = func_vectors[i]
-                func2, vec2 = func_vectors[j]
+                func1, vec1, size1 = func_vectors[i]
+                func2, vec2, size2 = func_vectors[j]
 
                 similarity = self._cosine_similarity(vec1, vec2)
 
-                if similarity >= self.SIMILARITY_THRESHOLD:
-                    similarity_pairs.append((similarity, func1, func2))
+                if similarity < self.MIN_SIMILARITY:
+                    continue
 
-        # Sort by similarity (descending)
-        similarity_pairs.sort(reverse=True, key=lambda x: x[0])
+                # Interestingness: similarity weighted by size (sqrt to not over-weight huge functions)
+                combined_size = size1 + size2
+                interestingness = similarity * math.sqrt(combined_size)
 
-        # Generate detections for top pairs
+                candidates.append((interestingness, similarity, combined_size, func1, func2))
+
+        # Sort by interestingness (descending)
+        candidates.sort(reverse=True, key=lambda x: x[0])
+
+        # Generate detections for top candidates
         detections = []
-        for similarity, func1, func2 in similarity_pairs[:self.MAX_PAIRS]:
-            # Report the later function as "similar to" earlier one
+        for interestingness, similarity, combined_size, func1, func2 in candidates[:self.MAX_CANDIDATES]:
             detections.append(Detection(
                 file_path=file_path,
                 line=func2.get('line', 0),
                 rule_code=self.code,
-                message=f"{self.message}: '{func2['name']}' is {similarity:.1%} similar to '{func1['name']}' (line {func1.get('line', 0)})",
+                message=f"{self.message}: '{func2['name']}' ~{similarity:.0%} similar to '{func1['name']}' (line {func1.get('line', 0)})",
                 severity=self.severity,
                 category=self.category,
-                suggestion=f"Consider refactoring or extracting common logic (similarity: {similarity:.3f})",
-                context=f"Similarity score: {similarity:.3f}"
+                suggestion=f"Combined {combined_size} lines. Worth investigating if logic can be shared.",
+                context=f"Interestingness: {interestingness:.1f} (similarity {similarity:.0%} × size {combined_size})"
             ))
 
         return detections
@@ -158,23 +165,27 @@ class D002(BaseRule):
             # Use token as feature
             features[f'token_{token}'] = tf
 
-        # 2. Control flow features
-        features['count_if'] = normalized.count('if ')
-        features['count_for'] = normalized.count('for ')
-        features['count_while'] = normalized.count('while ')
-        features['count_return'] = normalized.count('return ')
-        features['count_try'] = normalized.count('try:')
+        # 2. Control flow features (normalized by line count for density)
+        line_count = len(normalized.splitlines())
+        line_count_safe = max(line_count, 1)
 
-        # 3. Structural features
-        features['line_count'] = len(normalized.splitlines())
-        features['avg_line_length'] = sum(len(l) for l in normalized.splitlines()) / max(len(normalized.splitlines()), 1)
+        features['density_if'] = normalized.count('if ') / line_count_safe
+        features['density_for'] = normalized.count('for ') / line_count_safe
+        features['density_while'] = normalized.count('while ') / line_count_safe
+        features['density_return'] = normalized.count('return ') / line_count_safe
+        features['density_try'] = normalized.count('try:') / line_count_safe
 
-        # 4. Operator features
-        features['count_assignments'] = normalized.count('=')
-        features['count_comparisons'] = (normalized.count('==') +
-                                        normalized.count('!=') +
-                                        normalized.count('>=') +
-                                        normalized.count('<='))
+        # 3. Structural features (normalized to 0-1 range)
+        features['line_count_norm'] = min(line_count / 100.0, 1.0)  # Cap at 100 lines
+        avg_len = sum(len(l) for l in normalized.splitlines()) / line_count_safe
+        features['avg_line_length_norm'] = min(avg_len / 80.0, 1.0)  # Cap at 80 chars
+
+        # 4. Operator features (normalized by line count)
+        features['density_assignments'] = normalized.count('=') / line_count_safe
+        features['density_comparisons'] = (normalized.count('==') +
+                                          normalized.count('!=') +
+                                          normalized.count('>=') +
+                                          normalized.count('<=')) / line_count_safe
 
         return features
 
