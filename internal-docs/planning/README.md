@@ -82,9 +82,78 @@ Config validation and conflict detection.
 reveal /etc/nginx/conf.d/upstreams.conf --check
 ```
 
+### 🏗️ Type-First Architecture
+
+**Status:** Design complete
+**Target:** v0.23.0+
+**Session:** hidden-grove-1213 (2025-12-13)
+**Priority:** Medium
+
+Elevate `types.py` to be first-class: drive extension→adapter mapping, containment rules, and Pythonic navigation.
+
+**Document:** [CONTAINMENT_MODEL_DESIGN.md](./CONTAINMENT_MODEL_DESIGN.md)
+
+**Key insight**: TypeRegistry becomes source of truth. Enables:
+- Auto-upgrade `.py` → `py://` for rich analysis
+- Computed containment from EntityDef rules + line ranges
+- Pythonic navigation: `structure / 'MyClass' / 'method'`
+- `walk()`, `find()`, `.parent`, `.children` on elements
+
+```bash
+reveal app.py                     # PythonType → structure adapter
+reveal py://app.py                # PythonType → deep adapter
+reveal app.py --rich              # Explicit upgrade
+
+# Python API
+structure = reveal('app.py')
+for method in structure / 'MyClass':
+    print(method.path, method.depth)
+```
+
+**Phases:**
+1. TypeRegistry, RevealType, EntityDef classes
+2. TypedElement with navigation (`__contains__`, `walk()`)
+3. TypedStructure container (`__truediv__`, `find()`)
+4. Wire up PythonType + TreeSitter
+5. Extension → scheme magic (`--rich` flag)
+6. Additional types (Markdown, JSON, YAML)
+7. Rules integration
+
 ---
 
 ## Shipped
+
+### Architecture Refactoring (v0.22.0)
+
+**Status:** Complete
+**Sessions:** bright-panther-1213, fidajosa-1213, wireju-1213
+**Branch:** `refactor/architecture-v1`
+
+Systematic modularization of core reveal codebase.
+
+**Results:**
+- `main.py`: 2,446 → 287 lines (**-88%**)
+- `base.py`: 520 → 302 lines (**-42%**)
+- `python.py`: 1,140 lines → 7 focused modules
+
+**New Packages:**
+- `reveal/cli/` - Argument parsing, routing, handlers (4 files)
+- `reveal/rendering/` - Output formatting (4 files)
+- `reveal/display/` - Terminal display (5 files)
+- `reveal/adapters/python/` - Python adapter modules (7 files)
+- `reveal/registry.py` - Analyzer registration system
+
+**Phases:**
+1. Extract rendering system ✅
+2. Extract display system ✅
+3. Extract CLI system ✅
+4. Split Python adapter ✅
+5. Extract registry ✅
+6. Consolidation ✅
+
+**Git Tags:** phase-1 through phase-6
+
+---
 
 ### Python Adapter (v0.17.0-v0.18.0)
 
@@ -132,4 +201,4 @@ Key decisions.
 
 ---
 
-**Last Updated:** 2025-12-12 (cyber-phoenix-1212)
+**Last Updated:** 2025-12-13 (wireju-1213 - architecture refactoring complete)
