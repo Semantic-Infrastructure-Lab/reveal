@@ -2,47 +2,9 @@
 
 import sys
 import os
-import json
-from pathlib import Path
-from typing import Optional
-from .base import get_analyzer, get_all_analyzers, FileAnalyzer
-from .tree_view import show_directory_tree
+from .base import get_all_analyzers, FileAnalyzer
 from . import __version__
-
-# Import utilities from utils module
-from .utils import (
-    copy_to_clipboard,
-    DateTimeEncoder,
-    safe_json_dumps,
-    get_element_placeholder,
-    get_file_type_from_analyzer,
-    print_breadcrumbs,
-    check_for_updates,
-)
-
-# Import renderers from rendering package
-from .rendering import (
-    render_reveal_structure,
-    render_json_result,
-    render_env_structure,
-    render_env_variable,
-    render_ast_structure,
-    render_help,
-    render_python_structure,
-    render_python_element,
-)
-
-# Import display functions from display package
-from .display import (
-    show_structure,
-    show_metadata,
-    extract_element,
-    build_hierarchy,
-    build_heading_hierarchy,
-    render_outline,
-)
-
-# Import CLI infrastructure from cli package
+from .utils import copy_to_clipboard, safe_json_dumps, check_for_updates
 from .cli import (
     create_argument_parser,
     validate_navigation_args,
@@ -236,8 +198,8 @@ def list_supported_types():
         # tree-sitter-languages not available or probe failed
         pass
 
-    print(f"\nUsage: reveal <file>")
-    print(f"Help: reveal --help")
+    print("\nUsage: reveal <file>")
+    print("Help: reveal --help")
 
 
 def run_pattern_detection(analyzer: FileAnalyzer, path: str, output_format: str, args):

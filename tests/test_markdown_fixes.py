@@ -13,7 +13,7 @@ import tempfile
 import os
 from pathlib import Path
 from reveal.analyzers.markdown import MarkdownAnalyzer
-from reveal.main import build_heading_hierarchy
+from reveal.display import build_heading_hierarchy
 
 
 class TestIssue1ConditionalHeadingInclusion(unittest.TestCase):
