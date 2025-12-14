@@ -90,8 +90,12 @@ Examples:
 
 File-type specific features:
   • Markdown: --links, --code, --frontmatter (extract links/code/metadata)
-  • Code files: --check, --outline (quality checks, show hierarchical structure)
+  • Code files: --check, --outline, --typed (quality checks, hierarchy, containment)
   • URI adapters: help:// (documentation), env:// (environment), ast:// (code queries)
+
+  # Type-aware output (shows parent/child relationships!)
+  reveal app.py --typed            # See containment hierarchy
+  reveal app.py --typed --format=json  # Full typed structure as JSON
 
 Perfect filename:line format - works with vim, git, grep, sed, awk!
 Metrics: All code files show [X lines, depth:Y] for complexity analysis
@@ -137,6 +141,10 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
                         help='Output format (text, json, typed [typed JSON with types/relationships], grep)')
     parser.add_argument('--copy', '-c', action='store_true',
                         help='Copy output to clipboard (also prints normally)')
+
+    # Type-aware output
+    parser.add_argument('--typed', action='store_true',
+                        help='Enable type-aware output with containment navigation (Pythonic structure)')
 
     # Display options
     parser.add_argument('--no-fallback', action='store_true',

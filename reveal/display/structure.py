@@ -17,6 +17,72 @@ from .formatting import (
 )
 
 
+def _render_typed_structure_output(
+    analyzer: FileAnalyzer,
+    structure: Dict[str, List[Dict[str, Any]]],
+    output_format: str = "text",
+) -> None:
+    """Render structure using the new Type-First Architecture.
+
+    Converts raw analyzer output to TypedStructure with containment
+    relationships, then renders in the specified format.
+
+    Args:
+        analyzer: The file analyzer
+        structure: Raw structure dict from analyzer
+        output_format: 'text' for human-readable, 'json' for TypedStructure JSON
+    """
+    from reveal.structure import TypedStructure
+
+    file_path = str(analyzer.path)
+
+    # Convert to TypedStructure (auto-detects type from extension)
+    typed = TypedStructure.from_analyzer_output(structure, file_path)
+
+    if output_format == "json":
+        # Output full typed structure with tree
+        result = {
+            "file": file_path,
+            "type": typed.reveal_type.name if typed.reveal_type else None,
+            "stats": typed.stats,
+            "tree": typed.to_tree().get("roots", []),
+        }
+        print(safe_json_dumps(result))
+        return
+
+    # Text output: show hierarchical structure with containment
+    is_fallback = getattr(analyzer, "is_fallback", False)
+    fallback_lang = getattr(analyzer, "fallback_language", None)
+    _print_file_header(Path(file_path), is_fallback, fallback_lang)
+
+    if not typed.elements:
+        print("No structure available")
+        return
+
+    # Print type info
+    if typed.reveal_type:
+        print(f"Type: {typed.reveal_type.name}")
+    print(f"Elements: {len(typed)} ({typed.stats.get('roots', 0)} roots)")
+    print()
+
+    # Render tree structure
+    def render_element(el, indent=0):
+        prefix = "  " * indent
+        # Format: name (category) [lines X-Y]
+        line_info = f"[{el.line}-{el.line_end}]" if el.line != el.line_end else f"[{el.line}]"
+        print(f"{prefix}{el.name} ({el.category}) {line_info}")
+        for child in el.children:
+            render_element(child, indent + 1)
+
+    for root in typed.roots:
+        render_element(root)
+
+    # Navigation hints
+    print()
+    file_type = get_file_type_from_analyzer(analyzer)
+    print_breadcrumbs("typed", file_path, file_type=file_type)
+
+
 def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
     """Render structure as JSON output (standard format)."""
     is_fallback = getattr(analyzer, 'is_fallback', False)
@@ -205,6 +271,12 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None):
     # Get fallback info
     is_fallback = getattr(analyzer, 'is_fallback', False)
     fallback_lang = getattr(analyzer, 'fallback_language', None)
+
+    # Handle --typed flag (new Type-First Architecture)
+    if args and getattr(args, 'typed', False):
+        json_format = "json" if output_format == "json" else "text"
+        _render_typed_structure_output(analyzer, structure, json_format)
+        return
 
     # Handle outline mode
     if args and getattr(args, 'outline', False):

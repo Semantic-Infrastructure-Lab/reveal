@@ -19,6 +19,9 @@ from .treesitter import TreeSitterAnalyzer
 # Import all built-in analyzers to register them
 from .analyzers import *
 
+# Import type definitions to auto-register them in TypeRegistry
+from .types import python  # noqa: F401
+
 __all__ = [
     'FileAnalyzer',
     'TreeSitterAnalyzer',

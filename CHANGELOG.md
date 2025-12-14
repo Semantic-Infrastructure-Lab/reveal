@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🏗️ NEW: Type-First Architecture with `--typed` Flag
+
+**Reveal now supports typed, navigable code structures with containment relationships!**
+
+```bash
+reveal app.py --typed            # See hierarchical structure with containment
+reveal app.py --typed --format=json   # Full typed structure as JSON
+```
+
+**What's Included:**
+- ✅ `--typed` flag for type-aware output showing parent/child relationships
+- ✅ `TypedStructure.from_analyzer_output()` factory for programmatic use
+- ✅ `TypedElement` base class with `.parent`, `.children`, `.walk()` navigation
+- ✅ `PythonElement` specialized class for Python files
+- ✅ Containment computed from line ranges + EntityDef rules
+- ✅ Path navigation: `structure / 'MyClass' / 'method'`
+- ✅ Query methods: `structure.find(category='function')`, `find_by_line(42)`
+
+**Example Output:**
+```bash
+reveal mymodule.py --typed
+
+File: mymodule.py (5.2KB, 150 lines)
+Type: python
+Elements: 15 (3 roots)
+
+MyClass (class) [10-80]
+  __init__ (function) [15-25]
+  process (function) [30-60]
+    helper (function) [45-55]   # Nested function visible!
+  validate (function) [65-78]
+standalone_func (function) [85-100]
+```
+
+**Programmatic Usage:**
+```python
+from reveal.structure import TypedStructure
+
+# Convert raw analyzer output to typed structure
+typed = TypedStructure.from_analyzer_output(raw_dict, 'app.py')
+
+# Navigate
+my_class = typed / 'MyClass'
+for method in my_class.children:
+    print(f"{method.name} at line {method.line}")
+
+# Query
+nested = list(typed.find(lambda el: el.depth > 1))
+```
+
 ### 🎯 IMPROVED: Size Disclosure & LLM-Friendly Quality Checks
 
 **Reveal now shows file size and line count in headers, preventing surprise large reads!**

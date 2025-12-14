@@ -668,3 +668,124 @@ class TestPythonTypeIntegration:
         assert self.python_type.can_contain("class", "function")
         assert self.python_type.can_contain("function", "function")  # nested
         assert not self.python_type.can_contain("function", "class")
+
+
+class TestTypedStructureFactory:
+    """Tests for TypedStructure.from_analyzer_output factory method."""
+
+    def setup_method(self):
+        """Clear registry and import PythonType."""
+        TypeRegistry.clear()
+        from reveal.types.python import PythonType
+        self.python_type = PythonType
+
+    def test_from_analyzer_output_basic(self):
+        """Factory creates TypedStructure from raw dict."""
+        raw = {
+            "functions": [
+                {"name": "foo", "line": 1, "line_end": 5, "signature": "(x)"},
+                {"name": "bar", "line": 10, "line_end": 15, "signature": "(y)"},
+            ],
+            "classes": [
+                {"name": "MyClass", "line": 20, "line_end": 50},
+            ],
+        }
+
+        structure = TypedStructure.from_analyzer_output(raw, "test.py")
+
+        assert len(structure) == 3
+        assert len(structure.functions) == 2
+        assert len(structure.classes) == 1
+
+    def test_from_analyzer_output_auto_detects_type(self):
+        """Factory auto-detects RevealType from extension."""
+        # Ensure PythonType is registered for this test
+        TypeRegistry.register(self.python_type)
+
+        raw = {"functions": [{"name": "foo", "line": 1, "line_end": 5}]}
+
+        structure = TypedStructure.from_analyzer_output(raw, "test.py")
+
+        assert structure.reveal_type is not None
+        assert structure.reveal_type.name == "python"
+
+    def test_from_analyzer_output_uses_element_class(self):
+        """Factory uses element_class from RevealType."""
+        from reveal.elements import PythonElement
+
+        raw = {"functions": [{"name": "foo", "line": 1, "line_end": 5}]}
+
+        structure = TypedStructure.from_analyzer_output(
+            raw, "test.py", self.python_type
+        )
+
+        assert isinstance(structure.functions[0], PythonElement)
+
+    def test_from_analyzer_output_containment(self):
+        """Factory-created structure has working containment."""
+        raw = {
+            "classes": [{"name": "MyClass", "line": 1, "line_end": 20}],
+            "functions": [{"name": "method", "line": 5, "line_end": 10}],
+        }
+
+        structure = TypedStructure.from_analyzer_output(
+            raw, "test.py", self.python_type
+        )
+
+        my_class = structure / "MyClass"
+        method = structure.find_by_name("method")
+
+        assert my_class is not None
+        assert method is not None
+        assert method in my_class
+        assert method.parent == my_class
+
+    def test_from_analyzer_output_skips_private_keys(self):
+        """Factory skips keys starting with underscore."""
+        raw = {
+            "functions": [{"name": "foo", "line": 1, "line_end": 5}],
+            "_meta": {"analyzer": "test"},
+        }
+
+        structure = TypedStructure.from_analyzer_output(raw, "test.py")
+
+        assert len(structure) == 1
+
+    def test_from_analyzer_output_handles_missing_line_end(self):
+        """Factory handles items without line_end (defaults to line)."""
+        raw = {
+            "imports": [{"name": "os", "line": 1}],
+        }
+
+        structure = TypedStructure.from_analyzer_output(raw, "test.py")
+
+        assert len(structure) == 1
+        assert structure.imports[0].line_end == 1
+
+    def test_from_analyzer_output_navigation(self):
+        """Factory-created structure supports full navigation."""
+        raw = {
+            "classes": [{"name": "Parent", "line": 1, "line_end": 30}],
+            "functions": [
+                {"name": "outer", "line": 5, "line_end": 20},
+                {"name": "inner", "line": 10, "line_end": 15},
+            ],
+        }
+
+        structure = TypedStructure.from_analyzer_output(
+            raw, "test.py", self.python_type
+        )
+
+        # Path navigation
+        parent = structure / "Parent"
+        assert parent is not None
+
+        # Nested containment
+        inner = structure.find_by_name("inner")
+        outer = structure.find_by_name("outer")
+        assert inner.parent == outer
+        assert outer.parent == parent
+
+        # Walk
+        all_elements = list(structure.walk())
+        assert len(all_elements) == 3

@@ -44,6 +44,23 @@ if TYPE_CHECKING:
 from .elements import TypedElement
 
 
+# Map analyzer output keys (plural) to category names (singular)
+_CATEGORY_MAP = {
+    "functions": "function",
+    "classes": "class",
+    "imports": "import",
+    "structs": "struct",
+    "sections": "section",
+    "headings": "section",
+    "attributes": "attribute",
+    "variables": "variable",
+    "methods": "method",
+    "code_blocks": "code_block",
+    "links": "link",
+    # Add more as needed
+}
+
+
 @dataclass
 class TypedStructure:
     """Container for typed elements with navigation.
@@ -70,6 +87,99 @@ class TypedStructure:
         for el in self.elements:
             el._type = self.reveal_type
             el._siblings = self.elements
+
+    # === Factory Methods ===
+
+    @classmethod
+    def from_analyzer_output(
+        cls,
+        structure_dict: Dict[str, list],
+        path: str,
+        reveal_type: Optional["RevealType"] = None,
+    ) -> "TypedStructure":
+        """Create TypedStructure from raw analyzer output.
+
+        Converts the dict-based output from TreeSitterAnalyzer or other
+        analyzers into typed elements with containment relationships.
+
+        Args:
+            structure_dict: Raw output from analyzer.get_structure(),
+                            e.g. {'functions': [...], 'classes': [...]}
+            path: File path that was analyzed
+            reveal_type: Optional RevealType for containment rules.
+                         If None, auto-detects from file extension.
+
+        Returns:
+            TypedStructure with typed, navigable elements
+
+        Example:
+            structure = analyzer.get_structure()
+            typed = TypedStructure.from_analyzer_output(
+                structure, 'app.py', PythonType
+            )
+            for func in typed.functions:
+                print(func.name, func.parent)
+        """
+        from pathlib import Path as PathLib
+
+        # Auto-detect type from extension if not provided
+        if reveal_type is None:
+            from .type_system import TypeRegistry
+            ext = PathLib(path).suffix.lower()
+            reveal_type = TypeRegistry.from_extension(ext)
+
+        # Get element class from type, or use base TypedElement
+        element_class = TypedElement
+        if reveal_type and reveal_type.element_class:
+            element_class = reveal_type.element_class
+
+        elements: List[TypedElement] = []
+
+        for key, items in structure_dict.items():
+            # Skip private/meta keys
+            if key.startswith("_"):
+                continue
+
+            # Map plural key to singular category
+            category = _CATEGORY_MAP.get(key, key.rstrip("s"))
+
+            # Skip if items is not a list
+            if not isinstance(items, list):
+                continue
+
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+
+                # Required fields
+                name = item.get("name", "")
+                line = item.get("line", 0)
+                line_end = item.get("line_end", line)
+
+                # Create element with appropriate class
+                el = element_class(
+                    name=name,
+                    line=line,
+                    line_end=line_end,
+                    category=category,
+                )
+
+                # Copy additional properties from item (skip computed properties)
+                skip_props = {"name", "line", "line_end", "line_count", "depth"}
+                for prop_key, prop_value in item.items():
+                    if prop_key in skip_props:
+                        continue
+                    # Only set if it's a data attribute, not a property
+                    if hasattr(el, prop_key):
+                        try:
+                            setattr(el, prop_key, prop_value)
+                        except AttributeError:
+                            # Skip computed properties that can't be set
+                            pass
+
+                elements.append(el)
+
+        return cls(path=path, reveal_type=reveal_type, elements=elements)
 
     # === Category Accessors ===
 
