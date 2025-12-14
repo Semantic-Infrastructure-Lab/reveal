@@ -8,25 +8,6 @@ import hashlib
 
 logger = logging.getLogger(__name__)
 
-# Import type system (lazy to avoid circular imports)
-_TYPE_REGISTRY = None
-_RELATIONSHIP_REGISTRY = None
-
-
-def _get_type_system():
-    """Lazy import of type system to avoid circular dependencies."""
-    global _TYPE_REGISTRY, _RELATIONSHIP_REGISTRY
-    if _TYPE_REGISTRY is None:
-        try:
-            from .types import TypeRegistry, RelationshipRegistry
-            _TYPE_REGISTRY = TypeRegistry
-            _RELATIONSHIP_REGISTRY = RelationshipRegistry
-        except ImportError:
-            logger.debug("Type system not available")
-            _TYPE_REGISTRY = False
-            _RELATIONSHIP_REGISTRY = False
-    return _TYPE_REGISTRY, _RELATIONSHIP_REGISTRY
-
 
 class FileAnalyzer:
     """Base class for all file analyzers.
@@ -36,31 +17,16 @@ class FileAnalyzer:
     - Metadata extraction
     - Line number formatting
     - Source extraction helpers
-    - Optional type system and relationships
 
     Subclasses only need to implement:
     - get_structure(): Return dict of file elements
     - extract_element(type, name): Extract specific element (optional)
-
-    Optional type system (subclasses can define):
-    - types: Dict mapping type names to Entity definitions
-    - relationships: Dict mapping relationship names to RelationshipDef
-    - _extract_relationships(structure): Extract relationship edges
     """
-
-    # Optional: Subclasses can define types and relationships
-    types: Optional[Dict[str, Any]] = None
-    relationships: Optional[Dict[str, Any]] = None
 
     def __init__(self, path: str):
         self.path = Path(path)
         self.lines = self._read_file()
         self.content = '\n'.join(self.lines)
-
-        # Initialize type system if types are defined
-        self._type_registry = None
-        self._relationship_registry = None
-        self._init_type_system()
 
     def _read_file(self) -> List[str]:
         """Read file with automatic encoding detection."""
@@ -214,31 +180,6 @@ class FileAnalyzer:
         except UnicodeEncodeError:
             return 'UTF-8'
 
-    def _init_type_system(self) -> None:
-        """Initialize type system if types/relationships are defined.
-
-        This is called automatically in __init__ and handles:
-        - Type registry creation
-        - Type inheritance resolution
-        - Relationship registry creation
-        """
-        TypeRegistryClass, RelationshipRegistryClass = _get_type_system()
-
-        # Check if type system is available
-        if not TypeRegistryClass or not RelationshipRegistryClass:
-            return
-
-        # Initialize type registry if types are defined
-        if self.types:
-            self._type_registry = TypeRegistryClass()
-            self._type_registry.register_types(self.types)
-            self._type_registry.resolve_inheritance()
-
-        # Initialize relationship registry if relationships are defined
-        if self.relationships and self._type_registry:
-            self._relationship_registry = RelationshipRegistryClass(self._type_registry)
-            self._relationship_registry.register_relationships(self.relationships)
-
     def _extract_relationships(self, structure: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
         """Extract relationships from structure.
 
@@ -253,30 +194,6 @@ class FileAnalyzer:
             e.g., {'calls': [{'from': {...}, 'to': {...}, 'line': 42}]}
         """
         return {}
-
-    def validate_structure(self, structure: Dict[str, List[Dict[str, Any]]]) -> List[str]:
-        """Validate structure against type definitions.
-
-        Args:
-            structure: Structure dict to validate
-
-        Returns:
-            List of validation error messages (empty if valid)
-        """
-        if not self._type_registry:
-            return []
-
-        errors = []
-
-        for type_name, entities in structure.items():
-            if type_name not in self._type_registry.types:
-                continue
-
-            for entity in entities:
-                entity_errors = self._type_registry.validate_entity(type_name, entity)
-                errors.extend(entity_errors)
-
-        return errors
 
     def get_directory_entry(self) -> Dict[str, Any]:
         """Return info for directory listing.
