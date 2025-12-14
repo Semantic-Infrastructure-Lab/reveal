@@ -42,7 +42,8 @@ class AstAdapter(ResourceAdapter):
                 'lines': 'Number of lines in function/class (e.g., lines>50)',
                 'complexity': 'Cyclomatic complexity score 1-10 (e.g., complexity>5)',
                 'type': 'Element type: function, class, method. Supports OR with | or , (e.g., type=function, type=class|function)',
-                'name': 'Element name pattern with wildcards (e.g., name=test_*, name=*helper*, name=get_?)'
+                'name': 'Element name pattern with wildcards (e.g., name=test_*, name=*helper*, name=get_?)',
+                'decorator': 'Decorator pattern - find decorated functions/classes (e.g., decorator=property, decorator=*cache*)'
             },
             'examples': [
                 {
@@ -80,13 +81,30 @@ class AstAdapter(ResourceAdapter):
                 {
                     'uri': "ast://./src?complexity>5 --format=json",
                     'description': 'JSON output for scripting'
+                },
+                {
+                    'uri': 'ast://.?decorator=property',
+                    'description': 'Find all @property decorated methods'
+                },
+                {
+                    'uri': 'ast://.?decorator=*cache*',
+                    'description': 'Find all cached functions (@lru_cache, @cached_property, etc.)'
+                },
+                {
+                    'uri': 'ast://.?decorator=staticmethod',
+                    'description': 'Find all @staticmethod methods'
+                },
+                {
+                    'uri': 'ast://.?decorator=property&lines>10',
+                    'description': 'Find complex properties (potential code smell)'
                 }
             ],
             # Executable examples for current directory
             'try_now': [
                 "reveal 'ast://.?complexity>5'",
                 "reveal 'ast://.?name=test_*'",
-                "reveal 'ast://.?type=class'",
+                "reveal 'ast://.?decorator=property'",
+                "reveal 'ast://.?decorator=*cache*'",
             ],
             # Scenario-based workflow patterns
             'workflows': [
@@ -116,6 +134,17 @@ class AstAdapter(ResourceAdapter):
                     'steps': [
                         "git diff --name-only | grep '\\.py$' | xargs -I{} reveal 'ast://{}?complexity>8'",
                         "git diff --name-only | reveal --stdin --check",
+                    ]
+                },
+                {
+                    'name': 'Analyze Decorator Patterns',
+                    'scenario': 'Understand caching, properties, and API surface',
+                    'steps': [
+                        "reveal 'ast://.?decorator=property'            # All properties",
+                        "reveal 'ast://.?decorator=*cache*'             # All cached/memoized functions",
+                        "reveal 'ast://.?decorator=staticmethod'        # Static methods (might not need class)",
+                        "reveal 'ast://.?decorator=abstractmethod'      # Abstract interface",
+                        "reveal 'ast://.?decorator=property&lines>10'   # Complex properties (code smell)",
                     ]
                 },
             ],
@@ -326,6 +355,7 @@ class AstAdapter(ResourceAdapter):
                         'line': item.get('line', 0),
                         'line_count': line_count,
                         'signature': item.get('signature', ''),
+                        'decorators': item.get('decorators', []),
                     }
 
                     # Add complexity if we can calculate it
@@ -412,6 +442,12 @@ class AstAdapter(ResourceAdapter):
             elif key == 'lines':
                 # Map 'lines' to 'line_count'
                 value = element.get('line_count', 0)
+            elif key == 'decorator':
+                # Special handling: check if any decorator matches
+                decorators = element.get('decorators', [])
+                if not self._matches_decorator(decorators, condition):
+                    return False
+                continue  # Already handled, skip normal comparison
             else:
                 value = element.get(key)
 
@@ -422,6 +458,45 @@ class AstAdapter(ResourceAdapter):
                 return False
 
         return True
+
+    def _matches_decorator(self, decorators: List[str], condition: Dict[str, Any]) -> bool:
+        """Check if any decorator matches the condition.
+
+        Supports:
+        - Exact match: decorator=property
+        - Wildcard: decorator=*cache* (matches @lru_cache, @cached_property, etc.)
+
+        Args:
+            decorators: List of decorator strings (e.g., ['@property', '@lru_cache(maxsize=100)'])
+            condition: Condition dict with 'op' and 'value'
+
+        Returns:
+            True if any decorator matches
+        """
+        if not decorators:
+            return False
+
+        target = condition['value']
+        op = condition['op']
+
+        # Normalize target - add @ if not present
+        if not target.startswith('@') and not target.startswith('*'):
+            target = f'@{target}'
+
+        for dec in decorators:
+            # Exact match
+            if op == '==':
+                # Match decorator name (ignore args)
+                # @lru_cache(maxsize=100) should match @lru_cache
+                dec_name = dec.split('(')[0]
+                if dec_name == target or dec == target:
+                    return True
+            # Wildcard match
+            elif op == 'glob':
+                if fnmatch(dec, target) or fnmatch(dec, f'@{target}'):
+                    return True
+
+        return False
 
     def _normalize_type_condition(self, condition: Dict[str, Any]) -> Dict[str, Any]:
         """Normalize type condition to handle singular/plural forms.

@@ -152,6 +152,126 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     sys.exit(0)
 
 
+def handle_decorator_stats(path: str):
+    """Handle --decorator-stats flag to show decorator usage statistics.
+
+    Scans Python files and reports decorator usage across the codebase.
+
+    Args:
+        path: File or directory path to scan
+    """
+    from collections import defaultdict
+    from ..base import get_analyzer
+
+    target_path = Path(path) if path else Path('.')
+
+    # Collect decorator statistics
+    decorator_counts = defaultdict(int)  # decorator -> count
+    decorator_files = defaultdict(set)   # decorator -> set of files
+    total_files = 0
+    total_decorated = 0
+
+    def process_file(file_path: str):
+        """Process a single file for decorator statistics."""
+        nonlocal total_files, total_decorated
+
+        try:
+            analyzer_class = get_analyzer(file_path)
+            if not analyzer_class:
+                return
+
+            analyzer = analyzer_class(file_path)
+            structure = analyzer.get_structure()
+            if not structure:
+                return
+
+            total_files += 1
+            file_has_decorators = False
+
+            # Check functions and classes for decorators
+            for category in ['functions', 'classes']:
+                for item in structure.get(category, []):
+                    decorators = item.get('decorators', [])
+                    for dec in decorators:
+                        # Normalize decorator (just the name, not args)
+                        dec_name = dec.split('(')[0]
+                        decorator_counts[dec_name] += 1
+                        decorator_files[dec_name].add(file_path)
+                        file_has_decorators = True
+
+            if file_has_decorators:
+                total_decorated += 1
+
+        except Exception:
+            pass  # Skip files we can't analyze
+
+    # Scan files
+    if target_path.is_file():
+        process_file(str(target_path))
+    elif target_path.is_dir():
+        for file_path in target_path.rglob('*.py'):
+            if '.venv' in str(file_path) or 'node_modules' in str(file_path):
+                continue  # Skip common non-source directories
+            process_file(str(file_path))
+    else:
+        print(f"Error: {path} not found", file=sys.stderr)
+        sys.exit(1)
+
+    if total_files == 0:
+        print(f"No Python files found in {path or '.'}")
+        sys.exit(0)
+
+    # Print statistics
+    print(f"Decorator Usage in {target_path} ({total_files} files)\n")
+
+    if not decorator_counts:
+        print("No decorators found")
+        sys.exit(0)
+
+    # Sort by count (descending)
+    sorted_decorators = sorted(decorator_counts.items(), key=lambda x: -x[1])
+
+    # Categorize decorators
+    stdlib_decorators = ['@property', '@staticmethod', '@classmethod', '@abstractmethod',
+                         '@dataclass', '@cached_property', '@lru_cache', '@functools.wraps',
+                         '@contextmanager', '@asynccontextmanager', '@overload', '@final',
+                         '@pytest.fixture', '@pytest.mark']
+
+    custom_decorators = []
+    stdlib_list = []
+
+    for dec, count in sorted_decorators:
+        file_count = len(decorator_files[dec])
+        if any(dec.startswith(std) for std in stdlib_decorators):
+            stdlib_list.append((dec, count, file_count))
+        else:
+            custom_decorators.append((dec, count, file_count))
+
+    # Print stdlib decorators
+    if stdlib_list:
+        print("Standard Library Decorators:")
+        for dec, count, file_count in stdlib_list:
+            files_text = f"{file_count} file{'s' if file_count != 1 else ''}"
+            print(f"  {dec:<30s} {count:>4d} occurrences ({files_text})")
+        print()
+
+    # Print custom decorators
+    if custom_decorators:
+        print("Custom/Third-Party Decorators:")
+        for dec, count, file_count in custom_decorators:
+            files_text = f"{file_count} file{'s' if file_count != 1 else ''}"
+            print(f"  {dec:<30s} {count:>4d} occurrences ({files_text})")
+        print()
+
+    # Summary
+    print(f"Summary:")
+    print(f"  Total decorators: {sum(decorator_counts.values())}")
+    print(f"  Unique decorators: {len(decorator_counts)}")
+    print(f"  Files with decorators: {total_decorated}/{total_files} ({100*total_decorated//total_files}%)")
+
+    sys.exit(0)
+
+
 # Backward compatibility aliases (private names used in main.py)
 _handle_list_supported = handle_list_supported
 _handle_agent_help = handle_agent_help
@@ -159,3 +279,4 @@ _handle_agent_help_full = handle_agent_help_full
 _handle_rules_list = handle_rules_list
 _handle_explain_rule = handle_explain_rule
 _handle_stdin_mode = handle_stdin_mode
+_handle_decorator_stats = handle_decorator_stats

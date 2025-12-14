@@ -7,7 +7,7 @@
 ## Table of Contents
 
 - [Self-Diagnostic Superpowers](#self-diagnostic-superpowers)
-- [AST Query Wizardry](#ast-query-wizardry)
+- [AST Query Wizardry](#ast-query-wizardry) (includes Decorator Intelligence NEW v0.23.0)
 - [Pipeline Magic](#pipeline-magic)
 - [Markdown Surgery](#markdown-surgery)
 - [Token Efficiency Mastery](#token-efficiency-mastery)
@@ -149,6 +149,51 @@ reveal 'ast://.?name=get_*' --format=json | \
 # Count functions per file
 reveal 'ast://./src?type=function' --format=json | \
   jq -r '.results[].file' | sort | uniq -c | sort -rn
+```
+
+### Decorator Intelligence (NEW v0.23.0)
+
+```bash
+# Find all @property methods
+reveal 'ast://.?decorator=property'
+
+# Find all cached functions (wildcards work!)
+reveal 'ast://.?decorator=*cache*'
+
+# Find abstract interface methods
+reveal 'ast://.?decorator=abstractmethod'
+
+# Find complex properties (code smell - properties should be simple)
+reveal 'ast://.?decorator=property&lines>10'
+
+# Find all @dataclass classes
+reveal 'ast://.?decorator=dataclass&type=class'
+```
+
+### Decorator Statistics
+
+```bash
+# Analyze decorator usage across your codebase
+reveal src/ --decorator-stats
+
+# Output shows:
+# - Standard library decorators (@property, @staticmethod, etc.)
+# - Custom/third-party decorators
+# - Occurrence counts and file distribution
+# - Summary with total decorators and coverage percentage
+```
+
+### Filter Typed Output
+
+```bash
+# Show only properties in typed view
+reveal app.py --typed --filter=property
+
+# Show only static methods
+reveal app.py --typed --filter=staticmethod
+
+# Show only classes
+reveal app.py --typed --filter=class
 ```
 
 ---
@@ -319,14 +364,17 @@ reveal --rules
 # Explain a specific rule
 reveal --explain B001
 
-# Rules by category:
-# B - Bugs (bare except, etc.)
-# C - Complexity (cyclomatic complexity)
-# E - Errors (line length, etc.)
-# N - Nginx (duplicate backends, SSL, proxy headers) [NEW v0.19.0]
-# R - Refactoring (too many args)
-# S - Security (Docker :latest tag)
-# U - URLs (insecure http://)
+# Rules by category (24 total):
+# B - Bugs: B001 bare except, B002 @staticmethod+self, B003 complex @property, B004 @property no return [NEW v0.23.0]
+# C - Complexity: C901 cyclomatic, C902 function length, C905 nesting depth
+# D - Duplicates: D001 duplicate functions, D002 similar code
+# E - Errors: E501 line length
+# M - Maintainability: M101 file too large
+# N - Nginx: N001 duplicate backends, N002 missing SSL, N003 missing proxy headers
+# R - Refactoring: R913 too many arguments
+# S - Security: S701 Docker :latest tag
+# U - URLs: U501 insecure http://
+# V - Validation: V001-V007 schema/structure validation
 ```
 
 ### Combine with Outline
@@ -555,6 +603,10 @@ reveal 'ast://./src?lines>50&complexity<3'       # Long but simple (inline?)
 | Complex | `reveal 'ast://.?complexity>10'` |
 | Long | `reveal 'ast://.?lines>50'` |
 | Named | `reveal 'ast://.?name=test_*'` |
+| Decorated | `reveal 'ast://.?decorator=property'` |
+| Cached | `reveal 'ast://.?decorator=*cache*'` |
+| Dec stats | `reveal src/ --decorator-stats` |
+| Filter | `reveal file.py --typed --filter=property` |
 | Check | `reveal file.py --check` |
 | Links | `reveal doc.md --links` |
 | Code | `reveal doc.md --code` |

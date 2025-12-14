@@ -20,7 +20,8 @@ reveal app.py --typed --format=json   # Full typed structure as JSON
 - ✅ `--typed` flag for type-aware output showing parent/child relationships
 - ✅ `TypedStructure.from_analyzer_output()` factory for programmatic use
 - ✅ `TypedElement` base class with `.parent`, `.children`, `.walk()` navigation
-- ✅ `PythonElement` specialized class for Python files
+- ✅ `PythonElement` specialized class with `.decorators`, `.is_property`, `.is_staticmethod`, etc.
+- ✅ **Decorator extraction** from Python functions and classes via TreeSitter
 - ✅ Containment computed from line ranges + EntityDef rules
 - ✅ Path navigation: `structure / 'MyClass' / 'method'`
 - ✅ Query methods: `structure.find(category='function')`, `find_by_line(42)`
@@ -33,13 +34,21 @@ File: mymodule.py (5.2KB, 150 lines)
 Type: python
 Elements: 15 (3 roots)
 
+@dataclass Config (class) [1-5]
 MyClass (class) [10-80]
-  __init__ (function) [15-25]
-  process (function) [30-60]
-    helper (function) [45-55]   # Nested function visible!
-  validate (function) [65-78]
-standalone_func (function) [85-100]
+  __init__(self, name) (method) [15-25]
+  @property name() (property) [28-31]
+  @staticmethod helper() (staticmethod) [33-40]
+  process(data) → Result (method) [45-60]
+    _inner_helper() (function) [50-55]   # Nested function visible!
+standalone_func(x, y) → int (function) [85-100]
 ```
+
+**Rich Output Features:**
+- ✅ **Decorator extraction**: Shows `@property`, `@staticmethod`, `@classmethod`, `@dataclass`, etc.
+- ✅ **Function signatures**: Parameters and return types displayed
+- ✅ **Semantic categories**: Methods, properties, staticmethods distinguished from plain functions
+- ✅ **Line counts**: Shows line count for longer elements (e.g., `94 lines`)
 
 **Programmatic Usage:**
 ```python
@@ -383,6 +392,91 @@ reveal config.toml --outline
 - **Code complexity**: main.py depth 5 → 2
 - **Documentation**: 105.6KB planning docs added
 - **Lines changed**: 11,575+ across 8 commits
+
+## [0.23.0] - 2025-12-14
+
+### 🎯 NEW: Decorator-Aware Code Intelligence
+
+**Reveal now understands decorators semantically — query by decorator, detect decorator-related bugs, and analyze decorator usage across your codebase.**
+
+#### New Bug Detection Rules (B002-B004)
+
+Three new rules catch common decorator-related bugs:
+
+```bash
+reveal app.py --check --select B
+
+# B002: @staticmethod 'process' has 'self' parameter
+#       Either remove @staticmethod or remove 'self'
+
+# B003: @property 'config' is 15 lines (max 8)
+#       Properties should be simple getters
+
+# B004: @property 'value' has no return statement (will return None)
+#       Add a return statement or convert to a method
+```
+
+| Rule | Description | Severity |
+|------|-------------|----------|
+| B002 | `@staticmethod` with `self` parameter | HIGH |
+| B003 | `@property` too complex (>8 lines) | MEDIUM |
+| B004 | `@property` without return statement | HIGH |
+
+#### AST Decorator Query
+
+Query code by decorator pattern using the `ast://` adapter:
+
+```bash
+# Find all properties
+reveal 'ast://.?decorator=property'
+
+# Find all cached functions (wildcard matching)
+reveal 'ast://.?decorator=*cache*'
+
+# Find all abstract methods
+reveal 'ast://.?decorator=abstractmethod'
+
+# Combine with other filters - find complex properties (code smell)
+reveal 'ast://.?decorator=property&lines>10'
+```
+
+#### Category Filtering (`--filter`)
+
+Filter `--typed` output by semantic category:
+
+```bash
+reveal app.py --typed --filter=property       # Only properties
+reveal app.py --typed --filter=staticmethod   # Only static methods
+reveal app.py --typed --filter=class          # Only classes
+```
+
+#### Decorator Statistics (`--decorator-stats`)
+
+Analyze decorator usage across your codebase:
+
+```bash
+reveal src/ --decorator-stats
+
+# Standard Library Decorators:
+#   @property                        13 occurrences (2 files)
+#   @staticmethod                    11 occurrences (8 files)
+#   @lru_cache                        5 occurrences (3 files)
+#
+# Custom/Third-Party Decorators:
+#   @register                        23 occurrences (16 files)
+#   @validate                         8 occurrences (4 files)
+#
+# Summary:
+#   Total decorators: 94
+#   Files with decorators: 30/98 (30%)
+```
+
+### 📊 Quality Metrics
+
+- **Tests**: 401 passing (up from 384)
+- **New rules**: B002, B003, B004
+- **New CLI flags**: `--filter`, `--decorator-stats`
+- **AST adapter**: Extended with `decorator=` filter
 
 ## [0.22.0] - 2025-12-11
 

@@ -52,6 +52,7 @@ from .cli import (
     handle_rules_list,
     handle_explain_rule,
     handle_stdin_mode,
+    handle_decorator_stats,
     handle_uri,
     handle_file_or_directory,
     handle_file,
@@ -142,6 +143,8 @@ def _main_impl():
         handle_rules_list(__version__)
     if args.explain:
         handle_explain_rule(args.explain)
+    if getattr(args, 'decorator_stats', False):
+        handle_decorator_stats(args.path)
 
     # Handle stdin mode
     if args.stdin:

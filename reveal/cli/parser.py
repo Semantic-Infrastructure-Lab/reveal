@@ -145,6 +145,10 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     # Type-aware output
     parser.add_argument('--typed', action='store_true',
                         help='Enable type-aware output with containment navigation (Pythonic structure)')
+    parser.add_argument('--filter', type=str, metavar='CATEGORY',
+                        help='Filter --typed output by category (property, staticmethod, classmethod, method, function, class)')
+    parser.add_argument('--decorator-stats', action='store_true',
+                        help='Show decorator usage statistics across codebase (works on directories)')
 
     # Display options
     parser.add_argument('--no-fallback', action='store_true',

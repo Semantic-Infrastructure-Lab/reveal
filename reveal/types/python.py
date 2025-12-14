@@ -23,7 +23,7 @@ PythonType = RevealType(
         ),
         "class": EntityDef(
             contains=["method", "function", "attribute", "class"],
-            properties={"name": str, "line": int, "line_end": int, "bases": list},
+            properties={"name": str, "line": int, "line_end": int, "bases": list, "decorators": list},
         ),
         "function": EntityDef(
             contains=["function", "variable"],
@@ -33,6 +33,7 @@ PythonType = RevealType(
                 "line_end": int,
                 "signature": str,
                 "depth": int,
+                "decorators": list,
             },
         ),
         "method": EntityDef(
