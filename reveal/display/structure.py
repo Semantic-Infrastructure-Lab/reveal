@@ -65,12 +65,55 @@ def _render_typed_structure_output(
     print(f"Elements: {len(typed)} ({typed.stats.get('roots', 0)} roots)")
     print()
 
-    # Render tree structure
+    # Render tree structure with rich formatting
     def render_element(el, indent=0):
+        from reveal.elements import PythonElement
+
         prefix = "  " * indent
-        # Format: name (category) [lines X-Y]
-        line_info = f"[{el.line}-{el.line_end}]" if el.line != el.line_end else f"[{el.line}]"
-        print(f"{prefix}{el.name} ({el.category}) {line_info}")
+        parts = []
+
+        # For PythonElement, use enhanced display
+        if isinstance(el, PythonElement):
+            # Decorator prefix (e.g., @property, @classmethod)
+            if el.decorator_prefix and el.category == "function":
+                parts.append(el.decorator_prefix)
+
+            # Name with optional signature
+            if el.compact_signature and el.category == "function":
+                parts.append(f"{el.name}{el.compact_signature}")
+            else:
+                parts.append(el.name)
+
+            # Return type
+            if el.return_type:
+                parts.append(f"→ {el.return_type}")
+
+            # Category (semantic: method, property, classmethod, etc.)
+            parts.append(f"({el.display_category})")
+        else:
+            # Base element: simple format
+            parts.append(el.name)
+            parts.append(f"({el.category})")
+
+        # Line range
+        if el.line != el.line_end:
+            parts.append(f"[{el.line}-{el.line_end}]")
+        else:
+            parts.append(f"[{el.line}]")
+
+        # Line count for multi-line elements
+        line_count = el.line_end - el.line + 1
+        if line_count > 10:
+            parts.append(f"{line_count} lines")
+
+        # Quality warnings for functions
+        if isinstance(el, PythonElement) and el.category == "function":
+            depth = getattr(el, "depth", 0)
+            if isinstance(depth, int) and depth > 4:
+                parts.append(f"⚠ depth:{depth}")
+
+        print(f"{prefix}{' '.join(parts)}")
+
         for child in el.children:
             render_element(child, indent + 1)
 

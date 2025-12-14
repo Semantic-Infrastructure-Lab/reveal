@@ -651,14 +651,14 @@ class TestPythonTypeIntegration:
     """Integration tests with the real PythonType."""
 
     def setup_method(self):
-        """Clear registry and import PythonType."""
+        """Clear registry and register PythonType."""
         TypeRegistry.clear()
-        # Import to register
         from reveal.types.python import PythonType
+        TypeRegistry.register(PythonType)
         self.python_type = PythonType
 
     def test_python_type_registered(self):
-        """PythonType is registered on import."""
+        """PythonType is registered and accessible."""
         assert TypeRegistry.from_extension(".py") is not None
         assert TypeRegistry.from_scheme("py") is not None
 
@@ -789,3 +789,445 @@ class TestTypedStructureFactory:
         # Walk
         all_elements = list(structure.walk())
         assert len(all_elements) == 3
+
+
+class TestParseImportName:
+    """Tests for _parse_import_name helper function."""
+
+    def test_from_import(self):
+        """Parses 'from X import Y' format."""
+        from reveal.structure import _parse_import_name
+
+        assert _parse_import_name("from dataclasses import dataclass") == "dataclasses"
+        assert _parse_import_name("from typing import Dict, List") == "typing"
+        assert _parse_import_name("from os.path import join") == "os.path"
+
+    def test_import_statement(self):
+        """Parses 'import X' format."""
+        from reveal.structure import _parse_import_name
+
+        assert _parse_import_name("import os") == "os"
+        assert _parse_import_name("import os.path") == "os.path"
+        assert _parse_import_name("import json as j") == "json"
+
+    def test_relative_imports(self):
+        """Parses relative imports."""
+        from reveal.structure import _parse_import_name
+
+        assert _parse_import_name("from . import utils") == "."
+        assert _parse_import_name("from .. import base") == ".."
+        assert _parse_import_name("from .utils import helper") == ".utils"
+        assert _parse_import_name("from ..core import base") == "..core"
+
+    def test_empty_and_invalid(self):
+        """Handles empty and invalid input."""
+        from reveal.structure import _parse_import_name
+
+        assert _parse_import_name("") == ""
+        assert _parse_import_name("not an import") == ""
+        assert _parse_import_name("x = 1") == ""
+
+    def test_factory_uses_import_parser(self):
+        """Factory method uses import parser for imports without names."""
+        raw = {
+            "imports": [
+                {"line": 1, "content": "from dataclasses import dataclass"},
+                {"line": 2, "content": "import os"},
+                {"line": 3, "content": "from typing import Dict"},
+            ],
+        }
+
+        structure = TypedStructure.from_analyzer_output(raw, "test.py")
+
+        names = [e.name for e in structure.imports]
+        assert names == ["dataclasses", "os", "typing"]
+
+
+class TestPythonElementDisplayProperties:
+    """Tests for PythonElement display helper properties."""
+
+    def setup_method(self):
+        """Set up test elements."""
+        from reveal.elements import PythonElement
+
+        # A method inside a class (simulated via _siblings)
+        self.method = PythonElement(
+            name="process",
+            line=10,
+            line_end=20,
+            category="function",
+            signature="(self, data: str) -> bool",
+        )
+        self.cls = PythonElement(
+            name="MyClass",
+            line=1,
+            line_end=50,
+            category="class",
+        )
+        # Wire up siblings for parent detection
+        self.method._siblings = [self.cls, self.method]
+        self.cls._siblings = [self.cls, self.method]
+
+        # Need to set up type for containment
+        TypeRegistry.clear()
+        from reveal.types.python import PythonType
+
+        self.method._type = PythonType
+        self.cls._type = PythonType
+
+    def test_display_category_method(self):
+        """Methods inside classes show as 'method'."""
+        assert self.method.display_category == "method"
+
+    def test_display_category_property(self):
+        """Functions with @property decorator show as 'property'."""
+        from reveal.elements import PythonElement
+
+        prop = PythonElement(
+            name="value",
+            line=5,
+            line_end=7,
+            category="function",
+            decorators=["@property"],
+        )
+        assert prop.display_category == "property"
+
+    def test_display_category_classmethod(self):
+        """Functions with @classmethod show as 'classmethod'."""
+        from reveal.elements import PythonElement
+
+        cm = PythonElement(
+            name="create",
+            line=5,
+            line_end=10,
+            category="function",
+            decorators=["@classmethod"],
+        )
+        assert cm.display_category == "classmethod"
+
+    def test_display_category_staticmethod(self):
+        """Functions with @staticmethod show as 'staticmethod'."""
+        from reveal.elements import PythonElement
+
+        sm = PythonElement(
+            name="helper",
+            line=5,
+            line_end=10,
+            category="function",
+            decorators=["@staticmethod"],
+        )
+        assert sm.display_category == "staticmethod"
+
+    def test_display_category_standalone_function(self):
+        """Standalone functions show as 'function'."""
+        from reveal.elements import PythonElement
+
+        func = PythonElement(
+            name="main",
+            line=1,
+            line_end=10,
+            category="function",
+        )
+        assert func.display_category == "function"
+
+    def test_compact_signature_simple(self):
+        """Compact signature extracts parameter names."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="foo",
+            line=1,
+            line_end=5,
+            category="function",
+            signature="(self, x, y)",
+        )
+        assert el.compact_signature == "(x, y)"
+
+    def test_compact_signature_with_types(self):
+        """Compact signature strips type annotations."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="foo",
+            line=1,
+            line_end=5,
+            category="function",
+            signature="(self, x: int, y: str) -> bool",
+        )
+        assert el.compact_signature == "(x, y)"
+
+    def test_compact_signature_with_defaults(self):
+        """Compact signature strips default values."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="foo",
+            line=1,
+            line_end=5,
+            category="function",
+            signature="(self, x=10, y='hello')",
+        )
+        assert el.compact_signature == "(x, y)"
+
+    def test_compact_signature_complex_types(self):
+        """Compact signature handles complex nested types."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="foo",
+            line=1,
+            line_end=5,
+            category="function",
+            signature="(self, predicate: Callable[[TypedElement], bool]) -> Iterator[TypedElement]",
+        )
+        assert el.compact_signature == "(predicate)"
+
+    def test_compact_signature_many_params(self):
+        """Compact signature truncates when more than 4 params."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="foo",
+            line=1,
+            line_end=5,
+            category="function",
+            signature="(self, a, b, c, d, e, f)",
+        )
+        assert el.compact_signature == "(a, b, c, ...)"
+
+    def test_compact_signature_cls(self):
+        """Compact signature removes cls for classmethods."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="create",
+            line=1,
+            line_end=5,
+            category="function",
+            signature="(cls, data: dict)",
+            decorators=["@classmethod"],
+        )
+        assert el.compact_signature == "(data)"
+
+    def test_compact_signature_empty(self):
+        """Compact signature handles empty params."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="foo",
+            line=1,
+            line_end=5,
+            category="function",
+            signature="(self)",
+        )
+        assert el.compact_signature == "()"
+
+    def test_return_type_simple(self):
+        """Return type extracts from signature."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="foo",
+            line=1,
+            line_end=5,
+            category="function",
+            signature="(self) -> str",
+        )
+        assert el.return_type == "str"
+
+    def test_return_type_complex(self):
+        """Return type handles complex types."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="foo",
+            line=1,
+            line_end=5,
+            category="function",
+            signature="(self) -> Dict[str, int]",
+        )
+        assert el.return_type == "Dict[str, int]"
+
+    def test_return_type_none(self):
+        """Return type is empty when not specified."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="foo",
+            line=1,
+            line_end=5,
+            category="function",
+            signature="(self)",
+        )
+        assert el.return_type == ""
+
+    def test_decorator_prefix_property(self):
+        """Decorator prefix shows @property."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="value",
+            line=1,
+            line_end=5,
+            category="function",
+            decorators=["@property"],
+        )
+        assert el.decorator_prefix == "@property"
+
+    def test_decorator_prefix_priority(self):
+        """Decorator prefix prioritizes semantic decorators."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="value",
+            line=1,
+            line_end=5,
+            category="function",
+            decorators=["@lru_cache", "@classmethod"],
+        )
+        # @classmethod takes priority over @lru_cache
+        assert el.decorator_prefix == "@classmethod"
+
+    def test_decorator_prefix_custom(self):
+        """Decorator prefix shows custom decorators."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="handler",
+            line=1,
+            line_end=5,
+            category="function",
+            decorators=["@app.route"],
+        )
+        assert el.decorator_prefix == "@app.route"
+
+    def test_compact_signature_no_signature(self):
+        """Compact signature returns empty for no signature."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="foo",
+            line=1,
+            line_end=5,
+            category="function",
+            signature="",
+        )
+        assert el.compact_signature == ""
+
+    def test_return_type_long_truncated(self):
+        """Long return types are truncated."""
+        from reveal.elements import PythonElement
+
+        el = PythonElement(
+            name="foo",
+            line=1,
+            line_end=5,
+            category="function",
+            signature="(self) -> Dict[str, List[Tuple[int, str, float]]]",
+        )
+        # Should truncate the very long type
+        assert "[...]" in el.return_type or len(el.return_type) <= 30
+
+
+class TestTypedStructureNavigation:
+    """Tests for TypedStructure navigation methods."""
+
+    def setup_method(self):
+        """Set up test structure."""
+        TypeRegistry.clear()
+        from reveal.types.python import PythonType
+        TypeRegistry.register(PythonType)
+
+        raw = {
+            "classes": [{"name": "MyClass", "line": 1, "line_end": 50}],
+            "functions": [
+                {"name": "method1", "line": 5, "line_end": 15},
+                {"name": "method2", "line": 20, "line_end": 30},
+                {"name": "standalone", "line": 60, "line_end": 70},
+            ],
+            "imports": [
+                {"line": 1, "content": "import os"},
+            ],
+        }
+        self.structure = TypedStructure.from_analyzer_output(raw, "test.py", PythonType)
+
+    def test_stats(self):
+        """Stats returns correct counts."""
+        stats = self.structure.stats
+        assert stats["total"] == 5  # 1 class + 3 functions + 1 import
+        assert stats["class"] == 1
+        assert stats["function"] == 3
+        assert stats["import"] == 1
+
+    def test_to_dict(self):
+        """to_dict serializes structure."""
+        d = self.structure.to_dict()
+        assert d["path"] == "test.py"
+        assert "elements" in d
+
+    def test_to_tree(self):
+        """to_tree returns hierarchical structure."""
+        tree = self.structure.to_tree()
+        assert "roots" in tree
+        assert len(tree["roots"]) > 0
+
+    def test_walk(self):
+        """walk iterates all elements."""
+        elements = list(self.structure.walk())
+        assert len(elements) == 5
+
+    def test_walk_flat(self):
+        """walk_flat iterates all elements without tree structure."""
+        elements = list(self.structure.walk_flat())
+        assert len(elements) == 5
+
+    def test_find_by_line(self):
+        """find_by_line returns element at line."""
+        el = self.structure.find_by_line(10)
+        assert el is not None
+        assert el.name == "method1"
+
+    def test_bool(self):
+        """bool returns True for non-empty structure."""
+        assert bool(self.structure)
+
+        empty = TypedStructure(path="empty.py", reveal_type=None, elements=[])
+        assert not bool(empty)
+
+    def test_iter(self):
+        """iter yields elements."""
+        elements = list(self.structure)
+        assert len(elements) == 5
+
+
+class TestMarkdownElement:
+    """Tests for MarkdownElement."""
+
+    def test_markdown_element_creation(self):
+        """MarkdownElement can be created."""
+        from reveal.elements import MarkdownElement
+
+        el = MarkdownElement(
+            name="Introduction",
+            line=1,
+            line_end=10,
+            category="section",
+            level=1,
+        )
+        assert el.name == "Introduction"
+        assert el.level == 1
+
+    def test_markdown_to_dict(self):
+        """MarkdownElement.to_dict includes level."""
+        from reveal.elements import MarkdownElement
+
+        el = MarkdownElement(
+            name="Overview",
+            line=1,
+            line_end=5,
+            category="section",
+            level=2,
+        )
+        d = el.to_dict()
+        assert d["level"] == 2
+        assert d["name"] == "Overview"

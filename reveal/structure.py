@@ -61,6 +61,42 @@ _CATEGORY_MAP = {
 }
 
 
+def _parse_import_name(content: str) -> str:
+    """Extract module name from import statement.
+
+    Examples:
+        'from dataclasses import dataclass' -> 'dataclasses'
+        'from typing import Dict, List' -> 'typing'
+        'import os' -> 'os'
+        'import os.path' -> 'os.path'
+        'from . import utils' -> '.utils'
+        'from ..core import base' -> '..core'
+    """
+    if not content:
+        return ""
+
+    content = content.strip()
+
+    # "from X import Y" -> X
+    if content.startswith("from "):
+        parts = content[5:].split(" import", 1)
+        if parts:
+            return parts[0].strip()
+
+    # "import X" or "import X as Y" -> X
+    if content.startswith("import "):
+        rest = content[7:].strip()
+        # Handle "import X as Y"
+        if " as " in rest:
+            rest = rest.split(" as ")[0].strip()
+        # Handle "import X, Y, Z" -> just first
+        if "," in rest:
+            rest = rest.split(",")[0].strip()
+        return rest
+
+    return ""
+
+
 @dataclass
 class TypedStructure:
     """Container for typed elements with navigation.
@@ -155,6 +191,11 @@ class TypedStructure:
                 name = item.get("name", "")
                 line = item.get("line", 0)
                 line_end = item.get("line_end", line)
+
+                # For imports, parse module name from content if name is empty
+                if category == "import" and not name:
+                    content = item.get("content", "")
+                    name = _parse_import_name(content)
 
                 # Create element with appropriate class
                 el = element_class(

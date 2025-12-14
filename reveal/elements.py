@@ -266,6 +266,131 @@ class PythonElement(TypedElement):
         """True if decorated with @property."""
         return "@property" in self.decorators
 
+    @property
+    def display_category(self) -> str:
+        """Semantic category for display (method, property, classmethod, etc.)."""
+        if self.category != "function":
+            return self.category
+
+        if self.is_property:
+            return "property"
+        if self.is_classmethod:
+            return "classmethod"
+        if self.is_staticmethod:
+            return "staticmethod"
+        if self.is_method:
+            return "method"
+        if self.is_nested_function:
+            return "function"  # nested, but still a function
+        return "function"
+
+    @property
+    def decorator_prefix(self) -> str:
+        """Decorator prefix for display (e.g., '@cached_property')."""
+        # Priority: show the most semantically meaningful decorator
+        priority = ["@property", "@cached_property", "@classmethod", "@staticmethod"]
+        for dec in priority:
+            if dec in self.decorators:
+                return dec
+        # Show first non-standard decorator if any
+        for dec in self.decorators:
+            if dec not in priority:
+                return dec
+        return ""
+
+    @property
+    def compact_signature(self) -> str:
+        """Compact signature for display (truncated params)."""
+        if not self.signature:
+            return ""
+
+        sig = self.signature.strip()
+
+        # Extract just the params part: (x, y, z) -> "x, y, z"
+        if sig.startswith("("):
+            # Find matching closing paren (handle nested brackets)
+            depth = 0
+            end = 0
+            for i, c in enumerate(sig):
+                if c in "([{":
+                    depth += 1
+                elif c in ")]}":
+                    depth -= 1
+                    if depth == 0:
+                        end = i
+                        break
+
+            params = sig[1:end] if end > 0 else sig[1:-1] if sig.endswith(")") else sig[1:]
+
+            # Remove self/cls
+            params = params.strip()
+            if params.startswith("self"):
+                params = params[4:].lstrip(",").strip()
+            elif params.startswith("cls"):
+                params = params[3:].lstrip(",").strip()
+
+            # Split on commas, respecting brackets
+            simplified = []
+            current = ""
+            depth = 0
+            for c in params:
+                if c in "([{":
+                    depth += 1
+                    current += c
+                elif c in ")]}":
+                    depth -= 1
+                    current += c
+                elif c == "," and depth == 0:
+                    # End of parameter
+                    param = current.strip()
+                    if param:
+                        # Get just the name (before : or =)
+                        name = param.split(":")[0].split("=")[0].strip()
+                        if name.startswith("*"):
+                            simplified.append(name)
+                        elif name:
+                            simplified.append(name)
+                    current = ""
+                else:
+                    current += c
+
+            # Don't forget last parameter
+            param = current.strip()
+            if param:
+                name = param.split(":")[0].split("=")[0].strip()
+                if name.startswith("*"):
+                    simplified.append(name)
+                elif name:
+                    simplified.append(name)
+
+            # Truncate if too many
+            if len(simplified) > 4:
+                return f"({', '.join(simplified[:3])}, ...)"
+            elif simplified:
+                return f"({', '.join(simplified)})"
+            return "()"
+
+        return ""
+
+    @property
+    def return_type(self) -> str:
+        """Extract return type from signature."""
+        if not self.signature:
+            return ""
+
+        sig = self.signature.strip()
+        if " -> " in sig:
+            ret = sig.split(" -> ", 1)[1].strip()
+            # Clean up quotes
+            ret = ret.strip('"').strip("'")
+            # Simplify long types
+            if len(ret) > 25:
+                # Try to get just the main type
+                if "[" in ret:
+                    ret = ret.split("[")[0] + "[...]"
+            return ret
+        return ""
+
     def to_dict(self) -> dict:
         """Convert to dict with Python-specific fields."""
         d = super().to_dict()
