@@ -22,7 +22,7 @@ git push origin master
 ```
 
 **Then watch CI results:**
-- Go to: https://github.com/scottsen/reveal/actions
+- Go to: https://github.com/Semantic-Infrastructure-Lab/reveal/actions
 - Wait for "Tests" workflow to complete (~3-5 minutes)
 - **Must see:** ✅ Green checkmarks for all platforms
 
@@ -87,7 +87,7 @@ gh release create v0.13.3 \
 - Added comprehensive Windows compatibility tests
 - Updated PyPI classifiers for explicit OS support
 
-See full changelog: https://github.com/scottsen/reveal/compare/v0.13.2...v0.13.3
+See full changelog: https://github.com/Semantic-Infrastructure-Lab/reveal/compare/v0.13.2...v0.13.3
 "
 ```
 

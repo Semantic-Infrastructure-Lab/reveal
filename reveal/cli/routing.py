@@ -250,7 +250,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         print(f"Error: No analyzer found for {path} ({ext})", file=sys.stderr)
         print(f"\nError: File type '{ext}' is not supported yet", file=sys.stderr)
         print("Run 'reveal --list-supported' to see all supported file types", file=sys.stderr)
-        print("Visit https://github.com/scottsen/reveal to request new file types", file=sys.stderr)
+        print("Visit https://github.com/Semantic-Infrastructure-Lab/reveal to request new file types", file=sys.stderr)
         sys.exit(1)
 
     analyzer = analyzer_class(path)

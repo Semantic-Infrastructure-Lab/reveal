@@ -1936,6 +1936,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on adding new features and
 
 ## Links
 
-- **GitHub**: https://github.com/scottsen/reveal
+- **GitHub**: https://github.com/Semantic-Infrastructure-Lab/reveal
 - **PyPI**: https://pypi.org/project/reveal-cli/
-- **Issues**: https://github.com/scottsen/reveal/issues
+- **Issues**: https://github.com/Semantic-Infrastructure-Lab/reveal/issues

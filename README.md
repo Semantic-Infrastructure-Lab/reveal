@@ -291,8 +291,8 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 ---
 
-**License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](reveal/COOL_TRICKS.md) | [Issues](https://github.com/scottsen/reveal/issues)
+**License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](reveal/COOL_TRICKS.md) | [Issues](https://github.com/Semantic-Infrastructure-Lab/reveal/issues)
 
-[![Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/scottsen/reveal)
+[![Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/Semantic-Infrastructure-Lab/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)

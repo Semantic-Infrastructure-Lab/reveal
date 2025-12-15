@@ -246,7 +246,7 @@ CHANGELOG_SECTION=$(awk "/## \[?$NEW_VERSION\]?/,/## \[?[0-9]/" CHANGELOG.md | s
 
 if [ -z "$CHANGELOG_SECTION" ]; then
     warn "Could not extract CHANGELOG section for v$NEW_VERSION"
-    CHANGELOG_SECTION="See [CHANGELOG.md](https://github.com/scottsen/reveal/blob/master/CHANGELOG.md) for details."
+    CHANGELOG_SECTION="See [CHANGELOG.md](https://github.com/Semantic-Infrastructure-Lab/reveal/blob/master/CHANGELOG.md) for details."
 fi
 
 # Create release notes
@@ -261,8 +261,8 @@ $CHANGELOG_SECTION
 pip install --upgrade reveal-cli
 \`\`\`
 
-**Documentation:** https://github.com/scottsen/reveal
-**Full Changelog:** https://github.com/scottsen/reveal/blob/master/CHANGELOG.md"
+**Documentation:** https://github.com/Semantic-Infrastructure-Lab/reveal
+**Full Changelog:** https://github.com/Semantic-Infrastructure-Lab/reveal/blob/master/CHANGELOG.md"
 
 # Create GitHub release (this triggers the publish-to-pypi workflow)
 gh release create "v$NEW_VERSION" \
@@ -270,7 +270,7 @@ gh release create "v$NEW_VERSION" \
     --notes "$RELEASE_NOTES" \
     || error "Failed to create GitHub release"
 
-success "GitHub release created: https://github.com/scottsen/reveal/releases/tag/v$NEW_VERSION"
+success "GitHub release created: https://github.com/Semantic-Infrastructure-Lab/reveal/releases/tag/v$NEW_VERSION"
 echo
 
 # ============================================================================
@@ -282,7 +282,7 @@ echo -e "${GREEN}  ✓ Release v$NEW_VERSION Complete!${NC}"
 echo "=========================================="
 echo
 echo "Next steps:"
-echo "1. Monitor GitHub Actions: https://github.com/scottsen/reveal/actions"
+echo "1. Monitor GitHub Actions: https://github.com/Semantic-Infrastructure-Lab/reveal/actions"
 echo "2. Verify PyPI publish: https://pypi.org/project/reveal-cli/$NEW_VERSION/"
 echo "3. Test installation: pip install --upgrade reveal-cli"
 echo

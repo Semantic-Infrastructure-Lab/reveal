@@ -272,7 +272,7 @@ python -m build && twine upload dist/*
 ## Resources
 
 - **PyPI:** https://pypi.org/project/reveal-cli/
-- **GitHub Actions:** https://github.com/scottsen/reveal/actions
+- **GitHub Actions:** https://github.com/Semantic-Infrastructure-Lab/reveal/actions
 - **Script:** `scripts/release.sh`
 
 ---

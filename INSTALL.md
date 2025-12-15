@@ -9,7 +9,7 @@ pip install reveal-cli
 
 **From GitHub (latest development):**
 ```bash
-pip install git+https://github.com/scottsen/reveal.git
+pip install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
 ```
 
 That's it! The `reveal` command is now available globally.
@@ -27,7 +27,7 @@ reveal README.md          # Try on any file
 ### From Source (Development)
 
 ```bash
-git clone https://github.com/scottsen/reveal.git
+git clone https://github.com/Semantic-Infrastructure-Lab/reveal.git
 cd reveal
 pip install -e .
 ```
@@ -38,17 +38,17 @@ The `-e` flag installs in "editable" mode - changes to the code take effect imme
 
 ```bash
 # Install specific tag/release
-pip install git+https://github.com/scottsen/reveal.git@v0.1.0
+pip install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git@v0.1.0
 
 # Install specific branch
-pip install git+https://github.com/scottsen/reveal.git@main
+pip install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git@main
 ```
 
 ### Using pipx (Isolated Environment)
 
 ```bash
 # Install with pipx for isolated environment
-pipx install git+https://github.com/scottsen/reveal.git
+pipx install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
 ```
 
 ## Requirements
@@ -64,10 +64,10 @@ For advanced language analysis (Rust, C#, Go, Java, TypeScript, C++, and 40+ mor
 
 ```bash
 # Install with tree-sitter support
-pip install 'git+https://github.com/scottsen/reveal.git#egg=reveal-cli[treesitter]'
+pip install 'git+https://github.com/Semantic-Infrastructure-Lab/reveal.git#egg=reveal-cli[treesitter]'
 
 # Or upgrade existing install
-pip install --upgrade 'git+https://github.com/scottsen/reveal.git#egg=reveal-cli[treesitter]'
+pip install --upgrade 'git+https://github.com/Semantic-Infrastructure-Lab/reveal.git#egg=reveal-cli[treesitter]'
 ```
 
 **What you get:**
@@ -83,7 +83,7 @@ pip install --upgrade 'git+https://github.com/scottsen/reveal.git#egg=reveal-cli
 
 If you get permission errors, try:
 ```bash
-pip install --user git+https://github.com/scottsen/reveal.git
+pip install --user git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
 ```
 
 ### Command Not Found
@@ -102,7 +102,7 @@ source ~/.bashrc  # or source ~/.zshrc
 ### Upgrade to Latest
 
 ```bash
-pip install --upgrade git+https://github.com/scottsen/reveal.git
+pip install --upgrade git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
 ```
 
 ### Uninstall
@@ -138,13 +138,13 @@ Custom plugins are automatically loaded alongside built-in plugins.
 
 Add to `requirements.txt`:
 ```txt
-reveal-cli @ git+https://github.com/scottsen/reveal.git
+reveal-cli @ git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
 ```
 
 Or `pyproject.toml`:
 ```toml
 [project.dependencies]
-reveal-cli = {git = "https://github.com/scottsen/reveal.git"}
+reveal-cli = {git = "https://github.com/Semantic-Infrastructure-Lab/reveal.git"}
 ```
 
 ## CI/CD Integration
@@ -174,9 +174,9 @@ After installation:
 
 ## Getting Help
 
-- **Issues:** https://github.com/scottsen/reveal/issues
-- **Discussions:** https://github.com/scottsen/reveal/discussions
-- **Documentation:** https://github.com/scottsen/reveal/tree/main/docs
+- **Issues:** https://github.com/Semantic-Infrastructure-Lab/reveal/issues
+- **Discussions:** https://github.com/Semantic-Infrastructure-Lab/reveal/discussions
+- **Documentation:** https://github.com/Semantic-Infrastructure-Lab/reveal/tree/main/docs
 
 ---
 

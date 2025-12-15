@@ -354,7 +354,7 @@ reveal unknown_file.py            # What's in here? (~100 tokens)
 - **Traditional Help:** `reveal --help` (CLI flags and options)
 - **Supported Types:** `reveal --list-supported`
 - **Version:** `reveal --version`
-- **GitHub:** https://github.com/scottsen/reveal
+- **GitHub:** https://github.com/Semantic-Infrastructure-Lab/reveal
 - **PyPI:** https://pypi.org/project/reveal-cli/
 
 ---

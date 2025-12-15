@@ -590,12 +590,12 @@ New adapters automatically appear in `reveal help://` output.
 
 ## Support & Resources
 
-- **Repo:** https://github.com/scottsen/reveal
+- **Repo:** https://github.com/Semantic-Infrastructure-Lab/reveal
 - **PyPI:** https://pypi.org/project/reveal-cli/
 - **Install:** `pip install reveal-cli`
 - **Help:** `reveal --help` (syntax reference)
 - **Agent Help:** `reveal --agent-help` (this guide)
-- **Issues:** https://github.com/scottsen/reveal/issues
+- **Issues:** https://github.com/Semantic-Infrastructure-Lab/reveal/issues
 
 ---
 

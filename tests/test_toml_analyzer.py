@@ -114,7 +114,7 @@ version = "0.7.0"
 description = "Semantic code explorer"
 
 [project.urls]
-Homepage = "https://github.com/scottsen/reveal"
+Homepage = "https://github.com/Semantic-Infrastructure-Lab/reveal"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

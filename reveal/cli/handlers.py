@@ -30,7 +30,7 @@ def handle_agent_help():
             print(f.read())
     except FileNotFoundError:
         print(f"Error: AGENT_HELP.md not found at {agent_help_path}", file=sys.stderr)
-        print("This is a bug - please report it at https://github.com/scottsen/reveal/issues", file=sys.stderr)
+        print("This is a bug - please report it at https://github.com/Semantic-Infrastructure-Lab/reveal/issues", file=sys.stderr)
         sys.exit(1)
     sys.exit(0)
 
@@ -43,7 +43,7 @@ def handle_agent_help_full():
             print(f.read())
     except FileNotFoundError:
         print(f"Error: AGENT_HELP_FULL.md not found at {agent_help_full_path}", file=sys.stderr)
-        print("This is a bug - please report it at https://github.com/scottsen/reveal/issues", file=sys.stderr)
+        print("This is a bug - please report it at https://github.com/Semantic-Infrastructure-Lab/reveal/issues", file=sys.stderr)
         sys.exit(1)
     sys.exit(0)
 

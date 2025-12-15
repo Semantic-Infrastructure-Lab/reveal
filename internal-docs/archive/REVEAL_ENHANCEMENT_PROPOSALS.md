@@ -515,8 +515,8 @@ From documentation audit (mortal-temple-1209):
 
 Want to discuss these proposals or suggest others?
 
-- [GitHub Issues](https://github.com/scottsen/reveal/issues)
-- [Discussions](https://github.com/scottsen/reveal/discussions)
+- [GitHub Issues](https://github.com/Semantic-Infrastructure-Lab/reveal/issues)
+- [Discussions](https://github.com/Semantic-Infrastructure-Lab/reveal/discussions)
 
 ---
 
