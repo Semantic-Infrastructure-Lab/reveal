@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Fixed
+- **stdlib collision**: Renamed `reveal/types/` to `reveal/schemas/` to avoid conflict with Python's `types` module
+- **--check flag for reveal://**: V-series validation rules now execute correctly (were dead code)
+- **--check warnings**: URI adapters (python://, json://, ast://, env://, help://) now warn when --check is unsupported instead of silently ignoring
+- **Stale tests**: Removed 22 failing tests that tested removed API surface in Python adapter
+
+### Changed
+- Updated README architecture diagram to reflect `schemas/` rename
 
 ## [0.23.0] - 2025-12-14
 

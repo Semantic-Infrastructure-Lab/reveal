@@ -265,7 +265,7 @@ reveal/
 ├── rules/        # 24 quality rules (B, C, D, E, M, N, R, S, U, V)
 ├── analyzers/    # 25 file types (Python, Rust, Markdown, etc.)
 ├── adapters/     # URI support (help://, env://, ast://, python://)
-├── types/        # Type-first architecture (v0.23.0+)
+├── schemas/      # Type definitions (renamed from types/ in v0.23.0)
 └── treesitter.py # Universal language support (50+ langs)
 ```
 
