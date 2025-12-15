@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [0.23.1] - 2025-12-14
+
 ### Fixed
 - **stdlib collision**: Renamed `reveal/types/` to `reveal/schemas/` to avoid conflict with Python's `types` module
 - **--check flag for reveal://**: V-series validation rules now execute correctly (were dead code)
