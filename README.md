@@ -98,7 +98,7 @@ reveal --rules                   # List all rules
 reveal --explain B001            # Explain specific rule
 ```
 
-**24 built-in rules** across 9 categories: bugs (B001-B004), complexity (C901-C905), duplicates (D001-D002), style (E501), maintainability (M101), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501), validation (V001-V007). New in v0.23.0: decorator-aware bug detection (B002-B004).
+**28 built-in rules** across 10 categories: bugs (B001-B005), complexity (C901-C905), duplicates (D001-D002), style (E501), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V007). New in v0.23.0: decorator-aware bug detection (B002-B005).
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
 
 ### 🌲 Outline Mode (v0.9.0+)

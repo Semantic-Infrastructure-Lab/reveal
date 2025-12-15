@@ -1,6 +1,6 @@
 # Reveal - Agent Quick Start
 
-**Version:** 0.23.0
+**Version:** 0.23.1
 **Token Cost:** ~1,500 tokens (this guide)
 **Alternative:** Use `reveal help://` for progressive discovery (~50-500 tokens)
 
