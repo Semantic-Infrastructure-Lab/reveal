@@ -41,13 +41,6 @@ warn() {
     echo -e "${YELLOW}⚠ $1${NC}"
 }
 
-confirm() {
-    local prompt="$1"
-    read -p "$(echo -e "${YELLOW}${prompt} (y/N): ${NC}")" -n 1 -r
-    echo
-    [[ $REPLY =~ ^[Yy]$ ]]
-}
-
 # Check if version argument provided
 if [ $# -ne 1 ]; then
     error "Usage: $0 <version>\nExample: $0 0.10.0"
@@ -119,11 +112,7 @@ info "Current version: $CURRENT_VERSION"
 info "New version: $NEW_VERSION"
 echo
 
-if ! confirm "Proceed with release v$NEW_VERSION?"; then
-    info "Release cancelled"
-    exit 0
-fi
-
+info "Proceeding with release v$NEW_VERSION"
 echo
 
 # ============================================================================
@@ -146,15 +135,7 @@ if ! grep -q "## \[$NEW_VERSION\]" CHANGELOG.md && ! grep -q "## $NEW_VERSION" C
     echo "- What changed"
     echo
 
-    if ! confirm "Have you updated CHANGELOG.md?"; then
-        info "Please update CHANGELOG.md and run this script again"
-        exit 1
-    fi
-
-    # Verify they actually updated it
-    if ! grep -q "## \[$NEW_VERSION\]" CHANGELOG.md && ! grep -q "## $NEW_VERSION" CHANGELOG.md; then
-        error "CHANGELOG.md still doesn't contain version $NEW_VERSION"
-    fi
+    error "CHANGELOG.md must contain version $NEW_VERSION before release"
 fi
 
 success "CHANGELOG.md contains entry for v$NEW_VERSION"
@@ -221,12 +202,6 @@ echo
 # ============================================================================
 
 info "Pushing to GitHub..."
-
-if ! confirm "Push commit and tag to GitHub?"; then
-    warn "Skipping push. You can push manually with:"
-    warn "  git push origin master && git push origin v$NEW_VERSION"
-    exit 0
-fi
 
 # Push commit and tag
 git push origin master || error "Failed to push commit"

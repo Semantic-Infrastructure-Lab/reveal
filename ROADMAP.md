@@ -2,39 +2,46 @@
 
 > **Vision:** Universal resource exploration with progressive disclosure
 
-**Current version:** v0.19.0
-**Last updated:** 2025-12-09
+**Current version:** v0.23.x
+**Last updated:** 2025-12-14
 
 ---
 
 ## What We've Shipped
 
+### v0.23.x - Type-First Architecture (Dec 2025)
+
+- `--typed` flag: Hierarchical code structure with containment relationships
+- Decorator extraction: `@property`, `@staticmethod`, `@classmethod`, `@dataclass`
+- `TypedStructure` and `TypedElement` classes for programmatic navigation
+- AST decorator queries: `ast://.?decorator=property`
+- New bug rules: B002, B003, B004, B005 (decorator-related)
+- `reveal://` self-inspection adapter with V-series validation rules
+- `json://` adapter for JSON navigation with path access and schema discovery
+
+### v0.22.0 - Self-Inspection (Dec 2025)
+
+- `reveal://` adapter: Inspect reveal's own codebase
+- V-series validation rules for completeness checks
+- Modular package refactoring (cli/, display/, rendering/, rules/)
+
+### v0.20.0-v0.21.0 - JSON & Quality Rules (Dec 2025)
+
+- `json://` adapter: Navigate JSON files with path access, schema, gron-style output
+- Enhanced quality rules: M101-M103 (maintainability), D001-D002 (duplicate detection)
+- `--frontmatter` flag for markdown YAML extraction
+
 ### v0.19.0 - Clipboard & Nginx Rules (Dec 2025)
 
 - `--copy` / `-c` flag: Copy output to clipboard (cross-platform)
-- Nginx configuration rules: N001 (duplicate backends), N002 (missing SSL certs), N003 (missing proxy headers)
-- `help://tricks`: Cool tricks and hidden features guide
+- Nginx configuration rules: N001-N003
 
-### v0.18.0 - Agent-First Improvements (Dec 2025)
+### v0.17.0-v0.18.0 - Python Runtime (Dec 2025)
 
+- `python://` adapter: Environment inspection, bytecode debugging, module conflicts
 - Enhanced help system with progressive discovery
-- Python adapter improvements (bytecode debugging, module inspection)
-- AST adapter enhancements (wildcard patterns, combined queries)
 
-### v0.17.0 - Python Runtime Inspection (Dec 2025)
-
-- `python://` adapter: Inspect Python environment
-- `python://debug/bytecode`: Detect stale .pyc files
-- `python://packages`: Package information
-- `python://module/<name>`: Module conflict detection
-
-### v0.16.0 - Enhanced Help System (Dec 2025)
-
-- Self-documenting `help://` URIs
-- Static guides: `help://agent`, `help://anti-patterns`, `help://python-guide`
-- Adapter authoring guide
-
-### v0.13.0 - Pattern Detection (Nov 2025)
+### v0.13.0-v0.16.0 - Pattern Detection & Help (Nov-Dec 2025)
 
 - `--check` flag for code quality analysis
 - Pluggable rule system (B/S/C/E categories)
@@ -65,11 +72,6 @@
 ## What's Next
 
 ### Near-term: CLI Polish
-
-**Completed in v0.19.0:**
-- [x] `--copy` clipboard integration
-- [x] `help://tricks` documentation
-- [x] Nginx configuration rules (N001-N003)
 
 **Ready to implement:**
 - [ ] `--watch` mode: Live updates on file changes
