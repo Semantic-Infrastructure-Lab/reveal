@@ -5,10 +5,10 @@ Types are auto-registered when imported.
 
 Usage:
     # Import registers the types automatically
-    from reveal.types import python
+    from reveal.schemas import python
 
     # Or import specific types
-    from reveal.types.python import PythonType
+    from reveal.schemas.python import PythonType
 
     # Core classes from type_system module
     from reveal.type_system import EntityDef, RevealType, TypeRegistry

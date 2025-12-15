@@ -86,8 +86,9 @@ class TestPythonAdapter(unittest.TestCase):
         self.assertEqual(result["sys_path_count"], len(result["sys_path"]))
 
     def test_get_packages_list(self):
-        """Test _get_packages_list returns installed packages."""
-        result = self.adapter._get_packages_list()
+        """Test get_packages_list returns installed packages."""
+        from reveal.adapters.python.packages import get_packages_list
+        result = get_packages_list()
 
         self.assertIn("packages", result)
         self.assertIn("count", result)

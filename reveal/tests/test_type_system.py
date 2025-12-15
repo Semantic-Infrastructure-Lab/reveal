@@ -652,7 +652,7 @@ class TestPythonTypeIntegration:
     def setup_method(self):
         """Clear registry and register PythonType."""
         TypeRegistry.clear()
-        from reveal.types.python import PythonType
+        from reveal.schemas.python import PythonType
         TypeRegistry.register(PythonType)
         self.python_type = PythonType
 
@@ -675,7 +675,7 @@ class TestTypedStructureFactory:
     def setup_method(self):
         """Clear registry and import PythonType."""
         TypeRegistry.clear()
-        from reveal.types.python import PythonType
+        from reveal.schemas.python import PythonType
         self.python_type = PythonType
 
     def test_from_analyzer_output_basic(self):
@@ -869,7 +869,7 @@ class TestPythonElementDisplayProperties:
 
         # Need to set up type for containment
         TypeRegistry.clear()
-        from reveal.types.python import PythonType
+        from reveal.schemas.python import PythonType
 
         self.method._type = PythonType
         self.cls._type = PythonType
@@ -1134,7 +1134,7 @@ class TestTypedStructureNavigation:
     def setup_method(self):
         """Set up test structure."""
         TypeRegistry.clear()
-        from reveal.types.python import PythonType
+        from reveal.schemas.python import PythonType
         TypeRegistry.register(PythonType)
 
         raw = {

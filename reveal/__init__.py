@@ -20,7 +20,7 @@ from .treesitter import TreeSitterAnalyzer
 from .analyzers import *  # noqa: F401, F403
 
 # Import type definitions to auto-register them in TypeRegistry
-from .types import python  # noqa: F401
+from .schemas import python  # noqa: F401
 
 __all__ = [
     'FileAnalyzer',
