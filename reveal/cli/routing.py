@@ -131,6 +131,38 @@ def _handle_reveal(adapter_class: type, resource: str, element: Optional[str],
     """Handle reveal:// URIs (self-inspection)."""
     from ..rendering import render_reveal_structure
 
+    # Handle --check: run V-series validation rules
+    if getattr(args, 'check', False):
+        from ..rules import RuleRegistry
+        from ..main import safe_json_dumps
+
+        uri = f"reveal://{resource}" if resource else "reveal://"
+        select = args.select.split(',') if args.select else None
+        ignore = args.ignore.split(',') if args.ignore else None
+
+        # V-series rules don't need structure/content - they inspect reveal source directly
+        detections = RuleRegistry.check_file(uri, None, "", select=select, ignore=ignore)
+
+        if args.format == 'json':
+            result = {
+                'file': uri,
+                'detections': [d.to_dict() for d in detections],
+                'total': len(detections)
+            }
+            print(safe_json_dumps(result))
+        elif args.format == 'grep':
+            for d in detections:
+                print(f"{d.file_path}:{d.line}:{d.column}:{d.rule_code}:{d.message}")
+        else:
+            if not detections:
+                print(f"{uri}: ✅ No issues found")
+            else:
+                print(f"{uri}: Found {len(detections)} issues\n")
+                for d in sorted(detections, key=lambda x: (x.line, x.column)):
+                    print(d)
+                    print()
+        return
+
     adapter = adapter_class(resource if resource else None)
     result = adapter.get_structure()
     render_reveal_structure(result, args.format)
