@@ -23,6 +23,9 @@ def _handle_env(adapter_class: type, resource: str, element: Optional[str],
     """Handle env:// URIs."""
     from ..rendering import render_env_structure, render_env_variable
 
+    if getattr(args, 'check', False):
+        print("Warning: --check is not supported for env:// URIs", file=sys.stderr)
+
     adapter = adapter_class()
 
     if element or resource:
@@ -44,6 +47,9 @@ def _handle_ast(adapter_class: type, resource: str, element: Optional[str],
     """Handle ast:// URIs."""
     from ..rendering import render_ast_structure
 
+    if getattr(args, 'check', False):
+        print("Warning: --check is not supported for ast:// URIs", file=sys.stderr)
+
     # Parse path and query from resource
     if '?' in resource:
         path, query = resource.split('?', 1)
@@ -64,6 +70,9 @@ def _handle_help(adapter_class: type, resource: str, element: Optional[str],
                  args: 'Namespace') -> None:
     """Handle help:// URIs."""
     from ..rendering import render_help
+
+    if getattr(args, 'check', False):
+        print("Warning: --check is not supported for help:// URIs", file=sys.stderr)
 
     adapter = adapter_class(resource)
 
@@ -88,6 +97,9 @@ def _handle_python(adapter_class: type, resource: str, element: Optional[str],
     """Handle python:// URIs."""
     from ..rendering import render_python_structure, render_python_element
 
+    if getattr(args, 'check', False):
+        print("Warning: --check is not supported for python:// URIs", file=sys.stderr)
+
     adapter = adapter_class()
 
     if element or resource:
@@ -109,6 +121,9 @@ def _handle_json(adapter_class: type, resource: str, element: Optional[str],
                  args: 'Namespace') -> None:
     """Handle json:// URIs."""
     from ..rendering import render_json_result
+
+    if getattr(args, 'check', False):
+        print("Warning: --check is not supported for json:// URIs", file=sys.stderr)
 
     # Parse path and query from resource
     if '?' in resource:
@@ -150,17 +165,22 @@ def _handle_reveal(adapter_class: type, resource: str, element: Optional[str],
                 'total': len(detections)
             }
             print(safe_json_dumps(result))
-        elif args.format == 'grep':
+            return
+
+        if args.format == 'grep':
             for d in detections:
                 print(f"{d.file_path}:{d.line}:{d.column}:{d.rule_code}:{d.message}")
-        else:
-            if not detections:
-                print(f"{uri}: ✅ No issues found")
-            else:
-                print(f"{uri}: Found {len(detections)} issues\n")
-                for d in sorted(detections, key=lambda x: (x.line, x.column)):
-                    print(d)
-                    print()
+            return
+
+        # Text format (default)
+        if not detections:
+            print(f"{uri}: ✅ No issues found")
+            return
+
+        print(f"{uri}: Found {len(detections)} issues\n")
+        for d in sorted(detections, key=lambda x: (x.line, x.column)):
+            print(d)
+            print()
         return
 
     adapter = adapter_class(resource if resource else None)
