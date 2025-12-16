@@ -47,36 +47,155 @@ def _render_help_breadcrumbs(scheme: str, data: Dict[str, Any]) -> None:
 def _render_help_list_mode(data: Dict[str, Any]) -> None:
     """Render help system topic list (reveal help://)."""
     print("# Reveal Help System")
+    print("**Purpose:** Progressive, explorable documentation")
+    print("**Usage:** reveal help://<topic>")
     print()
-    print(f"Available help topics ({len(data['available_topics'])} total):")
+    print("---")
     print()
 
     # Group topics
     adapters = [a for a in data.get('adapters', []) if a.get('has_help')]
     static = data.get('static_guides', [])
 
+    # DYNAMIC CONTENT
+    print("## 📦 DYNAMIC CONTENT (Runtime Discovery)")
+    print()
+
     if adapters:
-        print("## URI Adapters")
+        print("### URI Adapters ({} registered)".format(len(adapters)))
+        print("Source: Live adapter registry")
+        print("Updates: Automatic when new adapters added")
+        print()
         for adapter in adapters:
             scheme = adapter['scheme']
             desc = adapter.get('description', 'No description')
-            print(f"  {scheme:12} - {desc}")
-            print(f"               Usage: reveal help://{scheme}")
+            print(f"  {scheme}://      - {desc}")
+            print(f"               Details: reveal help://{scheme}")
         print()
+
+    # STATIC CONTENT
+    print("## 📄 STATIC GUIDES (Markdown Files)")
+    print("Source: reveal/ and reveal/adapters/ directories")
+    print("Location: Bundled with installation")
+    print()
 
     if static:
-        print("## Guides")
-        for topic in static:
-            print(f"  {topic:12} - Static guide")
-            print(f"               Usage: reveal help://{topic}")
+        # Organize static guides by category
+        ai_guides = ['agent', 'agent-full']
+        feature_guides = ['python-guide', 'markdown', 'reveal-guide']
+        best_practices = ['anti-patterns', 'tricks']
+        dev_guides = ['adapter-authoring', 'help']
+
+        # Map topics to their files for source attribution
+        from reveal.adapters.help import HelpAdapter
+        static_help_map = HelpAdapter.STATIC_HELP
+
+        # AI Agent Guides
+        print("### For AI Agents")
+        for topic in [t for t in ai_guides if t in static]:
+            file = static_help_map.get(topic, 'unknown')
+            token_estimate = {
+                'agent': '~2,200',
+                'agent-full': '~12,000'
+            }.get(topic, '~1,500')
+
+            alias = ''
+            if topic == 'agent':
+                alias = '\n                     Alias: --agent-help flag'
+            elif topic == 'agent-full':
+                alias = '\n                     Alias: --agent-help-full flag'
+
+            print(f"  {topic:16} - {_get_guide_description(topic)}")
+            print(f"                     File: {file}")
+            print(f"                     Token cost: {token_estimate}{alias}")
         print()
 
-    print("Examples:")
-    print("  reveal help://ast         # Learn about ast:// adapter")
-    print("  reveal help://adapters    # Summary of all adapters")
-    print("  reveal help://agent       # Agent usage patterns")
+        # Feature Guides
+        if any(t in static for t in feature_guides):
+            print("### Feature Guides")
+            for topic in [t for t in feature_guides if t in static]:
+                file = static_help_map.get(topic, 'unknown')
+                token_estimate = {
+                    'python-guide': '~2,500',
+                    'markdown': '~4,000',
+                    'reveal-guide': '~3,000'
+                }.get(topic, '~2,000')
+                print(f"  {topic:16} - {_get_guide_description(topic)}")
+                print(f"                     File: {file}")
+                print(f"                     Token cost: {token_estimate}")
+            print()
+
+        # Best Practices
+        if any(t in static for t in best_practices):
+            print("### Best Practices")
+            for topic in [t for t in best_practices if t in static]:
+                file = static_help_map.get(topic, 'unknown')
+                token_estimate = {
+                    'anti-patterns': '~2,000',
+                    'tricks': '~3,500'
+                }.get(topic, '~2,000')
+                print(f"  {topic:16} - {_get_guide_description(topic)}")
+                print(f"                     File: {file}")
+                print(f"                     Token cost: {token_estimate}")
+            print()
+
+        # Development
+        if any(t in static for t in dev_guides):
+            print("### Development")
+            for topic in [t for t in dev_guides if t in static]:
+                file = static_help_map.get(topic, 'unknown')
+                token_estimate = '~2,500'
+                print(f"  {topic:16} - {_get_guide_description(topic)}")
+                print(f"                     File: {file}")
+                print(f"                     Token cost: {token_estimate}")
+            print()
+
+    # SPECIAL TOPICS
+    print("## 🧭 SPECIAL TOPICS")
     print()
-    print("Alternative: Use --agent-help and --agent-help-full flags (llms.txt convention)")
+    print("  adapters         - Summary of all URI adapters")
+    print("                     Type: Generated")
+    print("                     Token cost: ~300 tokens")
+    print()
+
+    # NAVIGATION
+    print("---")
+    print()
+    print("## Navigation Tips")
+    print()
+    print("**Start here:**")
+    print("  reveal help://              # This index")
+    print()
+    print("**Bootstrap (AI agents):**")
+    print("  reveal --agent-help         # Task-based patterns (~2,200 tokens)")
+    print()
+    print("**Discover adapters:**")
+    print("  reveal help://adapters      # Summary of all URI adapters")
+    print()
+    print("**Learn specific feature:**")
+    print("  reveal help://ast           # Deep dive on ast://")
+    print("  reveal help://python        # Deep dive on python://")
+    print()
+    print("**Best practices:**")
+    print("  reveal help://anti-patterns # Common mistakes to avoid")
+    print("  reveal help://tricks        # Power user workflows")
+
+
+def _get_guide_description(topic: str) -> str:
+    """Get human-friendly description for a guide topic."""
+    descriptions = {
+        'agent': 'Quick reference (task-based patterns)',
+        'agent-full': 'Comprehensive guide',
+        'python': 'Python adapter with examples (duplicate of python-guide)',
+        'python-guide': 'Python adapter deep dive',
+        'reveal-guide': 'reveal:// adapter reference',
+        'markdown': 'Markdown feature guide',
+        'anti-patterns': 'Common mistakes to avoid',
+        'adapter-authoring': 'Build your own adapters',
+        'tricks': 'Cool tricks and hidden features',
+        'help': 'How the help system works (meta!)'
+    }
+    return descriptions.get(topic, 'Static guide')
 
 
 def _render_help_static_guide(data: Dict[str, Any]) -> None:
@@ -84,6 +203,14 @@ def _render_help_static_guide(data: Dict[str, Any]) -> None:
     if 'error' in data:
         print(f"Error: {data['message']}", file=sys.stderr)
         sys.exit(1)
+
+    # Add source attribution header
+    topic = data.get('topic', 'unknown')
+    file = data.get('file', 'unknown')
+
+    print(f"<!-- Source: {file} | Type: Static Guide | Access: reveal help://{topic} or --agent-help{'-full' if topic == 'agent-full' else ''} -->")
+    print()
+
     print(data['content'])
 
 
@@ -152,6 +279,10 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
 
     scheme = data.get('scheme', data.get('name', ''))
     print(f"# {scheme}:// - {data.get('description', '')}")
+    print()
+    print(f"**Source:** {scheme}.py adapter (dynamic)")
+    print(f"**Type:** URI Adapter")
+    print(f"**Access:** reveal help://{scheme}")
     print()
 
     if data.get('syntax'):

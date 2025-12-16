@@ -1,381 +1,602 @@
-# Reveal - Agent Quick Start
-
+# Reveal - AI Agent Reference
 **Version:** 0.23.1
-**Token Cost:** ~1,500 tokens (this guide)
-**Alternative:** Use `reveal help://` for progressive discovery (~50-500 tokens)
+**Purpose:** Practical patterns for AI code assistants
+**Token Cost:** ~2,200 tokens
+**Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
 
 ---
 
-## Token-Efficient Help System ⭐
+## Core Rule: Structure Before Content
 
-Reveal has a **discoverable help system** via `help://` URIs - always up-to-date, self-documenting.
+**Always use reveal instead of cat/grep/find for code files.**
 
-**Best Practice:** Use `help://` to explore capabilities progressively instead of loading full guides.
-
----
-
-## Progressive Discovery Pattern
-
-```bash
-# 1. Discover what's available
-reveal help://                    # List all adapters (~50 tokens)
-
-# 2. Learn about specific capability
-reveal help://python              # Python runtime inspection (~200 tokens)
-reveal help://ast                 # AST query system (~250 tokens)
-
-# 3. Use it
-reveal python://                  # Python environment overview
-reveal python://debug/bytecode    # Check for stale .pyc files
-reveal 'ast://./src?complexity>10' # Find complex functions
-```
-
-**Token efficiency:**
-- Progressive exploration: ~50-500 tokens (as needed)
-- This quick start: ~1,500 tokens
-- Full guide (--agent-help-full): ~12,000 tokens
-
----
-
-## Available Help Topics
-
-**Discover current list:** `reveal help://`
-
-### URI Adapters (Self-Documenting)
-- `help://python` - Python runtime inspection (bytecode debugging, package info)
-- `help://ast` - Query code as AST database (wildcard patterns, OR logic)
-- `help://json` - Navigate and query JSON files (path access, schema, gron-style)
-- `help://env` - Environment variables explorer
-- `help://reveal` - Self-inspection and validation (v0.22.0+)
-- `help://help` - Help system itself (meta!)
-
-### Comprehensive Guides
-- `help://python-guide` - Python adapter with multi-shot examples for LLMs
-- `help://anti-patterns` - Stop using grep/find, use reveal instead
-- `help://adapter-authoring` - Create your own adapters with excellent help
-- `help://tricks` - Cool tricks and hidden features guide
-- `help://agent` - Same as this file
-- `help://agent-full` - Complete comprehensive guide (~12K tokens)
-
-**New adapters auto-appear** - `help://` queries the live adapter registry.
-
----
-
-## Core Reveal Usage (Quick Reference)
-
-### Structure-First Philosophy
-
-**DO THIS:**
-```bash
-reveal file.py                    # Structure first (~100 tokens)
-reveal file.py target_function    # Then extract what you need (~50 tokens)
-```
-
-**NOT THIS:**
-```bash
-cat file.py                       # Read entire file (~7,500 tokens) ❌
-```
+❌ DON'T: `cat file.py` (wastes 7,500 tokens)
+✅ DO: `reveal file.py` (uses 100 tokens, shows structure)
 
 **Token savings:** 10-150x reduction
 
 ---
 
-### Essential Commands
+## Common Tasks → Reveal Patterns
 
+### Task: "Understand unfamiliar code"
+
+**Pattern:**
 ```bash
-# File exploration
-reveal src/                       # Directory tree
-reveal file.py                    # File structure (functions, classes, imports)
-reveal file.py --outline          # Hierarchical view (classes with methods)
-reveal file.py function_name      # Extract specific function
+# 1. See directory structure
+reveal src/
 
-# Code quality checks
-reveal file.py --check            # Run all quality checks
-reveal file.py --check --select B,S  # Bugs & security only
-reveal nginx.conf --check         # Nginx config validation (N001-N003)
-reveal Dockerfile --check         # Docker best practices (S701)
+# 2. Pick interesting file, see its structure
+reveal src/main.py
 
-# Large files (progressive disclosure)
-reveal large.py --head 10         # First 10 functions
-reveal large.py --tail 5          # Last 5 functions
-reveal large.py --range 15-20     # Specific range
+# 3. Extract specific function you need
+reveal src/main.py load_config
+```
 
-# Pipeline workflows
-git diff --name-only | reveal --stdin --outline
-find src/ -name "*.py" | reveal --stdin --check
+**Why this works:** Progressive disclosure. Don't read entire files.
 
-# Output formats
-reveal file.py --format=json      # JSON (for scripting)
-reveal file.py --format=grep      # Pipeable format
-reveal file.py --copy             # Copy output to clipboard
+**Example output:**
+```
+File: src/main.py (342 lines, Python)
+
+Imports (5):
+  import os
+  import sys
+  from pathlib import Path
+
+Functions (8):
+  load_config [12 lines, depth:1] (line 45)
+  parse_args [8 lines, depth:1] (line 58)
+  ...
 ```
 
 ---
 
-## Python Runtime Inspection (NEW in v0.17.0)
+### Task: "Find where X is implemented"
 
-**Common use case:** "My code changes aren't working!" (stale .pyc bytecode)
-
+**Pattern:**
 ```bash
-# Quick environment check
-reveal python://                  # Python version, venv status, package count
+# Find functions by name pattern
+reveal 'ast://./src?name=*authenticate*'
 
-# Debug bytecode issues
-reveal python://debug/bytecode    # ⚠️  Detects stale .pyc files
-
-# Package management
-reveal python://packages          # List all installed packages
-reveal python://packages/requests # Details for specific package
-
-# Environment details
-reveal python://venv              # Virtual environment status
-reveal python://env               # sys.path, flags, encoding
-reveal python://imports           # Currently loaded modules
-```
-
-**Full documentation:** `reveal help://python`
-
----
-
-## AST Query System
-
-Find code patterns without reading files:
-
-```bash
-# Find complex functions
+# Find complex code (likely buggy)
 reveal 'ast://./src?complexity>10'
 
-# Find long functions
-reveal 'ast://app.py?lines>50'
+# Find long functions (refactor candidates)
+reveal 'ast://./src?lines>50'
 
-# Find by name pattern (NEW: wildcard support)
-reveal 'ast://.?name=test_*'        # All test functions
-reveal 'ast://src/?name=*helper*'   # Functions containing "helper"
-
-# Find all functions (JSON output)
-reveal 'ast://.?type=function' --format=json
-
-# Query specific file
-reveal 'ast://main.py?type=class'
+# Combine filters
+reveal 'ast://./src?complexity>10&lines>50'
 ```
 
-**Full syntax:** `reveal help://ast`
+**Why this works:** AST queries don't require reading files. Searches across entire codebase instantly.
+
+**Available filters:**
+- `name=pattern` - Wildcard matching (test_*, *helper*, etc.)
+- `complexity>N` - Cyclomatic complexity threshold
+- `lines>N` - Function line count
+- `type=X` - Element type (function, class, method)
+- `depth>N` - Nesting depth
 
 ---
 
-## JSON Navigation (`json://`)
+### Task: "Review code quality"
 
-Navigate and query JSON files:
-
+**Pattern:**
 ```bash
-# Path navigation
-reveal json://config.json/name           # Access key
-reveal json://config.json/users/0        # Array index
-reveal json://config.json/users[-1]      # Negative index (last item)
-reveal json://config.json/items[0:3]     # Array slice
+# Check all quality rules
+reveal file.py --check
 
-# Queries
-reveal json://config.json?schema         # Infer type structure
-reveal json://config.json?flatten        # Gron-style grep-able output
-reveal json://config.json?gron           # Alias for flatten
-reveal json://config.json?keys           # List keys/indices
-reveal json://config.json?length         # Get length
+# Check specific categories (faster)
+reveal file.py --check --select B,S    # Bugs & security
+reveal file.py --check --select C,E    # Complexity & errors
+
+# Specific file types
+reveal Dockerfile --check              # Docker best practices
+reveal nginx.conf --check              # Nginx validation
 ```
 
-**Full syntax:** `reveal help://json`
+**Available rule categories:**
+- **B** (bugs) - Common code bugs and anti-patterns
+- **S** (security) - Security vulnerabilities
+- **C** (complexity) - Code complexity metrics
+- **E** (errors) - Syntax errors and issues
+- **D** (duplicates) - Duplicate code detection
+- **N** (nginx) - Nginx configuration issues
+- **V** (validation) - General validation rules
+
+**List all rules:** `reveal --rules`
+**Explain rule:** `reveal --explain B001`
 
 ---
 
-## Essential Workflows
+### Task: "Extract specific code element"
 
-### Unknown Codebase
+**Pattern:**
 ```bash
-reveal help://                    # What adapters exist?
-reveal src/                       # What's the structure?
-reveal src/main.py                # What's in this file?
-reveal src/main.py load_config    # Extract specific function
+# Extract function
+reveal app.py process_request
+
+# Extract class
+reveal app.py DatabaseHandler
+
+# Extract specific lines
+reveal app.py --range 42-80
+
+# Get first/last functions (bugs cluster at end!)
+reveal app.py --head 5
+reveal app.py --tail 5
 ```
 
-### PR Review
+**Why tail is useful:** Bugs and technical debt often cluster at the end of files. `--tail 5` shows the last 5 functions added.
+
+---
+
+### Task: "Debug Python environment issues"
+
+**Pattern:**
 ```bash
+# Quick environment check
+reveal python://
+
+# Check for stale .pyc bytecode (common issue!)
+reveal python://debug/bytecode
+
+# Check virtual environment
+reveal python://venv
+
+# List installed packages
+reveal python://packages
+
+# Get details on specific package
+reveal python://packages/requests
+```
+
+**Common scenario:** "My code changes aren't working!"
+**Solution:** `reveal python://debug/bytecode` detects stale .pyc files
+
+**python:// adapter provides:**
+- Python version and interpreter path
+- Virtual environment detection
+- Package inventory (pip list equivalent)
+- sys.path inspection
+- Stale bytecode detection
+- Environment variables (PYTHONPATH, etc.)
+
+---
+
+### Task: "Navigate JSON/JSONL files"
+
+**Pattern:**
+```bash
+# Access nested keys
+reveal json://config.json/database/host
+
+# Array access
+reveal json://data.json/users/0
+reveal json://data.json/users[-1]      # Last item
+
+# Array slicing
+reveal json://data.json/users[0:5]
+
+# Get structure overview
+reveal json://config.json?schema
+
+# Make grep-able (gron-style)
+reveal json://config.json?flatten
+
+# JSONL: Get specific records
+reveal conversation.jsonl --head 10    # First 10 records
+reveal conversation.jsonl --tail 5     # Last 5 records
+reveal conversation.jsonl --range 48-52 # Records 48-52
+reveal conversation.jsonl 42           # Specific record
+```
+
+**JSONL is different:** Each line is a separate JSON object. Use `--head`, `--tail`, `--range` to navigate records without loading entire file.
+
+---
+
+### Task: "Review pull request / git changes"
+
+**Pattern:**
+```bash
+# See structure of changed files
 git diff --name-only | reveal --stdin --outline
+
+# Check quality on changed Python files
 git diff --name-only | grep "\.py$" | reveal --stdin --check
+
+# Deep dive on specific changed file
 reveal src/changed_file.py --check
+reveal src/changed_file.py changed_function
 ```
 
-### Python Environment Debugging
+**--stdin mode:** Feed file paths via stdin. Works with `git diff`, `find`, `ls`, etc.
+
+---
+
+### Task: "Understand file relationships"
+
+**Pattern:**
 ```bash
-reveal python://                  # Environment overview
-reveal python://debug/bytecode    # Check for stale .pyc (common issue!)
-reveal python://venv              # Virtual environment status
+# See imports
+reveal app.py --format=json | jq '.structure.imports[]'
+
+# See class hierarchy
+reveal app.py --outline
+
+# Find what imports a module
+grep -r "import database" src/
+
+# See all functions in directory
+find src/ -name "*.py" | reveal --stdin --format=json | \
+  jq '.structure.functions[] | {file, name, lines: .line_count}'
 ```
 
-### Bug Investigation
+**--outline flag:** Shows hierarchical structure (classes with their methods, nested functions, etc.)
+
+---
+
+### Task: "Find duplicate code"
+
+**Pattern:**
 ```bash
-reveal file.py --outline          # See structure
-reveal file.py --tail 5           # Last functions (bugs cluster here!)
-reveal file.py suspicious_func    # Extract suspect code
-reveal file.py --check --select B,E  # Check for bugs & errors
+# Run duplicate detection
+reveal file.py --check --select D
+
+# D001: Exact duplicates (hash-based, reliable)
+# D002: Similar code (structural similarity, experimental)
 ```
 
-### Nginx Configuration Validation (NEW in v0.19.0)
-```bash
-reveal nginx.conf --check         # Run all nginx checks
-reveal nginx.conf --check --select N  # Only nginx rules
+**Note:** D002 currently has high false positive rate. Use D001 for exact duplicates only.
 
-# Available nginx rules:
-# N001: Duplicate backend detection (upstreams sharing same server:port)
-# N002: Missing SSL certificate (listen 443 ssl without certs)
-# N003: Missing proxy headers (X-Real-IP, X-Forwarded-For)
+---
+
+### Task: "Validate configuration files"
+
+**Pattern:**
+```bash
+# Nginx configuration
+reveal nginx.conf --check              # N001-N003 rules
+# - N001: Duplicate backends (upstreams with same server:port)
+# - N002: Missing SSL certificates
+# - N003: Missing proxy headers
+
+# Dockerfile
+reveal Dockerfile --check              # S701 rule
+# - S701: Security best practices
+
+# YAML/TOML
+reveal config.yaml                     # Structure view
+reveal pyproject.toml                  # Structure view
 ```
 
 ---
 
 ## Output Formats
 
+**Choose format based on use case:**
+
 ```bash
-reveal file.py                    # Text (human-readable)
-reveal file.py --format=json      # JSON (standard structure)
-reveal file.py --format=typed     # JSON with types & relationships
-reveal file.py --format=grep      # Pipeable (name:line format)
+# Human-readable (default)
+reveal file.py
+
+# JSON for scripting
+reveal file.py --format=json
+
+# Grep-friendly (name:line format)
+reveal file.py --format=grep
+
+# Typed JSON (with relationships)
+reveal file.py --format=typed
+
+# Copy to clipboard
+reveal file.py --copy
 ```
 
-**JSON + jq** (powerful filtering):
+**JSON + jq filtering:**
 ```bash
 # Find complex functions
 reveal app.py --format=json | jq '.structure.functions[] | select(.depth > 3)'
 
-# List all imports
-reveal app.py --format=json | jq '.structure.imports[]'
+# Find functions > 50 lines
+reveal app.py --format=json | jq '.structure.functions[] | select(.line_count > 50)'
+
+# List all classes
+reveal app.py --format=json | jq '.structure.classes[].name'
 ```
 
 ---
 
-## When to Use --agent-help-full
+## Markdown-Specific Features
 
-**Use the full guide when:**
-- Cannot make multiple reveal calls (API/token constraints)
-- Working in restricted environment (no file system access)
-- Need complete offline reference
-
-**Cost:** ~12,000 tokens (vs. ~500 for progressive `help://` exploration)
-
+**Pattern:**
 ```bash
-reveal --agent-help-full          # Complete guide (all workflows, examples, patterns)
+# Extract all links
+reveal doc.md --links
+
+# Only external links
+reveal doc.md --links --link-type external
+
+# Only internal links (broken link detection)
+reveal doc.md --links --link-type internal
+
+# Extract code blocks
+reveal doc.md --code
+
+# Only Python code blocks
+reveal doc.md --code --language python
+
+# Get YAML frontmatter
+reveal doc.md --frontmatter
 ```
+
+**Link types:**
+- `internal` - Relative links (./file.md, ../other.md)
+- `external` - HTTP/HTTPS links
+- `email` - mailto: links
+- `all` - All link types
 
 ---
 
-## Decision Tree
+## When reveal Won't Help
 
-```
-Need help with reveal?
-├─ What adapters exist? → reveal help://
-├─ How does python:// work? → reveal help://python
-├─ How does ast:// work? → reveal help://ast
-├─ Need complete offline guide? → reveal --agent-help-full
-├─ Traditional CLI help? → reveal --help
-└─ Supported file types? → reveal --list-supported
+**Don't use reveal for:**
+- Binary files (use file-specific tools)
+- Very large files >10MB (performance degrades)
+- Real-time log tailing (use `tail -f`)
+- Text search across many files (use `ripgrep`/`grep`)
+- Compiled binaries (use `objdump`, etc.)
 
-Exploring code?
-├─ Unknown directory → reveal src/
-├─ Unknown file → reveal file.py
-├─ Need specific function → reveal file.py function_name
-├─ Multiple files → find/git | reveal --stdin
-├─ Large file (>300 lines) → reveal file.py --head 10
-└─ Full content needed → Read tool (after structure exploration)
-```
+**Use reveal for:**
+- Understanding code structure
+- Extracting specific functions/classes
+- Quality checks
+- Progressive file exploration
+- Python environment debugging
+- Config file validation
 
 ---
 
-## Common Patterns
+## File Type Support
 
-### ✅ DO: Progressive exploration
-```bash
-reveal file.py                    # Structure first
-reveal file.py --outline          # Hierarchy if needed
-reveal file.py target_func        # Extract what you need
-```
+**reveal auto-detects and provides structure for:**
 
-### ❌ DON'T: Read everything
-```bash
-cat huge_file.py                  # 10,000 tokens wasted
-```
+**Languages:** Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, GDScript, Bash, SQL, PHP, Ruby, Swift, Kotlin (18 languages)
+
+**Configs:** Nginx, Dockerfile, TOML, YAML, JSON
+
+**Documents:** Markdown, Jupyter notebooks
+
+**Office:** Excel (.xlsx), Word (.docx), PowerPoint (.pptx)
+
+**Check supported types:** `reveal --list-supported`
 
 ---
 
-### ✅ DO: Use pipelines
+## Advanced: Pipeline Workflows
+
+**reveal works in Unix pipelines:**
+
 ```bash
+# Check all Python files
+find src/ -name "*.py" | reveal --stdin --check
+
+# Get outline of modified files
 git diff --name-only | reveal --stdin --outline
-```
 
-### ❌ DON'T: Manual iteration
-```bash
-reveal file1.py; reveal file2.py; ...  # Use --stdin instead
-```
+# Find complex functions across codebase
+find . -name "*.py" | reveal --stdin --format=json | \
+  jq '.structure.functions[] | select(.depth > 3)'
 
----
-
-### ✅ DO: Use help:// for discovery
-```bash
-reveal help://                    # See all adapters
-reveal help://python              # Learn specific adapter
-```
-
-### ❌ DON'T: Load full guide unnecessarily
-```bash
-reveal --agent-help-full          # 12K tokens when help:// costs 50
+# Quality check on recent commits
+git diff HEAD~5 --name-only | reveal --stdin --check
 ```
 
 ---
 
-## Integration Patterns
+## Real-World Examples
 
-### With TIA
+### Example 1: "User reports auth bug"
+
 ```bash
-tia search all "auth"             # Orient: Find files
-reveal path/to/auth.py            # Navigate: Structure (Use reveal here!)
-reveal path/to/auth.py auth_func  # Focus: Extract specific code
+# Find auth-related code
+reveal 'ast://./src?name=*auth*'
+
+# Found: src/auth/handler.py authenticate_user()
+# Check structure
+reveal src/auth/handler.py
+
+# Extract suspect function
+reveal src/auth/handler.py authenticate_user
+
+# Quality check
+reveal src/auth/handler.py --check --select B,S
 ```
 
-### With Claude Code
+### Example 2: "Need to refactor complex code"
+
 ```bash
-# Before using Read tool, explore structure
+# Find complex functions
+reveal 'ast://./src?complexity>10&lines>50'
+
+# Found: src/processor.py process_request (complexity: 15, 87 lines)
+# See structure
+reveal src/processor.py --outline
+
+# Extract function
+reveal src/processor.py process_request
+
+# Check for issues
+reveal src/processor.py --check
+```
+
+### Example 3: "Setup not working in new environment"
+
+```bash
+# Check Python environment
+reveal python://
+
+# Check for stale bytecode
+reveal python://debug/bytecode
+
+# Check virtual environment
+reveal python://venv
+
+# Verify package installed
+reveal python://packages/fastapi
+```
+
+### Example 4: "Review PR changes"
+
+```bash
+# See what changed
+git diff --name-only
+
+# Get structure of changed files
+git diff --name-only | reveal --stdin --outline
+
+# Quality check Python files
+git diff --name-only | grep "\.py$" | reveal --stdin --check
+
+# Deep dive on specific file
+reveal src/modified.py --check
+reveal src/modified.py new_function
+```
+
+---
+
+## Troubleshooting
+
+**If reveal doesn't work on a file:**
+```bash
+# Check file type detection
+reveal file.py --meta
+
+# Try without fallback (see if TreeSitter parser exists)
+reveal file.py --no-fallback
+```
+
+**If structure is incomplete:**
+- Tree-sitter parser may not support that syntax
+- File may have syntax errors
+- Try `--outline` for hierarchical view
+
+**If quality checks seem wrong:**
+```bash
+# See which rules triggered
+reveal file.py --check
+
+# Explain specific rule
+reveal --explain B001
+
+# List all available rules
+reveal --rules
+```
+
+**If performance is slow:**
+```bash
+# Use --fast mode (skips line counting)
+reveal large_dir/ --fast
+
+# Limit tree depth
+reveal deep_dir/ --depth 2
+
+# Limit entries shown
+reveal huge_dir/ --max-entries 100
+```
+
+---
+
+## Quick Reference Card
+
+| Task | Command |
+|------|---------|
+| See directory structure | `reveal src/` |
+| See file structure | `reveal file.py` |
+| Extract function | `reveal file.py func_name` |
+| Quality check | `reveal file.py --check` |
+| Find complex code | `reveal 'ast://./src?complexity>10'` |
+| Debug Python env | `reveal python://debug/bytecode` |
+| Navigate JSON | `reveal json://file.json/path/to/key` |
+| JSONL records | `reveal file.jsonl --head 10` |
+| Check changes | `git diff --name-only \| reveal --stdin --check` |
+| Get JSON output | `reveal file.py --format=json` |
+| Hierarchical view | `reveal file.py --outline` |
+| Copy to clipboard | `reveal file.py --copy` |
+| Extract links | `reveal doc.md --links` |
+| Extract code blocks | `reveal doc.md --code` |
+
+---
+
+## Help System Overview
+
+**For AI agents (you):**
+- **This guide** (`reveal --agent-help`) - Task-based patterns, concrete examples
+- **Complete guide** (`reveal --agent-help-full`) - Comprehensive reference (~12K tokens)
+
+**For humans:**
+- **CLI reference** (`reveal --help`) - All flags and options
+- **Progressive help** (`reveal help://`) - Explorable documentation
+
+**You don't need to explore help://** - this guide has the patterns you need. The examples above cover 95% of use cases.
+
+---
+
+## Integration with Other Tools
+
+### With TIA (if available)
+```bash
+tia search all "keyword"          # Find files containing keyword
+reveal path/to/file.py            # See structure
+reveal path/to/file.py func       # Extract specific code
+```
+
+### With Claude Code workflow
+```bash
+# 1. Structure first (this is what you should do!)
 reveal unknown_file.py            # What's in here? (~100 tokens)
-# Then use Read tool on specific functions only
+
+# 2. Then use Read tool on specific functions only
+# Don't use Read on entire large files
+```
+
+### With grep/ripgrep
+```bash
+# Find files with keyword
+rg -l "authenticate" src/
+
+# Check structure of matches
+rg -l "authenticate" src/ | reveal --stdin --outline
 ```
 
 ---
 
-## Key Resources
+## Key Principles for AI Agents
 
-- **Progressive Help:** `reveal help://` (always current, ~50 tokens)
-- **Complete Guide:** `reveal --agent-help-full` (~12K tokens, offline fallback)
-- **Traditional Help:** `reveal --help` (CLI flags and options)
-- **Supported Types:** `reveal --list-supported`
-- **Version:** `reveal --version`
-- **GitHub:** https://github.com/Semantic-Infrastructure-Lab/reveal
-- **PyPI:** https://pypi.org/project/reveal-cli/
+1. **Structure before content** - Always `reveal` before `Read`
+2. **Progressive disclosure** - Start broad, drill down as needed
+3. **Use AST queries** - Don't grep when you can query
+4. **Quality checks built-in** - Use `--check` proactively
+5. **Pipeline friendly** - Combine with git, find, grep via `--stdin`
 
 ---
 
-## Quick Comparison
-
-| Approach | Tokens | When to Use |
-|----------|--------|-------------|
-| `reveal help://` | ~50 | Discover available adapters |
-| `reveal help://python` | ~200 | Learn specific adapter |
-| `reveal --agent-help` | ~1,500 | Quick start + discovery pattern |
-| `reveal --agent-help-full` | ~12,000 | Complete offline reference |
-
-**Best Practice:** Start with `help://` for progressive discovery. Fall back to `--agent-help-full` only when needed.
+**Version:** 0.23.1
+**Last updated:** 2025-12-16
+**Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
+**PyPI:** https://pypi.org/project/reveal-cli/
 
 ---
 
-## Remember
+## What Changed in This Guide
 
-**Key Principle:** Explore structure before reading files (10-150x token reduction)
+This is a redesigned AI agent reference (Dec 2025). Changes:
 
-**Discovery Pattern:** `help://` → learn → use (most token-efficient)
+- **Task-oriented** - "When you need to do X, use Y"
+- **Example-heavy** - Concrete commands that work
+- **Realistic** - Written for how AI agents actually behave
+- **No exploration prompts** - Direct patterns, not discovery hints
+- **Real-world examples** - Actual scenarios you'll encounter
 
-**When stuck:** `reveal help://` shows you what's possible!
+The old version told you to "explore with help://" - this version gives you the patterns directly.

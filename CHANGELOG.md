@@ -7,7 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes._
+### 🎯 REDESIGNED: Help System (AI Agent Focused)
+
+**Major improvements to reveal's help system** - designed for realistic AI agent usage patterns.
+
+#### What Changed
+
+**`--agent-help` (AI Agent Reference)**
+- **Task-oriented**: "When you need to do X, use Y" patterns (not exploration hints)
+- **Example-heavy**: Concrete, working commands for every task
+- **Realistic**: Written for how AI agents actually behave (like Claude Code)
+- **Real-world scenarios**: Bug investigation, PR review, environment debugging, etc.
+- **No exploration prompts**: Direct patterns instead of "discover with help://"
+- **Token cost**: ~2,200 tokens (updated estimate)
+
+**`help://` (Progressive Discovery)**
+- **Source attribution**: All topics show where content comes from
+  - Dynamic: "ast.py adapter (dynamic)"
+  - Static: "File: AGENT_HELP.md | Token cost: ~2,200"
+- **Categorized index**: Organized by source type (Dynamic/Static/Special)
+- **Token costs**: Estimates shown for AI agents
+- **Clear organization**: AI Agents, Feature Guides, Best Practices, Development
+- **Navigation tips**: Better discoverability
+
+**New: `help://help`**
+- Meta-documentation explaining the three-tier help system
+- Design principles and architecture
+- How to add new help content
+- Troubleshooting guide
+
+#### Files Modified
+
+- `reveal/AGENT_HELP.md` - Completely redesigned with task-based patterns
+- `reveal/rendering/adapters/help.py` - Enhanced with source attribution
+- `reveal/adapters/help.py` - Added HELP_SYSTEM_GUIDE.md mapping
+- `reveal/HELP_SYSTEM_GUIDE.md` - **New** meta-documentation
+
+#### Design Philosophy
+
+**Three-tier system with clear separation:**
+1. `--help` - CLI reference (humans typing commands)
+2. `--agent-help` - Task patterns (AI agents, llms.txt standard)
+3. `help://` - Progressive discovery (both humans and agents)
+
+**Key insight**: AI agents don't "explore" help systems - they need direct, actionable patterns.
+
+#### Examples
+
+**Before (exploration-based):**
+```markdown
+## Progressive Discovery Pattern
+1. Discover what's available: reveal help://
+2. Learn about specific capability: reveal help://ast
+3. Use it
+```
+
+**After (task-based):**
+```markdown
+### Task: "Find where X is implemented"
+
+**Pattern:**
+```bash
+reveal 'ast://./src?name=*authenticate*'
+```
+
+**Why this works:** AST queries don't require reading files.
+```
+
+### Benefits
+
+- **For AI agents**: Get working patterns immediately (no discovery needed)
+- **For humans**: Clear source attribution (know where help comes from)
+- **For developers**: Easy to add new help (auto-discovery + clear docs)
+- **Token efficiency**: Estimate costs shown for all guides
 
 ## [0.23.1] - 2025-12-14
 

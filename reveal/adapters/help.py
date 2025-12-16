@@ -37,7 +37,8 @@ class HelpAdapter(ResourceAdapter):
         'markdown': 'MARKDOWN_GUIDE.md',
         'anti-patterns': 'ANTI_PATTERNS.md',
         'adapter-authoring': 'adapters/ADAPTER_AUTHORING_GUIDE.md',
-        'tricks': 'COOL_TRICKS.md'
+        'tricks': 'COOL_TRICKS.md',
+        'help': 'HELP_SYSTEM_GUIDE.md'  # Meta-documentation about help system
     }
 
     @staticmethod
