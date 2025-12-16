@@ -2,22 +2,28 @@
 
 > **Vision:** Universal resource exploration with progressive disclosure
 
-**Current version:** v0.23.x
-**Last updated:** 2025-12-14
+**Current version:** v0.23.1
+**Last updated:** 2025-12-16
 
 ---
 
 ## What We've Shipped
 
-### v0.23.x - Type-First Architecture (Dec 2025)
+### v0.23.0-v0.23.1 - Type-First Architecture (Dec 2025)
 
+**Type System & Containment:**
 - `--typed` flag: Hierarchical code structure with containment relationships
 - Decorator extraction: `@property`, `@staticmethod`, `@classmethod`, `@dataclass`
 - `TypedStructure` and `TypedElement` classes for programmatic navigation
 - AST decorator queries: `ast://.?decorator=property`
 - New bug rules: B002, B003, B004, B005 (decorator-related)
+
+**Adapters & Features:**
 - `reveal://` self-inspection adapter with V-series validation rules
 - `json://` adapter for JSON navigation with path access and schema discovery
+- `--copy` / `-c` flag: Cross-platform clipboard integration
+- `ast://` query system with multiline pattern matching
+- Enhanced help system with `help://` progressive discovery
 
 ### v0.22.0 - Self-Inspection (Dec 2025)
 
@@ -71,61 +77,97 @@
 
 ## What's Next
 
-### Near-term: CLI Polish
+### v0.24 (Q1 2026): Link Validation & Quality
 
-**Ready to implement:**
-- [ ] `--watch` mode: Live updates on file changes
-- [ ] Color themes: Light/dark/16-color
-- [ ] `--quiet` mode: Suppress breadcrumbs
+**Link Validation** - Documentation workflow support:
+- L-series quality rules (L001: broken internal, L002: broken external, L003: routing mismatches)
+- `--recursive` modifier for batch processing
+- Framework profiles (FastHTML, Jekyll, Hugo routing awareness)
+- CI/CD integration (exit codes, JSON output)
 
-### Short-term: Structural Analysis
+**Quality Improvements:**
+- D002 duplicate detection refinement (better discrimination)
+- Test coverage improvements (target: 50%+)
+- Code quality refactoring (Phases 2-3)
 
-**`diff://` adapter** - Compare files, environments, or time:
+**See:** `internal-docs/planning/PENDING_WORK.md` for active tracks
+
+### v0.25-v0.26 (Q2 2026): Core Features
+
+**`diff://` adapter** - Comparative exploration:
 ```bash
 reveal diff://app.py:backup/app.py       # Compare two files
 reveal diff://app.py:HEAD~1              # Compare with git revision
-reveal diff://env://:env://prod          # Compare environments
+reveal diff://python://venv:python://    # Compare environments
 ```
 
 **`stats://` adapter** - Codebase health metrics:
 ```bash
-reveal stats://./src                     # Lines, functions, complexity
+reveal stats://./src                     # Overview: lines, functions, complexity
 reveal stats://./src --hotspots          # Largest/most complex files
+reveal stats://./src --format=json       # For CI/CD dashboards
 ```
 
-### Medium-term: Database Adapters
-
-**Goal:** Explore database schemas with the same ease as code files
-
+**`--watch` mode** - Live feedback:
 ```bash
-pip install reveal-cli[database]
-
-reveal postgres://prod                   # All tables
-reveal postgres://prod users             # Table structure
-reveal mysql://staging orders            # MySQL support
-reveal sqlite:///path/to/db.sqlite       # SQLite files
+reveal app.py --watch --check            # Monitor file for changes
+reveal src/ --watch --typed              # Watch directory
 ```
 
-**Design:** MySQL adapter spec complete in `internal-docs/planning/MYSQL_ADAPTER_SPEC.md`
+### v0.27-v0.29 (Q3 2026): Polish for v1.0
+
+**UX Improvements:**
+- Color themes (light/dark/high-contrast)
+- Config file support (`~/.config/reveal/config.yaml`)
+- `--quiet` mode for scripting
+- Interactive mode exploration
+
+**Documentation:**
+- Complete adapter authoring guide
+- CI/CD integration examples
+- Performance benchmarking suite
+
+### v1.0 (Q4 2026): Stable Foundation
+
+**Stability commitment:**
+- API freeze (CLI flags, output formats, adapter protocol)
+- 60%+ test coverage
+- All 18 built-in languages tested
+- Comprehensive documentation
+- Performance guarantees
+
+### Post-v1.0: Advanced URI Schemes
+
+**See:** `internal-docs/planning/ADVANCED_URI_SCHEMES.md` for detailed roadmap
+
+**Phases (v1.1-v1.4):**
+- `query://` - SQL-like cross-resource queries
+- `graph://` - Dependency and call graph visualization
+- `time://` - Temporal exploration (git history, blame)
+- `semantic://` - Semantic code search with embeddings
+- `trace://` - Execution trace exploration
+- `live://` - Real-time monitoring
+- `merge://` - Multi-resource composite views
 
 ### Long-term: Ecosystem
 
-**API Adapters:**
+**Database Adapters:**
+```bash
+pip install reveal-cli[database]
+reveal postgres://prod users             # Database schemas
+reveal mysql://staging orders
+reveal sqlite:///app.db
+```
+
+**API & Container Adapters:**
 ```bash
 reveal https://api.github.com            # REST API exploration
-reveal openapi://petstore.swagger.io     # OpenAPI spec parsing
-reveal graphql://api.github.com/graphql  # GraphQL introspection
+reveal docker://container-name           # Container inspection
 ```
 
-**Container Adapters:**
+**Plugin System:**
 ```bash
-reveal docker://my-app-prod              # Container inspection
-reveal docker-compose://web              # Compose service details
-```
-
-**Plugin Ecosystem:**
-```bash
-pip install reveal-adapter-mongodb       # Third-party adapters
+pip install reveal-adapter-mongodb       # Community adapters
 reveal mongodb://prod                    # Just works
 ```
 

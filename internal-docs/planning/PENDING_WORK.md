@@ -1,7 +1,7 @@
 # Reveal - Pending Work Index
 
-**Last Updated:** 2025-12-14
-**Sessions:** infernal-throne-1212, wise-goddess-1212, cyber-phoenix-1212, emerald-hue-1214
+**Last Updated:** 2025-12-16
+**Sessions:** infernal-throne-1212, wise-goddess-1212, cyber-phoenix-1212, emerald-hue-1214, savage-siege-1216, kujofugo-1216
 
 ---
 
@@ -42,6 +42,7 @@ This document indexes all pending work for Reveal, organized by project track. E
 - [Track 1: Duplicate Detection](#track-1-duplicate-detection-d001-d002-rules) - Universal duplicate detection system
 - [Track 2: Code Quality Refactoring](#track-2-code-quality-refactoring) - Systematic codebase cleanup
 - [Track 3: Testing & Infrastructure](#track-3-testing--infrastructure) - Coverage and reliability
+- [Track 4: Link Validation](#track-4-link-validation) - ⭐ Documentation workflow support (NEW)
 - [Quick Start Commands](#quick-start-commands)
 
 ---
@@ -268,28 +269,150 @@ pytest tests/ --cov=reveal --cov-report=html
 
 ---
 
+## Track 4: Link Validation
+
+**Status:** 🟢 New track, high priority
+**Session:** savage-siege-1216 (pain point identified), kujofugo-1216 (consolidation)
+**Priority:** High
+**Effort:** 2-3 weeks
+
+### What's Needed
+
+**Problem**: Documentation workflows require manual link checking with `find | reveal --stdin --links | grep BROKEN`. Framework routing (FastHTML, Jekyll) breaks filesystem-based validation.
+
+**User Pain Point**: Spent savage-siege-1216 + multiple sessions doing manual link validation and fixing across SIL website docs.
+
+### Proposed Solution
+
+**L-series Quality Rules** (extends existing --check system):
+- [ ] L001: Broken internal links (filesystem-based)
+- [ ] L002: Broken external links (HTTP HEAD requests, optional)
+- [ ] L003: Framework routing mismatches (FastHTML /path vs path.md)
+
+**Recursive Processing** (applies to all adapters):
+- [ ] `--recursive` flag: Process directory trees natively
+- [ ] Respects `.gitignore` patterns
+- [ ] Aggregated output (summary + details)
+
+**Framework Profiles** (config-based, not CLI flags):
+```yaml
+# ~/.config/reveal/frameworks/fasthtml.yaml
+routing:
+  strip_extension: true
+  case_insensitive: true
+  base_path: /
+link_resolution:
+  - check_with_extension: [.md]
+  - check_uppercase_variant: true
+```
+
+**CI/CD Integration** (already exists, extend):
+- Exit code 0 (all valid) / 1 (issues found) / 2 (validation error)
+- JSON output format for GitHub Actions
+- Summary mode for quick checks
+
+### Implementation Plan
+
+**Phase 1: Core L-series Rules** (Week 1, ~8 hours)
+- [ ] L001: Broken internal links
+  - Extend `reveal/analyzers/markdown.py` (453 lines, has link extraction)
+  - Add link validation logic
+  - Test with SIL website docs (64 files, 1,245 links)
+
+**Phase 2: Recursive Processing** (Week 1-2, ~6 hours)
+- [ ] Add `--recursive` flag to CLI parser
+- [ ] Implement directory tree walking (respect .gitignore)
+- [ ] Aggregate results across files
+- [ ] Add summary output mode
+
+**Phase 3: Framework Profiles** (Week 2, ~8 hours)
+- [ ] Config file loading (`~/.config/reveal/frameworks/*.yaml`)
+- [ ] Framework-aware link resolution
+- [ ] L003: Framework routing mismatch detection
+- [ ] Test with FastHTML routing patterns
+
+**Phase 4: CI/CD Examples** (Week 3, ~4 hours)
+- [ ] Document JSON output format
+- [ ] Create GitHub Action example
+- [ ] Add to CONTRIBUTING.md
+- [ ] Test in SIL website CI/CD
+
+### Quick Start
+
+```bash
+# Test current markdown link extraction
+cd /home/scottsen/src/projects/reveal/external-git
+reveal reveal/analyzers/markdown.py --outline
+reveal tests/test_markdown_analyzer.py
+
+# Explore SIL website docs (target for testing)
+reveal /home/scottsen/src/projects/sil-website/docs/ --recursive --links  # (not yet implemented)
+
+# Current workaround being used
+cd /home/scottsen/src/projects/sil-website
+find docs/ -name "*.md" | reveal --stdin --links --link-type internal
+```
+
+### Success Criteria
+
+**Functional:**
+- [ ] Can detect broken internal links in directory tree
+- [ ] Framework routing validated correctly (FastHTML /path vs docs/path.md)
+- [ ] CI/CD integration works (exit codes, JSON output)
+- [ ] No false positives on SIL website docs
+
+**Performance:**
+- [ ] <500ms for 64 files (current find | reveal baseline)
+- [ ] Incremental mode for --watch (only check changed files)
+
+**UX:**
+- [ ] Clear error messages with file:line references
+- [ ] Summary output: "✅ 949 valid, ❌ 296 broken across 64 files"
+- [ ] Suggest fixes where possible
+
+### Documentation
+
+**Design Spec:**
+- Move `/home/scottsen/src/projects/sil-website/REVEAL_ENHANCEMENTS.md` → `internal-docs/planning/LINK_VALIDATION_SPEC.md`
+
+**Session Context:**
+- `/home/scottsen/src/tia/sessions/savage-siege-1216` - Where pain point was identified
+- `/home/scottsen/src/tia/sessions/kujofugo-1216` - Consolidation session
+
+---
+
 ## Decision Points
 
 ### For Scott to Decide
 
 **1. Which track to pursue next?**
-- **Option A:** Track 1 (Improve D002 duplicate detection)
+- **Option A:** Track 4 (Link Validation) ⭐ RECOMMENDED
+  - Effort: 2-3 weeks
+  - Impact: Solves real user pain point, CI/CD ready, high value
+  - Status: Clear spec, validated need from savage-siege-1216
+
+- **Option B:** Track 1 (Improve D002 duplicate detection)
   - Effort: 2-3 hours
   - Impact: Better feature discrimination, validated statistical framework
   - Status: Foundation solid, needs tuning
 
-- **Option B:** Track 2 (Continue quality refactoring, Phases 2-3)
+- **Option C:** Track 2 (Continue quality refactoring, Phases 2-3)
   - Effort: 8 hours
   - Impact: 75/100 quality score, -776 lines, clean architecture
   - Status: Phase 1 proven successful, clear roadmap
 
-- **Option C:** Track 3 (Testing infrastructure first)
+- **Option D:** Track 3 (Testing infrastructure first)
   - Effort: 12-20 hours
   - Impact: Safe foundation for other work
   - Status: Blocks large refactorings, but Track 2 Phase 1 succeeded without it
 
-- **Option D:** Ship what we have, move to other priorities
-  - Merge Phase 1 refactoring
+- **Option E:** Parallel - Track 4 + Track 1
+  - Link validation (new feature, extends markdown.py)
+  - D002 refinement (focused, small scope)
+  - Can ship both in v0.24
+
+- **Option F:** Ship what we have, move to other priorities
+  - Merge existing work
   - Document D001/D002 as experimental
   - Defer improvements to future sessions
 
@@ -413,6 +536,7 @@ When resuming work on Reveal:
 **This document is the single source of truth for Reveal pending work.**
 
 **Created:** 2025-12-12 (cyber-phoenix-1212)
-**Tracks:** 3 active (Duplicate Detection, Quality Refactoring, Testing)
-**Total Pending Effort:** ~22-31 hours across all tracks
-**Documentation:** 7 comprehensive guides (68KB total)
+**Updated:** 2025-12-16 (kujofugo-1216 - added Track 4)
+**Tracks:** 4 active (Duplicate Detection, Quality Refactoring, Testing, Link Validation)
+**Total Pending Effort:** ~2-3 weeks (Track 4) + 22-31 hours (Tracks 1-3)
+**Documentation:** 7 comprehensive guides (68KB total) + Link validation spec
