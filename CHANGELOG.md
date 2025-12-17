@@ -7,6 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ NEW: Stats Adapter - Code Quality Metrics & Hotspot Detection
+
+**Automated code quality analysis and technical debt identification** - find problematic code before it becomes a maintenance burden.
+
+#### New `stats://` Adapter
+
+Analyze codebase metrics and identify quality hotspots automatically:
+
+```bash
+# Directory statistics with quality metrics
+reveal stats://./src
+
+# Identify quality hotspots (worst files first)
+reveal stats://./src --hotspots
+
+# Specific file metrics
+reveal stats://./src/app.py
+
+# JSON output for CI/CD integration
+reveal stats://./src --format=json | jq '.summary.avg_quality_score'
+```
+
+**Metrics Provided:**
+- **Lines**: Total, code, comments, empty
+- **Elements**: Functions, classes, imports
+- **Complexity**: Average, min, max cyclomatic complexity
+- **Quality Score**: 0-100 rating based on:
+  - Long functions (>100 lines)
+  - Deep nesting (>4 levels)
+  - High complexity (>10)
+
+**Quality Hotspot Detection (`--hotspots`):**
+- Automatically ranks files by quality score (worst first)
+- Highlights specific issues (long functions, deep nesting)
+- Provides actionable refactoring targets
+- CI/CD ready with JSON output
+
+#### Use Cases
+
+**Find Technical Debt:**
+```bash
+# Identify worst quality files
+reveal stats://./src --hotspots
+
+# Set quality baseline in CI/CD
+baseline=90.0
+current=$(reveal stats://./src --format=json | jq '.summary.avg_quality_score')
+if (( $(echo "$current < $baseline" | bc -l) )); then
+    echo "Quality dropped: $current < $baseline"
+    exit 1
+fi
+```
+
+**Guided Refactoring:**
+```bash
+# 1. Find hotspots
+reveal stats://./src --hotspots
+
+# 2. Check specific file details
+reveal stats://./src/problem.py
+
+# 3. View code structure
+reveal ./src/problem.py --outline
+
+# 4. Refactor and verify improvement
+# ... make changes ...
+reveal stats://./src/problem.py  # Check new score
+```
+
+**Codebase Health Dashboard:**
+```bash
+# Overall statistics
+reveal stats://./src
+
+# Example output:
+# Files: 42
+# Total lines: 12,458
+# Code lines: 8,234 (66.1%)
+# Functions: 187
+# Classes: 34
+# Avg complexity: 3.2
+# Quality score: 87.5/100
+```
+
+#### Files Added
+- `reveal/adapters/stats.py` - Stats adapter implementation (570 lines)
+- `reveal/tests/test_stats_adapter.py` - Comprehensive tests (23 tests, all passing)
+
+#### Files Modified
+- `reveal/cli/parser.py` - Added `--hotspots` flag
+- `reveal/adapters/__init__.py` - Registered stats:// adapter
+- `reveal/cli/routing.py` - Stats CLI handler
+
+#### Dogfooding Success
+
+**Real-world validation:** Used stats adapter on reveal's own codebase:
+- Identified `nginx.py` analyzer as worst hotspot (32.2/100 quality score)
+- Guided refactoring: extracted 6 helper methods, reduced complexity
+- Result: Improved from 32.2/100 → 93.8/100 (+192%)
+- Added 16 comprehensive tests with 97% coverage
+- Overall reveal quality improved: 95.2/100 → 95.7/100
+
 ### ✨ NEW: Link Validation Rules (Track 4 Phase 1)
 
 **Native link validation for documentation workflows** - detect broken links in Markdown files.

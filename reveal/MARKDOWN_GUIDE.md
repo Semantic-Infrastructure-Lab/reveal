@@ -760,20 +760,21 @@ README.md:10:https://github.com/user/repo
 README.md:15:https://docs.example.com
 ```
 
-## Integration with TIA Workflow
+## Integration with Documentation Workflows
+
+Progressive disclosure pattern for documentation exploration:
 
 ```bash
 # Orient: Discover structure
-tia search all "readme"
-reveal docs/README.md
+reveal docs/README.md                       # See all headings
 
 # Navigate: Explore specific sections
-reveal docs/README.md --outline
-reveal docs/README.md "API Reference"
+reveal docs/README.md --outline             # Hierarchical view
+reveal docs/README.md "API Reference"       # Extract section
 
 # Focus: Extract specific elements
-reveal docs/README.md --links --domain github.com
-reveal docs/README.md --code --language python
+reveal docs/README.md --links --domain github.com   # GitHub links
+reveal docs/README.md --code --language python      # Python examples
 ```
 
 ## Advanced Use Cases

@@ -2,12 +2,25 @@
 
 > **Vision:** Universal resource exploration with progressive disclosure
 
-**Current version:** v0.23.1
+**Current version:** v0.24.0
 **Last updated:** 2025-12-16
 
 ---
 
 ## What We've Shipped
+
+### v0.24.0 - Code Quality Metrics (Dec 2025)
+
+**Stats Adapter & Hotspot Detection:**
+- `stats://` adapter: Automated code quality analysis and metrics
+- `--hotspots` flag: Identify worst quality files (technical debt detection)
+- Quality scoring: 0-100 rating based on complexity, nesting, and function length
+- CI/CD integration: JSON output for quality gates
+- Dogfooding validation: Used on reveal itself to improve code quality
+
+**Documentation Improvements:**
+- Generic workflow patterns (removed tool-specific references)
+- Enhanced adapter documentation
 
 ### v0.23.0-v0.23.1 - Type-First Architecture (Dec 2025)
 

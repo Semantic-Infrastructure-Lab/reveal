@@ -169,18 +169,25 @@ reveal 'ast://src?type=function' --format=json  # JSON output
 reveal reveal://                            # Inspect reveal's structure
 reveal reveal:// --check                    # Validate completeness (V-series rules)
 reveal help://reveal                        # Learn about reveal:// adapter
+
+# Code quality metrics & hotspot detection 🆕
+reveal stats://./src                        # Codebase statistics and quality score
+reveal stats://./src --hotspots             # Find worst quality files (technical debt)
+reveal stats://./src/app.py                 # Specific file metrics
+reveal stats://./src --format=json          # JSON output for CI/CD pipelines
 ```
 
 **Extensibility Example:**
 The `reveal://` adapter demonstrates that reveal can inspect **any resource**, not just files. Use it as a reference for creating custom adapters for your own projects (APIs, databases, containers, etc.). See `reveal help://reveal` for the complete guide.
 
-**6 Built-in Adapters:**
+**7 Built-in Adapters:**
 - `help://` - Self-documenting help system (discover all adapters)
 - `env://` - Environment variables (cross-language)
 - `ast://` - Static code analysis & queries (cross-language)
 - `json://` - JSON navigation with path access & schema (v0.20.0+)
 - `python://` - Python runtime inspection & diagnostics (v0.17.0+)
 - `reveal://` - Self-inspection & validation (v0.22.0+)
+- `stats://` - Code quality metrics & hotspot detection 🆕
 
 **Self-documenting:** Every adapter exposes help via `reveal help://<scheme>`
 
