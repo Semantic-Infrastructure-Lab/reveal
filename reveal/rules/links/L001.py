@@ -121,6 +121,27 @@ class L001(BaseRule):
 
         return (True, "file_not_found")
 
+    def _find_case_mismatch(self, target_path: Path) -> Optional[str]:
+        """Find file with case-insensitive match.
+
+        Args:
+            target_path: Path to check for case mismatch
+
+        Returns:
+            Correct filename if found, None otherwise
+        """
+        try:
+            target_dir = target_path.parent
+            if not target_dir.exists():
+                return None
+
+            for file in target_dir.iterdir():
+                if file.name.lower() == target_path.name.lower() and file.name != target_path.name:
+                    return file.name
+        except Exception:
+            pass
+        return None
+
     def _suggest_fix(self, base_dir: Path, broken_url: str, reason: str) -> str:
         """Generate helpful suggestion for fixing broken link.
 
@@ -158,15 +179,9 @@ class L001(BaseRule):
                     suggestions.append(f"Add .md extension: {broken_url}.md")
 
             # Check for case mismatch
-            try:
-                target_dir = target_path.parent
-                if target_dir.exists():
-                    for file in target_dir.iterdir():
-                        if file.name.lower() == target_path.name.lower() and file.name != target_path.name:
-                            suggestions.append(f"Fix case: {file.name}")
-                            break
-            except Exception:
-                pass
+            case_match = self._find_case_mismatch(target_path)
+            if case_match:
+                suggestions.append(f"Fix case: {case_match}")
 
             # Check for common typos in path
             if '../' in file_part:

@@ -140,7 +140,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     decorators.append(self._get_node_text(child))
 
             if func_node:
-                name = self._get_function_name(func_node)
+                name = self._get_node_name(func_node)
                 if name:
                     # Use decorated_definition bounds (includes decorators)
                     line_start = decorated_node.start_point[0] + 1
@@ -164,7 +164,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         for func_type in function_types:
             nodes = self._find_nodes_by_type(func_type)
             for node in nodes:
-                name = self._get_function_name(node)
+                name = self._get_node_name(node)
                 if not name:
                     continue
 
@@ -213,7 +213,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     decorators.append(self._get_node_text(child))
 
             if class_node:
-                name = self._get_class_name(class_node)
+                name = self._get_node_name(class_node)
                 if name:
                     # Use decorated_definition bounds (includes decorators)
                     line_start = decorated_node.start_point[0] + 1
@@ -232,7 +232,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         for class_type in class_types:
             nodes = self._find_nodes_by_type(class_type)
             for node in nodes:
-                name = self._get_class_name(node)
+                name = self._get_node_name(node)
                 if not name:
                     continue
 
@@ -263,7 +263,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         for struct_type in struct_types:
             nodes = self._find_nodes_by_type(struct_type)
             for node in nodes:
-                name = self._get_struct_name(node)
+                name = self._get_node_name(node)
                 if name:
                     line_start = node.start_point[0] + 1
                     line_end = node.end_point[0] + 1
@@ -349,18 +349,6 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 return self._get_node_text(child)
 
         return None
-
-    def _get_function_name(self, node) -> Optional[str]:
-        """Extract function name from function node."""
-        return self._get_node_name(node)
-
-    def _get_class_name(self, node) -> Optional[str]:
-        """Extract class name from class node."""
-        return self._get_node_name(node)
-
-    def _get_struct_name(self, node) -> Optional[str]:
-        """Extract struct name from struct node."""
-        return self._get_node_name(node)
 
     def _get_signature(self, node) -> str:
         """Get function signature (parameters and return type only)."""
