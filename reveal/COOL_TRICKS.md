@@ -624,7 +624,7 @@ reveal 'ast://./src?lines>50&complexity<3'       # Long but simple (inline?)
 - `reveal --agent-help` - Quick reference for AI agents
 - `reveal help://anti-patterns` - What NOT to do
 - `reveal help://python-guide` - Deep dive on Python adapter
-- [ROADMAP.md](ROADMAP.md) - Future features
+- [ROADMAP.md](../ROADMAP.md) - Future features
 
 ---
 

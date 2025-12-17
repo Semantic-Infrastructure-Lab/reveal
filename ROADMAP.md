@@ -192,4 +192,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add analyzers and adapters.
 - Add `--watch` mode
 - Improve markdown link extraction
 
-**Share ideas:** [GitHub Discussions](https://github.com/Semantic-Infrastructure-Lab/reveal/discussions)
+**Share ideas:** [GitHub Issues](https://github.com/Semantic-Infrastructure-Lab/reveal/issues)
