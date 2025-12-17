@@ -106,6 +106,12 @@ class RulePrefix(Enum):
     # D002: Similar functions (fuzzy match)
     # D003: Duplicate code blocks
 
+    # Links (L) - link validation
+    L = "L"  # Link and reference validation
+    # L001: Broken internal links (filesystem)
+    # L002: Broken external links (HTTP)
+    # L003: Framework routing mismatches
+
 
 @dataclass
 class Detection:
