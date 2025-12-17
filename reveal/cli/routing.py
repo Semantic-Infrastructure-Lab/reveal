@@ -264,7 +264,6 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         args: Parsed arguments
     """
     from ..base import get_analyzer
-    from ..checks import run_checks
     import fnmatch
 
     # Collect all supported files
@@ -319,28 +318,42 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
 
     for file_path in sorted(files_to_check):
         try:
-            # Read file content
-            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                content = f.read()
+            # Get analyzer for this file
+            analyzer_class = get_analyzer(str(file_path), allow_fallback=False)
+            if not analyzer_class:
+                continue
 
-            # Run checks
-            issues = run_checks(str(file_path), content, args.select, args.ignore)
+            analyzer = analyzer_class(str(file_path))
 
-            if issues:
+            # Run pattern detection
+            from ..rules import RuleRegistry
+
+            # Parse select/ignore options
+            select = args.select.split(',') if args.select else None
+            ignore = args.ignore.split(',') if args.ignore else None
+
+            # Get structure and content
+            structure = analyzer.get_structure()
+            content = analyzer.content
+
+            # Run rules
+            detections = RuleRegistry.check_file(str(file_path), structure, content, select=select, ignore=ignore)
+
+            if detections:
                 # Print file header
                 relative = file_path.relative_to(directory)
-                print(f"\n{relative}: Found {len(issues)} issue{'s' if len(issues) != 1 else ''}\n")
+                print(f"\n{relative}: Found {len(detections)} issue{'s' if len(detections) != 1 else ''}\n")
 
-                # Print each issue
-                for issue in issues:
-                    severity_icon = "⚠️ " if issue.severity.value == "MEDIUM" else "❌" if issue.severity.value == "HIGH" else "ℹ️ "
-                    print(f"{relative}:{issue.line}:{issue.column} {severity_icon} {issue.rule_code} {issue.message}")
-                    if issue.suggestion:
-                        print(f"  💡 {issue.suggestion}")
-                    if issue.context:
-                        print(f"  📝 {issue.context}")
+                # Print each detection
+                for detection in detections:
+                    severity_icon = "⚠️ " if detection.severity.value == "MEDIUM" else "❌" if detection.severity.value == "HIGH" else "ℹ️ "
+                    print(f"{relative}:{detection.line}:{detection.column} {severity_icon} {detection.rule_code} {detection.message}")
+                    if detection.suggestion:
+                        print(f"  💡 {detection.suggestion}")
+                    if detection.context:
+                        print(f"  📝 {detection.context}")
 
-                total_issues += len(issues)
+                total_issues += len(detections)
                 files_with_issues += 1
 
         except Exception as e:
