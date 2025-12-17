@@ -7,6 +7,7 @@ This module handles dispatching to the correct handler based on:
 """
 
 import sys
+import os
 from pathlib import Path
 from typing import Optional, Callable, Dict, TYPE_CHECKING
 
@@ -255,6 +256,108 @@ def handle_adapter(adapter_class: type, scheme: str, resource: str,
         sys.exit(1)
 
 
+def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
+    """Handle recursive quality checking of a directory.
+
+    Args:
+        directory: Directory to check recursively
+        args: Parsed arguments
+    """
+    from ..base import get_analyzer
+    from ..checks import run_checks
+    import fnmatch
+
+    # Collect all supported files
+    files_to_check = []
+
+    # Try to load .gitignore patterns if available
+    gitignore_patterns = []
+    gitignore_file = directory / '.gitignore'
+    if gitignore_file.exists():
+        try:
+            with open(gitignore_file) as f:
+                gitignore_patterns = [
+                    line.strip() for line in f
+                    if line.strip() and not line.startswith('#')
+                ]
+        except Exception:
+            pass
+
+    # Walk directory tree
+    for root, dirs, files in os.walk(directory):
+        root_path = Path(root)
+
+        # Filter directories (remove .git, __pycache__, etc.)
+        dirs[:] = [d for d in dirs if d not in {'.git', '__pycache__', 'node_modules', '.venv', 'venv'}]
+
+        # Check files
+        for filename in files:
+            file_path = root_path / filename
+
+            # Skip if matches .gitignore patterns
+            relative_path = file_path.relative_to(directory)
+            skip = False
+            for pattern in gitignore_patterns:
+                if fnmatch.fnmatch(str(relative_path), pattern):
+                    skip = True
+                    break
+
+            if skip:
+                continue
+
+            # Check if file has a supported analyzer
+            if get_analyzer(str(file_path), allow_fallback=False):
+                files_to_check.append(file_path)
+
+    if not files_to_check:
+        print(f"No supported files found in {directory}")
+        return
+
+    # Run checks on all files
+    total_issues = 0
+    files_with_issues = 0
+
+    for file_path in sorted(files_to_check):
+        try:
+            # Read file content
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+
+            # Run checks
+            issues = run_checks(str(file_path), content, args.select, args.ignore)
+
+            if issues:
+                # Print file header
+                relative = file_path.relative_to(directory)
+                print(f"\n{relative}: Found {len(issues)} issue{'s' if len(issues) != 1 else ''}\n")
+
+                # Print each issue
+                for issue in issues:
+                    severity_icon = "⚠️ " if issue.severity.value == "MEDIUM" else "❌" if issue.severity.value == "HIGH" else "ℹ️ "
+                    print(f"{relative}:{issue.line}:{issue.column} {severity_icon} {issue.rule_code} {issue.message}")
+                    if issue.suggestion:
+                        print(f"  💡 {issue.suggestion}")
+                    if issue.context:
+                        print(f"  📝 {issue.context}")
+
+                total_issues += len(issues)
+                files_with_issues += 1
+
+        except Exception as e:
+            # Skip files that can't be read or processed
+            continue
+
+    # Print summary
+    print(f"\n{'='*60}")
+    print(f"Checked {len(files_to_check)} files")
+    if total_issues > 0:
+        print(f"Found {total_issues} issue{'s' if total_issues != 1 else ''} in {files_with_issues} file{'s' if files_with_issues != 1 else ''}")
+        sys.exit(1)  # Exit with error code if issues found
+    else:
+        print(f"✅ No issues found")
+        sys.exit(0)
+
+
 def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     """Handle regular file or directory path.
 
@@ -270,9 +373,13 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
         sys.exit(1)
 
     if path.is_dir():
-        output = show_directory_tree(str(path), depth=args.depth,
-                                     max_entries=args.max_entries, fast=args.fast)
-        print(output)
+        # Check if recursive mode is enabled with --check
+        if getattr(args, 'recursive', False) and getattr(args, 'check', False):
+            handle_recursive_check(path, args)
+        else:
+            output = show_directory_tree(str(path), depth=args.depth,
+                                         max_entries=args.max_entries, fast=args.fast)
+            print(output)
     elif path.is_file():
         handle_file(str(path), args.element, args.meta, args.format, args)
     else:

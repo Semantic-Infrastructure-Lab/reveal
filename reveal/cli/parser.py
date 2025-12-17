@@ -168,6 +168,8 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
                         help='Select specific rules or categories (e.g., "B,S" or "B001,S701")')
     parser.add_argument('--ignore', type=str, metavar='RULES',
                         help='Ignore specific rules or categories (e.g., "E501" or "C")')
+    parser.add_argument('--recursive', '-r', action='store_true',
+                        help='Process directory recursively (with --check)')
     parser.add_argument('--rules', action='store_true',
                         help='List all available pattern detection rules')
     parser.add_argument('--explain', type=str, metavar='CODE',

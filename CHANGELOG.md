@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ NEW: Link Validation Rules (Track 4 Phase 1)
+
+**Native link validation for documentation workflows** - detect broken links in Markdown files.
+
+#### New Quality Rules (L-series)
+
+**L001: Broken Internal Links**
+- Detects broken relative filesystem links in Markdown
+- Validates `./file.md`, `../path/file.md` patterns
+- Provides helpful fix suggestions (case mismatches, missing extensions)
+- Handles anchor links `#heading` gracefully
+- Example: `reveal docs/README.md --check --select L`
+
+**L002: Broken External Links**
+- Validates external HTTP/HTTPS URLs
+- Uses HTTP HEAD requests (5s timeout)
+- Handles various HTTP errors (404, 403, 500, etc.)
+- Suggests common fixes (http→https, add www, etc.)
+- Lower severity (external links can be transient)
+- Example: `reveal docs/ --recursive --check --select L002`
+
+**L003: Framework Routing Mismatches**
+- Validates framework-specific routing conventions
+- Auto-detects framework (FastHTML, Jekyll, Hugo, static)
+- FastHTML: `/path/FILE` → `docs/path/FILE.md` (case-insensitive)
+- Jekyll: Checks `_posts/` directory and permalinks
+- Hugo: Validates `content/` directory and `index.md` files
+- Example: `reveal docs/foundations/ --check --select L003`
+
+#### New Feature: Recursive Directory Checking
+
+**`--recursive` / `-r` flag**
+- Process all files in directory tree
+- Respects `.gitignore` patterns
+- Skips common directories (`.git`, `node_modules`, `__pycache__`)
+- Aggregated output with summary
+- Exit code 0 (success) or 1 (issues found)
+- Example: `reveal docs/ --recursive --check --select L`
+
+**Output format:**
+```
+foundations/SIL_GLOSSARY.md: Found 2 issues
+
+foundations/SIL_GLOSSARY.md:88:1 ⚠️  L001 Broken internal link: ./missing.md
+  💡 File not found - verify path is correct
+  📝 [Guide](./missing.md)
+
+============================================================
+Checked 8 files
+Found 2 issues in 1 file
+```
+
+#### Use Cases
+
+**CI/CD Integration:**
+```bash
+# Validate all docs before deploy
+reveal docs/ --recursive --check --select L
+```
+
+**Link Quality Checks:**
+```bash
+# Check only internal links
+reveal docs/ -r --check --select L001
+
+# Check everything including external URLs
+reveal docs/ -r --check --select L
+```
+
+**Framework-Aware Validation:**
+```bash
+# FastHTML project - validates web routes
+reveal docs/ -r --check --select L003
+```
+
+#### Files Added
+- `reveal/rules/links/L001.py` - Internal link validation (182 lines)
+- `reveal/rules/links/L002.py` - External link validation (204 lines)
+- `reveal/rules/links/L003.py` - Framework routing validation (312 lines)
+- `reveal/rules/base.py` - Added `L` prefix for link rules
+
+#### Files Modified
+- `reveal/cli/parser.py` - Added `--recursive` flag
+- `reveal/cli/routing.py` - Added recursive directory checking
+
 ### 🎯 REDESIGNED: Help System (AI Agent Focused)
 
 **Major improvements to reveal's help system** - designed for realistic AI agent usage patterns.
