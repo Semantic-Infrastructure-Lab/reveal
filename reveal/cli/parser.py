@@ -160,6 +160,8 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
                         help='Fast mode: skip line counting for better performance')
     parser.add_argument('--outline', action='store_true',
                         help='Show hierarchical outline (classes with methods, nested structures)')
+    parser.add_argument('--hotspots', action='store_true',
+                        help='Identify quality hotspots (requires stats:// adapter, shows worst 10 files by quality)')
 
     # Pattern detection (linting)
     parser.add_argument('--check', '--lint', action='store_true',
