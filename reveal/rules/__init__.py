@@ -123,8 +123,9 @@ class RuleRegistry:
         if ignore:
             rules = [r for r in rules if not cls._matches_patterns(r, ignore)]
 
-        # Filter out disabled rules
-        rules = [r for r in rules if r.enabled]
+        # Filter out disabled rules (but allow explicitly selected disabled rules)
+        if not select:
+            rules = [r for r in rules if r.enabled]
 
         return rules
 

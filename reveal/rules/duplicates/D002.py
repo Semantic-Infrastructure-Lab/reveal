@@ -32,6 +32,7 @@ class D002(BaseRule):
     severity = Severity.LOW  # Advisory, not a defect
     file_patterns = ['*']
     version = "2.0.0"
+    enabled = False  # Opt-in only (too noisy for default checks)
 
     # Minimum function size to consider (skip trivial functions)
     MIN_FUNCTION_SIZE = 8  # Lines
