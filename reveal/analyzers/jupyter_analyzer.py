@@ -23,7 +23,8 @@ class JupyterAnalyzer(FileAnalyzer):
         except Exception as e:
             self.parse_error = str(e)
 
-    def get_structure(self) -> Dict[str, Any]:
+    def get_structure(self, head: int = None, tail: int = None,
+                      range: tuple = None, **kwargs) -> Dict[str, Any]:
         """Analyze Jupyter notebook structure."""
         if self.parse_error:
             return {

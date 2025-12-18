@@ -12,10 +12,14 @@ class TomlAnalyzer(FileAnalyzer):
     Extracts sections ([section]) and key-value pairs.
     """
 
-    def get_structure(self, outline: bool = False, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: int = None, tail: int = None,
+                      range: tuple = None, outline: bool = False, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract TOML sections and top-level keys.
 
         Args:
+            head: Show first N sections/keys
+            tail: Show last N sections/keys
+            range: Show sections/keys in range (start, end)
             outline: If True, add level information for hierarchical display
             **kwargs: Additional arguments (for compatibility)
         """

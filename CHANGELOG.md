@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.1] - 2025-12-17
+
+### 🐛 Bug Fixes
+
+**Critical: Fixed TypeError when using CLI flags with certain file types**
+- Fixed LSP violation where analyzers didn't accept parameters from CLI layer
+- All analyzers now properly accept `head`, `tail`, `range`, and `**kwargs`
+- Fixes: `reveal file.json --outline` (and similar combinations) no longer crashes
+
+**Affected commands that now work:**
+```bash
+reveal file.json --outline  # ✅ Previously: TypeError
+reveal file.yaml --head 5   # ✅ Previously: TypeError
+reveal Dockerfile --tail 3  # ✅ Previously: TypeError
+```
+
+### 🔧 Improvements
+
+**Enhanced analyzer architecture:**
+- Standardized `get_structure()` signature across all analyzers
+- Added V008 validation rule to catch signature violations at dev time
+- Updated analyzers: Dockerfile, GDScript, Jupyter, Nginx, TOML, YAML, JSON
+
+**Test coverage:**
+- Added integration tests for CLI flags × file type combinations
+- Prevents regression of LSP violations in analyzer signatures
+
+### 📚 Documentation
+
+**Why this happened:**
+- CLI layer passes universal params (`outline`, `head`, `tail`) to all analyzers
+- Some analyzers had narrow signatures that rejected these params
+- Unit tests only called analyzers directly (worked), never via CLI (failed)
+
+**The fix:**
+- All analyzers now accept: `get_structure(self, head=None, tail=None, range=None, **kwargs)`
+- Analyzers implement slicing/outline if meaningful, ignore if not
+- V008 check prevents future violations
+
 ### ✨ NEW: Stats Adapter - Code Quality Metrics & Hotspot Detection
 
 **Automated code quality analysis and technical debt identification** - find problematic code before it becomes a maintenance burden.

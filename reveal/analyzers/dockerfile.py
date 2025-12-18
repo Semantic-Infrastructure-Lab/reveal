@@ -12,7 +12,8 @@ class DockerfileAnalyzer(FileAnalyzer):
     Extracts Docker directives (FROM, RUN, COPY, ENV, EXPOSE, etc.).
     """
 
-    def get_structure(self) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: int = None, tail: int = None,
+                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract Dockerfile directives."""
         from_images = []
         runs = []

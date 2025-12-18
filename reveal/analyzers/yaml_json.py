@@ -13,7 +13,8 @@ class YamlAnalyzer(FileAnalyzer):
     Extracts top-level keys.
     """
 
-    def get_structure(self) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: int = None, tail: int = None,
+                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract YAML top-level keys."""
         keys = []
 
@@ -77,7 +78,8 @@ class JsonAnalyzer(FileAnalyzer):
     Extracts top-level keys.
     """
 
-    def get_structure(self) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: int = None, tail: int = None,
+                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract JSON top-level keys."""
         try:
             data = json.loads(self.content)

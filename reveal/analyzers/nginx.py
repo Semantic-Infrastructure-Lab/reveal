@@ -66,7 +66,8 @@ class NginxAnalyzer(FileAnalyzer):
                     break
         return loc_info
 
-    def get_structure(self) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: int = None, tail: int = None,
+                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract nginx config structure."""
         servers = []
         locations = []
