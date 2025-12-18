@@ -175,12 +175,19 @@ reveal stats://./src                        # Codebase statistics and quality sc
 reveal stats://./src --hotspots             # Find worst quality files (technical debt)
 reveal stats://./src/app.py                 # Specific file metrics
 reveal stats://./src --format=json          # JSON output for CI/CD pipelines
+
+# MySQL database inspection 🆕
+reveal mysql://localhost                    # Database health overview
+reveal mysql://localhost/performance        # Query performance + DBA tuning ratios
+reveal mysql://localhost/indexes            # Index usage analysis
+reveal mysql://localhost/slow-queries       # Slow query analysis (last 24h)
+reveal mysql://localhost/innodb             # InnoDB buffer pool & locks
 ```
 
 **Extensibility Example:**
 The `reveal://` adapter demonstrates that reveal can inspect **any resource**, not just files. Use it as a reference for creating custom adapters for your own projects (APIs, databases, containers, etc.). See `reveal help://reveal` for the complete guide.
 
-**7 Built-in Adapters:**
+**8 Built-in Adapters:**
 - `help://` - Self-documenting help system (discover all adapters)
 - `env://` - Environment variables (cross-language)
 - `ast://` - Static code analysis & queries (cross-language)
@@ -188,6 +195,7 @@ The `reveal://` adapter demonstrates that reveal can inspect **any resource**, n
 - `python://` - Python runtime inspection & diagnostics (v0.17.0+)
 - `reveal://` - Self-inspection & validation (v0.22.0+)
 - `stats://` - Code quality metrics & hotspot detection 🆕
+- `mysql://` - MySQL database inspection with DBA tuning ratios 🆕
 
 **Self-documenting:** Every adapter exposes help via `reveal help://<scheme>`
 
