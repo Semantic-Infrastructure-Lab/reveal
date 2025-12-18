@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List, Type, Optional, Dict, Any
 
 from .base import BaseRule, Detection, RulePrefix, Severity
+from reveal.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -40,20 +41,32 @@ class RuleRegistry:
 
         cls._rules = []
         cls._rules_by_code = {}
+        config = get_config()
 
         # Built-in rules
         rules_dir = Path(__file__).parent
         cls._discover_dir(rules_dir, "reveal.rules")
 
-        # User rules: ~/.reveal/rules/
-        user_dir = Path.home() / '.reveal' / 'rules'
-        if user_dir.exists():
-            cls._discover_dir(user_dir, "user.rules")
+        # User rules: ~/.local/share/reveal/rules/ (XDG_DATA_HOME)
+        user_rules_dir = config.user_data_dir / 'rules'
+        if user_rules_dir.exists():
+            cls._discover_dir(user_rules_dir, "user.rules")
 
-        # Project rules: .reveal/rules/
-        project_dir = Path.cwd() / '.reveal' / 'rules'
-        if project_dir.exists():
-            cls._discover_dir(project_dir, "project.rules")
+        # Legacy user rules: ~/.reveal/rules/ (backward compatibility)
+        legacy_paths = config.get_legacy_paths()
+        legacy_user_dir = legacy_paths['rules_user']
+        if legacy_user_dir.exists() and not user_rules_dir.exists():
+            logger.warning(
+                f"Using legacy rules directory: {legacy_user_dir}\n"
+                f"Please migrate to XDG-compliant location: {user_rules_dir}\n"
+                f"Run: mkdir -p {user_rules_dir} && mv {legacy_user_dir}/* {user_rules_dir}/"
+            )
+            cls._discover_dir(legacy_user_dir, "user.rules")
+
+        # Project rules: ./.reveal/rules/ (stays the same - project-local)
+        project_rules_dir = config.project_config_dir / 'rules'
+        if project_rules_dir.exists():
+            cls._discover_dir(project_rules_dir, "project.rules")
 
         cls._discovered = True
         logger.info(f"Discovered {len(cls._rules)} rules from {len(set(r.category for r in cls._rules if r.category))} categories")

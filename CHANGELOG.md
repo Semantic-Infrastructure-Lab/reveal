@@ -37,7 +37,14 @@ Reveal now has a unified configuration system following the XDG Base Directory S
 **Components migrated:**
 - MySQL adapter health checks
 - Update checker cache
-- Future: Rules, adapters, display settings
+- Rules system (custom user/project rules)
+- All config patterns now unified!
+
+**Rules migration:**
+- User rules: `~/.reveal/rules/` → `~/.local/share/reveal/rules/` (XDG_DATA_HOME)
+- Project rules: `./.reveal/rules/` (unchanged - already project-local)
+- Backward compatibility: Legacy paths still work with migration warning
+- To migrate: `mkdir -p ~/.local/share/reveal/rules && mv ~/.reveal/rules/* ~/.local/share/reveal/rules/`
 
 ### ✨ NEW: Configurable MySQL Health Thresholds
 
