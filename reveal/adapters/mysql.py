@@ -888,6 +888,53 @@ class MySQLAdapter(ResourceAdapter):
                 'message': 'Slow query log may not be enabled or accessible',
             }
 
+    def _load_health_check_config(self) -> Dict[str, Any]:
+        """Load health check configuration from file or use defaults.
+
+        Config file locations (in order of precedence):
+        1. ~/.config/reveal/mysql-health-checks.yaml
+        2. /etc/reveal/mysql-health-checks.yaml
+        3. Hardcoded defaults (fallback)
+
+        Returns:
+            Dict with 'checks' key containing list of check definitions
+        """
+        import yaml
+        from pathlib import Path
+
+        # Default configuration (fallback)
+        defaults = {
+            'checks': [
+                {'name': 'Table Scan Ratio', 'metric': 'table_scan_ratio', 'pass_threshold': 10, 'warn_threshold': 25, 'severity': 'high', 'operator': '<'},
+                {'name': 'Thread Cache Miss Rate', 'metric': 'thread_cache_miss_rate', 'pass_threshold': 10, 'warn_threshold': 25, 'severity': 'medium', 'operator': '<'},
+                {'name': 'Temp Disk Ratio', 'metric': 'temp_disk_ratio', 'pass_threshold': 25, 'warn_threshold': 50, 'severity': 'medium', 'operator': '<'},
+                {'name': 'Max Used Connections %', 'metric': 'max_used_connections_pct', 'pass_threshold': 80, 'warn_threshold': 100, 'severity': 'critical', 'operator': '<'},
+                {'name': 'Open Files %', 'metric': 'open_files_pct', 'pass_threshold': 75, 'warn_threshold': 90, 'severity': 'critical', 'operator': '<'},
+                {'name': 'Current Connection %', 'metric': 'connection_pct', 'pass_threshold': 80, 'warn_threshold': 95, 'severity': 'high', 'operator': '<'},
+                {'name': 'Buffer Hit Rate', 'metric': 'buffer_hit_rate', 'pass_threshold': 99, 'warn_threshold': 95, 'severity': 'high', 'operator': '>'},
+            ]
+        }
+
+        # Try to load from config files
+        config_paths = [
+            Path.home() / '.config' / 'reveal' / 'mysql-health-checks.yaml',
+            Path('/etc/reveal/mysql-health-checks.yaml'),
+        ]
+
+        for config_path in config_paths:
+            if config_path.exists():
+                try:
+                    with open(config_path) as f:
+                        config = yaml.safe_load(f)
+                        if config and 'checks' in config:
+                            return config
+                except Exception:
+                    # If config file is malformed, continue to next location
+                    pass
+
+        # Fall back to defaults
+        return defaults
+
     def check(self, **kwargs) -> Dict[str, Any]:
         """Run health checks with pass/warn/fail thresholds.
 
@@ -958,6 +1005,20 @@ class MySQLAdapter(ResourceAdapter):
         innodb_buffer_pool_read_requests = int(status_vars.get('Innodb_buffer_pool_read_requests', 1))
         buffer_hit_rate = 100 * (1 - innodb_buffer_pool_reads / innodb_buffer_pool_read_requests) if innodb_buffer_pool_read_requests else 100
 
+        # Load health check configuration
+        config = self._load_health_check_config()
+
+        # Map metric names to calculated values
+        metrics = {
+            'table_scan_ratio': table_scan_ratio,
+            'thread_cache_miss_rate': thread_cache_miss_rate,
+            'temp_disk_ratio': temp_disk_ratio,
+            'max_used_connections_pct': max_used_pct,
+            'open_files_pct': open_files_pct,
+            'connection_pct': connection_pct,
+            'buffer_hit_rate': buffer_hit_rate,
+        }
+
         # Define health checks with thresholds
         checks = []
 
@@ -987,14 +1048,18 @@ class MySQLAdapter(ResourceAdapter):
                 'severity': severity
             })
 
-        # Run all checks (based on audit spec lines 316-359)
-        add_check('Table Scan Ratio', table_scan_ratio, 10, 25, 'high', '<')
-        add_check('Thread Cache Miss Rate', thread_cache_miss_rate, 10, 25, 'medium', '<')
-        add_check('Temp Disk Ratio', temp_disk_ratio, 25, 50, 'medium', '<')
-        add_check('Max Used Connections %', max_used_pct, 80, 100, 'critical', '<')
-        add_check('Open Files %', open_files_pct, 75, 90, 'critical', '<')
-        add_check('Current Connection %', connection_pct, 80, 95, 'high', '<')
-        add_check('Buffer Hit Rate', buffer_hit_rate, 99, 95, 'high', '>')
+        # Run all checks from config
+        for check_def in config.get('checks', []):
+            metric_name = check_def.get('metric')
+            if metric_name in metrics:
+                add_check(
+                    name=check_def['name'],
+                    value=metrics[metric_name],
+                    pass_threshold=check_def['pass_threshold'],
+                    warn_threshold=check_def['warn_threshold'],
+                    severity=check_def['severity'],
+                    operator=check_def.get('operator', '<')
+                )
 
         # Calculate summary
         total = len(checks)

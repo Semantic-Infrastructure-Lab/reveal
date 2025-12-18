@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ NEW: Configurable MySQL Health Thresholds
+
+**Customize health check thresholds** - No more hardcoded limits!
+
+MySQL health check thresholds are now fully configurable via YAML config files. Different environments (dev, staging, prod) can have different tolerance levels.
+
+**Configuration:**
+
+Create `~/.config/reveal/mysql-health-checks.yaml` (user-specific) or `/etc/reveal/mysql-health-checks.yaml` (system-wide):
+
+```yaml
+checks:
+  - name: "Table Scan Ratio"
+    metric: "table_scan_ratio"
+    pass_threshold: 5      # Stricter than default (10)
+    warn_threshold: 15     # Stricter than default (25)
+    severity: high
+    operator: "<"
+
+  # ... customize other checks
+```
+
+**Features:**
+- ✅ Fallback to sensible defaults if no config exists
+- ✅ Per-environment customization (dev/staging/prod)
+- ✅ Add/remove checks without code changes
+- ✅ Version control your thresholds
+- ✅ Complete example: `docs/mysql-health-checks.example.yaml`
+
+**Example: Strict production thresholds**
+```yaml
+# Production: Zero tolerance for issues
+checks:
+  - name: "Table Scan Ratio"
+    pass_threshold: 5   # Default: 10
+    warn_threshold: 10  # Default: 25
+```
+
+**Example: Permissive development thresholds**
+```yaml
+# Dev: More lenient
+checks:
+  - name: "Table Scan Ratio"
+    pass_threshold: 25   # Default: 10
+    warn_threshold: 50   # Default: 25
+```
+
+**Why it matters:**
+- Production DBAs can enforce stricter standards
+- Development teams can avoid false alarms
+- CI/CD can use different thresholds per environment
+- No need to fork/modify reveal source code
+
 ### ✨ NEW: MySQL DBA Tuning Ratios
 
 **Added 5 critical DBA tuning metrics to MySQL adapter** - now exceeds pt-mysql-summary coverage for most use cases!
