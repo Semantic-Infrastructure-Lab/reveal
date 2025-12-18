@@ -223,6 +223,14 @@ Exit code: 0
 reveal mysql://localhost --check --format=json
 ```
 
+### 🐛 Bug Fixes
+
+**Markdown analyzer semantic navigation:**
+- Fixed headings being excluded when `extract_links=True` or `extract_code=True`
+- Headings are now always included (base structure), with links/code as additive features
+- **Impact:** `reveal file.md --head 5 --extract-links` now returns first 5 headings AND first 5 links (as intended)
+- **Tests:** All 146 tests now pass (was 145/146)
+
 ### 🔧 IMPROVED: Code Quality & Performance
 
 **Type system performance optimization:**

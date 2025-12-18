@@ -54,17 +54,9 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         if extract_frontmatter:
             result['frontmatter'] = self._extract_frontmatter()
 
-        # Determine if specific features requested
-        # Note: frontmatter is metadata, not structure, so it doesn't exclude headings
-        specific_features_requested = extract_links or extract_code
-
-        # Only include headings if no specific features requested (default case)
-        # OR if outline mode is active (Issue #3 dependency)
-        # OR if only frontmatter was requested (frontmatter + headings is the default combo)
-        outline_mode = kwargs.get('outline', False)
-
-        if not specific_features_requested or outline_mode or (extract_frontmatter and not extract_links and not extract_code):
-            result['headings'] = self._extract_headings()
+        # Always include headings (base structure)
+        # Links and code blocks are additive features
+        result['headings'] = self._extract_headings()
 
         # Extract links if requested
         if extract_links:
