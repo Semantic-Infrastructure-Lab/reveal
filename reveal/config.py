@@ -88,15 +88,18 @@ class RevealConfig:
             Loaded config dict or default
         """
         for config_path in self.get_config_paths(name):
-            if config_path.exists():
-                try:
-                    with open(config_path) as f:
-                        loaded = yaml.safe_load(f)
-                        if loaded is not None:
-                            return loaded
-                except Exception:
-                    # Malformed config at this location, try next
-                    continue
+            # Skip non-existent paths (early continue reduces nesting)
+            if not config_path.exists():
+                continue
+
+            try:
+                with open(config_path) as f:
+                    loaded = yaml.safe_load(f)
+                    if loaded is not None:
+                        return loaded
+            except Exception:
+                # Malformed config at this location, try next
+                continue
 
         # No valid config found
         return default or {}
