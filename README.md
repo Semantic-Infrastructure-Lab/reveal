@@ -27,6 +27,13 @@ reveal --agent-help-full     # Complete reference (~1215 lines)
 
 **Documentation:** [Installation](INSTALL.md) • [Contributing](CONTRIBUTING.md) • [Changelog](CHANGELOG.md)
 
+**Quick Install:**
+```bash
+pip install reveal-cli              # Full-featured by default (25+ languages, 7 adapters)
+pip install reveal-cli[database]    # Add MySQL database inspection
+```
+See [INSTALL.md](INSTALL.md) for details on what's included.
+
 ---
 
 ## Core Modes
@@ -177,6 +184,7 @@ reveal stats://./src/app.py                 # Specific file metrics
 reveal stats://./src --format=json          # JSON output for CI/CD pipelines
 
 # MySQL database inspection 🆕
+# Requires: pip install reveal-cli[database]
 reveal mysql://localhost                    # Database health overview
 reveal mysql://localhost/performance        # Query performance + DBA tuning ratios
 reveal mysql://localhost/indexes            # Index usage analysis
@@ -195,7 +203,7 @@ The `reveal://` adapter demonstrates that reveal can inspect **any resource**, n
 - `python://` - Python runtime inspection & diagnostics (v0.17.0+)
 - `reveal://` - Self-inspection & validation (v0.22.0+)
 - `stats://` - Code quality metrics & hotspot detection 🆕
-- `mysql://` - MySQL database inspection with DBA tuning ratios 🆕
+- `mysql://` - MySQL database inspection with DBA tuning ratios 🆕 (requires `[database]` extra)
 
 **Self-documenting:** Every adapter exposes help via `reveal help://<scheme>`
 

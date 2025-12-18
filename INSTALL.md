@@ -56,26 +56,86 @@ pipx install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
 - **Python:** 3.8 or higher
 - **Dependencies:** Automatically installed (PyYAML, rich)
 
+## What's Included by Default
+
+Just `pip install reveal-cli` gives you everything:
+
+**Languages (25+ built-in):**
+- Python, JavaScript, TypeScript, Rust, Go, C, C++, C#, Java
+- GDScript, Bash, Shell Scripts, Jupyter Notebooks
+- Markdown, JSON, JSONL, YAML, TOML
+- Nginx configs, Dockerfiles
+- Office documents: Word (.docx), Excel (.xlsx), PowerPoint (.pptx)
+- LibreOffice: Writer (.odt), Calc (.ods), Impress (.odp)
+
+**Tree-sitter support (50+ languages):**
+All tree-sitter languages work immediately - no extra installation needed since v0.8.0 (Nov 2025).
+
+**URI Adapters (7 included):**
+- `help://` - Self-documenting help system
+- `env://` - Environment variable inspection
+- `ast://` - Code queries and semantic analysis
+- `json://` - JSON navigation with path access
+- `python://` - Python runtime inspection and diagnostics
+- `reveal://` - Self-inspection and validation
+- `stats://` - Code quality metrics and hotspot detection
+
 ## Optional Features
 
-### Tree-sitter Language Support
+### MySQL Database Inspection
 
-For advanced language analysis (Rust, C#, Go, Java, TypeScript, C++, and 40+ more):
+For database health inspection with the `mysql://` adapter:
 
 ```bash
-# Install with tree-sitter support
-pip install 'git+https://github.com/Semantic-Infrastructure-Lab/reveal.git#egg=reveal-cli[treesitter]'
-
-# Or upgrade existing install
-pip install --upgrade 'git+https://github.com/Semantic-Infrastructure-Lab/reveal.git#egg=reveal-cli[treesitter]'
+pip install reveal-cli[database]
 ```
 
 **What you get:**
-- Rust analyzer (functions, structs, enums, traits, impls, modules)
-- C# analyzer (classes, methods, properties, namespaces, interfaces)
-- Easy to add more languages (Go, Java, TypeScript, etc.) - see PLUGIN_GUIDE.md
+- MySQL database health monitoring and diagnostics
+- Industry-standard DBA tuning ratios (table scans, thread cache efficiency, temp tables)
+- Index usage analysis (most used indexes, unused indexes)
+- Slow query detection and analysis (last 24 hours)
+- InnoDB buffer pool metrics and lock information
 
-**Without tree-sitter:** Rust/C# files fall back to text analyzer (still works, just less structured)
+**Examples:**
+```bash
+reveal mysql://localhost                    # Health overview
+reveal mysql://localhost/performance        # Performance metrics + DBA tuning ratios
+reveal mysql://localhost/indexes            # Index usage analysis
+reveal mysql://localhost/slow-queries       # Slow query analysis (last 24h)
+reveal mysql://localhost/innodb             # InnoDB buffer pool and locks
+```
+
+### Development Tools
+
+For contributors:
+
+```bash
+pip install reveal-cli[dev]
+```
+
+**Includes:** pytest, pytest-cov, black, ruff
+
+### Installing Multiple Extras
+
+```bash
+pip install reveal-cli[database,dev]
+```
+
+## Migration Note
+
+**If you previously used `[treesitter]` extra:**
+
+Tree-sitter is now included by default (since v0.8.0, Nov 2025). You can safely remove `[treesitter]` from your install commands - it's no longer needed, but old commands still work for backward compatibility.
+
+**Example:**
+```bash
+# Old (still works, but unnecessary)
+pip install reveal-cli[treesitter]
+
+# New (recommended)
+pip install reveal-cli
+```
 
 ## Troubleshooting
 
