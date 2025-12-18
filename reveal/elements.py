@@ -266,7 +266,7 @@ class PythonElement(TypedElement):
         """True if decorated with @property."""
         return "@property" in self.decorators
 
-    @property
+    @cached_property
     def display_category(self) -> str:
         """Semantic category for display (method, property, classmethod, etc.)."""
         if self.category != "function":
@@ -284,7 +284,7 @@ class PythonElement(TypedElement):
             return "function"  # nested, but still a function
         return "function"
 
-    @property
+    @cached_property
     def decorator_prefix(self) -> str:
         """Decorator prefix for display (e.g., '@cached_property')."""
         # Priority: show the most semantically meaningful decorator
@@ -298,7 +298,7 @@ class PythonElement(TypedElement):
                 return dec
         return ""
 
-    @property
+    @cached_property
     def compact_signature(self) -> str:
         """Compact signature for display (truncated params)."""
         if not self.signature:
@@ -372,7 +372,7 @@ class PythonElement(TypedElement):
 
         return ""
 
-    @property
+    @cached_property
     def return_type(self) -> str:
         """Extract return type from signature."""
         if not self.signature:

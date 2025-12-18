@@ -223,6 +223,23 @@ Exit code: 0
 reveal mysql://localhost --check --format=json
 ```
 
+### 🔧 IMPROVED: Code Quality & Performance
+
+**Type system performance optimization:**
+- Converted 4 oversized `@property` methods to `@cached_property` in `reveal/elements.py`
+  - `compact_signature` (73 lines, depth 6) - Complex signature parsing now cached
+  - `return_type` (17 lines) - Return type extraction now cached
+  - `display_category` (16 lines) - Category display logic now cached
+  - `decorator_prefix` (12 lines) - Decorator selection now cached
+- **Impact:** Improved performance for type-heavy code analysis (cached vs recomputed)
+- **Code quality:** Reduced B003 warnings from 11 to 5 issues in elements.py
+
+**B003 rule fix - @cached_property exclusion:**
+- Fixed false positives: B003 rule now correctly excludes `@cached_property` from complexity checks
+- **Rationale:** `@cached_property` is computed once and cached, so complexity is acceptable
+- **Before:** Both `@property` and `@cached_property` were flagged (incorrect)
+- **After:** Only `@property` is flagged for complexity (correct behavior)
+
 ### 🔧 IMPROVED: MySQL Adapter Code Quality
 
 **Complete P0 fixes for production readiness:**

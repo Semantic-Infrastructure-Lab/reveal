@@ -55,13 +55,23 @@ class B003(BaseRule):
             line = func.get('line', 0)
             line_count = func.get('line_count', 0)
 
-            # Check if it's a property
+            # Check if it's a property (but not cached_property)
+            # cached_property is OK to be complex since it's computed once and cached
             is_property = any(
-                d in ['@property', '@cached_property'] or
-                d.startswith('@property') or
+                d == '@property' or
+                (d.startswith('@property') and 'cached' not in d) or
                 d.endswith('.getter')
                 for d in decorators
             )
+
+            # Exclude cached_property - it's OK to be complex
+            is_cached = any(
+                '@cached_property' in d
+                for d in decorators
+            )
+
+            if is_cached:
+                continue
 
             if not is_property:
                 continue
