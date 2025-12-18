@@ -7,15 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ NEW: Unified Configuration System
+
+**XDG-compliant config management** - Consistent, predictable configuration across all reveal components!
+
+Reveal now has a unified configuration system following the XDG Base Directory Specification. All components use consistent paths and precedence rules.
+
+**Standard locations:**
+```
+~/.config/reveal/       # User configuration
+~/.cache/reveal/        # Cache files
+~/.local/share/reveal/  # Data files
+/etc/reveal/            # System-wide configuration
+./.reveal/              # Project-local configuration
+```
+
+**Configuration precedence** (first found wins):
+1. Project: `./.reveal/<config-file>`
+2. User: `~/.config/reveal/<config-file>`
+3. System: `/etc/reveal/<config-file>`
+
+**Benefits:**
+- ✅ Follows XDG standards (proper Unix citizen)
+- ✅ Consistent config locations across all components
+- ✅ Per-project, per-user, and system-wide config support
+- ✅ Graceful fallback to defaults
+- ✅ Single source of truth (`reveal/config.py`)
+
+**Components migrated:**
+- MySQL adapter health checks
+- Update checker cache
+- Future: Rules, adapters, display settings
+
 ### ✨ NEW: Configurable MySQL Health Thresholds
 
 **Customize health check thresholds** - No more hardcoded limits!
 
-MySQL health check thresholds are now fully configurable via YAML config files. Different environments (dev, staging, prod) can have different tolerance levels.
+MySQL health check thresholds are now fully configurable via YAML config files using the new unified config system. Different environments (dev, staging, prod) can have different tolerance levels.
 
 **Configuration:**
 
-Create `~/.config/reveal/mysql-health-checks.yaml` (user-specific) or `/etc/reveal/mysql-health-checks.yaml` (system-wide):
+Create config at any of these locations (in precedence order):
+- `./.reveal/mysql-health-checks.yaml` (project-specific)
+- `~/.config/reveal/mysql-health-checks.yaml` (user-specific)
+- `/etc/reveal/mysql-health-checks.yaml` (system-wide)
 
 ```yaml
 checks:

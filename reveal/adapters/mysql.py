@@ -891,16 +891,17 @@ class MySQLAdapter(ResourceAdapter):
     def _load_health_check_config(self) -> Dict[str, Any]:
         """Load health check configuration from file or use defaults.
 
+        Uses unified reveal config system with XDG-compliant paths.
         Config file locations (in order of precedence):
-        1. ~/.config/reveal/mysql-health-checks.yaml
-        2. /etc/reveal/mysql-health-checks.yaml
-        3. Hardcoded defaults (fallback)
+        1. ./.reveal/mysql-health-checks.yaml (project)
+        2. ~/.config/reveal/mysql-health-checks.yaml (user)
+        3. /etc/reveal/mysql-health-checks.yaml (system)
+        4. Hardcoded defaults (fallback)
 
         Returns:
             Dict with 'checks' key containing list of check definitions
         """
-        import yaml
-        from pathlib import Path
+        from reveal.config import load_config
 
         # Default configuration (fallback)
         defaults = {
@@ -915,25 +916,8 @@ class MySQLAdapter(ResourceAdapter):
             ]
         }
 
-        # Try to load from config files
-        config_paths = [
-            Path.home() / '.config' / 'reveal' / 'mysql-health-checks.yaml',
-            Path('/etc/reveal/mysql-health-checks.yaml'),
-        ]
-
-        for config_path in config_paths:
-            if config_path.exists():
-                try:
-                    with open(config_path) as f:
-                        config = yaml.safe_load(f)
-                        if config and 'checks' in config:
-                            return config
-                except Exception:
-                    # If config file is malformed, continue to next location
-                    pass
-
-        # Fall back to defaults
-        return defaults
+        # Load from unified config system
+        return load_config('mysql-health-checks.yaml', defaults)
 
     def check(self, **kwargs) -> Dict[str, Any]:
         """Run health checks with pass/warn/fail thresholds.

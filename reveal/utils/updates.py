@@ -9,28 +9,22 @@ from datetime import datetime, timedelta
 def check_for_updates():
     """Check PyPI for newer version (once per day, non-blocking).
 
-    - Checks at most once per day (cached in ~/.config/reveal/last_update_check)
+    - Checks at most once per day (cached in ~/.cache/reveal/last_update_check)
     - 1-second timeout (doesn't slow down CLI)
     - Fails silently (no errors shown to user)
     - Opt-out: Set REVEAL_NO_UPDATE_CHECK=1 environment variable
     """
     # Import here to avoid circular dependencies
     from .. import __version__
+    from ..config import get_cache_path
 
     # Opt-out check
     if os.environ.get('REVEAL_NO_UPDATE_CHECK'):
         return
 
     try:
-        # Setup cache directory (platform-appropriate)
-        if sys.platform == 'win32':
-            # Windows: Use %LOCALAPPDATA%\reveal
-            cache_dir = Path(os.getenv('LOCALAPPDATA', Path.home() / 'AppData' / 'Local')) / 'reveal'
-        else:
-            # Unix/macOS: Use ~/.config/reveal
-            cache_dir = Path.home() / '.config' / 'reveal'
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_file = cache_dir / 'last_update_check'
+        # Use unified config system for cache file
+        cache_file = get_cache_path('last_update_check')
 
         # Check if we should update (once per day)
         if cache_file.exists():
