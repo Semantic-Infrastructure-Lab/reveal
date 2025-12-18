@@ -7,5 +7,6 @@ from .python import PythonAdapter
 from .json_adapter import JsonAdapter
 from .reveal import RevealAdapter
 from .stats import StatsAdapter
+from .mysql import MySQLAdapter
 
-__all__ = ['EnvAdapter', 'AstAdapter', 'HelpAdapter', 'PythonAdapter', 'JsonAdapter', 'RevealAdapter', 'StatsAdapter']
+__all__ = ['EnvAdapter', 'AstAdapter', 'HelpAdapter', 'PythonAdapter', 'JsonAdapter', 'RevealAdapter', 'StatsAdapter', 'MySQLAdapter']

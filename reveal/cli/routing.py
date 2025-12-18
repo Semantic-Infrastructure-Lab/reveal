@@ -257,11 +257,107 @@ def _handle_stats(adapter_class: type, resource: str, element: Optional[str],
         print(f"  Deep nest:  {result['quality']['deep_nesting']}")
 
 
+def _handle_mysql(adapter_class: type, resource: str, element: Optional[str],
+                  args: 'Namespace') -> None:
+    """Handle mysql:// URIs."""
+    import json
+
+    # Build connection string from resource and element
+    connection_string = f"mysql://{resource}"
+
+    adapter = adapter_class(connection_string)
+
+    # If element is specified, get element details
+    if adapter.element:
+        result = adapter.get_element(adapter.element)
+        if result is None:
+            print(f"Error: Element '{adapter.element}' not found", file=sys.stderr)
+            print(f"Available elements: connections, performance, innodb, replication, storage, errors, variables, health, databases", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # Get structure (health overview)
+        result = adapter.get_structure()
+
+    # Render output
+    if args.format == 'json':
+        print(json.dumps(result, indent=2))
+    else:
+        # Pretty-print the structure
+        _render_mysql_result(result, args.format)
+
+
+def _render_mysql_result(result: dict, format: str = 'text'):
+    """Render MySQL adapter results in human-readable format."""
+    import json
+
+    if format == 'json':
+        print(json.dumps(result, indent=2))
+        return
+
+    # Handle different result types
+    result_type = result.get('type', 'mysql_server')
+
+    if result_type == 'mysql_server':
+        # Main health overview
+        print(f"MySQL Server: {result['server']}")
+        print(f"Version: {result['version']}")
+        print(f"Uptime: {result['uptime']}")
+        print()
+
+        conn = result['connection_health']
+        print(f"Connection Health: {conn['status']}")
+        print(f"  Current: {conn['current']} / {conn['max']} max ({conn['percentage']})")
+        print()
+
+        perf = result['performance']
+        print("Performance:")
+        print(f"  QPS: {perf['qps']} queries/sec")
+        print(f"  Slow Queries: {perf['slow_queries']}")
+        print(f"  Threads Running: {perf['threads_running']}")
+        print()
+
+        innodb = result['innodb_health']
+        print(f"InnoDB Health: {innodb['status']}")
+        print(f"  Buffer Pool Hit Rate: {innodb['buffer_pool_hit_rate']}")
+        print(f"  Row Lock Waits: {innodb['row_lock_waits']}")
+        print(f"  Deadlocks: {innodb['deadlocks']}")
+        print()
+
+        repl = result['replication']
+        print(f"Replication: {repl['role']}")
+        if 'lag' in repl:
+            print(f"  Lag: {repl['lag']}s")
+        if 'slaves' in repl:
+            print(f"  Slaves: {repl['slaves']}")
+        print()
+
+        storage = result['storage']
+        print("Storage:")
+        print(f"  Total: {storage['total_size_gb']:.2f} GB across {storage['database_count']} databases")
+        print(f"  Largest: {storage['largest_db']}")
+        print()
+
+        print(f"Health Status: {result['health_status']}")
+        print("Issues:")
+        for issue in result['health_issues']:
+            print(f"  • {issue}")
+        print()
+
+        print("Next Steps:")
+        for step in result['next_steps']:
+            print(f"  {step}")
+
+    else:
+        # Element-specific results - just JSON for now
+        print(json.dumps(result, indent=2))
+
+
 # Dispatch table: scheme -> handler function
 # To add a new scheme: create a _handle_<scheme> function and register here
 SCHEME_HANDLERS: Dict[str, Callable] = {
     'env': _handle_env,
     'ast': _handle_ast,
+    'mysql': _handle_mysql,
     'help': _handle_help,
     'python': _handle_python,
     'json': _handle_json,
@@ -290,7 +386,7 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
 
     # Look up adapter from registry
     from ..adapters.base import get_adapter_class, list_supported_schemes
-    from ..adapters import env, ast, help, python, json_adapter, reveal  # noqa: F401 - Trigger registration
+    from ..adapters import env, ast, help, python, json_adapter, reveal, mysql  # noqa: F401 - Trigger registration
 
     adapter_class = get_adapter_class(scheme)
     if not adapter_class:

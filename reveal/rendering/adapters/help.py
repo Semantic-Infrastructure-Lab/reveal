@@ -84,7 +84,7 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
         ai_guides = ['agent', 'agent-full']
         feature_guides = ['python-guide', 'markdown', 'reveal-guide']
         best_practices = ['anti-patterns', 'tricks']
-        dev_guides = ['adapter-authoring', 'help']
+        dev_guides = ['adapter-authoring', 'help', 'release']
 
         # Map topics to their files for source attribution
         from reveal.adapters.help import HelpAdapter
@@ -193,7 +193,8 @@ def _get_guide_description(topic: str) -> str:
         'anti-patterns': 'Common mistakes to avoid',
         'adapter-authoring': 'Build your own adapters',
         'tricks': 'Cool tricks and hidden features',
-        'help': 'How the help system works (meta!)'
+        'help': 'How the help system works (meta!)',
+        'release': 'Release process for maintainers'
     }
     return descriptions.get(topic, 'Static guide')
 

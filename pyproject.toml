@@ -56,6 +56,10 @@ excel = [
 syntax = [
     "pygments>=2.0",
 ]
+# Database adapter support (mysql://, postgres://, etc.)
+database = [
+    "pymysql>=1.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/Semantic-Infrastructure-Lab/reveal"

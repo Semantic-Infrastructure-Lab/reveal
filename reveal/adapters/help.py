@@ -38,7 +38,8 @@ class HelpAdapter(ResourceAdapter):
         'anti-patterns': 'ANTI_PATTERNS.md',
         'adapter-authoring': 'adapters/ADAPTER_AUTHORING_GUIDE.md',
         'tricks': 'COOL_TRICKS.md',
-        'help': 'HELP_SYSTEM_GUIDE.md'  # Meta-documentation about help system
+        'help': 'HELP_SYSTEM_GUIDE.md',  # Meta-documentation about help system
+        'release': 'RELEASE_GUIDE.md'  # Release process for maintainers
     }
 
     @staticmethod
