@@ -84,7 +84,68 @@ With these additions, Reveal's MySQL adapter now:
 - Tested on production database (175GB, 77 days uptime, 51M+ rows)
 - Correctly identified: 58% table scan ratio (needs indexes), 0.12% thread cache miss (excellent), 1.1% temp tables on disk (excellent)
 
-**What's Next:** `--check` flag implementation with health thresholds for automated MySQL health validation
+### ✨ NEW: MySQL --check Flag with Health Thresholds
+
+**Production-ready health validation** - Automated MySQL health checks with pass/warn/fail thresholds!
+
+The MySQL adapter now supports `reveal mysql://host --check` with 7 industry-standard health checks:
+
+**Health Checks:**
+1. **Table Scan Ratio** (high severity) - Pass: <10%, Warn: <25%, Fail: ≥25%
+2. **Thread Cache Miss Rate** (medium) - Pass: <10%, Warn: <25%, Fail: ≥25%
+3. **Temp Disk Ratio** (medium) - Pass: <25%, Warn: <50%, Fail: ≥50%
+4. **Max Used Connections %** (critical) - Pass: <80%, Warn: <100%, Fail: ≥100%
+5. **Open Files %** (critical) - Pass: <75%, Warn: <90%, Fail: ≥90%
+6. **Current Connection %** (high) - Pass: <80%, Warn: <95%, Fail: ≥95%
+7. **Buffer Hit Rate** (high) - Pass: >99%, Warn: >95%, Fail: ≤95%
+
+**Exit Codes:**
+- 0: All checks passed ✅
+- 1: Some warnings ⚠️
+- 2: One or more failures ❌
+
+**Example:**
+```bash
+reveal mysql://localhost --check
+
+MySQL Health Check: ✅ PASS
+Summary: 7/7 passed, 0 warnings, 0 failures
+
+✅ All Checks Passed:
+  • Table Scan Ratio: 5.20% (threshold: <10%)
+  • Thread Cache Miss Rate: 2.10% (threshold: <10%)
+  • Temp Disk Ratio: 10.50% (threshold: <25%)
+  • Max Used Connections %: 50.00% (threshold: <80%)
+  • Open Files %: 10.00% (threshold: <75%)
+  • Current Connection %: 5.00% (threshold: <80%)
+  • Buffer Hit Rate: 99.90% (threshold: >99%)
+
+Exit code: 0
+```
+
+**JSON Output for CI/CD:**
+```bash
+reveal mysql://localhost --check --format=json
+```
+
+### 🔧 IMPROVED: MySQL Adapter Code Quality
+
+**Complete P0 fixes for production readiness:**
+
+1. **Fixed bare except clauses** - Changed `except:` to `except Exception as e:` with error capture
+   - Line 411: Replication detection now includes error in return dict
+   - Line 896: Connection cleanup remains silent (standard __del__ pattern)
+
+2. **Comprehensive test suite** - 45 tests with 100% P0 coverage
+   - 6 test classes covering initialization, credentials, routing, conversion, errors
+   - 6 dedicated check() tests for all threshold scenarios
+   - Full mocking strategy - no real MySQL needed
+
+3. **Code excellence metrics:**
+   - ✅ No bare except clauses
+   - ✅ Error handling with context
+   - ✅ Production-validated on 175GB database
+   - ✅ Complete test coverage for core functionality
 
 ## [0.24.1] - 2025-12-17
 

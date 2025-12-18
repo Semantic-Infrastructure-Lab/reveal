@@ -267,6 +267,19 @@ def _handle_mysql(adapter_class: type, resource: str, element: Optional[str],
 
     adapter = adapter_class(connection_string)
 
+    # Handle --check flag: run health checks with thresholds
+    if getattr(args, 'check', False):
+        result = adapter.check()
+
+        # Render check results
+        if args.format == 'json':
+            print(json.dumps(result, indent=2))
+        else:
+            _render_mysql_check_result(result)
+
+        # Exit with appropriate code
+        sys.exit(result['exit_code'])
+
     # If element is specified, get element details
     if adapter.element:
         result = adapter.get_element(adapter.element)
@@ -350,6 +363,47 @@ def _render_mysql_result(result: dict, format: str = 'text'):
     else:
         # Element-specific results - just JSON for now
         print(json.dumps(result, indent=2))
+
+
+def _render_mysql_check_result(result: dict):
+    """Render MySQL health check results in human-readable format."""
+    status = result['status']
+    summary = result['summary']
+
+    # Header with overall status
+    status_icon = '✅' if status == 'pass' else '⚠️' if status == 'warning' else '❌'
+    print(f"\nMySQL Health Check: {status_icon} {status.upper()}")
+    print(f"\nSummary: {summary['passed']}/{summary['total']} passed, {summary['warnings']} warnings, {summary['failures']} failures")
+    print()
+
+    # Group checks by status for better readability
+    failures = [c for c in result['checks'] if c['status'] == 'failure']
+    warnings = [c for c in result['checks'] if c['status'] == 'warning']
+    passes = [c for c in result['checks'] if c['status'] == 'pass']
+
+    # Show failures first
+    if failures:
+        print("❌ Failures:")
+        for check in failures:
+            print(f"  • {check['name']}: {check['value']} (threshold: {check['threshold']}, severity: {check['severity']})")
+        print()
+
+    # Then warnings
+    if warnings:
+        print("⚠️  Warnings:")
+        for check in warnings:
+            print(f"  • {check['name']}: {check['value']} (threshold: {check['threshold']}, severity: {check['severity']})")
+        print()
+
+    # Finally passes (if verbose or no issues)
+    if passes and (not failures and not warnings):
+        print("✅ All Checks Passed:")
+        for check in passes:
+            print(f"  • {check['name']}: {check['value']} (threshold: {check['threshold']})")
+        print()
+
+    # Exit code hint
+    print(f"Exit code: {result['exit_code']}")
 
 
 # Dispatch table: scheme -> handler function
