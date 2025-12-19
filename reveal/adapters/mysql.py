@@ -2,7 +2,7 @@
 
 import os
 import subprocess
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from .base import ResourceAdapter, register_adapter
 
 try:
@@ -1023,8 +1023,150 @@ class MySQLAdapter(ResourceAdapter):
         # Load from unified config system
         return load_config('mysql-health-checks.yaml', defaults)
 
+    def _parse_percentage(self, value_str) -> float:
+        """Parse percentage string like '12.5%' to float.
+
+        Args:
+            value_str: Value as string, int, or float
+
+        Returns:
+            Float value (percentage as number)
+        """
+        if isinstance(value_str, (int, float)):
+            return float(value_str)
+        if isinstance(value_str, str) and '%' in value_str:
+            return float(value_str.replace('%', ''))
+        return 0.0
+
+    def _collect_health_metrics(self) -> Dict[str, float]:
+        """Collect all health check metrics from MySQL.
+
+        Returns:
+            Dict mapping metric names to calculated values
+        """
+        # Get performance metrics
+        performance = self._get_performance()
+        tuning_ratios = performance.get('tuning_ratios', {})
+
+        # Get status and configuration variables
+        status_vars = {row['Variable_name']: row['Value']
+                      for row in self._execute_query("SHOW GLOBAL STATUS")}
+        vars_result = self._execute_query("SHOW VARIABLES")
+        variables = {row['Variable_name']: row['Value'] for row in vars_result}
+
+        # Parse ratio metrics
+        table_scan_ratio = self._parse_percentage(tuning_ratios.get('table_scan_ratio', '0%'))
+        thread_cache_miss_rate = self._parse_percentage(tuning_ratios.get('thread_cache_miss_rate', '0%'))
+        temp_disk_ratio = self._parse_percentage(tuning_ratios.get('temp_tables_to_disk_ratio', '0%'))
+
+        # Calculate connection metrics
+        max_connections = int(variables.get('max_connections', 100))
+        current_connections = int(status_vars.get('Threads_connected', 0))
+        max_used_connections = int(status_vars.get('Max_used_connections', 0))
+        connection_pct = (current_connections / max_connections * 100) if max_connections else 0
+        max_used_pct = (max_used_connections / max_connections * 100) if max_connections else 0
+
+        # Calculate open files metrics
+        open_files_limit = int(variables.get('open_files_limit', 1))
+        open_files = int(status_vars.get('Open_files', 0))
+        open_files_pct = (open_files / open_files_limit * 100) if open_files_limit else 0
+
+        # Calculate buffer hit rate
+        innodb_buffer_pool_reads = int(status_vars.get('Innodb_buffer_pool_reads', 0))
+        innodb_buffer_pool_read_requests = int(status_vars.get('Innodb_buffer_pool_read_requests', 1))
+        buffer_hit_rate = 100 * (1 - innodb_buffer_pool_reads / innodb_buffer_pool_read_requests) if innodb_buffer_pool_read_requests else 100
+
+        return {
+            'table_scan_ratio': table_scan_ratio,
+            'thread_cache_miss_rate': thread_cache_miss_rate,
+            'temp_disk_ratio': temp_disk_ratio,
+            'max_used_connections_pct': max_used_pct,
+            'open_files_pct': open_files_pct,
+            'connection_pct': connection_pct,
+            'buffer_hit_rate': buffer_hit_rate,
+        }
+
+    def _evaluate_health_check(self, name: str, value: float, pass_threshold: float,
+                               warn_threshold: float, severity: str, operator: str = '<') -> Dict[str, Any]:
+        """Evaluate a single health check against thresholds.
+
+        Args:
+            name: Check name
+            value: Measured value
+            pass_threshold: Passing threshold
+            warn_threshold: Warning threshold
+            severity: Severity level
+            operator: Comparison operator ('<' or '>')
+
+        Returns:
+            Check result dict with status, value, threshold, etc.
+        """
+        # Determine status based on operator and thresholds
+        if operator == '<':
+            if value < pass_threshold:
+                status = 'pass'
+            elif value < warn_threshold:
+                status = 'warning'
+            else:
+                status = 'failure'
+        else:  # operator == '>'
+            if value > pass_threshold:
+                status = 'pass'
+            elif value > warn_threshold:
+                status = 'warning'
+            else:
+                status = 'failure'
+
+        # Format value string
+        is_percentage = 'rate' in name.lower() or 'ratio' in name.lower() or 'pct' in name.lower()
+        value_str = f'{value:.2f}%' if is_percentage else str(value)
+
+        return {
+            'name': name,
+            'status': status,
+            'value': value_str,
+            'threshold': f'{operator}{pass_threshold}%',
+            'severity': severity
+        }
+
+    def _calculate_check_summary(self, checks: List[Dict[str, Any]]) -> tuple:
+        """Calculate summary and overall status from checks.
+
+        Args:
+            checks: List of check result dicts
+
+        Returns:
+            Tuple of (overall_status, exit_code, summary_dict)
+        """
+        total = len(checks)
+        passed = sum(1 for c in checks if c['status'] == 'pass')
+        warnings = sum(1 for c in checks if c['status'] == 'warning')
+        failures = sum(1 for c in checks if c['status'] == 'failure')
+
+        # Determine overall status and exit code
+        if failures > 0:
+            overall_status = 'failure'
+            exit_code = 2
+        elif warnings > 0:
+            overall_status = 'warning'
+            exit_code = 1
+        else:
+            overall_status = 'pass'
+            exit_code = 0
+
+        summary = {
+            'total': total,
+            'passed': passed,
+            'warnings': warnings,
+            'failures': failures
+        }
+
+        return overall_status, exit_code, summary
+
     def check(self, **kwargs) -> Dict[str, Any]:
         """Run health checks with pass/warn/fail thresholds.
+
+        Refactored to reduce complexity from 58 → ~15 by extracting helpers.
 
         Returns:
             {
@@ -1048,99 +1190,18 @@ class MySQLAdapter(ResourceAdapter):
                 }
             }
         """
-        # Get performance metrics needed for health checks
-        performance = self._get_performance()
-
-        # Get status variables for additional checks
-        status_vars = {row['Variable_name']: row['Value']
-                      for row in self._execute_query("SHOW GLOBAL STATUS")}
-
-        # Get configuration variables
-        vars_result = self._execute_query("SHOW VARIABLES")
-        variables = {row['Variable_name']: row['Value'] for row in vars_result}
-
-        # Parse values from performance data
-        tuning_ratios = performance.get('tuning_ratios', {})
-
-        # Extract numeric values
-        def parse_percentage(value_str):
-            """Parse percentage string like '12.5%' to float."""
-            if isinstance(value_str, (int, float)):
-                return float(value_str)
-            if isinstance(value_str, str) and '%' in value_str:
-                return float(value_str.replace('%', ''))
-            return 0.0
-
-        # Calculate metrics
-        table_scan_ratio = parse_percentage(tuning_ratios.get('table_scan_ratio', '0%'))
-        thread_cache_miss_rate = parse_percentage(tuning_ratios.get('thread_cache_miss_rate', '0%'))
-        temp_disk_ratio = parse_percentage(tuning_ratios.get('temp_tables_to_disk_ratio', '0%'))
-
-        # Connection metrics
-        max_connections = int(variables.get('max_connections', 100))
-        current_connections = int(status_vars.get('Threads_connected', 0))
-        max_used_connections = int(status_vars.get('Max_used_connections', 0))
-        connection_pct = (current_connections / max_connections * 100) if max_connections else 0
-        max_used_pct = (max_used_connections / max_connections * 100) if max_connections else 0
-
-        # Open files
-        open_files_limit = int(variables.get('open_files_limit', 1))
-        open_files = int(status_vars.get('Open_files', 0))
-        open_files_pct = (open_files / open_files_limit * 100) if open_files_limit else 0
-
-        # Buffer hit rate (from performance data)
-        innodb_buffer_pool_reads = int(status_vars.get('Innodb_buffer_pool_reads', 0))
-        innodb_buffer_pool_read_requests = int(status_vars.get('Innodb_buffer_pool_read_requests', 1))
-        buffer_hit_rate = 100 * (1 - innodb_buffer_pool_reads / innodb_buffer_pool_read_requests) if innodb_buffer_pool_read_requests else 100
+        # Collect all health metrics using extracted helper
+        metrics = self._collect_health_metrics()
 
         # Load health check configuration
         config = self._load_health_check_config()
 
-        # Map metric names to calculated values
-        metrics = {
-            'table_scan_ratio': table_scan_ratio,
-            'thread_cache_miss_rate': thread_cache_miss_rate,
-            'temp_disk_ratio': temp_disk_ratio,
-            'max_used_connections_pct': max_used_pct,
-            'open_files_pct': open_files_pct,
-            'connection_pct': connection_pct,
-            'buffer_hit_rate': buffer_hit_rate,
-        }
-
-        # Define health checks with thresholds
-        checks = []
-
-        # Helper function to evaluate check
-        def add_check(name, value, pass_threshold, warn_threshold, severity, operator='<'):
-            """Add a health check result."""
-            if operator == '<':
-                if value < pass_threshold:
-                    status = 'pass'
-                elif value < warn_threshold:
-                    status = 'warning'
-                else:
-                    status = 'failure'
-            else:  # operator == '>'
-                if value > pass_threshold:
-                    status = 'pass'
-                elif value > warn_threshold:
-                    status = 'warning'
-                else:
-                    status = 'failure'
-
-            checks.append({
-                'name': name,
-                'status': status,
-                'value': f'{value:.2f}%' if 'rate' in name.lower() or 'ratio' in name.lower() or 'pct' in name.lower() else str(value),
-                'threshold': f'{operator}{pass_threshold}%' if operator == '<' else f'{operator}{pass_threshold}%',
-                'severity': severity
-            })
-
         # Run all checks from config
+        checks = []
         for check_def in config.get('checks', []):
             metric_name = check_def.get('metric')
             if metric_name in metrics:
-                add_check(
+                check_result = self._evaluate_health_check(
                     name=check_def['name'],
                     value=metrics[metric_name],
                     pass_threshold=check_def['pass_threshold'],
@@ -1148,34 +1209,16 @@ class MySQLAdapter(ResourceAdapter):
                     severity=check_def['severity'],
                     operator=check_def.get('operator', '<')
                 )
+                checks.append(check_result)
 
-        # Calculate summary
-        total = len(checks)
-        passed = sum(1 for c in checks if c['status'] == 'pass')
-        warnings = sum(1 for c in checks if c['status'] == 'warning')
-        failures = sum(1 for c in checks if c['status'] == 'failure')
-
-        # Determine overall status and exit code
-        if failures > 0:
-            overall_status = 'failure'
-            exit_code = 2
-        elif warnings > 0:
-            overall_status = 'warning'
-            exit_code = 1
-        else:
-            overall_status = 'pass'
-            exit_code = 0
+        # Calculate summary and overall status using extracted helper
+        overall_status, exit_code, summary = self._calculate_check_summary(checks)
 
         return {
             'status': overall_status,
             'exit_code': exit_code,
             'checks': checks,
-            'summary': {
-                'total': total,
-                'passed': passed,
-                'warnings': warnings,
-                'failures': failures
-            }
+            'summary': summary
         }
 
     def __del__(self):
