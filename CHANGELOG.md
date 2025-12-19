@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Improved
+- **MySQL Adapter**: Refactored for better maintainability
+  - Fixed C905 nesting depth warning in `_resolve_credentials()` (depth 5 → 4)
+  - Extracted `_try_tia_secrets()` helper method for cleaner credential resolution
+  - Reduced `get_structure()` god function from 191 → 135 lines (29% reduction, ~840 tokens saved)
+  - Added helper methods: `_get_server_uptime_info()`, `_calculate_connection_health()`, `_calculate_innodb_health()`, `_calculate_resource_limits()`
+  - All 45 MySQL tests passing, no regressions
+
 ### Fixed
 - **Bash Analyzer**: Fixed function extraction by overriding `_get_node_name()`
   - Bash tree-sitter uses 'word' node type for names, not 'identifier'

@@ -193,6 +193,36 @@ class MySQLAdapter(ResourceAdapter):
         else:
             self.host = host_port or "localhost"
 
+    def _try_tia_secrets(self) -> bool:
+        """Try to load credentials from TIA secrets.
+
+        Returns:
+            True if credentials were loaded, False otherwise
+        """
+        if not self.host:
+            return False
+
+        try:
+            result = subprocess.run(
+                ['tia', 'secrets', 'get', f'mysql:{self.host}'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+
+        if result.returncode != 0 or not result.stdout:
+            return False
+
+        # Expected format: user:password
+        secret = result.stdout.strip()
+        if ':' not in secret:
+            return False
+
+        self.user, self.password = secret.split(':', 1)
+        return True
+
     def _resolve_credentials(self):
         """Resolve credentials from multiple sources.
 
@@ -207,22 +237,8 @@ class MySQLAdapter(ResourceAdapter):
             return
 
         # Try TIA secrets
-        if self.host:
-            try:
-                result = subprocess.run(
-                    ['tia', 'secrets', 'get', f'mysql:{self.host}'],
-                    capture_output=True,
-                    text=True,
-                    timeout=5
-                )
-                if result.returncode == 0 and result.stdout:
-                    # Expected format: user:password
-                    secret = result.stdout.strip()
-                    if ':' in secret:
-                        self.user, self.password = secret.split(':', 1)
-                        return
-            except (subprocess.TimeoutExpired, FileNotFoundError):
-                pass
+        if self._try_tia_secrets():
+            return
 
         # Try environment variables
         self.host = self.host or os.environ.get('MYSQL_HOST', 'localhost')
@@ -328,31 +344,31 @@ class MySQLAdapter(ResourceAdapter):
         results = self._execute_query(query)
         return results[0] if results else None
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
-        """Get MySQL health overview (DBA snapshot).
+    def _get_server_uptime_info(self, status_vars: Dict[str, str]) -> tuple:
+        """Calculate server uptime and start time.
 
         Returns:
-            Dict containing health signals (~100 tokens)
+            Tuple of (uptime_days, uptime_hours, uptime_mins, server_start_time)
         """
         from datetime import datetime, timezone
-
-        # Get server version and uptime
-        version_info = self._execute_single("SELECT VERSION() as version")
-        status_vars = {row['Variable_name']: row['Value']
-                      for row in self._execute_query("SHOW GLOBAL STATUS")}
 
         uptime_seconds = int(status_vars.get('Uptime', 0))
         uptime_days = uptime_seconds // 86400
         uptime_hours = (uptime_seconds % 86400) // 3600
         uptime_mins = (uptime_seconds % 3600) // 60
 
-        # Calculate server start time using MySQL's clock (not local machine clock)
+        # Calculate server start time using MySQL's clock
         mysql_time = self._execute_single("SELECT UNIX_TIMESTAMP() as timestamp")
         mysql_timestamp = int(mysql_time['timestamp'])
         server_start_timestamp = mysql_timestamp - uptime_seconds
-        server_start_time = datetime.fromtimestamp(server_start_timestamp, timezone.utc)
+        server_start_time = datetime.fromtimestamp(
+            server_start_timestamp, timezone.utc
+        )
 
-        # Connection health
+        return uptime_days, uptime_hours, uptime_mins, server_start_time
+
+    def _calculate_connection_health(self, status_vars: Dict[str, str]) -> Dict:
+        """Calculate connection health metrics."""
         max_connections = int(self._execute_single(
             "SHOW VARIABLES LIKE 'max_connections'"
         )['Value'])
@@ -372,20 +388,30 @@ class MySQLAdapter(ResourceAdapter):
             connection_status = '❌'
         max_used_status = '⚠️' if max_used_pct >= 100 else '✅'
 
-        # Performance (counters are cumulative since server start)
-        questions = int(status_vars.get('Questions', 0))
-        slow_queries = int(status_vars.get('Slow_queries', 0))
-        qps = questions / uptime_seconds if uptime_seconds else 0
-        slow_pct = (slow_queries / questions * 100) if questions else 0
-        threads_running = int(status_vars.get('Threads_running', 0))
+        return {
+            'current': current_connections,
+            'max': max_connections,
+            'percentage': connection_pct,
+            'max_used_ever': max_used_connections,
+            'max_used_pct': max_used_pct,
+            'status': connection_status,
+            'max_used_status': max_used_status,
+        }
 
-        # InnoDB health (counters are cumulative since server start)
-        innodb_buffer_pool_reads = int(status_vars.get('Innodb_buffer_pool_reads', 0))
+    def _calculate_innodb_health(self, status_vars: Dict[str, str]) -> Dict:
+        """Calculate InnoDB health metrics."""
+        innodb_buffer_pool_reads = int(
+            status_vars.get('Innodb_buffer_pool_reads', 0)
+        )
         innodb_buffer_pool_read_requests = int(
-            status_vars.get('Innodb_buffer_pool_read_requests', 1))
+            status_vars.get('Innodb_buffer_pool_read_requests', 1)
+        )
+
         if innodb_buffer_pool_read_requests:
-            buffer_hit_rate = (100 * (1 - innodb_buffer_pool_reads /
-                                     innodb_buffer_pool_read_requests))
+            buffer_hit_rate = (
+                100 * (1 - innodb_buffer_pool_reads /
+                       innodb_buffer_pool_read_requests)
+            )
         else:
             buffer_hit_rate = 0
 
@@ -399,7 +425,15 @@ class MySQLAdapter(ResourceAdapter):
         row_lock_waits = int(status_vars.get('Innodb_row_lock_waits', 0))
         deadlocks = int(status_vars.get('Innodb_deadlocks', 0))
 
-        # Resource limits
+        return {
+            'buffer_hit_rate': buffer_hit_rate,
+            'status': buffer_status,
+            'row_lock_waits': row_lock_waits,
+            'deadlocks': deadlocks,
+        }
+
+    def _calculate_resource_limits(self, status_vars: Dict[str, str]) -> Dict:
+        """Calculate resource limit metrics."""
         open_files = int(status_vars.get('Open_files', 0))
         open_files_limit = int(self._execute_single(
             "SHOW VARIABLES LIKE 'open_files_limit'"
@@ -413,6 +447,43 @@ class MySQLAdapter(ResourceAdapter):
             open_files_status = '⚠️'
         else:
             open_files_status = '❌'
+
+        return {
+            'open_files': {
+                'current': open_files,
+                'limit': open_files_limit,
+                'percentage': open_files_pct,
+                'status': open_files_status,
+            }
+        }
+
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
+        """Get MySQL health overview (DBA snapshot).
+
+        Returns:
+            Dict containing health signals (~100 tokens)
+        """
+        # Get server version and status
+        version_info = self._execute_single("SELECT VERSION() as version")
+        status_vars = {row['Variable_name']: row['Value']
+                      for row in self._execute_query("SHOW GLOBAL STATUS")}
+
+        # Calculate metrics using helper methods
+        uptime_days, uptime_hours, uptime_mins, server_start_time = (
+            self._get_server_uptime_info(status_vars)
+        )
+        uptime_seconds = int(status_vars.get('Uptime', 0))
+
+        conn_health = self._calculate_connection_health(status_vars)
+        innodb_health = self._calculate_innodb_health(status_vars)
+        resource_limits = self._calculate_resource_limits(status_vars)
+
+        # Performance (counters are cumulative since server start)
+        questions = int(status_vars.get('Questions', 0))
+        slow_queries = int(status_vars.get('Slow_queries', 0))
+        qps = questions / uptime_seconds if uptime_seconds else 0
+        slow_pct = (slow_queries / questions * 100) if questions else 0
+        threads_running = int(status_vars.get('Threads_running', 0))
 
         # Replication (check if slave)
         try:
@@ -456,17 +527,25 @@ class MySQLAdapter(ResourceAdapter):
         total_size_gb = sum(row['size_gb'] for row in db_sizes)
         largest_db = db_sizes[0] if db_sizes else None
 
-        # Overall health
+        # Overall health assessment
         health_issues = []
-        if connection_pct > 80:
-            health_issues.append(f"High connection usage ({connection_pct:.1f}%)")
-        if buffer_hit_rate < 99:
-            health_issues.append(f"Low buffer pool hit rate ({buffer_hit_rate:.2f}%)")
-        if replication_info.get('role') == 'Slave' and replication_info.get('lag', 0) and replication_info['lag'] != 'Unknown':
+        if conn_health['percentage'] > 80:
+            health_issues.append(
+                f"High connection usage ({conn_health['percentage']:.1f}%)"
+            )
+        if innodb_health['buffer_hit_rate'] < 99:
+            health_issues.append(
+                f"Low buffer pool hit rate ({innodb_health['buffer_hit_rate']:.2f}%)"
+            )
+        if (replication_info.get('role') == 'Slave' and
+                replication_info.get('lag', 0) and
+                replication_info['lag'] != 'Unknown'):
             if int(replication_info['lag']) > 60:
                 health_issues.append(f"Replication lag ({replication_info['lag']}s)")
 
-        health_status = '✅ HEALTHY' if not health_issues else '⚠️ WARNING' if len(health_issues) < 3 else '❌ CRITICAL'
+        health_status = ('✅ HEALTHY' if not health_issues else
+                        '⚠️ WARNING' if len(health_issues) < 3 else
+                        '❌ CRITICAL')
 
         return {
             'type': 'mysql_server',
@@ -475,13 +554,9 @@ class MySQLAdapter(ResourceAdapter):
             'uptime': f"{uptime_days}d {uptime_hours}h {uptime_mins}m",
             'server_start_time': server_start_time.isoformat(),
             'connection_health': {
-                'current': current_connections,
-                'max': max_connections,
-                'percentage': f"{connection_pct:.1f}%",
-                'max_used_ever': max_used_connections,
-                'max_used_pct': f"{max_used_pct:.1f}%",
-                'max_used_status': max_used_status,
-                'status': connection_status,
+                **conn_health,
+                'percentage': f"{conn_health['percentage']:.1f}%",
+                'max_used_pct': f"{conn_health['max_used_pct']:.1f}%",
                 'note': 'If max_used_pct was 100%, connections were rejected (since server start)'
             },
             'performance': {
@@ -490,10 +565,10 @@ class MySQLAdapter(ResourceAdapter):
                 'threads_running': threads_running,
             },
             'innodb_health': {
-                'buffer_pool_hit_rate': f"{buffer_hit_rate:.2f}% (since server start)",
-                'status': buffer_status,
-                'row_lock_waits': f"{row_lock_waits} (since server start)",
-                'deadlocks': f"{deadlocks} (since server start)",
+                'buffer_pool_hit_rate': f"{innodb_health['buffer_hit_rate']:.2f}% (since server start)",
+                'status': innodb_health['status'],
+                'row_lock_waits': f"{innodb_health['row_lock_waits']} (since server start)",
+                'deadlocks': f"{innodb_health['deadlocks']} (since server start)",
             },
             'replication': replication_info,
             'storage': {
@@ -503,10 +578,8 @@ class MySQLAdapter(ResourceAdapter):
             },
             'resource_limits': {
                 'open_files': {
-                    'current': open_files,
-                    'limit': open_files_limit,
-                    'percentage': f'{open_files_pct:.1f}%',
-                    'status': open_files_status,
+                    **resource_limits['open_files'],
+                    'percentage': f"{resource_limits['open_files']['percentage']:.1f}%",
                     'note': 'Approaching limit (>75%) can cause "too many open files" errors'
                 }
             },
