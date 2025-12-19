@@ -244,12 +244,14 @@ class PythonElement(TypedElement):
     @property
     def is_method(self) -> bool:
         """True if this function is a method (inside a class)."""
-        return self.category == "function" and self.parent and self.parent.category == "class"
+        return (self.category == "function" and self.parent and
+                self.parent.category == "class")
 
     @property
     def is_nested_function(self) -> bool:
         """True if this function is nested inside another function."""
-        return self.category == "function" and self.parent and self.parent.category == "function"
+        return (self.category == "function" and self.parent and
+                self.parent.category == "function")
 
     @property
     def is_staticmethod(self) -> bool:
@@ -320,7 +322,13 @@ class PythonElement(TypedElement):
                         end = i
                         break
 
-            params = sig[1:end] if end > 0 else sig[1:-1] if sig.endswith(")") else sig[1:]
+            # Extract parameter list (handle nested parens)
+            if end > 0:
+                params = sig[1:end]
+            elif sig.endswith(")"):
+                params = sig[1:-1]
+            else:
+                params = sig[1:]
 
             # Remove self/cls
             params = params.strip()
