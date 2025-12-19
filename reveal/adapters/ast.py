@@ -214,6 +214,32 @@ class AstAdapter(ResourceAdapter):
             'results': filtered
         }
 
+    def _parse_equality_value(self, key: str, value: str) -> Dict[str, Any]:
+        """Parse equality parameter value based on content.
+
+        Args:
+            key: Parameter key (e.g., 'type', 'name')
+            value: Parameter value to parse
+
+        Returns:
+            Filter dict with operator and parsed value
+        """
+        # Check for OR logic (| or , separator) for type filters
+        if key == 'type' and ('|' in value or ',' in value):
+            separator = '|' if '|' in value else ','
+            types = [t.strip() for t in value.split(separator)]
+            return {'op': 'in', 'value': types}
+
+        # Check if value contains wildcards
+        if '*' in value or '?' in value:
+            return {'op': 'glob', 'value': value}
+
+        # Try to parse as int, otherwise keep as string
+        try:
+            return {'op': '==', 'value': int(value)}
+        except ValueError:
+            return {'op': '==', 'value': value}
+
     def _parse_query(self, query_string: str) -> Dict[str, Any]:
         """Parse query string into filter conditions.
 
@@ -228,7 +254,7 @@ class AstAdapter(ResourceAdapter):
 
         filters = {}
         for param in query_string.split('&'):
-            # Handle different operators
+            # Handle comparison operators (order matters: >= before >)
             if '>=' in param:
                 key, value = param.split('>=', 1)
                 filters[key] = {'op': '>=', 'value': int(value)}
@@ -243,21 +269,7 @@ class AstAdapter(ResourceAdapter):
                 filters[key] = {'op': '<', 'value': int(value)}
             elif '=' in param:
                 key, value = param.split('=', 1)
-                # Check for OR logic (| or , separator) for type filters
-                if key == 'type' and ('|' in value or ',' in value):
-                    separator = '|' if '|' in value else ','
-                    types = [t.strip() for t in value.split(separator)]
-                    filters[key] = {'op': 'in', 'value': types}
-                # Check if value contains wildcards
-                elif '*' in value or '?' in value:
-                    # Use glob pattern matching
-                    filters[key] = {'op': 'glob', 'value': value}
-                else:
-                    # Try to parse as int, otherwise keep as string
-                    try:
-                        filters[key] = {'op': '==', 'value': int(value)}
-                    except ValueError:
-                        filters[key] = {'op': '==', 'value': value}
+                filters[key] = self._parse_equality_value(key, value)
 
         return filters
 
@@ -277,6 +289,17 @@ class AstAdapter(ResourceAdapter):
                 parts.append(f"{key}{op}{val}")
         return " AND ".join(parts)
 
+    def _try_add_file_structure(self, file_path: str, structures: List[Dict[str, Any]]) -> None:
+        """Analyze file and add its structure to list if successful.
+
+        Args:
+            file_path: Path to file to analyze
+            structures: List to append structure to
+        """
+        structure = self._analyze_file(file_path)
+        if structure:
+            structures.append(structure)
+
     def _collect_structures(self, path: str) -> List[Dict[str, Any]]:
         """Collect structure data from file(s).
 
@@ -290,16 +313,12 @@ class AstAdapter(ResourceAdapter):
         path_obj = Path(path)
 
         if path_obj.is_file():
-            structure = self._analyze_file(str(path_obj))
-            if structure:
-                structures.append(structure)
+            self._try_add_file_structure(str(path_obj), structures)
         elif path_obj.is_dir():
             # Recursively find all code files
             for file_path in path_obj.rglob('*'):
                 if file_path.is_file() and self._is_code_file(file_path):
-                    structure = self._analyze_file(str(file_path))
-                    if structure:
-                        structures.append(structure)
+                    self._try_add_file_structure(str(file_path), structures)
 
         return structures
 
@@ -312,6 +331,47 @@ class AstAdapter(ResourceAdapter):
             '.php', '.swift', '.kt', '.scala', '.sh', '.bash'
         }
         return path.suffix.lower() in code_exts
+
+    def _create_element_dict(
+        self,
+        file_path: str,
+        category: str,
+        item: Dict[str, Any],
+        analyzer
+    ) -> Dict[str, Any]:
+        """Create element dict from analyzer item.
+
+        Args:
+            file_path: Source file path
+            category: Element category (functions, classes, etc.)
+            item: Item dict from analyzer
+            analyzer: Analyzer instance for complexity calculation
+
+        Returns:
+            Element dict with standardized fields
+        """
+        # Calculate line_count - functions have it, classes need computation
+        line_count = item.get('line_count')
+        if not line_count and item.get('line_end'):
+            line_count = item.get('line_end', 0) - item.get('line', 0) + 1
+        else:
+            line_count = line_count or 0
+
+        element = {
+            'file': file_path,
+            'category': category,
+            'name': item.get('name', ''),
+            'line': item.get('line', 0),
+            'line_count': line_count,
+            'signature': item.get('signature', ''),
+            'decorators': item.get('decorators', []),
+        }
+
+        # Add complexity for functions/methods
+        if category in ('functions', 'methods'):
+            element['complexity'] = self._calculate_complexity(item, analyzer)
+
+        return element
 
     def _analyze_file(self, file_path: str) -> Optional[Dict[str, Any]]:
         """Analyze a single file and extract structure.
@@ -334,34 +394,12 @@ class AstAdapter(ResourceAdapter):
             if not structure:
                 return None
 
-            # Add file metadata to each element
-            result = {
-                'file': file_path,
-                'elements': []
-            }
-
             # Flatten all elements from structure
+            result = {'file': file_path, 'elements': []}
+
             for category, items in structure.items():
                 for item in items:
-                    # Calculate line_count - functions have it, classes need computation from line_end
-                    line_count = item.get('line_count') or (
-                        item.get('line_end', 0) - item.get('line', 0) + 1
-                        if item.get('line_end') else 0
-                    )
-                    element = {
-                        'file': file_path,
-                        'category': category,
-                        'name': item.get('name', ''),
-                        'line': item.get('line', 0),
-                        'line_count': line_count,
-                        'signature': item.get('signature', ''),
-                        'decorators': item.get('decorators', []),
-                    }
-
-                    # Add complexity if we can calculate it
-                    if category in ('functions', 'methods'):
-                        element['complexity'] = self._calculate_complexity(item, analyzer)
-
+                    element = self._create_element_dict(file_path, category, item, analyzer)
                     result['elements'].append(element)
 
             return result

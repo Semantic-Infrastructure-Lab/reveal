@@ -475,6 +475,142 @@ def handle_adapter(adapter_class: type, scheme: str, resource: str,
         sys.exit(1)
 
 
+def _load_gitignore_patterns(directory: Path) -> list[str]:
+    """Load .gitignore patterns from directory.
+
+    Args:
+        directory: Directory containing .gitignore file
+
+    Returns:
+        List of gitignore patterns (empty if no .gitignore or on error)
+    """
+    gitignore_file = directory / '.gitignore'
+    if not gitignore_file.exists():
+        return []
+
+    try:
+        with open(gitignore_file) as f:
+            return [
+                line.strip() for line in f
+                if line.strip() and not line.startswith('#')
+            ]
+    except Exception:
+        return []
+
+
+def _should_skip_file(relative_path: Path, gitignore_patterns: list[str]) -> bool:
+    """Check if file should be skipped based on gitignore patterns.
+
+    Args:
+        relative_path: File path relative to repository root
+        gitignore_patterns: List of gitignore patterns
+
+    Returns:
+        True if file should be skipped
+    """
+    import fnmatch
+
+    for pattern in gitignore_patterns:
+        if fnmatch.fnmatch(str(relative_path), pattern):
+            return True
+    return False
+
+
+def _collect_files_to_check(directory: Path, gitignore_patterns: list[str]) -> list[Path]:
+    """Collect all supported files in directory tree.
+
+    Args:
+        directory: Root directory to scan
+        gitignore_patterns: Patterns to skip
+
+    Returns:
+        List of file paths to check
+    """
+    from ..base import get_analyzer
+
+    files_to_check = []
+    excluded_dirs = {'.git', '__pycache__', 'node_modules', '.venv', 'venv'}
+
+    for root, dirs, files in os.walk(directory):
+        # Filter out excluded directories
+        dirs[:] = [d for d in dirs if d not in excluded_dirs]
+
+        root_path = Path(root)
+        for filename in files:
+            file_path = root_path / filename
+            relative_path = file_path.relative_to(directory)
+
+            # Skip gitignored files
+            if _should_skip_file(relative_path, gitignore_patterns):
+                continue
+
+            # Check if file has a supported analyzer
+            if get_analyzer(str(file_path), allow_fallback=False):
+                files_to_check.append(file_path)
+
+    return files_to_check
+
+
+def _check_and_report_file(
+    file_path: Path,
+    directory: Path,
+    select: Optional[list[str]],
+    ignore: Optional[list[str]]
+) -> int:
+    """Check a single file and report issues.
+
+    Args:
+        file_path: Path to file to check
+        directory: Base directory for relative paths
+        select: Rule codes to select (None = all)
+        ignore: Rule codes to ignore
+
+    Returns:
+        Number of issues found (0 if no issues or on error)
+    """
+    from ..base import get_analyzer
+    from ..rules import RuleRegistry
+
+    try:
+        analyzer_class = get_analyzer(str(file_path), allow_fallback=False)
+        if not analyzer_class:
+            return 0
+
+        analyzer = analyzer_class(str(file_path))
+        structure = analyzer.get_structure()
+        content = analyzer.content
+
+        detections = RuleRegistry.check_file(
+            str(file_path), structure, content, select=select, ignore=ignore
+        )
+
+        if not detections:
+            return 0
+
+        # Print file header and detections
+        relative = file_path.relative_to(directory)
+        issue_count = len(detections)
+        print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
+
+        for detection in detections:
+            # Determine severity icon
+            severity_icons = {"HIGH": "❌", "MEDIUM": "⚠️ ", "LOW": "ℹ️ "}
+            icon = severity_icons.get(detection.severity.value, "ℹ️ ")
+
+            print(f"{relative}:{detection.line}:{detection.column} {icon} {detection.rule_code} {detection.message}")
+
+            if detection.suggestion:
+                print(f"  💡 {detection.suggestion}")
+            if detection.context:
+                print(f"  📝 {detection.context}")
+
+        return issue_count
+
+    except Exception:
+        # Skip files that can't be read or processed
+        return 0
+
+
 def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     """Handle recursive quality checking of a directory.
 
@@ -482,109 +618,34 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         directory: Directory to check recursively
         args: Parsed arguments
     """
-    from ..base import get_analyzer
-    import fnmatch
-
-    # Collect all supported files
-    files_to_check = []
-
-    # Try to load .gitignore patterns if available
-    gitignore_patterns = []
-    gitignore_file = directory / '.gitignore'
-    if gitignore_file.exists():
-        try:
-            with open(gitignore_file) as f:
-                gitignore_patterns = [
-                    line.strip() for line in f
-                    if line.strip() and not line.startswith('#')
-                ]
-        except Exception:
-            pass
-
-    # Walk directory tree
-    for root, dirs, files in os.walk(directory):
-        root_path = Path(root)
-
-        # Filter directories (remove .git, __pycache__, etc.)
-        dirs[:] = [d for d in dirs if d not in {'.git', '__pycache__', 'node_modules', '.venv', 'venv'}]
-
-        # Check files
-        for filename in files:
-            file_path = root_path / filename
-
-            # Skip if matches .gitignore patterns
-            relative_path = file_path.relative_to(directory)
-            skip = False
-            for pattern in gitignore_patterns:
-                if fnmatch.fnmatch(str(relative_path), pattern):
-                    skip = True
-                    break
-
-            if skip:
-                continue
-
-            # Check if file has a supported analyzer
-            if get_analyzer(str(file_path), allow_fallback=False):
-                files_to_check.append(file_path)
+    # Load gitignore patterns and collect files
+    gitignore_patterns = _load_gitignore_patterns(directory)
+    files_to_check = _collect_files_to_check(directory, gitignore_patterns)
 
     if not files_to_check:
         print(f"No supported files found in {directory}")
         return
 
-    # Run checks on all files
+    # Parse select/ignore options once
+    select = args.select.split(',') if args.select else None
+    ignore = args.ignore.split(',') if args.ignore else None
+
+    # Check all files and collect results
     total_issues = 0
     files_with_issues = 0
 
     for file_path in sorted(files_to_check):
-        try:
-            # Get analyzer for this file
-            analyzer_class = get_analyzer(str(file_path), allow_fallback=False)
-            if not analyzer_class:
-                continue
-
-            analyzer = analyzer_class(str(file_path))
-
-            # Run pattern detection
-            from ..rules import RuleRegistry
-
-            # Parse select/ignore options
-            select = args.select.split(',') if args.select else None
-            ignore = args.ignore.split(',') if args.ignore else None
-
-            # Get structure and content
-            structure = analyzer.get_structure()
-            content = analyzer.content
-
-            # Run rules
-            detections = RuleRegistry.check_file(str(file_path), structure, content, select=select, ignore=ignore)
-
-            if detections:
-                # Print file header
-                relative = file_path.relative_to(directory)
-                print(f"\n{relative}: Found {len(detections)} issue{'s' if len(detections) != 1 else ''}\n")
-
-                # Print each detection
-                for detection in detections:
-                    severity_icon = "⚠️ " if detection.severity.value == "MEDIUM" else "❌" if detection.severity.value == "HIGH" else "ℹ️ "
-                    print(f"{relative}:{detection.line}:{detection.column} {severity_icon} {detection.rule_code} {detection.message}")
-                    if detection.suggestion:
-                        print(f"  💡 {detection.suggestion}")
-                    if detection.context:
-                        print(f"  📝 {detection.context}")
-
-                total_issues += len(detections)
-                files_with_issues += 1
-
-        except Exception as e:
-            # Skip files that can't be read or processed
-            continue
+        issue_count = _check_and_report_file(file_path, directory, select, ignore)
+        if issue_count > 0:
+            total_issues += issue_count
+            files_with_issues += 1
 
     # Print summary
     print(f"\n{'='*60}")
     print(f"Checked {len(files_to_check)} files")
     if total_issues > 0:
         print(f"Found {total_issues} issue{'s' if total_issues != 1 else ''} in {files_with_issues} file{'s' if files_with_issues != 1 else ''}")
-        sys.exit(1)  # Exit with error code if issues found
+        sys.exit(1)
     else:
         print(f"✅ No issues found")
         sys.exit(0)

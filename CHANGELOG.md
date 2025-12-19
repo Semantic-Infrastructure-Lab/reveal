@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Improved
+- **Code Quality**: Fixed critical C905 nesting depth violations across codebase
+  - **routing.py**: Eliminated C905 + C902 violations in `handle_recursive_check()`
+    - Reduced from 113 → 38 lines (66% reduction)
+    - Nesting depth: 6 → 2 (critical C905 violation eliminated)
+    - Extracted 4 focused helpers: `_load_gitignore_patterns()`, `_should_skip_file()`, `_collect_files_to_check()`, `_check_and_report_file()`
+    - Improved modularity and testability of recursive directory checking
+  - **ast.py**: Eliminated all C905 nesting depth violations (3 functions)
+    - `_parse_query()`: Depth 5 → 2 - Extracted `_parse_equality_value()` helper
+    - `_collect_structures()`: Depth 5 → 3 - Extracted `_try_add_file_structure()` helper
+    - `_analyze_file()`: Depth 5 → 3 - Extracted `_create_element_dict()` helper
+    - Cleaner AST query parsing and file collection logic
+  - **Impact**: All critical C905 violations eliminated, 519/519 tests passing, zero regressions
 - **Code Quality**: Fixed C905 nesting depth violations in core modules
   - **structure.py**: Reduced `from_analyzer_output()` from 95 → 64 lines (33% reduction)
     - Nesting depth: 6 → 3 (C905 violation eliminated)
