@@ -17,6 +17,168 @@ from .formatting import (
 )
 
 
+# Helper functions for typed structure rendering
+
+def _matches_category_filter(el, filter_value: str) -> bool:
+    """Check if element matches the category filter.
+
+    Args:
+        el: Element to check (PythonElement or base Element)
+        filter_value: Filter string (lowercased)
+
+    Returns:
+        True if element matches filter
+    """
+    from reveal.elements import PythonElement
+
+    if isinstance(el, PythonElement):
+        # Check display_category (property, staticmethod, method, etc.)
+        if el.display_category.lower() == filter_value:
+            return True
+        # Also check raw category for class, function, import
+        if el.category.lower() == filter_value:
+            return True
+    else:
+        if el.category.lower() == filter_value:
+            return True
+    return False
+
+
+def _filter_element_tree(elements, filter_value: str):
+    """Recursively filter elements and their children.
+
+    Args:
+        elements: List of elements to filter
+        filter_value: Filter string (lowercased)
+
+    Returns:
+        Filtered list of elements
+    """
+    result = []
+    for el in elements:
+        if _matches_category_filter(el, filter_value):
+            result.append(el)
+        else:
+            # Check children for matches
+            filtered_children = _filter_element_tree(el.children, filter_value)
+            if filtered_children:
+                # Include this element as container for matching children
+                result.append(el)
+    return result
+
+
+def _count_filtered_matches(elements, filter_value: str) -> int:
+    """Count total elements matching filter recursively.
+
+    Args:
+        elements: List of elements to count
+        filter_value: Filter string (lowercased)
+
+    Returns:
+        Count of matching elements
+    """
+    count = 0
+    for el in elements:
+        if _matches_category_filter(el, filter_value):
+            count += 1
+        count += _count_filtered_matches(el.children, filter_value)
+    return count
+
+
+def _format_element_parts(el) -> List[str]:
+    """Format element display parts (name, signature, type, etc.).
+
+    Args:
+        el: Element to format
+
+    Returns:
+        List of formatted parts to join
+    """
+    from reveal.elements import PythonElement
+
+    parts = []
+
+    # For PythonElement, use enhanced display
+    if isinstance(el, PythonElement):
+        # Decorator prefix (e.g., @property, @classmethod)
+        if el.decorator_prefix and el.category == "function":
+            parts.append(el.decorator_prefix)
+
+        # Name with optional signature
+        if el.compact_signature and el.category == "function":
+            parts.append(f"{el.name}{el.compact_signature}")
+        else:
+            parts.append(el.name)
+
+        # Return type
+        if el.return_type:
+            parts.append(f"→ {el.return_type}")
+
+        # Category (semantic: method, property, classmethod, etc.)
+        parts.append(f"({el.display_category})")
+    else:
+        # Base element: simple format
+        parts.append(el.name)
+        parts.append(f"({el.category})")
+
+    # Line range
+    if el.line != el.line_end:
+        parts.append(f"[{el.line}-{el.line_end}]")
+    else:
+        parts.append(f"[{el.line}]")
+
+    # Line count for multi-line elements
+    line_count = el.line_end - el.line + 1
+    if line_count > 10:
+        parts.append(f"{line_count} lines")
+
+    # Quality warnings for functions
+    if isinstance(el, PythonElement) and el.category == "function":
+        depth = getattr(el, "depth", 0)
+        if isinstance(depth, int) and depth > 4:
+            parts.append(f"⚠ depth:{depth}")
+
+    return parts
+
+
+def _render_typed_element(el, indent=0):
+    """Render a single typed element and its children recursively.
+
+    Args:
+        el: Element to render
+        indent: Indentation level
+    """
+    prefix = "  " * indent
+    parts = _format_element_parts(el)
+    print(f"{prefix}{' '.join(parts)}")
+
+    for child in el.children:
+        _render_typed_element(child, indent + 1)
+
+
+def _print_typed_header(typed, category_filter=None, match_count=None):
+    """Print header for typed structure output.
+
+    Args:
+        typed: TypedStructure instance
+        category_filter: Optional category filter string
+        match_count: Optional count of filtered matches
+    """
+    if category_filter:
+        # Filtered view
+        if typed.reveal_type:
+            print(f"Type: {typed.reveal_type.name}")
+        print(f"Filter: {category_filter}")
+        print(f"Matches: {match_count}")
+        print()
+    else:
+        # Full view
+        if typed.reveal_type:
+            print(f"Type: {typed.reveal_type.name}")
+        print(f"Elements: {len(typed)} ({typed.stats.get('roots', 0)} roots)")
+        print()
+
+
 def _render_typed_structure_output(
     analyzer: FileAnalyzer,
     structure: Dict[str, List[Dict[str, Any]]],
@@ -27,6 +189,8 @@ def _render_typed_structure_output(
 
     Converts raw analyzer output to TypedStructure with containment
     relationships, then renders in the specified format.
+
+    Refactored to reduce complexity from 69 → ~20 by extracting helpers.
 
     Args:
         analyzer: The file analyzer
@@ -63,122 +227,27 @@ def _render_typed_structure_output(
 
     # Apply category filter if specified
     if category_filter:
-        from reveal.elements import PythonElement
         filter_lower = category_filter.lower()
 
-        def matches_filter(el):
-            """Check if element matches the category filter."""
-            if isinstance(el, PythonElement):
-                # Check display_category (property, staticmethod, method, etc.)
-                if el.display_category.lower() == filter_lower:
-                    return True
-                # Also check raw category for class, function, import
-                if el.category.lower() == filter_lower:
-                    return True
-            else:
-                if el.category.lower() == filter_lower:
-                    return True
-            return False
-
-        def filter_tree(elements):
-            """Recursively filter elements and their children."""
-            result = []
-            for el in elements:
-                if matches_filter(el):
-                    result.append(el)
-                else:
-                    # Check children for matches
-                    filtered_children = filter_tree(el.children)
-                    if filtered_children:
-                        # Include this element as container for matching children
-                        result.append(el)
-            return result
-
-        # Filter roots and count matches
-        filtered_roots = filter_tree(typed.roots)
+        # Filter roots using extracted helper
+        filtered_roots = _filter_element_tree(typed.roots, filter_lower)
         if not filtered_roots:
             print(f"No elements matching filter '{category_filter}'")
             return
 
-        # Count total matches
-        def count_matches(elements):
-            count = 0
-            for el in elements:
-                if matches_filter(el):
-                    count += 1
-                count += count_matches(el.children)
-            return count
+        # Count matches using extracted helper
+        match_count = _count_filtered_matches(typed.roots, filter_lower)
 
-        match_count = count_matches(typed.roots)
-
-        # Print type info with filter
-        if typed.reveal_type:
-            print(f"Type: {typed.reveal_type.name}")
-        print(f"Filter: {category_filter}")
-        print(f"Matches: {match_count}")
-        print()
+        # Print header with filter info
+        _print_typed_header(typed, category_filter, match_count)
     else:
         filtered_roots = typed.roots
-        # Print type info
-        if typed.reveal_type:
-            print(f"Type: {typed.reveal_type.name}")
-        print(f"Elements: {len(typed)} ({typed.stats.get('roots', 0)} roots)")
-        print()
+        # Print header without filter
+        _print_typed_header(typed)
 
-    # Render tree structure with rich formatting
-    def render_element(el, indent=0):
-        from reveal.elements import PythonElement
-
-        prefix = "  " * indent
-        parts = []
-
-        # For PythonElement, use enhanced display
-        if isinstance(el, PythonElement):
-            # Decorator prefix (e.g., @property, @classmethod)
-            if el.decorator_prefix and el.category == "function":
-                parts.append(el.decorator_prefix)
-
-            # Name with optional signature
-            if el.compact_signature and el.category == "function":
-                parts.append(f"{el.name}{el.compact_signature}")
-            else:
-                parts.append(el.name)
-
-            # Return type
-            if el.return_type:
-                parts.append(f"→ {el.return_type}")
-
-            # Category (semantic: method, property, classmethod, etc.)
-            parts.append(f"({el.display_category})")
-        else:
-            # Base element: simple format
-            parts.append(el.name)
-            parts.append(f"({el.category})")
-
-        # Line range
-        if el.line != el.line_end:
-            parts.append(f"[{el.line}-{el.line_end}]")
-        else:
-            parts.append(f"[{el.line}]")
-
-        # Line count for multi-line elements
-        line_count = el.line_end - el.line + 1
-        if line_count > 10:
-            parts.append(f"{line_count} lines")
-
-        # Quality warnings for functions
-        if isinstance(el, PythonElement) and el.category == "function":
-            depth = getattr(el, "depth", 0)
-            if isinstance(depth, int) and depth > 4:
-                parts.append(f"⚠ depth:{depth}")
-
-        print(f"{prefix}{' '.join(parts)}")
-
-        for child in el.children:
-            render_element(child, indent + 1)
-
+    # Render tree structure using extracted helper
     for root in filtered_roots:
-        render_element(root)
+        _render_typed_element(root)
 
     # Navigation hints
     print()
