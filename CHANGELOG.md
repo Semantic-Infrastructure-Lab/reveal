@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Bash Analyzer**: Fixed function extraction by overriding `_get_node_name()`
+  - Bash tree-sitter uses 'word' node type for names, not 'identifier'
+  - Now correctly extracts functions from bash/shell scripts
+  - Fixes 3 failing tests (test_bash_with_complex_script, test_cross_platform_analysis, test_extract_functions)
+  - Test results: 516 → 519 passing tests (100% pass rate)
 - **Markdown Analyzer**: Correctly distinguish between filtering and navigation modes
   - `reveal doc.md --links` now shows ONLY links (filtering mode)
   - `reveal doc.md --head 5 --links` shows headings AND links (navigation mode)

@@ -26,19 +26,16 @@ class BashAnalyzer(TreeSitterAnalyzer):
     """
     language = 'bash'
 
-    def _get_function_name(self, node) -> Optional[str]:
-        """Extract function name from bash function_definition node.
+    def _get_node_name(self, node) -> Optional[str]:
+        """Get the name of a bash node (function/variable/etc).
 
-        Bash tree-sitter uses 'word' for function names, not 'identifier'.
-
-        Bash function syntax:
-        - function name() { ... }  # 'function' keyword, then 'word'
-        - name() { ... }           # just 'word'
+        Bash tree-sitter uses 'word' for names, not 'identifier'.
+        This is called by _extract_functions() and other extraction methods.
         """
         # Look for 'word' child (bash uses this instead of 'identifier')
         for child in node.children:
             if child.type == 'word':
                 return self._get_node_text(child)
 
-        # Fallback to parent implementation
-        return super()._get_function_name(node)
+        # Fallback to parent implementation (checks for 'identifier' or 'name')
+        return super()._get_node_name(node)
