@@ -1,5 +1,5 @@
 # Reveal - AI Agent Reference
-**Version:** 0.24.1
+**Version:** 0.24.2
 **Purpose:** Practical patterns for AI code assistants
 **Token Cost:** ~2,200 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -582,7 +582,7 @@ rg -l "authenticate" src/ | reveal --stdin --outline
 
 ---
 
-**Version:** 0.24.1
+**Version:** 0.24.2
 **Last updated:** 2025-12-16
 **Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
 **PyPI:** https://pypi.org/project/reveal-cli/
