@@ -40,7 +40,7 @@ class AstAdapter(ResourceAdapter):
             },
             'filters': {
                 'lines': 'Number of lines in function/class (e.g., lines>50)',
-                'complexity': 'Cyclomatic complexity score 1-10 (e.g., complexity>5)',
+                'complexity': 'McCabe cyclomatic complexity (industry threshold: >10 needs refactoring, >20 is high risk)',
                 'type': 'Element type: function, class, method. Supports OR with | or , (e.g., type=function, type=class|function)',
                 'name': 'Element name pattern with wildcards (e.g., name=test_*, name=*helper*, name=get_?)',
                 'decorator': 'Decorator pattern - find decorated functions/classes (e.g., decorator=property, decorator=*cache*)'
@@ -79,7 +79,7 @@ class AstAdapter(ResourceAdapter):
                     'description': 'Long but simple functions (low complexity)'
                 },
                 {
-                    'uri': "ast://./src?complexity>5 --format=json",
+                    'uri': "ast://./src?complexity>10 --format=json",
                     'description': 'JSON output for scripting'
                 },
                 {
@@ -101,7 +101,7 @@ class AstAdapter(ResourceAdapter):
             ],
             # Executable examples for current directory
             'try_now': [
-                "reveal 'ast://.?complexity>5'",
+                "reveal 'ast://.?complexity>10'",
                 "reveal 'ast://.?name=test_*'",
                 "reveal 'ast://.?decorator=property'",
                 "reveal 'ast://.?decorator=*cache*'",
