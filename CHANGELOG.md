@@ -267,6 +267,26 @@ reveal mysql://localhost --check --format=json
    - ✅ Production-validated on 175GB database
    - ✅ Complete test coverage for core functionality
 
+## [0.24.2] - 2025-12-18
+
+### 🐛 Bug Fixes
+
+**Critical: Fixed missing database extra in PyPI package**
+- PyPI package now properly includes `[database]` extra for MySQL support
+- Fixed: `pip install reveal-cli[database]` now correctly installs `pymysql>=1.0.0`
+- **Previous behavior:** Warning "reveal-cli does not provide the extra 'database'"
+- **New behavior:** Clean installation with mysql:// adapter fully functional
+
+**Installation:**
+```bash
+pip install reveal-cli[database]  # ✅ Now works correctly
+```
+
+**Impact:**
+- Users can now install MySQL support as documented in INSTALL.md
+- Database health monitoring features now accessible via standard PyPI install
+- No need to install from source for mysql:// adapter functionality
+
 ## [0.24.1] - 2025-12-17
 
 ### 🐛 Bug Fixes
