@@ -97,6 +97,62 @@ def _parse_import_name(content: str) -> str:
     return ""
 
 
+def _create_element_from_item(
+    item: dict,
+    category: str,
+    element_class: type,
+) -> Optional[TypedElement]:
+    """Create a TypedElement from an analyzer item dict.
+
+    Extracts required fields (name, line, line_end), handles special
+    cases (e.g., imports), and copies additional properties.
+
+    Args:
+        item: Item dict from analyzer output
+        category: Element category (function, class, etc.)
+        element_class: TypedElement class or subclass to instantiate
+
+    Returns:
+        TypedElement instance with properties copied from item,
+        or None if item is invalid
+    """
+    if not isinstance(item, dict):
+        return None
+
+    # Required fields
+    name = item.get("name", "")
+    line = item.get("line", 0)
+    line_end = item.get("line_end", line)
+
+    # For imports, parse module name from content if name is empty
+    if category == "import" and not name:
+        content = item.get("content", "")
+        name = _parse_import_name(content)
+
+    # Create element with appropriate class
+    el = element_class(
+        name=name,
+        line=line,
+        line_end=line_end,
+        category=category,
+    )
+
+    # Copy additional properties from item (skip computed properties)
+    skip_props = {"name", "line", "line_end", "line_count", "depth"}
+    for prop_key, prop_value in item.items():
+        if prop_key in skip_props:
+            continue
+        # Only set if it's a data attribute, not a property
+        if hasattr(el, prop_key):
+            try:
+                setattr(el, prop_key, prop_value)
+            except AttributeError:
+                # Skip computed properties that can't be set
+                pass
+
+    return el
+
+
 @dataclass
 class TypedStructure:
     """Container for typed elements with navigation.
@@ -183,42 +239,11 @@ class TypedStructure:
             if not isinstance(items, list):
                 continue
 
+            # Create elements from items
             for item in items:
-                if not isinstance(item, dict):
-                    continue
-
-                # Required fields
-                name = item.get("name", "")
-                line = item.get("line", 0)
-                line_end = item.get("line_end", line)
-
-                # For imports, parse module name from content if name is empty
-                if category == "import" and not name:
-                    content = item.get("content", "")
-                    name = _parse_import_name(content)
-
-                # Create element with appropriate class
-                el = element_class(
-                    name=name,
-                    line=line,
-                    line_end=line_end,
-                    category=category,
-                )
-
-                # Copy additional properties from item (skip computed properties)
-                skip_props = {"name", "line", "line_end", "line_count", "depth"}
-                for prop_key, prop_value in item.items():
-                    if prop_key in skip_props:
-                        continue
-                    # Only set if it's a data attribute, not a property
-                    if hasattr(el, prop_key):
-                        try:
-                            setattr(el, prop_key, prop_value)
-                        except AttributeError:
-                            # Skip computed properties that can't be set
-                            pass
-
-                elements.append(el)
+                el = _create_element_from_item(item, category, element_class)
+                if el is not None:
+                    elements.append(el)
 
         return cls(path=path, reveal_type=reveal_type, elements=elements)
 

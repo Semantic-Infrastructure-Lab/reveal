@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Improved
+- **Code Quality**: Fixed C905 nesting depth violations in core modules
+  - **structure.py**: Reduced `from_analyzer_output()` from 95 → 64 lines (33% reduction)
+    - Nesting depth: 6 → 3 (C905 violation eliminated)
+    - Extracted `_create_element_from_item()` helper (54 lines)
+    - Cleaner separation of element creation logic
+  - **elements.py**: Reduced `compact_signature()` from 79 → 34 lines (57% reduction!)
+    - Nesting depth: 6 → 3 (C905 violation eliminated)
+    - Extracted 3 focused helpers: `_find_closing_paren()`, `_extract_param_name()`, `_extract_param_names()`
+    - Dramatic simplification of signature parsing
+  - Total: 76 lines reduced, 5 helper functions created
+  - All 519 tests passing, zero regressions
 - **MySQL Adapter**: Refactored for better maintainability
   - Fixed C905 nesting depth warning in `_resolve_credentials()` (depth 5 → 4)
   - Extracted `_try_tia_secrets()` helper method for cleaner credential resolution

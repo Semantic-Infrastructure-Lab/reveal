@@ -35,6 +35,87 @@ if TYPE_CHECKING:
     from .type_system import RevealType
 
 
+def _find_closing_paren(sig: str) -> int:
+    """Find index of matching closing paren, handling nesting.
+
+    Args:
+        sig: Signature string starting with opening paren
+
+    Returns:
+        Index of matching closing paren, or -1 if not found
+    """
+    depth = 0
+    for i, c in enumerate(sig):
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def _extract_param_name(param: str) -> Optional[str]:
+    """Extract parameter name from a parameter definition.
+
+    Args:
+        param: Single parameter definition, e.g., "x: int" or "y = 5"
+
+    Returns:
+        Parameter name, or None if invalid
+    """
+    param = param.strip()
+    if not param:
+        return None
+
+    # Get just the name (before : or =)
+    name = param.split(":")[0].split("=")[0].strip()
+    return name if name else None
+
+
+def _extract_param_names(params: str) -> List[str]:
+    """Extract parameter names from param string, respecting nesting.
+
+    Parses a parameter list and extracts just the names, handling:
+    - Type annotations: "x: int" -> "x"
+    - Default values: "y = 5" -> "y"
+    - Nested brackets: "z: List[str]" -> "z"
+    - Variadic params: "*args, **kwargs"
+
+    Args:
+        params: Parameter string (without parens), e.g., "x: int, y: List[str] = []"
+
+    Returns:
+        List of parameter names, e.g., ["x", "y"]
+    """
+    simplified = []
+    current = ""
+    depth = 0
+
+    for c in params:
+        if c in "([{":
+            depth += 1
+            current += c
+        elif c in ")]}":
+            depth -= 1
+            current += c
+        elif c == "," and depth == 0:
+            # End of parameter - extract name
+            name = _extract_param_name(current)
+            if name:
+                simplified.append(name)
+            current = ""
+        else:
+            current += c
+
+    # Don't forget last parameter
+    name = _extract_param_name(current)
+    if name:
+        simplified.append(name)
+
+    return simplified
+
+
 @dataclass
 class TypedElement:
     """Base class for navigable, typed elements.
@@ -307,78 +388,34 @@ class PythonElement(TypedElement):
             return ""
 
         sig = self.signature.strip()
+        if not sig.startswith("("):
+            return ""
 
-        # Extract just the params part: (x, y, z) -> "x, y, z"
-        if sig.startswith("("):
-            # Find matching closing paren (handle nested brackets)
-            depth = 0
-            end = 0
-            for i, c in enumerate(sig):
-                if c in "([{":
-                    depth += 1
-                elif c in ")]}":
-                    depth -= 1
-                    if depth == 0:
-                        end = i
-                        break
+        # Find matching closing paren and extract parameter string
+        end = _find_closing_paren(sig)
+        if end > 0:
+            params = sig[1:end]
+        elif sig.endswith(")"):
+            params = sig[1:-1]
+        else:
+            params = sig[1:]
 
-            # Extract parameter list (handle nested parens)
-            if end > 0:
-                params = sig[1:end]
-            elif sig.endswith(")"):
-                params = sig[1:-1]
-            else:
-                params = sig[1:]
+        # Remove self/cls from parameter list
+        params = params.strip()
+        if params.startswith("self"):
+            params = params[4:].lstrip(",").strip()
+        elif params.startswith("cls"):
+            params = params[3:].lstrip(",").strip()
 
-            # Remove self/cls
-            params = params.strip()
-            if params.startswith("self"):
-                params = params[4:].lstrip(",").strip()
-            elif params.startswith("cls"):
-                params = params[3:].lstrip(",").strip()
+        # Extract parameter names (handles nesting, type annotations, defaults)
+        simplified = _extract_param_names(params)
 
-            # Split on commas, respecting brackets
-            simplified = []
-            current = ""
-            depth = 0
-            for c in params:
-                if c in "([{":
-                    depth += 1
-                    current += c
-                elif c in ")]}":
-                    depth -= 1
-                    current += c
-                elif c == "," and depth == 0:
-                    # End of parameter
-                    param = current.strip()
-                    if param:
-                        # Get just the name (before : or =)
-                        name = param.split(":")[0].split("=")[0].strip()
-                        if name.startswith("*"):
-                            simplified.append(name)
-                        elif name:
-                            simplified.append(name)
-                    current = ""
-                else:
-                    current += c
-
-            # Don't forget last parameter
-            param = current.strip()
-            if param:
-                name = param.split(":")[0].split("=")[0].strip()
-                if name.startswith("*"):
-                    simplified.append(name)
-                elif name:
-                    simplified.append(name)
-
-            # Truncate if too many
-            if len(simplified) > 4:
-                return f"({', '.join(simplified[:3])}, ...)"
-            elif simplified:
-                return f"({', '.join(simplified)})"
-            return "()"
-
-        return ""
+        # Format output, truncating if > 4 parameters
+        if len(simplified) > 4:
+            return f"({', '.join(simplified[:3])}, ...)"
+        elif simplified:
+            return f"({', '.join(simplified)})"
+        return "()"
 
     @cached_property
     def return_type(self) -> str:
