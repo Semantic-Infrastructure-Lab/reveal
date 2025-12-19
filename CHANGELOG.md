@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Markdown Analyzer**: Correctly distinguish between filtering and navigation modes
+  - `reveal doc.md --links` now shows ONLY links (filtering mode)
+  - `reveal doc.md --head 5 --links` shows headings AND links (navigation mode)
+  - Outline mode (`--outline`) now correctly includes headings even with other flags
+  - Fixes 4 regression tests that were failing
+  - Test results: 512 → 516 passing tests
+
 ### ✨ NEW: Unified Configuration System
 
 **XDG-compliant config management** - Consistent, predictable configuration across all reveal components!
