@@ -31,12 +31,14 @@ class MySQLAdapter(ResourceAdapter):
         """Get help documentation for mysql:// adapter."""
         return {
             'name': 'mysql',
-            'description': 'MySQL database inspection - progressive disclosure of health, connections, InnoDB, replication',
+            'description': ('MySQL database inspection - progressive disclosure '
+                           'of health, connections, InnoDB, replication'),
             'syntax': 'mysql://[user:password@]host[:port][/element]',
             'examples': [
                 {
                     'uri': 'mysql://localhost',
-                    'description': 'Health overview (connections, InnoDB, replication, storage)'
+                    'description': ('Health overview (connections, InnoDB, '
+                                   'replication, storage)')
                 },
                 {
                     'uri': 'mysql://localhost/connections',
@@ -74,7 +76,8 @@ class MySQLAdapter(ResourceAdapter):
             'features': [
                 'DBA health snapshot (~100 tokens vs 5000+ for raw SQL)',
                 'Progressive disclosure (structure → element → detail)',
-                'Industry-standard tuning ratios (table scans, thread cache, temp tables, etc.)',
+                ('Industry-standard tuning ratios (table scans, thread cache, '
+                 'temp tables, etc.)'),
                 'Time context accuracy (uses MySQL clock, not local machine)',
                 'Index usage analysis (most used, unused)',
                 'Health checks with pass/warn/fail thresholds',
@@ -110,7 +113,8 @@ class MySQLAdapter(ResourceAdapter):
                 {
                     'bad': "mysql -e 'SHOW STATUS' | grep -i innodb",
                     'good': "reveal mysql://localhost/innodb",
-                    'why': "50x fewer tokens, structured output, DBA-relevant signals only",
+                    'why': ("50x fewer tokens, structured output, "
+                           "DBA-relevant signals only"),
                 },
                 {
                     'bad': "mysql -e 'SHOW PROCESSLIST\\G'",
@@ -122,8 +126,10 @@ class MySQLAdapter(ResourceAdapter):
                 'Requires pymysql: pip install reveal-cli[database]',
                 'Credentials: URI > TIA secrets > env vars > ~/.my.cnf',
                 'Env vars: MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE',
-                'Health thresholds: connections <80%, buffer pool >99%, replication lag <60s',
-                'DBA tuning ratios: table scans <25%, thread cache miss <10%, temp tables on disk <25%',
+                ('Health thresholds: connections <80%, buffer pool >99%, '
+                 'replication lag <60s'),
+                ('DBA tuning ratios: table scans <25%, thread cache miss <10%, '
+                 'temp tables on disk <25%'),
                 'All metrics show "since server start" with accurate MySQL timestamps',
             ],
             'output_formats': ['text', 'json', 'grep'],
@@ -353,10 +359,17 @@ class MySQLAdapter(ResourceAdapter):
         current_connections = int(status_vars.get('Threads_connected', 0))
         max_used_connections = int(status_vars.get('Max_used_connections', 0))
 
-        connection_pct = (current_connections / max_connections * 100) if max_connections else 0
-        max_used_pct = (max_used_connections / max_connections * 100) if max_connections else 0
+        connection_pct = ((current_connections / max_connections * 100)
+                         if max_connections else 0)
+        max_used_pct = ((max_used_connections / max_connections * 100)
+                       if max_connections else 0)
 
-        connection_status = '✅' if connection_pct < 80 else '⚠️' if connection_pct < 95 else '❌'
+        if connection_pct < 80:
+            connection_status = '✅'
+        elif connection_pct < 95:
+            connection_status = '⚠️'
+        else:
+            connection_status = '❌'
         max_used_status = '⚠️' if max_used_pct >= 100 else '✅'
 
         # Performance (counters are cumulative since server start)
@@ -368,9 +381,20 @@ class MySQLAdapter(ResourceAdapter):
 
         # InnoDB health (counters are cumulative since server start)
         innodb_buffer_pool_reads = int(status_vars.get('Innodb_buffer_pool_reads', 0))
-        innodb_buffer_pool_read_requests = int(status_vars.get('Innodb_buffer_pool_read_requests', 1))
-        buffer_hit_rate = 100 * (1 - innodb_buffer_pool_reads / innodb_buffer_pool_read_requests) if innodb_buffer_pool_read_requests else 0
-        buffer_status = '✅' if buffer_hit_rate > 99 else '⚠️' if buffer_hit_rate > 95 else '❌'
+        innodb_buffer_pool_read_requests = int(
+            status_vars.get('Innodb_buffer_pool_read_requests', 1))
+        if innodb_buffer_pool_read_requests:
+            buffer_hit_rate = (100 * (1 - innodb_buffer_pool_reads /
+                                     innodb_buffer_pool_read_requests))
+        else:
+            buffer_hit_rate = 0
+
+        if buffer_hit_rate > 99:
+            buffer_status = '✅'
+        elif buffer_hit_rate > 95:
+            buffer_status = '⚠️'
+        else:
+            buffer_status = '❌'
 
         row_lock_waits = int(status_vars.get('Innodb_row_lock_waits', 0))
         deadlocks = int(status_vars.get('Innodb_deadlocks', 0))
@@ -380,9 +404,15 @@ class MySQLAdapter(ResourceAdapter):
         open_files_limit = int(self._execute_single(
             "SHOW VARIABLES LIKE 'open_files_limit'"
         )['Value'])
-        open_files_pct = (open_files / open_files_limit * 100) if open_files_limit > 0 else 0
+        open_files_pct = ((open_files / open_files_limit * 100)
+                         if open_files_limit > 0 else 0)
 
-        open_files_status = '✅' if open_files_pct < 75 else '⚠️' if open_files_pct < 90 else '❌'
+        if open_files_pct < 75:
+            open_files_status = '✅'
+        elif open_files_pct < 90:
+            open_files_status = '⚠️'
+        else:
+            open_files_status = '❌'
 
         # Replication (check if slave)
         try:
@@ -415,7 +445,8 @@ class MySQLAdapter(ResourceAdapter):
         db_sizes = self._execute_query("""
             SELECT
                 table_schema as db_name,
-                ROUND(SUM(data_length + index_length) / 1024 / 1024 / 1024, 2) as size_gb
+                ROUND(SUM(data_length + index_length) / 1024 / 1024 / 1024, 2)
+                    as size_gb
             FROM information_schema.tables
             WHERE table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
             GROUP BY table_schema
