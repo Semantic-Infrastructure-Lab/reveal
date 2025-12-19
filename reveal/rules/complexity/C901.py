@@ -50,7 +50,11 @@ class C901(BaseRule):
         functions = structure.get('functions', [])
 
         for func in functions:
-            complexity = self._calculate_complexity(func, content)
+            # Use complexity from structure if available (tree-sitter calculated)
+            # Otherwise fall back to manual calculation
+            complexity = func.get('complexity')
+            if complexity is None:
+                complexity = self._calculate_complexity(func, content)
 
             if complexity > self.THRESHOLD:
                 line = func.get('line', 0)
@@ -85,8 +89,9 @@ class C901(BaseRule):
             Estimated complexity score
         """
         # Get function content if we have line numbers
+        # Accept both 'end_line' and 'line_end' (tree-sitter uses 'line_end')
         start_line = func.get('line', 0)
-        end_line = func.get('end_line', start_line)
+        end_line = func.get('end_line') or func.get('line_end') or start_line
 
         if start_line == 0 or end_line == 0:
             # Fall back to simple heuristics from metadata

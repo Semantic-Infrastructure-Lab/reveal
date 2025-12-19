@@ -156,6 +156,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                         'signature': self._get_signature(func_node),
                         'line_count': line_count,
                         'depth': self._get_nesting_depth(func_node),
+                        'complexity': self._calculate_complexity(func_node),
                         'decorators': decorators,
                     })
                     processed_funcs.add((func_line, name))
@@ -182,6 +183,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
                     'signature': self._get_signature(node),
                     'line_count': line_count,
                     'depth': self._get_nesting_depth(node),
+                    'complexity': self._calculate_complexity(node),
                     'decorators': [],
                 })
 
@@ -430,3 +432,70 @@ class TreeSitterAnalyzer(FileAnalyzer):
             return max_depth
 
         return get_depth(node)
+
+    def _calculate_complexity(self, node) -> int:
+        """Calculate cyclomatic complexity for a function node.
+
+        McCabe complexity: count of decision points + 1
+        Decision points: if, elif, for, while, and, or, try/except, case, etc.
+
+        Args:
+            node: Tree-sitter node (function/method)
+
+        Returns:
+            Cyclomatic complexity score (1 = simple, higher = more complex)
+        """
+        if not node:
+            return 1
+
+        # Decision point node types across languages
+        # These represent branches in the control flow
+        decision_types = {
+            # Conditionals (each branch is a decision point)
+            'if_statement', 'if_expression', 'if',
+            'elif_clause', 'else_if_clause',
+            'case_statement', 'switch_case',
+
+            # Loops (each loop is a decision point)
+            'for_statement', 'for_expression', 'for',
+            'while_statement', 'while',
+            'do_statement',
+
+            # Boolean operators (each adds a branch)
+            'boolean_operator', 'binary_operator',  # Generic
+            'and', 'or',  # Python
+            'logical_and', 'logical_or',  # C-family
+
+            # Ternary/conditional expressions
+            'conditional_expression', 'ternary_expression',
+
+            # Exception handling (each except/catch is a branch)
+            'except_clause', 'catch_clause',
+
+            # Pattern matching
+            'match_statement', 'case_clause',
+        }
+
+        def count_decisions(n):
+            """Recursively count decision points."""
+            count = 0
+
+            for child in n.children:
+                # Count this node if it's a decision point
+                if child.type in decision_types:
+                    count += 1
+
+                # Special handling for boolean operators in expressions
+                # Check if operator is 'and' or 'or' by examining node text
+                if child.type in ('binary_operator', 'boolean_operator'):
+                    text = self._get_node_text(child)
+                    if text and any(op in text for op in [' and ', ' or ', '&&', '||']):
+                        count += 1
+
+                # Recursively count in children
+                count += count_decisions(child)
+
+            return count
+
+        # McCabe complexity = decision points + 1
+        return count_decisions(node) + 1

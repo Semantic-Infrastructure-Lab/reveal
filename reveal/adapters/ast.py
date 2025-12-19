@@ -369,7 +369,9 @@ class AstAdapter(ResourceAdapter):
 
         # Add complexity for functions/methods
         if category in ('functions', 'methods'):
-            element['complexity'] = self._calculate_complexity(item, analyzer)
+            # Use complexity from item if available (tree-sitter calculated)
+            # Otherwise calculate with heuristic
+            element['complexity'] = item.get('complexity') or self._calculate_complexity(item, analyzer)
 
         return element
 
@@ -412,6 +414,9 @@ class AstAdapter(ResourceAdapter):
     def _calculate_complexity(self, element: Dict[str, Any], analyzer) -> int:
         """Calculate cyclomatic complexity for a function.
 
+        NOTE: This is a fallback heuristic for non-tree-sitter analyzers.
+        Tree-sitter analyzers calculate proper McCabe complexity.
+
         Args:
             element: Function element dict
             analyzer: FileAnalyzer instance
@@ -419,15 +424,15 @@ class AstAdapter(ResourceAdapter):
         Returns:
             Complexity score (1 = simple, higher = more complex)
         """
-        # For now, use a simple heuristic based on line count
-        # TODO: Implement proper tree-sitter based complexity
+        # Fallback heuristic based on line count
+        # Used only when tree-sitter complexity is not available
         line_count = element.get('line_count', 0)
 
         # Very rough heuristic:
         # - Simple function (1-10 lines) = 1-2
         # - Medium function (11-30 lines) = 3-5
         # - Complex function (31-50 lines) = 6-8
-        # - Very complex (50+) = 9+
+        # - Very complex (50+) = proportional to lines
 
         if line_count <= 10:
             return 1
@@ -440,7 +445,8 @@ class AstAdapter(ResourceAdapter):
         elif line_count <= 60:
             return 7
         else:
-            return min(10, line_count // 10)
+            # No cap! Let it scale with line count
+            return line_count // 10
 
     def _apply_filters(self, structures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Apply query filters to collected structures.
