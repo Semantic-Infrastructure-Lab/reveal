@@ -102,6 +102,44 @@ reveal python://syspath
 
 ## AST Query Wizardry
 
+### Complexity Analysis (NEW v0.25.0)
+
+**Tree-sitter based McCabe complexity** - now accurate across all languages!
+
+```bash
+# Find complex functions (industry standard: >10 needs refactoring)
+reveal 'ast://./src?complexity>10'
+
+# The danger zone - extremely complex functions
+reveal 'ast://./src?complexity>20'
+
+# Find functions that are BOTH complex AND long (prime refactoring targets)
+reveal 'ast://./src?complexity>15&lines>100'
+
+# Compact but complex - lots of logic in few lines (code golf smell)
+reveal 'ast://./src?complexity>10&lines<50'
+
+# Top 10 most complex functions in your codebase
+reveal 'ast://./src?type=function' --format=json | \
+  jq -r '[.results[] | {name, file, complexity, lines: .line_count}] |
+         sort_by(.complexity) | reverse | .[0:10][] |
+         "\(.file) - \(.name) (complexity: \(.complexity), lines: \(.lines))"'
+
+# Find all god functions (both metrics high)
+reveal 'ast://./src?complexity>30|lines>150'
+
+# Simple but long - candidate for splitting or inlining
+reveal 'ast://./src?complexity<5&lines>50'
+```
+
+**Real example from reveal's codebase:**
+```bash
+$ reveal 'ast://reveal?complexity>50'
+# Found: _render_typed_structure_output (complexity: 69, 167 lines)
+# Found: check/mysql.py (complexity: 58, 154 lines)
+# Found: handle_decorator_stats (complexity: 52, 118 lines)
+```
+
 ### Find Complex Functions
 
 ```bash
@@ -149,6 +187,18 @@ reveal 'ast://.?name=get_*' --format=json | \
 # Count functions per file
 reveal 'ast://./src?type=function' --format=json | \
   jq -r '.results[].file' | sort | uniq -c | sort -rn
+
+# Find largest classes (potential god objects)
+reveal 'ast://./src?type=class' --format=json | \
+  jq -r '[.results[] | {name, file, lines: .line_count}] |
+         sort_by(.lines) | reverse | .[0:10][] |
+         "\(.file) - \(.name) (\(.lines) lines)"'
+
+# Complexity distribution analysis
+reveal 'ast://./src?type=function' --format=json | \
+  jq '[.results[].complexity] | group_by(.) |
+      map({complexity: .[0], count: length}) |
+      sort_by(.complexity) | reverse'
 ```
 
 ### Decorator Intelligence (NEW v0.23.0)
@@ -353,6 +403,32 @@ reveal app.py --check --select B,S
 
 # Everything except line length
 reveal app.py --check --ignore E501
+
+# Complexity-focused check (find refactoring targets)
+reveal app.py --check --select C901,C902,C905
+```
+
+### Codebase Health Assessment
+
+```bash
+# Get overall stats with hotspots
+reveal stats://./src --hotspots
+
+# Output shows:
+# - Total files, lines, functions, classes
+# - Average complexity and quality score
+# - Top 10 files needing attention (hotspot score)
+# - Issues: functions >100 lines, depth >4, etc.
+
+# Track complexity over time (save baseline)
+reveal stats://./src --format=json > complexity_baseline.json
+
+# Compare later (manually with jq)
+reveal stats://./src --format=json > complexity_current.json
+jq -s '.[0].summary.avg_complexity as $old |
+       .[1].summary.avg_complexity as $new |
+       "Complexity: \($old) → \($new) (change: \(($new - $old) * 100 | round / 100))"' \
+  complexity_baseline.json complexity_current.json
 ```
 
 ### Available Rules
@@ -601,13 +677,19 @@ reveal 'ast://./src?lines>50&complexity<3'       # Long but simple (inline?)
 | Hierarchy | `reveal file.py --outline` |
 | Extract | `reveal file.py function_name` |
 | Complex | `reveal 'ast://.?complexity>10'` |
+| Very complex | `reveal 'ast://.?complexity>20'` |
+| Complex+long | `reveal 'ast://.?complexity>15&lines>100'` |
+| Top complex | `reveal 'ast://.?type=function' --format=json \| jq -r '[.results[]] \| sort_by(.complexity) \| reverse \| .[0:10][]'` |
 | Long | `reveal 'ast://.?lines>50'` |
+| God functions | `reveal 'ast://.?complexity>30\|lines>150'` |
 | Named | `reveal 'ast://.?name=test_*'` |
 | Decorated | `reveal 'ast://.?decorator=property'` |
 | Cached | `reveal 'ast://.?decorator=*cache*'` |
 | Dec stats | `reveal src/ --decorator-stats` |
 | Filter | `reveal file.py --typed --filter=property` |
 | Check | `reveal file.py --check` |
+| Complexity check | `reveal file.py --check --select C901,C902,C905` |
+| Stats | `reveal stats://./src --hotspots` |
 | Links | `reveal doc.md --links` |
 | Code | `reveal doc.md --code` |
 | Pipeline | `git diff --name-only \| reveal --stdin` |
