@@ -305,6 +305,10 @@ def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
         if not items:
             continue
 
+        # Skip HTML internal structure categories (not meant for default display)
+        if category in ['type', 'document', 'head', 'body', 'stats', 'template']:
+            continue
+
         # Format category name (e.g., 'functions' -> 'Functions')
         category_name = category.capitalize()
 
