@@ -102,8 +102,96 @@ def build_heading_hierarchy(headings: List[Dict[str, Any]]) -> List[Dict[str, An
     return root_items
 
 
+def _build_metrics_display(item: Dict[str, Any]) -> str:
+    """Build metrics display string for an item.
+
+    Args:
+        item: Item dict potentially containing line_count, depth
+
+    Returns:
+        Formatted metrics string (e.g., " [10 lines, depth:3]") or empty string
+    """
+    if not ('line_count' in item or 'depth' in item):
+        return ''
+
+    parts = []
+    if 'line_count' in item:
+        parts.append(f"{item['line_count']} lines")
+    if 'depth' in item:
+        parts.append(f"depth:{item['depth']}")
+
+    if parts:
+        return f" [{', '.join(parts)}]"
+    return ''
+
+
+def _build_item_display(item: Dict[str, Any]) -> str:
+    """Build display string for an item.
+
+    Args:
+        item: Item dict containing name, signature, content
+
+    Returns:
+        Formatted display string
+    """
+    name = item.get('name', '')
+    signature = item.get('signature', '')
+    metrics = _build_metrics_display(item)
+
+    if signature and name:
+        return f"{name}{signature}{metrics}"
+    elif name:
+        return f"{name}{metrics}"
+    else:
+        return item.get('content', '?')
+
+
+def _print_outline_item(item: Dict[str, Any], path: Path,
+                        indent: str, is_root: bool, is_last_item: bool) -> None:
+    """Print a single outline item with appropriate formatting.
+
+    Args:
+        item: Item to print
+        path: File path for line number display
+        indent: Current indentation prefix
+        is_root: Whether this is a root-level item
+        is_last_item: Whether this is the last item in its list
+    """
+    line = item.get('line', '?')
+    display = _build_item_display(item)
+
+    if is_root:
+        # Root items - no tree chars, show full path
+        print(f"{display} ({path}:{line})")
+    else:
+        # Child items - use tree chars
+        tree_char = '└─ ' if is_last_item else '├─ '
+        print(f"{indent}{tree_char}{display} (line {line})")
+
+
+def _get_child_indent(indent: str, is_root: bool, is_last_item: bool) -> str:
+    """Calculate indentation for child items.
+
+    Args:
+        indent: Current indentation prefix
+        is_root: Whether parent is a root item
+        is_last_item: Whether parent is the last item in its list
+
+    Returns:
+        Indentation string for children
+    """
+    if is_root:
+        # Children of root get minimal indent
+        return '  '
+    else:
+        # Children of nested items continue the tree
+        return indent + ('   ' if is_last_item else '│  ')
+
+
 def render_outline(items: List[Dict[str, Any]], path: Path, indent: str = '', is_root: bool = True) -> None:
     """Render hierarchical outline with tree characters.
+
+    Refactored to reduce complexity from 34 → ~12 by extracting helpers.
 
     Args:
         items: List of items (potentially with children)
@@ -117,45 +205,10 @@ def render_outline(items: List[Dict[str, Any]], path: Path, indent: str = '', is
     for i, item in enumerate(items):
         is_last_item = (i == len(items) - 1)
 
-        # Format item
-        line = item.get('line', '?')
-        name = item.get('name', '')
-        signature = item.get('signature', '')
-
-        # Build metrics display
-        metrics = ''
-        if 'line_count' in item or 'depth' in item:
-            parts = []
-            if 'line_count' in item:
-                parts.append(f"{item['line_count']} lines")
-            if 'depth' in item:
-                parts.append(f"depth:{item['depth']}")
-            if parts:
-                metrics = f" [{', '.join(parts)}]"
-
-        # Format output
-        if signature and name:
-            display = f"{name}{signature}{metrics}"
-        elif name:
-            display = f"{name}{metrics}"
-        else:
-            display = item.get('content', '?')
-
-        # Print item with appropriate prefix
-        if is_root:
-            # Root items - no tree chars, show full path
-            print(f"{display} ({path}:{line})")
-        else:
-            # Child items - use tree chars
-            tree_char = '└─ ' if is_last_item else '├─ '
-            print(f"{indent}{tree_char}{display} (line {line})")
+        # Print this item
+        _print_outline_item(item, path, indent, is_root, is_last_item)
 
         # Recursively render children
         if item.get('children'):
-            if is_root:
-                # Children of root get minimal indent
-                child_indent = '  '
-            else:
-                # Children of nested items continue the tree
-                child_indent = indent + ('   ' if is_last_item else '│  ')
+            child_indent = _get_child_indent(indent, is_root, is_last_item)
             render_outline(item['children'], path, child_indent, is_root=False)
