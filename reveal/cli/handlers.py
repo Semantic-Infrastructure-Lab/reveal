@@ -152,6 +152,151 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     sys.exit(0)
 
 
+def _extract_decorators_from_file(file_path: str):
+    """Extract decorator information from a single Python file.
+
+    Args:
+        file_path: Path to Python file to analyze
+
+    Returns:
+        Tuple of (decorators_found dict, file_has_decorators bool) or None if file can't be analyzed
+    """
+    from ..base import get_analyzer
+
+    try:
+        analyzer_class = get_analyzer(file_path)
+        if not analyzer_class:
+            return None
+
+        analyzer = analyzer_class(file_path)
+        structure = analyzer.get_structure()
+        if not structure:
+            return None
+
+        decorators_found = {}  # decorator_name -> count in this file
+
+        # Check functions and classes for decorators
+        for category in ['functions', 'classes']:
+            for item in structure.get(category, []):
+                decorators = item.get('decorators', [])
+                for dec in decorators:
+                    # Normalize decorator (just the name, not args)
+                    dec_name = dec.split('(')[0]
+                    decorators_found[dec_name] = decorators_found.get(dec_name, 0) + 1
+
+        return (decorators_found, len(decorators_found) > 0)
+
+    except Exception:
+        return None  # Skip files we can't analyze
+
+
+def _categorize_decorators(sorted_decorators, decorator_files):
+    """Categorize decorators into stdlib and custom.
+
+    Args:
+        sorted_decorators: List of (decorator, count) tuples sorted by count
+        decorator_files: Dict mapping decorator -> set of files
+
+    Returns:
+        Tuple of (stdlib_list, custom_list) where each is list of (name, count, file_count) tuples
+    """
+    stdlib_prefixes = ['@property', '@staticmethod', '@classmethod', '@abstractmethod',
+                       '@dataclass', '@cached_property', '@lru_cache', '@functools.wraps',
+                       '@contextmanager', '@asynccontextmanager', '@overload', '@final',
+                       '@pytest.fixture', '@pytest.mark']
+
+    stdlib_list = []
+    custom_list = []
+
+    for dec, count in sorted_decorators:
+        file_count = len(decorator_files[dec])
+        if any(dec.startswith(prefix) for prefix in stdlib_prefixes):
+            stdlib_list.append((dec, count, file_count))
+        else:
+            custom_list.append((dec, count, file_count))
+
+    return stdlib_list, custom_list
+
+
+def _print_decorator_category(title, decorators_list):
+    """Print a category of decorators.
+
+    Args:
+        title: Category title
+        decorators_list: List of (decorator, count, file_count) tuples
+    """
+    if not decorators_list:
+        return
+
+    print(f"{title}:")
+    for dec, count, file_count in decorators_list:
+        files_text = f"{file_count} file{'s' if file_count != 1 else ''}"
+        print(f"  {dec:<30s} {count:>4d} occurrences ({files_text})")
+    print()
+
+
+def _collect_file_decorators(file_path, decorator_counts, decorator_files):
+    """Collect decorators from a single file and update statistics.
+
+    Args:
+        file_path: Path to file to analyze
+        decorator_counts: Dict to update with decorator counts
+        decorator_files: Dict to update with files per decorator
+
+    Returns:
+        Tuple of (file_processed, file_has_decorators)
+    """
+    result = _extract_decorators_from_file(str(file_path))
+    if not result:
+        return (False, False)
+
+    decorators_found, has_decorators = result
+    if has_decorators:
+        for dec_name, count in decorators_found.items():
+            decorator_counts[dec_name] += count
+            decorator_files[dec_name].add(str(file_path))
+
+    return (True, has_decorators)
+
+
+def _scan_python_files(target_path):
+    """Scan Python files and collect decorator statistics.
+
+    Args:
+        target_path: Path object (file or directory) to scan
+
+    Returns:
+        Tuple of (decorator_counts, decorator_files, total_files, total_decorated)
+    """
+    from collections import defaultdict
+
+    decorator_counts = defaultdict(int)
+    decorator_files = defaultdict(set)
+    total_files = 0
+    total_decorated = 0
+
+    if target_path.is_file():
+        processed, has_decorators = _collect_file_decorators(
+            target_path, decorator_counts, decorator_files
+        )
+        if processed:
+            total_files = 1
+            total_decorated = 1 if has_decorators else 0
+    elif target_path.is_dir():
+        for file_path in target_path.rglob('*.py'):
+            if '.venv' in str(file_path) or 'node_modules' in str(file_path):
+                continue
+            processed, has_decorators = _collect_file_decorators(
+                file_path, decorator_counts, decorator_files
+            )
+            if processed:
+                total_files += 1
+                if has_decorators:
+                    total_decorated += 1
+
+    return decorator_counts, decorator_files, total_files, total_decorated
+
+
 def handle_decorator_stats(path: str):
     """Handle --decorator-stats flag to show decorator usage statistics.
 
@@ -160,108 +305,32 @@ def handle_decorator_stats(path: str):
     Args:
         path: File or directory path to scan
     """
-    from collections import defaultdict
-    from ..base import get_analyzer
-
     target_path = Path(path) if path else Path('.')
 
-    # Collect decorator statistics
-    decorator_counts = defaultdict(int)  # decorator -> count
-    decorator_files = defaultdict(set)   # decorator -> set of files
-    total_files = 0
-    total_decorated = 0
-
-    def process_file(file_path: str):
-        """Process a single file for decorator statistics."""
-        nonlocal total_files, total_decorated
-
-        try:
-            analyzer_class = get_analyzer(file_path)
-            if not analyzer_class:
-                return
-
-            analyzer = analyzer_class(file_path)
-            structure = analyzer.get_structure()
-            if not structure:
-                return
-
-            total_files += 1
-            file_has_decorators = False
-
-            # Check functions and classes for decorators
-            for category in ['functions', 'classes']:
-                for item in structure.get(category, []):
-                    decorators = item.get('decorators', [])
-                    for dec in decorators:
-                        # Normalize decorator (just the name, not args)
-                        dec_name = dec.split('(')[0]
-                        decorator_counts[dec_name] += 1
-                        decorator_files[dec_name].add(file_path)
-                        file_has_decorators = True
-
-            if file_has_decorators:
-                total_decorated += 1
-
-        except Exception:
-            pass  # Skip files we can't analyze
-
-    # Scan files
-    if target_path.is_file():
-        process_file(str(target_path))
-    elif target_path.is_dir():
-        for file_path in target_path.rglob('*.py'):
-            if '.venv' in str(file_path) or 'node_modules' in str(file_path):
-                continue  # Skip common non-source directories
-            process_file(str(file_path))
-    else:
+    if not target_path.exists():
         print(f"Error: {path} not found", file=sys.stderr)
         sys.exit(1)
+
+    # Scan files and collect statistics
+    decorator_counts, decorator_files, total_files, total_decorated = _scan_python_files(target_path)
 
     if total_files == 0:
         print(f"No Python files found in {path or '.'}")
         sys.exit(0)
 
-    # Print statistics
+    # Print header
     print(f"Decorator Usage in {target_path} ({total_files} files)\n")
 
     if not decorator_counts:
         print("No decorators found")
         sys.exit(0)
 
-    # Sort by count (descending)
+    # Categorize and print decorators
     sorted_decorators = sorted(decorator_counts.items(), key=lambda x: -x[1])
+    stdlib_list, custom_list = _categorize_decorators(sorted_decorators, decorator_files)
 
-    # Categorize decorators
-    stdlib_decorators = ['@property', '@staticmethod', '@classmethod', '@abstractmethod',
-                         '@dataclass', '@cached_property', '@lru_cache', '@functools.wraps',
-                         '@contextmanager', '@asynccontextmanager', '@overload', '@final',
-                         '@pytest.fixture', '@pytest.mark']
-
-    custom_decorators = []
-    stdlib_list = []
-
-    for dec, count in sorted_decorators:
-        file_count = len(decorator_files[dec])
-        if any(dec.startswith(std) for std in stdlib_decorators):
-            stdlib_list.append((dec, count, file_count))
-        else:
-            custom_decorators.append((dec, count, file_count))
-
-    # Print stdlib decorators
-    if stdlib_list:
-        print("Standard Library Decorators:")
-        for dec, count, file_count in stdlib_list:
-            files_text = f"{file_count} file{'s' if file_count != 1 else ''}"
-            print(f"  {dec:<30s} {count:>4d} occurrences ({files_text})")
-        print()
-
-    # Print custom decorators
-    if custom_decorators:
-        print("Custom/Third-Party Decorators:")
-        for dec, count, file_count in custom_decorators:
-            files_text = f"{file_count} file{'s' if file_count != 1 else ''}"
-            print(f"  {dec:<30s} {count:>4d} occurrences ({files_text})")
-        print()
+    _print_decorator_category("Standard Library Decorators", stdlib_list)
+    _print_decorator_category("Custom/Third-Party Decorators", custom_list)
 
     # Summary
     print("Summary:")
