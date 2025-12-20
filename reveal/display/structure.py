@@ -327,59 +327,67 @@ def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
         print()  # Blank line between categories
 
 
-def show_structure(analyzer: FileAnalyzer, output_format: str, args=None):
-    """Show file structure.
+def _build_outline_hierarchy(structure: Dict[str, List[Dict[str, Any]]]):
+    """Build hierarchy for outline mode based on structure type.
 
-    Simplified using extracted helper functions.
+    Args:
+        structure: Structure dict from analyzer
+
+    Returns:
+        Hierarchy suitable for render_outline()
     """
-    # Build kwargs and get structure
-    kwargs = _build_analyzer_kwargs(analyzer, args)
+    # Check if this is markdown with headings
+    if 'headings' in structure and structure.get('headings'):
+        # Markdown outline: use level-based hierarchy
+        return build_heading_hierarchy(structure['headings'])
 
-    # Add outline flag for markdown analyzer (Issue #3)
-    if args and hasattr(args, 'outline'):
-        kwargs['outline'] = args.outline
-
-    structure = analyzer.get_structure(**kwargs)
-    path = analyzer.path
-
-    # Get fallback info
-    is_fallback = getattr(analyzer, 'is_fallback', False)
-    fallback_lang = getattr(analyzer, 'fallback_language', None)
-
-    # Handle --typed flag (new Type-First Architecture)
-    if args and getattr(args, 'typed', False):
-        json_format = "json" if output_format == "json" else "text"
-        category_filter = getattr(args, 'filter', None)
-        _render_typed_structure_output(analyzer, structure, json_format, category_filter)
-        return
-
-    # Handle outline mode
-    if args and getattr(args, 'outline', False):
-        _print_file_header(path, is_fallback, fallback_lang)
-        if not structure:
-            print("No structure available for this file type")
-            return
-
-        # Check if this is markdown with headings
-        if 'headings' in structure and structure.get('headings'):
-            # Markdown outline: use level-based hierarchy
-            hierarchy = build_heading_hierarchy(structure['headings'])
-        # Check if this is TOML with sections (level-based like markdown)
-        elif 'sections' in structure and structure.get('sections'):
-            # Check if sections have 'level' field (TOML outline mode)
-            sections = structure['sections']
-            if sections and 'level' in sections[0]:
-                # TOML outline: use level-based hierarchy like markdown
-                hierarchy = build_heading_hierarchy(sections)
-            else:
-                # Regular TOML: use line-range based hierarchy
-                hierarchy = build_hierarchy(structure)
+    # Check if this is TOML with sections (level-based like markdown)
+    if 'sections' in structure and structure.get('sections'):
+        sections = structure['sections']
+        # Check if sections have 'level' field (TOML outline mode)
+        if sections and 'level' in sections[0]:
+            # TOML outline: use level-based hierarchy like markdown
+            return build_heading_hierarchy(sections)
         else:
-            # Code outline: use line-range based hierarchy
-            hierarchy = build_hierarchy(structure)
+            # Regular TOML: use line-range based hierarchy
+            return build_hierarchy(structure)
 
-        render_outline(hierarchy, path)
+    # Code outline: use line-range based hierarchy
+    return build_hierarchy(structure)
+
+
+def _handle_outline_mode(structure: Dict[str, List[Dict[str, Any]]],
+                         path: Path, is_fallback: bool, fallback_lang: str) -> None:
+    """Handle outline mode rendering.
+
+    Args:
+        structure: Structure dict from analyzer
+        path: File path
+        is_fallback: Whether using fallback analyzer
+        fallback_lang: Fallback language if applicable
+    """
+    _print_file_header(path, is_fallback, fallback_lang)
+
+    if not structure:
+        print("No structure available for this file type")
         return
+
+    hierarchy = _build_outline_hierarchy(structure)
+    render_outline(hierarchy, path)
+
+
+def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]],
+                            output_format: str, is_fallback: bool, fallback_lang: str) -> None:
+    """Handle standard JSON or text output.
+
+    Args:
+        analyzer: File analyzer instance
+        structure: Structure dict from analyzer
+        output_format: 'json' or 'text'
+        is_fallback: Whether using fallback analyzer
+        fallback_lang: Fallback language if applicable
+    """
+    path = analyzer.path
 
     # Handle JSON output (standard format)
     if output_format == 'json':
@@ -405,3 +413,43 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None):
     if output_format == 'text':
         file_type = get_file_type_from_analyzer(analyzer)
         print_breadcrumbs('structure', path, file_type=file_type)
+
+
+def show_structure(analyzer: FileAnalyzer, output_format: str, args=None):
+    """Show file structure.
+
+    Refactored to reduce complexity from 42 → ~18 by extracting mode handlers.
+
+    Args:
+        analyzer: File analyzer instance
+        output_format: Output format ('text', 'json', 'typed')
+        args: Optional command-line arguments
+    """
+    # Build kwargs and get structure
+    kwargs = _build_analyzer_kwargs(analyzer, args)
+
+    # Add outline flag for markdown analyzer (Issue #3)
+    if args and hasattr(args, 'outline'):
+        kwargs['outline'] = args.outline
+
+    structure = analyzer.get_structure(**kwargs)
+    path = analyzer.path
+
+    # Get fallback info
+    is_fallback = getattr(analyzer, 'is_fallback', False)
+    fallback_lang = getattr(analyzer, 'fallback_language', None)
+
+    # Handle --typed flag (new Type-First Architecture)
+    if args and getattr(args, 'typed', False):
+        json_format = "json" if output_format == "json" else "text"
+        category_filter = getattr(args, 'filter', None)
+        _render_typed_structure_output(analyzer, structure, json_format, category_filter)
+        return
+
+    # Handle outline mode
+    if args and getattr(args, 'outline', False):
+        _handle_outline_mode(structure, path, is_fallback, fallback_lang)
+        return
+
+    # Handle standard output (JSON or text)
+    _handle_standard_output(analyzer, structure, output_format, is_fallback, fallback_lang)
