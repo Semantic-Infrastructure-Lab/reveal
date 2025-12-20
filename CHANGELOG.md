@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] - 2025-12-20
+
 ### ✨ NEW: HTML Analyzer
 
 **Full HTML analysis with template support** - Analyze HTML files, extract metadata, semantic elements, scripts, and styles!
