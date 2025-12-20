@@ -35,6 +35,7 @@ class HelpAdapter(ResourceAdapter):
         'python-guide': 'adapters/PYTHON_ADAPTER_GUIDE.md',
         'reveal-guide': 'REVEAL_ADAPTER_GUIDE.md',  # Reference implementation
         'markdown': 'MARKDOWN_GUIDE.md',
+        'html': 'HTML_GUIDE.md',  # HTML features guide
         'anti-patterns': 'ANTI_PATTERNS.md',
         'adapter-authoring': 'adapters/ADAPTER_AUTHORING_GUIDE.md',
         'tricks': 'COOL_TRICKS.md',

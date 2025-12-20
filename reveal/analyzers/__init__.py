@@ -21,6 +21,7 @@ from .bash import BashAnalyzer
 from .nginx import NginxAnalyzer
 from .toml import TomlAnalyzer
 from .dockerfile import DockerfileAnalyzer
+from .html import HTMLAnalyzer
 
 # Office document analyzers (ZIP+XML based)
 from .office import (
@@ -48,6 +49,7 @@ __all__ = [
     'NginxAnalyzer',
     'TomlAnalyzer',
     'DockerfileAnalyzer',
+    'HTMLAnalyzer',
     # Office documents
     'DocxAnalyzer',
     'XlsxAnalyzer',

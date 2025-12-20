@@ -117,6 +117,85 @@ def _format_code_blocks(items: List[Dict[str, Any]], path: Path, output_format: 
             print(f"    ... and {len(inline_items) - 10} more")
 
 
+def _format_html_metadata(metadata: Dict[str, Any], path: Path, output_format: str) -> None:
+    """Format and display HTML metadata (SEO, social, etc.)."""
+    # Title
+    if 'title' in metadata:
+        print(f"  Title: {metadata['title']}")
+
+    # Meta tags
+    if 'meta' in metadata:
+        print(f"\n  Meta Tags ({len(metadata['meta'])}):")
+        for name, content in metadata['meta'].items():
+            if len(content) > 80:
+                print(f"    {name}: {content[:77]}...")
+            else:
+                print(f"    {name}: {content}")
+
+    # Canonical URL
+    if 'canonical' in metadata:
+        print(f"\n  Canonical: {metadata['canonical']}")
+
+    # Stylesheets
+    if 'stylesheets' in metadata:
+        print(f"\n  Stylesheets ({len(metadata['stylesheets'])}):")
+        for stylesheet in metadata['stylesheets']:
+            print(f"    {stylesheet}")
+
+    # Scripts
+    if 'scripts' in metadata:
+        print(f"\n  Scripts ({len(metadata['scripts'])}):")
+        for script in metadata['scripts']:
+            if script['type'] == 'external':
+                print(f"    [external] {script['src']}")
+            else:
+                preview = script.get('preview', '')
+                if preview:
+                    print(f"    [inline] {preview[:60]}...")
+                else:
+                    print(f"    [inline]")
+
+
+def _format_html_elements(elements: List[Dict[str, Any]], path: Path, output_format: str, category: str) -> None:
+    """Format and display HTML elements (scripts, styles, semantic)."""
+    for elem in elements:
+        line = elem.get('line', '?')
+
+        if category == 'scripts':
+            if elem['type'] == 'external':
+                print(f"  {path}:{line:<6} [external] {elem['src']}")
+            else:
+                preview = elem.get('preview', '')
+                if preview:
+                    print(f"  {path}:{line:<6} [inline] {preview[:60]}...")
+                else:
+                    print(f"  {path}:{line:<6} [inline]")
+
+        elif category == 'styles':
+            if elem['type'] == 'external':
+                print(f"  {path}:{line:<6} [external] {elem['href']}")
+            else:
+                preview = elem.get('preview', '')
+                if preview:
+                    print(f"  {path}:{line:<6} [inline] {preview[:60]}...")
+                else:
+                    print(f"  {path}:{line:<6} [inline]")
+
+        elif category == 'semantic':
+            tag = elem.get('tag', '')
+            attrs = elem.get('attributes', {})
+            elem_id = attrs.get('id', '')
+            elem_class = ' '.join(attrs.get('class', [])) if isinstance(attrs.get('class'), list) else attrs.get('class', '')
+
+            label = f"<{tag}>"
+            if elem_id:
+                label += f" #{elem_id}"
+            elif elem_class:
+                label += f" .{elem_class.split()[0] if elem_class else ''}"
+
+            print(f"  {path}:{line:<6} {label}")
+
+
 def _format_standard_items(items: List[Dict[str, Any]], path: Path, output_format: str) -> None:
     """Format and display standard items (functions, classes, etc.)."""
     for item in items:
@@ -206,6 +285,26 @@ def _add_markdown_code_kwargs(kwargs: Dict[str, Any], args) -> None:
         kwargs['inline_code'] = args.inline
 
 
+def _add_html_kwargs(kwargs: Dict[str, Any], args) -> None:
+    """Add HTML-specific arguments to kwargs.
+
+    Args:
+        kwargs: Dict to update with HTML args
+        args: Command-line arguments
+    """
+    if not (args.metadata or args.semantic or args.scripts or args.styles):
+        return
+
+    if args.metadata:
+        kwargs['metadata'] = True
+    if args.semantic:
+        kwargs['semantic'] = args.semantic
+    if args.scripts:
+        kwargs['scripts'] = args.scripts
+    if args.styles:
+        kwargs['styles'] = args.styles
+
+
 def _build_analyzer_kwargs(analyzer: FileAnalyzer, args) -> Dict[str, Any]:
     """Build kwargs for get_structure() based on analyzer type and args.
 
@@ -230,5 +329,17 @@ def _build_analyzer_kwargs(analyzer: FileAnalyzer, args) -> Dict[str, Any]:
 
         if args.frontmatter:
             kwargs['extract_frontmatter'] = True
+
+    # HTML-specific filters
+    if args and hasattr(analyzer, '_extract_metadata'):
+        _add_html_kwargs(kwargs, args)
+
+        # HTML also supports --links (reuse from markdown)
+        if args.links or args.link_type or args.domain:
+            kwargs['links'] = True
+            if args.link_type:
+                kwargs['link_type'] = args.link_type
+            if args.domain:
+                kwargs['domain'] = args.domain
 
     return kwargs

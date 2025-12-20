@@ -75,6 +75,14 @@ Examples:
   reveal doc.md --code --language python      # Only Python code blocks
   reveal doc.md --frontmatter                 # Extract YAML front matter
 
+  # HTML-specific features
+  reveal page.html --metadata                 # Extract SEO/social metadata
+  reveal page.html --semantic navigation      # Extract nav elements
+  reveal page.html --semantic content         # Extract main/article/section
+  reveal page.html --scripts all              # Extract all script tags
+  reveal page.html --styles external          # Extract external stylesheets
+  reveal page.html --links                    # Extract all HTML links
+
   # URI adapters - explore ANY resource!
   reveal help://                              # Discover all help topics
   reveal help://ast                           # Learn about ast:// queries
@@ -90,6 +98,7 @@ Examples:
 
 File-type specific features:
   • Markdown: --links, --code, --frontmatter (extract links/code/metadata)
+  • HTML: --metadata, --semantic, --scripts, --styles (extract SEO/elements/scripts)
   • Code files: --check, --outline, --typed (quality checks, hierarchy, containment)
   • URI adapters: help:// (documentation), env:// (environment), ast:// (code queries)
 
@@ -200,6 +209,19 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
                         help='Include inline code snippets (requires --code)')
     parser.add_argument('--frontmatter', action='store_true',
                         help='Extract YAML front matter from markdown files')
+
+    # HTML-specific filters
+    parser.add_argument('--metadata', action='store_true',
+                        help='Extract HTML head metadata (SEO, OpenGraph, Twitter cards)')
+    parser.add_argument('--semantic', type=str,
+                        choices=['navigation', 'content', 'forms', 'media', 'all'],
+                        help='Extract semantic HTML elements (nav, main, article, forms, etc.)')
+    parser.add_argument('--scripts', type=str,
+                        choices=['inline', 'external', 'all'],
+                        help='Extract script tags from HTML files')
+    parser.add_argument('--styles', type=str,
+                        choices=['inline', 'external', 'all'],
+                        help='Extract stylesheets from HTML files')
 
     return parser
 

@@ -7,7 +7,107 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ NEW: HTML Analyzer
+
+**Full HTML analysis with template support** - Analyze HTML files, extract metadata, semantic elements, scripts, and styles!
+
+The HTML analyzer brings first-class HTML support to reveal with template awareness, progressive disclosure, and comprehensive extraction capabilities. Perfect for analyzing websites, static site generators, and template-based applications.
+
+**What's Included:**
+
+1. **Template Detection** ⭐⭐⭐
+   - Automatic detection of Jinja2, Go templates, Handlebars, ERB, and PHP templates
+   - Identifies template variables, blocks, and control structures
+   - Line-accurate extraction for template elements
+
+2. **Metadata Extraction** (`--metadata`)
+   - Document title, meta tags (SEO, OpenGraph, Twitter cards)
+   - Character encoding and viewport settings
+   - Canonical URLs and linked resources
+   - Complete head section analysis
+
+3. **Semantic Element Extraction** (`--semantic TYPE`)
+   - Navigation: Extract `<nav>` elements and menu structures
+   - Content: Main content areas, articles, sections
+   - Forms: Input fields, form actions, validation attributes
+   - Media: Images with alt text, videos, audio elements
+   - Line numbers for each element
+
+4. **Script Analysis** (`--scripts TYPE`)
+   - Inline scripts with content preview
+   - External script URLs
+   - Async/defer attributes
+   - Filter by: all, inline, external
+
+5. **Style Extraction** (`--styles TYPE`)
+   - Inline stylesheets with CSS preview
+   - External stylesheet URLs
+   - Media queries and attributes
+   - Filter by: all, inline, external
+
+**CLI Integration:**
+
+```bash
+# Extract metadata (SEO, OpenGraph, etc.)
+reveal page.html --metadata
+
+# Extract semantic navigation elements
+reveal page.html --semantic navigation
+
+# Extract all scripts (inline + external)
+reveal page.html --scripts all
+
+# Extract only external stylesheets
+reveal page.html --styles external
+
+# Learn about HTML analysis
+reveal help://html
+```
+
+**Documentation:**
+- Comprehensive guide: `reveal help://html` (350+ lines)
+- Example workflows for templates, SEO, and accessibility analysis
+- All CLI flags documented in README.md
+
+**Technical Details:**
+- Parser: BeautifulSoup4 with lxml backend (fallback to html.parser)
+- Template detection: Pattern-based recognition for 5 template engines
+- Progressive disclosure: Structure view → detailed extraction
+- File size: 855 lines, 24 functions, 1 main class
+- Tests: 35 comprehensive tests (100% passing)
+- Zero regressions: All 733 tests passing
+
+**Example Output:**
+
+```bash
+reveal base.html --metadata
+```
+
+Shows: Title, 14 meta tags, canonical URL, 2 stylesheets, 4 scripts (with SEO and social media tags)
+
+**Dependencies Added:**
+- `beautifulsoup4>=4.12.0` - HTML parsing
+- `lxml>=4.9.0` - Fast XML/HTML parser backend
+
+**Impact:**
+- HTML is now a first-class citizen in reveal (26th built-in language)
+- Template-aware analysis for modern web development
+- SEO and accessibility analysis capabilities
+- Dogfooded successfully (reveal analyzes itself including HTML files)
+
 ### Improved
+- **HTML Analyzer Code Quality**: Critical bug fixes and refactoring
+  - Fixed bare except clause (B001) - now catches `Exception` instead of everything
+  - Prevents hiding critical exceptions (SystemExit, KeyboardInterrupt)
+  - Refactored `_get_default_structure()`: Complexity 36 → <10 (73% reduction!)
+  - Length: 75 lines → 20 lines through extraction of 5 focused helpers:
+    - `_build_document_info()` - Language, doctype (13 lines)
+    - `_build_head_info()` - Title, meta tags (24 lines)
+    - `_build_body_info()` - Semantic elements (13 lines)
+    - `_build_stats()` - Element counts (7 lines)
+    - `_build_template_info()` - Template variables/blocks (20 lines)
+  - Applied Single Responsibility Principle for easier testing and maintenance
+  - All tests passing, zero regressions
 - **Code Quality**: Fixed critical C905 nesting depth violations across codebase
   - **routing.py**: Eliminated C905 + C902 violations in `handle_recursive_check()`
     - Reduced from 113 → 38 lines (66% reduction)

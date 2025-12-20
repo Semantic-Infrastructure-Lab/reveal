@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reveal-cli"
-version = "0.24.2"
+version = "0.25.0"
 description = "Semantic code exploration with progressive disclosure - explore directories, files, and code elements with smart defaults"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -36,6 +36,8 @@ dependencies = [
     "rich>=13.0.0",  # For beautiful terminal output
     "tree-sitter==0.21.3",  # Semantic parsing for all languages
     "tree-sitter-languages>=1.10.0",  # Language grammar support (JS, TS, Rust, Go, etc.)
+    "beautifulsoup4>=4.12.0",  # HTML parsing for HTML analyzer
+    "lxml>=4.9.0",  # Fast XML/HTML parser backend for BeautifulSoup
 ]
 
 [project.optional-dependencies]

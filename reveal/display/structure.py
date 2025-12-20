@@ -12,6 +12,8 @@ from .formatting import (
     _format_frontmatter,
     _format_links,
     _format_code_blocks,
+    _format_html_metadata,
+    _format_html_elements,
     _format_standard_items,
     _build_analyzer_kwargs,
 )
@@ -321,6 +323,10 @@ def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
             _format_links(items, path, output_format)
         elif category == 'code_blocks':
             _format_code_blocks(items, path, output_format)
+        elif category == 'metadata':
+            _format_html_metadata(items, path, output_format)
+        elif category in ['scripts', 'styles', 'semantic']:
+            _format_html_elements(items, path, output_format, category)
         else:
             _format_standard_items(items, path, output_format)
 

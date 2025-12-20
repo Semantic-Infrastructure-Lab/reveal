@@ -9,7 +9,7 @@ reveal app.py                  # file → structure
 reveal app.py load_config      # element → code
 ```
 
-Zero config. 18 languages built-in. 50+ via tree-sitter.
+Zero config. 26 languages built-in. 50+ via tree-sitter.
 
 ---
 
@@ -29,7 +29,7 @@ reveal --agent-help-full     # Complete reference (~1215 lines)
 
 **Quick Install:**
 ```bash
-pip install reveal-cli              # Full-featured by default (25+ languages, 7 adapters)
+pip install reveal-cli              # Full-featured by default (26 languages, 8 adapters)
 pip install reveal-cli[database]    # Add MySQL database inspection
 ```
 See [INSTALL.md](INSTALL.md) for details on what's included.
@@ -141,6 +141,8 @@ Explore ANY resource - files, environment, code queries, Python runtime:
 reveal help://                              # List all help topics
 reveal help://ast                           # Learn about ast:// queries
 reveal help://python                        # Python runtime adapter help
+reveal help://html                          # HTML analysis guide (templates, metadata, semantic)
+reveal help://markdown                      # Markdown analysis guide
 
 # Comprehensive guides (v0.18.0+)
 reveal help://python-guide                  # Multi-shot examples for LLMs
@@ -222,7 +224,7 @@ reveal app.py --meta             # metadata only
 
 ### Supported Languages
 
-**Built-in (25):** Python, Rust, Go, JavaScript, TypeScript, GDScript, Bash, Jupyter, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
+**Built-in (26):** Python, Rust, Go, JavaScript, TypeScript, GDScript, Bash, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
 
 **Via tree-sitter (50+):** C, C++, C#, Java, PHP, Swift, Kotlin, Ruby, etc.
 
@@ -236,6 +238,10 @@ reveal app.py --meta             # metadata only
 | `--check` | Code quality analysis |
 | `--copy` / `-c` | Copy output to clipboard 🆕 |
 | `--frontmatter` | Extract YAML front matter (markdown) 🆕 |
+| `--metadata` | Extract HTML head metadata (SEO, OpenGraph, Twitter cards) 🆕 |
+| `--semantic TYPE` | Extract HTML semantic elements (navigation, content, forms, media) 🆕 |
+| `--scripts TYPE` | Extract script tags from HTML (inline, external, all) 🆕 |
+| `--styles TYPE` | Extract stylesheets from HTML (inline, external, all) 🆕 |
 | `--stdin` | Read file paths from stdin |
 | `--depth N` | Directory tree depth |
 | `--max-entries N` | Limit directory entries (default: 200, 0=unlimited) |
@@ -286,7 +292,7 @@ reveal/
 ├── display/      # Terminal output formatting
 ├── rendering/    # Adapter-specific renderers
 ├── rules/        # 24 quality rules (B, C, D, E, M, N, R, S, U, V)
-├── analyzers/    # 25 file types (Python, Rust, Markdown, etc.)
+├── analyzers/    # 26 file types (Python, Rust, HTML, Markdown, etc.)
 ├── adapters/     # URI support (help://, env://, ast://, python://)
 ├── schemas/      # Type definitions (renamed from types/ in v0.23.0)
 └── treesitter.py # Universal language support (50+ langs)
