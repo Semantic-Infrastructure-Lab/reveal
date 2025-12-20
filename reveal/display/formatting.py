@@ -154,37 +154,79 @@ def _format_standard_items(items: List[Dict[str, Any]], path: Path, output_forma
                 print(f"  {path}:{line:<6} {content}")
 
 
+def _add_navigation_kwargs(kwargs: Dict[str, Any], args) -> None:
+    """Add navigation/slicing arguments to kwargs.
+
+    Args:
+        kwargs: Dict to update with navigation args
+        args: Command-line arguments
+    """
+    if not args:
+        return
+
+    if getattr(args, 'head', None):
+        kwargs['head'] = args.head
+    if getattr(args, 'tail', None):
+        kwargs['tail'] = args.tail
+    if getattr(args, 'range', None):
+        kwargs['range'] = args.range
+
+
+def _add_markdown_link_kwargs(kwargs: Dict[str, Any], args) -> None:
+    """Add markdown link extraction arguments to kwargs.
+
+    Args:
+        kwargs: Dict to update with link args
+        args: Command-line arguments
+    """
+    if not (args.links or args.link_type or args.domain):
+        return
+
+    kwargs['extract_links'] = True
+    if args.link_type:
+        kwargs['link_type'] = args.link_type
+    if args.domain:
+        kwargs['domain'] = args.domain
+
+
+def _add_markdown_code_kwargs(kwargs: Dict[str, Any], args) -> None:
+    """Add markdown code extraction arguments to kwargs.
+
+    Args:
+        kwargs: Dict to update with code args
+        args: Command-line arguments
+    """
+    if not (args.code or args.language or args.inline):
+        return
+
+    kwargs['extract_code'] = True
+    if args.language:
+        kwargs['language'] = args.language
+    if args.inline:
+        kwargs['inline_code'] = args.inline
+
+
 def _build_analyzer_kwargs(analyzer: FileAnalyzer, args) -> Dict[str, Any]:
     """Build kwargs for get_structure() based on analyzer type and args.
 
-    This centralizes all analyzer-specific argument mapping.
+    Refactored to reduce complexity from 40 → ~10 by extracting helpers.
+
+    Args:
+        analyzer: File analyzer instance
+        args: Command-line arguments
+
+    Returns:
+        Dict of kwargs for get_structure()
     """
     kwargs = {}
 
     # Navigation/slicing arguments (apply to all analyzers)
-    if args:
-        if getattr(args, 'head', None):
-            kwargs['head'] = args.head
-        if getattr(args, 'tail', None):
-            kwargs['tail'] = args.tail
-        if getattr(args, 'range', None):
-            kwargs['range'] = args.range
+    _add_navigation_kwargs(kwargs, args)
 
     # Markdown-specific filters
     if args and hasattr(analyzer, '_extract_links'):
-        if args.links or args.link_type or args.domain:
-            kwargs['extract_links'] = True
-            if args.link_type:
-                kwargs['link_type'] = args.link_type
-            if args.domain:
-                kwargs['domain'] = args.domain
-
-        if args.code or args.language or args.inline:
-            kwargs['extract_code'] = True
-            if args.language:
-                kwargs['language'] = args.language
-            if args.inline:
-                kwargs['inline_code'] = args.inline
+        _add_markdown_link_kwargs(kwargs, args)
+        _add_markdown_code_kwargs(kwargs, args)
 
         if args.frontmatter:
             kwargs['extract_frontmatter'] = True
