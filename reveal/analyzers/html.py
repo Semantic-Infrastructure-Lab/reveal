@@ -1,7 +1,6 @@
 """HTML analyzer with template support and progressive disclosure."""
 
 import re
-from pathlib import Path
 from typing import Dict, List, Any, Optional
 from ..base import FileAnalyzer, register
 

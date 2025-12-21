@@ -1628,8 +1628,8 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 
 ---
 
-**Version:** 0.24.2
-**Last updated:** 2025-12-16
+**Version:** 0.25.0
+**Last updated:** 2025-12-20
 **Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
 **PyPI:** https://pypi.org/project/reveal-cli/
 
