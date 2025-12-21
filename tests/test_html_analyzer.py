@@ -757,6 +757,271 @@ class TestHTMLAnalyzer(unittest.TestCase):
         # Should parse successfully
         self.assertEqual(structure['head']['title'], 'Test')
 
+    # ========================================
+    # Display/Rendering Tests
+    # ========================================
+
+    def test_default_display_no_crash(self):
+        """Test that HTML default structure displays without error.
+
+        This test prevents regression of the bug where HTML structure categories
+        (type, document, head, body, stats, template) were being passed to
+        _format_standard_items() which expected lists of dicts, causing:
+        AttributeError: 'str' object has no attribute 'get'
+        """
+        html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Test Page</title>
+    <meta name="description" content="Test description">
+</head>
+<body>
+    <nav><a href="/">Home</a></nav>
+    <main>
+        <h1>Welcome</h1>
+        <p>Content here</p>
+    </main>
+</body>
+</html>"""
+
+        path = self.create_temp_html(html)
+        analyzer = HTMLAnalyzer(path)
+        structure = analyzer.get_structure()
+
+        # Verify structure has expected categories
+        self.assertEqual(structure['type'], 'html')
+        self.assertIn('document', structure)
+        self.assertIn('head', structure)
+        self.assertIn('body', structure)
+        self.assertIn('stats', structure)
+
+        # Test that rendering doesn't crash
+        # Import here to avoid circular dependencies
+        from reveal.display.structure import _render_text_categories
+        from pathlib import Path
+        import io
+        import sys
+
+        # Capture output to verify it runs without error
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+
+        try:
+            # This should not raise AttributeError
+            _render_text_categories(structure, Path(path), 'text')
+            output = sys.stdout.getvalue()
+
+            # Should complete without error (even if output is minimal)
+            # HTML internal categories are skipped in display
+            self.assertIsInstance(output, str)
+        finally:
+            sys.stdout = old_stdout
+
+    def test_display_with_metadata_flag(self):
+        """Test HTML display with --metadata flag formatting."""
+        html = """<!DOCTYPE html>
+<html>
+<head>
+    <title>SEO Test</title>
+    <meta name="description" content="A test page">
+    <meta property="og:title" content="OG Title">
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js"></script>
+</head>
+<body>
+    <h1>Test</h1>
+</body>
+</html>"""
+
+        path = self.create_temp_html(html)
+        analyzer = HTMLAnalyzer(path)
+
+        # Get metadata structure (what --metadata flag returns)
+        structure = analyzer.get_structure(metadata=True)
+
+        # Should return metadata category
+        self.assertIn('metadata', structure)
+        metadata = structure['metadata']
+
+        # Metadata is a dict with title, meta, stylesheets, scripts
+        self.assertIsInstance(metadata, dict)
+        self.assertIn('title', metadata)
+        self.assertEqual(metadata['title'], 'SEO Test')
+
+        # Verify formatting doesn't crash
+        from reveal.display.structure import _render_text_categories
+        from pathlib import Path
+        import io
+        import sys
+
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+
+        try:
+            _render_text_categories(structure, Path(path), 'text')
+            output = sys.stdout.getvalue()
+
+            # Should contain metadata information
+            self.assertIn('Metadata', output)
+        finally:
+            sys.stdout = old_stdout
+
+    # ========================================
+    # Edge Case Tests
+    # ========================================
+
+    def test_parser_fallback_on_invalid_xml(self):
+        """Test fallback to html.parser when lxml fails on invalid XML-like HTML."""
+        # Create HTML that might trigger lxml issues but is valid HTML
+        html = """<!DOCTYPE html>
+<html>
+<head>
+    <title>Parser Test</title>
+</head>
+<body>
+    <!-- Unclosed tags that HTML parser handles but XML parser might not -->
+    <p>Paragraph without closing
+    <br>
+    <img src="test.png">
+    <hr>
+</body>
+</html>"""
+
+        path = self.create_temp_html(html)
+        analyzer = HTMLAnalyzer(path)
+        structure = analyzer.get_structure()
+
+        # Should parse successfully with either parser
+        self.assertEqual(structure['type'], 'html')
+        self.assertEqual(structure['head']['title'], 'Parser Test')
+
+    def test_extremely_nested_html(self):
+        """Test HTML with deeply nested elements."""
+        # Create deeply nested structure
+        nested = "<div>" * 50 + "Deep content" + "</div>" * 50
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Nested Test</title>
+</head>
+<body>
+    {nested}
+</body>
+</html>"""
+
+        path = self.create_temp_html(html)
+        analyzer = HTMLAnalyzer(path)
+        structure = analyzer.get_structure()
+
+        # Should handle deep nesting without crashing
+        self.assertEqual(structure['type'], 'html')
+        self.assertEqual(structure['head']['title'], 'Nested Test')
+
+    def test_html_with_special_characters(self):
+        """Test HTML with Unicode and special characters."""
+        html = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <title>特殊字符测试 — Special Chars & Entities</title>
+    <meta name="description" content="Testing: <>&quot;'">
+</head>
+<body>
+    <p>Emoji test: 🎉 🚀 ✅</p>
+    <p>Math symbols: ∑ ∫ ∞ ≠ ≤ ≥</p>
+    <p>Entities: &lt;div&gt; &amp; &copy; &reg;</p>
+</body>
+</html>"""
+
+        path = self.create_temp_html(html)
+        analyzer = HTMLAnalyzer(path)
+        structure = analyzer.get_structure()
+
+        # Should handle Unicode and special characters
+        self.assertEqual(structure['type'], 'html')
+        self.assertIn('特殊字符测试', structure['head']['title'])
+
+    def test_html_with_no_head_or_body(self):
+        """Test minimalist HTML without explicit head/body tags."""
+        html = """<!DOCTYPE html>
+<html>
+<title>Minimal</title>
+<h1>Hello World</h1>
+<p>No explicit head or body tags</p>
+</html>"""
+
+        path = self.create_temp_html(html)
+        analyzer = HTMLAnalyzer(path)
+        structure = analyzer.get_structure()
+
+        # Browser-like parsers auto-create head/body
+        self.assertEqual(structure['type'], 'html')
+        # BeautifulSoup should auto-create structure
+        self.assertIsInstance(structure, dict)
+
+    def test_html_with_multiple_templates_detected(self):
+        """Test HTML that might match multiple template patterns."""
+        html = """<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ .Title }} - {% block title %}Default{% endblock %}</title>
+</head>
+<body>
+    <p>Go: {{ .Content }}</p>
+    <p>Jinja2: {{ content }}</p>
+    <p>Handlebars: {{name}}</p>
+    <p>ERB: <%= user.name %></p>
+</body>
+</html>"""
+
+        path = self.create_temp_html(html)
+        analyzer = HTMLAnalyzer(path)
+        structure = analyzer.get_structure()
+
+        # Should detect at least one template type
+        # (implementation picks first match)
+        self.assertIn('template', structure)
+        self.assertIn('type', structure['template'])
+        # Template type should be one of the supported ones
+        self.assertIn(structure['template']['type'],
+                     ['jinja2', 'go-template', 'handlebars', 'erb', 'php'])
+
+    def test_html_with_large_inline_content(self):
+        """Test HTML with very large inline scripts/styles."""
+        large_script = "var data = [" + ",".join([str(i) for i in range(1000)]) + "];"
+        large_style = "\n".join([f".class{i} {{ color: #{i:06x}; }}" for i in range(100)])
+
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Large Inline Test</title>
+    <style>
+    {large_style}
+    </style>
+    <script>
+    {large_script}
+    </script>
+</head>
+<body>
+    <h1>Test</h1>
+</body>
+</html>"""
+
+        path = self.create_temp_html(html)
+        analyzer = HTMLAnalyzer(path)
+
+        # Test scripts extraction
+        structure = analyzer.get_structure(scripts='inline')
+        self.assertIn('scripts', structure)
+
+        scripts = structure['scripts']
+        self.assertEqual(len(scripts), 1)
+
+        # Should have preview (truncated)
+        self.assertIn('preview', scripts[0])
+        # Preview should be truncated, not full content
+        preview = scripts[0]['preview']
+        self.assertLess(len(preview), len(large_script))
+
 
 if __name__ == '__main__':
     unittest.main()
