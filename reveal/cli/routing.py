@@ -215,6 +215,15 @@ def _handle_reveal(adapter_class: type, resource: str, element: Optional[str],
         _handle_reveal_check(resource, args)
         return
 
+    # Handle element extraction: delegate to file analyzer
+    if element and resource:
+        adapter = adapter_class()
+        result = adapter.get_element(resource, element, args)
+        if result is None:
+            print(f"Error: Could not extract '{element}' from reveal://{resource}", file=sys.stderr)
+            sys.exit(1)
+        return  # Rendering handled by get_element
+
     # Normal reveal: get and render structure
     adapter = adapter_class(resource if resource else None)
     result = adapter.get_structure()

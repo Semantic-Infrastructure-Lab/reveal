@@ -285,6 +285,34 @@ class RevealAdapter(ResourceAdapter):
 
         return sorted(types)
 
+    def get_element(self, resource: str, element_name: str, args) -> Optional[bool]:
+        """Extract a specific element from a reveal source file.
+
+        Args:
+            resource: File path within reveal (e.g., "rules/links/L001.py")
+            element_name: Element to extract (e.g., function name)
+            args: Command-line arguments
+
+        Returns:
+            True if successful (output is printed), None if failed
+        """
+        from ..cli.routing import handle_file
+
+        # Resolve the file path within reveal
+        file_path = self.reveal_root / resource
+
+        if not file_path.exists():
+            return None
+
+        # Use regular file processing to extract the element
+        # This delegates to the appropriate analyzer (Python, etc.)
+        try:
+            handle_file(str(file_path), element_name,
+                       show_meta=False, output_format=args.format, args=args)
+            return True
+        except Exception:
+            return None
+
     def format_output(self, structure: Dict[str, Any], format_type: str = 'text') -> str:
         """Format reveal structure for display.
 

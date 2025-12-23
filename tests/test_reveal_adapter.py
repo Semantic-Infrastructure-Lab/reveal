@@ -279,6 +279,117 @@ class TestRevealAdapterFormatOutput:
         assert 'Rules' in output or 'rules_count' in output
 
 
+class TestRevealAdapterElementExtraction:
+    """Test element extraction from reveal source files."""
+
+    def test_get_element_python_function(self, capsys):
+        """Extract a Python function from reveal source."""
+        from argparse import Namespace
+        adapter = RevealAdapter()
+        args = Namespace(format='text')
+
+        # Extract a function from L001 rule
+        result = adapter.get_element('rules/links/L001.py', '_extract_anchors_from_markdown', args)
+
+        assert result is True
+        captured = capsys.readouterr()
+        assert '_extract_anchors_from_markdown' in captured.out
+        assert 'def _extract_anchors_from_markdown' in captured.out
+
+    def test_get_element_python_class(self, capsys):
+        """Extract a Python class from reveal source."""
+        from argparse import Namespace
+        adapter = RevealAdapter()
+        args = Namespace(format='text')
+
+        # Extract MarkdownAnalyzer class
+        result = adapter.get_element('analyzers/markdown.py', 'MarkdownAnalyzer', args)
+
+        assert result is True
+        captured = capsys.readouterr()
+        assert 'MarkdownAnalyzer' in captured.out
+        assert 'class MarkdownAnalyzer' in captured.out
+
+    def test_get_element_nonexistent_file(self):
+        """get_element returns None for nonexistent file."""
+        from argparse import Namespace
+        adapter = RevealAdapter()
+        args = Namespace(format='text')
+
+        result = adapter.get_element('nonexistent/file.py', 'SomeElement', args)
+
+        assert result is None
+
+    def test_get_element_self_referential(self, capsys):
+        """Extract element from RevealAdapter itself."""
+        from argparse import Namespace
+        adapter = RevealAdapter()
+        args = Namespace(format='text')
+
+        # Extract get_element method from RevealAdapter
+        result = adapter.get_element('adapters/reveal.py', 'get_element', args)
+
+        assert result is True
+        captured = capsys.readouterr()
+        assert 'get_element' in captured.out
+        assert 'def get_element' in captured.out
+
+
+class TestRevealAdapterComponentFiltering:
+    """Test component-specific filtering (analyzers, adapters, rules)."""
+
+    def test_filter_analyzers_only(self):
+        """Filter to show only analyzers."""
+        adapter = RevealAdapter(component='analyzers')
+        structure = adapter.get_structure()
+
+        # Should have analyzers
+        assert 'analyzers' in structure
+        assert len(structure['analyzers']) > 0
+
+        # Should NOT have adapters or rules at top level
+        assert 'adapters' not in structure
+        assert 'rules' not in structure
+
+    def test_filter_adapters_only(self):
+        """Filter to show only adapters."""
+        adapter = RevealAdapter(component='adapters')
+        structure = adapter.get_structure()
+
+        # Should have adapters
+        assert 'adapters' in structure
+        assert len(structure['adapters']) > 0
+
+        # Should NOT have analyzers or rules
+        assert 'analyzers' not in structure
+        assert 'rules' not in structure
+
+    def test_filter_rules_only(self):
+        """Filter to show only rules."""
+        adapter = RevealAdapter(component='rules')
+        structure = adapter.get_structure()
+
+        # Should have rules
+        assert 'rules' in structure
+        assert len(structure['rules']) > 0
+
+        # Should NOT have analyzers or adapters
+        assert 'analyzers' not in structure
+        assert 'adapters' not in structure
+
+    def test_filter_case_insensitive(self):
+        """Component filtering is case-insensitive."""
+        adapter_lower = RevealAdapter(component='analyzers')
+        adapter_upper = RevealAdapter(component='ANALYZERS')
+
+        struct_lower = adapter_lower.get_structure()
+        struct_upper = adapter_upper.get_structure()
+
+        # Both should filter to analyzers
+        assert 'analyzers' in struct_lower
+        assert 'analyzers' in struct_upper
+
+
 class TestRevealAdapterIntegration:
     """Integration tests for reveal:// adapter."""
 
