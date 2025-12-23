@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **reveal:// Element Extraction**: Extract specific code elements from reveal's own source
+  - `reveal reveal://rules/links/L001.py _extract_anchors_from_markdown` extracts function
+  - `reveal reveal://analyzers/markdown.py MarkdownAnalyzer` extracts class
+  - Works with any file type in reveal's codebase (Python, Markdown, etc.)
+  - Self-referential: Can extract reveal's own code using reveal
+  - Added 8 new tests for element extraction and component filtering
+
+### Technical
+- 782/782 tests passing (up from 774)
+- 68% code coverage (up from 67%)
+- Session: wrathful-eclipse-1223
+
 ## [0.26.0] - 2025-12-23
 
 ### ✨ NEW: Link Validation Complete
