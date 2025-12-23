@@ -3,7 +3,7 @@
 > **Vision:** Universal resource exploration with progressive disclosure
 
 **Current version:** v0.24.0
-**Last updated:** 2025-12-16
+**Last updated:** 2025-12-22
 
 ---
 
@@ -90,7 +90,7 @@
 
 ## What's Next
 
-### v0.24 (Q1 2026): Link Validation & Quality
+### v0.25 (Q1 2026): Link Validation & Quality
 
 **Link Validation** - Documentation workflow support:
 - L-series quality rules (L001: broken internal, L002: broken external, L003: routing mismatches)
@@ -105,7 +105,49 @@
 
 **See:** `internal-docs/planning/PENDING_WORK.md` for active tracks
 
-### v0.25-v0.26 (Q2 2026): Core Features
+### v0.26-v0.27 (Q2 2026): Code Analysis & Architecture
+
+**`imports://` adapter** - Import graph analysis:
+```bash
+reveal imports://src                     # All imports in directory
+reveal 'imports://src?unused'            # Find unused imports
+reveal 'imports://src?circular'          # Detect circular dependencies
+reveal imports://src --graph             # Visualize import relationships
+```
+- Language-agnostic (Python, JavaScript, Go, Rust, Java, TypeScript)
+- Unused import detection with symbol usage analysis
+- Circular dependency detection via topological sort
+- Layer violation detection (routes importing repositories, etc.)
+- Multi-language support via tree-sitter
+
+**`architecture://` adapter** - Architecture rule validation:
+```bash
+reveal architecture://src               # Check all architecture rules
+reveal 'architecture://src?violations'   # List violations only
+reveal architecture://src/routes         # Check specific layer
+```
+- Layer boundary enforcement (presentation → service → data)
+- Custom dependency rules via `.reveal.yaml`
+- Pattern compliance validation
+- CI/CD integration for architecture governance
+
+**`.reveal.yaml` config** - Project-specific configuration:
+```yaml
+# .reveal.yaml - shareable project configuration
+imports:
+  entry_points: [app/main.py, tests/]
+  ignore_unused: [__init__.py]
+
+architecture:
+  layers:
+    - name: routes
+      allow_imports: [services, models, utils]
+      deny_imports: [repositories, database]
+```
+- Reduces false positives (entry points, framework patterns)
+- Team-shared rules (commit to version control)
+- Adapter-specific configuration sections
+- JSON Schema validation
 
 **`diff://` adapter** - Comparative exploration:
 ```bash
@@ -114,24 +156,14 @@ reveal diff://app.py:HEAD~1              # Compare with git revision
 reveal diff://python://venv:python://    # Compare environments
 ```
 
-**`stats://` adapter** - Codebase health metrics:
-```bash
-reveal stats://./src                     # Overview: lines, functions, complexity
-reveal stats://./src --hotspots          # Largest/most complex files
-reveal stats://./src --format=json       # For CI/CD dashboards
-```
+**See:** `internal-docs/planning/PRACTICAL_CODE_ANALYSIS_ADAPTERS.md` for implementation details
 
-**`--watch` mode** - Live feedback:
-```bash
-reveal app.py --watch --check            # Monitor file for changes
-reveal src/ --watch --typed              # Watch directory
-```
-
-### v0.27-v0.29 (Q3 2026): Polish for v1.0
+### v0.28-v0.29 (Q3 2026): Polish for v1.0
 
 **UX Improvements:**
+- `--watch` mode: Live feedback for file changes
 - Color themes (light/dark/high-contrast)
-- Config file support (`~/.config/reveal/config.yaml`)
+- Global config support (`~/.config/reveal/config.yaml`)
 - `--quiet` mode for scripting
 - Interactive mode exploration
 
