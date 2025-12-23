@@ -116,21 +116,41 @@ class RevealAdapter(ResourceAdapter):
         self.reveal_root = self._find_reveal_root()
 
     def _find_reveal_root(self) -> Path:
-        """Find reveal's root directory."""
-        # Start from this file's location
-        current = Path(__file__).parent.parent
+        """Find reveal's root directory.
 
-        # If we're in the reveal package, return parent
-        if (current / 'analyzers').exists() and (current / 'rules').exists():
-            return current
+        Priority:
+        1. REVEAL_DEV_ROOT environment variable (explicit override)
+        2. Git checkout in CWD or parent directories (prefer development)
+        3. Installed package location (fallback)
+        """
+        import os
 
-        # Otherwise, search up to 3 levels
-        for _ in range(3):
-            if (current / 'reveal' / 'analyzers').exists():
-                return current / 'reveal'
-            current = current.parent
+        # 1. Explicit override via environment
+        env_root = os.getenv('REVEAL_DEV_ROOT')
+        if env_root:
+            dev_root = Path(env_root)
+            if (dev_root / 'analyzers').exists() and (dev_root / 'rules').exists():
+                return dev_root
 
-        # Fallback: assume we're in installed package
+        # 2. Search from CWD for git checkout (prefer development over installed)
+        cwd = Path.cwd()
+        for _ in range(10):  # Search up to 10 levels
+            # Check for reveal git checkout patterns
+            reveal_dir = cwd / 'reveal'
+            if (reveal_dir / 'analyzers').exists() and (reveal_dir / 'rules').exists():
+                # Verify it's a git checkout by checking for pyproject.toml in parent
+                if (cwd / 'pyproject.toml').exists():
+                    return reveal_dir
+            cwd = cwd.parent
+            if cwd == cwd.parent:  # Reached root
+                break
+
+        # 3. Fallback to installed package location
+        installed = Path(__file__).parent.parent
+        if (installed / 'analyzers').exists() and (installed / 'rules').exists():
+            return installed
+
+        # Last resort
         return Path(__file__).parent.parent
 
     def get_structure(self) -> Dict[str, Any]:
@@ -138,7 +158,41 @@ class RevealAdapter(ResourceAdapter):
 
         Returns:
             Dict containing analyzers, adapters, rules, etc.
+            Filtered by self.component if specified.
         """
+        # Filter by component if specified
+        if self.component:
+            component = self.component.lower()
+
+            if component == 'analyzers':
+                analyzers = self._get_analyzers()
+                return {
+                    'analyzers': analyzers,
+                    'metadata': {
+                        'root': str(self.reveal_root),
+                        'analyzers_count': len(analyzers),
+                    }
+                }
+            elif component == 'adapters':
+                adapters = self._get_adapters()
+                return {
+                    'adapters': adapters,
+                    'metadata': {
+                        'root': str(self.reveal_root),
+                        'adapters_count': len(adapters),
+                    }
+                }
+            elif component == 'rules':
+                rules = self._get_rules()
+                return {
+                    'rules': rules,
+                    'metadata': {
+                        'root': str(self.reveal_root),
+                        'rules_count': len(rules),
+                    }
+                }
+
+        # Default: show everything
         structure = {
             'analyzers': self._get_analyzers(),
             'adapters': self._get_adapters(),
