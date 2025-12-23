@@ -7,12 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2025-12-23
+
+### ✨ NEW: Link Validation Complete
+
+**Anchor validation, improved root detection, and reveal:// enhancements!**
+
+This release completes the link validation feature with anchor support, fixes dogfooding issues discovered while using reveal on itself, and improves development workflows.
+
 ### Added
-- **Link Validation Tests**: Comprehensive test coverage for L001, L002, L003 rules
+- **L001 Anchor Validation**: Full support for `#heading` links in markdown
+  - Extract headings from markdown files using GitHub Flavored Markdown slug algorithm
+  - Validate anchor-only links (`[text](#heading)`)
+  - Validate file+anchor links (`[text](file.md#heading)`)
+  - Detects broken anchors and suggests valid alternatives
+- **reveal:// Component Filtering**: Path-based filtering now works
+  - `reveal reveal://analyzers` shows only analyzers (15 items)
+  - `reveal reveal://adapters` shows only adapters (8 items)
+  - `reveal reveal://rules` shows only rules (32 items)
+- **Smart Root Detection**: Prefer git checkouts over installed packages
+  - Search from CWD upward for reveal/ directory with pyproject.toml
+  - Support `REVEAL_DEV_ROOT` environment variable for explicit override
+  - Fixes confusing behavior where `reveal:// --check` found wrong root
+
+### Fixed
+- **Logging**: Added debug logging to 9 bare exception handlers (main.py, html.py, markdown.py, office/base.py)
+- **MySQL Errors**: Improved pymysql missing dependency errors (fail-fast in `__init__`)
+- **Version References**: Updated outdated v0.18.0 → v0.27 references in help text
+- **reveal:// Rendering**: Renderer now handles partial structure dicts correctly
 
 ### Changed
-- **Documentation**: Updated README with link validation section and correct rule count (31 rules)
+- **Link Validation Tests**: Comprehensive test coverage for L001, L002, L003 rules (594 lines, 28 tests)
+- **Documentation**: Updated README with link validation section and correct rule count (32 rules)
 - **Roadmap**: Updated to reflect v0.25.0 shipped, v0.26 planning
+
+### Technical
+- 773/773 tests passing (100% pass rate)
+- 67% code coverage maintained
+- Zero regressions introduced
+- Sessions: charcoal-dye-1223, garnet-dye-1223
 
 ## [0.25.0] - 2025-12-20
 

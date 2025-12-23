@@ -1,5 +1,5 @@
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.25.0
+**Version:** 0.26.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -1628,7 +1628,7 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 
 ---
 
-**Version:** 0.25.0
+**Version:** 0.26.0
 **Last updated:** 2025-12-20
 **Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
 **PyPI:** https://pypi.org/project/reveal-cli/
