@@ -105,8 +105,26 @@ reveal --rules                   # List all rules
 reveal --explain B001            # Explain specific rule
 ```
 
-**28 built-in rules** across 10 categories: bugs (B001-B005), complexity (C901-C905), duplicates (D001-D002), style (E501), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V007). New in v0.23.0: decorator-aware bug detection (B002-B005).
+**31 built-in rules** across 11 categories: bugs (B001-B005), complexity (C901-C905), duplicates (D001-D002), style (E501), links (L001-L003), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V008). New in v0.25.0: link validation (L001-L003) for documentation workflows.
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
+
+### 🔗 Link Validation (v0.25.0+)
+
+```bash
+# Validate links in markdown files
+reveal docs/README.md --check --select L      # Check all link rules
+reveal docs/ --check --select L001            # Only broken internal links
+reveal docs/ --check --select L002            # Only broken external links (slow)
+reveal docs/ --check --select L003            # Only framework routing mismatches
+```
+
+**L-series rules** for documentation workflows:
+- **L001:** Broken internal links (filesystem validation, case sensitivity)
+- **L002:** Broken external links (HTTP validation with smart suggestions)
+- **L003:** Framework routing mismatches (FastHTML, Jekyll, Hugo auto-detection)
+
+**Performance:** L001+L003 are fast (~50ms/file), L002 is slow (network I/O). Run L002 pre-commit or weekly.
+**Guide:** See [LINK_VALIDATION_GUIDE.md](docs/LINK_VALIDATION_GUIDE.md) for batch validation, CI/CD integration, and examples.
 
 ### 🌲 Outline Mode (v0.9.0+)
 

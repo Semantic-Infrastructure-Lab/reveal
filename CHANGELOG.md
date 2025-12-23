@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Link Validation Tests**: Comprehensive test coverage for L001, L002, L003 rules
+
+### Changed
+- **Documentation**: Updated README with link validation section and correct rule count (31 rules)
+- **Roadmap**: Updated to reflect v0.25.0 shipped, v0.26 planning
+
 ## [0.25.0] - 2025-12-20
 
 ### ✨ NEW: HTML Analyzer
@@ -96,6 +103,92 @@ Shows: Title, 14 meta tags, canonical URL, 2 stylesheets, 4 scripts (with SEO an
 - Template-aware analysis for modern web development
 - SEO and accessibility analysis capabilities
 - Dogfooded successfully (reveal analyzes itself including HTML files)
+
+### ✨ NEW: Link Validation
+
+**L-series quality rules for documentation workflows** - Automatically validate internal and external links in markdown documentation!
+
+Three new rules for comprehensive link checking in documentation:
+
+1. **L001: Broken Internal Links** (⚠️ Warning)
+   - Filesystem validation of relative links (`../path/file.md`)
+   - Case sensitivity detection (catches `README.md` vs `readme.md` mismatches)
+   - Missing `.md` extension suggestions
+   - Anchor splitting (`file.md#heading`) with file validation
+   - Smart error messages with fix suggestions
+
+2. **L002: Broken External Links** (ℹ️ Info)
+   - HTTP HEAD requests for fast validation (no content download)
+   - Fallback to GET with Range header for servers blocking HEAD
+   - 5-second timeout per URL to prevent hangs
+   - Status code analysis: 404, 403, 401, 410, 500, 503
+   - Smart suggestions: try HTTPS, try with/without www
+   - User-Agent header to avoid bot blocking
+
+3. **L003: Framework Routing Mismatches** (⚠️ Warning)
+   - Auto-detects framework type (FastHTML, Jekyll, Hugo, static)
+   - Framework-specific routing validation:
+     - **FastHTML**: `/path/FILE` → `path/FILE.md` (case-insensitive)
+     - **Jekyll**: `/path/file.html` → `path/file.md`, checks `_posts/`
+     - **Hugo**: `/path/file/` → `content/path/file/index.md`
+   - Docs root detection (scans for `docs/`, `content/`, `_docs/`)
+   - Similar file suggestions for case mismatches and typos
+
+**CLI Integration:**
+
+```bash
+# Check all link rules
+reveal docs/README.md --check --select L
+
+# Only broken internal links (fast)
+reveal docs/ --check --select L001
+
+# Only broken external links (slow, network I/O)
+reveal docs/ --check --select L002
+
+# Only framework routing mismatches (fast)
+reveal docs/ --check --select L003
+
+# Combine with other quality rules
+reveal docs/ --check --select L,M,V
+```
+
+**Performance Characteristics:**
+
+| Rule | Speed | Use Case |
+|------|-------|----------|
+| L001 | ~50ms/file (filesystem I/O) | Every commit |
+| L002 | ~500ms/URL (network I/O) | Pre-commit, weekly |
+| L003 | ~50ms/file (filesystem I/O) | Every commit |
+
+**Recommendation:** Run `--select L001,L003` during development (fast), add `L002` for thorough pre-commit checks.
+
+**Documentation:**
+- Comprehensive guide: [docs/LINK_VALIDATION_GUIDE.md](docs/LINK_VALIDATION_GUIDE.md) (417 lines)
+- Quick start examples for single files and batch validation
+- CI/CD integration patterns (GitHub Actions examples)
+- Real-world validation results (SIL website: 21 issues found in 1,245 links)
+- Performance tips and troubleshooting
+
+**Technical Details:**
+- Rules auto-discovered via RuleRegistry (no manual registration)
+- L001: 196 lines, filesystem-based validation
+- L002: 212 lines, HTTP validation with smart retry
+- L003: 369 lines, framework detection and routing
+- Total: 777 lines of production code
+- File patterns: `.md`, `.markdown`
+
+**Production Validation:**
+- Tested on SIL website (64 files, 1,245 links)
+- Found 21 real issues: 8 broken GitHub URLs, 13 routing case mismatches
+- FastHTML framework auto-detected correctly
+- Performance validated: ~5s for 100 files (L001+L003 only)
+
+**Impact:**
+- Solves documented user pain point (manual link checking → 5-second automation)
+- Framework-aware validation (not just simple regex matching)
+- Production-ready with real-world testing
+- Natural fit for CI/CD pipelines
 
 ### Improved
 - **HTML Analyzer Code Quality**: Critical bug fixes and refactoring

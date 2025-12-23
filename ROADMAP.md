@@ -2,12 +2,33 @@
 
 > **Vision:** Universal resource exploration with progressive disclosure
 
-**Current version:** v0.24.0
-**Last updated:** 2025-12-22
+**Current version:** v0.25.0
+**Last updated:** 2025-12-23
 
 ---
 
 ## What We've Shipped
+
+### v0.25.0 - HTML Analyzer & Link Validation (Dec 2025)
+
+**HTML Analyzer:**
+- Full HTML analysis with template support (Jinja2, Go, Handlebars, ERB, PHP)
+- `--metadata` flag: Extract SEO, OpenGraph, Twitter cards
+- `--semantic TYPE` flag: Extract navigation, content, forms, media elements
+- `--scripts` and `--styles` flags: Extract inline/external scripts and stylesheets
+- Comprehensive guide via `reveal help://html`
+- 35 tests with 100% pass rate
+
+**Link Validation:**
+- L-series quality rules (L001, L002, L003) for documentation workflows
+- **L001:** Broken internal links (filesystem validation, case sensitivity)
+- **L002:** Broken external links (HTTP validation with 404/403 detection)
+- **L003:** Framework routing mismatches (FastHTML, Jekyll, Hugo auto-detection)
+- Performance optimized: L001+L003 fast (~50ms/file), L002 slow (network I/O)
+- Comprehensive guide: [LINK_VALIDATION_GUIDE.md](docs/LINK_VALIDATION_GUIDE.md)
+
+**Dependencies Added:**
+- `beautifulsoup4>=4.12.0` and `lxml>=4.9.0` for HTML parsing
 
 ### v0.24.0 - Code Quality Metrics (Dec 2025)
 
@@ -90,22 +111,22 @@
 
 ## What's Next
 
-### v0.25 (Q1 2026): Link Validation & Quality
+### v0.26 (Q1 2026): Quality & Usability
 
-**Link Validation** - Documentation workflow support:
-- L-series quality rules (L001: broken internal, L002: broken external, L003: routing mismatches)
-- `--recursive` modifier for batch processing
-- Framework profiles (FastHTML, Jekyll, Hugo routing awareness)
-- CI/CD integration (exit codes, JSON output)
+**Link Validation Enhancements:**
+- Test coverage for L001, L002, L003 (target: 80%+)
+- `--recursive` flag for batch processing
+- Anchor validation (#heading links)
+- `.reveal.yaml` config for ignoring URLs
 
 **Quality Improvements:**
 - D002 duplicate detection refinement (better discrimination)
-- Test coverage improvements (target: 50%+)
-- Code quality refactoring (Phases 2-3)
+- Overall test coverage improvements (target: 60%+)
+- Code quality refactoring based on dogfooding results
 
 **See:** `internal-docs/planning/PENDING_WORK.md` for active tracks
 
-### v0.26-v0.27 (Q2 2026): Code Analysis & Architecture
+### v0.27-v0.28 (Q2 2026): Code Analysis & Architecture
 
 **`imports://` adapter** - Import graph analysis:
 ```bash
@@ -158,7 +179,7 @@ reveal diff://python://venv:python://    # Compare environments
 
 **See:** `internal-docs/planning/PRACTICAL_CODE_ANALYSIS_ADAPTERS.md` for implementation details
 
-### v0.28-v0.29 (Q3 2026): Polish for v1.0
+### v0.29-v0.30 (Q3 2026): Polish for v1.0
 
 **UX Improvements:**
 - `--watch` mode: Live feedback for file changes

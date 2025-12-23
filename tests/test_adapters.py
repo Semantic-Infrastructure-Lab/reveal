@@ -528,18 +528,21 @@ class TestPythonAdapter(unittest.TestCase):
         """Should return error messages for unimplemented features."""
         adapter = PythonAdapter()
 
-        # Import graph - coming in v0.18.0
+        # Import graph - coming in v0.27 via imports:// adapter
         result = adapter.get_element('imports/graph')
         self.assertIn('error', result)
-        self.assertIn('0.18.0', result['error'])
+        self.assertIn('0.27', result['error'])
+        self.assertIn('imports://', result['error'])
 
-        # Circular import detection - coming in v0.18.0
+        # Circular import detection - coming in v0.27 via imports:// adapter
         result = adapter.get_element('imports/circular')
         self.assertIn('error', result)
+        self.assertIn('0.27', result['error'])
 
-        # Syntax checking - coming in v0.18.0
+        # Syntax checking - not supported
         result = adapter.get_element('debug/syntax')
         self.assertIn('error', result)
+        self.assertIn('Unknown debug type', result['error'])
 
     def test_get_module_analysis(self):
         """Should analyze module import location and detect conflicts."""

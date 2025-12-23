@@ -2,6 +2,7 @@
 
 import sys
 import os
+import logging
 from .base import get_all_analyzers, FileAnalyzer
 from . import __version__
 from .utils import copy_to_clipboard, safe_json_dumps, check_for_updates
@@ -182,8 +183,9 @@ def list_supported_types():
                 try:
                     get_language(lang)
                     available_fallbacks.append((display_name, ext))
-                except Exception:
+                except Exception as e:
                     # Language not available in tree-sitter-languages, skip it
+                    logging.debug(f"Tree-sitter language {lang} not available: {e}")
                     pass
 
         if available_fallbacks:
@@ -194,8 +196,9 @@ def list_supported_types():
             print("Note: These work automatically but may have basic support.")
             print("Note: Contributions for full analyzers welcome!")
 
-    except Exception:
+    except Exception as e:
         # tree-sitter-languages not available or probe failed
+        logging.debug(f"Tree-sitter language detection failed: {e}")
         pass
 
     print("\nUsage: reveal <file>")

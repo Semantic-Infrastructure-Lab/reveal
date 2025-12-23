@@ -57,7 +57,6 @@ class PythonAdapter(ResourceAdapter):
             - syspath: sys.path analysis with conflict detection
             - doctor: Auto-detect common environment issues
             - debug/bytecode: Bytecode issues
-            - debug/syntax: Syntax errors (future)
 
         Returns:
             Dict containing element details, or None if not found
@@ -83,9 +82,9 @@ class PythonAdapter(ResourceAdapter):
             return {"error": "Specify module name: python://module/<name>"}
         elif base == "imports":
             if len(parts) > 1 and parts[1] == "graph":
-                return {"error": "Import graph analysis coming in v0.18.0"}
+                return {"error": "Import graph analysis coming in v0.27 (use imports:// adapter)"}
             elif len(parts) > 1 and parts[1] == "circular":
-                return {"error": "Circular import detection coming in v0.18.0"}
+                return {"error": "Circular import detection coming in v0.27 (use imports:// adapter)"}
             return self._get_imports(**kwargs)
         elif base == "syspath":
             return get_syspath_analysis()
@@ -94,7 +93,7 @@ class PythonAdapter(ResourceAdapter):
         elif base == "debug":
             if len(parts) > 1:
                 return self._handle_debug(parts[1], **kwargs)
-            return {"error": "Specify debug type: bytecode, syntax"}
+            return {"error": "Specify debug type: bytecode"}
 
         return None
 
@@ -226,10 +225,8 @@ class PythonAdapter(ResourceAdapter):
         if debug_type == "bytecode":
             root_path = kwargs.get("root_path", ".")
             return check_bytecode(root_path)
-        elif debug_type == "syntax":
-            return {"error": "Syntax checking coming in v0.18.0"}
 
-        return {"error": f"Unknown debug type: {debug_type}"}
+        return {"error": f"Unknown debug type: {debug_type}. Available: bytecode"}
 
     @staticmethod
     def _pyc_to_source(pyc_file):

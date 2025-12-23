@@ -2,6 +2,7 @@
 
 import re
 import yaml
+import logging
 from typing import Dict, List, Any, Optional
 from ..base import register
 from ..treesitter import TreeSitterAnalyzer
@@ -398,11 +399,13 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
             return result
 
-        except yaml.YAMLError:
+        except yaml.YAMLError as e:
             # Malformed YAML - return None (graceful degradation)
+            logging.debug(f"Failed to parse YAML frontmatter: {e}")
             return None
-        except Exception:
+        except Exception as e:
             # Any other error - graceful degradation
+            logging.debug(f"Unexpected error parsing frontmatter: {e}")
             return None
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:

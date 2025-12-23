@@ -11,6 +11,7 @@ This base class provides shared infrastructure for both format families.
 
 import zipfile
 import xml.etree.ElementTree as ET
+import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from ...base import FileAnalyzer
@@ -75,7 +76,8 @@ class ZipXMLAnalyzer(FileAnalyzer):
         try:
             xml_content = self.archive.read(part_path)
             return ET.fromstring(xml_content)
-        except Exception:
+        except Exception as e:
+            logging.debug(f"Failed to read/parse XML part {part_path}: {e}")
             return None
 
     def _read_part(self, part_path: str) -> Optional[bytes]:
@@ -84,7 +86,8 @@ class ZipXMLAnalyzer(FileAnalyzer):
             return None
         try:
             return self.archive.read(part_path)
-        except Exception:
+        except Exception as e:
+            logging.debug(f"Failed to read part {part_path}: {e}")
             return None
 
     def _extract_text(self, element: ET.Element, text_tag: str, ns_prefix: str = '') -> str:
@@ -138,7 +141,8 @@ class ZipXMLAnalyzer(FileAnalyzer):
                         'size': info.file_size,
                         'type': ext[1:].upper(),
                     })
-                except Exception:
+                except Exception as e:
+                    logging.debug(f"Failed to extract media info for {part}: {e}")
                     pass
         return media
 
@@ -184,5 +188,6 @@ class ZipXMLAnalyzer(FileAnalyzer):
         if self.archive:
             try:
                 self.archive.close()
-            except Exception:
+            except Exception as e:
+                logging.debug(f"Failed to close archive {self.path}: {e}")
                 pass

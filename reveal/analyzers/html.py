@@ -1,6 +1,7 @@
 """HTML analyzer with template support and progressive disclosure."""
 
 import re
+import logging
 from typing import Dict, List, Any, Optional
 from ..base import FileAnalyzer, register
 
@@ -33,8 +34,9 @@ class HTMLAnalyzer(FileAnalyzer):
         # Try lxml first (faster), fallback to html.parser (stdlib)
         try:
             self.soup = BeautifulSoup(self.content, 'lxml')
-        except Exception:
+        except Exception as e:
             # lxml not installed or parsing failed, use stdlib parser
+            logging.debug(f"lxml parser not available for {path}, using html.parser: {e}")
             self.soup = BeautifulSoup(self.content, 'html.parser')
 
         # Detect template type

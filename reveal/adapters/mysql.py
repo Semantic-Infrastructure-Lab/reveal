@@ -123,7 +123,8 @@ class MySQLAdapter(ResourceAdapter):
                 },
             ],
             'notes': [
-                'Requires pymysql: pip install reveal-cli[database]',
+                '⚠️  IMPORTANT: Requires pymysql dependency',
+                'Install: pip install reveal-cli[database] OR pip install pymysql',
                 'Credentials: URI > TIA secrets > env vars > ~/.my.cnf',
                 'Env vars: MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE',
                 ('Health thresholds: connections <80%, buffer pool >99%, '
@@ -144,7 +145,17 @@ class MySQLAdapter(ResourceAdapter):
 
         Args:
             connection_string: mysql://[user:pass@]host[:port][/element]
+
+        Raises:
+            ImportError: If pymysql is not installed
         """
+        if not PYMYSQL_AVAILABLE:
+            raise ImportError(
+                "pymysql is required for mysql:// adapter.\n"
+                "Install with: pip install reveal-cli[database]\n"
+                "Or: pip install pymysql"
+            )
+
         self.connection_string = connection_string
         self.host = None
         self.port = 3306
@@ -255,18 +266,10 @@ class MySQLAdapter(ResourceAdapter):
             pymysql connection object
 
         Raises:
-            ImportError: If pymysql not installed
             Exception: Connection errors
         """
         if self._connection:
             return self._connection
-
-        if not PYMYSQL_AVAILABLE:
-            raise ImportError(
-                "pymysql is required for mysql:// adapter.\n"
-                "Install with: pip install reveal-cli[database]\n"
-                "Or: pip install pymysql"
-            )
 
         connection_params = {
             'host': self.host or 'localhost',

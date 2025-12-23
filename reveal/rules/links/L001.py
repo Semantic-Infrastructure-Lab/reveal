@@ -25,6 +25,8 @@ class L001(BaseRule):
 
     # Markdown link pattern: [text](url)
     LINK_PATTERN = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
+    # Markdown heading pattern: # Heading text
+    HEADING_PATTERN = re.compile(r'^#{1,6}\s+(.+)$', re.MULTILINE)
 
     def check(self,
              file_path: str,
@@ -56,7 +58,7 @@ class L001(BaseRule):
                     continue
 
                 # Check if this internal link is broken
-                is_broken, reason = self._is_broken_link(base_path, url)
+                is_broken, reason = self._is_broken_link(base_path, url, file_path)
 
                 if is_broken:
                     message = f"{self.message}: {url}"
@@ -76,19 +78,55 @@ class L001(BaseRule):
 
         return detections
 
-    def _is_broken_link(self, base_dir: Path, url: str) -> Tuple[bool, str]:
+    def _extract_anchors_from_markdown(self, file_path: Path) -> List[str]:
+        """Extract valid anchor IDs from markdown headings.
+
+        Args:
+            file_path: Path to markdown file
+
+        Returns:
+            List of anchor IDs (e.g., ['my-heading', 'another-section'])
+        """
+        try:
+            content = file_path.read_text(encoding='utf-8', errors='ignore')
+        except Exception as e:
+            logger.debug(f"Failed to read {file_path} for anchor extraction: {e}")
+            return []
+
+        anchors = []
+        for match in self.HEADING_PATTERN.finditer(content):
+            heading_text = match.group(1).strip()
+            # Convert heading to anchor slug (GitHub Flavored Markdown style)
+            anchor = heading_text.lower()
+            anchor = re.sub(r'[^\w\s-]', '', anchor)  # Remove special chars except spaces and hyphens
+            anchor = re.sub(r'[\s_]+', '-', anchor)   # Replace spaces/underscores with hyphens
+            anchor = re.sub(r'-+', '-', anchor)       # Collapse multiple hyphens
+            anchor = anchor.strip('-')                # Remove leading/trailing hyphens
+            if anchor:
+                anchors.append(anchor)
+
+        return anchors
+
+    def _is_broken_link(self, base_dir: Path, url: str, source_file: str = "") -> Tuple[bool, str]:
         """Check if an internal link is broken.
 
         Args:
             base_dir: Directory containing the markdown file
             url: Link URL (relative or absolute)
+            source_file: Path to the source markdown file (for anchor-only links)
 
         Returns:
             Tuple of (is_broken, reason)
         """
         # Handle anchor-only links (#heading)
         if url.startswith('#'):
-            # TODO: Validate anchor exists in current file
+            # Validate anchor exists in current file
+            anchor = url[1:]  # Remove # prefix
+            if source_file:
+                source_path = Path(source_file)
+                valid_anchors = self._extract_anchors_from_markdown(source_path)
+                if anchor not in valid_anchors:
+                    return (True, "anchor_not_found")
             return (False, "")
 
         # Split file path and anchor
@@ -110,7 +148,11 @@ class L001(BaseRule):
         if target.exists():
             if target.is_dir():
                 return (True, "target_is_directory")
-            # TODO: Validate anchor if present
+            # Validate anchor if present
+            if anchor:
+                valid_anchors = self._extract_anchors_from_markdown(target)
+                if anchor not in valid_anchors:
+                    return (True, "anchor_not_found")
             return (False, "")
 
         # Try with .md extension if not already present

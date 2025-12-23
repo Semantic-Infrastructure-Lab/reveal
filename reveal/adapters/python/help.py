@@ -146,11 +146,8 @@ def get_help() -> Dict[str, Any]:
             "Package details require pkg_resources or importlib.metadata",
         ],
         "coming_soon": [
-            "python://imports/graph - Import dependency visualization (v0.18.0)",
-            "python://imports/circular - Circular import detection (v0.18.0)",
-            "python://debug/syntax - Syntax error detection (v0.18.0)",
-            "python://project - Project type detection (v0.19.0)",
-            "python://tests - Test discovery (v0.19.0)",
+            "imports://src - Import dependency visualization (v0.27, separate adapter)",
+            "imports://src?circular - Circular import detection (v0.27, separate adapter)",
         ],
         "see_also": [
             "reveal help://python-guide - Comprehensive guide with multi-shot examples",
