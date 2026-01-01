@@ -3,6 +3,8 @@
 import unittest
 import tempfile
 import os
+from pathlib import Path
+from typing import Dict
 from reveal.rules.bugs.B001 import B001
 from reveal.rules.complexity.C901 import C901
 from reveal.rules.refactoring.R913 import R913
@@ -550,6 +552,239 @@ def main():
 
         finally:
             self.teardown_file(path)
+
+
+class TestI002CircularDependencies(unittest.TestCase):
+    """Tests for I002 circular dependency detection rule."""
+
+    def create_temp_module(self, files: Dict[str, str]) -> Path:
+        """
+        Helper: Create a temporary directory with multiple Python files.
+
+        Args:
+            files: Dict mapping filename to content
+
+        Returns:
+            Path to temp directory
+        """
+        import tempfile
+        temp_dir = Path(tempfile.mkdtemp(prefix='reveal_test_i002_'))
+
+        for filename, content in files.items():
+            file_path = temp_dir / filename
+            with open(file_path, 'w') as f:
+                f.write(content)
+
+        return temp_dir
+
+    def teardown_module(self, temp_dir: Path):
+        """Helper: Clean up temp directory."""
+        import shutil
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+
+    def test_simple_circular_dependency(self):
+        """Test detection of simple A -> B -> A circular dependency."""
+        files = {
+            'module_a.py': """
+import module_b
+
+def func_a():
+    return module_b.func_b()
+""",
+            'module_b.py': """
+import module_a
+
+def func_b():
+    return module_a.func_a()
+"""
+        }
+        temp_dir = self.create_temp_module(files)
+        try:
+            from reveal.rules.imports.I002 import I002
+            rule = I002()
+
+            # Check module_a - should find cycle
+            file_a = str(temp_dir / 'module_a.py')
+            content_a = files['module_a.py']
+            detections_a = rule.check(file_a, None, content_a)
+
+            self.assertGreater(len(detections_a), 0, "Should detect circular dependency in module_a")
+            self.assertEqual(detections_a[0].rule_code, 'I002')
+            self.assertIn('module_a.py', detections_a[0].context)
+            self.assertIn('module_b.py', detections_a[0].context)
+
+            # Check module_b - should also find the same cycle
+            file_b = str(temp_dir / 'module_b.py')
+            content_b = files['module_b.py']
+            detections_b = rule.check(file_b, None, content_b)
+
+            self.assertGreater(len(detections_b), 0, "Should detect circular dependency in module_b")
+
+        finally:
+            self.teardown_module(temp_dir)
+
+    def test_three_file_circular_dependency(self):
+        """Test detection of A -> B -> C -> A circular dependency."""
+        files = {
+            'alpha.py': """
+import beta
+
+def func_alpha():
+    return beta.func_beta()
+""",
+            'beta.py': """
+import gamma
+
+def func_beta():
+    return gamma.func_gamma()
+""",
+            'gamma.py': """
+import alpha
+
+def func_gamma():
+    return alpha.func_alpha()
+"""
+        }
+        temp_dir = self.create_temp_module(files)
+        try:
+            from reveal.rules.imports.I002 import I002
+            rule = I002()
+
+            # Check alpha - should find 3-file cycle
+            file_alpha = str(temp_dir / 'alpha.py')
+            content_alpha = files['alpha.py']
+            detections = rule.check(file_alpha, None, content_alpha)
+
+            self.assertGreater(len(detections), 0, "Should detect 3-file circular dependency")
+            self.assertEqual(detections[0].rule_code, 'I002')
+
+            # Verify the cycle involves all three files
+            context = detections[0].context
+            self.assertIn('alpha.py', context)
+            self.assertIn('beta.py', context)
+            self.assertIn('gamma.py', context)
+
+        finally:
+            self.teardown_module(temp_dir)
+
+    def test_no_circular_dependency(self):
+        """Test that DAG (no cycles) produces no detections."""
+        files = {
+            'top.py': """
+import middle
+
+def func_top():
+    return middle.func_middle()
+""",
+            'middle.py': """
+import bottom
+
+def func_middle():
+    return bottom.func_bottom()
+""",
+            'bottom.py': """
+def func_bottom():
+    return "leaf"
+"""
+        }
+        temp_dir = self.create_temp_module(files)
+        try:
+            from reveal.rules.imports.I002 import I002
+            rule = I002()
+
+            # Check all files - none should have cycles
+            for filename in files.keys():
+                file_path = str(temp_dir / filename)
+                content = files[filename]
+                detections = rule.check(file_path, None, content)
+                self.assertEqual(len(detections), 0, f"{filename} should have no circular dependencies")
+
+        finally:
+            self.teardown_module(temp_dir)
+
+    def test_unrelated_file_no_detection(self):
+        """Test that files not involved in cycles produce no detections."""
+        files = {
+            'cycle_a.py': """
+import cycle_b
+
+def func_a():
+    return cycle_b.func_b()
+""",
+            'cycle_b.py': """
+import cycle_a
+
+def func_b():
+    return cycle_a.func_a()
+""",
+            'independent.py': """
+def func_independent():
+    return "no dependencies"
+"""
+        }
+        temp_dir = self.create_temp_module(files)
+        try:
+            from reveal.rules.imports.I002 import I002
+            rule = I002()
+
+            # Check independent file - should have no detections
+            file_independent = str(temp_dir / 'independent.py')
+            content_independent = files['independent.py']
+            detections = rule.check(file_independent, None, content_independent)
+
+            self.assertEqual(len(detections), 0, "Independent file should have no circular dependency detections")
+
+        finally:
+            self.teardown_module(temp_dir)
+
+    def test_multiple_cycles(self):
+        """Test handling of multiple independent cycles."""
+        files = {
+            'cycle1_a.py': """
+import cycle1_b
+
+def func():
+    return cycle1_b.func()
+""",
+            'cycle1_b.py': """
+import cycle1_a
+
+def func():
+    return cycle1_a.func()
+""",
+            'cycle2_a.py': """
+import cycle2_b
+
+def func():
+    return cycle2_b.func()
+""",
+            'cycle2_b.py': """
+import cycle2_a
+
+def func():
+    return cycle2_a.func()
+"""
+        }
+        temp_dir = self.create_temp_module(files)
+        try:
+            from reveal.rules.imports.I002 import I002
+            rule = I002()
+
+            # Check cycle1_a - should only report cycles involving it
+            file_cycle1_a = str(temp_dir / 'cycle1_a.py')
+            content_cycle1_a = files['cycle1_a.py']
+            detections = rule.check(file_cycle1_a, None, content_cycle1_a)
+
+            self.assertGreater(len(detections), 0, "Should detect cycle involving cycle1_a")
+
+            # Verify it's the right cycle (cycle1, not cycle2)
+            context = detections[0].context
+            self.assertIn('cycle1', context)
+            self.assertNotIn('cycle2', context)
+
+        finally:
+            self.teardown_module(temp_dir)
 
 
 if __name__ == '__main__':
