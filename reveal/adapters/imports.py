@@ -14,7 +14,7 @@ Usage:
 
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 
 from .base import ResourceAdapter, register_adapter
 from ..analyzers.imports import ImportGraph, ImportStatement
@@ -44,7 +44,16 @@ class ImportsAdapter(ResourceAdapter):
         # Parse URI
         parsed = urlparse(uri if uri else 'imports://')
         path_str = parsed.path or '.'
-        query_params = parse_qs(parsed.query)
+
+        # Parse query params - support both flag-style (?circular) and key-value (?circular=true)
+        query_params = {}
+        if parsed.query:
+            for param in parsed.query.split('&'):
+                if '=' in param:
+                    key, value = param.split('=', 1)
+                    query_params[key] = value
+                else:
+                    query_params[param] = True
 
         # Resolve target path
         target_path = Path(path_str).resolve()

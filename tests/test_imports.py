@@ -256,3 +256,24 @@ class TestImportsAdapter:
 
         assert 'type' in result
         assert 'files' in result or 'error' not in result
+
+    def test_query_params_flag_style(self, tmp_path):
+        """Test flag-style query params (?circular vs ?circular=true)."""
+        # Create test files with circular dependency
+        (tmp_path / "a.py").write_text("from . import b\n")
+        (tmp_path / "b.py").write_text("from . import a\n")
+
+        adapter = ImportsAdapter()
+
+        # Test flag-style param (?circular)
+        result_flag = adapter.get_structure(f"imports://{tmp_path}?circular")
+        assert result_flag.get('type') == 'circular_dependencies'
+        assert 'cycles' in result_flag
+
+        # Test key-value param (?circular=true)
+        result_kv = adapter.get_structure(f"imports://{tmp_path}?circular=true")
+        assert result_kv.get('type') == 'circular_dependencies'
+        assert 'cycles' in result_kv
+
+        # Both should produce same results
+        assert result_flag.get('count') == result_kv.get('count')
