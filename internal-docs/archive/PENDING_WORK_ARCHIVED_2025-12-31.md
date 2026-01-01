@@ -1,4 +1,11 @@
-# Reveal - Pending Work Index
+# Reveal - Pending Work Index (ARCHIVED)
+
+> **⚠️ ARCHIVED:** 2025-12-31
+>
+> **Reason:** This document reflected work pending as of v0.23.0-v0.26.0 timeframe.
+> With v0.27.0 and v0.27.1 shipped, the context has changed significantly.
+>
+> **Current planning:** See `ROADMAP.md` and `internal-docs/planning/IMPORTS_IMPLEMENTATION_PLAN.md`
 
 **Last Updated:** 2025-12-16
 **Sessions:** infernal-throne-1212, wise-goddess-1212, cyber-phoenix-1212, emerald-hue-1214, savage-siege-1216, kujofugo-1216
