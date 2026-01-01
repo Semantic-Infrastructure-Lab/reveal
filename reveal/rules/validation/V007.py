@@ -13,6 +13,8 @@ Checks:
     - CHANGELOG.md (must have section for current version)
     - reveal/AGENT_HELP.md (version reference)
     - reveal/AGENT_HELP_FULL.md (version reference)
+    - ROADMAP.md (current version reference)
+    - README.md (version badge, if present)
 """
 
 import re
@@ -83,6 +85,32 @@ class V007(BaseRule):
                     context=f"Expected version: {canonical_version}"
                 ))
 
+        # Check ROADMAP.md
+        roadmap_file = project_root / 'ROADMAP.md'
+        if roadmap_file.exists():
+            roadmap_version = self._extract_roadmap_version(roadmap_file)
+            if roadmap_version and roadmap_version != canonical_version:
+                detections.append(self.create_detection(
+                    file_path="ROADMAP.md",
+                    line=1,
+                    message=f"ROADMAP.md version mismatch: v{roadmap_version} != v{canonical_version}",
+                    suggestion=f"Update '**Current version:** v{roadmap_version}' to '**Current version:** v{canonical_version}'",
+                    context=f"Found: v{roadmap_version}, Expected: v{canonical_version}"
+                ))
+
+        # Check README.md (optional - only if version badge exists)
+        readme_file = project_root / 'README.md'
+        if readme_file.exists():
+            readme_version = self._extract_readme_version(readme_file)
+            if readme_version and readme_version != canonical_version:
+                detections.append(self.create_detection(
+                    file_path="README.md",
+                    line=1,
+                    message=f"README.md version badge mismatch: {readme_version} != {canonical_version}",
+                    suggestion=f"Update version badge to {canonical_version}",
+                    context=f"Found: {readme_version}, Expected: {canonical_version}"
+                ))
+
         # Check AGENT_HELP.md
         agent_help = reveal_root / 'AGENT_HELP.md'
         if agent_help.exists():
@@ -142,6 +170,43 @@ class V007(BaseRule):
             match = re.search(r'\*\*Version:\*\*\s*([0-9]+\.[0-9]+\.[0-9]+)', content)
             if not match:
                 match = re.search(r'Version:\s*([0-9]+\.[0-9]+\.[0-9]+)', content)
+            if match:
+                return match.group(1)
+        except Exception:
+            pass
+        return None
+
+    def _extract_roadmap_version(self, roadmap_file: Path) -> Optional[str]:
+        """Extract version from ROADMAP.md.
+
+        Looks for pattern: **Current version:** vX.Y.Z
+        """
+        try:
+            content = roadmap_file.read_text()
+            # Match: **Current version:** v0.27.1 or **Current version:** 0.27.1
+            match = re.search(r'\*\*Current version:\*\*\s*v?([0-9]+\.[0-9]+\.[0-9]+)', content)
+            if match:
+                return match.group(1)
+        except Exception:
+            pass
+        return None
+
+    def _extract_readme_version(self, readme_file: Path) -> Optional[str]:
+        """Extract version from README.md badges (optional check).
+
+        Only returns a version if a badge pattern is found.
+        Common patterns:
+        - ![Version](https://img.shields.io/badge/version-vX.Y.Z-blue)
+        - [![Version](https://img.shields.io/pypi/v/reveal-cli.svg)]
+        """
+        try:
+            content = readme_file.read_text()
+            # Match shield.io badge with version
+            match = re.search(r'badge/version-v?([0-9]+\.[0-9]+\.[0-9]+)', content)
+            if match:
+                return match.group(1)
+            # Match PyPI version badge
+            match = re.search(r'pypi/v/reveal-cli.*?([0-9]+\.[0-9]+\.[0-9]+)', content)
             if match:
                 return match.group(1)
         except Exception:

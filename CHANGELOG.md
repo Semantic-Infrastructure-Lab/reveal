@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **V-series Validation Enhancements**: Improved release process automation
+  - **V007 (extended)**: Now checks ROADMAP.md and README.md version consistency
+  - **V009 (new)**: Documentation cross-reference validation - detects broken markdown links
+  - **V011 (new)**: Release readiness checklist - validates CHANGELOG dates and ROADMAP completeness
+  - Total validation rules: V001-V011 (10 rules for reveal's self-checks)
+
+### Changed
+- README: Updated rule count from 31 to 33 rules (V009, V011 added)
+
 ## [0.27.1] - 2025-12-31
 
 ### Changed
