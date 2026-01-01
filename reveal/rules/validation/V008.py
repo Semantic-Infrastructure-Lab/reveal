@@ -15,6 +15,7 @@ Background:
     don't use these parameters, to maintain interface compatibility.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import ast
@@ -22,6 +23,18 @@ import inspect
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+
+
+@dataclass
+class DetectionContext:
+    """Location context for creating a detection.
+
+    Bundles the common parameters needed to create a detection,
+    reducing parameter repetition across detection creator methods.
+    """
+    line: int
+    class_name: str
+    analyzer_path: Path
 
 
 class V008(BaseRule):
@@ -99,20 +112,23 @@ class V008(BaseRule):
 
         Returns Detection if signature is invalid, None otherwise.
         """
+        # Create detection context once
+        ctx = DetectionContext(
+            line=func.lineno,
+            class_name=class_name,
+            analyzer_path=analyzer_path
+        )
+
         # Check for **kwargs requirement
         has_kwargs = func.args.kwarg and func.args.kwarg.arg == 'kwargs'
         if not has_kwargs:
-            return self._create_missing_kwargs_detection(
-                func.lineno, class_name, analyzer_path
-            )
+            return self._create_missing_kwargs_detection(ctx)
 
         # Check for required base parameters
         param_names = [arg.arg for arg in func.args.args if arg.arg != 'self']
         missing_params = self._find_missing_base_params(param_names)
         if missing_params:
-            return self._create_missing_params_detection(
-                func.lineno, class_name, analyzer_path, missing_params
-            )
+            return self._create_missing_params_detection(ctx, missing_params)
 
         return None
 
@@ -129,13 +145,17 @@ class V008(BaseRule):
         return [param for param in required if param not in param_names]
 
     def _create_missing_kwargs_detection(
-        self, line: int, class_name: str, analyzer_path: Path
+        self, ctx: DetectionContext
     ) -> Detection:
-        """Create detection for missing **kwargs parameter."""
+        """Create detection for missing **kwargs parameter.
+
+        Args:
+            ctx: Location context for the detection
+        """
         return self.create_detection(
-            file_path=str(analyzer_path),
-            line=line,
-            message=f"Class '{class_name}.get_structure()' missing **kwargs parameter",
+            file_path=str(ctx.analyzer_path),
+            line=ctx.line,
+            message=f"Class '{ctx.class_name}.get_structure()' missing **kwargs parameter",
             suggestion=(
                 "Update signature to match base class:\n"
                 "def get_structure(self, head=None, tail=None, range=None, **kwargs):"
@@ -147,21 +167,18 @@ class V008(BaseRule):
         )
 
     def _create_missing_params_detection(
-        self,
-        line: int,
-        class_name: str,
-        analyzer_path: Path,
-        missing_params: List[str]
+        self, ctx: DetectionContext, missing_params: List[str]
     ) -> Detection:
         """Create detection for missing base parameters.
 
         Args:
+            ctx: Location context for the detection
             missing_params: List of parameter names that are missing
         """
         return self.create_detection(
-            file_path=str(analyzer_path),
-            line=line,
-            message=f"Class '{class_name}.get_structure()' missing base parameters: {', '.join(missing_params)}",
+            file_path=str(ctx.analyzer_path),
+            line=ctx.line,
+            message=f"Class '{ctx.class_name}.get_structure()' missing base parameters: {', '.join(missing_params)}",
             suggestion=(
                 "Add base parameters for consistency:\n"
                 "def get_structure(self, head=None, tail=None, range=None, **kwargs):"
