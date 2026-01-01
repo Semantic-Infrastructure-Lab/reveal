@@ -13,8 +13,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 from collections import defaultdict, deque
 
-from .layers import LayerRule, LayerConfig, load_layer_config
-
 
 @dataclass
 class ImportStatement:
@@ -145,10 +143,20 @@ class ImportGraph:
         return len(self.files)
 
 
+# Import extractors and layer config after core types are defined (avoid circular imports)
+from .layers import LayerRule, LayerConfig, load_layer_config
+from .javascript import extract_js_imports
+from .go import extract_go_imports
+from .rust import extract_rust_imports
+
+
 __all__ = [
     'ImportStatement',
     'ImportGraph',
     'LayerRule',
     'LayerConfig',
     'load_layer_config',
+    'extract_js_imports',
+    'extract_go_imports',
+    'extract_rust_imports',
 ]

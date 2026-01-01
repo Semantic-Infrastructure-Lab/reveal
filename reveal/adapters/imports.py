@@ -17,7 +17,13 @@ from typing import Dict, Any, Optional, List
 from urllib.parse import urlparse
 
 from .base import ResourceAdapter, register_adapter
-from ..analyzers.imports import ImportGraph, ImportStatement
+from ..analyzers.imports import (
+    ImportGraph,
+    ImportStatement,
+    extract_js_imports,
+    extract_go_imports,
+    extract_rust_imports,
+)
 from ..analyzers.imports.python import extract_python_imports, extract_python_symbols
 from ..analyzers.imports.resolver import resolve_python_import
 
@@ -144,38 +150,69 @@ class ImportsAdapter(ResourceAdapter):
                 'circular': 'Detect circular dependencies',
                 'violations': 'Check layer violations (requires .reveal.yaml)'
             },
-            'supported_languages': ['Python'],
+            'supported_languages': ['Python', 'JavaScript', 'TypeScript', 'Go', 'Rust'],
             'status': 'beta'
         }
 
     def _build_graph(self, target_path: Path) -> None:
-        """Build import graph from target path.
+        """Build import graph from target path (multi-language).
 
         Args:
             target_path: Directory or file to analyze
+
+        Supports:
+            - Python (.py)
+            - JavaScript/TypeScript (.js, .jsx, .ts, .tsx)
+            - Go (.go)
+            - Rust (.rs)
         """
         if target_path.is_file():
             files = [target_path]
         else:
-            files = list(target_path.rglob('*.py'))
+            # Collect all supported file types
+            files = []
+            for pattern in ['*.py', '*.js', '*.jsx', '*.ts', '*.tsx', '*.go', '*.rs']:
+                files.extend(target_path.rglob(pattern))
 
-        # Extract imports from all Python files
+        # Extract imports from all files using appropriate extractor
         all_imports = []
         for file_path in files:
-            imports = extract_python_imports(file_path)
-            all_imports.extend(imports)
+            ext = file_path.suffix
 
-            # Also extract symbols for unused detection
-            symbols = extract_python_symbols(file_path)
-            self._symbols_by_file[file_path] = symbols
+            # Select extractor based on file extension
+            if ext == '.py':
+                imports = extract_python_imports(file_path)
+                # Also extract symbols for unused detection (Python only for now)
+                symbols = extract_python_symbols(file_path)
+                self._symbols_by_file[file_path] = symbols
+            elif ext in ('.js', '.jsx', '.ts', '.tsx'):
+                imports = extract_js_imports(file_path)
+                # TODO: Symbol extraction for JS/TS (Phase 5.1)
+                self._symbols_by_file[file_path] = set()
+            elif ext == '.go':
+                imports = extract_go_imports(file_path)
+                # TODO: Symbol extraction for Go (Phase 5.1)
+                self._symbols_by_file[file_path] = set()
+            elif ext == '.rs':
+                imports = extract_rust_imports(file_path)
+                # TODO: Symbol extraction for Rust (Phase 5.1)
+                self._symbols_by_file[file_path] = set()
+            else:
+                # Unknown file type, skip
+                continue
+
+            all_imports.extend(imports)
 
         # Build graph
         self._graph = ImportGraph.from_imports(all_imports)
 
-        # Resolve imports to build dependency edges
+        # Resolve imports to build dependency edges (Python only for now)
         for file_path, imports in self._graph.files.items():
-            base_path = file_path.parent
+            # Only resolve Python imports for now
+            if file_path.suffix != '.py':
+                continue
 
+            base_path = file_path.parent
             for stmt in imports:
                 resolved = resolve_python_import(stmt, base_path)
                 if resolved:
