@@ -48,7 +48,10 @@ class HelpAdapter(ResourceAdapter):
         """Get help about the help system (meta!)."""
         return {
             'name': 'help',
-            'description': 'Explore reveal help system - discover adapters, read guides',
+            'description': (
+                'Explore reveal help system - '
+                'discover adapters, read guides'
+            ),
             'syntax': 'help://[topic]',
             'examples': [
                 {
@@ -69,7 +72,10 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'uri': 'help://python-guide',
-                    'description': 'Python adapter comprehensive guide (multi-shot examples, LLM integration)'
+                    'description': (
+                        'Python adapter comprehensive guide '
+                        '(multi-shot examples, LLM integration)'
+                    )
                 },
                 {
                     'uri': 'help://agent',
@@ -87,8 +93,14 @@ class HelpAdapter(ResourceAdapter):
             'notes': [
                 'Each adapter exposes its own help via get_help() method',
                 'Static guides (agent, agent-full) load from markdown files',
-                'New adapters automatically appear in help:// when they implement get_help()',
-                'Alternative: Use --agent-help and --agent-help-full flags for llms.txt convention'
+                (
+                    'New adapters automatically appear in help:// '
+                    'when they implement get_help()'
+                ),
+                (
+                    'Alternative: Use --agent-help and --agent-help-full '
+                    'flags for llms.txt convention'
+                )
             ],
             'see_also': [
                 'reveal --agent-help - Brief agent guide (llms.txt)',
@@ -143,27 +155,36 @@ class HelpAdapter(ResourceAdapter):
 
         return None
 
-    def _get_adapter_section(self, adapter_name: str, section: str) -> Optional[Dict[str, Any]]:
-        """Get a specific section from an adapter's help.
-
-        Args:
-            adapter_name: Adapter scheme name (e.g., 'ast')
-            section: Section name (e.g., 'workflows', 'try-now', 'anti-patterns')
+    def _validate_section_name(
+        self, adapter_name: str, section: str
+    ) -> Optional[Dict[str, Any]]:
+        """Validate section name is valid.
 
         Returns:
-            Dict with section content or error
+            Error dict if invalid, None if valid
         """
-        # Validate section name
         if section not in self.VALID_SECTIONS:
+            valid_sections = ', '.join(sorted(self.VALID_SECTIONS))
             return {
                 'type': 'help_section',
                 'adapter': adapter_name,
                 'section': section,
                 'error': 'Invalid section',
-                'message': f"Unknown section '{section}'. Valid sections: {', '.join(sorted(self.VALID_SECTIONS))}"
+                'message': (
+                    f"Unknown section '{section}'. "
+                    f"Valid sections: {valid_sections}"
+                )
             }
+        return None
 
-        # Get full adapter help
+    def _validate_adapter_exists(
+        self, adapter_name: str, section: str
+    ) -> Optional[Dict[str, Any]]:
+        """Validate adapter exists in registry.
+
+        Returns:
+            Error dict if not found, None if exists
+        """
         if adapter_name not in _ADAPTER_REGISTRY:
             return {
                 'type': 'help_section',
@@ -172,11 +193,16 @@ class HelpAdapter(ResourceAdapter):
                 'error': 'Unknown adapter',
                 'message': f"No adapter named '{adapter_name}'"
             }
+        return None
 
-        help_data = self._get_adapter_help(adapter_name)
-        if not help_data or 'error' in help_data:
-            return help_data
+    def _extract_section_content(
+        self, adapter_name: str, section: str, help_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Extract specific section from adapter help.
 
+        Returns:
+            Section content dict or error dict
+        """
         # Map section names to help dict keys
         section_key_map = {
             'workflows': 'workflows',
@@ -193,7 +219,10 @@ class HelpAdapter(ResourceAdapter):
                 'adapter': adapter_name,
                 'section': section,
                 'error': 'Section not found',
-                'message': f"Adapter '{adapter_name}' does not have a '{section}' section"
+                'message': (
+                    f"Adapter '{adapter_name}' does not have "
+                    f"a '{section}' section"
+                )
             }
 
         return {
@@ -202,6 +231,36 @@ class HelpAdapter(ResourceAdapter):
             'section': section,
             'content': content
         }
+
+    def _get_adapter_section(
+        self, adapter_name: str, section: str
+    ) -> Optional[Dict[str, Any]]:
+        """Get a specific section from an adapter's help.
+
+        Args:
+            adapter_name: Adapter scheme name (e.g., 'ast')
+            section: Section name (e.g., 'workflows', 'try-now')
+
+        Returns:
+            Dict with section content or error
+        """
+        # Validate section name
+        error = self._validate_section_name(adapter_name, section)
+        if error:
+            return error
+
+        # Validate adapter exists
+        error = self._validate_adapter_exists(adapter_name, section)
+        if error:
+            return error
+
+        # Get full adapter help
+        help_data = self._get_adapter_help(adapter_name)
+        if not help_data or 'error' in help_data:
+            return help_data
+
+        # Extract and return section content
+        return self._extract_section_content(adapter_name, section, help_data)
 
     def _list_topics(self) -> List[str]:
         """List all available help topics."""
@@ -218,26 +277,42 @@ class HelpAdapter(ResourceAdapter):
 
         return sorted(topics)
 
+    def _get_adapter_description(self, adapter_class: type) -> str:
+        """Get description from adapter's help method.
+
+        Args:
+            adapter_class: Adapter class
+
+        Returns:
+            Description string or empty string if unavailable
+        """
+        try:
+            help_data = adapter_class.get_help()
+            if help_data:
+                return help_data.get('description', '')
+        except Exception:
+            # If get_help() fails, return empty
+            pass
+        return ''
+
     def _list_adapters(self) -> List[Dict[str, Any]]:
         """List all registered adapters with basic info."""
         adapters = []
         for scheme, adapter_class in _ADAPTER_REGISTRY.items():
+            has_help = (
+                hasattr(adapter_class, 'get_help') and
+                callable(getattr(adapter_class, 'get_help'))
+            )
+
             info = {
                 'scheme': scheme,
                 'class': adapter_class.__name__,
-                'has_help': hasattr(adapter_class, 'get_help') and
-                           callable(getattr(adapter_class, 'get_help'))
+                'has_help': has_help
             }
 
-            # Try to get description from help
-            if info['has_help']:
-                try:
-                    help_data = adapter_class.get_help()
-                    if help_data:
-                        info['description'] = help_data.get('description', '')
-                except Exception:
-                    # If get_help() fails, skip description
-                    pass
+            # Add description if available
+            if has_help:
+                info['description'] = self._get_adapter_description(adapter_class)
 
             adapters.append(info)
 
@@ -260,7 +335,10 @@ class HelpAdapter(ResourceAdapter):
             return {
                 'scheme': scheme,
                 'error': 'No help available',
-                'message': f'{adapter_class.__name__} does not provide help documentation'
+                'message': (
+                    f'{adapter_class.__name__} does not provide '
+                    f'help documentation'
+                )
             }
 
         try:
@@ -286,10 +364,14 @@ class HelpAdapter(ResourceAdapter):
         for scheme in _ADAPTER_REGISTRY.keys():
             help_data = self._get_adapter_help(scheme)
             if help_data and 'error' not in help_data:
+                example = ''
+                if help_data.get('examples'):
+                    example = help_data.get('examples', [{}])[0].get('uri', '')
+
                 all_help['adapters'][scheme] = {
                     'description': help_data.get('description', ''),
                     'syntax': help_data.get('syntax', ''),
-                    'example': help_data.get('examples', [{}])[0].get('uri', '') if help_data.get('examples') else ''
+                    'example': example
                 }
 
         return all_help

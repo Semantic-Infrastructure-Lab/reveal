@@ -93,25 +93,41 @@ class L003(BaseRule):
 
         return detections
 
+    def _has_fasthtml_indicators(self, cwd: Path) -> bool:
+        """Check if directory has FastHTML framework indicators.
+
+        Args:
+            cwd: Current working directory
+
+        Returns:
+            True if FastHTML indicators found
+        """
+        # Check for Python app files
+        if not ((cwd / "main.py").exists() or (cwd / "app.py").exists()):
+            return False
+
+        # Check for FastHTML imports in Python files
+        for py_file in cwd.glob("*.py"):
+            try:
+                content = py_file.read_text()
+                if 'fasthtml' in content.lower():
+                    return True
+            except Exception:
+                continue
+
+        return False
+
     def _detect_framework(self) -> str:
         """Auto-detect framework type based on project structure.
 
         Returns:
             Framework name ('fasthtml', 'jekyll', 'hugo', 'static')
         """
-        # Look for framework indicators in current directory tree
         cwd = Path.cwd()
 
-        # Check for FastHTML indicators
-        if (cwd / "main.py").exists() or (cwd / "app.py").exists():
-            # Check for FastHTML imports
-            for py_file in cwd.glob("*.py"):
-                try:
-                    content = py_file.read_text()
-                    if 'fasthtml' in content.lower():
-                        return 'fasthtml'
-                except Exception:
-                    pass
+        # Check for FastHTML
+        if self._has_fasthtml_indicators(cwd):
+            return 'fasthtml'
 
         # Check for Jekyll
         if (cwd / "_config.yml").exists() or (cwd / "Gemfile").exists():
@@ -146,7 +162,9 @@ class L003(BaseRule):
         # Fallback: use parent directory of the file
         return path.parent
 
-    def _is_broken_route(self, base_path: Path, url: str) -> Tuple[bool, str, Optional[str]]:
+    def _is_broken_route(
+        self, base_path: Path, url: str
+    ) -> Tuple[bool, str, Optional[str]]:
         """Check if a framework route is broken.
 
         Args:
@@ -175,7 +193,32 @@ class L003(BaseRule):
         else:
             return self._check_static_route(relative_path)
 
-    def _check_fasthtml_route(self, path: str) -> Tuple[bool, str, Optional[str]]:
+    def _find_case_insensitive_match(
+        self, target_dir: Path, target_name: str
+    ) -> Optional[Path]:
+        """Find case-insensitive file match in directory.
+
+        Args:
+            target_dir: Directory to search
+            target_name: Target filename (without extension)
+
+        Returns:
+            Matching file path or None
+        """
+        if not target_dir.exists():
+            return None
+
+        for file in target_dir.iterdir():
+            if file.suffix not in ('.md', '.markdown'):
+                continue
+            if file.stem.lower() == target_name.lower():
+                return file
+
+        return None
+
+    def _check_fasthtml_route(
+        self, path: str
+    ) -> Tuple[bool, str, Optional[str]]:
         """Check FastHTML routing conventions.
 
         FastHTML conventions:
@@ -207,19 +250,43 @@ class L003(BaseRule):
         target_dir = self.docs_root / path_obj.parent
         target_name = path_obj.name
 
-        if target_dir.exists():
-            for file in target_dir.iterdir():
-                # Check if filename matches (case-insensitive, with or without .md)
-                if file.suffix in ('.md', '.markdown'):
-                    stem = file.stem
-                    if stem.lower() == target_name.lower():
-                        return (False, "", str(file))
+        match = self._find_case_insensitive_match(target_dir, target_name)
+        if match:
+            return (False, "", str(match))
 
         # Not found
-        expected = str(exact)
-        return (True, "file_not_found", expected)
+        return (True, "file_not_found", str(exact))
 
-    def _check_jekyll_route(self, path: str) -> Tuple[bool, str, Optional[str]]:
+    def _find_jekyll_post(self, path: str) -> Optional[Path]:
+        """Find matching post in Jekyll _posts directory.
+
+        Args:
+            path: Path to match against post titles
+
+        Returns:
+            Matching post file or None
+        """
+        if not self.docs_root:
+            return None
+
+        posts_dir = self.docs_root / '_posts'
+        if not posts_dir.exists():
+            return None
+
+        # Jekyll posts follow YYYY-MM-DD-title.md format
+        for post in posts_dir.glob('*.md'):
+            # Extract title from filename (remove date prefix)
+            parts = post.stem.split('-', 3)
+            if len(parts) >= 4:
+                title = parts[3]
+                if title.lower() in path.lower():
+                    return post
+
+        return None
+
+    def _check_jekyll_route(
+        self, path: str
+    ) -> Tuple[bool, str, Optional[str]]:
         """Check Jekyll routing conventions.
 
         Jekyll conventions:
@@ -245,19 +312,11 @@ class L003(BaseRule):
             return (False, "", str(md_path))
 
         # Try in _posts directory
-        posts_dir = self.docs_root / '_posts'
-        if posts_dir.exists():
-            # Jekyll posts follow YYYY-MM-DD-title.md format
-            for post in posts_dir.glob('*.md'):
-                # Extract title from filename (remove date prefix)
-                parts = post.stem.split('-', 3)
-                if len(parts) >= 4:
-                    title = parts[3]
-                    if title.lower() in path.lower():
-                        return (False, "", str(post))
+        post = self._find_jekyll_post(path)
+        if post:
+            return (False, "", str(post))
 
-        expected = str(md_path)
-        return (True, "file_not_found", expected)
+        return (True, "file_not_found", str(md_path))
 
     def _check_hugo_route(self, path: str) -> Tuple[bool, str, Optional[str]]:
         """Check Hugo routing conventions.
@@ -323,7 +382,51 @@ class L003(BaseRule):
         expected = str(md_path)
         return (True, "file_not_found", expected)
 
-    def _suggest_fix(self, url: str, reason: str, expected_path: Optional[str]) -> str:
+    def _find_similar_files(self, expected_path: str) -> List[str]:
+        """Find files with similar names to expected path.
+
+        Args:
+            expected_path: Expected file path
+
+        Returns:
+            List of similar filenames (up to 3)
+        """
+        if not expected_path or not self.docs_root:
+            return []
+
+        expected = Path(expected_path)
+        target_dir = expected.parent
+
+        if not target_dir.exists():
+            return []
+
+        # Find files with similar names
+        similar = []
+        target_stem = expected.stem.lower()
+
+        for file in target_dir.glob('*.md'):
+            if file.stem.lower().startswith(target_stem[:3]):
+                similar.append(file.name)
+
+        return similar[:3]  # Return max 3
+
+    def _get_framework_suggestion(self) -> str:
+        """Get framework-specific routing suggestion.
+
+        Returns:
+            Framework-specific suggestion string
+        """
+        if self.framework == 'fasthtml':
+            return "FastHTML routes are case-insensitive - check file exists"
+        elif self.framework == 'jekyll':
+            return "Check _posts/ directory or frontmatter permalinks"
+        elif self.framework == 'hugo':
+            return "Check content/ directory or index.md files"
+        return ""
+
+    def _suggest_fix(
+        self, url: str, reason: str, expected_path: Optional[str]
+    ) -> str:
         """Generate helpful suggestion for fixing routing mismatch.
 
         Args:
@@ -334,36 +437,19 @@ class L003(BaseRule):
         Returns:
             Suggestion string
         """
-        suggestions = []
+        if reason != "file_not_found":
+            return "Framework route does not resolve to expected file"
 
-        if reason == "file_not_found":
-            suggestions.append(f"Expected file not found: {expected_path}")
+        suggestions = [f"Expected file not found: {expected_path}"]
 
-            # Check for similar files
-            if expected_path and self.docs_root:
-                expected = Path(expected_path)
-                target_dir = expected.parent
+        # Add similar files if found
+        similar = self._find_similar_files(expected_path)
+        if similar:
+            suggestions.append(f"Similar files: {', '.join(similar)}")
 
-                if target_dir.exists():
-                    # Find files with similar names
-                    similar = []
-                    target_stem = expected.stem.lower()
+        # Add framework-specific suggestion
+        framework_suggestion = self._get_framework_suggestion()
+        if framework_suggestion:
+            suggestions.append(framework_suggestion)
 
-                    for file in target_dir.glob('*.md'):
-                        if file.stem.lower().startswith(target_stem[:3]):
-                            similar.append(file.name)
-
-                    if similar:
-                        suggestions.append(f"Similar files: {', '.join(similar[:3])}")
-
-            # Framework-specific suggestions
-            if self.framework == 'fasthtml':
-                suggestions.append("FastHTML routes are case-insensitive - check file exists")
-            elif self.framework == 'jekyll':
-                suggestions.append("Check _posts/ directory or frontmatter permalinks")
-            elif self.framework == 'hugo':
-                suggestions.append("Check content/ directory or index.md files")
-
-        if suggestions:
-            return " | ".join(suggestions)
-        return "Framework route does not resolve to expected file"
+        return " | ".join(suggestions)

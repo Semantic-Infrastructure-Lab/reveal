@@ -5,11 +5,9 @@ import argparse
 import shutil
 
 
-def build_help_epilog() -> str:
-    """Build dynamic help with conditional jq examples."""
-    has_jq = shutil.which('jq') is not None
-
-    base_help = '''
+def _build_core_examples() -> str:
+    """Build core usage examples."""
+    return '''
 Examples:
   # Basic structure exploration
   reveal src/                    # Directory tree
@@ -49,8 +47,10 @@ Examples:
   ls src/*.py | reveal --stdin
 '''
 
-    if has_jq:
-        base_help += '''
+
+def _build_jq_examples() -> str:
+    """Build jq integration examples."""
+    return '''
   # Semantic navigation + jq (token-efficient exploration!)
   reveal conversation.jsonl --tail 10 --format=json | jq '.structure.records[] | select(.name | contains("user"))'
   reveal app.py --head 20 --format=json | jq '.structure.functions[] | select(.line_count > 30)'
@@ -67,7 +67,10 @@ Examples:
   git diff --name-only | grep "\\.py$" | reveal --stdin --check --format=grep
 '''
 
-    base_help += '''
+
+def _build_adapter_examples() -> str:
+    """Build URI adapter and file-specific examples."""
+    return '''
   # Markdown-specific features
   reveal doc.md --links                       # Extract all links
   reveal doc.md --links --link-type external  # Only external links
@@ -111,7 +114,128 @@ Metrics: All code files show [X lines, depth:Y] for complexity analysis
 stdin: Reads file paths from stdin (one per line) - works with find, git, ls, etc.
 '''
 
-    return base_help
+
+def build_help_epilog() -> str:
+    """Build dynamic help with conditional jq examples."""
+    has_jq = shutil.which('jq') is not None
+
+    help_text = _build_core_examples()
+    if has_jq:
+        help_text += _build_jq_examples()
+    help_text += _build_adapter_examples()
+
+    return help_text
+
+
+def _add_basic_arguments(parser: argparse.ArgumentParser, version: str) -> None:
+    """Add positional arguments and basic flags."""
+    # Positional arguments
+    parser.add_argument('path', nargs='?', help='File or directory to reveal')
+    parser.add_argument('element', nargs='?', help='Element to extract (function, class, etc.)')
+
+    # Basic flags
+    parser.add_argument('--version', action='version', version=f'reveal {version}')
+    parser.add_argument('--list-supported', '-l', action='store_true',
+                        help='List all supported file types')
+    parser.add_argument('--agent-help', action='store_true',
+                        help='Show agent usage guide (llms.txt-style brief reference)')
+    parser.add_argument('--agent-help-full', action='store_true',
+                        help='Show comprehensive agent guide (complete examples, patterns, troubleshooting)')
+
+
+def _add_input_output_options(parser: argparse.ArgumentParser) -> None:
+    """Add input/output and formatting options."""
+    parser.add_argument('--stdin', action='store_true',
+                        help='Read file paths from stdin (one per line) - enables Unix pipeline workflows')
+    parser.add_argument('--meta', action='store_true', help='Show metadata only')
+    parser.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default='text',
+                        help='Output format (text, json, typed [typed JSON with types/relationships], grep)')
+    parser.add_argument('--copy', '-c', action='store_true',
+                        help='Copy output to clipboard (also prints normally)')
+
+
+def _add_type_aware_options(parser: argparse.ArgumentParser) -> None:
+    """Add type-aware output options."""
+    parser.add_argument('--typed', action='store_true',
+                        help='Enable type-aware output with containment navigation (Pythonic structure)')
+    parser.add_argument('--filter', type=str, metavar='CATEGORY',
+                        help='Filter --typed output by category (property, staticmethod, classmethod, method, function, class)')
+    parser.add_argument('--decorator-stats', action='store_true',
+                        help='Show decorator usage statistics across codebase (works on directories)')
+
+
+def _add_display_options(parser: argparse.ArgumentParser) -> None:
+    """Add display and visualization options."""
+    parser.add_argument('--no-fallback', action='store_true',
+                        help='Disable TreeSitter fallback for unknown file types')
+    parser.add_argument('--depth', type=int, default=3, help='Directory tree depth (default: 3)')
+    parser.add_argument('--max-entries', type=int, default=200,
+                        help='Maximum entries to show in directory tree (default: 200, 0=unlimited)')
+    parser.add_argument('--fast', action='store_true',
+                        help='Fast mode: skip line counting for better performance')
+    parser.add_argument('--outline', action='store_true',
+                        help='Show hierarchical outline (classes with methods, nested structures)')
+    parser.add_argument('--hotspots', action='store_true',
+                        help='Identify quality hotspots (requires stats:// adapter, shows worst 10 files by quality)')
+
+
+def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
+    """Add pattern detection (linting) options."""
+    parser.add_argument('--check', '--lint', action='store_true',
+                        help='Run pattern detectors (code quality, security, complexity checks)')
+    parser.add_argument('--select', type=str, metavar='RULES',
+                        help='Select specific rules or categories (e.g., "B,S" or "B001,S701")')
+    parser.add_argument('--ignore', type=str, metavar='RULES',
+                        help='Ignore specific rules or categories (e.g., "E501" or "C")')
+    parser.add_argument('--recursive', '-r', action='store_true',
+                        help='Process directory recursively (with --check)')
+    parser.add_argument('--rules', action='store_true',
+                        help='List all available pattern detection rules')
+    parser.add_argument('--explain', type=str, metavar='CODE',
+                        help='Explain a specific rule (e.g., "B001")')
+
+
+def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
+    """Add semantic navigation options."""
+    parser.add_argument('--head', type=int, metavar='N',
+                        help='Show first N semantic units (records, functions, sections)')
+    parser.add_argument('--tail', type=int, metavar='N',
+                        help='Show last N semantic units (records, functions, sections)')
+    parser.add_argument('--range', type=str, metavar='START-END',
+                        help='Show semantic units in range (e.g., 10-20, 1-indexed)')
+
+
+def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
+    """Add markdown-specific extraction options."""
+    parser.add_argument('--links', action='store_true',
+                        help='Extract links from markdown files')
+    parser.add_argument('--link-type', choices=['internal', 'external', 'email', 'all'],
+                        help='Filter links by type (requires --links)')
+    parser.add_argument('--domain', type=str,
+                        help='Filter links by domain (requires --links)')
+    parser.add_argument('--code', action='store_true',
+                        help='Extract code blocks from markdown files')
+    parser.add_argument('--language', type=str,
+                        help='Filter code blocks by language (requires --code)')
+    parser.add_argument('--inline', action='store_true',
+                        help='Include inline code snippets (requires --code)')
+    parser.add_argument('--frontmatter', action='store_true',
+                        help='Extract YAML front matter from markdown files')
+
+
+def _add_html_options(parser: argparse.ArgumentParser) -> None:
+    """Add HTML-specific extraction options."""
+    parser.add_argument('--metadata', action='store_true',
+                        help='Extract HTML head metadata (SEO, OpenGraph, Twitter cards)')
+    parser.add_argument('--semantic', type=str,
+                        choices=['navigation', 'content', 'forms', 'media', 'all'],
+                        help='Extract semantic HTML elements (nav, main, article, forms, etc.)')
+    parser.add_argument('--scripts', type=str,
+                        choices=['inline', 'external', 'all'],
+                        help='Extract script tags from HTML files')
+    parser.add_argument('--styles', type=str,
+                        choices=['inline', 'external', 'all'],
+                        help='Extract stylesheets from HTML files')
 
 
 def create_argument_parser(version: str) -> argparse.ArgumentParser:
@@ -129,99 +253,14 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
         epilog=build_help_epilog()
     )
 
-    # Positional arguments
-    parser.add_argument('path', nargs='?', help='File or directory to reveal')
-    parser.add_argument('element', nargs='?', help='Element to extract (function, class, etc.)')
-
-    # Basic flags
-    parser.add_argument('--version', action='version', version=f'reveal {version}')
-    parser.add_argument('--list-supported', '-l', action='store_true',
-                        help='List all supported file types')
-    parser.add_argument('--agent-help', action='store_true',
-                        help='Show agent usage guide (llms.txt-style brief reference)')
-    parser.add_argument('--agent-help-full', action='store_true',
-                        help='Show comprehensive agent guide (complete examples, patterns, troubleshooting)')
-
-    # Input/output options
-    parser.add_argument('--stdin', action='store_true',
-                        help='Read file paths from stdin (one per line) - enables Unix pipeline workflows')
-    parser.add_argument('--meta', action='store_true', help='Show metadata only')
-    parser.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default='text',
-                        help='Output format (text, json, typed [typed JSON with types/relationships], grep)')
-    parser.add_argument('--copy', '-c', action='store_true',
-                        help='Copy output to clipboard (also prints normally)')
-
-    # Type-aware output
-    parser.add_argument('--typed', action='store_true',
-                        help='Enable type-aware output with containment navigation (Pythonic structure)')
-    parser.add_argument('--filter', type=str, metavar='CATEGORY',
-                        help='Filter --typed output by category (property, staticmethod, classmethod, method, function, class)')
-    parser.add_argument('--decorator-stats', action='store_true',
-                        help='Show decorator usage statistics across codebase (works on directories)')
-
-    # Display options
-    parser.add_argument('--no-fallback', action='store_true',
-                        help='Disable TreeSitter fallback for unknown file types')
-    parser.add_argument('--depth', type=int, default=3, help='Directory tree depth (default: 3)')
-    parser.add_argument('--max-entries', type=int, default=200,
-                        help='Maximum entries to show in directory tree (default: 200, 0=unlimited)')
-    parser.add_argument('--fast', action='store_true',
-                        help='Fast mode: skip line counting for better performance')
-    parser.add_argument('--outline', action='store_true',
-                        help='Show hierarchical outline (classes with methods, nested structures)')
-    parser.add_argument('--hotspots', action='store_true',
-                        help='Identify quality hotspots (requires stats:// adapter, shows worst 10 files by quality)')
-
-    # Pattern detection (linting)
-    parser.add_argument('--check', '--lint', action='store_true',
-                        help='Run pattern detectors (code quality, security, complexity checks)')
-    parser.add_argument('--select', type=str, metavar='RULES',
-                        help='Select specific rules or categories (e.g., "B,S" or "B001,S701")')
-    parser.add_argument('--ignore', type=str, metavar='RULES',
-                        help='Ignore specific rules or categories (e.g., "E501" or "C")')
-    parser.add_argument('--recursive', '-r', action='store_true',
-                        help='Process directory recursively (with --check)')
-    parser.add_argument('--rules', action='store_true',
-                        help='List all available pattern detection rules')
-    parser.add_argument('--explain', type=str, metavar='CODE',
-                        help='Explain a specific rule (e.g., "B001")')
-
-    # Semantic navigation
-    parser.add_argument('--head', type=int, metavar='N',
-                        help='Show first N semantic units (records, functions, sections)')
-    parser.add_argument('--tail', type=int, metavar='N',
-                        help='Show last N semantic units (records, functions, sections)')
-    parser.add_argument('--range', type=str, metavar='START-END',
-                        help='Show semantic units in range (e.g., 10-20, 1-indexed)')
-
-    # Markdown entity filters
-    parser.add_argument('--links', action='store_true',
-                        help='Extract links from markdown files')
-    parser.add_argument('--link-type', choices=['internal', 'external', 'email', 'all'],
-                        help='Filter links by type (requires --links)')
-    parser.add_argument('--domain', type=str,
-                        help='Filter links by domain (requires --links)')
-    parser.add_argument('--code', action='store_true',
-                        help='Extract code blocks from markdown files')
-    parser.add_argument('--language', type=str,
-                        help='Filter code blocks by language (requires --code)')
-    parser.add_argument('--inline', action='store_true',
-                        help='Include inline code snippets (requires --code)')
-    parser.add_argument('--frontmatter', action='store_true',
-                        help='Extract YAML front matter from markdown files')
-
-    # HTML-specific filters
-    parser.add_argument('--metadata', action='store_true',
-                        help='Extract HTML head metadata (SEO, OpenGraph, Twitter cards)')
-    parser.add_argument('--semantic', type=str,
-                        choices=['navigation', 'content', 'forms', 'media', 'all'],
-                        help='Extract semantic HTML elements (nav, main, article, forms, etc.)')
-    parser.add_argument('--scripts', type=str,
-                        choices=['inline', 'external', 'all'],
-                        help='Extract script tags from HTML files')
-    parser.add_argument('--styles', type=str,
-                        choices=['inline', 'external', 'all'],
-                        help='Extract stylesheets from HTML files')
+    _add_basic_arguments(parser, version)
+    _add_input_output_options(parser)
+    _add_type_aware_options(parser)
+    _add_display_options(parser)
+    _add_pattern_detection_options(parser)
+    _add_navigation_options(parser)
+    _add_markdown_options(parser)
+    _add_html_options(parser)
 
     return parser
 

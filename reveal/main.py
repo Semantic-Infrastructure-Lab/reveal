@@ -22,109 +22,204 @@ from .cli import (
 )
 
 
-def main():
-    """Main CLI entry point."""
+def _setup_windows_console():
+    """Configure Windows console for UTF-8/emoji support."""
+    if sys.platform != 'win32':
+        return
+
+    os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+
+def _setup_copy_mode():
+    """Setup output capture for copy mode.
+
+    Returns:
+        tuple: (tee_writer, captured_output, original_stdout) or None if not copy mode
+    """
     import io
 
-    # Fix Windows console encoding for emoji/unicode support
-    if sys.platform == 'win32':
-        # Set environment variable for subprocess compatibility
-        os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
-        # Reconfigure stdout/stderr to use UTF-8 with error handling
-        if hasattr(sys.stdout, 'reconfigure'):
-            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-        if hasattr(sys.stderr, 'reconfigure'):
-            sys.stderr.reconfigure(encoding='utf-8', errors='replace')
-
-    # Check for --copy flag early (before full parsing)
     copy_mode = '--copy' in sys.argv or '-c' in sys.argv
+    if not copy_mode:
+        return None
 
-    if copy_mode:
-        # Capture stdout while still displaying it (tee behavior)
-        captured_output = io.StringIO()
-        original_stdout = sys.stdout
+    captured_output = io.StringIO()
+    original_stdout = sys.stdout
 
-        class TeeWriter:
-            """Write to both original stdout and capture buffer."""
-            def __init__(self, original, capture):
-                self.original = original
-                self.capture = capture
+    class TeeWriter:
+        """Write to both original stdout and capture buffer."""
+        def __init__(self, original, capture):
+            self.original = original
+            self.capture = capture
 
-            def write(self, data):
-                self.original.write(data)
-                self.capture.write(data)
+        def write(self, data):
+            self.original.write(data)
+            self.capture.write(data)
 
-            def flush(self):
-                self.original.flush()
+        def flush(self):
+            self.original.flush()
 
-            # Support attributes like encoding, isatty, etc.
-            def __getattr__(self, name):
-                return getattr(self.original, name)
+        def __getattr__(self, name):
+            return getattr(self.original, name)
 
-        sys.stdout = TeeWriter(original_stdout, captured_output)
+    return TeeWriter(original_stdout, captured_output), captured_output, original_stdout
+
+
+def _handle_clipboard_copy(captured_output, original_stdout):
+    """Handle clipboard copy after command execution."""
+    sys.stdout = original_stdout
+    output_text = captured_output.getvalue()
+    if not output_text:
+        return
+
+    if copy_to_clipboard(output_text):
+        print(f"\n📋 Copied {len(output_text)} chars to clipboard", file=sys.stderr)
+    else:
+        msg = "Could not copy to clipboard (no clipboard utility found)"
+        print(f"\n⚠️  {msg}", file=sys.stderr)
+        print("   Install xclip, xsel (Linux), or use pbcopy (macOS)", file=sys.stderr)
+
+
+def main():
+    """Main CLI entry point."""
+    _setup_windows_console()
+
+    copy_setup = _setup_copy_mode()
+    if copy_setup:
+        tee_writer, captured_output, original_stdout = copy_setup
+        sys.stdout = tee_writer
+    else:
+        captured_output = None
+        original_stdout = None
 
     try:
         _main_impl()
     except BrokenPipeError:
-        # Python flushes standard streams on exit; redirect remaining output
-        # to devnull to avoid another BrokenPipeError at shutdown
         devnull = os.open(os.devnull, os.O_WRONLY)
         os.dup2(devnull, sys.stdout.fileno())
-        sys.exit(0)  # Exit cleanly
+        sys.exit(0)
     finally:
-        if copy_mode:
-            sys.stdout = original_stdout
-            output_text = captured_output.getvalue()
-            if output_text:
-                if copy_to_clipboard(output_text):
-                    print(f"\n📋 Copied {len(output_text)} chars to clipboard", file=sys.stderr)
-                else:
-                    print("\n⚠️  Could not copy to clipboard (no clipboard utility found)", file=sys.stderr)
-                    print("   Install xclip, xsel (Linux), or use pbcopy (macOS)", file=sys.stderr)
+        if copy_setup:
+            _handle_clipboard_copy(captured_output, original_stdout)
+
+
+def _handle_special_modes(args):
+    """Handle special CLI modes that exit early.
+
+    Returns:
+        bool: True if a special mode was handled (caller should exit)
+    """
+    # Special mode handlers (flag -> (handler, *handler_args))
+    special_modes = [
+        (args.list_supported, handle_list_supported, [list_supported_types]),
+        (args.agent_help, handle_agent_help, []),
+        (args.agent_help_full, handle_agent_help_full, []),
+        (args.rules, handle_rules_list, [__version__]),
+        (args.explain, handle_explain_rule, [args.explain]),
+        (getattr(args, 'decorator_stats', False), handle_decorator_stats, [args.path]),
+        (args.stdin, handle_stdin_mode, [args, handle_file]),
+    ]
+
+    for condition, handler, handler_args in special_modes:
+        if condition:
+            handler(*handler_args)
+            return True
+
+    return False
 
 
 def _main_impl():
     """Main CLI implementation."""
-    # Parse arguments
+    # Parse and validate arguments
     parser = create_argument_parser(__version__)
     args = parser.parse_args()
-
-    # Validate navigation arguments
     validate_navigation_args(args)
 
     # Check for updates (once per day, non-blocking, opt-out available)
     check_for_updates()
 
     # Handle special modes (exit early)
-    if args.list_supported:
-        handle_list_supported(list_supported_types)
-    if args.agent_help:
-        handle_agent_help()
-    if args.agent_help_full:
-        handle_agent_help_full()
-    if args.rules:
-        handle_rules_list(__version__)
-    if args.explain:
-        handle_explain_rule(args.explain)
-    if getattr(args, 'decorator_stats', False):
-        handle_decorator_stats(args.path)
+    if _handle_special_modes(args):
+        return
 
-    # Handle stdin mode
-    if args.stdin:
-        handle_stdin_mode(args, handle_file)
-
-    # Path is required if not using special modes or --stdin
+    # Path is required for normal operation
     if not args.path:
         parser.print_help()
         sys.exit(1)
 
-    # Check if this is a URI (scheme://)
+    # Dispatch based on path type
     if '://' in args.path:
         handle_uri(args.path, args.element, args)
-        sys.exit(0)
+    else:
+        handle_file_or_directory(args.path, args)
 
-    # Handle regular file/directory path
-    handle_file_or_directory(args.path, args)
+
+def _get_tree_sitter_fallbacks(registered_analyzers):
+    """Probe tree-sitter for additional language support.
+
+    Args:
+        registered_analyzers: Dict of already-registered analyzers
+
+    Returns:
+        list: Available fallback languages as (display_name, ext) tuples
+    """
+    try:
+        import warnings
+        warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
+        from tree_sitter_languages import get_language
+    except ImportError:
+        return []
+
+    # Common languages to check (extension -> language name mapping)
+    fallback_languages = {
+        '.java': ('java', 'Java'),
+        '.c': ('c', 'C'),
+        '.cpp': ('cpp', 'C++'),
+        '.cc': ('cpp', 'C++'),
+        '.cxx': ('cpp', 'C++'),
+        '.h': ('c', 'C/C++ Header'),
+        '.hpp': ('cpp', 'C++ Header'),
+        '.cs': ('c_sharp', 'C#'),
+        '.rb': ('ruby', 'Ruby'),
+        '.php': ('php', 'PHP'),
+        '.swift': ('swift', 'Swift'),
+        '.kt': ('kotlin', 'Kotlin'),
+        '.scala': ('scala', 'Scala'),
+        '.lua': ('lua', 'Lua'),
+        '.hs': ('haskell', 'Haskell'),
+        '.elm': ('elm', 'Elm'),
+        '.ocaml': ('ocaml', 'OCaml'),
+        '.ml': ('ocaml', 'OCaml'),
+    }
+
+    available_fallbacks = []
+    for ext, (lang, display_name) in fallback_languages.items():
+        if ext in registered_analyzers:
+            continue
+
+        try:
+            get_language(lang)
+            available_fallbacks.append((display_name, ext))
+        except Exception as e:
+            logging.debug(f"Tree-sitter language {lang} not available: {e}")
+
+    return available_fallbacks
+
+
+def _print_fallback_languages(fallbacks):
+    """Print tree-sitter fallback languages."""
+    if not fallbacks:
+        return
+
+    print("\nTree-Sitter Auto-Supported (basic):")
+    for name, ext in sorted(fallbacks):
+        print(f"  {name:20s} {ext}")
+    print(f"\nTotal: {len(fallbacks)} additional languages via fallback")
+    print("Note: These work automatically but may have basic support.")
+    print("Note: Contributions for full analyzers welcome!")
 
 
 def list_supported_types():
@@ -137,72 +232,47 @@ def list_supported_types():
 
     print(f"Reveal v{__version__} - Supported File Types\n")
 
-    # Sort by name for nice display
+    # Print built-in analyzers
     sorted_analyzers = sorted(analyzers.items(), key=lambda x: x[1]['name'])
-
     print("Built-in Analyzers:")
     for ext, info in sorted_analyzers:
-        name = info['name']
-        print(f"  {name:20s} {ext}")
-
+        print(f"  {info['name']:20s} {ext}")
     print(f"\nTotal: {len(analyzers)} file types with full support")
 
-    # Probe tree-sitter for additional languages
-    try:
-        import warnings
-        warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
-
-        from tree_sitter_languages import get_language
-
-        # Common languages to check (extension -> language name mapping)
-        fallback_languages = {
-            '.java': ('java', 'Java'),
-            '.c': ('c', 'C'),
-            '.cpp': ('cpp', 'C++'),
-            '.cc': ('cpp', 'C++'),
-            '.cxx': ('cpp', 'C++'),
-            '.h': ('c', 'C/C++ Header'),
-            '.hpp': ('cpp', 'C++ Header'),
-            '.cs': ('c_sharp', 'C#'),
-            '.rb': ('ruby', 'Ruby'),
-            '.php': ('php', 'PHP'),
-            '.swift': ('swift', 'Swift'),
-            '.kt': ('kotlin', 'Kotlin'),
-            '.scala': ('scala', 'Scala'),
-            '.lua': ('lua', 'Lua'),
-            '.hs': ('haskell', 'Haskell'),
-            '.elm': ('elm', 'Elm'),
-            '.ocaml': ('ocaml', 'OCaml'),
-            '.ml': ('ocaml', 'OCaml'),
-        }
-
-        # Filter out languages already registered
-        available_fallbacks = []
-        for ext, (lang, display_name) in fallback_languages.items():
-            if ext not in analyzers:  # Not already registered
-                try:
-                    get_language(lang)
-                    available_fallbacks.append((display_name, ext))
-                except Exception as e:
-                    # Language not available in tree-sitter-languages, skip it
-                    logging.debug(f"Tree-sitter language {lang} not available: {e}")
-                    pass
-
-        if available_fallbacks:
-            print("\nTree-Sitter Auto-Supported (basic):")
-            for name, ext in sorted(available_fallbacks):
-                print(f"  {name:20s} {ext}")
-            print(f"\nTotal: {len(available_fallbacks)} additional languages via fallback")
-            print("Note: These work automatically but may have basic support.")
-            print("Note: Contributions for full analyzers welcome!")
-
-    except Exception as e:
-        # tree-sitter-languages not available or probe failed
-        logging.debug(f"Tree-sitter language detection failed: {e}")
-        pass
+    # Check for tree-sitter fallback support
+    fallbacks = _get_tree_sitter_fallbacks(analyzers)
+    _print_fallback_languages(fallbacks)
 
     print("\nUsage: reveal <file>")
     print("Help: reveal --help")
+
+
+def _format_detections_json(path, detections):
+    """Format detections as JSON."""
+    result = {
+        'file': path,
+        'detections': [d.to_dict() for d in detections],
+        'total': len(detections)
+    }
+    print(safe_json_dumps(result))
+
+
+def _format_detections_grep(detections):
+    """Format detections as grep output."""
+    for d in detections:
+        print(f"{d.file_path}:{d.line}:{d.column}:{d.rule_code}:{d.message}")
+
+
+def _format_detections_text(path, detections):
+    """Format detections as human-readable text."""
+    if not detections:
+        print(f"{path}: ✅ No issues found")
+        return
+
+    print(f"{path}: Found {len(detections)} issues\n")
+    for d in sorted(detections, key=lambda x: (x.line, x.column)):
+        print(d)
+        print()
 
 
 def run_pattern_detection(analyzer: FileAnalyzer, path: str, output_format: str, args):
@@ -225,30 +295,19 @@ def run_pattern_detection(analyzer: FileAnalyzer, path: str, output_format: str,
     content = analyzer.content
 
     # Run rules
-    detections = RuleRegistry.check_file(path, structure, content, select=select, ignore=ignore)
+    detections = RuleRegistry.check_file(
+        path, structure, content, select=select, ignore=ignore
+    )
 
-    # Output results
-    if output_format == 'json':
-        result = {
-            'file': path,
-            'detections': [d.to_dict() for d in detections],
-            'total': len(detections)
-        }
-        print(safe_json_dumps(result))
+    # Format and output results
+    formatters = {
+        'json': lambda: _format_detections_json(path, detections),
+        'grep': lambda: _format_detections_grep(detections),
+        'text': lambda: _format_detections_text(path, detections),
+    }
 
-    elif output_format == 'grep':
-        # Grep format: file:line:column:code:message
-        for d in detections:
-            print(f"{d.file_path}:{d.line}:{d.column}:{d.rule_code}:{d.message}")
-
-    else:  # text
-        if not detections:
-            print(f"{path}: ✅ No issues found")
-        else:
-            print(f"{path}: Found {len(detections)} issues\n")
-            for d in sorted(detections, key=lambda x: (x.line, x.column)):
-                print(d)
-                print()  # Blank line between detections
+    formatter = formatters.get(output_format, formatters['text'])
+    formatter()
 
 
 if __name__ == '__main__':

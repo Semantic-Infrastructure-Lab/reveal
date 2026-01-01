@@ -35,13 +35,54 @@ def _format_frontmatter(fm: Optional[Dict[str, Any]]) -> None:
             print(f"    {key}: {value}")
 
 
-def _format_links(items: List[Dict[str, Any]], path: Path, output_format: str) -> None:
+def _format_single_link(
+    item: Dict[str, Any],
+    link_type: str,
+    path: Path,
+    output_format: str
+) -> None:
+    """Format and display a single link.
+
+    Args:
+        item: Link item dict
+        link_type: Type of link (external, internal, email)
+        path: File path (for grep output)
+        output_format: Output format ('grep' or default)
+    """
+    line = item.get('line', '?')
+    text = item.get('text', '')
+    url = item.get('url', '')
+    broken = item.get('broken', False)
+
+    if output_format == 'grep':
+        print(f"{path}:{line}:{url}")
+        return
+
+    if broken:
+        print(f"    X Line {line:<4} [{text}]({url}) [BROKEN]")
+        return
+
+    # Normal link display
+    print(f"    Line {line:<4} [{text}]({url})")
+
+    # Show domain for external links
+    if link_type == 'external':
+        domain = item.get('domain', '')
+        if domain:
+            print(f"             -> {domain}")
+
+
+def _format_links(
+    items: List[Dict[str, Any]], path: Path, output_format: str
+) -> None:
     """Format and display link items grouped by type."""
+    # Group by type
     by_type = {}
     for item in items:
         link_type = item.get('type', 'unknown')
         by_type.setdefault(link_type, []).append(item)
 
+    # Display each type
     for link_type in ['external', 'internal', 'email']:
         if link_type not in by_type:
             continue
@@ -50,28 +91,67 @@ def _format_links(items: List[Dict[str, Any]], path: Path, output_format: str) -
         print(f"\n  {link_type.capitalize()} ({len(type_items)}):")
 
         for item in type_items:
-            line = item.get('line', '?')
-            text = item.get('text', '')
-            url = item.get('url', '')
-            broken = item.get('broken', False)
-
-            if output_format == 'grep':
-                print(f"{path}:{line}:{url}")
-            else:
-                if broken:
-                    print(f"    X Line {line:<4} [{text}]({url}) [BROKEN]")
-                else:
-                    if link_type == 'external':
-                        domain = item.get('domain', '')
-                        print(f"    Line {line:<4} [{text}]({url})")
-                        if domain:
-                            print(f"             -> {domain}")
-                    else:
-                        print(f"    Line {line:<4} [{text}]({url})")
+            _format_single_link(item, link_type, path, output_format)
 
 
-def _format_code_blocks(items: List[Dict[str, Any]], path: Path, output_format: str) -> None:
+def _format_fenced_block(
+    item: Dict[str, Any], path: Path, output_format: str
+) -> None:
+    """Format and display a single fenced code block.
+
+    Args:
+        item: Code block item dict
+        path: File path (for grep output)
+        output_format: Output format ('grep' or default)
+    """
+    line_start = item.get('line_start', '?')
+    line_end = item.get('line_end', '?')
+    line_count = item.get('line_count', 0)
+    source = item.get('source', '')
+
+    if output_format == 'grep':
+        first_line = source.split('\n')[0] if source else ''
+        print(f"{path}:{line_start}:{first_line}")
+        return
+
+    print(f"    Lines {line_start}-{line_end} ({line_count} lines)")
+    preview_lines = source.split('\n')[:3]
+    for preview_line in preview_lines:
+        print(f"      {preview_line}")
+    if line_count > 3:
+        print(f"      ... ({line_count - 3} more lines)")
+
+
+def _format_inline_code_items(
+    items: List[Dict[str, Any]], path: Path, output_format: str
+) -> None:
+    """Format and display inline code items.
+
+    Args:
+        items: List of inline code items
+        path: File path (for grep output)
+        output_format: Output format ('grep' or default)
+    """
+    print(f"\n  Inline code ({len(items)} snippets):")
+
+    for item in items[:10]:
+        line = item.get('line', '?')
+        source = item.get('source', '')
+
+        if output_format == 'grep':
+            print(f"{path}:{line}:{source}")
+        else:
+            print(f"    Line {line:<4} `{source}`")
+
+    if len(items) > 10:
+        print(f"    ... and {len(items) - 10} more")
+
+
+def _format_code_blocks(
+    items: List[Dict[str, Any]], path: Path, output_format: str
+) -> None:
     """Format and display code block items grouped by language."""
+    # Group by language
     by_lang = {}
     for item in items:
         lang = item.get('language', 'unknown')
@@ -86,38 +166,33 @@ def _format_code_blocks(items: List[Dict[str, Any]], path: Path, output_format: 
         print(f"\n  {lang.capitalize()} ({len(lang_items)} blocks):")
 
         for item in lang_items:
-            line_start = item.get('line_start', '?')
-            line_end = item.get('line_end', '?')
-            line_count = item.get('line_count', 0)
-            source = item.get('source', '')
-
-            if output_format == 'grep':
-                first_line = source.split('\n')[0] if source else ''
-                print(f"{path}:{line_start}:{first_line}")
-            else:
-                print(f"    Lines {line_start}-{line_end} ({line_count} lines)")
-                preview_lines = source.split('\n')[:3]
-                for preview_line in preview_lines:
-                    print(f"      {preview_line}")
-                if line_count > 3:
-                    print(f"      ... ({line_count - 3} more lines)")
+            _format_fenced_block(item, path, output_format)
 
     # Show inline code if present
     if 'inline' in by_lang:
-        inline_items = by_lang['inline']
-        print(f"\n  Inline code ({len(inline_items)} snippets):")
-        for item in inline_items[:10]:
-            line = item.get('line', '?')
-            source = item.get('source', '')
-            if output_format == 'grep':
-                print(f"{path}:{line}:{source}")
-            else:
-                print(f"    Line {line:<4} `{source}`")
-        if len(inline_items) > 10:
-            print(f"    ... and {len(inline_items) - 10} more")
+        _format_inline_code_items(by_lang['inline'], path, output_format)
 
 
-def _format_html_metadata(metadata: Dict[str, Any], path: Path, output_format: str) -> None:
+def _format_script_summary(script: Dict[str, Any]) -> None:
+    """Format and display a single script summary.
+
+    Args:
+        script: Script dict with type, src, and preview
+    """
+    if script['type'] == 'external':
+        print(f"    [external] {script['src']}")
+        return
+
+    preview = script.get('preview', '')
+    if preview:
+        print(f"    [inline] {preview[:60]}...")
+    else:
+        print(f"    [inline]")
+
+
+def _format_html_metadata(
+    metadata: Dict[str, Any], path: Path, output_format: str
+) -> None:
     """Format and display HTML metadata (SEO, social, etc.)."""
     # Title
     if 'title' in metadata:
@@ -146,57 +221,104 @@ def _format_html_metadata(metadata: Dict[str, Any], path: Path, output_format: s
     if 'scripts' in metadata:
         print(f"\n  Scripts ({len(metadata['scripts'])}):")
         for script in metadata['scripts']:
-            if script['type'] == 'external':
-                print(f"    [external] {script['src']}")
-            else:
-                preview = script.get('preview', '')
-                if preview:
-                    print(f"    [inline] {preview[:60]}...")
-                else:
-                    print(f"    [inline]")
+            _format_script_summary(script)
 
 
-def _format_html_elements(elements: List[Dict[str, Any]], path: Path, output_format: str, category: str) -> None:
+def _format_script_element(
+    elem: Dict[str, Any], path: Path, line: int
+) -> None:
+    """Format and display a script element.
+
+    Args:
+        elem: Script element dict
+        path: File path
+        line: Line number
+    """
+    if elem['type'] == 'external':
+        print(f"  {path}:{line:<6} [external] {elem['src']}")
+        return
+
+    preview = elem.get('preview', '')
+    if preview:
+        print(f"  {path}:{line:<6} [inline] {preview[:60]}...")
+    else:
+        print(f"  {path}:{line:<6} [inline]")
+
+
+def _format_style_element(
+    elem: Dict[str, Any], path: Path, line: int
+) -> None:
+    """Format and display a style element.
+
+    Args:
+        elem: Style element dict
+        path: File path
+        line: Line number
+    """
+    if elem['type'] == 'external':
+        print(f"  {path}:{line:<6} [external] {elem['href']}")
+        return
+
+    preview = elem.get('preview', '')
+    if preview:
+        print(f"  {path}:{line:<6} [inline] {preview[:60]}...")
+    else:
+        print(f"  {path}:{line:<6} [inline]")
+
+
+def _format_semantic_element(
+    elem: Dict[str, Any], path: Path, line: int
+) -> None:
+    """Format and display a semantic element.
+
+    Args:
+        elem: Semantic element dict
+        path: File path
+        line: Line number
+    """
+    tag = elem.get('tag', '')
+    attrs = elem.get('attributes', {})
+    elem_id = attrs.get('id', '')
+    elem_class_attr = attrs.get('class', '')
+
+    # Build class string
+    if isinstance(elem_class_attr, list):
+        elem_class = ' '.join(elem_class_attr)
+    else:
+        elem_class = elem_class_attr
+
+    # Build label
+    label = f"<{tag}>"
+    if elem_id:
+        label += f" #{elem_id}"
+    elif elem_class:
+        first_class = elem_class.split()[0] if elem_class else ''
+        label += f" .{first_class}"
+
+    print(f"  {path}:{line:<6} {label}")
+
+
+def _format_html_elements(
+    elements: List[Dict[str, Any]],
+    path: Path,
+    output_format: str,
+    category: str
+) -> None:
     """Format and display HTML elements (scripts, styles, semantic)."""
     for elem in elements:
         line = elem.get('line', '?')
 
         if category == 'scripts':
-            if elem['type'] == 'external':
-                print(f"  {path}:{line:<6} [external] {elem['src']}")
-            else:
-                preview = elem.get('preview', '')
-                if preview:
-                    print(f"  {path}:{line:<6} [inline] {preview[:60]}...")
-                else:
-                    print(f"  {path}:{line:<6} [inline]")
-
+            _format_script_element(elem, path, line)
         elif category == 'styles':
-            if elem['type'] == 'external':
-                print(f"  {path}:{line:<6} [external] {elem['href']}")
-            else:
-                preview = elem.get('preview', '')
-                if preview:
-                    print(f"  {path}:{line:<6} [inline] {preview[:60]}...")
-                else:
-                    print(f"  {path}:{line:<6} [inline]")
-
+            _format_style_element(elem, path, line)
         elif category == 'semantic':
-            tag = elem.get('tag', '')
-            attrs = elem.get('attributes', {})
-            elem_id = attrs.get('id', '')
-            elem_class = ' '.join(attrs.get('class', [])) if isinstance(attrs.get('class'), list) else attrs.get('class', '')
-
-            label = f"<{tag}>"
-            if elem_id:
-                label += f" #{elem_id}"
-            elif elem_class:
-                label += f" .{elem_class.split()[0] if elem_class else ''}"
-
-            print(f"  {path}:{line:<6} {label}")
+            _format_semantic_element(elem, path, line)
 
 
-def _format_standard_items(items: List[Dict[str, Any]], path: Path, output_format: str) -> None:
+def _format_standard_items(
+    items: List[Dict[str, Any]], path: Path, output_format: str
+) -> None:
     """Format and display standard items (functions, classes, etc.)."""
     for item in items:
         line = item.get('line', '?')
