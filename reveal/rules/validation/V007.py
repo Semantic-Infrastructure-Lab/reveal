@@ -164,40 +164,43 @@ class V007(BaseRule):
         self, reveal_root: Path, canonical: str, detections: List[Detection]
     ) -> None:
         """Check AGENT_HELP*.md version references."""
-        # Check AGENT_HELP.md
-        agent_help = reveal_root / 'AGENT_HELP.md'
-        if agent_help.exists():
-            help_version = self._extract_version_from_markdown(agent_help)
-            if help_version and help_version != canonical:
-                detections.append(self.create_detection(
-                    file_path="reveal/AGENT_HELP.md",
-                    line=1,
-                    message=f"AGENT_HELP.md version mismatch: "
-                           f"{help_version} != {canonical}",
-                    suggestion=f"Update version reference to {canonical}",
-                    context=f"Found: {help_version}, Expected: {canonical}"
-                ))
+        self._validate_agent_help_file(
+            reveal_root, 'AGENT_HELP.md', canonical, detections
+        )
+        self._validate_agent_help_file(
+            reveal_root, 'AGENT_HELP_FULL.md', canonical, detections
+        )
 
-        # Check AGENT_HELP_FULL.md
-        agent_help_full = reveal_root / 'AGENT_HELP_FULL.md'
-        if agent_help_full.exists():
-            help_full_version = self._extract_version_from_markdown(agent_help_full)
-            if help_full_version and help_full_version != canonical:
-                detections.append(self.create_detection(
-                    file_path="reveal/AGENT_HELP_FULL.md",
-                    line=1,
-                    message=f"AGENT_HELP_FULL.md version mismatch: "
-                           f"{help_full_version} != {canonical}",
-                    suggestion=f"Update version reference to {canonical}",
-                    context=f"Found: {help_full_version}, Expected: {canonical}"
-                ))
+    def _validate_agent_help_file(
+        self,
+        reveal_root: Path,
+        filename: str,
+        canonical: str,
+        detections: List[Detection]
+    ) -> None:
+        """Validate a single AGENT_HELP*.md file version."""
+        file_path = reveal_root / filename
+        if not file_path.exists():
+            return
+
+        found_version = self._extract_version_from_markdown(file_path)
+        if found_version and found_version != canonical:
+            detections.append(self.create_detection(
+                file_path=f"reveal/{filename}",
+                line=1,
+                message=f"{filename} version mismatch: "
+                       f"{found_version} != {canonical}",
+                suggestion=f"Update version reference to {canonical}",
+                context=f"Found: {found_version}, Expected: {canonical}"
+            ))
 
     def _extract_version_from_pyproject(self, pyproject_file: Path) -> Optional[str]:
         """Extract version from pyproject.toml."""
         try:
             content = pyproject_file.read_text()
             # Match: version = "X.Y.Z"
-            match = re.search(r'^version\s*=\s*["\']([0-9]+\.[0-9]+\.[0-9]+)["\']', content, re.MULTILINE)
+            pattern = r'^version\s*=\s*["\']([0-9]+\.[0-9]+\.[0-9]+)["\']'
+            match = re.search(pattern, content, re.MULTILINE)
             if match:
                 return match.group(1)
         except Exception:
@@ -237,7 +240,8 @@ class V007(BaseRule):
         try:
             content = roadmap_file.read_text()
             # Match: **Current version:** v0.27.1 or **Current version:** 0.27.1
-            match = re.search(r'\*\*Current version:\*\*\s*v?([0-9]+\.[0-9]+\.[0-9]+)', content)
+            pattern = r'\*\*Current version:\*\*\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
+            match = re.search(pattern, content)
             if match:
                 return match.group(1)
         except Exception:
