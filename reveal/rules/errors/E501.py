@@ -22,8 +22,9 @@ class E501(BaseRule):
     file_patterns = ['*']  # Universal: works on any file
     version = "1.0.0"
 
-    # Maximum line length (PEP 8 standard is 79, but 88 is Black default)
-    MAX_LENGTH = 88
+    # Maximum line length (100 is pragmatic for modern development)
+    # PEP 8 = 79, Black = 88, but many codebases use 100-120
+    MAX_LENGTH = 100
 
     # Patterns to ignore (URLs, etc.)
     IGNORE_PATTERNS = [
