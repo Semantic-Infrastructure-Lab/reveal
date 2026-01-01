@@ -23,7 +23,7 @@ Example .reveal.yaml:
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ class LayerRule:
 
         return False
 
-    def is_violation(self, from_file: Path, to_file: Path, project_root: Path = None) -> tuple[bool, Optional[str]]:
+    def is_violation(self, from_file: Path, to_file: Path, project_root: Path = None) -> Tuple[bool, Optional[str]]:
         """Check if import violates layer boundary.
 
         Args:
@@ -175,7 +175,7 @@ class LayerConfig:
 
     def check_import(
         self, from_file: Path, to_file: Path, project_root: Path = None
-    ) -> Optional[tuple[str, str]]:
+    ) -> Optional[Tuple[str, str]]:
         """Check if import violates any layer rules.
 
         Args:
