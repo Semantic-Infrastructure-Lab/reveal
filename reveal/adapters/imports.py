@@ -17,15 +17,8 @@ from typing import Dict, Any, Optional, List
 from urllib.parse import urlparse
 
 from .base import ResourceAdapter, register_adapter
-from ..analyzers.imports import (
-    ImportGraph,
-    ImportStatement,
-    extract_js_imports,
-    extract_go_imports,
-    extract_rust_imports,
-)
-from ..analyzers.imports.python import extract_python_imports, extract_python_symbols
-from ..analyzers.imports.resolver import resolve_python_import
+from ..analyzers.imports import ImportGraph, ImportStatement
+from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
 
 
 @register_adapter('imports')
@@ -150,71 +143,55 @@ class ImportsAdapter(ResourceAdapter):
                 'circular': 'Detect circular dependencies',
                 'violations': 'Check layer violations (requires .reveal.yaml)'
             },
-            'supported_languages': ['Python', 'JavaScript', 'TypeScript', 'Go', 'Rust'],
+            'supported_languages': get_supported_languages(),
             'status': 'beta'
         }
 
     def _build_graph(self, target_path: Path) -> None:
         """Build import graph from target path (multi-language).
 
+        Uses plugin-based architecture to automatically detect and use
+        appropriate extractor for each file type.
+
         Args:
             target_path: Directory or file to analyze
-
-        Supports:
-            - Python (.py)
-            - JavaScript/TypeScript (.js, .jsx, .ts, .tsx)
-            - Go (.go)
-            - Rust (.rs)
         """
         if target_path.is_file():
             files = [target_path]
         else:
-            # Collect all supported file types
+            # Collect all supported file types using registry
             files = []
-            for pattern in ['*.py', '*.js', '*.jsx', '*.ts', '*.tsx', '*.go', '*.rs']:
+            for ext in get_all_extensions():
+                pattern = f'*{ext}'
                 files.extend(target_path.rglob(pattern))
 
         # Extract imports from all files using appropriate extractor
         all_imports = []
         for file_path in files:
-            ext = file_path.suffix
-
-            # Select extractor based on file extension
-            if ext == '.py':
-                imports = extract_python_imports(file_path)
-                # Also extract symbols for unused detection (Python only for now)
-                symbols = extract_python_symbols(file_path)
-                self._symbols_by_file[file_path] = symbols
-            elif ext in ('.js', '.jsx', '.ts', '.tsx'):
-                imports = extract_js_imports(file_path)
-                # TODO: Symbol extraction for JS/TS (Phase 5.1)
-                self._symbols_by_file[file_path] = set()
-            elif ext == '.go':
-                imports = extract_go_imports(file_path)
-                # TODO: Symbol extraction for Go (Phase 5.1)
-                self._symbols_by_file[file_path] = set()
-            elif ext == '.rs':
-                imports = extract_rust_imports(file_path)
-                # TODO: Symbol extraction for Rust (Phase 5.1)
-                self._symbols_by_file[file_path] = set()
-            else:
+            extractor = get_extractor(file_path)
+            if not extractor:
                 # Unknown file type, skip
                 continue
 
+            # Extract imports and symbols using language-specific extractor
+            imports = extractor.extract_imports(file_path)
+            symbols = extractor.extract_symbols(file_path)
+
+            self._symbols_by_file[file_path] = symbols
             all_imports.extend(imports)
 
         # Build graph
         self._graph = ImportGraph.from_imports(all_imports)
 
-        # Resolve imports to build dependency edges (Python only for now)
+        # Resolve imports to build dependency edges (language-specific)
         for file_path, imports in self._graph.files.items():
-            # Only resolve Python imports for now
-            if file_path.suffix != '.py':
+            extractor = get_extractor(file_path)
+            if not extractor:
                 continue
 
             base_path = file_path.parent
             for stmt in imports:
-                resolved = resolve_python_import(stmt, base_path)
+                resolved = extractor.resolve_import(stmt, base_path)
                 if resolved:
                     self._graph.add_dependency(file_path, resolved)
                     self._graph.resolved_paths[stmt.module_name] = resolved
