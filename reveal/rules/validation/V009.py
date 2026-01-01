@@ -12,7 +12,7 @@ Example violation:
 
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
@@ -34,23 +34,12 @@ class V009(BaseRule):
         """Check for broken documentation links."""
         detections = []
 
-        # Only run for reveal:// URIs
-        if not file_path.startswith('reveal://'):
+        # Get file path context (early returns handled here)
+        context = self._get_file_path_context(file_path)
+        if not context:
             return detections
 
-        # Find reveal root
-        reveal_root = find_reveal_root()
-        if not reveal_root:
-            return detections
-
-        project_root = reveal_root.parent
-
-        # Convert reveal:// URI to actual file path
-        actual_file_path = self._uri_to_path(
-            file_path, reveal_root, project_root
-        )
-        if not actual_file_path or not actual_file_path.exists():
-            return detections
+        actual_file_path, project_root = context
 
         # Extract and validate links
         links = self._extract_markdown_links(content)
@@ -67,6 +56,33 @@ class V009(BaseRule):
 
         return detections
 
+    def _get_file_path_context(
+            self, file_path: str) -> Optional[Tuple[Path, Path]]:
+        """Get file path context for validation.
+
+        Returns:
+            Tuple of (actual_file_path, project_root) or None if invalid
+        """
+        # Only run for reveal:// URIs
+        if not file_path.startswith('reveal://'):
+            return None
+
+        # Find reveal root
+        reveal_root = find_reveal_root()
+        if not reveal_root:
+            return None
+
+        project_root = reveal_root.parent
+
+        # Convert reveal:// URI to actual file path
+        actual_file_path = self._uri_to_path(
+            file_path, reveal_root, project_root
+        )
+        if not actual_file_path or not actual_file_path.exists():
+            return None
+
+        return (actual_file_path, project_root)
+
     def _extract_markdown_links(self, content: str) -> List[Dict[str, Any]]:
         """Extract internal markdown links from content.
 
@@ -80,32 +96,51 @@ class V009(BaseRule):
             link_text = match.group(1)
             link_target = match.group(2)
 
-            # Skip external links
-            if (link_target.startswith('http://') or
-                    link_target.startswith('https://')):
-                continue
-
-            # Skip anchor-only links (#heading)
-            if link_target.startswith('#'):
-                continue
-
-            # Skip mailto: links
-            if link_target.startswith('mailto:'):
-                continue
-
-            # Remove anchor fragments (file.md#heading -> file.md)
-            link_target_clean = link_target.split('#')[0]
-            if not link_target_clean:
-                continue
-
-            links.append({
-                'text': link_text,
-                'target': link_target,
-                'target_clean': link_target_clean,
-                'match': match
-            })
+            # Filter out non-internal links
+            link_info = self._process_link(link_text, link_target, match)
+            if link_info:
+                links.append(link_info)
 
         return links
+
+    def _process_link(
+            self,
+            link_text: str,
+            link_target: str,
+            match: re.Match) -> Optional[Dict[str, Any]]:
+        """Process a single link and determine if it should be validated.
+
+        Returns:
+            Link info dict or None if link should be skipped
+        """
+        # Skip external links
+        if self._is_external_link(link_target):
+            return None
+
+        # Skip anchor-only links (#heading)
+        if link_target.startswith('#'):
+            return None
+
+        # Skip mailto: links
+        if link_target.startswith('mailto:'):
+            return None
+
+        # Remove anchor fragments (file.md#heading -> file.md)
+        link_target_clean = link_target.split('#')[0]
+        if not link_target_clean:
+            return None
+
+        return {
+            'text': link_text,
+            'target': link_target,
+            'target_clean': link_target_clean,
+            'match': match
+        }
+
+    def _is_external_link(self, link_target: str) -> bool:
+        """Check if link is external (http/https)."""
+        return (link_target.startswith('http://') or
+                link_target.startswith('https://'))
 
     def _validate_link(
             self,
