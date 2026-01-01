@@ -195,6 +195,8 @@ reveal 'ast://src?type=function' --format=json  # JSON output
 # Self-inspection and validation (v0.22.0+) 🆕
 reveal reveal://                            # Inspect reveal's structure
 reveal reveal:// --check                    # Validate completeness (V-series rules)
+reveal reveal://analyzers/markdown.py MarkdownAnalyzer  # Extract class from reveal source
+reveal reveal://rules/links/L001.py _extract_anchors_from_markdown  # Extract function from reveal source
 reveal help://reveal                        # Learn about reveal:// adapter
 
 # Code quality metrics & hotspot detection 🆕

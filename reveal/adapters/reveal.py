@@ -24,7 +24,7 @@ class RevealAdapter(ResourceAdapter):
         return {
             'name': 'reveal',
             'description': 'Inspect reveal\'s own codebase - validate configuration, check completeness',
-            'syntax': 'reveal://[component]',
+            'syntax': 'reveal://[path] [element]',
             'examples': [
                 {
                     'uri': 'reveal reveal://',
@@ -39,6 +39,14 @@ class RevealAdapter(ResourceAdapter):
                     'description': 'List all available validation rules'
                 },
                 {
+                    'uri': 'reveal reveal://adapters/reveal.py get_element',
+                    'description': 'Extract specific function from reveal\'s source (element extraction)'
+                },
+                {
+                    'uri': 'reveal reveal://analyzers/markdown.py MarkdownAnalyzer',
+                    'description': 'Extract class from reveal\'s source'
+                },
+                {
                     'uri': 'reveal reveal:// --check',
                     'description': 'Run all validation rules (V-series)'
                 },
@@ -49,6 +57,7 @@ class RevealAdapter(ResourceAdapter):
             ],
             'features': [
                 'Self-inspection of reveal codebase',
+                'Element extraction from reveal source files',
                 'Validation rules for completeness checks',
                 'Analyzer and rule discovery',
                 'Configuration validation',
@@ -75,6 +84,15 @@ class RevealAdapter(ResourceAdapter):
                         "reveal reveal:// --check                # Run all validation rules",
                         "reveal reveal:// --check --select V001  # Check help completeness",
                         "reveal reveal://analyzers               # Review registered analyzers",
+                    ],
+                },
+                {
+                    'name': 'Extract Reveal Source Code',
+                    'scenario': 'Study reveal\'s implementation by extracting specific functions/classes',
+                    'steps': [
+                        "reveal reveal://analyzers/markdown.py MarkdownAnalyzer  # Extract class",
+                        "reveal reveal://rules/links/L001.py _extract_anchors_from_markdown  # Extract function",
+                        "reveal reveal://adapters/reveal.py get_element  # Self-referential extraction",
                     ],
                 },
                 {

@@ -15,10 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Self-referential: Can extract reveal's own code using reveal
   - Added 8 new tests for element extraction and component filtering
 
+### Documentation
+- Updated `reveal help://reveal` with element extraction examples and workflow
+- Added element extraction section to COOL_TRICKS.md
+- Added README examples for reveal:// element extraction
+
 ### Technical
-- 782/782 tests passing (up from 774)
-- 68% code coverage (up from 67%)
-- Session: wrathful-eclipse-1223
+- 988/988 tests passing (up from 773 in v0.26.0)
+- 74% code coverage (up from 67%)
+- Sessions: wrathful-eclipse-1223, cloudy-flood-1231
 
 ## [0.26.0] - 2025-12-23
 

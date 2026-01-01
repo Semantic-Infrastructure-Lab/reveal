@@ -98,6 +98,35 @@ reveal python://syspath
 # - Warning if CWD shadows packages
 ```
 
+### Self-Referential Code Extraction (NEW v0.27.0)
+
+**The ultimate meta feature:** Use reveal to extract reveal's own implementation!
+
+```bash
+# Extract a specific function from reveal's source
+reveal reveal://rules/links/L001.py _extract_anchors_from_markdown
+
+# Extract a class definition
+reveal reveal://analyzers/markdown.py MarkdownAnalyzer
+
+# Self-referential extraction - extract the extraction method itself!
+reveal reveal://adapters/reveal.py get_element
+
+# Extract adapter help documentation
+reveal reveal://adapters/help.py get_help
+```
+
+**Why this rocks:**
+- Study reveal's implementation without reading full files
+- Learn adapter patterns by extracting adapter code
+- Perfect for contributors learning the codebase
+- Self-documenting architecture - reveal shows you how reveal works
+
+**Pro tip:** Combine with `--format=json` for programmatic analysis:
+```bash
+reveal reveal://analyzers/markdown.py MarkdownAnalyzer --format=json | jq '.code'
+```
+
 ---
 
 ## AST Query Wizardry
