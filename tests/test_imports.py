@@ -277,3 +277,68 @@ class TestImportsAdapter:
 
         # Both should produce same results
         assert result_flag.get('count') == result_kv.get('count')
+
+    def test_path_not_found(self):
+        """Test error handling for non-existent paths."""
+        adapter = ImportsAdapter()
+        result = adapter.get_structure("imports:///nonexistent/path")
+
+        assert 'error' in result
+        assert 'Path not found' in result['error']
+
+    def test_unused_query_param(self, tmp_path):
+        """Test ?unused query parameter."""
+        adapter = ImportsAdapter()
+
+        # Create file with unused imports
+        (tmp_path / "test.py").write_text("import os\nimport sys\n\nprint('hello')\n")
+
+        # Test unused detection
+        result = adapter.get_structure(f"imports://{tmp_path}?unused")
+        assert result['type'] == 'unused_imports'
+        assert isinstance(result.get('unused'), list)
+
+    def test_violations_query_param(self, tmp_path):
+        """Test ?violations query parameter."""
+        adapter = ImportsAdapter()
+
+        # Create test file
+        (tmp_path / "test.py").write_text("import os\n\nprint('hello')\n")
+
+        # Test violations (placeholder - actual layer violations need config)
+        result = adapter.get_structure(f"imports://{tmp_path}?violations")
+        assert result['type'] == 'layer_violations'
+        assert 'violations' in result
+
+    def test_get_element(self, tmp_path):
+        """Test get_element method for specific file."""
+        adapter = ImportsAdapter()
+
+        # Create test file
+        (tmp_path / "test.py").write_text("import os\nimport sys\n")
+
+        # First, analyze the directory
+        adapter.get_structure(f"imports://{tmp_path}")
+
+        # Then get specific element
+        result = adapter.get_element("test.py")
+        assert result is not None
+        assert result['file'].endswith('test.py')
+        assert result['count'] == 2
+        assert len(result['imports']) == 2
+
+        # Test non-existent element
+        result_missing = adapter.get_element("nonexistent.py")
+        assert result_missing is None
+
+    def test_get_element_before_analysis(self):
+        """Test get_element returns None before analysis."""
+        adapter = ImportsAdapter()
+        result = adapter.get_element("anything.py")
+        assert result is None
+
+    def test_get_metadata_before_analysis(self):
+        """Test get_metadata before analysis."""
+        adapter = ImportsAdapter()
+        metadata = adapter.get_metadata()
+        assert metadata['status'] == 'not_analyzed'

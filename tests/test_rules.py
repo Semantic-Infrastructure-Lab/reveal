@@ -786,6 +786,150 @@ def func():
         finally:
             self.teardown_module(temp_dir)
 
+    def test_exception_handling(self):
+        """Test I002 handles exceptions gracefully."""
+        from reveal.rules.imports.I002 import I002
+        rule = I002()
+
+        # Test with non-existent file (should return empty list, not crash)
+        detections = rule.check("/nonexistent/path/file.py", None, "")
+        self.assertEqual(len(detections), 0, "Should handle missing files gracefully")
+
+    def test_syntax_error_handling(self):
+        """Test I002 handles Python syntax errors gracefully."""
+        files = {
+            'bad_syntax.py': """
+import good_module
+def broken(
+    # Missing closing paren - syntax error
+"""
+        }
+        temp_dir = self.create_temp_module(files)
+        try:
+            from reveal.rules.imports.I002 import I002
+            rule = I002()
+
+            file_path = str(temp_dir / 'bad_syntax.py')
+            content = files['bad_syntax.py']
+
+            # Should not crash, should return empty detections
+            detections = rule.check(file_path, None, content)
+            self.assertIsInstance(detections, list, "Should return list even with syntax errors")
+
+        finally:
+            self.teardown_module(temp_dir)
+
+    def test_break_point_suggestion_last_in_cycle(self):
+        """Test suggestion when current file is last in cycle."""
+        files = {
+            'first.py': """
+import second
+
+def func():
+    return second.func()
+""",
+            'second.py': """
+import first
+
+def func():
+    return first.func()
+"""
+        }
+        temp_dir = self.create_temp_module(files)
+        try:
+            from reveal.rules.imports.I002 import I002
+            rule = I002()
+
+            # Check second.py (which comes last in alphabetical order)
+            file_second = str(temp_dir / 'second.py')
+            content_second = files['second.py']
+            detections = rule.check(file_second, None, content_second)
+
+            # Should have a suggestion
+            self.assertGreater(len(detections), 0)
+            self.assertIsNotNone(detections[0].suggestion)
+            self.assertIn('second.py', detections[0].context)
+
+        finally:
+            self.teardown_module(temp_dir)
+
+
+class TestI001EdgeCases(unittest.TestCase):
+    """Additional edge case tests for I001."""
+
+    def create_temp_python(self, content: str) -> str:
+        """Helper: Create temp Python file."""
+        temp_dir = tempfile.mkdtemp()
+        path = os.path.join(temp_dir, "test.py")
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def teardown_file(self, path: str):
+        """Helper: Clean up temp file."""
+        os.unlink(path)
+        os.rmdir(os.path.dirname(path))
+
+    def test_syntax_error_handling(self):
+        """Test I001 handles syntax errors gracefully."""
+        content = """
+import os
+def broken(
+    # Syntax error - missing closing paren
+"""
+        path = self.create_temp_python(content)
+        try:
+            from reveal.rules.imports.I001 import I001
+            rule = I001()
+            detections = rule.check(path, None, content)
+
+            # Should return empty list, not crash
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_aliased_import_unused(self):
+        """Test detection of unused aliased imports."""
+        content = """
+import os as operating_system
+import sys as system
+
+def main():
+    print("Hello")
+"""
+        path = self.create_temp_python(content)
+        try:
+            from reveal.rules.imports.I001 import I001
+            rule = I001()
+            detections = rule.check(path, None, content)
+
+            # Both aliased imports are unused
+            self.assertEqual(len(detections), 2)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_aliased_import_used(self):
+        """Test that used aliased imports don't trigger detection."""
+        content = """
+import os as operating_system
+
+def main():
+    return operating_system.path.join('a', 'b')
+"""
+        path = self.create_temp_python(content)
+        try:
+            from reveal.rules.imports.I001 import I001
+            rule = I001()
+            detections = rule.check(path, None, content)
+
+            # Alias is used, should not detect
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_file(path)
+
 
 if __name__ == '__main__':
     unittest.main()
