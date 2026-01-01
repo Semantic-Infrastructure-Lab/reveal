@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Optional
 import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from .utils import find_reveal_root
 
 
 class V001(BaseRule):
@@ -44,7 +45,7 @@ class V001(BaseRule):
             return detections
 
         # Find reveal root
-        reveal_root = self._find_reveal_root()
+        reveal_root = find_reveal_root()
         if not reveal_root:
             return detections
 
@@ -81,25 +82,6 @@ class V001(BaseRule):
                 ))
 
         return detections
-
-    def _find_reveal_root(self) -> Optional[Path]:
-        """Find reveal's root directory."""
-        # Start from this file's location
-        current = Path(__file__).parent.parent.parent
-
-        # Check if we're in the reveal package
-        if (current / 'analyzers').exists() and (current / 'rules').exists():
-            return current
-
-        # Search up to 5 levels
-        for _ in range(5):
-            if (current / 'reveal' / 'analyzers').exists():
-                return current / 'reveal'
-            current = current.parent
-            if current == current.parent:  # Reached root
-                break
-
-        return None
 
     def _get_analyzers(self, reveal_root: Path) -> Dict[str, Path]:
         """Get all analyzer files.

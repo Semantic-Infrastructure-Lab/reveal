@@ -21,6 +21,7 @@ import ast
 import inspect
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from .utils import find_reveal_root
 
 
 class V008(BaseRule):
@@ -44,7 +45,7 @@ class V008(BaseRule):
             return detections
 
         # Find reveal root
-        reveal_root = self._find_reveal_root()
+        reveal_root = find_reveal_root()
         if not reveal_root:
             return detections
 
@@ -60,95 +61,112 @@ class V008(BaseRule):
 
     def _check_analyzer_file(self, analyzer_path: Path) -> List[Detection]:
         """Check a single analyzer file for get_structure signature issues."""
-        detections = []
-
         try:
             content = analyzer_path.read_text()
             tree = ast.parse(content)
+            return self._find_get_structure_violations(tree, analyzer_path)
+        except Exception:
+            # Don't fail the check if we can't parse the file
+            return []
 
-            # Find all class definitions
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.ClassDef):
+    def _find_get_structure_violations(
+        self, tree: ast.AST, analyzer_path: Path
+    ) -> List[Detection]:
+        """Find all get_structure signature violations in an AST."""
+        detections = []
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+
+            for func in node.body:
+                if not isinstance(func, ast.FunctionDef):
+                    continue
+                if func.name != 'get_structure':
                     continue
 
-                # Check if class has get_structure method
-                for item in node.body:
-                    if not isinstance(item, ast.FunctionDef):
-                        continue
-                    if item.name != 'get_structure':
-                        continue
-
-                    # Check signature matches base class contract
-                    has_kwargs = item.args.kwarg and item.args.kwarg.arg == 'kwargs'
-
-                    # Get parameter names
-                    param_names = [arg.arg for arg in item.args.args if arg.arg != 'self']
-
-                    # Check for required base parameters
-                    has_head = 'head' in param_names
-                    has_tail = 'tail' in param_names
-                    has_range = 'range' in param_names
-
-                    # Either has explicit head/tail/range + **kwargs, or just **kwargs (acceptable)
-                    if not has_kwargs:
-                        detections.append(self.create_detection(
-                            file_path=str(analyzer_path),
-                            line=item.lineno,
-                            message=f"Class '{node.name}.get_structure()' missing **kwargs parameter",
-                            suggestion=(
-                                f"Update signature to match base class:\n"
-                                f"def get_structure(self, head=None, tail=None, range=None, **kwargs):"
-                            ),
-                            context=(
-                                f"Base class FileAnalyzer.get_structure() accepts head/tail/range/**kwargs. "
-                                f"Subclasses must maintain this contract (Liskov Substitution Principle)."
-                            )
-                        ))
-                    elif not (has_head and has_tail and has_range):
-                        # Has **kwargs but missing explicit base params - warn
-                        missing = []
-                        if not has_head: missing.append('head')
-                        if not has_tail: missing.append('tail')
-                        if not has_range: missing.append('range')
-
-                        detections.append(self.create_detection(
-                            file_path=str(analyzer_path),
-                            line=item.lineno,
-                            message=f"Class '{node.name}.get_structure()' missing base parameters: {', '.join(missing)}",
-                            suggestion=(
-                                f"Add base parameters for consistency:\n"
-                                f"def get_structure(self, head=None, tail=None, range=None, **kwargs):"
-                            ),
-                            context=(
-                                f"While **kwargs technically accepts these, explicitly declaring "
-                                f"head/tail/range improves clarity and matches base class contract."
-                            )
-                        ))
-
-        except Exception as e:
-            # Don't fail the check if we can't parse the file
-            pass
+                # Found get_structure method - validate it
+                violation = self._validate_signature(func, node.name, analyzer_path)
+                if violation:
+                    detections.append(violation)
 
         return detections
 
-    def _find_reveal_root(self) -> Optional[Path]:
-        """Find reveal's root directory."""
-        # Start from this file's location
-        current = Path(__file__).parent.parent.parent
+    def _validate_signature(
+        self, func: ast.FunctionDef, class_name: str, analyzer_path: Path
+    ) -> Optional[Detection]:
+        """Validate get_structure signature.
 
-        # Check if we're in the reveal package
-        if (current / 'analyzers').exists() and (current / 'rules').exists():
-            return current
+        Returns Detection if signature is invalid, None otherwise.
+        """
+        has_kwargs = func.args.kwarg and func.args.kwarg.arg == 'kwargs'
+        param_names = [arg.arg for arg in func.args.args if arg.arg != 'self']
 
-        # Search up to 5 levels
-        for _ in range(5):
-            if (current / 'reveal' / 'analyzers').exists():
-                return current / 'reveal'
-            current = current.parent
-            if current == current.parent:  # Reached root
-                break
+        has_head = 'head' in param_names
+        has_tail = 'tail' in param_names
+        has_range = 'range' in param_names
+
+        if not has_kwargs:
+            return self._create_missing_kwargs_detection(
+                func.lineno, class_name, analyzer_path
+            )
+        elif not (has_head and has_tail and has_range):
+            return self._create_missing_params_detection(
+                func.lineno, class_name, analyzer_path,
+                has_head, has_tail, has_range
+            )
 
         return None
+
+    def _create_missing_kwargs_detection(
+        self, line: int, class_name: str, analyzer_path: Path
+    ) -> Detection:
+        """Create detection for missing **kwargs parameter."""
+        return self.create_detection(
+            file_path=str(analyzer_path),
+            line=line,
+            message=f"Class '{class_name}.get_structure()' missing **kwargs parameter",
+            suggestion=(
+                "Update signature to match base class:\n"
+                "def get_structure(self, head=None, tail=None, range=None, **kwargs):"
+            ),
+            context=(
+                "Base class FileAnalyzer.get_structure() accepts head/tail/range/**kwargs. "
+                "Subclasses must maintain this contract (Liskov Substitution Principle)."
+            )
+        )
+
+    def _create_missing_params_detection(
+        self,
+        line: int,
+        class_name: str,
+        analyzer_path: Path,
+        has_head: bool,
+        has_tail: bool,
+        has_range: bool
+    ) -> Detection:
+        """Create detection for missing base parameters."""
+        missing = []
+        if not has_head:
+            missing.append('head')
+        if not has_tail:
+            missing.append('tail')
+        if not has_range:
+            missing.append('range')
+
+        return self.create_detection(
+            file_path=str(analyzer_path),
+            line=line,
+            message=f"Class '{class_name}.get_structure()' missing base parameters: {', '.join(missing)}",
+            suggestion=(
+                "Add base parameters for consistency:\n"
+                "def get_structure(self, head=None, tail=None, range=None, **kwargs):"
+            ),
+            context=(
+                "While **kwargs technically accepts these, explicitly declaring "
+                "head/tail/range improves clarity and matches base class contract."
+            )
+        )
 
     def _get_analyzer_files(self, reveal_root: Path) -> List[Path]:
         """Get all analyzer Python files.
@@ -156,24 +174,34 @@ class V008(BaseRule):
         Returns:
             List of paths to analyzer files
         """
-        analyzer_files = []
         analyzers_dir = reveal_root / 'analyzers'
-
         if not analyzers_dir.exists():
-            return analyzer_files
+            return []
+
+        analyzer_files = []
 
         # Get all .py files in analyzers directory
-        for file in analyzers_dir.glob('*.py'):
-            if file.stem.startswith('_'):
-                continue
-            analyzer_files.append(file)
+        analyzer_files.extend(self._scan_directory_for_analyzers(analyzers_dir))
 
         # Also check subdirectories (like office/)
         for subdir in analyzers_dir.iterdir():
-            if subdir.is_dir() and not subdir.name.startswith('_'):
-                for file in subdir.glob('*.py'):
-                    if file.stem.startswith('_'):
-                        continue
-                    analyzer_files.append(file)
+            if not subdir.is_dir() or subdir.name.startswith('_'):
+                continue
+            analyzer_files.extend(self._scan_directory_for_analyzers(subdir))
 
         return analyzer_files
+
+    def _scan_directory_for_analyzers(self, directory: Path) -> List[Path]:
+        """Scan a directory for analyzer Python files.
+
+        Args:
+            directory: Directory to scan
+
+        Returns:
+            List of analyzer file paths (excluding private files)
+        """
+        files = []
+        for file in directory.glob('*.py'):
+            if not file.stem.startswith('_'):
+                files.append(file)
+        return files

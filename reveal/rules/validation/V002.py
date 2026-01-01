@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Optional
 import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from .utils import find_reveal_root
 
 
 class V002(BaseRule):
@@ -37,7 +38,7 @@ class V002(BaseRule):
             return detections
 
         # Find reveal root
-        reveal_root = self._find_reveal_root()
+        reveal_root = find_reveal_root()
         if not reveal_root:
             return detections
 
@@ -51,29 +52,43 @@ class V002(BaseRule):
             if analyzer_file.stem.startswith('_'):
                 continue
 
-            # Check if file has @register decorator
-            try:
-                content = analyzer_file.read_text()
-                has_register = self._has_register_decorator(content)
-
-                if not has_register:
-                    # Count classes to see if it looks like an analyzer
-                    class_count = len(re.findall(r'^class\s+\w+', content, re.MULTILINE))
-
-                    if class_count > 0:
-                        detections.append(self.create_detection(
-                            file_path=str(analyzer_file.relative_to(reveal_root)),
-                            line=1,
-                            message=f"Analyzer '{analyzer_file.stem}' has {class_count} class(es) but no @register decorator",
-                            suggestion="Add @register decorator to the analyzer class(es)",
-                            context=f"File contains classes but may not be registered"
-                        ))
-
-            except Exception as e:
-                # Skip files we can't read
-                continue
+            # Check this analyzer file
+            detection = self._check_analyzer_registration(analyzer_file, reveal_root)
+            if detection:
+                detections.append(detection)
 
         return detections
+
+    def _check_analyzer_registration(
+        self, analyzer_file: Path, reveal_root: Path
+    ) -> Optional[Detection]:
+        """Check if analyzer file is properly registered.
+
+        Returns Detection if unregistered, None otherwise.
+        """
+        try:
+            content = analyzer_file.read_text()
+        except Exception:
+            # Skip files we can't read
+            return None
+
+        # Check if file has @register decorator
+        if self._has_register_decorator(content):
+            return None
+
+        # Count classes to see if it looks like an analyzer
+        class_count = len(re.findall(r'^class\s+\w+', content, re.MULTILINE))
+        if class_count == 0:
+            return None
+
+        # Has classes but no @register - create detection
+        return self.create_detection(
+            file_path=str(analyzer_file.relative_to(reveal_root)),
+            line=1,
+            message=f"Analyzer '{analyzer_file.stem}' has {class_count} class(es) but no @register decorator",
+            suggestion="Add @register decorator to the analyzer class(es)",
+            context="File contains classes but may not be registered"
+        )
 
     def _has_register_decorator(self, content: str) -> bool:
         """Check if file contains @register decorator.
@@ -95,19 +110,3 @@ class V002(BaseRule):
                 return True
 
         return False
-
-    def _find_reveal_root(self) -> Optional[Path]:
-        """Find reveal's root directory."""
-        current = Path(__file__).parent.parent.parent
-
-        if (current / 'analyzers').exists() and (current / 'rules').exists():
-            return current
-
-        for _ in range(5):
-            if (current / 'reveal' / 'analyzers').exists():
-                return current / 'reveal'
-            current = current.parent
-            if current == current.parent:
-                break
-
-        return None
