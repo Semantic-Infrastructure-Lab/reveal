@@ -169,8 +169,10 @@ class D001(BaseRule):
         code = re.sub(r'/\*.*?\*/', '', code, flags=re.DOTALL)
 
         # Remove docstrings (Python)
-        code = re.sub(r'""".*?"""', '', code, flags=re.DOTALL)
-        code = re.sub(r"'''.*?'''", '', code, flags=re.DOTALL)
+        # Only remove standalone docstrings (at start of line), not string literals
+        # in return statements, assignments, etc.
+        code = re.sub(r'^\s*""".*?"""', '', code, flags=re.DOTALL | re.MULTILINE)
+        code = re.sub(r"^\s*'''.*?'''", '', code, flags=re.DOTALL | re.MULTILINE)
 
         # Normalize whitespace
         # Collapse multiple spaces to single space
