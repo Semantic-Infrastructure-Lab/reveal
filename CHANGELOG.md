@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.1] - 2025-12-31
+
+### Changed
+- **Code Quality Improvements**: Extensive refactoring for better maintainability
+  - Broke down large functions (100-300 lines) into focused helpers (10-50 lines)
+  - Improved Single Responsibility Principle adherence
+  - Reduced cyclomatic complexity for better testability
+  - Files refactored: help.py, parser.py, formatting.py, main.py, L003.py
+  - 754 insertions, 366 deletions (function extraction, no logic changes)
+
+### Technical
+- 988/988 tests passing (100% pass rate maintained)
+- 74% code coverage maintained
+- Zero functional changes - pure internal improvements
+- Session: ancient-satellite-1231
+
 ## [0.27.0] - 2025-12-31
 
 ### Added
