@@ -47,58 +47,113 @@ class V011(BaseRule):
         project_root = reveal_root.parent
 
         # Get canonical version from pyproject.toml
-        pyproject_file = project_root / 'pyproject.toml'
-        if not pyproject_file.exists():
-            return detections
-
-        canonical_version = self._extract_version_from_pyproject(pyproject_file)
+        canonical_version = self._get_canonical_version(project_root)
         if not canonical_version:
             return detections
 
-        # Check 1: CHANGELOG.md has dated entry (not Unreleased)
+        # Run all validation checks
         changelog_file = project_root / 'CHANGELOG.md'
-        if changelog_file.exists():
-            if not self._changelog_has_dated_entry(changelog_file, canonical_version):
-                detections.append(self.create_detection(
-                    file_path="CHANGELOG.md",
-                    line=1,
-                    message=f"CHANGELOG.md [{canonical_version}] section missing date or marked Unreleased",
-                    suggestion=f"Update section to: ## [{canonical_version}] - YYYY-MM-DD",
-                    context=f"Version: {canonical_version}"
-                ))
-
-        # Check 2: ROADMAP.md mentions version in "What We've Shipped"
         roadmap_file = project_root / 'ROADMAP.md'
-        if roadmap_file.exists():
-            if not self._roadmap_has_shipped_section(roadmap_file, canonical_version):
-                detections.append(self.create_detection(
-                    file_path="ROADMAP.md",
-                    line=1,
-                    message=f"ROADMAP.md doesn't mention v{canonical_version} in 'What We've Shipped'",
-                    suggestion=f"Add v{canonical_version} section to 'What We've Shipped'",
-                    context=f"Version: {canonical_version}"
-                ))
 
-        # Check 3: ROADMAP.md current version is set correctly
-        if roadmap_file.exists():
-            roadmap_version = self._extract_roadmap_version(roadmap_file)
-            if roadmap_version and roadmap_version != canonical_version:
-                detections.append(self.create_detection(
-                    file_path="ROADMAP.md",
-                    line=1,
-                    message=f"ROADMAP.md '**Current version:**' not updated (v{roadmap_version} != v{canonical_version})",
-                    suggestion=f"Update to: **Current version:** v{canonical_version}",
-                    context=f"Found: v{roadmap_version}, Expected: v{canonical_version}"
-                ))
+        self._validate_changelog(
+            changelog_file, canonical_version, detections
+        )
+        self._validate_roadmap_shipped(
+            roadmap_file, canonical_version, detections
+        )
+        self._validate_roadmap_version(
+            roadmap_file, canonical_version, detections
+        )
 
         return detections
 
-    def _extract_version_from_pyproject(self, pyproject_file: Path) -> Optional[str]:
+    def _get_canonical_version(self, project_root: Path) -> Optional[str]:
+        """Get canonical version from pyproject.toml."""
+        pyproject_file = project_root / 'pyproject.toml'
+        if not pyproject_file.exists():
+            return None
+        return self._extract_version_from_pyproject(pyproject_file)
+
+    def _validate_changelog(
+            self,
+            changelog_file: Path,
+            version: str,
+            detections: List[Detection]) -> None:
+        """Validate CHANGELOG.md has dated entry."""
+        if not changelog_file.exists():
+            return
+
+        if not self._changelog_has_dated_entry(changelog_file, version):
+            detections.append(self.create_detection(
+                file_path="CHANGELOG.md",
+                line=1,
+                message=(
+                    f"CHANGELOG.md [{version}] section missing date "
+                    "or marked Unreleased"
+                ),
+                suggestion=(
+                    f"Update section to: ## [{version}] - YYYY-MM-DD"
+                ),
+                context=f"Version: {version}"
+            ))
+
+    def _validate_roadmap_shipped(
+            self,
+            roadmap_file: Path,
+            version: str,
+            detections: List[Detection]) -> None:
+        """Validate ROADMAP.md mentions version in shipped section."""
+        if not roadmap_file.exists():
+            return
+
+        if not self._roadmap_has_shipped_section(roadmap_file, version):
+            detections.append(self.create_detection(
+                file_path="ROADMAP.md",
+                line=1,
+                message=(
+                    f"ROADMAP.md doesn't mention v{version} in "
+                    "'What We've Shipped'"
+                ),
+                suggestion=(
+                    f"Add v{version} section to 'What We've Shipped'"
+                ),
+                context=f"Version: {version}"
+            ))
+
+    def _validate_roadmap_version(
+            self,
+            roadmap_file: Path,
+            version: str,
+            detections: List[Detection]) -> None:
+        """Validate ROADMAP.md current version is correct."""
+        if not roadmap_file.exists():
+            return
+
+        roadmap_version = self._extract_roadmap_version(roadmap_file)
+        if roadmap_version and roadmap_version != version:
+            detections.append(self.create_detection(
+                file_path="ROADMAP.md",
+                line=1,
+                message=(
+                    f"ROADMAP.md '**Current version:**' not updated "
+                    f"(v{roadmap_version} != v{version})"
+                ),
+                suggestion=f"Update to: **Current version:** v{version}",
+                context=(
+                    f"Found: v{roadmap_version}, Expected: v{version}"
+                )
+            ))
+
+    def _extract_version_from_pyproject(
+            self, pyproject_file: Path) -> Optional[str]:
         """Extract version from pyproject.toml."""
         try:
             content = pyproject_file.read_text()
             # Match: version = "X.Y.Z"
-            match = re.search(r'^version\s*=\s*["\']([0-9]+\.[0-9]+\.[0-9]+)["\']', content, re.MULTILINE)
+            pattern = (
+                r'^version\s*=\s*["\']([0-9]+\.[0-9]+\.[0-9]+)["\']'
+            )
+            match = re.search(pattern, content, re.MULTILINE)
             if match:
                 return match.group(1)
         except Exception:
@@ -140,7 +195,8 @@ class V011(BaseRule):
             pass
         return False
 
-    def _roadmap_has_shipped_section(self, roadmap_file: Path, version: str) -> bool:
+    def _roadmap_has_shipped_section(
+            self, roadmap_file: Path, version: str) -> bool:
         """Check if ROADMAP.md mentions version in 'What We've Shipped' section.
 
         Looks for:
@@ -151,7 +207,9 @@ class V011(BaseRule):
             content = roadmap_file.read_text()
 
             # Find "What We've Shipped" section
-            shipped_match = re.search(r'##\s*What We\'ve Shipped', content, re.IGNORECASE)
+            shipped_match = re.search(
+                r'##\s*What We\'ve Shipped', content, re.IGNORECASE
+            )
             if not shipped_match:
                 return False
 
@@ -179,15 +237,19 @@ class V011(BaseRule):
             pass
         return False
 
-    def _extract_roadmap_version(self, roadmap_file: Path) -> Optional[str]:
+    def _extract_roadmap_version(
+            self, roadmap_file: Path) -> Optional[str]:
         """Extract version from ROADMAP.md.
 
         Looks for pattern: **Current version:** vX.Y.Z
         """
         try:
             content = roadmap_file.read_text()
-            # Match: **Current version:** v0.27.1 or **Current version:** 0.27.1
-            match = re.search(r'\*\*Current version:\*\*\s*v?([0-9]+\.[0-9]+\.[0-9]+)', content)
+            # Match: **Current version:** v0.27.1 or 0.27.1
+            pattern = (
+                r'\*\*Current version:\*\*\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
+            )
+            match = re.search(pattern, content)
             if match:
                 return match.group(1)
         except Exception:

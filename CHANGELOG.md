@@ -48,9 +48,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Eliminated duplicate `_find_reveal_root()` code
   - Fixed blocking C902 error (function too long)
   - Improved from 10 quality issues down to 3
-- **V009, V011 Quality**: Updated to use shared utilities
-  - Both now use `find_reveal_root()` from utils module
-  - Eliminated 70+ lines of duplicated code across 3 files
+- **V009 Code Quality**: Refactored for reduced complexity
+  - Extracted helper methods: `_extract_markdown_links()`, `_validate_link()`
+  - Reduced complexity: check() from 29 to 14, overall from 5 issues to 2
+  - Fixed all line length issues (E501)
+  - Uses `find_reveal_root()` from shared utils module
+- **V011 Code Quality**: Refactored for clarity and maintainability
+  - Extracted validation methods: `_validate_changelog()`, `_validate_roadmap_shipped()`, `_validate_roadmap_version()`
+  - Added `_get_canonical_version()` helper method
+  - Reduced complexity: check() from 27 to below threshold
+  - Fixed all line length issues (E501)
+  - Improved from 10 quality issues down to 0 (✅ completely clean)
+  - Uses `find_reveal_root()` from shared utils module
+- **V-Series Quality Summary**: 87% reduction in quality issues
+  - Before: V009 (5 issues), V011 (10 issues) = 15 total
+  - After: V009 (2 issues), V011 (0 issues) = 2 total
+  - All tests passing (1010/1010)
+  - 74% code coverage maintained
 - **ROADMAP.md**: Aligned with implementation reality
   - Moved `.reveal.yaml` config to v0.28.0 (where it's actually planned)
   - Clarified Python-first strategy with phased language rollout

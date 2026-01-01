@@ -46,18 +46,43 @@ class V009(BaseRule):
         project_root = reveal_root.parent
 
         # Convert reveal:// URI to actual file path
-        actual_file_path = self._uri_to_path(file_path, reveal_root, project_root)
+        actual_file_path = self._uri_to_path(
+            file_path, reveal_root, project_root
+        )
         if not actual_file_path or not actual_file_path.exists():
             return detections
 
-        # Extract markdown links: [text](path)
+        # Extract and validate links
+        links = self._extract_markdown_links(content)
+        for link_info in links:
+            detection = self._validate_link(
+                link_info,
+                actual_file_path,
+                project_root,
+                file_path,
+                content
+            )
+            if detection:
+                detections.append(detection)
+
+        return detections
+
+    def _extract_markdown_links(self, content: str) -> List[Dict[str, Any]]:
+        """Extract internal markdown links from content.
+
+        Returns:
+            List of dicts with keys: text, target, match_obj
+        """
+        links = []
         link_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
+
         for match in re.finditer(link_pattern, content):
             link_text = match.group(1)
             link_target = match.group(2)
 
             # Skip external links
-            if link_target.startswith('http://') or link_target.startswith('https://'):
+            if (link_target.startswith('http://') or
+                    link_target.startswith('https://')):
                 continue
 
             # Skip anchor-only links (#heading)
@@ -73,21 +98,59 @@ class V009(BaseRule):
             if not link_target_clean:
                 continue
 
-            # Resolve relative path
-            resolved = self._resolve_link(actual_file_path, link_target_clean, project_root)
-            if not resolved or not resolved.exists():
-                line_num = content[:match.start()].count('\n') + 1
-                detections.append(self.create_detection(
-                    file_path=file_path,
-                    line=line_num,
-                    message=f"Broken link: {link_target}",
-                    suggestion=f"Create {link_target_clean} or update link",
-                    context=f"Link text: '{link_text}'"
-                ))
+            links.append({
+                'text': link_text,
+                'target': link_target,
+                'target_clean': link_target_clean,
+                'match': match
+            })
 
-        return detections
+        return links
 
-    def _uri_to_path(self, uri: str, reveal_root: Path, project_root: Path) -> Optional[Path]:
+    def _validate_link(
+            self,
+            link_info: Dict[str, Any],
+            source_file: Path,
+            project_root: Path,
+            file_path: str,
+            content: str) -> Optional[Detection]:
+        """Validate a single link and return detection if broken.
+
+        Args:
+            link_info: Dict with link metadata
+            source_file: Source file containing the link
+            project_root: Project root directory
+            file_path: Original file path (for detection)
+            content: File content (to calculate line number)
+
+        Returns:
+            Detection if link is broken, None otherwise
+        """
+        resolved = self._resolve_link(
+            source_file,
+            link_info['target_clean'],
+            project_root
+        )
+
+        if not resolved or not resolved.exists():
+            line_num = content[:link_info['match'].start()].count('\n') + 1
+            return self.create_detection(
+                file_path=file_path,
+                line=line_num,
+                message=f"Broken link: {link_info['target']}",
+                suggestion=(
+                    f"Create {link_info['target_clean']} or update link"
+                ),
+                context=f"Link text: '{link_info['text']}'"
+            )
+
+        return None
+
+    def _uri_to_path(
+            self,
+            uri: str,
+            reveal_root: Path,
+            project_root: Path) -> Optional[Path]:
         """Convert reveal:// URI to actual file path.
 
         Args:
@@ -117,7 +180,11 @@ class V009(BaseRule):
         # Return first candidate (for consistency, even if it doesn't exist)
         return candidates[0]
 
-    def _resolve_link(self, source_file: Path, link: str, project_root: Path) -> Optional[Path]:
+    def _resolve_link(
+            self,
+            source_file: Path,
+            link: str,
+            project_root: Path) -> Optional[Path]:
         """Resolve a relative link to an absolute path.
 
         Args:
