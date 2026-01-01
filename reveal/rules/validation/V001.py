@@ -38,38 +38,55 @@ class V001(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for missing help documentation."""
-        detections = []
-
         # Only run this check for reveal:// URIs
         if not file_path.startswith('reveal://'):
-            return detections
+            return []
 
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
-            return detections
+            return []
 
-        # Get all analyzers
+        # Get all analyzers and static help
         analyzers = self._get_analyzers(reveal_root)
-
-        # Load STATIC_HELP dict from help.py
         static_help = self._get_static_help(reveal_root)
 
-        # Check each analyzer
-        for analyzer_name, analyzer_path in analyzers.items():
-            # Check if analyzer has help in STATIC_HELP
-            if analyzer_name not in static_help:
-                # Check if it's expected to have help
-                if analyzer_name in self.EXPECTED_HELP_TOPICS:
-                    detections.append(self.create_detection(
-                        file_path=str(analyzer_path),
-                        line=1,
-                        message=f"Analyzer '{analyzer_name}' missing from help system",
-                        suggestion=f"Add '{analyzer_name}': '{self.EXPECTED_HELP_TOPICS[analyzer_name]}' to STATIC_HELP in reveal/adapters/help.py",
-                        context=f"Expected help file: {self.EXPECTED_HELP_TOPICS[analyzer_name]}"
-                    ))
+        # Run validation checks
+        detections = []
+        detections.extend(self._check_analyzers_have_help(analyzers, static_help))
+        detections.extend(self._validate_help_files_exist(static_help, reveal_root))
 
-        # Check that help files actually exist
+        return detections
+
+    def _check_analyzers_have_help(
+        self, analyzers: Dict[str, Path], static_help: Dict[str, str]
+    ) -> List[Detection]:
+        """Check that expected analyzers have help documentation."""
+        detections = []
+
+        for analyzer_name, analyzer_path in analyzers.items():
+            if analyzer_name in static_help:
+                continue  # Has help, OK
+
+            # Missing from help system - check if expected
+            if analyzer_name in self.EXPECTED_HELP_TOPICS:
+                expected_file = self.EXPECTED_HELP_TOPICS[analyzer_name]
+                detections.append(self.create_detection(
+                    file_path=str(analyzer_path),
+                    line=1,
+                    message=f"Analyzer '{analyzer_name}' missing from help system",
+                    suggestion=f"Add '{analyzer_name}': '{expected_file}' to STATIC_HELP in reveal/adapters/help.py",
+                    context=f"Expected help file: {expected_file}"
+                ))
+
+        return detections
+
+    def _validate_help_files_exist(
+        self, static_help: Dict[str, str], reveal_root: Path
+    ) -> List[Detection]:
+        """Check that referenced help files actually exist."""
+        detections = []
+
         for topic, help_file in static_help.items():
             help_path = reveal_root / help_file
             if not help_path.exists():
@@ -114,31 +131,46 @@ class V001(BaseRule):
 
         try:
             content = help_file.read_text()
-
-            # Find STATIC_HELP dict using regex
-            # Pattern: STATIC_HELP = { ... }
-            pattern = r"STATIC_HELP\s*=\s*\{([^}]+)\}"
-            match = re.search(pattern, content, re.DOTALL)
-
-            if not match:
+            dict_content = self._find_static_help_dict(content)
+            if not dict_content:
                 return {}
 
-            dict_content = match.group(1)
-
-            # Parse the dict entries (simple parsing)
-            static_help = {}
-            for line in dict_content.split('\n'):
-                line = line.strip()
-                if not line or line.startswith('#'):
-                    continue
-
-                # Pattern: 'topic': 'file.md',
-                entry_match = re.match(r"'([^']+)':\s*'([^']+)'", line)
-                if entry_match:
-                    topic, file_path = entry_match.groups()
-                    static_help[topic] = file_path
-
-            return static_help
+            return self._parse_dict_entries(dict_content)
 
         except Exception:
             return {}
+
+    def _find_static_help_dict(self, content: str) -> Optional[str]:
+        """Find STATIC_HELP dict content using regex.
+
+        Returns:
+            The dict content string, or None if not found
+        """
+        # Pattern: STATIC_HELP = { ... }
+        pattern = r"STATIC_HELP\s*=\s*\{([^}]+)\}"
+        match = re.search(pattern, content, re.DOTALL)
+        return match.group(1) if match else None
+
+    def _parse_dict_entries(self, dict_content: str) -> Dict[str, str]:
+        """Parse dict entries from STATIC_HELP content.
+
+        Args:
+            dict_content: The inner content of the STATIC_HELP dict
+
+        Returns:
+            Dict mapping topic name to help file path
+        """
+        static_help = {}
+
+        for line in dict_content.split('\n'):
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+
+            # Pattern: 'topic': 'file.md',
+            entry_match = re.match(r"'([^']+)':\s*'([^']+)'", line)
+            if entry_match:
+                topic, file_path = entry_match.groups()
+                static_help[topic] = file_path
+
+        return static_help

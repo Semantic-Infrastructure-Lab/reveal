@@ -99,24 +99,34 @@ class V008(BaseRule):
 
         Returns Detection if signature is invalid, None otherwise.
         """
+        # Check for **kwargs requirement
         has_kwargs = func.args.kwarg and func.args.kwarg.arg == 'kwargs'
-        param_names = [arg.arg for arg in func.args.args if arg.arg != 'self']
-
-        has_head = 'head' in param_names
-        has_tail = 'tail' in param_names
-        has_range = 'range' in param_names
-
         if not has_kwargs:
             return self._create_missing_kwargs_detection(
                 func.lineno, class_name, analyzer_path
             )
-        elif not (has_head and has_tail and has_range):
+
+        # Check for required base parameters
+        param_names = [arg.arg for arg in func.args.args if arg.arg != 'self']
+        missing_params = self._find_missing_base_params(param_names)
+        if missing_params:
             return self._create_missing_params_detection(
-                func.lineno, class_name, analyzer_path,
-                has_head, has_tail, has_range
+                func.lineno, class_name, analyzer_path, missing_params
             )
 
         return None
+
+    def _find_missing_base_params(self, param_names: List[str]) -> List[str]:
+        """Find which required base parameters are missing.
+
+        Args:
+            param_names: List of parameter names from function signature
+
+        Returns:
+            List of missing parameter names (empty if all present)
+        """
+        required = ['head', 'tail', 'range']
+        return [param for param in required if param not in param_names]
 
     def _create_missing_kwargs_detection(
         self, line: int, class_name: str, analyzer_path: Path
@@ -141,23 +151,17 @@ class V008(BaseRule):
         line: int,
         class_name: str,
         analyzer_path: Path,
-        has_head: bool,
-        has_tail: bool,
-        has_range: bool
+        missing_params: List[str]
     ) -> Detection:
-        """Create detection for missing base parameters."""
-        missing = []
-        if not has_head:
-            missing.append('head')
-        if not has_tail:
-            missing.append('tail')
-        if not has_range:
-            missing.append('range')
+        """Create detection for missing base parameters.
 
+        Args:
+            missing_params: List of parameter names that are missing
+        """
         return self.create_detection(
             file_path=str(analyzer_path),
             line=line,
-            message=f"Class '{class_name}.get_structure()' missing base parameters: {', '.join(missing)}",
+            message=f"Class '{class_name}.get_structure()' missing base parameters: {', '.join(missing_params)}",
             suggestion=(
                 "Add base parameters for consistency:\n"
                 "def get_structure(self, head=None, tail=None, range=None, **kwargs):"
