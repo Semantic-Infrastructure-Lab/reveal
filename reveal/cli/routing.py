@@ -447,6 +447,58 @@ def _render_mysql_check_result(result: dict):
     print(f"Exit code: {result['exit_code']}")
 
 
+def _handle_imports(adapter_class: type, resource: str, element: Optional[str],
+                    args: 'Namespace') -> None:
+    """Handle imports:// URIs."""
+    from ..main import safe_json_dumps
+
+    if not resource:
+        resource = '.'
+
+    adapter = adapter_class()
+    uri = f"imports://{resource}"
+
+    if element:
+        # Get imports for specific file
+        result = adapter.get_element(element)
+        if result is None:
+            print(f"Error: File '{element}' not found", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # Get import analysis
+        result = adapter.get_structure(uri=uri)
+
+    # Handle output format
+    if args.format == 'json':
+        print(safe_json_dumps(result))
+        return
+
+    # Text format - basic for now
+    if 'type' in result:
+        if result['type'] == 'unused_imports':
+            print(f"Unused Imports ({result['count']}):\n")
+            for imp in result['unused']:
+                print(f"  {imp['file']}:{imp['line']} - {imp['module']}")
+        elif result['type'] == 'circular_dependencies':
+            print(f"Circular Dependencies ({result['count']}):\n")
+            for i, cycle in enumerate(result['cycles'], 1):
+                print(f"  {i}. {' -> '.join(cycle)}")
+        elif result['type'] == 'layer_violations':
+            print(f"Layer Violations ({result['count']}):\n")
+            if result['count'] == 0:
+                print(f"  {result.get('note', 'No violations found')}")
+        else:
+            # Default: show all imports
+            metadata = result.get('metadata', {})
+            print(f"Import Analysis:\n")
+            print(f"  Total files: {metadata.get('total_files', 0)}")
+            print(f"  Total imports: {metadata.get('total_imports', 0)}")
+            print(f"  Has cycles: {metadata.get('has_cycles', False)}")
+    else:
+        # Fallback to JSON if unknown structure
+        print(safe_json_dumps(result))
+
+
 # Dispatch table: scheme -> handler function
 # To add a new scheme: create a _handle_<scheme> function and register here
 SCHEME_HANDLERS: Dict[str, Callable] = {
@@ -458,6 +510,7 @@ SCHEME_HANDLERS: Dict[str, Callable] = {
     'json': _handle_json,
     'reveal': _handle_reveal,
     'stats': _handle_stats,
+    'imports': _handle_imports,
 }
 
 
@@ -481,7 +534,7 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
 
     # Look up adapter from registry
     from ..adapters.base import get_adapter_class, list_supported_schemes
-    from ..adapters import env, ast, help, python, json_adapter, reveal, mysql  # noqa: F401 - Trigger registration
+    from ..adapters import env, ast, help, python, json_adapter, reveal, mysql, imports  # noqa: F401 - Trigger registration
 
     adapter_class = get_adapter_class(scheme)
     if not adapter_class:
