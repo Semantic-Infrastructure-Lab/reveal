@@ -9,7 +9,7 @@ This module handles dispatching to the correct handler based on:
 import sys
 import os
 from pathlib import Path
-from typing import Optional, Callable, Dict, TYPE_CHECKING
+from typing import Optional, Callable, Dict, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -569,7 +569,7 @@ def handle_adapter(adapter_class: type, scheme: str, resource: str,
         sys.exit(1)
 
 
-def _load_gitignore_patterns(directory: Path) -> list[str]:
+def _load_gitignore_patterns(directory: Path) -> List[str]:
     """Load .gitignore patterns from directory.
 
     Args:
@@ -592,7 +592,7 @@ def _load_gitignore_patterns(directory: Path) -> list[str]:
         return []
 
 
-def _should_skip_file(relative_path: Path, gitignore_patterns: list[str]) -> bool:
+def _should_skip_file(relative_path: Path, gitignore_patterns: List[str]) -> bool:
     """Check if file should be skipped based on gitignore patterns.
 
     Args:
@@ -610,7 +610,7 @@ def _should_skip_file(relative_path: Path, gitignore_patterns: list[str]) -> boo
     return False
 
 
-def _collect_files_to_check(directory: Path, gitignore_patterns: list[str]) -> list[Path]:
+def _collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> List[Path]:
     """Collect all supported files in directory tree.
 
     Args:
