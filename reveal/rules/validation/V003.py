@@ -10,11 +10,29 @@ Example violation:
     - Result: Inconsistent UX across file types (Issue #3)
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+
+
+@dataclass
+class AnalyzerContext:
+    """Context for analyzer-related detections.
+
+    Bundles common parameters for creating detections about analyzers,
+    reducing parameter repetition and enabling reusable helpers.
+    """
+    analyzer_name: str
+    analyzer_path: Path
+    reveal_root: Path
+
+    @property
+    def relative_path(self) -> str:
+        """Get analyzer path relative to reveal root for detection reporting."""
+        return str(self.analyzer_path.relative_to(self.reveal_root))
 
 
 class V003(BaseRule):
@@ -71,11 +89,17 @@ class V003(BaseRule):
             analyzer_path = analyzer_info['path']
             is_structured = analyzer_name in self.STRUCTURED_FORMATS
 
+            # Create context for this analyzer
+            ctx = AnalyzerContext(
+                analyzer_name=analyzer_name,
+                analyzer_path=analyzer_path,
+                reveal_root=reveal_root
+            )
+
             try:
                 content = analyzer_path.read_text()
 
                 # Check for get_structure (required for all)
-                # Can be either direct implementation OR inherited from base classes
                 has_get_structure = (
                     'def get_structure' in content or
                     'TreeSitterAnalyzer' in content or
@@ -83,35 +107,56 @@ class V003(BaseRule):
                 )
 
                 if not has_get_structure:
-                    detections.append(self.create_detection(
-                        file_path=str(analyzer_path.relative_to(reveal_root)),
-                        line=1,
-                        message=f"Analyzer '{analyzer_name}' missing get_structure() method",
-                        suggestion="All analyzers should implement get_structure() or inherit from FileAnalyzer/TreeSitterAnalyzer",
-                        context="This is the core method for structure extraction"
-                    ))
+                    detections.append(self._create_missing_structure_detection(ctx))
 
                 # Check for hierarchical support (for structured formats)
                 if is_structured:
                     has_hierarchy_support = self._check_hierarchy_support(content)
 
                     if not has_hierarchy_support:
-                        # This is informational - not all structured formats need it
-                        # But we should track it for Issue #3 type situations
                         line_num = self._find_class_line(content)
-                        detections.append(self.create_detection(
-                            file_path=str(analyzer_path.relative_to(reveal_root)),
-                            line=line_num,
-                            message=f"Structured analyzer '{analyzer_name}' may not support --outline",
-                            suggestion="Consider implementing hierarchical outline support (see markdown.py or python.py for examples)",
-                            context="Would have caught Issue #3 (markdown missing outline)"
-                        ))
+                        detections.append(
+                            self._create_missing_outline_detection(ctx, line_num)
+                        )
 
             except Exception:
                 # Skip files we can't read
                 continue
 
         return detections
+
+    def _create_missing_structure_detection(
+        self, ctx: AnalyzerContext
+    ) -> Detection:
+        """Create detection for missing get_structure() method.
+
+        Args:
+            ctx: Analyzer context
+        """
+        return self.create_detection(
+            file_path=ctx.relative_path,
+            line=1,
+            message=f"Analyzer '{ctx.analyzer_name}' missing get_structure() method",
+            suggestion="All analyzers should implement get_structure() or inherit from FileAnalyzer/TreeSitterAnalyzer",
+            context="This is the core method for structure extraction"
+        )
+
+    def _create_missing_outline_detection(
+        self, ctx: AnalyzerContext, line: int
+    ) -> Detection:
+        """Create detection for missing outline support.
+
+        Args:
+            ctx: Analyzer context
+            line: Line number where the class is defined
+        """
+        return self.create_detection(
+            file_path=ctx.relative_path,
+            line=line,
+            message=f"Structured analyzer '{ctx.analyzer_name}' may not support --outline",
+            suggestion="Consider implementing hierarchical outline support (see markdown.py or python.py for examples)",
+            context="Would have caught Issue #3 (markdown missing outline)"
+        )
 
     def _get_analyzers_with_types(self, reveal_root: Path) -> Dict[str, Dict[str, Any]]:
         """Get all analyzers with their metadata.
