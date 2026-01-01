@@ -7,6 +7,7 @@ from reveal.rules.bugs.B001 import B001
 from reveal.rules.complexity.C901 import C901
 from reveal.rules.refactoring.R913 import R913
 from reveal.rules.security.S701 import S701
+from reveal.rules.imports.I001 import I001
 
 
 class TestB001BareExcept(unittest.TestCase):
@@ -431,6 +432,121 @@ FROM nginx:1.25
 
             # Two :latest tags
             self.assertEqual(len(detections), 2)
+
+        finally:
+            self.teardown_file(path)
+
+
+class TestI001UnusedImports(unittest.TestCase):
+    """Test I001: Unused imports detector."""
+
+    def create_temp_python(self, content: str) -> str:
+        """Helper: Create temp Python file."""
+        temp_dir = tempfile.mkdtemp()
+        path = os.path.join(temp_dir, "test.py")
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def teardown_file(self, path: str):
+        """Helper: Clean up temp file."""
+        os.unlink(path)
+        os.rmdir(os.path.dirname(path))
+
+    def test_unused_import_detected(self):
+        """Test that unused imports are detected."""
+        content = """
+import os
+import sys
+
+def main():
+    print("Hello")
+"""
+        path = self.create_temp_python(content)
+        try:
+            rule = I001()
+            detections = rule.check(path, None, content)
+
+            # Both os and sys are unused
+            self.assertEqual(len(detections), 2)
+            self.assertEqual(detections[0].rule_code, 'I001')
+
+        finally:
+            self.teardown_file(path)
+
+    def test_used_import_ok(self):
+        """Test that used imports don't trigger detection."""
+        content = """
+import os
+
+def main():
+    return os.path.join('a', 'b')
+"""
+        path = self.create_temp_python(content)
+        try:
+            rule = I001()
+            detections = rule.check(path, None, content)
+
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_from_import_unused(self):
+        """Test unused from imports."""
+        content = """
+from pathlib import Path
+from typing import Dict, List
+
+def main():
+    return "Hello"
+"""
+        path = self.create_temp_python(content)
+        try:
+            rule = I001()
+            detections = rule.check(path, None, content)
+
+            # Both Path and Dict, List are unused
+            self.assertEqual(len(detections), 2)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_from_import_partially_used(self):
+        """Test partially used from imports are not flagged."""
+        content = """
+from typing import Dict, List
+
+def main(x: List[str]) -> None:
+    print(x)
+"""
+        path = self.create_temp_python(content)
+        try:
+            rule = I001()
+            detections = rule.check(path, None, content)
+
+            # Dict is unused, but List is used - don't flag partial imports
+            # (user might be using other names later, or keeping them for consistency)
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_star_import_skipped(self):
+        """Test that star imports are skipped."""
+        content = """
+from os import *
+
+def main():
+    print("Hello")
+"""
+        path = self.create_temp_python(content)
+        try:
+            rule = I001()
+            detections = rule.check(path, None, content)
+
+            # Star imports can't be reliably checked
+            self.assertEqual(len(detections), 0)
 
         finally:
             self.teardown_file(path)
