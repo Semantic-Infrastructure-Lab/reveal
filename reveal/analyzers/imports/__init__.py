@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set
 from collections import defaultdict, deque
 
+from .layers import LayerRule, LayerConfig, load_layer_config
+
 
 @dataclass
 class ImportStatement:
@@ -146,4 +148,7 @@ class ImportGraph:
 __all__ = [
     'ImportStatement',
     'ImportGraph',
+    'LayerRule',
+    'LayerConfig',
+    'load_layer_config',
 ]

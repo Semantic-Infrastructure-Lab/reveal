@@ -931,5 +931,411 @@ def main():
             self.teardown_file(path)
 
 
+class TestI003LayerViolations(unittest.TestCase):
+    """Tests for I003 architectural layer violation detection rule."""
+
+    def create_temp_project(self, files: Dict[str, str], config: str = None) -> Path:
+        """
+        Helper: Create a temporary project directory with files and config.
+
+        Args:
+            files: Dict mapping filename to content
+            config: Optional .reveal.yaml content
+
+        Returns:
+            Path to temp directory
+        """
+        import tempfile
+        temp_dir = Path(tempfile.mkdtemp(prefix='reveal_test_i003_'))
+
+        # Create .reveal.yaml if provided
+        if config:
+            config_path = temp_dir / '.reveal.yaml'
+            with open(config_path, 'w') as f:
+                f.write(config)
+
+        # Create all files (supports nested paths)
+        for filepath, content in files.items():
+            file_path = temp_dir / filepath
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(file_path, 'w') as f:
+                f.write(content)
+
+        return temp_dir
+
+    def teardown_project(self, temp_dir: Path):
+        """Helper: Clean up temp directory."""
+        import shutil
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+
+    def test_basic_layer_violation(self):
+        """Test detection of basic layer violation (services importing from api)."""
+        config = """
+architecture:
+  layers:
+    - name: "services"
+      paths: ["services/"]
+      allow_imports: ["models/"]
+      deny_imports: ["api/"]
+"""
+        files = {
+            'services/user_service.py': """
+from api import routes
+
+def get_user():
+    pass
+""",
+            'api/routes.py': """
+def api_route():
+    pass
+""",
+            'models/user.py': """
+class User:
+    pass
+"""
+        }
+
+        temp_dir = self.create_temp_project(files, config)
+        try:
+            from reveal.rules.imports.I003 import I003
+            rule = I003()
+
+            # Check user_service.py - should detect violation
+            file_path = str(temp_dir / 'services/user_service.py')
+            content = files['services/user_service.py']
+            detections = rule.check(file_path, None, content)
+
+            self.assertGreater(len(detections), 0, "Should detect layer violation")
+            self.assertEqual(detections[0].rule_code, 'I003')
+            self.assertIn('services', detections[0].message.lower())
+
+        finally:
+            self.teardown_project(temp_dir)
+
+    def test_allowed_import(self):
+        """Test that allowed imports don't trigger violations."""
+        config = """
+architecture:
+  layers:
+    - name: "services"
+      paths: ["services/"]
+      allow_imports: ["repositories/", "models/"]
+      deny_imports: []
+"""
+        files = {
+            'services/user_service.py': """
+from repositories import user_repo
+from models import user
+
+def get_user():
+    pass
+""",
+            'repositories/user_repo.py': """
+def find_user():
+    pass
+""",
+            'models/user.py': """
+class User:
+    pass
+"""
+        }
+
+        temp_dir = self.create_temp_project(files, config)
+        try:
+            from reveal.rules.imports.I003 import I003
+            rule = I003()
+
+            file_path = str(temp_dir / 'services/user_service.py')
+            content = files['services/user_service.py']
+            detections = rule.check(file_path, None, content)
+
+            # Should not detect any violations
+            self.assertEqual(len(detections), 0, "Allowed imports should not trigger violations")
+
+        finally:
+            self.teardown_project(temp_dir)
+
+    def test_multiple_layers(self):
+        """Test project with multiple layers enforcing different rules."""
+        config = """
+architecture:
+  layers:
+    - name: "api"
+      paths: ["api/"]
+      allow_imports: ["services/", "models/"]
+      deny_imports: ["repositories/", "database/"]
+
+    - name: "services"
+      paths: ["services/"]
+      allow_imports: ["repositories/", "models/"]
+      deny_imports: ["api/"]
+
+    - name: "repositories"
+      paths: ["repositories/"]
+      allow_imports: ["database/", "models/"]
+      deny_imports: ["api/", "services/"]
+"""
+        files = {
+            'api/routes.py': """
+from services import user_service
+
+def handle_request():
+    pass
+""",
+            'services/user_service.py': """
+from repositories import user_repo
+
+def get_user():
+    pass
+""",
+            'repositories/user_repo.py': """
+from database import db
+
+def find_user():
+    pass
+""",
+            'database/db.py': """
+def connect():
+    pass
+""",
+            'models/user.py': """
+class User:
+    pass
+"""
+        }
+
+        temp_dir = self.create_temp_project(files, config)
+        try:
+            from reveal.rules.imports.I003 import I003
+            rule = I003()
+
+            # All files should pass (no violations)
+            for filepath in files.keys():
+                if filepath.endswith('.py'):
+                    file_path = str(temp_dir / filepath)
+                    content = files[filepath]
+                    detections = rule.check(file_path, None, content)
+                    self.assertEqual(len(detections), 0,
+                                   f"No violations expected in {filepath}")
+
+        finally:
+            self.teardown_project(temp_dir)
+
+    def test_deny_list_violation(self):
+        """Test that deny_imports are properly enforced."""
+        config = """
+architecture:
+  layers:
+    - name: "repositories"
+      paths: ["repositories/"]
+      allow_imports: ["database/"]
+      deny_imports: ["api/", "services/"]
+"""
+        files = {
+            'repositories/user_repo.py': """
+from services import user_service
+
+def find_user():
+    pass
+""",
+            'services/user_service.py': """
+def get_user():
+    pass
+"""
+        }
+
+        temp_dir = self.create_temp_project(files, config)
+        try:
+            from reveal.rules.imports.I003 import I003
+            rule = I003()
+
+            file_path = str(temp_dir / 'repositories/user_repo.py')
+            content = files['repositories/user_repo.py']
+            detections = rule.check(file_path, None, content)
+
+            self.assertGreater(len(detections), 0, "Should detect deny_imports violation")
+            self.assertEqual(detections[0].rule_code, 'I003')
+
+        finally:
+            self.teardown_project(temp_dir)
+
+    def test_no_config_no_violations(self):
+        """Test that files without .reveal.yaml don't trigger violations."""
+        files = {
+            'module_a.py': """
+import module_b
+
+def func_a():
+    pass
+""",
+            'module_b.py': """
+def func_b():
+    pass
+"""
+        }
+
+        temp_dir = self.create_temp_project(files, config=None)
+        try:
+            from reveal.rules.imports.I003 import I003
+            rule = I003()
+
+            file_path = str(temp_dir / 'module_a.py')
+            content = files['module_a.py']
+            detections = rule.check(file_path, None, content)
+
+            # No config = no violations
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_project(temp_dir)
+
+    def test_external_imports_ignored(self):
+        """Test that external/stdlib imports are ignored."""
+        config = """
+architecture:
+  layers:
+    - name: "services"
+      paths: ["services/"]
+      allow_imports: ["repositories/"]
+      deny_imports: []
+"""
+        files = {
+            'services/user_service.py': """
+import os
+import sys
+from pathlib import Path
+import requests
+
+def get_user():
+    pass
+"""
+        }
+
+        temp_dir = self.create_temp_project(files, config)
+        try:
+            from reveal.rules.imports.I003 import I003
+            rule = I003()
+
+            file_path = str(temp_dir / 'services/user_service.py')
+            content = files['services/user_service.py']
+            detections = rule.check(file_path, None, content)
+
+            # External/stdlib imports should be ignored
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_project(temp_dir)
+
+    def test_glob_pattern_matching(self):
+        """Test that glob patterns (** wildcards) work correctly."""
+        config = """
+architecture:
+  layers:
+    - name: "api"
+      paths: ["api/**"]
+      allow_imports: ["services/"]
+      deny_imports: ["database/"]
+"""
+        files = {
+            'api/v1/users/routes.py': """
+from database import db
+
+def get_users():
+    pass
+""",
+            'database/db.py': """
+def connect():
+    pass
+"""
+        }
+
+        temp_dir = self.create_temp_project(files, config)
+        try:
+            from reveal.rules.imports.I003 import I003
+            rule = I003()
+
+            # Nested file should still match api layer
+            file_path = str(temp_dir / 'api/v1/users/routes.py')
+            content = files['api/v1/users/routes.py']
+            detections = rule.check(file_path, None, content)
+
+            self.assertGreater(len(detections), 0,
+                             "Should detect violation in nested file matching glob pattern")
+
+        finally:
+            self.teardown_project(temp_dir)
+
+    def test_file_outside_layers(self):
+        """Test that files not in any layer don't trigger violations."""
+        config = """
+architecture:
+  layers:
+    - name: "services"
+      paths: ["services/"]
+      allow_imports: ["models/"]
+      deny_imports: []
+"""
+        files = {
+            'util.py': """
+from services import user_service
+
+def helper():
+    pass
+""",
+            'services/user_service.py': """
+def get_user():
+    pass
+"""
+        }
+
+        temp_dir = self.create_temp_project(files, config)
+        try:
+            from reveal.rules.imports.I003 import I003
+            rule = I003()
+
+            # util.py is not in any layer, so no violations
+            file_path = str(temp_dir / 'util.py')
+            content = files['util.py']
+            detections = rule.check(file_path, None, content)
+
+            self.assertEqual(len(detections), 0,
+                           "Files outside defined layers should not trigger violations")
+
+        finally:
+            self.teardown_project(temp_dir)
+
+    def test_syntax_error_handling(self):
+        """Test graceful handling of syntax errors."""
+        config = """
+architecture:
+  layers:
+    - name: "services"
+      paths: ["services/"]
+      allow_imports: ["models/"]
+      deny_imports: []
+"""
+        files = {
+            'services/broken.py': """
+import this is not valid python syntax
+"""
+        }
+
+        temp_dir = self.create_temp_project(files, config)
+        try:
+            from reveal.rules.imports.I003 import I003
+            rule = I003()
+
+            file_path = str(temp_dir / 'services/broken.py')
+            content = files['services/broken.py']
+            detections = rule.check(file_path, None, content)
+
+            # Should handle gracefully without crashing
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_project(temp_dir)
+
+
 if __name__ == '__main__':
     unittest.main()
