@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2025-12-31
+
 ### Added
 - **reveal:// Element Extraction**: Extract specific code elements from reveal's own source
   - `reveal reveal://rules/links/L001.py _extract_anchors_from_markdown` extracts function
@@ -23,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Technical
 - 988/988 tests passing (up from 773 in v0.26.0)
 - 74% code coverage (up from 67%)
-- Sessions: wrathful-eclipse-1223, cloudy-flood-1231
+- Sessions: wrathful-eclipse-1223, cloudy-flood-1231, ancient-satellite-1231
 
 ## [0.26.0] - 2025-12-23
 
