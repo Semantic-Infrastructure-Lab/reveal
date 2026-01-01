@@ -17,6 +17,7 @@ from reveal.rules.validation.V007 import V007
 from reveal.rules.validation.V008 import V008
 from reveal.rules.validation.V009 import V009
 from reveal.rules.validation.V011 import V011
+from reveal.rules.validation.utils import find_reveal_root
 
 
 class TestV001HelpDocumentation(unittest.TestCase):
@@ -53,7 +54,7 @@ class TestV001HelpDocumentation(unittest.TestCase):
 
     def test_find_reveal_root(self):
         """Test that _find_reveal_root locates reveal installation."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         # Should find reveal root (we're running tests from reveal project)
         self.assertIsNotNone(root)
         self.assertTrue((root / 'analyzers').exists())
@@ -61,7 +62,7 @@ class TestV001HelpDocumentation(unittest.TestCase):
 
     def test_get_analyzers(self):
         """Test that _get_analyzers finds analyzer files."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         if root:
             analyzers = self.rule._get_analyzers(root)
             self.assertIsInstance(analyzers, dict)
@@ -76,7 +77,7 @@ class TestV001HelpDocumentation(unittest.TestCase):
 
     def test_get_static_help(self):
         """Test that _get_static_help extracts STATIC_HELP dict."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         if root:
             static_help = self.rule._get_static_help(root)
             self.assertIsInstance(static_help, dict)
@@ -144,7 +145,7 @@ class SomeClass:
 
     def test_find_reveal_root(self):
         """Test _find_reveal_root locates installation."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         self.assertIsNotNone(root)
         self.assertTrue((root / 'analyzers').exists())
 
@@ -255,7 +256,7 @@ class TestV004TestCoverage(unittest.TestCase):
 
     def test_find_reveal_root(self):
         """Test _find_reveal_root locates installation."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         self.assertIsNotNone(root)
         self.assertTrue((root / 'analyzers').exists())
 
@@ -292,14 +293,14 @@ class TestV005StaticHelpSync(unittest.TestCase):
 
     def test_get_static_help(self):
         """Test _get_static_help extracts help files."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         if root:
             static_help = self.rule._get_static_help(root)
             self.assertIsInstance(static_help, dict)
 
     def test_find_reveal_root(self):
         """Test _find_reveal_root locates installation."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         self.assertIsNotNone(root)
 
 
@@ -424,7 +425,7 @@ class TestV007VersionConsistency(unittest.TestCase):
     def test_extract_version_from_pyproject(self):
         """Test extracting version from pyproject.toml content."""
         # This method needs a Path object, so we test with actual file if it exists
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         if root:
             project_root = root.parent
             pyproject = project_root / 'pyproject.toml'
@@ -437,7 +438,7 @@ class TestV007VersionConsistency(unittest.TestCase):
     def test_check_changelog(self):
         """Test checking if version exists in changelog."""
         # Test with actual changelog if it exists
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         if root:
             project_root = root.parent
             changelog = project_root / 'CHANGELOG.md'
@@ -452,7 +453,7 @@ class TestV007VersionConsistency(unittest.TestCase):
 
     def test_find_reveal_root(self):
         """Test _find_reveal_root locates installation."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         self.assertIsNotNone(root)
 
 
@@ -488,13 +489,13 @@ class TestV008AnalyzerSignature(unittest.TestCase):
 
     def test_find_reveal_root(self):
         """Test _find_reveal_root locates installation."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         self.assertIsNotNone(root)
         self.assertTrue((root / 'analyzers').exists())
 
     def test_get_analyzer_files(self):
         """Test _get_analyzer_files finds analyzer files."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         if root:
             analyzers = self.rule._get_analyzer_files(root)
             self.assertIsInstance(analyzers, list)
@@ -507,7 +508,7 @@ class TestV008AnalyzerSignature(unittest.TestCase):
 
     def test_check_analyzer_file_integration(self):
         """Test _check_analyzer_file on actual analyzer."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         if root:
             analyzers = self.rule._get_analyzer_files(root)
             if analyzers:
@@ -549,14 +550,14 @@ class TestV009DocumentationCrossReferences(unittest.TestCase):
 
     def test_find_reveal_root(self):
         """Test that _find_reveal_root locates reveal installation."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         self.assertIsNotNone(root)
         self.assertTrue((root / 'analyzers').exists())
         self.assertTrue((root / 'rules').exists())
 
     def test_uri_to_path(self):
         """Test converting reveal:// URI to actual path."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         if root:
             project_root = root.parent
             # Test with README.md
@@ -566,7 +567,7 @@ class TestV009DocumentationCrossReferences(unittest.TestCase):
 
     def test_resolve_link_relative(self):
         """Test resolving relative links."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         if root:
             project_root = root.parent
             source_file = project_root / 'README.md'
@@ -578,7 +579,7 @@ class TestV009DocumentationCrossReferences(unittest.TestCase):
 
     def test_resolve_link_absolute(self):
         """Test resolving absolute links (from project root)."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         if root:
             project_root = root.parent
             source_file = project_root / 'README.md'
@@ -660,14 +661,14 @@ class TestV011ReleaseReadiness(unittest.TestCase):
 
     def test_find_reveal_root(self):
         """Test that _find_reveal_root locates reveal installation."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         self.assertIsNotNone(root)
         self.assertTrue((root / 'analyzers').exists())
         self.assertTrue((root / 'rules').exists())
 
     def test_extract_version_from_pyproject(self):
         """Test extracting version from pyproject.toml."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         if root:
             project_root = root.parent
             pyproject = project_root / 'pyproject.toml'
@@ -679,7 +680,7 @@ class TestV011ReleaseReadiness(unittest.TestCase):
 
     def test_changelog_has_dated_entry_with_date(self):
         """Test detecting dated changelog entries."""
-        root = self.rule._find_reveal_root()
+        root = find_reveal_root()
         if root:
             project_root = root.parent
             # Create temp changelog with dated entry
@@ -819,16 +820,16 @@ class TestValidationRulesIntegration(unittest.TestCase):
             self.assertIsInstance(detections, list,
                                 f"Rule {rule.code} should return list for reveal:// URIs")
 
-    def test_all_rules_have_find_reveal_root(self):
-        """Test that all rules have _find_reveal_root() method."""
-        rules = [V001(), V002(), V003(), V004(), V005(), V006(), V007(), V008(), V009(), V011()]
-        for rule in rules:
-            self.assertTrue(hasattr(rule, '_find_reveal_root'),
-                          f"Rule {rule.code} missing _find_reveal_root()")
-            root = rule._find_reveal_root()
-            # Should find reveal root when running tests
-            self.assertIsNotNone(root,
-                               f"Rule {rule.code} should locate reveal root")
+    def test_find_reveal_root_utility(self):
+        """Test that find_reveal_root() utility function works."""
+        root = find_reveal_root()
+        # Should find reveal root when running tests
+        self.assertIsNotNone(root, "find_reveal_root() should locate reveal root")
+        # Verify it's a Path object
+        self.assertIsInstance(root, Path)
+        # Verify it has the expected structure
+        self.assertTrue((root / 'analyzers').exists())
+        self.assertTrue((root / 'rules').exists())
 
     def test_all_rules_have_correct_codes(self):
         """Test that rules have correct V001-V011 codes."""

@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from .utils import find_reveal_root
 
 
 class V007(BaseRule):
@@ -45,13 +46,28 @@ class V007(BaseRule):
             return detections
 
         # Find reveal root
-        reveal_root = self._find_reveal_root()
+        reveal_root = find_reveal_root()
         if not reveal_root:
             return detections
 
         project_root = reveal_root.parent
 
-        # Get canonical version from pyproject.toml
+        # Get canonical version (source of truth)
+        canonical_version = self._get_canonical_version(project_root, detections)
+        if not canonical_version:
+            return detections
+
+        # Check all project files against canonical version
+        self._check_project_files(
+            project_root, reveal_root, canonical_version, detections
+        )
+
+        return detections
+
+    def _get_canonical_version(
+        self, project_root: Path, detections: List[Detection]
+    ) -> Optional[str]:
+        """Extract canonical version from pyproject.toml."""
         pyproject_file = project_root / 'pyproject.toml'
         if not pyproject_file.exists():
             detections.append(self.create_detection(
@@ -60,7 +76,7 @@ class V007(BaseRule):
                 message="pyproject.toml not found (source of truth for version)",
                 suggestion="Create pyproject.toml with version field"
             ))
-            return detections
+            return None
 
         canonical_version = self._extract_version_from_pyproject(pyproject_file)
         if not canonical_version:
@@ -70,74 +86,111 @@ class V007(BaseRule):
                 message="Could not extract version from pyproject.toml",
                 suggestion="Add version = \"X.Y.Z\" to [project] section"
             ))
-            return detections
+            return None
 
-        # Check CHANGELOG.md
+        return canonical_version
+
+    def _check_project_files(
+        self,
+        project_root: Path,
+        reveal_root: Path,
+        canonical: str,
+        detections: List[Detection]
+    ) -> None:
+        """Check all project files for version consistency."""
+        self._check_changelog_version(project_root, canonical, detections)
+        self._check_roadmap_version(project_root, canonical, detections)
+        self._check_readme_version(project_root, canonical, detections)
+        self._check_agent_help_versions(reveal_root, canonical, detections)
+
+    def _check_changelog_version(
+        self, project_root: Path, canonical: str, detections: List[Detection]
+    ) -> None:
+        """Check CHANGELOG.md has section for current version."""
         changelog_file = project_root / 'CHANGELOG.md'
-        if changelog_file.exists():
-            changelog_version = self._check_changelog(changelog_file, canonical_version)
-            if not changelog_version:
-                detections.append(self.create_detection(
-                    file_path="CHANGELOG.md",
-                    line=1,
-                    message=f"CHANGELOG.md missing section for v{canonical_version}",
-                    suggestion=f"Add section: ## [{canonical_version}] - YYYY-MM-DD",
-                    context=f"Expected version: {canonical_version}"
-                ))
+        if not changelog_file.exists():
+            return
 
-        # Check ROADMAP.md
+        changelog_version = self._check_changelog(changelog_file, canonical)
+        if not changelog_version:
+            detections.append(self.create_detection(
+                file_path="CHANGELOG.md",
+                line=1,
+                message=f"CHANGELOG.md missing section for v{canonical}",
+                suggestion=f"Add section: ## [{canonical}] - YYYY-MM-DD",
+                context=f"Expected version: {canonical}"
+            ))
+
+    def _check_roadmap_version(
+        self, project_root: Path, canonical: str, detections: List[Detection]
+    ) -> None:
+        """Check ROADMAP.md current version matches."""
         roadmap_file = project_root / 'ROADMAP.md'
-        if roadmap_file.exists():
-            roadmap_version = self._extract_roadmap_version(roadmap_file)
-            if roadmap_version and roadmap_version != canonical_version:
-                detections.append(self.create_detection(
-                    file_path="ROADMAP.md",
-                    line=1,
-                    message=f"ROADMAP.md version mismatch: v{roadmap_version} != v{canonical_version}",
-                    suggestion=f"Update '**Current version:** v{roadmap_version}' to '**Current version:** v{canonical_version}'",
-                    context=f"Found: v{roadmap_version}, Expected: v{canonical_version}"
-                ))
+        if not roadmap_file.exists():
+            return
 
-        # Check README.md (optional - only if version badge exists)
+        roadmap_version = self._extract_roadmap_version(roadmap_file)
+        if roadmap_version and roadmap_version != canonical:
+            detections.append(self.create_detection(
+                file_path="ROADMAP.md",
+                line=1,
+                message=f"ROADMAP.md version mismatch: "
+                       f"v{roadmap_version} != v{canonical}",
+                suggestion=f"Update '**Current version:** v{roadmap_version}' "
+                          f"to '**Current version:** v{canonical}'",
+                context=f"Found: v{roadmap_version}, Expected: v{canonical}"
+            ))
+
+    def _check_readme_version(
+        self, project_root: Path, canonical: str, detections: List[Detection]
+    ) -> None:
+        """Check README.md version badge (if present)."""
         readme_file = project_root / 'README.md'
-        if readme_file.exists():
-            readme_version = self._extract_readme_version(readme_file)
-            if readme_version and readme_version != canonical_version:
-                detections.append(self.create_detection(
-                    file_path="README.md",
-                    line=1,
-                    message=f"README.md version badge mismatch: {readme_version} != {canonical_version}",
-                    suggestion=f"Update version badge to {canonical_version}",
-                    context=f"Found: {readme_version}, Expected: {canonical_version}"
-                ))
+        if not readme_file.exists():
+            return
 
+        readme_version = self._extract_readme_version(readme_file)
+        if readme_version and readme_version != canonical:
+            detections.append(self.create_detection(
+                file_path="README.md",
+                line=1,
+                message=f"README.md version badge mismatch: "
+                       f"{readme_version} != {canonical}",
+                suggestion=f"Update version badge to {canonical}",
+                context=f"Found: {readme_version}, Expected: {canonical}"
+            ))
+
+    def _check_agent_help_versions(
+        self, reveal_root: Path, canonical: str, detections: List[Detection]
+    ) -> None:
+        """Check AGENT_HELP*.md version references."""
         # Check AGENT_HELP.md
         agent_help = reveal_root / 'AGENT_HELP.md'
         if agent_help.exists():
             help_version = self._extract_version_from_markdown(agent_help)
-            if help_version and help_version != canonical_version:
+            if help_version and help_version != canonical:
                 detections.append(self.create_detection(
                     file_path="reveal/AGENT_HELP.md",
                     line=1,
-                    message=f"AGENT_HELP.md version mismatch: {help_version} != {canonical_version}",
-                    suggestion=f"Update version reference to {canonical_version}",
-                    context=f"Found: {help_version}, Expected: {canonical_version}"
+                    message=f"AGENT_HELP.md version mismatch: "
+                           f"{help_version} != {canonical}",
+                    suggestion=f"Update version reference to {canonical}",
+                    context=f"Found: {help_version}, Expected: {canonical}"
                 ))
 
         # Check AGENT_HELP_FULL.md
         agent_help_full = reveal_root / 'AGENT_HELP_FULL.md'
         if agent_help_full.exists():
             help_full_version = self._extract_version_from_markdown(agent_help_full)
-            if help_full_version and help_full_version != canonical_version:
+            if help_full_version and help_full_version != canonical:
                 detections.append(self.create_detection(
                     file_path="reveal/AGENT_HELP_FULL.md",
                     line=1,
-                    message=f"AGENT_HELP_FULL.md version mismatch: {help_full_version} != {canonical_version}",
-                    suggestion=f"Update version reference to {canonical_version}",
-                    context=f"Found: {help_full_version}, Expected: {canonical_version}"
+                    message=f"AGENT_HELP_FULL.md version mismatch: "
+                           f"{help_full_version} != {canonical}",
+                    suggestion=f"Update version reference to {canonical}",
+                    context=f"Found: {help_full_version}, Expected: {canonical}"
                 ))
-
-        return detections
 
     def _extract_version_from_pyproject(self, pyproject_file: Path) -> Optional[str]:
         """Extract version from pyproject.toml."""
@@ -211,41 +264,4 @@ class V007(BaseRule):
                 return match.group(1)
         except Exception:
             pass
-        return None
-
-    def _find_reveal_root(self) -> Optional[Path]:
-        """Find reveal's root directory.
-
-        Priority:
-        1. REVEAL_DEV_ROOT environment variable (explicit override)
-        2. Git checkout in CWD or parent directories (prefer development)
-        3. Installed package location (fallback)
-        """
-        import os
-
-        # 1. Explicit override via environment
-        env_root = os.getenv('REVEAL_DEV_ROOT')
-        if env_root:
-            dev_root = Path(env_root)
-            if (dev_root / 'analyzers').exists() and (dev_root / 'rules').exists():
-                return dev_root
-
-        # 2. Search from CWD for git checkout (prefer development over installed)
-        cwd = Path.cwd()
-        for _ in range(10):  # Search up to 10 levels
-            # Check for reveal git checkout patterns
-            reveal_dir = cwd / 'reveal'
-            if (reveal_dir / 'analyzers').exists() and (reveal_dir / 'rules').exists():
-                # Verify it's a git checkout by checking for pyproject.toml in parent
-                if (cwd / 'pyproject.toml').exists():
-                    return reveal_dir
-            cwd = cwd.parent
-            if cwd == cwd.parent:  # Reached root
-                break
-
-        # 3. Fallback to installed package location
-        installed = Path(__file__).parent.parent.parent
-        if (installed / 'analyzers').exists() and (installed / 'rules').exists():
-            return installed
-
         return None

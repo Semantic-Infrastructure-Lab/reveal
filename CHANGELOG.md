@@ -13,9 +13,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **V009 (new)**: Documentation cross-reference validation - detects broken markdown links
   - **V011 (new)**: Release readiness checklist - validates CHANGELOG dates and ROADMAP completeness
   - Total validation rules: V001-V011 (10 rules for reveal's self-checks)
+- **Architectural Diligence Documentation**: Comprehensive development standards
+  - `internal-docs/ARCHITECTURAL_DILIGENCE.md` - 970+ line living document
+  - Defines separation of concerns (public/self-validation/dev layers)
+  - Documents quality standards by layer
+  - Includes pre-release validation checklist
+  - Provides decision trees for code placement
+  - Establishes long-term architectural vision (3-year roadmap)
+- **Strategic Documentation Review**: Complete documentation audit
+  - `internal-docs/STRATEGIC_DOCUMENTATION_REVIEW.md` - 430+ lines
+  - Validates coherence across all planning documents
+  - Identifies scope overlaps and timeline conflicts
+  - Provides practical 6-month roadmap with feasibility analysis
+  - Recommends phased language rollout strategy (Python-first)
+- **Intent Lenses Design**: Community-curated relevance system
+  - `internal-docs/planning/INTENT_LENSES_DESIGN.md` - 577 lines
+  - SIL-aligned approach to progressive disclosure
+  - Typed metadata (not prose) for agent-friendly navigation
+  - Deferred to v0.30.0+ for proper strategic sequencing
+- **Pre-Release Validation Script**: Automated quality gate
+  - `scripts/pre-release-check.sh` - Comprehensive 8-step validation
+  - Blocks releases with quality issues (V-series, tests, coverage, docs)
+  - Provides clear next-steps output when all checks pass
+  - Integrates with existing release workflow
+- **Shared Validation Utilities**: Eliminated code duplication
+  - `reveal/rules/validation/utils.py` - Shared helper functions
+  - `find_reveal_root()` extracted from V007, V009, V011
+  - Reduces duplication, improves maintainability
 
 ### Changed
+- **V007 Code Quality**: Refactored for clarity and maintainability
+  - Reduced check() method from 105 lines to 29 lines (73% reduction)
+  - Extracted helper methods: `_get_canonical_version()`, `_check_project_files()`
+  - Eliminated duplicate `_find_reveal_root()` code
+  - Fixed blocking C902 error (function too long)
+  - Improved from 10 quality issues down to 3
+- **V009, V011 Quality**: Updated to use shared utilities
+  - Both now use `find_reveal_root()` from utils module
+  - Eliminated 70+ lines of duplicated code across 3 files
+- **ROADMAP.md**: Aligned with implementation reality
+  - Moved `.reveal.yaml` config to v0.28.0 (where it's actually planned)
+  - Clarified Python-first strategy with phased language rollout
+  - Added v0.28.1-v0.28.5 incremental releases (one language each)
+  - Documented architecture:// adapter for v0.29.0
+  - Deferred Intent Lenses to v0.30.0 for strategic focus
+- **Test Suite**: Updated for shared utilities
+  - All validation tests now use `find_reveal_root()` from utils
+  - New test: `test_find_reveal_root_utility()` validates shared function
+  - Removed obsolete `test_all_rules_have_find_reveal_root()`
+- **Planning Documentation**: Reorganized and indexed
+  - Updated `internal-docs/planning/README.md` with Intent Lenses reference
+  - Added "Future Ideas (Exploration)" section
+  - Clear separation of active vs. reference documents
 - README: Updated rule count from 31 to 33 rules (V009, V011 added)
+
+### Documentation
+- Established architectural boundaries and quality standards
+- Defined diligent path for reveal development and maintenance
+- Created comprehensive contributor guidelines
+- Validated documentation coherence across all planning docs
+- Reconciled roadmap with implementation plans
+- Created 6-month practical strategy (v0.28-v0.30)
 
 ## [0.27.1] - 2025-12-31
 

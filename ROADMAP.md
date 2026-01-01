@@ -2,12 +2,54 @@
 
 > **Vision:** Universal resource exploration with progressive disclosure
 
-**Current version:** v0.25.0
-**Last updated:** 2025-12-23
+**Current version:** v0.27.1
+**Last updated:** 2025-12-31
 
 ---
 
 ## What We've Shipped
+
+### v0.27.1 - Code Quality Refactoring (Dec 2025)
+
+**Internal Improvements:**
+- Extensive refactoring for better maintainability (no functional changes)
+- Broke down large functions (100-300 lines) into focused helpers (10-50 lines)
+- Improved Single Responsibility Principle adherence across 5 files
+- Reduced cyclomatic complexity for better testability
+- Files refactored: `help.py`, `parser.py`, `formatting.py`, `main.py`, `L003.py`
+- 988/988 tests passing (100% pass rate maintained)
+- 74% code coverage maintained
+
+### v0.27.0 - Element Extraction (Dec 2025)
+
+**reveal:// Element Extraction:**
+- Extract specific code elements from reveal's own source
+- `reveal reveal://rules/links/L001.py _extract_anchors_from_markdown` extracts function
+- `reveal reveal://analyzers/markdown.py MarkdownAnalyzer` extracts class
+- Self-referential: Can extract reveal's own code using reveal
+- Works with any file type in reveal's codebase
+- 988 tests passing (up from 773 in v0.26.0), 74% coverage (up from 67%)
+
+### v0.26.0 - Link Validation Complete (Dec 2025)
+
+**L001 Anchor Validation:**
+- Full support for `#heading` links in markdown files
+- Extract headings using GitHub Flavored Markdown slug algorithm
+- Validate anchor-only links (`[text](#heading)`)
+- Validate file+anchor links (`[text](file.md#heading)`)
+- Detects broken anchors and suggests valid alternatives
+
+**reveal:// Enhancements:**
+- Component filtering now works (`reveal reveal://analyzers` shows only analyzers)
+- Smart root detection (prefer git checkouts over installed packages)
+- Support `REVEAL_DEV_ROOT` environment variable for explicit override
+
+**Quality Improvements:**
+- Added debug logging to 9 bare exception handlers
+- Improved pymysql missing dependency errors
+- Updated outdated version references in help text
+- Comprehensive test coverage for L001, L002, L003 rules (28 tests)
+- 773 tests passing, 67% coverage
 
 ### v0.25.0 - HTML Analyzer & Link Validation (Dec 2025)
 
@@ -111,35 +153,35 @@
 
 ## What's Next
 
-### v0.26 (Q1 2026): Quality & Usability
+### v0.28.0 (Q1 2026): Import Intelligence
 
-**Link Validation Enhancements:**
-- Test coverage for L001, L002, L003 (target: 80%+)
-- `--recursive` flag for batch processing
-- Anchor validation (#heading links)
-- `.reveal.yaml` config for ignoring URLs
-
-**Quality Improvements:**
-- D002 duplicate detection refinement (better discrimination)
-- Overall test coverage improvements (target: 60%+)
-- Code quality refactoring based on dogfooding results
-
-**See:** `internal-docs/planning/PENDING_WORK.md` for active tracks
-
-### v0.27-v0.28 (Q2 2026): Code Analysis & Architecture
-
-**`imports://` adapter** - Import graph analysis:
+**`imports://` adapter** - Import graph analysis (Python-first):
 ```bash
 reveal imports://src                     # All imports in directory
 reveal 'imports://src?unused'            # Find unused imports
 reveal 'imports://src?circular'          # Detect circular dependencies
-reveal imports://src --graph             # Visualize import relationships
 ```
-- Language-agnostic (Python, JavaScript, Go, Rust, Java, TypeScript)
+
+**Initial scope (v0.28.0):**
+- Python import analysis (via tree-sitter)
 - Unused import detection with symbol usage analysis
 - Circular dependency detection via topological sort
-- Layer violation detection (routes importing repositories, etc.)
-- Multi-language support via tree-sitter
+- `.reveal.yaml` configuration (imports section)
+
+**Language expansion (v0.28.1-v0.28.5):**
+- v0.28.1: JavaScript support
+- v0.28.2: TypeScript support
+- v0.28.3: Go support
+- v0.28.4: Rust support
+- v0.28.5: Layer violation detection (multi-language)
+
+**See:** `internal-docs/planning/IMPORTS_IMPLEMENTATION_PLAN.md` for detailed implementation plan
+
+**Strategy:** Ship Python-first, validate approach, then add languages incrementally (one per release).
+
+---
+
+### v0.29.0 (Q2 2026): Architecture Validation
 
 **`architecture://` adapter** - Architecture rule validation:
 ```bash
@@ -147,28 +189,25 @@ reveal architecture://src               # Check all architecture rules
 reveal 'architecture://src?violations'   # List violations only
 reveal architecture://src/routes         # Check specific layer
 ```
+
+**Features:**
 - Layer boundary enforcement (presentation → service → data)
-- Custom dependency rules via `.reveal.yaml`
+- Custom dependency rules via `.reveal.yaml` (architecture section)
 - Pattern compliance validation
 - CI/CD integration for architecture governance
+- Expand .reveal.yaml schema (add architecture configuration)
 
-**`.reveal.yaml` config** - Project-specific configuration:
-```yaml
-# .reveal.yaml - shareable project configuration
-imports:
-  entry_points: [app/main.py, tests/]
-  ignore_unused: [__init__.py]
+**Prerequisites:**
+- Create `ARCHITECTURE_ADAPTER_PLAN.md` (detailed implementation spec)
+- Validate design with users
 
-architecture:
-  layers:
-    - name: routes
-      allow_imports: [services, models, utils]
-      deny_imports: [repositories, database]
-```
-- Reduces false positives (entry points, framework patterns)
-- Team-shared rules (commit to version control)
-- Adapter-specific configuration sections
-- JSON Schema validation
+**See:** (Planning document to be created)
+
+---
+
+### v0.29.5 (Q2 2026): Optional Enhancements
+
+**If time permits:**
 
 **`diff://` adapter** - Comparative exploration:
 ```bash
@@ -177,9 +216,7 @@ reveal diff://app.py:HEAD~1              # Compare with git revision
 reveal diff://python://venv:python://    # Compare environments
 ```
 
-**See:** `internal-docs/planning/PRACTICAL_CODE_ANALYSIS_ADAPTERS.md` for implementation details
-
-### v0.29-v0.30 (Q3 2026): Polish for v1.0
+### v0.30.0 (Q3 2026): Polish for v1.0
 
 **UX Improvements:**
 - `--watch` mode: Live feedback for file changes
