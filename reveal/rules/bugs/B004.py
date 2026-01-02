@@ -23,6 +23,73 @@ class B004(BaseRule):
     file_patterns = ['.py']
     version = "1.0.0"
 
+    def _is_property_decorator(self, decorators: List[str]) -> bool:
+        """Check if decorators include @property or @cached_property.
+
+        Args:
+            decorators: List of decorator strings
+
+        Returns:
+            True if any decorator is a property decorator
+        """
+        return any(
+            d in ['@property', '@cached_property'] or
+            d.startswith('@property') or
+            d.endswith('.getter')
+            for d in decorators
+        )
+
+    def _is_abstract_property(self, decorators: List[str]) -> bool:
+        """Check if decorators include @abstractmethod.
+
+        Args:
+            decorators: List of decorator strings
+
+        Returns:
+            True if any decorator is @abstractmethod
+        """
+        return any('@abstractmethod' in d for d in decorators)
+
+    def _extract_function_body(self, lines: List[str], line: int, line_count: int) -> Optional[str]:
+        """Extract function body from source lines.
+
+        Args:
+            lines: Source code split into lines
+            line: Starting line number (1-indexed)
+            line_count: Number of lines in function
+
+        Returns:
+            Function body as string, or None if invalid
+        """
+        if line <= 0 or line_count <= 0:
+            return None
+
+        # Get function lines (1-indexed to 0-indexed)
+        start_idx = line - 1
+        end_idx = min(start_idx + line_count, len(lines))
+        func_lines = lines[start_idx:end_idx]
+        return '\n'.join(func_lines)
+
+    def _has_valid_implementation(self, func_body: str) -> bool:
+        """Check if function body has valid implementation.
+
+        Valid implementations include:
+        - return statement
+        - raise statement
+        - ... (Ellipsis - stub)
+
+        Args:
+            func_body: Function body code
+
+        Returns:
+            True if function has valid implementation
+        """
+        has_return = self._has_return_statement(func_body)
+        has_raise = self._has_raise_statement(func_body)
+        has_ellipsis = bool(re.search(r'^\s*\.\.\.\s*$', func_body, re.MULTILINE))
+
+        return has_return or has_raise or has_ellipsis
+
     def check(self,
              file_path: str,
              structure: Optional[Dict[str, Any]],
@@ -55,43 +122,19 @@ class B004(BaseRule):
             line = func.get('line', 0)
             line_count = func.get('line_count', 0)
 
-            # Check if it's a property
-            is_property = any(
-                d in ['@property', '@cached_property'] or
-                d.startswith('@property') or
-                d.endswith('.getter')
-                for d in decorators
-            )
-
-            if not is_property:
+            # Skip non-properties and abstract properties
+            if not self._is_property_decorator(decorators):
+                continue
+            if self._is_abstract_property(decorators):
                 continue
 
-            # Skip abstract properties (they may not have implementation)
-            is_abstract = any('@abstractmethod' in d for d in decorators)
-            if is_abstract:
+            # Extract function body
+            func_body = self._extract_function_body(lines, line, line_count)
+            if not func_body:
                 continue
 
-            # Extract the function body from content
-            if line <= 0 or line_count <= 0:
-                continue
-
-            # Get function lines (1-indexed to 0-indexed)
-            start_idx = line - 1
-            end_idx = min(start_idx + line_count, len(lines))
-            func_lines = lines[start_idx:end_idx]
-            func_body = '\n'.join(func_lines)
-
-            # Check if there's a return statement
-            # Use regex to find 'return' that's not in a string or comment
-            has_return = self._has_return_statement(func_body)
-
-            # Also check for raise (valid - property can raise instead of return)
-            has_raise = self._has_raise_statement(func_body)
-
-            # Check for ... (Ellipsis - stub)
-            has_ellipsis = re.search(r'^\s*\.\.\.\s*$', func_body, re.MULTILINE)
-
-            if not has_return and not has_raise and not has_ellipsis:
+            # Check for valid implementation (return/raise/ellipsis)
+            if not self._has_valid_implementation(func_body):
                 msg = f"@property '{name}' has no return (will return None)"
                 detections.append(self.create_detection(
                     file_path=file_path,
