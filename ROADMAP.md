@@ -2,12 +2,23 @@
 
 > **Vision:** Universal resource exploration with progressive disclosure
 
-**Current version:** v0.27.1
-**Last updated:** 2025-12-31
+**Current version:** v0.28.0
+**Last updated:** 2026-01-01
 
 ---
 
 ## What We've Shipped
+
+### v0.28.0 - Import Intelligence (Jan 2026)
+
+**Import Graph Analysis:**
+- `imports://` adapter for multi-language import analysis (Python, JS, TS, Go, Rust)
+- I001: Unused import detection with symbol usage analysis
+- I002: Circular dependency detection via topological sort
+- I003: Layer violation detection (requires `.reveal.yaml` config)
+- Plugin-based architecture using ABC + registry pattern
+- Query parameters: `?unused`, `?circular`, `?violations`
+- 1,086/1,086 tests passing, 94% coverage on imports adapter
 
 ### v0.27.1 - Code Quality Refactoring (Dec 2025)
 

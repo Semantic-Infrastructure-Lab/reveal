@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-01-01
+
 ### Added
+- **`imports://` Adapter - Import Graph Analysis**
+  - **Multi-language support**: Python, JavaScript, TypeScript, Go, Rust
+  - **Unused import detection (I001)**: Find imports that are never used in code
+  - **Circular dependency detection (I002)**: Identify import cycles via topological sort
+  - **Layer violation detection (I003)**: Enforce architectural boundaries (requires `.reveal.yaml`)
+  - **Plugin-based architecture**: Elegant ABC + registry pattern for language extractors
+    - `@register_extractor` decorator for zero-touch language additions
+    - Type-first dispatch (file extension → extractor)
+    - Mirrors Reveal's adapter registry pattern exactly
+  - **Query parameters**: `?unused`, `?circular`, `?violations` for focused analysis
+  - **Element extraction**: Get specific file imports via `imports://path file.py`
+  - **Usage**: `reveal imports://src`, `reveal 'imports://src?unused'`, `reveal imports://src --check`
+  - **Implementation**: Phases 1-5 complete (foundation, unused detection, circular deps, layer violations, multi-language)
+  - **Test coverage**: 94% on adapter, 63 dedicated tests, zero regressions
+  - **Documentation**: `internal-docs/planning/IMPORTS_IMPLEMENTATION_PLAN.md` (1,134 lines)
 - **V-series Validation Enhancements**: Improved release process automation
   - **V007 (extended)**: Now checks ROADMAP.md and README.md version consistency
   - **V009 (new)**: Documentation cross-reference validation - detects broken markdown links

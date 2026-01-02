@@ -122,19 +122,19 @@ class ImportsAdapter(ResourceAdapter):
             'uri_scheme': 'imports://<path>',
             'examples': [
                 {
-                    'command': 'reveal imports://src',
+                    'uri': 'reveal imports://src',
                     'description': 'List all imports in src directory'
                 },
                 {
-                    'command': "reveal 'imports://src?unused'",
+                    'uri': "reveal 'imports://src?unused'",
                     'description': 'Find unused imports'
                 },
                 {
-                    'command': "reveal 'imports://src?circular'",
+                    'uri': "reveal 'imports://src?circular'",
                     'description': 'Detect circular dependencies'
                 },
                 {
-                    'command': 'reveal imports://src/main.py',
+                    'uri': 'reveal imports://src/main.py',
                     'description': 'Show imports for single file'
                 }
             ],
