@@ -1,20 +1,22 @@
-"""Python import extraction using AST.
+"""Python import extraction using tree-sitter.
 
 Extracts import statements and symbol usage from Python source files.
+Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
-import ast
 from pathlib import Path
 from typing import List, Set, Optional
+import re
 
 from . import ImportStatement
 from .base import LanguageExtractor, register_extractor
 from .resolver import resolve_python_import
+from ...base import get_analyzer
 
 
 @register_extractor
 class PythonExtractor(LanguageExtractor):
-    """Python import extractor using AST parsing.
+    """Python import extractor using tree-sitter parsing.
 
     Supports:
     - import os, sys
@@ -28,7 +30,7 @@ class PythonExtractor(LanguageExtractor):
     language_name = 'Python'
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
-        """Extract all import statements from Python file using AST.
+        """Extract all import statements from Python file using tree-sitter.
 
         Args:
             file_path: Path to Python source file
@@ -37,56 +39,123 @@ class PythonExtractor(LanguageExtractor):
             List of ImportStatement objects
         """
         try:
-            content = file_path.read_text()
-            tree = ast.parse(content)
-        except (SyntaxError, UnicodeDecodeError):
+            analyzer_class = get_analyzer(str(file_path))
+            if not analyzer_class:
+                return []
+
+            analyzer = analyzer_class(str(file_path))
+            if not analyzer.tree:
+                return []
+
+        except Exception:
             # Can't parse - return empty
             return []
 
         imports = []
 
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                # import os, sys
-                for alias in node.names:
-                    imports.append(ImportStatement(
-                        file_path=file_path,
-                        line_number=node.lineno,
-                        module_name=alias.name,
-                        imported_names=[],
-                        is_relative=False,
-                        import_type='import',
-                        alias=alias.asname
-                    ))
+        # Find import_statement nodes (import os, sys)
+        import_nodes = analyzer._find_nodes_by_type('import_statement')
+        for node in import_nodes:
+            imports.extend(self._parse_import_statement(node, file_path, analyzer))
 
-            elif isinstance(node, ast.ImportFrom):
-                # from os import path, environ
-                # from os import path as p
-                # from . import utils
-                module_name = node.module or ''
-                is_relative = node.level > 0
-
-                # Handle aliases in from imports: from X import Y as Z
-                imported_names = []
-                for alias in node.names:
-                    if alias.asname:
-                        imported_names.append(f"{alias.name} as {alias.asname}")
-                    else:
-                        imported_names.append(alias.name)
-
-                import_type = 'star_import' if '*' in imported_names else 'from_import'
-
-                imports.append(ImportStatement(
-                    file_path=file_path,
-                    line_number=node.lineno,
-                    module_name=module_name,
-                    imported_names=imported_names,
-                    is_relative=is_relative,
-                    import_type=import_type,
-                    alias=None  # from imports don't have module-level aliases
-                ))
+        # Find import_from_statement nodes (from x import y)
+        from_nodes = analyzer._find_nodes_by_type('import_from_statement')
+        for node in from_nodes:
+            imports.extend(self._parse_from_import(node, file_path, analyzer))
 
         return imports
+
+    def _parse_import_statement(self, node, file_path: Path, analyzer) -> List[ImportStatement]:
+        """Parse 'import x, y as z' statements."""
+        imports = []
+
+        # Get full import text for parsing
+        import_text = analyzer._get_node_text(node)
+
+        # Extract module names and aliases
+        # Pattern: import os, sys as s, pathlib
+        # Remove 'import ' prefix
+        modules_text = import_text[7:].strip() if import_text.startswith('import ') else import_text
+
+        # Split by comma, handle aliases
+        for module_part in modules_text.split(','):
+            module_part = module_part.strip()
+            if not module_part:
+                continue
+
+            # Check for alias (import numpy as np)
+            if ' as ' in module_part:
+                module_name, alias = module_part.split(' as ', 1)
+                module_name = module_name.strip()
+                alias = alias.strip()
+            else:
+                module_name = module_part
+                alias = None
+
+            imports.append(ImportStatement(
+                file_path=file_path,
+                line_number=node.start_point[0] + 1,
+                module_name=module_name,
+                imported_names=[],
+                is_relative=False,
+                import_type='import',
+                alias=alias
+            ))
+
+        return imports
+
+    def _parse_from_import(self, node, file_path: Path, analyzer) -> List[ImportStatement]:
+        """Parse 'from x import y' statements."""
+        import_text = analyzer._get_node_text(node)
+
+        # Parse: from <module> import <names>
+        # Also handles: from . import x, from .. import y
+        match = re.match(r'from\s+(\.*)(\S*)\s+import\s+(.+)', import_text, re.DOTALL)
+        if not match:
+            return []
+
+        dots, module_part, names_part = match.groups()
+
+        # Determine if relative
+        is_relative = len(dots) > 0
+        module_name = module_part.strip() if module_part else ''
+
+        # Parse imported names (handle aliases, wildcards)
+        imported_names = []
+        names_part = names_part.strip()
+
+        # Handle wildcard imports
+        if names_part == '*':
+            imported_names = ['*']
+            import_type = 'star_import'
+        else:
+            # Handle parenthesized imports: from x import (a, b, c)
+            names_part = re.sub(r'[()]', '', names_part)
+
+            # Split by comma, handle aliases
+            for name_part in names_part.split(','):
+                name_part = name_part.strip()
+                if not name_part:
+                    continue
+
+                # Handle 'from X import Y as Z'
+                if ' as ' in name_part:
+                    name, alias_name = name_part.split(' as ', 1)
+                    imported_names.append(f"{name.strip()} as {alias_name.strip()}")
+                else:
+                    imported_names.append(name_part)
+
+            import_type = 'from_import'
+
+        return [ImportStatement(
+            file_path=file_path,
+            line_number=node.start_point[0] + 1,
+            module_name=module_name,
+            imported_names=imported_names,
+            is_relative=is_relative,
+            import_type=import_type,
+            alias=None  # from imports don't have module-level aliases
+        )]
 
     def extract_symbols(self, file_path: Path) -> Set[str]:
         """Extract all symbol references (names used in code).
@@ -101,28 +170,95 @@ class PythonExtractor(LanguageExtractor):
         with actually-used symbols.
         """
         try:
-            content = file_path.read_text()
-            tree = ast.parse(content)
-        except (SyntaxError, UnicodeDecodeError):
+            analyzer_class = get_analyzer(str(file_path))
+            if not analyzer_class:
+                return set()
+
+            analyzer = analyzer_class(str(file_path))
+            if not analyzer.tree:
+                return set()
+
+        except Exception:
             return set()
 
         symbols = set()
 
-        # Use ast.walk to find all Name nodes in Load context (usage, not assignment)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-                # Direct name usage: os, sys, MyClass
-                # Exclude Store context (assignments) and Del context (deletions)
-                symbols.add(node.id)
+        # Find identifier nodes (tree-sitter node type for names)
+        identifier_nodes = analyzer._find_nodes_by_type('identifier')
 
-            elif isinstance(node, ast.Attribute):
-                # Attribute access: os.path.join
-                # Extract root name ('os' from 'os.path.join')
-                root = self._get_root_name(node)
+        for node in identifier_nodes:
+            # Extract the identifier text
+            name = analyzer._get_node_text(node)
+
+            # Filter out identifiers in assignment/definition contexts
+            # We want to track usage, not definitions
+            if self._is_usage_context(node):
+                symbols.add(name)
+
+            # Also handle attribute access (os.path -> track 'os')
+            if node.parent and node.parent.type == 'attribute':
+                # Get root of attribute chain
+                root = self._get_root_identifier(node.parent, analyzer)
                 if root:
                     symbols.add(root)
 
         return symbols
+
+    def _is_usage_context(self, node) -> bool:
+        """Check if identifier node is in a usage context (not definition).
+
+        Filters out:
+        - Function/class definitions
+        - Parameter names
+        - Assignment targets
+        - Import names
+        """
+        if not node.parent:
+            return True
+
+        # Walk up the tree to check if we're inside an import statement
+        current = node
+        while current:
+            if current.type in ('import_statement', 'import_from_statement'):
+                return False
+            current = current.parent
+
+        parent_type = node.parent.type
+
+        # Skip definition contexts
+        if parent_type in ('function_definition', 'class_definition', 'parameters',
+                          'keyword_argument', 'dotted_name', 'aliased_import'):
+            return False
+
+        # For assignments, check if this is the target (left side)
+        if parent_type == 'assignment':
+            # Check if this node is on the left side
+            if node.parent.children and node.parent.children[0] == node:
+                return False
+
+        return True
+
+    def _get_root_identifier(self, attribute_node, analyzer) -> Optional[str]:
+        """Extract root identifier from attribute chain.
+
+        Examples:
+            os.path.join -> 'os'
+            sys.argv -> 'sys'
+        """
+        # Walk up the attribute chain to find the root
+        current = attribute_node
+        while current and current.type == 'attribute':
+            # Attribute nodes have structure: object.attribute
+            if current.children:
+                current = current.children[0]
+            else:
+                break
+
+        # Current should now be an identifier
+        if current and current.type == 'identifier':
+            return analyzer._get_node_text(current)
+
+        return None
 
     def extract_exports(self, file_path: Path) -> Set[str]:
         """Extract names from __all__ declaration.
@@ -137,36 +273,36 @@ class PythonExtractor(LanguageExtractor):
         are intentionally exposed and should not be flagged as unused.
         """
         try:
-            content = file_path.read_text()
-            tree = ast.parse(content)
-        except (SyntaxError, UnicodeDecodeError):
+            analyzer_class = get_analyzer(str(file_path))
+            if not analyzer_class:
+                return set()
+
+            analyzer = analyzer_class(str(file_path))
+            if not analyzer.tree:
+                return set()
+
+        except Exception:
             return set()
 
         exports = set()
 
-        for node in ast.walk(tree):
-            # Look for __all__ = [...] assignments
-            if isinstance(node, ast.Assign):
-                for target in node.targets:
-                    if isinstance(target, ast.Name) and target.id == '__all__':
-                        # Extract list elements
-                        if isinstance(node.value, (ast.List, ast.Tuple)):
-                            for elt in node.value.elts:
-                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                                    exports.add(elt.value)
-                                # Python 3.7 compatibility (ast.Str deprecated in 3.8+)
-                                elif isinstance(elt, ast.Str):
-                                    exports.add(elt.s)
+        # Find assignment nodes
+        assignment_nodes = analyzer._find_nodes_by_type('assignment')
 
-            # Look for __all__ += [...] augmented assignments
-            elif isinstance(node, ast.AugAssign):
-                if isinstance(node.target, ast.Name) and node.target.id == '__all__':
-                    if isinstance(node.value, (ast.List, ast.Tuple)):
-                        for elt in node.value.elts:
-                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-                                exports.add(elt.value)
-                            elif isinstance(elt, ast.Str):
-                                exports.add(elt.s)
+        for node in assignment_nodes:
+            # Get assignment text
+            assignment_text = analyzer._get_node_text(node)
+
+            # Check if this is __all__ assignment
+            if not assignment_text.strip().startswith('__all__'):
+                continue
+
+            # Extract string literals from the assignment
+            # Handles: __all__ = ["a", "b"] and __all__ += ["c"]
+            # Use regex to extract quoted strings
+            pattern = r'["\']([^"\']+)["\']'
+            matches = re.findall(pattern, assignment_text)
+            exports.update(matches)
 
         return exports
 
@@ -185,23 +321,6 @@ class PythonExtractor(LanguageExtractor):
             Absolute path to the imported file, or None if not resolvable
         """
         return resolve_python_import(stmt, base_path)
-
-    @staticmethod
-    def _get_root_name(node: ast.Attribute) -> str:
-        """Extract root name from attribute chain.
-
-        Examples:
-            os.path.join -> 'os'
-            sys.argv -> 'sys'
-            obj.method() -> 'obj'
-        """
-        while isinstance(node.value, ast.Attribute):
-            node = node.value
-
-        if isinstance(node.value, ast.Name):
-            return node.value.id
-
-        return ''
 
 
 # Backward compatibility: Keep old function-based API
