@@ -5,6 +5,7 @@ Industry-aligned pattern detection following Ruff, ESLint, and Semgrep patterns.
 
 import importlib
 import logging
+import re
 from pathlib import Path
 from typing import List, Type, Optional, Dict, Any
 
@@ -106,7 +107,10 @@ class RuleRegistry:
                         cls._rules_by_code[rule_class.code] = rule_class
                         logger.debug(f"Discovered rule: {rule_class.code} - {rule_class.message}")
                     else:
-                        logger.warning(f"File {module_file} does not contain a valid rule class named {rule_class_name}")
+                        # Only warn if filename looks like a rule code (e.g., B001, V007)
+                        # Skip utility files (utils.py, helpers.py, base.py, etc.)
+                        if re.match(r'^[A-Z]+\d+$', rule_class_name):
+                            logger.warning(f"File {module_file} does not contain a valid rule class named {rule_class_name}")
 
                 except Exception as e:
                     logger.error(f"Failed to import rule from {module_file}: {e}", exc_info=True)

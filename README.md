@@ -105,7 +105,7 @@ reveal --rules                   # List all rules
 reveal --explain B001            # Explain specific rule
 ```
 
-**33 built-in rules** across 11 categories: bugs (B001-B005), complexity (C901-C905), duplicates (D001-D002), style (E501), links (L001-L003), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V011). New in v0.25.0: link validation (L001-L003) for documentation workflows.
+**36 built-in rules** across 12 categories: bugs (B001-B005), complexity (C901-C905), duplicates (D001-D002), style (E501), imports (I001-I003), links (L001-L003), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V011). New in v0.25.0: link validation (L001-L003). New in v0.28.0: import analysis (I001-I003) for unused imports, circular dependencies, and layer violations.
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
 
 ### 🔗 Link Validation (v0.25.0+)
