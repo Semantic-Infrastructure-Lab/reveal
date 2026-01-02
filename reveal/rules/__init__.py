@@ -29,6 +29,94 @@ class RuleRegistry:
     _rules_by_code: Dict[str, Type[BaseRule]] = {}
     _discovered: bool = False
 
+    # ===== Helper Methods: Rule Discovery Logic =====
+    # Clean separation of concerns for maintainability
+
+    @staticmethod
+    def _is_rule_module_file(file_path: Path) -> bool:
+        """
+        Determine if a file should be loaded as a rule module.
+
+        Rule modules follow the naming convention: <CODE>.py (e.g., B001.py, V007.py)
+        Non-rule files are skipped: __init__.py, utils.py, helpers.py, base.py
+
+        Args:
+            file_path: Path to the Python file
+
+        Returns:
+            True if file should be loaded as a rule, False for utility modules
+        """
+        filename = file_path.stem
+
+        # Skip private modules
+        if filename.startswith('_'):
+            return False
+
+        # Rule files match pattern: uppercase letter(s) + digits (e.g., B001, V007)
+        return bool(re.match(r'^[A-Z]+\d+$', filename))
+
+    @staticmethod
+    def _should_warn_about_missing_rule_class(filename: str) -> bool:
+        """
+        Determine if we should warn about a missing rule class.
+
+        Only warn for files that look like rule codes (B001, V007) but don't
+        contain a valid rule class. Don't warn for utility files.
+
+        Args:
+            filename: File stem (e.g., "B001", "utils")
+
+        Returns:
+            True if we should warn, False to silently skip
+        """
+        # Only warn if filename matches rule code pattern
+        return bool(re.match(r'^[A-Z]+\d+$', filename))
+
+    @staticmethod
+    def _extract_rule_class_from_module(
+        module,
+        expected_class_name: str
+    ) -> Optional[Type[BaseRule]]:
+        """
+        Extract a rule class from an imported module.
+
+        Looks for a class matching the expected name that's a valid BaseRule subclass.
+
+        Args:
+            module: Imported Python module
+            expected_class_name: Expected class name (e.g., "B001")
+
+        Returns:
+            Rule class if found and valid, None otherwise
+        """
+        rule_class = getattr(module, expected_class_name, None)
+
+        # Validate it's a proper BaseRule subclass
+        if not rule_class:
+            return None
+        if not isinstance(rule_class, type):
+            return None
+        if not issubclass(rule_class, BaseRule):
+            return None
+        if rule_class == BaseRule:  # Don't register the base class itself
+            return None
+
+        return rule_class
+
+    @classmethod
+    def _register_rule_in_registry(cls, rule_class: Type[BaseRule]) -> None:
+        """
+        Register a discovered rule in the registry.
+
+        Adds the rule to both the list and the code-indexed dictionary.
+
+        Args:
+            rule_class: The rule class to register
+        """
+        cls._rules.append(rule_class)
+        cls._rules_by_code[rule_class.code] = rule_class
+        logger.debug(f"Discovered rule: {rule_class.code} - {rule_class.message}")
+
     @classmethod
     def discover(cls, force: bool = False):
         """
@@ -70,53 +158,94 @@ class RuleRegistry:
             cls._discover_dir(project_rules_dir, "project.rules")
 
         cls._discovered = True
-        logger.info(f"Discovered {len(cls._rules)} rules from {len(set(r.category for r in cls._rules if r.category))} categories")
+        num_rules = len(cls._rules)
+        num_categories = len(set(r.category for r in cls._rules if r.category))
+        logger.info(f"Discovered {num_rules} rules from {num_categories} categories")
 
     @classmethod
     def _discover_dir(cls, rules_dir: Path, module_prefix: str):
         """
         Discover rules in a directory.
 
+        Scans category subdirectories for rule modules, imports them,
+        and registers valid rule classes in the registry.
+
         Args:
             rules_dir: Directory to search
             module_prefix: Module prefix for imports (e.g., "reveal.rules")
         """
-        # Find all category subdirectories
         for subdir in rules_dir.iterdir():
+            # Skip non-directories and private directories
             if not subdir.is_dir() or subdir.name.startswith('_'):
                 continue
 
-            # Import all .py files in subdir (each is a rule)
-            for module_file in subdir.glob('*.py'):
-                if module_file.stem.startswith('_'):
-                    continue
-
-                try:
-                    # Construct module path
-                    module_name = f"{module_prefix}.{subdir.name}.{module_file.stem}"
-
-                    # Import module
-                    mod = importlib.import_module(module_name)
-
-                    # Find BaseRule subclass matching filename
-                    rule_class_name = module_file.stem  # e.g., "B001"
-                    rule_class = getattr(mod, rule_class_name, None)
-
-                    if rule_class and isinstance(rule_class, type) and issubclass(rule_class, BaseRule) and rule_class != BaseRule:
-                        cls._rules.append(rule_class)
-                        cls._rules_by_code[rule_class.code] = rule_class
-                        logger.debug(f"Discovered rule: {rule_class.code} - {rule_class.message}")
-                    else:
-                        # Only warn if filename looks like a rule code (e.g., B001, V007)
-                        # Skip utility files (utils.py, helpers.py, base.py, etc.)
-                        if re.match(r'^[A-Z]+\d+$', rule_class_name):
-                            logger.warning(f"File {module_file} does not contain a valid rule class named {rule_class_name}")
-
-                except Exception as e:
-                    logger.error(f"Failed to import rule from {module_file}: {e}", exc_info=True)
+            cls._discover_rules_in_category_dir(subdir, module_prefix)
 
     @classmethod
-    def get_rules(cls, select: Optional[List[str]] = None, ignore: Optional[List[str]] = None) -> List[Type[BaseRule]]:
+    def _discover_rules_in_category_dir(
+        cls,
+        category_dir: Path,
+        module_prefix: str
+    ) -> None:
+        """
+        Discover all rules in a category directory.
+
+        Args:
+            category_dir: Category directory (e.g., rules/bugs/)
+            module_prefix: Module prefix for imports (e.g., "reveal.rules")
+        """
+        for module_file in category_dir.glob('*.py'):
+            # Skip if not a rule module file (filters out utils.py, etc.)
+            if not cls._is_rule_module_file(module_file):
+                continue
+
+            cls._try_load_and_register_rule(module_file, category_dir, module_prefix)
+
+    @classmethod
+    def _try_load_and_register_rule(
+        cls,
+        module_file: Path,
+        category_dir: Path,
+        module_prefix: str
+    ) -> None:
+        """
+        Attempt to load and register a single rule module.
+
+        Args:
+            module_file: Path to the rule module file
+            category_dir: Category directory containing the file
+            module_prefix: Module prefix for imports
+        """
+        try:
+            module_name = f"{module_prefix}.{category_dir.name}.{module_file.stem}"
+            module = importlib.import_module(module_name)
+
+            expected_class_name = module_file.stem
+            rule_class = cls._extract_rule_class_from_module(
+                module,
+                expected_class_name
+            )
+
+            if rule_class:
+                cls._register_rule_in_registry(rule_class)
+            elif cls._should_warn_about_missing_rule_class(expected_class_name):
+                logger.warning(
+                    f"File {module_file} does not contain a valid "
+                    f"rule class named {expected_class_name}"
+                )
+
+        except Exception as e:
+            logger.error(
+                f"Failed to import rule from {module_file}: {e}",
+                exc_info=True
+            )
+
+    @classmethod
+    def get_rules(
+        cls,
+        select: Optional[List[str]] = None,
+        ignore: Optional[List[str]] = None
+    ) -> List[Type[BaseRule]]:
         """
         Get filtered rules.
 
@@ -198,7 +327,11 @@ class RuleRegistry:
         return False
 
     @classmethod
-    def list_rules(cls, select: Optional[List[str]] = None, category: Optional[RulePrefix] = None) -> List[Dict[str, Any]]:
+    def list_rules(
+        cls,
+        select: Optional[List[str]] = None,
+        category: Optional[RulePrefix] = None
+    ) -> List[Dict[str, Any]]:
         """
         List rules with metadata.
 
@@ -269,7 +402,10 @@ class RuleRegistry:
                 rule.set_current_file(file_path)
                 rule_detections = rule.check(file_path, structure, content)
                 detections.extend(rule_detections)
-                logger.debug(f"Rule {rule_class.code} found {len(rule_detections)} issues in {file_path}")
+                num_issues = len(rule_detections)
+                logger.debug(
+                    f"Rule {rule_class.code} found {num_issues} issues in {file_path}"
+                )
             except Exception as e:
                 logger.error(f"Rule {rule_class.code} failed on {file_path}: {e}", exc_info=True)
 
