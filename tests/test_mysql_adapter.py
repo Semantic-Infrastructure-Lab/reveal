@@ -83,7 +83,7 @@ class TestCredentialResolution(unittest.TestCase):
         self.assertEqual(adapter.user, "uri_user")
         self.assertEqual(adapter.password, "uri_pass")
 
-    @patch('reveal.adapters.mysql.subprocess.run')
+    @patch('reveal.adapters.mysql.connection.subprocess.run')
     def test_credentials_from_tia_secrets(self, mock_run):
         """Should fall back to TIA secrets if not in URI."""
         # Mock tia-secrets-get command
@@ -104,7 +104,7 @@ class TestCredentialResolution(unittest.TestCase):
         adapter = MySQLAdapter("mysql://localhost")
 
         # Mock _resolve_credentials to use env vars
-        with patch('reveal.adapters.mysql.subprocess.run') as mock_run:
+        with patch('reveal.adapters.mysql.connection.subprocess.run') as mock_run:
             mock_run.side_effect = Exception("tia-secrets-get not available")
             adapter._resolve_credentials()
 
@@ -272,7 +272,7 @@ class TestDataConversion(unittest.TestCase):
 class TestErrorHandling(unittest.TestCase):
     """Test error handling for connection failures and invalid input."""
 
-    @patch('reveal.adapters.mysql.pymysql')
+    @patch('reveal.adapters.mysql.connection.pymysql')
     def test_connection_failure_handling(self, mock_pymysql):
         """Should handle connection failures gracefully."""
         # Mock connection failure
@@ -288,7 +288,7 @@ class TestErrorHandling(unittest.TestCase):
             # Connection errors should be caught and handled
             self.assertIn("Connection", str(e) or "refused")
 
-    @patch('reveal.adapters.mysql.pymysql')
+    @patch('reveal.adapters.mysql.connection.pymysql')
     def test_invalid_credentials_handling(self, mock_pymysql):
         """Should handle invalid credentials gracefully."""
         # Mock authentication failure
