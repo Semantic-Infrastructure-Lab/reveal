@@ -66,6 +66,79 @@ class B005(BaseRule):
         '__future__',
     }
 
+    def _check_import_statement(self,
+                                node: ast.Import,
+                                file_path: str,
+                                file_dir: Path) -> List[Detection]:
+        """Check 'import X' statement for dead imports.
+
+        Args:
+            node: AST Import node
+            file_path: Path to the file being checked
+            file_dir: Directory containing the file
+
+        Returns:
+            List of detections for dead imports
+        """
+        detections = []
+        for alias in node.names:
+            module_name = alias.name.split('.')[0]
+            if not self._module_exists(module_name, file_dir):
+                detections.append(self.create_detection(
+                    file_path=file_path,
+                    line=node.lineno,
+                    column=node.col_offset + 1,
+                    message=f"Import '{alias.name}' references non-existent module",
+                    suggestion=f"Remove unused import or install missing package '{module_name}'",
+                    context=f"import {alias.name}"
+                ))
+        return detections
+
+    def _check_from_import_statement(self,
+                                     node: ast.ImportFrom,
+                                     file_path: str,
+                                     file_dir: Path) -> List[Detection]:
+        """Check 'from X import Y' statement for dead imports.
+
+        Args:
+            node: AST ImportFrom node
+            file_path: Path to the file being checked
+            file_dir: Directory containing the file
+
+        Returns:
+            List of detections for dead imports
+        """
+        detections = []
+
+        if not node.module:
+            return detections
+
+        # Handle relative imports
+        if node.level > 0:
+            if not self._relative_import_exists(node, file_path):
+                detections.append(self.create_detection(
+                    file_path=file_path,
+                    line=node.lineno,
+                    column=node.col_offset + 1,
+                    message=f"Relative import '{'.' * node.level}{node.module or ''}' cannot be resolved",
+                    suggestion="Check that the referenced module exists in the package",
+                    context=f"from {'.' * node.level}{node.module or ''} import ..."
+                ))
+        else:
+            # Absolute import
+            module_name = node.module.split('.')[0]
+            if not self._module_exists(module_name, file_dir):
+                detections.append(self.create_detection(
+                    file_path=file_path,
+                    line=node.lineno,
+                    column=node.col_offset + 1,
+                    message=f"Import from '{node.module}' references non-existent module",
+                    suggestion=f"Remove unused import or install missing package '{module_name}'",
+                    context=f"from {node.module} import ..."
+                ))
+
+        return detections
+
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
@@ -92,44 +165,9 @@ class B005(BaseRule):
 
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
-                for alias in node.names:
-                    module_name = alias.name.split('.')[0]
-                    if not self._module_exists(module_name, file_dir):
-                        detections.append(self.create_detection(
-                            file_path=file_path,
-                            line=node.lineno,
-                            column=node.col_offset + 1,
-                            message=f"Import '{alias.name}' references non-existent module",
-                            suggestion=f"Remove unused import or install missing package '{module_name}'",
-                            context=f"import {alias.name}"
-                        ))
-
+                detections.extend(self._check_import_statement(node, file_path, file_dir))
             elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    # Handle relative imports
-                    if node.level > 0:
-                        # Relative import - check if the relative path exists
-                        if not self._relative_import_exists(node, file_path):
-                            detections.append(self.create_detection(
-                                file_path=file_path,
-                                line=node.lineno,
-                                column=node.col_offset + 1,
-                                message=f"Relative import '{'.' * node.level}{node.module or ''}' cannot be resolved",
-                                suggestion="Check that the referenced module exists in the package",
-                                context=f"from {'.' * node.level}{node.module or ''} import ..."
-                            ))
-                    else:
-                        # Absolute import
-                        module_name = node.module.split('.')[0]
-                        if not self._module_exists(module_name, file_dir):
-                            detections.append(self.create_detection(
-                                file_path=file_path,
-                                line=node.lineno,
-                                column=node.col_offset + 1,
-                                message=f"Import from '{node.module}' references non-existent module",
-                                suggestion=f"Remove unused import or install missing package '{module_name}'",
-                                context=f"from {node.module} import ..."
-                            ))
+                detections.extend(self._check_from_import_statement(node, file_path, file_dir))
 
         return detections
 
