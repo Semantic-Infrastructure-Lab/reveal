@@ -152,6 +152,8 @@ def _add_input_output_options(parser: argparse.ArgumentParser) -> None:
                         help='Output format (text, json, typed [typed JSON with types/relationships], grep)')
     parser.add_argument('--copy', '-c', action='store_true',
                         help='Copy output to clipboard (also prints normally)')
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help='Show detailed output (e.g., all results instead of truncated summary for imports://)')
 
 
 def _add_type_aware_options(parser: argparse.ArgumentParser) -> None:
