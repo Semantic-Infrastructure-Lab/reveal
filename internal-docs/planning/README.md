@@ -10,26 +10,45 @@ Internal planning documents for future and in-progress features.
 
 ## Active Plans
 
-### 🎯 imports:// Adapter (v0.28.0)
+### 🎯 Knowledge Graph Features (v0.29.0-v0.32.0)
 
-**Status:** Planning complete, ready for implementation
-**Target:** v0.28.0 (Q1 2026)
+**Status:** Planning complete, roadmap integrated
+**Target:** v0.29.0 (Schema validation), v0.30.0 (Link following), v0.31.0 (Queries + checks), v0.32.0 (Docs)
 **Priority:** HIGH
-**Effort:** 30-40 hours (5 weeks)
+**Effort:** 10-12 weeks over 4 releases
 
-Import graph analysis: unused imports, circular dependencies, layer violations.
+Knowledge graph construction: schema validation, link following, metadata queries, quality checks.
 
-**Primary Document:**
-- **[IMPORTS_IMPLEMENTATION_PLAN.md](./IMPORTS_IMPLEMENTATION_PLAN.md)** - Complete implementation spec
+**Primary Documents:**
+- **[KNOWLEDGE_GRAPH_PROPOSAL.md](./KNOWLEDGE_GRAPH_PROPOSAL.md)** - Executive decision document (Option A approved)
+- **[KNOWLEDGE_GRAPH_ARCHITECTURE.md](./KNOWLEDGE_GRAPH_ARCHITECTURE.md)** - Technical architecture & implementation specs
+- **[KNOWLEDGE_GRAPH_GUIDE.md](./KNOWLEDGE_GRAPH_GUIDE.md)** - User-facing guide (ships as `reveal help://knowledge-graph`)
 
-**Features:**
-- Unused import detection (I001 rule)
-- Circular dependency detection (I002 rule)
-- Layer violation detection (I003 rule)
-- Multi-language support: Python, JavaScript, TypeScript, Go, Rust
-- .reveal.yaml configuration
+**Roadmap (Hybrid Integration - Option D):**
+- v0.29.0 (Q2 2026): Schema validation framework (2-3 weeks)
+- v0.30.0 (Q2 2026): Link following with --related flag (2-3 weeks)
+- v0.31.0 (Q3 2026): markdown:// adapter + quality checks (5-6 weeks)
+- v0.32.0 (Q3 2026): Complete documentation suite (1-2 weeks)
 
-**Next Steps:** Begin Phase 1 (Foundation) - Core data structures and Python import extraction
+**Key Principles:**
+- Generic features (not Beth-specific) - works with Hugo, Obsidian, Jekyll, custom schemas
+- Stateless architecture (max depth 2 for link following)
+- Ships with reference schemas: beth.yaml, hugo.yaml, obsidian.yaml
+
+**Next Steps:**
+- Phase 1 (v0.29.0): Design schema validation framework, define YAML schema format
+- Create built-in schemas (beth, hugo, obsidian)
+- Implement validation rules engine (F001-F005)
+
+---
+
+## Shipped Plans
+
+### ✅ imports:// Adapter (v0.28.0)
+
+**Status:** ✅ SHIPPED (Jan 2026)
+**Features:** Import graph analysis, unused imports (I001), circular dependencies (I002), layer violations (I003)
+**Document:** [IMPORTS_IMPLEMENTATION_PLAN.md](./IMPORTS_IMPLEMENTATION_PLAN.md)
 
 ---
 

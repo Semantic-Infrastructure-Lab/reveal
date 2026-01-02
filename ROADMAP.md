@@ -164,35 +164,30 @@
 
 ## What's Next
 
-### v0.28.0 (Q1 2026): Import Intelligence
+### v0.29.0 (Q2 2026): Schema Validation for Knowledge Graphs
 
-**`imports://` adapter** - Import graph analysis (Python-first):
+**Front Matter Schema Validation** - Validate markdown metadata against schemas:
 ```bash
-reveal imports://src                     # All imports in directory
-reveal 'imports://src?unused'            # Find unused imports
-reveal 'imports://src?circular'          # Detect circular dependencies
+reveal file.md --validate-schema beth       # Validate against Beth schema
+reveal file.md --validate-schema hugo       # Validate against Hugo schema
+reveal file.md --validate-schema custom.yaml # Custom schema
 ```
 
-**Initial scope (v0.28.0):**
-- Python import analysis (via tree-sitter)
-- Unused import detection with symbol usage analysis
-- Circular dependency detection via topological sort
-- `.reveal.yaml` configuration (imports section)
+**Features:**
+- Schema-based validation framework
+- Built-in schemas: `beth.yaml`, `hugo.yaml`, `obsidian.yaml`
+- Custom validation rules (YAML-based)
+- CI/CD integration for documentation quality gates
+- Validation rules: F001-F005 (front matter quality)
 
-**Language expansion (v0.28.1-v0.28.5):**
-- v0.28.1: JavaScript support
-- v0.28.2: TypeScript support
-- v0.28.3: Go support
-- v0.28.4: Rust support
-- v0.28.5: Layer violation detection (multi-language)
+**Implementation:** 2-3 weeks
+**See:** `internal-docs/planning/KNOWLEDGE_GRAPH_PROPOSAL.md` for full design
 
-**See:** `internal-docs/planning/IMPORTS_IMPLEMENTATION_PLAN.md` for detailed implementation plan
-
-**Strategy:** Ship Python-first, validate approach, then add languages incrementally (one per release).
+**Rationale:** Lightweight feature (builds on existing `--frontmatter` from v0.23.0), foundational for knowledge graph construction.
 
 ---
 
-### v0.29.0 (Q2 2026): Architecture Validation
+### v0.30.0 (Q2 2026): Architecture Validation & Link Following
 
 **`architecture://` adapter** - Architecture rule validation:
 ```bash
@@ -206,28 +201,65 @@ reveal architecture://src/routes         # Check specific layer
 - Custom dependency rules via `.reveal.yaml` (architecture section)
 - Pattern compliance validation
 - CI/CD integration for architecture governance
-- Expand .reveal.yaml schema (add architecture configuration)
 
-**Prerequisites:**
-- Create `ARCHITECTURE_ADAPTER_PLAN.md` (detailed implementation spec)
-- Validate design with users
+**Related Documents Viewer** - Follow knowledge graph links:
+```bash
+reveal file.md --related                 # Show immediate related docs
+reveal file.md --related --depth 2       # Follow links recursively (max depth 2)
+```
 
-**See:** (Planning document to be created)
+**Features:**
+- Configurable link fields (related_docs, see_also, references)
+- Tree view of document relationships
+- Max depth 2 (maintains stateless architecture)
+- Auto-detect link field patterns
+
+**Implementation:**
+- architecture://: 3-4 weeks
+- --related: 2-3 weeks
+
+**See:**
+- Architecture: `ARCHITECTURE_ADAPTER_PLAN.md` (to be created)
+- Links: `internal-docs/planning/KNOWLEDGE_GRAPH_ARCHITECTURE.md`
 
 ---
 
-### v0.29.5 (Q2 2026): Optional Enhancements
+### v0.31.0 (Q3 2026): Metadata Queries & Quality Checks
 
-**If time permits:**
-
-**`diff://` adapter** - Comparative exploration:
+**`markdown://` URI Adapter** - Query markdown files by front matter:
 ```bash
-reveal diff://app.py:backup/app.py       # Compare two files
-reveal diff://app.py:HEAD~1              # Compare with git revision
-reveal diff://python://venv:python://    # Compare environments
+reveal markdown://sessions/?beth_topics=reveal  # Find by topic
+reveal markdown://content/?tags=python          # Find by tag
+reveal markdown://?!beth_topics                 # Find missing fields
 ```
 
-### v0.30.0 (Q3 2026): Polish for v1.0
+**Features:**
+- Local directory tree queries (not corpus-wide)
+- Field filtering with wildcards
+- Multiple criteria support
+- Integration with --related, --validate
+
+**Quality Checks** - Knowledge graph health metrics:
+```bash
+reveal file.md --check-metadata                 # Single file check
+reveal docs/**/*.md --check-metadata --summary  # Aggregate report
+```
+
+**Metrics:**
+- Front matter presence
+- Required fields (schema-based)
+- Link density (connectivity)
+- Topic coverage
+
+**Implementation:**
+- markdown://: 3-4 weeks
+- --check-metadata: 2 weeks
+
+**See:** `internal-docs/planning/KNOWLEDGE_GRAPH_ARCHITECTURE.md`
+
+---
+
+### v0.32.0 (Q3 2026): Polish for v1.0
 
 **UX Improvements:**
 - `--watch` mode: Live feedback for file changes
@@ -236,10 +268,20 @@ reveal diff://python://venv:python://    # Compare environments
 - `--quiet` mode for scripting
 - Interactive mode exploration
 
-**Documentation:**
+**Knowledge Graph Documentation:**
+- Complete knowledge graph guide (ships as `reveal help://knowledge-graph`)
+- Integration guides: Beth, Hugo, Obsidian
+- Best practices and workflow examples
+- Update `AGENT_HELP.md` with KG patterns
+
+**General Documentation:**
 - Complete adapter authoring guide
 - CI/CD integration examples
 - Performance benchmarking suite
+
+**See:** `internal-docs/planning/KNOWLEDGE_GRAPH_GUIDE.md`
+
+---
 
 ### v1.0 (Q4 2026): Stable Foundation
 
@@ -249,6 +291,13 @@ reveal diff://python://venv:python://    # Compare environments
 - All 18 built-in languages tested
 - Comprehensive documentation
 - Performance guarantees
+
+**Included Features:**
+- Code structure exploration (core competency)
+- 8+ URI adapters (ast://, json://, python://, env://, mysql://, imports://, architecture://, markdown://)
+- Quality rules (32+ rules across B/S/C/E/L/I/M/D/N/V/F categories)
+- Knowledge graph construction (schema validation, link following, metadata queries)
+- Progressive disclosure patterns for code and documentation
 
 ### Post-v1.0: Advanced URI Schemes
 
