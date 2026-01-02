@@ -61,11 +61,20 @@ class PythonExtractor(LanguageExtractor):
 
             elif isinstance(node, ast.ImportFrom):
                 # from os import path, environ
+                # from os import path as p
                 # from . import utils
                 module_name = node.module or ''
                 is_relative = node.level > 0
-                imported_names = [a.name for a in node.names]
-                import_type = 'star_import' if imported_names == ['*'] else 'from_import'
+
+                # Handle aliases in from imports: from X import Y as Z
+                imported_names = []
+                for alias in node.names:
+                    if alias.asname:
+                        imported_names.append(f"{alias.name} as {alias.asname}")
+                    else:
+                        imported_names.append(alias.name)
+
+                import_type = 'star_import' if '*' in imported_names else 'from_import'
 
                 imports.append(ImportStatement(
                     file_path=file_path,
@@ -99,9 +108,11 @@ class PythonExtractor(LanguageExtractor):
 
         symbols = set()
 
+        # Use ast.walk to find all Name nodes in Load context (usage, not assignment)
         for node in ast.walk(tree):
-            if isinstance(node, ast.Name):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
                 # Direct name usage: os, sys, MyClass
+                # Exclude Store context (assignments) and Del context (deletions)
                 symbols.add(node.id)
 
             elif isinstance(node, ast.Attribute):
@@ -112,6 +123,52 @@ class PythonExtractor(LanguageExtractor):
                     symbols.add(root)
 
         return symbols
+
+    def extract_exports(self, file_path: Path) -> Set[str]:
+        """Extract names from __all__ declaration.
+
+        Args:
+            file_path: Path to Python source file
+
+        Returns:
+            Set of names declared in __all__ (empty if no __all__ found)
+
+        Used to detect re-exports - imports that appear in __all__
+        are intentionally exposed and should not be flagged as unused.
+        """
+        try:
+            content = file_path.read_text()
+            tree = ast.parse(content)
+        except (SyntaxError, UnicodeDecodeError):
+            return set()
+
+        exports = set()
+
+        for node in ast.walk(tree):
+            # Look for __all__ = [...] assignments
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == '__all__':
+                        # Extract list elements
+                        if isinstance(node.value, (ast.List, ast.Tuple)):
+                            for elt in node.value.elts:
+                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                    exports.add(elt.value)
+                                # Python 3.7 compatibility (ast.Str deprecated in 3.8+)
+                                elif isinstance(elt, ast.Str):
+                                    exports.add(elt.s)
+
+            # Look for __all__ += [...] augmented assignments
+            elif isinstance(node, ast.AugAssign):
+                if isinstance(node.target, ast.Name) and node.target.id == '__all__':
+                    if isinstance(node.value, (ast.List, ast.Tuple)):
+                        for elt in node.value.elts:
+                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                exports.add(elt.value)
+                            elif isinstance(elt, ast.Str):
+                                exports.add(elt.s)
+
+        return exports
 
     def resolve_import(
         self,

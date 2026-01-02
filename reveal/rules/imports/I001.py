@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ...analyzers.imports.python import extract_python_imports, extract_python_symbols
+from ...analyzers.imports.python import PythonExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +42,11 @@ class I001(BaseRule):
         path = Path(file_path)
 
         try:
-            # Extract imports and symbols used
-            imports = extract_python_imports(path)
-            symbols_used = extract_python_symbols(path)
+            # Extract imports, symbols used, and exports (__all__)
+            extractor = PythonExtractor()
+            imports = extractor.extract_imports(path)
+            symbols_used = extractor.extract_symbols(path)
+            exports = extractor.extract_exports(path)
         except Exception as e:
             logger.debug(f"Failed to analyze {file_path}: {e}")
             return detections
@@ -61,10 +63,11 @@ class I001(BaseRule):
                 # from X import Y, Z - check if Y or Z are used
                 for name in stmt.imported_names:
                     actual_name = name.split(' as ')[-1] if ' as ' in name else name
-                    if actual_name not in symbols_used:
+                    # Check if used in code OR exported via __all__
+                    if actual_name not in symbols_used and actual_name not in exports:
                         unused_names.append(name)  # Keep original name with alias
 
-                # Create detection if ALL imported names are unused
+                # Create detection if ALL imported names are unused AND not exported
                 if len(unused_names) == len(stmt.imported_names):
                     import_str = f"from {stmt.module_name} import {', '.join(stmt.imported_names)}"
                     detections.append(self.create_detection(
@@ -75,9 +78,9 @@ class I001(BaseRule):
                         context=import_str
                     ))
             else:
-                # import X or import X as Y - check if used
+                # import X or import X as Y - check if used OR exported
                 check_name = stmt.alias or stmt.module_name.split('.')[0]
-                if check_name not in symbols_used:
+                if check_name not in symbols_used and check_name not in exports:
                     import_str = f"import {stmt.module_name}"
                     if stmt.alias:
                         import_str += f" as {stmt.alias}"
