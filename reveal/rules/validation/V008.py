@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import ast
-import inspect
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root

@@ -27,6 +27,8 @@ class ImportStatement:
     is_relative: bool  # True for './', '../', etc.
     import_type: str  # 'import', 'from_import', 'star_import'
     alias: Optional[str] = None  # 'np' in 'import numpy as np'
+    is_type_checking: bool = False  # True if inside 'if TYPE_CHECKING:' block
+    source_line: str = ""  # Full source line (for noqa comment detection)
 
 
 @dataclass

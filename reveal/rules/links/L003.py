@@ -8,7 +8,6 @@ import re
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
-import os
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 

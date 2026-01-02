@@ -12,7 +12,6 @@ Example violation:
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 import re
-import ast
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 

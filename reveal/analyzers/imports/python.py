@@ -51,23 +51,71 @@ class PythonExtractor(LanguageExtractor):
             # Can't parse - return empty
             return []
 
+        # Read source lines for noqa comment detection
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                source_lines = f.readlines()
+        except Exception:
+            source_lines = []
+
         imports = []
 
         # Find import_statement nodes (import os, sys)
         import_nodes = analyzer._find_nodes_by_type('import_statement')
         for node in import_nodes:
-            imports.extend(self._parse_import_statement(node, file_path, analyzer))
+            imports.extend(self._parse_import_statement(node, file_path, analyzer, source_lines))
 
         # Find import_from_statement nodes (from x import y)
         from_nodes = analyzer._find_nodes_by_type('import_from_statement')
         for node in from_nodes:
-            imports.extend(self._parse_from_import(node, file_path, analyzer))
+            imports.extend(self._parse_from_import(node, file_path, analyzer, source_lines))
 
         return imports
 
-    def _parse_import_statement(self, node, file_path: Path, analyzer) -> List[ImportStatement]:
+    def _is_inside_type_checking(self, node) -> bool:
+        """Check if import node is inside a TYPE_CHECKING conditional block.
+
+        Walks up the AST to detect patterns like:
+            if TYPE_CHECKING:
+                from typing import SomeType
+
+        Returns:
+            True if import is inside TYPE_CHECKING block
+        """
+        current = node.parent
+        while current:
+            # Check if this is an 'if' statement
+            if current.type == 'if_statement':
+                # Get the condition node (first child after 'if')
+                if current.children and len(current.children) > 1:
+                    condition = current.children[1]  # Skip 'if' keyword
+                    # Check if condition contains 'TYPE_CHECKING'
+                    # This handles: TYPE_CHECKING, typing.TYPE_CHECKING, etc.
+                    condition_text = self._get_node_text_from_tree(condition, current)
+                    if 'TYPE_CHECKING' in condition_text:
+                        return True
+            current = current.parent
+        return False
+
+    def _get_node_text_from_tree(self, node, analyzer_or_tree) -> str:
+        """Helper to get node text when we have a tree reference."""
+        if hasattr(analyzer_or_tree, '_get_node_text'):
+            return analyzer_or_tree._get_node_text(node)
+        # Fallback: decode bytes
+        if hasattr(node, 'text'):
+            return node.text.decode('utf-8')
+        return ""
+
+    def _parse_import_statement(self, node, file_path: Path, analyzer, source_lines: List[str]) -> List[ImportStatement]:
         """Parse 'import x, y as z' statements."""
         imports = []
+
+        # Detect TYPE_CHECKING context
+        is_type_checking = self._is_inside_type_checking(node)
+
+        # Get source line (0-indexed -> 1-indexed)
+        line_number = node.start_point[0] + 1
+        source_line = source_lines[node.start_point[0]].rstrip() if node.start_point[0] < len(source_lines) else ""
 
         # Get full import text for parsing
         import_text = analyzer._get_node_text(node)
@@ -94,18 +142,27 @@ class PythonExtractor(LanguageExtractor):
 
             imports.append(ImportStatement(
                 file_path=file_path,
-                line_number=node.start_point[0] + 1,
+                line_number=line_number,
                 module_name=module_name,
                 imported_names=[],
                 is_relative=False,
                 import_type='import',
-                alias=alias
+                alias=alias,
+                is_type_checking=is_type_checking,
+                source_line=source_line
             ))
 
         return imports
 
-    def _parse_from_import(self, node, file_path: Path, analyzer) -> List[ImportStatement]:
+    def _parse_from_import(self, node, file_path: Path, analyzer, source_lines: List[str]) -> List[ImportStatement]:
         """Parse 'from x import y' statements."""
+        # Detect TYPE_CHECKING context
+        is_type_checking = self._is_inside_type_checking(node)
+
+        # Get source line (0-indexed -> 1-indexed)
+        line_number = node.start_point[0] + 1
+        source_line = source_lines[node.start_point[0]].rstrip() if node.start_point[0] < len(source_lines) else ""
+
         import_text = analyzer._get_node_text(node)
 
         # Parse: from <module> import <names>
@@ -149,12 +206,14 @@ class PythonExtractor(LanguageExtractor):
 
         return [ImportStatement(
             file_path=file_path,
-            line_number=node.start_point[0] + 1,
+            line_number=line_number,
             module_name=module_name,
             imported_names=imported_names,
             is_relative=is_relative,
             import_type=import_type,
-            alias=None  # from imports don't have module-level aliases
+            alias=None,  # from imports don't have module-level aliases
+            is_type_checking=is_type_checking,
+            source_line=source_line
         )]
 
     def extract_symbols(self, file_path: Path) -> Set[str]:

@@ -23,6 +23,31 @@ class I001(BaseRule):
     file_patterns = ['.py']
     version = "1.0.0"
 
+    def _has_noqa_comment(self, source_line: str) -> bool:
+        """Check if source line has a noqa comment.
+
+        Detects patterns like:
+        - # noqa
+        - # noqa: F401
+        - # noqa: I001
+        - # noqa: F401, I001
+
+        Args:
+            source_line: Full source line text
+
+        Returns:
+            True if line has noqa comment (generic or specific to F401/I001)
+        """
+        if not source_line:
+            return False
+
+        comment_lower = source_line.lower()
+        if '# noqa' not in comment_lower:
+            return False
+
+        # Generic noqa (no colon) or specific F401/I001
+        return ':' not in comment_lower or 'f401' in comment_lower or 'i001' in comment_lower
+
     def check(self,
              file_path: str,
              structure: Optional[Dict[str, Any]],
@@ -55,6 +80,14 @@ class I001(BaseRule):
         for stmt in imports:
             # Skip star imports (can't reliably detect usage)
             if stmt.import_type == 'star_import':
+                continue
+
+            # Skip TYPE_CHECKING imports (used only in type hints)
+            if stmt.is_type_checking:
+                continue
+
+            # Skip imports with # noqa comments
+            if self._has_noqa_comment(stmt.source_line):
                 continue
 
             unused_names = []

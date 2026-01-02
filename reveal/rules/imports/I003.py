@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ...analyzers.imports import load_layer_config
 from ...analyzers.imports.python import extract_python_imports
 from ...analyzers.imports.resolver import resolve_python_import
 

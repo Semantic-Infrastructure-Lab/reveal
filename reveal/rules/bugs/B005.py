@@ -5,7 +5,6 @@ This catches orphaned imports left behind after refactoring.
 """
 
 import ast
-import sys
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
