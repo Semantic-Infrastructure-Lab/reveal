@@ -473,27 +473,92 @@ def _handle_imports(adapter_class: type, resource: str, element: Optional[str],
         print(safe_json_dumps(result))
         return
 
-    # Text format - basic for now
+    # Text format with progressive disclosure
+    verbose = getattr(args, 'verbose', False)
+
     if 'type' in result:
         if result['type'] == 'unused_imports':
-            print(f"Unused Imports ({result['count']}):\n")
-            for imp in result['unused']:
-                print(f"  {imp['file']}:{imp['line']} - {imp['module']}")
+            count = result['count']
+            print(f"\n{'='*60}")
+            print(f"Unused Imports: {count}")
+            print(f"{'='*60}\n")
+
+            if count == 0:
+                print("  ✅ No unused imports found!\n")
+            else:
+                if verbose:
+                    # Detailed mode: show all
+                    for imp in result['unused']:
+                        print(f"  {imp['file']}:{imp['line']} - {imp['module']}")
+                else:
+                    # Summary mode: show first 10, then count
+                    for imp in result['unused'][:10]:
+                        print(f"  {imp['file']}:{imp['line']} - {imp['module']}")
+                    if count > 10:
+                        print(f"\n  ... and {count - 10} more unused imports")
+                        print(f"  Run with --verbose to see all {count} unused imports\n")
+
         elif result['type'] == 'circular_dependencies':
-            print(f"Circular Dependencies ({result['count']}):\n")
-            for i, cycle in enumerate(result['cycles'], 1):
-                print(f"  {i}. {' -> '.join(cycle)}")
+            count = result['count']
+            print(f"\n{'='*60}")
+            print(f"Circular Dependencies: {count}")
+            print(f"{'='*60}\n")
+
+            if count == 0:
+                print("  ✅ No circular dependencies found!\n")
+            else:
+                if verbose:
+                    # Detailed mode: show all cycles
+                    for i, cycle in enumerate(result['cycles'], 1):
+                        print(f"  {i}. {' -> '.join(cycle)}")
+                else:
+                    # Summary mode: show first 5 cycles
+                    for i, cycle in enumerate(result['cycles'][:5], 1):
+                        print(f"  {i}. {' -> '.join(cycle)}")
+                    if count > 5:
+                        print(f"\n  ... and {count - 5} more circular dependencies")
+                        print(f"  Run with --verbose to see all {count} cycles\n")
+
         elif result['type'] == 'layer_violations':
-            print(f"Layer Violations ({result['count']}):\n")
-            if result['count'] == 0:
-                print(f"  {result.get('note', 'No violations found')}")
+            count = result['count']
+            print(f"\n{'='*60}")
+            print(f"Layer Violations: {count}")
+            print(f"{'='*60}\n")
+
+            if count == 0:
+                print(f"  ✅ {result.get('note', 'No violations found')}\n")
+            else:
+                violations = result.get('violations', [])
+                if verbose:
+                    # Detailed mode: show all
+                    for v in violations:
+                        print(f"  {v['file']}:{v['line']} - {v['message']}")
+                else:
+                    # Summary mode: show first 10
+                    for v in violations[:10]:
+                        print(f"  {v['file']}:{v['line']} - {v['message']}")
+                    if count > 10:
+                        print(f"\n  ... and {count - 10} more violations")
+                        print(f"  Run with --verbose to see all {count} violations\n")
         else:
-            # Default: show all imports
+            # Default: show import analysis summary
             metadata = result.get('metadata', {})
-            print(f"Import Analysis:\n")
-            print(f"  Total files: {metadata.get('total_files', 0)}")
-            print(f"  Total imports: {metadata.get('total_imports', 0)}")
-            print(f"  Has cycles: {metadata.get('has_cycles', False)}")
+            total_files = metadata.get('total_files', 0)
+            total_imports = metadata.get('total_imports', 0)
+            has_cycles = metadata.get('has_cycles', False)
+
+            print(f"\n{'='*60}")
+            print(f"Import Analysis: {resource}")
+            print(f"{'='*60}\n")
+            print(f"  Total Files:   {total_files}")
+            print(f"  Total Imports: {total_imports}")
+            print(f"  Cycles Found:  {'❌ Yes' if has_cycles else '✅ No'}")
+            print()
+            print(f"Query options:")
+            print(f"  reveal 'imports://{resource}?unused'    - Find unused imports")
+            print(f"  reveal 'imports://{resource}?circular'  - Detect circular deps")
+            print(f"  reveal 'imports://{resource}?violations' - Check layer violations")
+            print()
     else:
         # Fallback to JSON if unknown structure
         print(safe_json_dumps(result))
