@@ -3,10 +3,8 @@
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
-from collections import defaultdict
 
 from .base import ResourceAdapter, register_adapter
-from ..structure import TypedStructure
 from ..registry import get_analyzer
 
 

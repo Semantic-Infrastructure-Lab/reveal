@@ -9,7 +9,6 @@ All are ZIP archives containing XML files following the OASIS ODF standard.
 """
 
 import xml.etree.ElementTree as ET
-from pathlib import Path
 from typing import Dict, Any, List, Optional
 from ...base import register
 from .base import ZipXMLAnalyzer
