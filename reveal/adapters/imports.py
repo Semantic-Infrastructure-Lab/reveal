@@ -42,7 +42,20 @@ class ImportsAdapter(ResourceAdapter):
         """
         # Parse URI
         parsed = urlparse(uri if uri else 'imports://')
-        path_str = parsed.path or '.'
+
+        # Handle both absolute and relative paths:
+        # - imports:///absolute/path → netloc='', path='/absolute/path' → use path as-is
+        # - imports://relative/path  → netloc='relative', path='/path' → combine netloc + path
+        # - imports://. or imports:// → netloc='', path='' → use current dir
+        if parsed.netloc:
+            # Relative path with host component (imports://reveal/path)
+            path_str = f"{parsed.netloc}{parsed.path}"
+        elif parsed.path:
+            # Absolute path (imports:///absolute/path)
+            path_str = parsed.path
+        else:
+            # Default to current directory
+            path_str = '.'
 
         # Parse query params - support both flag-style (?circular) and key-value (?circular=true)
         query_params = {}
@@ -59,7 +72,7 @@ class ImportsAdapter(ResourceAdapter):
 
         if not target_path.exists():
             return {
-                'error': f"Path not found: {target_path}",
+                'error': f"Path not found: {path_str}",
                 'uri': uri
             }
 

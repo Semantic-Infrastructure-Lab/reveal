@@ -883,8 +883,10 @@ def broken(
             rule = I001()
             detections = rule.check(path, None, content)
 
-            # Should return empty list, not crash
-            self.assertEqual(len(detections), 0)
+            # Tree-sitter can extract imports from broken code (better than ast.parse()!)
+            # Should detect 'os' as unused (ast.parse() would have crashed)
+            self.assertEqual(len(detections), 1)
+            self.assertEqual(detections[0].rule_code, 'I001')
 
         finally:
             self.teardown_file(path)
