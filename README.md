@@ -212,20 +212,28 @@ reveal mysql://localhost/performance        # Query performance + DBA tuning rat
 reveal mysql://localhost/indexes            # Index usage analysis
 reveal mysql://localhost/slow-queries       # Slow query analysis (last 24h)
 reveal mysql://localhost/innodb             # InnoDB buffer pool & locks
+
+# Import graph analysis (v0.28.0+) 🆕
+reveal imports://src                        # List all imports in directory
+reveal 'imports://src?unused'               # Find unused imports (I001 rule)
+reveal 'imports://src?circular'             # Detect circular dependencies (I002 rule)
+reveal 'imports://src?violations'           # Check layer violations (I003 rule)
+reveal imports://src/app.py                 # Imports for specific file
 ```
 
 **Extensibility Example:**
 The `reveal://` adapter demonstrates that reveal can inspect **any resource**, not just files. Use it as a reference for creating custom adapters for your own projects (APIs, databases, containers, etc.). See `reveal help://reveal` for the complete guide.
 
-**8 Built-in Adapters:**
+**9 Built-in Adapters:**
 - `help://` - Self-documenting help system (discover all adapters)
 - `env://` - Environment variables (cross-language)
 - `ast://` - Static code analysis & queries (cross-language)
 - `json://` - JSON navigation with path access & schema (v0.20.0+)
 - `python://` - Python runtime inspection & diagnostics (v0.17.0+)
 - `reveal://` - Self-inspection & validation (v0.22.0+)
-- `stats://` - Code quality metrics & hotspot detection 🆕
-- `mysql://` - MySQL database inspection with DBA tuning ratios 🆕 (requires `[database]` extra)
+- `stats://` - Code quality metrics & hotspot detection
+- `mysql://` - MySQL database inspection with DBA tuning ratios (requires `[database]` extra)
+- `imports://` - Import graph analysis with unused/circular detection (v0.28.0+) 🆕
 
 **Self-documenting:** Every adapter exposes help via `reveal help://<scheme>`
 

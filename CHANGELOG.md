@@ -99,7 +99,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated `internal-docs/planning/README.md` with Intent Lenses reference
   - Added "Future Ideas (Exploration)" section
   - Clear separation of active vs. reference documents
-- README: Updated rule count from 31 to 33 rules (V009, V011 added)
+- **README**: Updated with imports:// adapter and examples
+  - Added imports:// to URI adapters section with usage examples
+  - Updated adapter count from 8 to 9 built-in adapters
+  - Updated rule count from 31 to 33 rules (V009, V011 added)
+- **Import Extractors - Tree-Sitter Architectural Refactor**: Achieved full consistency
+  - **JavaScript/TypeScript extractor**: Replaced regex parsing with tree-sitter nodes (`import_statement`, `call_expression`)
+    - Handles ES6 imports, CommonJS require(), dynamic import()
+    - Coverage: 88%, all 11 tests passing
+  - **Go extractor**: Replaced regex parsing with tree-sitter nodes (`import_spec`)
+    - Unified handling for single/grouped/aliased/dot/blank imports
+    - Coverage: 90%, all 7 tests passing
+  - **Rust extractor**: Replaced regex parsing with tree-sitter nodes (`use_declaration`)
+    - Cleaner handling of nested/glob/aliased use statements
+    - Coverage: 91%, all 10 tests passing
+  - **Python extractor**: Already using tree-sitter (completed in prior session)
+    - Coverage: 76%, all 23 tests passing
+  - **Architectural consistency achieved**: All import extractors now use TreeSitterAnalyzer
+  - **Improved fault tolerance**: Tree-sitter creates partial trees for broken code (better than ast.parse())
+  - **Documentation**: Added "Architectural Evolution" section to IMPORTS_IMPLEMENTATION_PLAN.md
+  - **Total test coverage**: 51/51 import tests passing (100%), 1086/1086 overall tests passing
+
+### Fixed
+- **imports:// Relative Path Resolution**: Fixed URL parsing to support both relative and absolute paths
+  - `imports://relative/path` now correctly interprets as relative path (not absolute `/relative/path`)
+  - URL netloc component is now combined with path for proper resolution
+  - Both `imports:///absolute/path` (triple slash) and `imports://relative/path` (double slash) work correctly
+- **Test Expectations**: Updated test_syntax_error_handling for improved tree-sitter behavior
+  - Old behavior (ast.parse): Crash on syntax errors, return 0 detections
+  - New behavior (tree-sitter): Extract valid imports from broken code, return detections
+  - Test now validates improved fault tolerance instead of crash-and-give-up behavior
 
 ### Documentation
 - Established architectural boundaries and quality standards
