@@ -1,20 +1,21 @@
-"""JavaScript/TypeScript import extraction.
+"""JavaScript/TypeScript import extraction using tree-sitter.
 
 Extracts import statements and require() calls from JavaScript and TypeScript files.
-Supports ES6 imports, CommonJS require(), and dynamic import().
+Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
 import re
 from pathlib import Path
-from typing import List, Set
+from typing import List, Set, Optional
 
 from . import ImportStatement
 from .base import LanguageExtractor, register_extractor
+from ...base import get_analyzer
 
 
 @register_extractor
 class JavaScriptExtractor(LanguageExtractor):
-    """JavaScript/TypeScript import extractor using regex parsing.
+    """JavaScript/TypeScript import extractor using tree-sitter parsing.
 
     Supports:
     - ES6 imports: import { foo } from 'module'
@@ -29,7 +30,7 @@ class JavaScriptExtractor(LanguageExtractor):
     language_name = 'JavaScript/TypeScript'
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
-        """Extract all import statements from JavaScript/TypeScript file.
+        """Extract all import statements from JavaScript/TypeScript file using tree-sitter.
 
         Args:
             file_path: Path to .js, .jsx, .ts, .tsx, .mjs, or .cjs file
@@ -38,20 +39,31 @@ class JavaScriptExtractor(LanguageExtractor):
             List of ImportStatement objects
         """
         try:
-            content = file_path.read_text(encoding='utf-8')
-        except (UnicodeDecodeError, FileNotFoundError):
+            analyzer_class = get_analyzer(str(file_path))
+            if not analyzer_class:
+                return []
+
+            analyzer = analyzer_class(str(file_path))
+            if not analyzer.tree:
+                return []
+
+        except Exception:
+            # Can't parse - return empty
             return []
 
         imports = []
 
-        # Extract ES6 imports
-        imports.extend(self._extract_es6_imports(file_path, content))
+        # Extract ES6 import statements
+        import_nodes = analyzer._find_nodes_by_type('import_statement')
+        for node in import_nodes:
+            imports.extend(self._parse_import_statement(node, file_path, analyzer))
 
-        # Extract CommonJS require()
-        imports.extend(self._extract_require_imports(file_path, content))
-
-        # Extract dynamic import()
-        imports.extend(self._extract_dynamic_imports(file_path, content))
+        # Extract CommonJS require() calls
+        call_nodes = analyzer._find_nodes_by_type('call_expression')
+        for node in call_nodes:
+            result = self._parse_require_call(node, file_path, analyzer)
+            if result:
+                imports.append(result)
 
         return imports
 
@@ -69,184 +81,120 @@ class JavaScriptExtractor(LanguageExtractor):
         # TODO: Phase 5.1 - Implement JS/TS symbol extraction
         return set()
 
-    @staticmethod
-    def _extract_es6_imports(file_path: Path, content: str) -> List[ImportStatement]:
-        """Extract ES6 import statements.
+    def _parse_import_statement(self, node, file_path: Path, analyzer) -> List[ImportStatement]:
+        """Parse ES6 import statement using tree-sitter.
 
-        Patterns:
+        Handles:
             import foo from 'module'
             import { foo, bar } from 'module'
             import * as foo from 'module'
             import foo, { bar } from 'module'
             import 'module'  // side-effect only
         """
-        imports = []
+        import_text = analyzer._get_node_text(node)
 
-        # Match import statements (handles multiline)
-        # Pattern: import ... from 'module' or import ... from "module"
-        pattern = r'''
-            ^\s*import\s+                     # import keyword
-            (?:                                # non-capturing group
-                (?:type\s+)?                   # optional 'type' keyword (TypeScript)
-                (?:
-                    (\{[^}]+\})|               # named imports { foo, bar }
-                    (\*\s+as\s+\w+)|           # namespace import * as foo
-                    (\w+)|                     # default import foo
-                    ((?:\w+\s*,\s*)?           # default + named: foo, { bar }
-                     \{[^}]+\})
-                )\s*
-                from\s+
-            )?                                 # from clause is optional for side-effects
-            ['"]([^'"]+)['"]                  # module path in quotes
-        '''
+        # Extract module path (always in quotes at end)
+        # Pattern: from 'module' or from "module" or just 'module' for side-effects
+        module_match = re.search(r'''['"]([^'"]+)['"]''', import_text)
+        if not module_match:
+            return []
 
-        for match in re.finditer(pattern, content, re.MULTILINE | re.VERBOSE):
-            module_path = match.group(5)  # Module path is always the last group
+        module_path = module_match.group(1)
+        line_number = node.start_point[0] + 1
 
-            # Determine line number
-            line_number = content[:match.start()].count('\n') + 1
+        # Determine import type and extract imported names
+        imported_names = []
+        import_type = 'es6_import'
+        alias = None
 
-            # Determine imported names
-            imported_names = []
-            import_type = 'es6_import'
-            alias = None
+        # Side-effect only: import './styles.css'
+        if not ' from ' in import_text and not 'import(' in import_text:
+            import_type = 'side_effect_import'
+
+        # Namespace import: import * as foo from 'module'
+        elif '* as ' in import_text:
+            import_type = 'namespace_import'
+            alias_match = re.search(r'\*\s+as\s+(\w+)', import_text)
+            if alias_match:
+                imported_names = ['*']
+                alias = alias_match.group(1)
+
+        # Named or default imports
+        elif ' from ' in import_text:
+            # Extract the part between 'import' and 'from'
+            import_clause = import_text.split(' from ')[0]
+            import_clause = import_clause.replace('import', '').strip()
+
+            # Remove optional 'type' keyword (TypeScript)
+            import_clause = re.sub(r'^type\s+', '', import_clause)
 
             # Named imports: { foo, bar }
-            if match.group(1):
-                # Extract names from { foo, bar as baz }
-                names_str = match.group(1).strip('{}')
-                for name in names_str.split(','):
-                    name = name.strip()
-                    # Handle 'foo as bar'
-                    if ' as ' in name:
-                        name = name.split(' as ')[0].strip()
-                    if name:
-                        imported_names.append(name)
-
-            # Namespace import: * as foo
-            elif match.group(2):
-                import_type = 'namespace_import'
-                # Extract alias from '* as foo'
-                alias_match = re.search(r'\*\s+as\s+(\w+)', match.group(2))
-                if alias_match:
-                    imported_names = ['*']
-                    alias = alias_match.group(1)
-
-            # Default import: foo
-            elif match.group(3):
-                imported_names = [match.group(3)]
-                import_type = 'default_import'
-
-            # Default + named: foo, { bar }
-            elif match.group(4):
-                names_str = match.group(4)
-                # Parse both default and named
-                parts = names_str.split('{')
-                if parts[0].strip():
-                    imported_names.append(parts[0].strip().rstrip(','))
-                if len(parts) > 1:
-                    for name in parts[1].strip('}').split(','):
+            if '{' in import_clause:
+                # Extract content from braces
+                names_match = re.search(r'\{([^}]+)\}', import_clause)
+                if names_match:
+                    names_str = names_match.group(1)
+                    for name in names_str.split(','):
                         name = name.strip()
+                        if not name:
+                            continue
+                        # Handle 'foo as bar' - we want 'foo'
                         if ' as ' in name:
                             name = name.split(' as ')[0].strip()
-                        if name:
-                            imported_names.append(name)
+                        imported_names.append(name)
 
-            # Side-effect only: import './styles.css'
+                # Check for default import too: foo, { bar }
+                default_match = re.match(r'(\w+)\s*,', import_clause)
+                if default_match:
+                    imported_names.insert(0, default_match.group(1))
+
+            # Default import only: import foo from 'module'
             else:
-                import_type = 'side_effect_import'
+                default_name = import_clause.strip()
+                if default_name:
+                    imported_names = [default_name]
+                    import_type = 'default_import'
 
-            imports.append(ImportStatement(
-                file_path=file_path,
-                line_number=line_number,
-                module_name=module_path,
-                imported_names=imported_names,
-                is_relative=module_path.startswith('.'),
-                import_type=import_type,
-                alias=alias
-            ))
+        return [ImportStatement(
+            file_path=file_path,
+            line_number=line_number,
+            module_name=module_path,
+            imported_names=imported_names,
+            is_relative=module_path.startswith('.'),
+            import_type=import_type,
+            alias=alias
+        )]
 
-        return imports
+    def _parse_require_call(self, node, file_path: Path, analyzer) -> Optional[ImportStatement]:
+        """Parse CommonJS require() call using tree-sitter.
 
-    @staticmethod
-    def _extract_require_imports(file_path: Path, content: str) -> List[ImportStatement]:
-        """Extract CommonJS require() statements.
-
-        Patterns:
+        Handles:
             const foo = require('module')
             const { foo, bar } = require('module')
             require('module')  // side-effect only
+            await import('./module')  // dynamic import
         """
-        imports = []
+        call_text = analyzer._get_node_text(node)
 
-        # Pattern: require('module') or require("module")
-        pattern = r'''
-            (?:
-                (?:const|let|var)\s+          # variable declaration
-                (?:
-                    (\w+)|                     # single assignment: foo
-                    \{([^}]+)\}                # destructured: { foo, bar }
-                )\s*=\s*
-            )?
-            require\s*\(\s*['"]([^'"]+)['"]\s*\)  # require('module')
-        '''
+        # Check if this is a require() call
+        is_require = call_text.startswith('require(')
+        # Also check for dynamic import()
+        is_dynamic_import = call_text.startswith('import(')
 
-        for match in re.finditer(pattern, content, re.VERBOSE):
-            module_path = match.group(3)
-            line_number = content[:match.start()].count('\n') + 1
+        if not is_require and not is_dynamic_import:
+            return None
 
-            imported_names = []
-            import_type = 'commonjs_require'
+        # Extract module path from quotes
+        module_match = re.search(r'''['"]([^'"]+)['"]''', call_text)
+        if not module_match:
+            return None
 
-            # Single assignment: const foo = require('module')
-            if match.group(1):
-                imported_names = [match.group(1)]
+        module_path = module_match.group(1)
+        line_number = node.start_point[0] + 1
 
-            # Destructured: const { foo, bar } = require('module')
-            elif match.group(2):
-                for name in match.group(2).split(','):
-                    name = name.strip()
-                    # Handle renaming: { foo: bar }
-                    if ':' in name:
-                        name = name.split(':')[0].strip()
-                    if name:
-                        imported_names.append(name)
-
-            # Side-effect only: require('module')
-            else:
-                import_type = 'side_effect_require'
-
-            imports.append(ImportStatement(
-                file_path=file_path,
-                line_number=line_number,
-                module_name=module_path,
-                imported_names=imported_names,
-                is_relative=module_path.startswith('.'),
-                import_type=import_type,
-                alias=None
-            ))
-
-        return imports
-
-    @staticmethod
-    def _extract_dynamic_imports(file_path: Path, content: str) -> List[ImportStatement]:
-        """Extract dynamic import() expressions.
-
-        Patterns:
-            import('./module')
-            await import('./module')
-            const mod = await import('./module')
-        """
-        imports = []
-
-        # Pattern: import('module') or import("module")
-        pattern = r"import\s*\(\s*['\"]([^'\"]+)['\"]\s*\)"
-
-        for match in re.finditer(pattern, content):
-            module_path = match.group(1)
-            line_number = content[:match.start()].count('\n') + 1
-
-            imports.append(ImportStatement(
+        # For dynamic imports
+        if is_dynamic_import:
+            return ImportStatement(
                 file_path=file_path,
                 line_number=line_number,
                 module_name=module_path,
@@ -254,9 +202,48 @@ class JavaScriptExtractor(LanguageExtractor):
                 is_relative=module_path.startswith('.'),
                 import_type='dynamic_import',
                 alias=None
-            ))
+            )
 
-        return imports
+        # For require(), check if it's part of a variable declaration
+        # We need to look at the parent node to see the assignment
+        imported_names = []
+        import_type = 'commonjs_require'
+
+        # Try to find variable declaration parent
+        parent = node.parent
+        if parent and parent.type == 'variable_declarator':
+            # Get the left side (identifier or pattern)
+            if parent.children:
+                left_side = analyzer._get_node_text(parent.children[0])
+
+                # Destructured: { foo, bar }
+                if left_side.startswith('{'):
+                    names_str = left_side.strip('{}')
+                    for name in names_str.split(','):
+                        name = name.strip()
+                        # Handle renaming: { foo: bar }
+                        if ':' in name:
+                            name = name.split(':')[0].strip()
+                        if name:
+                            imported_names.append(name)
+
+                # Single assignment: foo
+                else:
+                    imported_names = [left_side]
+
+        # Side-effect only if no assignment
+        if not imported_names:
+            import_type = 'side_effect_require'
+
+        return ImportStatement(
+            file_path=file_path,
+            line_number=line_number,
+            module_name=module_path,
+            imported_names=imported_names,
+            is_relative=module_path.startswith('.'),
+            import_type=import_type,
+            alias=None
+        )
 
 
 # Backward compatibility: Keep old function-based API

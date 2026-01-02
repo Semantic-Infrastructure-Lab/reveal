@@ -1,6 +1,7 @@
-"""Go import extraction.
+"""Go import extraction using tree-sitter.
 
 Extracts import declarations from Go source files.
+Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
 import re
@@ -9,11 +10,12 @@ from typing import List, Set
 
 from . import ImportStatement
 from .base import LanguageExtractor, register_extractor
+from ...base import get_analyzer
 
 
 @register_extractor
 class GoExtractor(LanguageExtractor):
-    """Go import extractor using regex parsing.
+    """Go import extractor using tree-sitter parsing.
 
     Supports:
     - Single imports: import "fmt"
@@ -27,7 +29,7 @@ class GoExtractor(LanguageExtractor):
     language_name = 'Go'
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
-        """Extract all import declarations from Go file.
+        """Extract all import declarations from Go file using tree-sitter.
 
         Args:
             file_path: Path to .go file
@@ -36,41 +38,26 @@ class GoExtractor(LanguageExtractor):
             List of ImportStatement objects
         """
         try:
-            content = file_path.read_text(encoding='utf-8')
-        except (UnicodeDecodeError, FileNotFoundError):
+            analyzer_class = get_analyzer(str(file_path))
+            if not analyzer_class:
+                return []
+
+            analyzer = analyzer_class(str(file_path))
+            if not analyzer.tree:
+                return []
+
+        except Exception:
+            # Can't parse - return empty
             return []
 
         imports = []
 
-        # Extract single-line imports: import "package"
-        single_pattern = r'^\s*import\s+(?:(\w+|\.|_)\s+)?"([^"]+)"'
-        for match in re.finditer(single_pattern, content, re.MULTILINE):
-            alias = match.group(1)  # Could be identifier, '.', or '_'
-            package_path = match.group(2)
-            line_number = content[:match.start()].count('\n') + 1
-
-            imports.append(self._create_import(
-                file_path, line_number, package_path, alias
-            ))
-
-        # Extract grouped imports: import ( ... )
-        grouped_pattern = r'import\s*\(\s*([^)]+)\)'
-        for block_match in re.finditer(grouped_pattern, content, re.DOTALL):
-            block_content = block_match.group(1)
-            block_start_line = content[:block_match.start()].count('\n') + 1
-
-            # Find each import line within the block
-            import_pattern = r'^\s*(?:(\w+|\.|_)\s+)?"([^"]+)"'
-            for line_match in re.finditer(import_pattern, block_content, re.MULTILINE):
-                alias = line_match.group(1)
-                package_path = line_match.group(2)
-                # Calculate line number within block
-                lines_before = block_content[:line_match.start()].count('\n')
-                line_number = block_start_line + lines_before
-
-                imports.append(self._create_import(
-                    file_path, line_number, package_path, alias
-                ))
+        # Find all import_spec nodes (works for both single and grouped imports)
+        import_specs = analyzer._find_nodes_by_type('import_spec')
+        for spec_node in import_specs:
+            result = self._parse_import_spec(spec_node, file_path, analyzer)
+            if result:
+                imports.append(result)
 
         return imports
 
@@ -87,6 +74,33 @@ class GoExtractor(LanguageExtractor):
         """
         # TODO: Phase 5.1 - Implement Go symbol extraction
         return set()
+
+    def _parse_import_spec(self, spec_node, file_path: Path, analyzer) -> ImportStatement:
+        """Parse a Go import_spec node.
+
+        Handles:
+            "fmt"                           # Simple import
+            alias "github.com/user/pkg"     # Aliased import
+            . "fmt"                         # Dot import
+            _ "database/sql/driver"         # Blank import (side-effect)
+        """
+        spec_text = analyzer._get_node_text(spec_node)
+        line_number = spec_node.start_point[0] + 1
+
+        # Extract package path from quotes
+        package_match = re.search(r'"([^"]+)"', spec_text)
+        if not package_match:
+            return None
+
+        package_path = package_match.group(1)
+
+        # Check for alias (word before the quoted path)
+        alias = None
+        alias_match = re.match(r'^\s*(\S+)\s+"', spec_text)
+        if alias_match:
+            alias = alias_match.group(1)
+
+        return self._create_import(file_path, line_number, package_path, alias)
 
     @staticmethod
     def _create_import(

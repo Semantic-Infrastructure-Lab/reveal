@@ -1,6 +1,7 @@
-"""Rust import (use statement) extraction.
+"""Rust import (use statement) extraction using tree-sitter.
 
 Extracts use declarations from Rust source files.
+Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
 import re
@@ -9,11 +10,12 @@ from typing import List, Set
 
 from . import ImportStatement
 from .base import LanguageExtractor, register_extractor
+from ...base import get_analyzer
 
 
 @register_extractor
 class RustExtractor(LanguageExtractor):
-    """Rust import extractor using regex parsing.
+    """Rust import extractor using tree-sitter parsing.
 
     Supports:
     - Simple use: use std::collections::HashMap
@@ -28,7 +30,7 @@ class RustExtractor(LanguageExtractor):
     language_name = 'Rust'
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
-        """Extract all use declarations from Rust file.
+        """Extract all use declarations from Rust file using tree-sitter.
 
         Args:
             file_path: Path to .rs file
@@ -37,61 +39,24 @@ class RustExtractor(LanguageExtractor):
             List of ImportStatement objects
         """
         try:
-            content = file_path.read_text(encoding='utf-8')
-        except (UnicodeDecodeError, FileNotFoundError):
+            analyzer_class = get_analyzer(str(file_path))
+            if not analyzer_class:
+                return []
+
+            analyzer = analyzer_class(str(file_path))
+            if not analyzer.tree:
+                return []
+
+        except Exception:
+            # Can't parse - return empty
             return []
 
         imports = []
 
-        # Pattern: use path::to::module[::item];
-        # Handles: use, pub use, pub(crate) use, etc.
-        use_pattern = r'''
-            ^\s*(?:pub\s*(?:\([^)]*\)\s*)?)?  # Optional pub or pub(crate)
-            use\s+                             # use keyword
-            ([\w:]+                            # Path (word chars and ::)
-             (?:::\{[^}]+\}                    # Optional nested imports
-             |::\*                             # OR glob import ::*
-             )?                                # Make nested/glob optional
-            )                                  # Capture the entire path
-            (?:\s+as\s+(\w+))?                 # Optional 'as' alias
-            \s*;                               # Semicolon
-        '''
-
-        for match in re.finditer(use_pattern, content, re.MULTILINE | re.VERBOSE):
-            use_path = match.group(1)
-            alias = match.group(2)
-            line_number = content[:match.start()].count('\n') + 1
-
-            # Check if this is a nested import: use std::{fs, io}
-            if '::{' in use_path:
-                # Extract base path and nested items
-                base_match = re.match(r'([\w:]+)::\{([^}]+)\}', use_path)
-                if base_match:
-                    base_path = base_match.group(1)
-                    nested_items = base_match.group(2)
-
-                    # Create separate import for each nested item
-                    for item in nested_items.split(','):
-                        item = item.strip()
-                        if not item:
-                            continue
-
-                        # Handle alias in nested import: {Read as R}
-                        item_alias = None
-                        if ' as ' in item:
-                            item, item_alias = [x.strip() for x in item.split(' as ', 1)]
-
-                        full_path = f"{base_path}::{item}"
-                        imports.append(self._create_import(
-                            file_path, line_number, full_path, item_alias, item
-                        ))
-
-                    continue  # Skip creating a single import for this line
-
-            # Single import or glob import
-            imports.append(self._create_import(
-                file_path, line_number, use_path, alias
-            ))
+        # Find all use_declaration nodes
+        use_nodes = analyzer._find_nodes_by_type('use_declaration')
+        for node in use_nodes:
+            imports.extend(self._parse_use_declaration(node, file_path, analyzer))
 
         return imports
 
@@ -108,6 +73,76 @@ class RustExtractor(LanguageExtractor):
         """
         # TODO: Phase 5.1 - Implement Rust symbol extraction
         return set()
+
+    def _parse_use_declaration(self, node, file_path: Path, analyzer) -> List[ImportStatement]:
+        """Parse a Rust use_declaration node.
+
+        Handles:
+            use std::collections::HashMap;
+            use std::{fs, io};
+            use std::io::Result as IoResult;
+            use std::collections::*;
+        """
+        use_text = analyzer._get_node_text(node)
+        line_number = node.start_point[0] + 1
+
+        # Check for nested/scoped imports: use std::{fs, io}
+        if '::{' in use_text:
+            return self._parse_scoped_use(use_text, line_number, file_path)
+
+        # Single use statement
+        # Pattern: use path::to::module[::*] [as alias];
+        # Remove 'pub', 'pub(crate)', etc. and 'use' keyword
+        use_text = re.sub(r'^\s*(?:pub\s*(?:\([^)]*\)\s*)?)?use\s+', '', use_text)
+        use_text = use_text.rstrip(';').strip()
+
+        # Check for alias
+        alias = None
+        if ' as ' in use_text:
+            use_path, alias = use_text.split(' as ', 1)
+            use_path = use_path.strip()
+            alias = alias.strip()
+        else:
+            use_path = use_text
+
+        return [self._create_import(file_path, line_number, use_path, alias)]
+
+    def _parse_scoped_use(self, use_text: str, line_number: int, file_path: Path) -> List[ImportStatement]:
+        """Parse nested/scoped use statement: use std::{fs, io}."""
+        imports = []
+
+        # Extract base path and nested items
+        # Pattern: use base::path::{item1, item2 as alias2}
+        match = re.match(r'(?:pub\s*(?:\([^)]*\)\s*)?)?use\s+([\w:]+)::\{([^}]+)\}', use_text)
+        if not match:
+            return imports
+
+        base_path = match.group(1)
+        nested_items = match.group(2)
+
+        # Parse each nested item
+        for item in nested_items.split(','):
+            item = item.strip()
+            if not item:
+                continue
+
+            # Check for alias in nested item
+            item_alias = None
+            if ' as ' in item:
+                item_name, item_alias = item.split(' as ', 1)
+                item_name = item_name.strip()
+                item_alias = item_alias.strip()
+            else:
+                item_name = item
+
+            # Create full path
+            full_path = f"{base_path}::{item_name}"
+
+            imports.append(self._create_import(
+                file_path, line_number, full_path, item_alias, item_name
+            ))
+
+        return imports
 
     @staticmethod
     def _create_import(
