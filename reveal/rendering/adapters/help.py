@@ -282,13 +282,9 @@ def _render_help_section(data: Dict[str, Any]) -> None:
     print()
 
 
-def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
-    """Render adapter-specific help documentation."""
-    if 'error' in data:
-        print(f"Error: {data['message']}", file=sys.stderr)
-        sys.exit(1)
-
-    scheme = data.get('scheme', data.get('name', ''))
+# Section renderers - each handles one aspect of help documentation
+def _render_help_header(scheme: str, data: Dict[str, Any]) -> None:
+    """Render help header with scheme, description, and metadata."""
     print(f"# {scheme}:// - {data.get('description', '')}")
     print()
     print(f"**Source:** {scheme}.py adapter (dynamic)")
@@ -296,34 +292,52 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
     print(f"**Access:** reveal help://{scheme}")
     print()
 
+
+def _render_help_syntax(data: Dict[str, Any]) -> None:
+    """Render syntax section if present."""
     if data.get('syntax'):
         print(f"**Syntax:** `{data['syntax']}`")
         print()
 
+
+def _render_help_operators(data: Dict[str, Any]) -> None:
+    """Render operators section if present."""
     if data.get('operators'):
         print("## Operators")
         for op, desc in data['operators'].items():
             print(f"  {op:4} - {desc}")
         print()
 
+
+def _render_help_filters(data: Dict[str, Any]) -> None:
+    """Render filters section if present."""
     if data.get('filters'):
         print("## Filters")
         for name, desc in data['filters'].items():
             print(f"  {name:12} - {desc}")
         print()
 
+
+def _render_help_features(data: Dict[str, Any]) -> None:
+    """Render features list if present."""
     if data.get('features'):
         print("## Features")
         for feature in data['features']:
             print(f"  * {feature}")
         print()
 
+
+def _render_help_categories(data: Dict[str, Any]) -> None:
+    """Render categories section if present."""
     if data.get('categories'):
         print("## Categories")
         for cat, desc in data['categories'].items():
             print(f"  {cat:12} - {desc}")
         print()
 
+
+def _render_help_examples(data: Dict[str, Any]) -> None:
+    """Render examples section if present."""
     if data.get('examples'):
         print("## Examples")
         for ex in data['examples']:
@@ -334,6 +348,9 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
                 print(f"  {ex}")
         print()
 
+
+def _render_help_try_now(data: Dict[str, Any]) -> None:
+    """Render try now commands if present."""
     if data.get('try_now'):
         print("## Try Now")
         print("  Run these in your current directory:")
@@ -342,6 +359,9 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
             print(f"  {cmd}")
         print()
 
+
+def _render_help_workflows(data: Dict[str, Any]) -> None:
+    """Render workflows section if present."""
     if data.get('workflows'):
         print("## Workflows")
         for workflow in data['workflows']:
@@ -352,6 +372,9 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
                 print(f"    {step}")
             print()
 
+
+def _render_help_anti_patterns(data: Dict[str, Any]) -> None:
+    """Render anti-patterns section if present."""
     if data.get('anti_patterns'):
         print("## Don't Do This")
         for ap in data['anti_patterns']:
@@ -361,22 +384,58 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
                 print(f"     Why: {ap['why']}")
             print()
 
+
+def _render_help_notes(data: Dict[str, Any]) -> None:
+    """Render notes section if present."""
     if data.get('notes'):
         print("## Notes")
         for note in data['notes']:
             print(f"  * {note}")
         print()
 
+
+def _render_help_output_formats(data: Dict[str, Any]) -> None:
+    """Render output formats if present."""
     if data.get('output_formats'):
         print(f"**Output formats:** {', '.join(data['output_formats'])}")
         print()
 
+
+def _render_help_see_also(data: Dict[str, Any]) -> None:
+    """Render see also section if present."""
     if data.get('see_also'):
         print("## See Also")
         for item in data['see_also']:
             print(f"  * {item}")
         print()
 
+
+def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
+    """Render adapter-specific help documentation.
+
+    Orchestrates rendering of all help sections in order.
+    Each section is handled by a dedicated function for clarity.
+    """
+    if 'error' in data:
+        print(f"Error: {data['message']}", file=sys.stderr)
+        sys.exit(1)
+
+    scheme = data.get('scheme', data.get('name', ''))
+
+    # Render all sections in order
+    _render_help_header(scheme, data)
+    _render_help_syntax(data)
+    _render_help_operators(data)
+    _render_help_filters(data)
+    _render_help_features(data)
+    _render_help_categories(data)
+    _render_help_examples(data)
+    _render_help_try_now(data)
+    _render_help_workflows(data)
+    _render_help_anti_patterns(data)
+    _render_help_notes(data)
+    _render_help_output_formats(data)
+    _render_help_see_also(data)
     _render_help_breadcrumbs(scheme, data)
 
 
