@@ -40,6 +40,8 @@ class HelpAdapter(ResourceAdapter):
         'adapter-authoring': 'adapters/ADAPTER_AUTHORING_GUIDE.md',
         'tricks': 'COOL_TRICKS.md',
         'help': 'HELP_SYSTEM_GUIDE.md',  # Meta-documentation about help system
+        'configuration': 'CONFIGURATION_GUIDE.md',  # Configuration system guide
+        'config': 'CONFIGURATION_GUIDE.md',  # Alias for configuration
         'release': 'RELEASE_GUIDE.md'  # Release process for maintainers
     }
 

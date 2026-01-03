@@ -282,9 +282,17 @@ class RevealConfig:
             cli_overrides: Command-line overrides (highest precedence)
             no_config: If True, use only defaults (skip all config files)
 
+        Environment variables:
+            REVEAL_NO_CONFIG: Set to '1' to skip all config files (like --no-config)
+            REVEAL_CONFIG: Path to a specific config file to load instead of discovery
+
         Returns:
             RevealConfig instance
         """
+        # Check REVEAL_NO_CONFIG environment variable
+        if os.getenv('REVEAL_NO_CONFIG') == '1':
+            no_config = True
+
         if start_path is None:
             start_path = Path.cwd()
 
@@ -353,31 +361,44 @@ class RevealConfig:
         Precedence (high to low):
         1. CLI overrides
         2. Environment variables
-        3. Project configs (walk up tree)
-        4. User config
-        5. System config
-        6. Built-in defaults
+        3. REVEAL_CONFIG custom file (if specified)
+        4. Project configs (walk up tree)
+        5. User config
+        6. System config
+        7. Built-in defaults
         """
         configs = []
 
         if not no_config:
-            # 1. System config
-            system_config = cls._load_file(Path('/etc/reveal/config.yaml'))
-            if system_config:
-                configs.append(system_config)
+            # Check for REVEAL_CONFIG environment variable
+            custom_config_path = os.getenv('REVEAL_CONFIG')
 
-            # 2. User config
-            user_config_path = cls._get_user_config_path()
-            if user_config_path.exists():
-                user_config = cls._load_file(user_config_path)
-                if user_config:
-                    configs.append(user_config)
+            if custom_config_path:
+                # Load only the specified config file
+                custom_config = cls._load_file(Path(custom_config_path))
+                if custom_config:
+                    configs.append(custom_config)
+                else:
+                    logger.warning(f"REVEAL_CONFIG specified but file not found: {custom_config_path}")
+            else:
+                # Normal config discovery
+                # 1. System config
+                system_config = cls._load_file(Path('/etc/reveal/config.yaml'))
+                if system_config:
+                    configs.append(system_config)
 
-            # 3. Project configs (walk up from start_path)
-            project_configs = cls._discover_project_configs(start_path)
-            configs.extend(reversed(project_configs))  # Reverse so nearest is last
+                # 2. User config
+                user_config_path = cls._get_user_config_path()
+                if user_config_path.exists():
+                    user_config = cls._load_file(user_config_path)
+                    if user_config:
+                        configs.append(user_config)
 
-            # 4. Environment variables
+                # 3. Project configs (walk up from start_path)
+                project_configs = cls._discover_project_configs(start_path)
+                configs.extend(reversed(project_configs))  # Reverse so nearest is last
+
+            # 4. Environment variables (always loaded, even with REVEAL_CONFIG)
             env_config = cls._load_from_env()
             if env_config:
                 configs.append(env_config)
@@ -480,7 +501,24 @@ class RevealConfig:
 
     @classmethod
     def _load_from_env(cls) -> Dict[str, Any]:
-        """Load configuration from environment variables."""
+        """Load configuration from environment variables.
+
+        Supported environment variables:
+        - REVEAL_RULES_DISABLE: Comma-separated list of rules to disable
+        - REVEAL_RULES_SELECT: Comma-separated list of rules/categories to select
+        - REVEAL_FORMAT: Output format (json, yaml, etc.)
+        - REVEAL_IGNORE: Comma-separated glob patterns to ignore
+        - REVEAL_C901_THRESHOLD: Complexity threshold for C901 rule
+        - REVEAL_E501_MAX_LENGTH: Max line length for E501 rule
+
+        Examples:
+            export REVEAL_RULES_DISABLE="E501,D001"
+            export REVEAL_RULES_SELECT="B,S"
+            export REVEAL_FORMAT=json
+            export REVEAL_IGNORE="*.min.js,vendor/**"
+            export REVEAL_C901_THRESHOLD=20
+            export REVEAL_E501_MAX_LENGTH=120
+        """
         config: Dict[str, Any] = {}
 
         # REVEAL_RULES_DISABLE="E501,D001"
@@ -494,6 +532,25 @@ class RevealConfig:
         # REVEAL_FORMAT=json
         if fmt := os.getenv('REVEAL_FORMAT'):
             config['output'] = {'format': fmt}
+
+        # REVEAL_IGNORE="*.min.js,vendor/**"
+        if ignore := os.getenv('REVEAL_IGNORE'):
+            config['ignore'] = [p.strip() for p in ignore.split(',')]
+
+        # Rule-specific configuration via environment variables
+        # REVEAL_C901_THRESHOLD=20
+        if threshold := os.getenv('REVEAL_C901_THRESHOLD'):
+            try:
+                config.setdefault('rules', {})['C901'] = {'threshold': int(threshold)}
+            except ValueError:
+                logger.warning(f"Invalid REVEAL_C901_THRESHOLD value: {threshold}")
+
+        # REVEAL_E501_MAX_LENGTH=120
+        if max_length := os.getenv('REVEAL_E501_MAX_LENGTH'):
+            try:
+                config.setdefault('rules', {})['E501'] = {'max_length': int(max_length)}
+            except ValueError:
+                logger.warning(f"Invalid REVEAL_E501_MAX_LENGTH value: {max_length}")
 
         return config
 

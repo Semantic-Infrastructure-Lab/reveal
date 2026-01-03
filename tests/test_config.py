@@ -841,24 +841,141 @@ class TestEnvironmentVariables(unittest.TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
         RevealConfig._cache.clear()
 
-    def test_env_config_precedence(self):
-        """Test environment variables override file configs."""
-        # Write base config
+    def write_config(self, config: Dict[str, Any]):
+        """Write config to temp directory."""
         config_path = Path(self.temp_dir) / '.reveal.yaml'
         with open(config_path, 'w') as f:
+            yaml.dump(config, f)
+
+    def test_reveal_rules_disable(self):
+        """Test REVEAL_RULES_DISABLE environment variable."""
+        self.write_config({'root': True, 'rules': {'disable': ['E501']}})
+
+        os.environ['REVEAL_RULES_DISABLE'] = 'C901,D001'
+        cfg = RevealConfig.get(Path(self.temp_dir))
+
+        # Env var should override file config (env has higher precedence)
+        disabled = cfg._config.get('rules', {}).get('disable', [])
+        self.assertIn('C901', disabled)
+        self.assertIn('D001', disabled)
+
+    def test_reveal_rules_select(self):
+        """Test REVEAL_RULES_SELECT environment variable."""
+        os.environ['REVEAL_RULES_SELECT'] = 'B,S'
+        cfg = RevealConfig.get(Path(self.temp_dir))
+
+        selected = cfg._config.get('rules', {}).get('select', [])
+        self.assertIn('B', selected)
+        self.assertIn('S', selected)
+
+    def test_reveal_format(self):
+        """Test REVEAL_FORMAT environment variable."""
+        os.environ['REVEAL_FORMAT'] = 'json'
+        cfg = RevealConfig.get(Path(self.temp_dir))
+
+        fmt = cfg._config.get('output', {}).get('format')
+        self.assertEqual(fmt, 'json')
+
+    def test_reveal_ignore(self):
+        """Test REVEAL_IGNORE environment variable."""
+        os.environ['REVEAL_IGNORE'] = '*.min.js,vendor/**'
+        cfg = RevealConfig.get(Path(self.temp_dir))
+
+        ignore = cfg._config.get('ignore', [])
+        self.assertIn('*.min.js', ignore)
+        self.assertIn('vendor/**', ignore)
+
+    def test_reveal_c901_threshold(self):
+        """Test REVEAL_C901_THRESHOLD environment variable."""
+        os.environ['REVEAL_C901_THRESHOLD'] = '20'
+        cfg = RevealConfig.get(Path(self.temp_dir))
+
+        threshold = cfg._config.get('rules', {}).get('C901', {}).get('threshold')
+        self.assertEqual(threshold, 20)
+
+    def test_reveal_e501_max_length(self):
+        """Test REVEAL_E501_MAX_LENGTH environment variable."""
+        os.environ['REVEAL_E501_MAX_LENGTH'] = '120'
+        cfg = RevealConfig.get(Path(self.temp_dir))
+
+        max_length = cfg._config.get('rules', {}).get('E501', {}).get('max_length')
+        self.assertEqual(max_length, 120)
+
+    def test_reveal_no_config(self):
+        """Test REVEAL_NO_CONFIG environment variable."""
+        self.write_config({'root': True, 'rules': {'disable': ['E501']}})
+
+        os.environ['REVEAL_NO_CONFIG'] = '1'
+        cfg = RevealConfig.get(Path(self.temp_dir))
+
+        # Config file should be ignored
+        disabled = cfg._config.get('rules', {}).get('disable', [])
+        self.assertEqual(len(disabled), 0)
+
+    def test_reveal_config_custom_file(self):
+        """Test REVEAL_CONFIG environment variable for custom config file."""
+        # Create custom config in different location
+        custom_config = Path(self.temp_dir) / 'custom.yaml'
+        with open(custom_config, 'w') as f:
             yaml.dump({
-                'root': True,
-                'rules': {'disable': ['E501']}
+                'rules': {'disable': ['CUSTOM1', 'CUSTOM2']}
             }, f)
 
-        # TODO: This test needs environment variable support implementation
-        # Currently config.py _load_from_env() returns empty dict
-        # When implemented, test would set REVEAL_RULES_DISABLE='E501,D001'
-        # and verify it overrides the file config
+        # Create default config that should be ignored
+        self.write_config({'root': True, 'rules': {'disable': ['E501']}})
+
+        os.environ['REVEAL_CONFIG'] = str(custom_config)
+        cfg = RevealConfig.get(Path(self.temp_dir))
+
+        # Should load custom config instead of project config
+        disabled = cfg._config.get('rules', {}).get('disable', [])
+        self.assertIn('CUSTOM1', disabled)
+        self.assertIn('CUSTOM2', disabled)
+        # E501 should not be present (from ignored project config)
+        self.assertNotIn('E501', disabled)
+
+    def test_env_vars_override_file_config(self):
+        """Test that environment variables have higher precedence than file configs."""
+        self.write_config({
+            'root': True,
+            'rules': {
+                'disable': ['E501'],
+                'C901': {'threshold': 10}
+            }
+        })
+
+        os.environ['REVEAL_C901_THRESHOLD'] = '25'
+        cfg = RevealConfig.get(Path(self.temp_dir))
+
+        # Env var should override file config
+        threshold = cfg._config.get('rules', {}).get('C901', {}).get('threshold')
+        self.assertEqual(threshold, 25)
+
+    def test_multiple_env_vars_combined(self):
+        """Test multiple environment variables work together."""
+        os.environ['REVEAL_RULES_DISABLE'] = 'E501,D001'
+        os.environ['REVEAL_RULES_SELECT'] = 'B'
+        os.environ['REVEAL_FORMAT'] = 'json'
+        os.environ['REVEAL_IGNORE'] = '*.min.js'
+        os.environ['REVEAL_C901_THRESHOLD'] = '15'
 
         cfg = RevealConfig.get(Path(self.temp_dir))
-        # Placeholder assertion
-        self.assertIsNotNone(cfg)
+
+        # All env vars should be applied
+        self.assertIn('E501', cfg._config.get('rules', {}).get('disable', []))
+        self.assertIn('B', cfg._config.get('rules', {}).get('select', []))
+        self.assertEqual(cfg._config.get('output', {}).get('format'), 'json')
+        self.assertIn('*.min.js', cfg._config.get('ignore', []))
+        self.assertEqual(cfg._config.get('rules', {}).get('C901', {}).get('threshold'), 15)
+
+    def test_invalid_threshold_value(self):
+        """Test invalid threshold value is handled gracefully."""
+        os.environ['REVEAL_C901_THRESHOLD'] = 'not-a-number'
+        cfg = RevealConfig.get(Path(self.temp_dir))
+
+        # Should not crash, threshold should not be set
+        threshold = cfg._config.get('rules', {}).get('C901', {}).get('threshold')
+        self.assertIsNone(threshold)
 
 
 class TestConfigDump(unittest.TestCase):
