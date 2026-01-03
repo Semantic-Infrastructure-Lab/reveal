@@ -1,6 +1,7 @@
 ---
 title: "Reveal Knowledge Graph Proposal"
 date: 2026-01-01
+updated: 2026-01-02
 session_id: prairie-snow-0101
 project: reveal
 type: planning-document
@@ -14,8 +15,13 @@ related_docs:
   - ./KNOWLEDGE_GRAPH_ARCHITECTURE.md
   - ./KNOWLEDGE_GRAPH_GUIDE.md
   - ../../ROADMAP.md
+  - ../archive/ARCHITECTURE_ADAPTER_DEPRECATION.md
 status: approved
 decision: option-a-generic-features
+updates:
+  - date: 2026-01-02
+    session: garnet-ember-0102
+    change: "architecture:// adapter deprecated, removed from roadmap"
 ---
 
 # Reveal Knowledge Graph Proposal
@@ -313,6 +319,8 @@ Extend reveal's core pattern to relationships:
 - Tree view output
 
 **Deliverable**: `reveal file.md --related --depth 2`
+
+**Update (2026-01-02):** The `architecture://` adapter originally planned for v0.30.0 has been deprecated. Layer violation detection is adequately handled by the I003 rule (shipped in v0.28.0). See `../archive/ARCHITECTURE_ADAPTER_DEPRECATION.md` for decision rationale.
 
 ---
 

@@ -194,20 +194,7 @@ reveal file.md --validate-schema custom.yaml # Custom schema
 
 ---
 
-### v0.30.0 (Q2 2026): Architecture Validation & Link Following
-
-**`architecture://` adapter** - Architecture rule validation:
-```bash
-reveal architecture://src               # Check all architecture rules
-reveal 'architecture://src?violations'   # List violations only
-reveal architecture://src/routes         # Check specific layer
-```
-
-**Features:**
-- Layer boundary enforcement (presentation → service → data)
-- Custom dependency rules via `.reveal.yaml` (architecture section)
-- Pattern compliance validation
-- CI/CD integration for architecture governance
+### v0.30.0 (Q2 2026): Link Following & Knowledge Graph Navigation
 
 **Related Documents Viewer** - Follow knowledge graph links:
 ```bash
@@ -220,14 +207,13 @@ reveal file.md --related --depth 2       # Follow links recursively (max depth 2
 - Tree view of document relationships
 - Max depth 2 (maintains stateless architecture)
 - Auto-detect link field patterns
+- Works with Beth, Hugo, Obsidian, and custom link patterns
 
-**Implementation:**
-- architecture://: 3-4 weeks
-- --related: 2-3 weeks
+**Implementation:** 2-3 weeks
 
-**See:**
-- Architecture: `ARCHITECTURE_ADAPTER_PLAN.md` (to be created)
-- Links: `internal-docs/planning/KNOWLEDGE_GRAPH_ARCHITECTURE.md`
+**See:** `internal-docs/planning/KNOWLEDGE_GRAPH_ARCHITECTURE.md`
+
+**Note:** The `architecture://` adapter originally planned for this release has been deprecated. Layer violation detection is already handled by the I003 rule (shipped in v0.28.0). A dedicated URI adapter was deemed too narrow in scope compared to knowledge graph features.
 
 ---
 
