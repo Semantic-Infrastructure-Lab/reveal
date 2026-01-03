@@ -1,8 +1,8 @@
 # Reveal Planning Documentation
 
-**Last Updated:** 2025-12-31
-**Current Release:** v0.27.1
-**Next Release:** v0.28.0 (imports://)
+**Last Updated:** 2026-01-02
+**Current Release:** v0.28.0
+**Next Release:** v0.29.0 (Schema Validation)
 
 Internal planning documents for future and in-progress features.
 

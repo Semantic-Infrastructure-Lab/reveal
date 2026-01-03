@@ -273,6 +273,30 @@ reveal pyproject.toml                  # Structure view
 
 ---
 
+### Task: "Debug reveal configuration"
+
+**Pattern:**
+```bash
+# See active configuration with sources
+reveal reveal://config
+
+# Check if environment variable is set
+REVEAL_C901_THRESHOLD=30 reveal reveal://config
+
+# Export config as JSON for scripting
+reveal reveal://config --format json
+```
+
+**Why this works:** Shows exactly what configuration is active and where it comes from (environment variables, config files, CLI flags, defaults). Displays 7-level precedence hierarchy for debugging.
+
+**Use cases:**
+- Troubleshoot why a rule isn't being applied
+- Verify environment variables are being picked up
+- See which config file is being used (project vs user vs system)
+- Debug precedence issues (which config source wins)
+
+---
+
 ## Output Formats
 
 **Choose format based on use case:**

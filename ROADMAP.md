@@ -20,6 +20,13 @@
 - Query parameters: `?unused`, `?circular`, `?violations`
 - 1,086/1,086 tests passing, 94% coverage on imports adapter
 
+**Configuration Transparency:**
+- `reveal://config` for debugging active configuration
+- Source tracking: environment variables, config files, CLI overrides
+- 7-level precedence visualization (CLI → env → config files → defaults)
+- Text and JSON output formats for scripting
+- Test coverage: 9 tests, 82% coverage on reveal.py adapter
+
 ### v0.27.1 - Code Quality Refactoring (Dec 2025)
 
 **Internal Improvements:**

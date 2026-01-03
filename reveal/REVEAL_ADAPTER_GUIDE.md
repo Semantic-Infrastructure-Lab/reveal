@@ -23,6 +23,10 @@ reveal help://reveal
 # List all adapters
 reveal reveal://adapters
 
+# Debug configuration
+reveal reveal://config              # Show active config with sources
+reveal reveal://config --format json # JSON output for scripting
+
 # See all validation rules
 reveal --rules | grep V0
 ```
