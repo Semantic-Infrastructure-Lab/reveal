@@ -379,7 +379,9 @@ class RevealConfig:
                 if custom_config:
                     configs.append(custom_config)
                 else:
-                    logger.warning(f"REVEAL_CONFIG specified but file not found: {custom_config_path}")
+                    logger.warning(
+                        f"REVEAL_CONFIG specified but file not found: {custom_config_path}"
+                    )
             else:
                 # Normal config discovery
                 # 1. System config
