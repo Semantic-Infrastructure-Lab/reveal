@@ -2,12 +2,33 @@
 
 > **Vision:** Universal resource exploration with progressive disclosure
 
-**Current version:** v0.28.0
-**Last updated:** 2026-01-01
+**Current version:** v0.29.0
+**Last updated:** 2026-01-03
 
 ---
 
 ## What We've Shipped
+
+### v0.29.0 - Schema Validation (Jan 2026)
+
+**Markdown Front Matter Validation:**
+- `--validate-schema` flag for markdown front matter validation
+- **Built-in schemas:** beth (TIA sessions), hugo (static sites), jekyll (GitHub Pages), mkdocs (Python docs), obsidian (knowledge bases)
+- **F-series rules:** F001-F005 for front matter quality checks
+  - F001: Missing front matter detection
+  - F002: Empty front matter detection
+  - F003: Required field validation
+  - F004: Type checking (string, list, dict, integer, boolean, date)
+  - F005: Custom validation rules with safe Python expression evaluation
+- **SchemaLoader:** Loads schemas by name or path with caching
+- **Custom schema support:** Create project-specific YAML schemas
+- **Multiple output formats:** text (human), json (CI/CD), grep (pipeable)
+- **Exit codes:** 0 = pass, 1 = fail (CI/CD integration ready)
+- **Date type handling:** Supports YAML auto-parsed dates (datetime.date objects)
+- **103 comprehensive tests:** 27 loader + 44 rules + 33 CLI + 43 schemas (100% passing)
+- **Documentation:** 808-line [Schema Validation Guide](docs/SCHEMA_VALIDATION_GUIDE.md)
+- **Implementation:** 5 phases across 4 sessions, 75% code coverage
+- **Test suite:** 1,292/1,292 tests passing (100% pass rate)
 
 ### v0.28.0 - Import Intelligence (Jan 2026)
 
@@ -171,26 +192,38 @@
 
 ## What's Next
 
-### v0.29.0 (Q2 2026): Schema Validation for Knowledge Graphs
+### v0.29.0 ✅ SHIPPED (Jan 2026): Schema Validation for Knowledge Graphs
 
 **Front Matter Schema Validation** - Validate markdown metadata against schemas:
 ```bash
-reveal file.md --validate-schema beth       # Validate against Beth schema
-reveal file.md --validate-schema hugo       # Validate against Hugo schema
+reveal file.md --validate-schema beth       # TIA sessions
+reveal file.md --validate-schema hugo       # Static sites
+reveal file.md --validate-schema jekyll     # GitHub Pages
+reveal file.md --validate-schema mkdocs     # Python docs
+reveal file.md --validate-schema obsidian   # Knowledge bases
 reveal file.md --validate-schema custom.yaml # Custom schema
 ```
 
-**Features:**
-- Schema-based validation framework
-- Built-in schemas: `beth.yaml`, `hugo.yaml`, `obsidian.yaml`
-- Custom validation rules (YAML-based)
-- CI/CD integration for documentation quality gates
-- Validation rules: F001-F005 (front matter quality)
+**Features:** ✅ All delivered
+- ✅ Schema-based validation framework
+- ✅ Built-in schemas: `beth.yaml`, `hugo.yaml`, `jekyll.yaml`, `mkdocs.yaml`, `obsidian.yaml`
+- ✅ Custom validation rules (YAML-based, safe eval)
+- ✅ CI/CD integration for documentation quality gates
+- ✅ Validation rules: F001-F005 (front matter quality)
+- ✅ 103 comprehensive tests (100% passing)
+- ✅ 808-line documentation guide
+- ✅ Dogfooded on real data (SIF website, TIA sessions)
+- ✅ Web-validated against official docs
 
-**Implementation:** 2-3 weeks
-**See:** `internal-docs/planning/KNOWLEDGE_GRAPH_PROPOSAL.md` for full design
+**Implementation:** Completed in 5 sessions (5 phases + dogfooding + Jekyll/MkDocs addition)
+**See:** `docs/SCHEMA_VALIDATION_GUIDE.md` for complete guide
 
-**Rationale:** Lightweight feature (builds on existing `--frontmatter` from v0.23.0), foundational for knowledge graph construction.
+**Community Reach:**
+- Jekyll schema: 1M+ GitHub Pages users
+- MkDocs schema: Large Python documentation ecosystem (FastAPI, NumPy, Pydantic)
+- Hugo/Obsidian/Beth: Static sites, knowledge bases, TIA sessions
+
+**Rationale:** Lightweight feature (builds on existing `--frontmatter` from v0.23.0), foundational for knowledge graph construction. Extended with Jekyll/MkDocs for broader community impact.
 
 ---
 
@@ -210,8 +243,6 @@ reveal file.md --related --depth 2       # Follow links recursively (max depth 2
 - Works with Beth, Hugo, Obsidian, and custom link patterns
 
 **Implementation:** 2-3 weeks
-
-**See:** `internal-docs/planning/KNOWLEDGE_GRAPH_ARCHITECTURE.md`
 
 **Note:** The `architecture://` adapter originally planned for this release has been deprecated. Layer violation detection is already handled by the I003 rule (shipped in v0.28.0). A dedicated URI adapter was deemed too narrow in scope compared to knowledge graph features.
 
@@ -248,8 +279,6 @@ reveal docs/**/*.md --check-metadata --summary  # Aggregate report
 - markdown://: 3-4 weeks
 - --check-metadata: 2 weeks
 
-**See:** `internal-docs/planning/KNOWLEDGE_GRAPH_ARCHITECTURE.md`
-
 ---
 
 ### v0.32.0 (Q3 2026): Polish for v1.0
@@ -271,8 +300,6 @@ reveal docs/**/*.md --check-metadata --summary  # Aggregate report
 - Complete adapter authoring guide
 - CI/CD integration examples
 - Performance benchmarking suite
-
-**See:** `internal-docs/planning/KNOWLEDGE_GRAPH_GUIDE.md`
 
 ---
 

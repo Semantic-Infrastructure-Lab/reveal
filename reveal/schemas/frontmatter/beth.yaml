@@ -26,7 +26,7 @@ field_types:
   related_docs: list
   tags: list
   status: string
-  date: string          # YYYY-MM-DD format
+  date: date            # YYYY-MM-DD format (accepts string or date object)
   type: string
   project: string
   files_modified: integer

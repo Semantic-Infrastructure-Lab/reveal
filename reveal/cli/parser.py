@@ -242,6 +242,12 @@ def _add_html_options(parser: argparse.ArgumentParser) -> None:
                         help='Extract stylesheets from HTML files')
 
 
+def _add_schema_validation_options(parser: argparse.ArgumentParser) -> None:
+    """Add schema validation options."""
+    parser.add_argument('--validate-schema', type=str, metavar='SCHEMA',
+                        help='Validate front matter against schema (built-in: beth, hugo, obsidian; or path to custom schema)')
+
+
 def create_argument_parser(version: str) -> argparse.ArgumentParser:
     """Create and configure the command-line argument parser.
 
@@ -265,6 +271,7 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     _add_navigation_options(parser)
     _add_markdown_options(parser)
     _add_html_options(parser)
+    _add_schema_validation_options(parser)
 
     return parser
 

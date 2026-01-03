@@ -1,0 +1,52 @@
+name: "Hugo Static Site Schema"
+description: "Validates Hugo static site front matter"
+version: "1.0"
+
+# Required fields (must be present in front matter)
+required_fields:
+  - title
+
+# Optional fields (commonly used but not required)
+optional_fields:
+  - date           # Optional for static pages, typically required for blog posts
+  - draft
+  - tags
+  - categories
+  - description
+  - author
+  - slug
+  - weight
+  - featured_image
+  - summary
+  - toc
+  - type
+  - layout
+
+# Field type constraints
+field_types:
+  title: string
+  date: date            # YYYY-MM-DD format (accepts string or date object)
+  draft: boolean
+  tags: list
+  categories: list
+  description: string
+  author: string
+  slug: string
+  weight: integer
+  featured_image: string
+  summary: string
+  toc: boolean
+  type: string
+  layout: string
+
+# Custom validation rules
+validation_rules:
+  - code: F005
+    field: title
+    check: "len(value) > 0"
+    message: "Title cannot be empty"
+
+  - code: F005
+    field: date
+    check: "isinstance(value, str) and re.match(r'^\\d{4}-\\d{2}-\\d{2}', value) or not isinstance(value, str)"
+    message: "Date must be in YYYY-MM-DD format (e.g., '2026-01-02')"

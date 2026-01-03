@@ -1,0 +1,67 @@
+name: "MkDocs Documentation Schema"
+description: "Validates MkDocs documentation front matter (including Material theme)"
+version: "1.0"
+
+# Required fields (must be present in front matter)
+required_fields: []  # MkDocs has no required fields - all optional
+
+# Optional fields (commonly used but not required)
+optional_fields:
+  - title          # Page title (overrides h1)
+  - description    # Page description for meta tags
+  - template       # Custom template to use (default: main.html)
+  - icon           # Icon for navigation sidebar (Material theme)
+  - status         # Page status (new, deprecated, etc.)
+  - tags           # Page tags (Material theme with tags plugin)
+  - hide           # Hide elements (navigation, toc) (Material theme)
+  - search         # Search configuration (Material theme)
+  - authors        # Document authors (list)
+  - date           # Document date
+  - summary        # Brief summary/excerpt
+  - some_url       # Custom URL field (example of arbitrary field)
+  - social         # Social cards metadata (Material theme)
+  - comments       # Enable comments (Material theme)
+  - feedback       # Enable feedback widget (Material theme)
+
+# Field type constraints
+field_types:
+  title: string
+  description: string
+  template: string
+  icon: string
+  status: string
+  tags: list
+  hide: list          # List of elements to hide (navigation, toc)
+  authors: list       # List of author names
+  date: date          # YYYY-MM-DD format
+  summary: string
+  some_url: string
+  comments: boolean
+  feedback: boolean
+
+# Custom validation rules
+validation_rules:
+  - code: F005
+    field: title
+    check: "len(value) > 0 if isinstance(value, str) else True"
+    message: "Title cannot be empty if specified"
+
+  - code: F005
+    field: hide
+    check: "all(item in ['navigation', 'toc', 'footer'] for item in value) if isinstance(value, list) else True"
+    message: "Hide options must be 'navigation', 'toc', or 'footer'"
+
+  - code: F005
+    field: date
+    check: "isinstance(value, str) and re.match(r'^\\d{4}-\\d{2}-\\d{2}', value) or not isinstance(value, str)"
+    message: "Date must be in YYYY-MM-DD format (e.g., '2026-01-03')"
+
+  - code: F005
+    field: tags
+    check: "len(value) >= 1 if isinstance(value, list) else True"
+    message: "If tags are specified, at least one tag is recommended"
+
+  - code: F005
+    field: status
+    check: "value in ['new', 'deprecated', 'beta', 'experimental'] or len(value) > 0 if isinstance(value, str) else True"
+    message: "Status should be 'new', 'deprecated', 'beta', 'experimental', or a custom value"

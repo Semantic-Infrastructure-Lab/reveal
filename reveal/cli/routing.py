@@ -191,6 +191,11 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         show_metadata(analyzer, output_format)
         return
 
+    if args and getattr(args, 'validate_schema', None):
+        from ..main import run_schema_validation
+        run_schema_validation(analyzer, path, args.validate_schema, output_format, args)
+        return
+
     if args and getattr(args, 'check', False):
         from ..main import run_pattern_detection
         run_pattern_detection(analyzer, path, output_format, args)

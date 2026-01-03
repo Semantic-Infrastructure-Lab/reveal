@@ -1,0 +1,57 @@
+name: "Obsidian Vault Schema"
+description: "Validates Obsidian vault note front matter"
+version: "1.0"
+
+# Obsidian has no required fields - front matter is optional
+# This schema just validates types and common patterns when present
+
+# Optional fields (commonly used in Obsidian notes)
+optional_fields:
+  - tags
+  - aliases
+  - cssclass
+  - cssclasses
+  - publish
+  - permalink
+  - created
+  - modified
+  - rating
+  - status
+  - due
+  - completed
+  - priority
+  - author
+
+# Field type constraints
+field_types:
+  tags: list           # Tags for organization
+  aliases: list        # Alternative names for the note
+  cssclass: string     # Single CSS class
+  cssclasses: list     # Multiple CSS classes
+  publish: boolean     # Whether to publish
+  permalink: string    # Custom URL slug
+  created: date        # Creation date (YYYY-MM-DD, accepts string or date object)
+  modified: date       # Modification date (YYYY-MM-DD, accepts string or date object)
+  rating: integer      # Note rating (1-5)
+  status: string       # Note status (active, archived, etc.)
+  due: date            # Due date (YYYY-MM-DD, accepts string or date object)
+  completed: boolean   # Whether task is completed
+  priority: integer    # Priority level (1-5)
+  author: string       # Note author
+
+# Custom validation rules
+validation_rules:
+  - code: F005
+    field: tags
+    check: "len(value) >= 1 if isinstance(value, list) else True"
+    message: "If tags are specified, at least one tag is recommended"
+
+  - code: F005
+    field: rating
+    check: "1 <= value <= 5 if isinstance(value, int) else True"
+    message: "Rating should be between 1 and 5"
+
+  - code: F005
+    field: priority
+    check: "1 <= value <= 5 if isinstance(value, int) else True"
+    message: "Priority should be between 1 and 5"

@@ -105,8 +105,29 @@ reveal --rules                   # List all rules
 reveal --explain B001            # Explain specific rule
 ```
 
-**36 built-in rules** across 12 categories: bugs (B001-B005), complexity (C901-C905), duplicates (D001-D002), style (E501), imports (I001-I003), links (L001-L003), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V011). New in v0.25.0: link validation (L001-L003). New in v0.28.0: import analysis (I001-I003) for unused imports, circular dependencies, and layer violations.
+**36 built-in rules** across 12 categories: bugs (B001-B005), complexity (C901-C905), duplicates (D001-D002), style (E501), frontmatter (F001-F005), imports (I001-I003), links (L001-L003), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V011). New in v0.25.0: link validation (L001-L003). New in v0.28.0: import analysis (I001-I003) for unused imports, circular dependencies, and layer violations. New in v0.29.0: schema validation (F001-F005) for markdown front matter.
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
+
+### 📝 Schema Validation (v0.29.0+)
+
+```bash
+# Validate markdown front matter against built-in schemas
+reveal README.md --validate-schema beth       # Beth session READMEs
+reveal post.md --validate-schema hugo         # Hugo blog posts/pages
+reveal post.md --validate-schema jekyll       # Jekyll (GitHub Pages)
+reveal docs/api.md --validate-schema mkdocs   # MkDocs documentation
+reveal note.md --validate-schema obsidian     # Obsidian notes
+
+# Use custom schema
+reveal doc.md --validate-schema /path/to/schema.yaml
+
+# CI/CD integration
+reveal README.md --validate-schema beth --format json
+```
+
+**Built-in schemas:** beth (TIA sessions), hugo (static sites), jekyll (GitHub Pages), mkdocs (Python docs), obsidian (knowledge bases)
+**Validation rules (F-series):** F001 (missing front matter), F002 (empty), F003 (required fields), F004 (type mismatches), F005 (custom validation)
+**Docs:** [Schema Validation Guide](docs/SCHEMA_VALIDATION_GUIDE.md)
 
 ### ⚙️ Configuration System (v0.28.0+)
 

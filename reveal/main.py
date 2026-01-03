@@ -310,5 +310,66 @@ def run_pattern_detection(analyzer: FileAnalyzer, path: str, output_format: str,
     formatter()
 
 
+def run_schema_validation(analyzer: FileAnalyzer, path: str, schema_name: str, output_format: str, args):
+    """Run schema validation on front matter.
+
+    Args:
+        analyzer: File analyzer instance
+        path: File path
+        schema_name: Schema name or path to schema file
+        output_format: Output format ('text', 'json', 'grep')
+        args: CLI arguments (for --select, --ignore)
+    """
+    from .schemas.frontmatter import load_schema
+    from .rules.frontmatter import set_validation_context, clear_validation_context
+    from .rules import RuleRegistry
+
+    # Load schema
+    schema = load_schema(schema_name)
+    if not schema:
+        print(f"Error: Schema '{schema_name}' not found", file=sys.stderr)
+        print("\nAvailable built-in schemas:", file=sys.stderr)
+        from .schemas.frontmatter import list_schemas
+        for name in list_schemas():
+            print(f"  - {name}", file=sys.stderr)
+        print("\nOr provide a path to a custom schema file", file=sys.stderr)
+        sys.exit(1)
+
+    # Get structure with frontmatter extraction enabled
+    structure = analyzer.get_structure(extract_frontmatter=True)
+    content = analyzer.content
+
+    # Set schema context for F-series rules
+    set_validation_context(schema)
+
+    try:
+        # Parse select/ignore options (default to F-series rules if not specified)
+        select = args.select.split(',') if args.select else ['F']
+        ignore = args.ignore.split(',') if args.ignore else None
+
+        # Run rules (F003, F004, F005 will use the schema context)
+        detections = RuleRegistry.check_file(
+            path, structure, content, select=select, ignore=ignore
+        )
+
+        # Format and output results
+        formatters = {
+            'json': lambda: _format_detections_json(path, detections),
+            'grep': lambda: _format_detections_grep(detections),
+            'text': lambda: _format_detections_text(path, detections),
+        }
+
+        formatter = formatters.get(output_format, formatters['text'])
+        formatter()
+
+        # Exit with error code if validation failed
+        if detections:
+            sys.exit(1)
+
+    finally:
+        # Always clear context, even if an error occurred
+        clear_validation_context()
+
+
 if __name__ == '__main__':
     main()

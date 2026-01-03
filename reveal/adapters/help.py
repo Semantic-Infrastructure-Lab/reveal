@@ -42,7 +42,8 @@ class HelpAdapter(ResourceAdapter):
         'help': 'HELP_SYSTEM_GUIDE.md',  # Meta-documentation about help system
         'configuration': 'CONFIGURATION_GUIDE.md',  # Configuration system guide
         'config': 'CONFIGURATION_GUIDE.md',  # Alias for configuration
-        'release': 'RELEASE_GUIDE.md'  # Release process for maintainers
+        'release': 'RELEASE_GUIDE.md',  # Release process for maintainers
+        'schemas': 'SCHEMA_VALIDATION_HELP.md'  # Schema validation guide (v0.29.0+)
     }
 
     @staticmethod

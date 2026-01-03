@@ -1,0 +1,71 @@
+name: "Jekyll Static Site Schema"
+description: "Validates Jekyll static site front matter (GitHub Pages compatible)"
+version: "1.0"
+
+# Required fields (must be present in front matter)
+required_fields:
+  - layout
+
+# Optional fields (commonly used but not required)
+optional_fields:
+  - title
+  - date
+  - categories
+  - tags
+  - author
+  - permalink
+  - excerpt
+  - published
+  - description
+  - image
+  - comments
+  - sitemap
+  - lang
+  - redirect_from
+  - redirect_to
+
+# Field type constraints
+field_types:
+  layout: string
+  title: string
+  date: date            # YYYY-MM-DD format (accepts string or date object)
+  categories: list      # Can be list or single string
+  tags: list            # Can be list or single string
+  author: string
+  permalink: string
+  excerpt: string
+  published: boolean
+  description: string
+  image: string
+  comments: boolean
+  sitemap: boolean
+  lang: string
+  redirect_from: list   # Jekyll redirect plugin
+  redirect_to: string   # Jekyll redirect plugin
+
+# Custom validation rules
+validation_rules:
+  - code: F005
+    field: layout
+    check: "value in ['default', 'post', 'page', 'home', 'posts', 'category', 'tag'] or len(value) > 0"
+    message: "Layout should be one of the common types (default, post, page, home) or a custom layout name"
+
+  - code: F005
+    field: title
+    check: "len(value) > 0 if isinstance(value, str) else True"
+    message: "Title cannot be empty if specified"
+
+  - code: F005
+    field: date
+    check: "isinstance(value, str) and re.match(r'^\\d{4}-\\d{2}-\\d{2}', value) or not isinstance(value, str)"
+    message: "Date must be in YYYY-MM-DD format (e.g., '2026-01-03')"
+
+  - code: F005
+    field: permalink
+    check: "value.startswith('/') if isinstance(value, str) else True"
+    message: "Permalink should start with '/' (e.g., '/posts/my-post/')"
+
+  - code: F005
+    field: published
+    check: "isinstance(value, bool)"
+    message: "Published field must be boolean (true/false)"

@@ -1,7 +1,7 @@
 # Reveal - AI Agent Reference
-**Version:** 0.28.0
+**Version:** 0.29.0
 **Purpose:** Practical patterns for AI code assistants
-**Token Cost:** ~2,200 tokens
+**Token Cost:** ~2,400 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
 
 ---
@@ -107,6 +107,59 @@ reveal nginx.conf --check              # Nginx validation
 
 **List all rules:** `reveal --rules`
 **Explain rule:** `reveal --explain B001`
+
+---
+
+### Task: "Validate Markdown front matter"
+
+**Pattern:**
+```bash
+# Validate Beth session README
+reveal README.md --validate-schema beth
+
+# Validate Hugo blog post or static page
+reveal content/posts/article.md --validate-schema hugo
+
+# Validate Jekyll post (GitHub Pages)
+reveal _posts/2026-01-03-my-post.md --validate-schema jekyll
+
+# Validate MkDocs documentation
+reveal docs/api/reference.md --validate-schema mkdocs
+
+# Validate Obsidian note
+reveal vault/notes/project.md --validate-schema obsidian
+
+# Use custom schema
+reveal document.md --validate-schema /path/to/custom-schema.yaml
+
+# JSON output for CI/CD
+reveal README.md --validate-schema beth --format json
+
+# Select specific validation rules
+reveal README.md --validate-schema beth --select F003,F004
+```
+
+**Why this works:** Schema validation ensures consistent front matter across markdown files. Essential for documentation sites (Hugo, MkDocs), GitHub Pages (Jekyll), knowledge bases (Obsidian), and TIA sessions (Beth).
+
+**Built-in schemas:**
+- **beth** - TIA session READMEs (requires `session_id`, `beth_topics`)
+- **hugo** - Hugo static sites (requires `title`)
+- **jekyll** - Jekyll sites / GitHub Pages (requires `layout`)
+- **mkdocs** - MkDocs documentation (all fields optional)
+- **obsidian** - Obsidian vaults (all fields optional)
+
+**Validation rules (F-series):**
+- **F001** - Missing front matter
+- **F002** - Empty front matter
+- **F003** - Required field missing
+- **F004** - Field type mismatch
+- **F005** - Custom validation failed
+
+**Exit codes:**
+- `0` - Validation passed
+- `1` - Validation failed (use in CI/CD)
+
+**See also:** [Schema Validation Guide](../docs/SCHEMA_VALIDATION_GUIDE.md)
 
 ---
 
