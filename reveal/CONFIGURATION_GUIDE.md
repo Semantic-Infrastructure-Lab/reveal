@@ -497,12 +497,63 @@ print(cfg.dump())
 
 **Problem:** Unsure which config is being used
 
-**Solution:** Use precedence order:
+**Solution:** Use `reveal://config` to see exactly what's loaded:
+
+```bash
+# See full configuration transparency
+reveal reveal://config
+
+# Shows:
+# - All environment variables set
+# - All config files discovered (project, user, system)
+# - Active merged configuration
+# - Precedence order explanation
+```
+
+**Manual precedence check:**
 1. Check for CLI flags first
 2. Check environment variables: `env | grep REVEAL_`
 3. Check for `REVEAL_CONFIG` env var
 4. Check `.reveal.yaml` in current and parent directories
 5. Check user config: `~/.config/reveal/config.yaml`
+
+### Debugging with reveal://config
+
+**Problem:** Need to understand current configuration state
+
+**Solution:** Use `reveal://config` for complete transparency:
+
+```bash
+# Human-readable output
+reveal reveal://config
+
+# JSON for scripting
+reveal reveal://config --format json
+
+# With environment variables
+REVEAL_C901_THRESHOLD=20 reveal reveal://config
+```
+
+**What it shows:**
+- **Overview**: Project root, working directory, config file counts
+- **Sources**: Environment variables, custom config, discovered config files
+- **Active Config**: Merged rules, ignore patterns, root flag, overrides
+- **Precedence**: 7-level hierarchy explanation
+
+**Example output:**
+```
+Configuration Sources:
+  Environment Variables:
+    REVEAL_C901_THRESHOLD: 20
+
+  Project Configs:
+    /home/user/project/.reveal.yaml
+
+Active Configuration:
+  Rules:
+    C901:
+      threshold: 20  # From REVEAL_C901_THRESHOLD
+```
 
 ### Pattern Matching Not Working
 

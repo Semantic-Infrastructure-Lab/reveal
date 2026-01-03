@@ -420,3 +420,106 @@ class TestRevealAdapterIntegration:
         # Should find at least some types
         if types:
             assert all(isinstance(t, str) for t in types)
+
+
+class TestRevealAdapterConfig:
+    """Test reveal://config configuration transparency."""
+
+    def test_get_config_returns_dict(self):
+        """_get_config returns a dict."""
+        adapter = RevealAdapter(component='config')
+        config = adapter._get_config()
+
+        assert isinstance(config, dict)
+
+    def test_get_config_has_sections(self):
+        """_get_config has all expected sections."""
+        adapter = RevealAdapter(component='config')
+        config = adapter._get_config()
+
+        assert 'active_config' in config
+        assert 'sources' in config
+        assert 'metadata' in config
+        assert 'precedence_order' in config
+
+    def test_get_config_active_config(self):
+        """Active config section has expected fields."""
+        adapter = RevealAdapter(component='config')
+        config = adapter._get_config()
+        active = config['active_config']
+
+        assert 'rules' in active
+        assert 'ignore' in active
+        assert 'root' in active
+        assert 'overrides' in active
+
+    def test_get_config_sources(self):
+        """Sources section has expected fields."""
+        adapter = RevealAdapter(component='config')
+        config = adapter._get_config()
+        sources = config['sources']
+
+        assert 'env_vars' in sources
+        assert 'custom_config' in sources
+        assert 'project_configs' in sources
+        assert 'user_config' in sources
+        assert 'system_config' in sources
+
+    def test_get_config_metadata(self):
+        """Metadata section has expected fields."""
+        adapter = RevealAdapter(component='config')
+        config = adapter._get_config()
+        meta = config['metadata']
+
+        assert 'project_root' in meta
+        assert 'working_directory' in meta
+        assert 'no_config_mode' in meta
+        assert 'env_vars_count' in meta
+        assert 'config_files_count' in meta
+
+    def test_get_structure_with_config_component(self):
+        """get_structure returns config when component='config'."""
+        adapter = RevealAdapter(component='config')
+        structure = adapter.get_structure()
+
+        # Should return config structure, not default structure
+        assert 'active_config' in structure
+        assert 'sources' in structure
+        assert 'analyzers' not in structure  # Should not have default structure
+
+    def test_format_config_output_text(self):
+        """Config output can be formatted as text."""
+        adapter = RevealAdapter(component='config')
+        config = adapter._get_config()
+        output = adapter.format_output(config, 'text')
+
+        assert isinstance(output, str)
+        assert 'Reveal Configuration' in output
+        assert 'Overview' in output
+        assert 'Configuration Sources' in output
+        assert 'Active Configuration' in output
+        assert 'Configuration Precedence' in output
+
+    def test_format_config_output_json(self):
+        """Config output can be formatted as JSON."""
+        adapter = RevealAdapter(component='config')
+        config = adapter._get_config()
+        output = adapter.format_output(config, 'json')
+
+        # Should be valid JSON
+        parsed = json.loads(output)
+        assert 'active_config' in parsed
+        assert 'sources' in parsed
+        assert 'metadata' in parsed
+
+    def test_config_precedence_order(self):
+        """Config includes precedence order."""
+        adapter = RevealAdapter(component='config')
+        config = adapter._get_config()
+
+        precedence = config['precedence_order']
+        assert isinstance(precedence, list)
+        assert len(precedence) == 7  # Should have 7 levels
+        assert any('CLI' in p for p in precedence)
+        assert any('Environment' in p for p in precedence)
+        assert any('defaults' in p for p in precedence)

@@ -57,6 +57,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `reveal/rules/validation/utils.py` - Shared helper functions
   - `find_reveal_root()` extracted from V007, V009, V011
   - Reduces duplication, improves maintainability
+- **`reveal://config` - Configuration Transparency**
+  - **Self-inspection**: Show active configuration with full transparency
+  - **Sources tracking**: Display environment variables, config files (project/user/system), and CLI overrides
+  - **Precedence visualization**: Clear 7-level hierarchy from CLI flags to built-in defaults
+  - **Metadata display**: Project root, working directory, file counts, no-config mode status
+  - **Multiple formats**: Text output for humans, JSON for scripting (`--format json`)
+  - **Debugging aid**: Troubleshoot configuration issues by seeing exactly what's loaded and from where
+  - **Usage**: `reveal reveal://config` for text, `reveal reveal://config --format json` for scripting
+  - **Documentation**: Integrated into `help://reveal` and `help://configuration`
+  - **Test coverage**: 9 comprehensive tests, 100% pass rate, increases reveal.py coverage 45% → 82%
 
 ### Changed
 - **V007 Code Quality**: Refactored for clarity and maintainability

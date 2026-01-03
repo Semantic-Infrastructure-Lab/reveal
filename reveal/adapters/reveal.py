@@ -31,6 +31,10 @@ class RevealAdapter(ResourceAdapter):
                     'description': 'Show reveal\'s internal structure (analyzers, rules, adapters)'
                 },
                 {
+                    'uri': 'reveal reveal://config',
+                    'description': 'Show active configuration with full transparency (sources, precedence)'
+                },
+                {
                     'uri': 'reveal reveal://analyzers',
                     'description': 'List all registered analyzers'
                 },
@@ -73,6 +77,7 @@ class RevealAdapter(ResourceAdapter):
             },
             'try_now': [
                 "reveal reveal://",
+                "reveal reveal://config",
                 "reveal reveal:// --check",
                 "reveal reveal://analyzers",
             ],
@@ -209,6 +214,8 @@ class RevealAdapter(ResourceAdapter):
                         'rules_count': len(rules),
                     }
                 }
+            elif component == 'config':
+                return self._get_config()
 
         # Default: show everything
         structure = {
@@ -303,6 +310,91 @@ class RevealAdapter(ResourceAdapter):
 
         return sorted(types)
 
+    def _get_config(self) -> Dict[str, Any]:
+        """Get current configuration with full transparency.
+
+        Returns:
+            Dict containing active config, sources, and metadata
+        """
+        import os
+        from ..config import RevealConfig
+
+        # Get current config instance
+        config = RevealConfig.get()
+
+        # Extract environment variables
+        env_vars = {}
+        env_var_names = [
+            'REVEAL_NO_CONFIG',
+            'REVEAL_CONFIG',
+            'REVEAL_RULES_DISABLE',
+            'REVEAL_C901_THRESHOLD',
+            'REVEAL_C905_MAX_DEPTH',
+            'REVEAL_E501_MAX_LENGTH',
+            'REVEAL_M101_THRESHOLD',
+            'REVEAL_CONFIG_DEBUG'
+        ]
+        for var in env_var_names:
+            value = os.getenv(var)
+            if value:
+                env_vars[var] = value
+
+        # Discover config files
+        project_configs = []
+        try:
+            discovered = RevealConfig._discover_project_configs(Path.cwd())
+            for cfg in discovered:
+                if 'path' in cfg:
+                    project_configs.append({
+                        'path': str(cfg['path']),
+                        'root': cfg.get('root', False)
+                    })
+        except Exception:
+            pass
+
+        # Check user and system configs
+        user_config_path = RevealConfig._get_user_config_path()
+        system_config_path = Path('/etc/reveal/config.yaml')
+
+        custom_config = os.getenv('REVEAL_CONFIG')
+
+        return {
+            'active_config': {
+                'rules': config._config.get('rules', {}),
+                'ignore': config._config.get('ignore', []),
+                'root': config._config.get('root', False),
+                'overrides': config._config.get('overrides', []),
+                'architecture': config._config.get('architecture', {}),
+                'adapters': config._config.get('adapters', {}),
+            },
+            'sources': {
+                'env_vars': env_vars,
+                'custom_config': custom_config,
+                'project_configs': project_configs,
+                'user_config': str(user_config_path)
+                if user_config_path.exists() else None,
+                'system_config': str(system_config_path)
+                if system_config_path.exists() else None,
+            },
+            'metadata': {
+                'project_root': str(config.project_root),
+                'working_directory': str(Path.cwd()),
+                'no_config_mode': os.getenv('REVEAL_NO_CONFIG') == '1',
+                'env_vars_count': len(env_vars),
+                'config_files_count': len(project_configs),
+                'custom_config_used': custom_config is not None,
+            },
+            'precedence_order': [
+                '1. CLI flags (--select, --ignore)',
+                '2. Environment variables',
+                '3. Custom config file (REVEAL_CONFIG)',
+                '4. Project configs (from cwd upward)',
+                '5. User config (~/.config/reveal/config.yaml)',
+                '6. System config (/etc/reveal/config.yaml)',
+                '7. Built-in defaults'
+            ]
+        }
+
     def get_element(self, resource: str, element_name: str, args) -> Optional[bool]:
         """Extract a specific element from a reveal source file.
 
@@ -345,7 +437,11 @@ class RevealAdapter(ResourceAdapter):
             import json
             return json.dumps(structure, indent=2)
 
-        # Text format
+        # Check if this is a config structure
+        if 'active_config' in structure and 'sources' in structure:
+            return self._format_config_output(structure)
+
+        # Text format for default reveal structure
         lines = []
         lines.append("# Reveal Internal Structure\n")
 
@@ -386,5 +482,106 @@ class RevealAdapter(ResourceAdapter):
                 for rule in rules:
                     lines.append(f"  • {rule['code']:<8} {rule['path']}")
                 lines.append("")
+
+        return '\n'.join(lines)
+
+    def _format_config_output(self, structure: Dict[str, Any]) -> str:
+        """Format configuration structure for text display.
+
+        Args:
+            structure: Config structure from _get_config()
+
+        Returns:
+            Formatted text output
+        """
+        lines = []
+        lines.append("# Reveal Configuration\n")
+
+        # Metadata section
+        meta = structure['metadata']
+        lines.append("## Overview\n")
+        lines.append(f"**Project Root**: {meta['project_root']}")
+        lines.append(f"**Working Directory**: {meta['working_directory']}")
+        lines.append(f"**No-Config Mode**: {meta['no_config_mode']}")
+        lines.append(f"**Config Files Found**: {meta['config_files_count']}")
+        lines.append(f"**Environment Variables Set**: {meta['env_vars_count']}")
+        if meta['custom_config_used']:
+            lines.append(f"**Custom Config**: Used (REVEAL_CONFIG)")
+        lines.append("")
+
+        # Sources section
+        sources = structure['sources']
+        lines.append("## Configuration Sources\n")
+
+        # Environment variables
+        if sources['env_vars']:
+            lines.append("### Environment Variables")
+            for var, value in sources['env_vars'].items():
+                lines.append(f"  • {var} = {value}")
+            lines.append("")
+
+        # Custom config
+        if sources['custom_config']:
+            lines.append("### Custom Config File")
+            lines.append(f"  • {sources['custom_config']}")
+            lines.append("")
+
+        # Project configs
+        if sources['project_configs']:
+            lines.append("### Project Configurations")
+            for cfg in sources['project_configs']:
+                root_marker = " (root)" if cfg.get('root') else ""
+                lines.append(f"  • {cfg['path']}{root_marker}")
+            lines.append("")
+
+        # User config
+        if sources['user_config']:
+            lines.append("### User Configuration")
+            lines.append(f"  • {sources['user_config']}")
+            lines.append("")
+
+        # System config
+        if sources['system_config']:
+            lines.append("### System Configuration")
+            lines.append(f"  • {sources['system_config']}")
+            lines.append("")
+
+        # Active configuration
+        active = structure['active_config']
+        lines.append("## Active Configuration\n")
+
+        # Rules
+        if active['rules']:
+            lines.append("### Rules")
+            import json
+            lines.append(f"```yaml\n{json.dumps(active['rules'], indent=2)}\n```")
+            lines.append("")
+
+        # Ignore patterns
+        if active['ignore']:
+            lines.append("### Ignore Patterns")
+            for pattern in active['ignore']:
+                lines.append(f"  • {pattern}")
+            lines.append("")
+
+        # Root flag
+        if active['root']:
+            lines.append("### Root")
+            lines.append("  • root: true (stops config search)")
+            lines.append("")
+
+        # Overrides
+        if active['overrides']:
+            lines.append("### File Overrides")
+            lines.append(f"  • {len(active['overrides'])} override(s) defined")
+            lines.append("")
+
+        # Precedence order
+        lines.append("## Configuration Precedence\n")
+        for order in structure['precedence_order']:
+            lines.append(f"  {order}")
+        lines.append("")
+
+        lines.append("**Tip**: Use `reveal help://configuration` for complete guide")
 
         return '\n'.join(lines)

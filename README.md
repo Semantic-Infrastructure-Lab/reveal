@@ -166,6 +166,12 @@ reveal --check src/
 6. System config (`/etc/reveal/config.yaml`)
 7. Built-in defaults
 
+**Debug configuration:**
+```bash
+reveal reveal://config              # Show active config with full transparency
+reveal reveal://config --format json  # JSON output for scripting
+```
+
 **Learn more:**
 ```bash
 reveal help://configuration  # Complete guide with examples

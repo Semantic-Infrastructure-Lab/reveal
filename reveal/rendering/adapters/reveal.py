@@ -4,6 +4,110 @@ import json
 from typing import Any, Dict
 
 
+def _render_config_structure(data: Dict[str, Any]) -> None:
+    """Render reveal://config structure.
+
+    Args:
+        data: Config structure from reveal adapter
+    """
+    print("Reveal Configuration\n")
+
+    # Metadata section
+    meta = data['metadata']
+    print("Overview:")
+    print(f"  Project Root: {meta['project_root']}")
+    print(f"  Working Directory: {meta['working_directory']}")
+    print(f"  No-Config Mode: {meta['no_config_mode']}")
+    print(f"  Config Files Found: {meta['config_files_count']}")
+    print(f"  Environment Variables Set: {meta['env_vars_count']}")
+    if meta['custom_config_used']:
+        print(f"  Custom Config: Used (REVEAL_CONFIG)")
+    print()
+
+    # Sources section
+    sources = data['sources']
+    print("Configuration Sources:\n")
+
+    # Environment variables
+    if sources['env_vars']:
+        print("  Environment Variables:")
+        for var, value in sources['env_vars'].items():
+            print(f"    * {var} = {value}")
+        print()
+
+    # Custom config
+    if sources['custom_config']:
+        print("  Custom Config File:")
+        print(f"    * {sources['custom_config']}")
+        print()
+
+    # Project configs
+    if sources['project_configs']:
+        print("  Project Configurations:")
+        for cfg in sources['project_configs']:
+            root_marker = " (root)" if cfg.get('root') else ""
+            print(f"    * {cfg['path']}{root_marker}")
+        print()
+
+    # User config
+    if sources['user_config']:
+        print("  User Configuration:")
+        print(f"    * {sources['user_config']}")
+        print()
+
+    # System config
+    if sources['system_config']:
+        print("  System Configuration:")
+        print(f"    * {sources['system_config']}")
+        print()
+
+    # Active configuration
+    active = data['active_config']
+    print("Active Configuration:\n")
+
+    # Rules
+    if active['rules']:
+        print("  Rules:")
+        rules = active['rules']
+        # Show disabled rules
+        if 'disable' in rules:
+            print(f"    Disabled: {', '.join(rules['disable'])}")
+        # Show rule configs
+        for rule_code, rule_config in rules.items():
+            if rule_code != 'disable' and isinstance(rule_config, dict):
+                print(f"    {rule_code}:")
+                for key, value in rule_config.items():
+                    print(f"      {key}: {value}")
+        print()
+
+    # Ignore patterns
+    if active['ignore']:
+        print("  Ignore Patterns:")
+        for pattern in active['ignore']:
+            print(f"    * {pattern}")
+        print()
+
+    # Root flag
+    if active['root']:
+        print("  Root:")
+        print("    * root: true (stops config search)")
+        print()
+
+    # Overrides
+    if active['overrides']:
+        print("  File Overrides:")
+        print(f"    * {len(active['overrides'])} override(s) defined")
+        print()
+
+    # Precedence order
+    print("Configuration Precedence:\n")
+    for order in data['precedence_order']:
+        print(f"  {order}")
+    print()
+
+    print("Tip: Use 'reveal help://configuration' for complete guide")
+
+
 def render_reveal_structure(data: Dict[str, Any], output_format: str) -> None:
     """Render reveal:// adapter result.
 
@@ -13,6 +117,11 @@ def render_reveal_structure(data: Dict[str, Any], output_format: str) -> None:
     """
     if output_format == 'json':
         print(json.dumps(data, indent=2))
+        return
+
+    # Check if this is a config structure
+    if 'active_config' in data and 'sources' in data:
+        _render_config_structure(data)
         return
 
     # Text format - show structure nicely
