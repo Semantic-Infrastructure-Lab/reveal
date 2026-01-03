@@ -168,8 +168,8 @@ def simple():
 """
         rule = C901()
         # Include complexity in structure (as tree-sitter would provide)
-        # Use complexity > threshold from .reveal.yaml (which sets C901.threshold: 15)
-        structure = {'functions': [{'name': 'complex_func', 'line': 1, 'end_line': 14, 'complexity': 20}]}
+        # Use complexity > threshold from .reveal.yaml (which sets C901.threshold: 21)
+        structure = {'functions': [{'name': 'complex_func', 'line': 1, 'end_line': 14, 'complexity': 25}]}
         detections = rule.check('test.py', structure, content)
 
         self.assertEqual(len(detections), 1)
