@@ -1,7 +1,40 @@
 """Renderer for reveal:// internal structure adapter."""
 
 import json
-from typing import Any, Dict
+from collections import defaultdict
+from typing import Any, Dict, List, Union
+
+
+def _render_optional_section(title: str, items: Union[str, List, Dict, None], indent: int = 1) -> None:
+    """Render an optional configuration section if items exist.
+
+    Args:
+        title: Section title
+        items: Items to render (string, list, or dict)
+        indent: Indentation level
+    """
+    if not items:
+        return
+
+    prefix = "  " * indent
+    print(f"{prefix}{title}:")
+
+    if isinstance(items, str):
+        print(f"{prefix}  * {items}")
+    elif isinstance(items, dict):
+        for key, value in items.items():
+            print(f"{prefix}  * {key} = {value}")
+    elif isinstance(items, list):
+        for item in items:
+            if isinstance(item, dict):
+                # Handle project configs with root marker
+                path = item.get('path', str(item))
+                marker = " (root)" if item.get('root') else ""
+                print(f"{prefix}  * {path}{marker}")
+            else:
+                print(f"{prefix}  * {item}")
+
+    print()
 
 
 def _render_config_overview(meta: Dict[str, Any]) -> None:
@@ -21,38 +54,12 @@ def _render_config_sources(sources: Dict[str, Any]) -> None:
     """Render configuration sources section."""
     print("Configuration Sources:\n")
 
-    # Environment variables
-    if sources['env_vars']:
-        print("  Environment Variables:")
-        for var, value in sources['env_vars'].items():
-            print(f"    * {var} = {value}")
-        print()
-
-    # Custom config
-    if sources['custom_config']:
-        print("  Custom Config File:")
-        print(f"    * {sources['custom_config']}")
-        print()
-
-    # Project configs
-    if sources['project_configs']:
-        print("  Project Configurations:")
-        for cfg in sources['project_configs']:
-            root_marker = " (root)" if cfg.get('root') else ""
-            print(f"    * {cfg['path']}{root_marker}")
-        print()
-
-    # User config
-    if sources['user_config']:
-        print("  User Configuration:")
-        print(f"    * {sources['user_config']}")
-        print()
-
-    # System config
-    if sources['system_config']:
-        print("  System Configuration:")
-        print(f"    * {sources['system_config']}")
-        print()
+    # Render each source section using helper
+    _render_optional_section("Environment Variables", sources.get('env_vars'))
+    _render_optional_section("Custom Config File", sources.get('custom_config'))
+    _render_optional_section("Project Configurations", sources.get('project_configs'))
+    _render_optional_section("User Configuration", sources.get('user_config'))
+    _render_optional_section("System Configuration", sources.get('system_config'))
 
 
 def _render_config_active_rules(rules: Dict[str, Any]) -> None:
@@ -158,12 +165,10 @@ def _render_rules_section(data: Dict[str, Any]) -> None:
     rules = data['rules']
     print(f"Rules ({len(rules)}):")
 
-    # Group by category
-    by_category = {}
+    # Group by category using defaultdict
+    by_category = defaultdict(list)
     for rule in rules:
         category = rule.get('category', 'unknown')
-        if category not in by_category:
-            by_category[category] = []
         by_category[category].append(rule)
 
     for category in sorted(by_category.keys()):

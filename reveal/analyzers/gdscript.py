@@ -12,23 +12,27 @@ class GDScriptAnalyzer(FileAnalyzer):
     Extracts classes, functions, signals, and variables.
     """
 
+    # Compile regex patterns once at class level for performance
+    CLASS_PATTERN = re.compile(r'^\s*class\s+(\w+)\s*:')
+    FUNC_PATTERN = re.compile(r'^\s*func\s+(\w+)\s*\((.*?)\)\s*(?:->\s*(.+?))?\s*:')
+    SIGNAL_PATTERN = re.compile(r'^\s*signal\s+(\w+)(?:\((.*?)\))?\s*$')
+    VAR_PATTERN = re.compile(r'^\s*(?:(export|onready)\s+)?(?:(var|const)\s+)?(\w+)(?:\s*:\s*(\w+))?(?:\s*=\s*(.+?))?\s*(?:#.*)?$')
+
     def _parse_class_line(self, line: str, line_num: int) -> Optional[Dict[str, Any]]:
         """Parse a class definition line."""
-        class_match = re.match(r'^\s*class\s+(\w+)\s*:', line)
-        if class_match:
+        if match := self.CLASS_PATTERN.match(line):
             return {
                 'line': line_num,
-                'name': class_match.group(1),
+                'name': match.group(1),
             }
         return None
 
     def _parse_function_line(self, line: str, line_num: int) -> Optional[Dict[str, Any]]:
         """Parse a function definition line."""
-        func_match = re.match(r'^\s*func\s+(\w+)\s*\((.*?)\)\s*(?:->\s*(.+?))?\s*:', line)
-        if func_match:
-            name = func_match.group(1)
-            params = func_match.group(2).strip()
-            return_type = func_match.group(3).strip() if func_match.group(3) else None
+        if match := self.FUNC_PATTERN.match(line):
+            name = match.group(1)
+            params = match.group(2).strip()
+            return_type = match.group(3).strip() if match.group(3) else None
 
             signature = f"({params})"
             if return_type:
@@ -43,10 +47,9 @@ class GDScriptAnalyzer(FileAnalyzer):
 
     def _parse_signal_line(self, line: str, line_num: int) -> Optional[Dict[str, Any]]:
         """Parse a signal definition line."""
-        signal_match = re.match(r'^\s*signal\s+(\w+)(?:\((.*?)\))?\s*$', line)
-        if signal_match:
-            name = signal_match.group(1)
-            params = signal_match.group(2) if signal_match.group(2) else ''
+        if match := self.SIGNAL_PATTERN.match(line):
+            name = match.group(1)
+            params = match.group(2) if match.group(2) else ''
 
             return {
                 'line': line_num,
@@ -57,12 +60,11 @@ class GDScriptAnalyzer(FileAnalyzer):
 
     def _parse_variable_line(self, line: str, line_num: int) -> Optional[Dict[str, Any]]:
         """Parse a variable definition line."""
-        var_match = re.match(r'^\s*(?:(export|onready)\s+)?(?:(var|const)\s+)?(\w+)(?:\s*:\s*(\w+))?(?:\s*=\s*(.+?))?\s*(?:#.*)?$', line)
-        if var_match and var_match.group(2) in ('var', 'const'):
-            modifier = var_match.group(1) or ''
-            var_type = var_match.group(2)
-            name = var_match.group(3)
-            type_hint = var_match.group(4) or ''
+        if (match := self.VAR_PATTERN.match(line)) and match.group(2) in ('var', 'const'):
+            modifier = match.group(1) or ''
+            var_type = match.group(2)
+            name = match.group(3)
+            type_hint = match.group(4) or ''
 
             # Skip if this looks like a function call or other syntax
             if name and not name.startswith('_'):
@@ -77,17 +79,17 @@ class GDScriptAnalyzer(FileAnalyzer):
         return None
 
     def _build_result(self, classes: List, functions: List, signals: List, variables: List) -> Dict[str, List[Dict[str, Any]]]:
-        """Build result dictionary from parsed elements."""
-        result = {}
-        if classes:
-            result['classes'] = classes
-        if functions:
-            result['functions'] = functions
-        if signals:
-            result['signals'] = signals
-        if variables:
-            result['variables'] = variables
-        return result
+        """Build result dictionary from parsed elements using dict comprehension."""
+        return {
+            name: elements
+            for name, elements in [
+                ('classes', classes),
+                ('functions', functions),
+                ('signals', signals),
+                ('variables', variables),
+            ]
+            if elements
+        }
 
     def get_structure(self, head: int = None, tail: int = None,
                       range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
