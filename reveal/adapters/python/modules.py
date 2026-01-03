@@ -173,44 +173,55 @@ def get_module_analysis(module_name: str) -> Dict[str, Any]:
     return result
 
 
-def get_syspath_analysis() -> Dict[str, Any]:
-    """Analyze sys.path for conflicts and issues.
+def _classify_syspath_entry(path: str, index: int, cwd: Path) -> Dict[str, Any]:
+    """Classify a single sys.path entry.
+
+    Args:
+        path: The sys.path entry
+        index: Index in sys.path
+        cwd: Current working directory
 
     Returns:
-        Dict with sys.path entries, CWD highlighting, and conflict detection
+        Dict with path info and classification
     """
-    cwd = Path.cwd()
-    paths = []
+    path_info = {
+        "index": index,
+        "path": path if path else f"(CWD: {cwd})",
+        "is_cwd": path == "" or path == ".",
+        "exists": Path(path).exists() if path else True,
+        "type": "unknown",
+    }
 
-    for i, path in enumerate(sys.path):
-        path_info = {
-            "index": i,
-            "path": path if path else f"(CWD: {cwd})",
-            "is_cwd": path == "" or path == ".",
-            "exists": Path(path).exists() if path else True,
-            "type": "unknown",
-        }
+    # Classify path type
+    if not path or path == ".":
+        path_info["type"] = "cwd"
+        path_info["priority"] = "highest"
+    elif "site-packages" in path:
+        path_info["type"] = "site-packages"
+        path_info["priority"] = "normal"
+    elif path == sys.prefix or path.startswith(sys.prefix):
+        path_info["type"] = "python_stdlib"
+        path_info["priority"] = "high"
+    elif os.getenv("PYTHONPATH") and path in os.getenv("PYTHONPATH", "").split(":"):
+        path_info["type"] = "pythonpath"
+        path_info["priority"] = "high"
+    else:
+        path_info["type"] = "other"
+        path_info["priority"] = "normal"
 
-        # Classify path type
-        if not path or path == ".":
-            path_info["type"] = "cwd"
-            path_info["priority"] = "highest"
-        elif "site-packages" in path:
-            path_info["type"] = "site-packages"
-            path_info["priority"] = "normal"
-        elif path == sys.prefix or path.startswith(sys.prefix):
-            path_info["type"] = "python_stdlib"
-            path_info["priority"] = "high"
-        elif os.getenv("PYTHONPATH") and path in os.getenv("PYTHONPATH", "").split(":"):
-            path_info["type"] = "pythonpath"
-            path_info["priority"] = "high"
-        else:
-            path_info["type"] = "other"
-            path_info["priority"] = "normal"
+    return path_info
 
-        paths.append(path_info)
 
-    # Detect potential conflicts
+def _detect_syspath_conflicts(paths: List[Dict[str, Any]], cwd: Path) -> List[Dict[str, Any]]:
+    """Detect potential conflicts in sys.path.
+
+    Args:
+        paths: List of classified path entries
+        cwd: Current working directory
+
+    Returns:
+        List of detected conflicts
+    """
     conflicts = []
 
     # Check for CWD shadowing site-packages
@@ -227,17 +238,42 @@ def get_syspath_analysis() -> Dict[str, Any]:
                 }
             )
 
+    return conflicts
+
+
+def _build_syspath_summary(paths: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Build summary statistics for sys.path.
+
+    Args:
+        paths: List of classified path entries
+
+    Returns:
+        Dict with counts by type
+    """
+    return {
+        "cwd_entries": len([p for p in paths if p["is_cwd"]]),
+        "site_packages": len([p for p in paths if p["type"] == "site-packages"]),
+        "stdlib": len([p for p in paths if p["type"] == "python_stdlib"]),
+        "pythonpath": len([p for p in paths if p["type"] == "pythonpath"]),
+        "other": len([p for p in paths if p["type"] == "other"]),
+    }
+
+
+def get_syspath_analysis() -> Dict[str, Any]:
+    """Analyze sys.path for conflicts and issues.
+
+    Returns:
+        Dict with sys.path entries, CWD highlighting, and conflict detection
+    """
+    cwd = Path.cwd()
+    paths = [_classify_syspath_entry(path, i, cwd) for i, path in enumerate(sys.path)]
+    conflicts = _detect_syspath_conflicts(paths, cwd)
+
     return {
         "count": len(sys.path),
         "cwd": str(cwd),
         "paths": paths,
         "conflicts": conflicts,
         "pythonpath": os.getenv("PYTHONPATH"),
-        "summary": {
-            "cwd_entries": len([p for p in paths if p["is_cwd"]]),
-            "site_packages": len([p for p in paths if p["type"] == "site-packages"]),
-            "stdlib": len([p for p in paths if p["type"] == "python_stdlib"]),
-            "pythonpath": len([p for p in paths if p["type"] == "pythonpath"]),
-            "other": len([p for p in paths if p["type"] == "other"]),
-        },
+        "summary": _build_syspath_summary(paths),
     }
