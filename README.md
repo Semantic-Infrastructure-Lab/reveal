@@ -108,6 +108,69 @@ reveal --explain B001            # Explain specific rule
 **36 built-in rules** across 12 categories: bugs (B001-B005), complexity (C901-C905), duplicates (D001-D002), style (E501), imports (I001-I003), links (L001-L003), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V011). New in v0.25.0: link validation (L001-L003). New in v0.28.0: import analysis (I001-I003) for unused imports, circular dependencies, and layer violations.
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
 
+### ⚙️ Configuration System (v0.28.0+)
+
+Control rule behavior via `.reveal.yaml` files and environment variables:
+
+```yaml
+# .reveal.yaml (project root)
+root: true  # Stop searching upward for parent configs
+
+rules:
+  # Adjust complexity thresholds
+  C901:
+    threshold: 15  # Cyclomatic complexity (default: 10)
+
+  E501:
+    max_length: 120  # Line length (default: 100)
+
+  # Disable specific rules
+  # disable:
+  #   - E501  # Line too long
+  #   - C901  # Too complex
+
+# Ignore files/directories
+ignore:
+  - "*.min.js"
+  - "vendor/**"
+  - "build/**"
+```
+
+**Environment variables** (override file config):
+
+```bash
+# Disable rules temporarily
+export REVEAL_RULES_DISABLE="C901,E501"
+reveal --check src/
+
+# Override thresholds
+export REVEAL_C901_THRESHOLD=20
+export REVEAL_E501_MAX_LENGTH=120
+reveal --check src/
+
+# Use custom config file
+export REVEAL_CONFIG=.reveal-strict.yaml
+reveal --check src/
+
+# Skip all config files (use defaults only)
+export REVEAL_NO_CONFIG=1
+reveal --check src/
+```
+
+**Configuration precedence** (highest to lowest):
+1. CLI flags (`--select`, `--ignore`)
+2. Environment variables
+3. Custom config file (via `REVEAL_CONFIG`)
+4. Project configs (walk up from current directory)
+5. User config (`~/.config/reveal/config.yaml`)
+6. System config (`/etc/reveal/config.yaml`)
+7. Built-in defaults
+
+**Learn more:**
+```bash
+reveal help://configuration  # Complete guide with examples
+```
+
 ### 🔗 Link Validation (v0.25.0+)
 
 ```bash

@@ -82,7 +82,7 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
     if static:
         # Organize static guides by category
         ai_guides = ['agent', 'agent-full']
-        feature_guides = ['python-guide', 'markdown', 'reveal-guide']
+        feature_guides = ['python-guide', 'markdown', 'reveal-guide', 'html', 'configuration']
         best_practices = ['anti-patterns', 'tricks']
         dev_guides = ['adapter-authoring', 'help', 'release']
 
@@ -118,7 +118,9 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
                 token_estimate = {
                     'python-guide': '~2,500',
                     'markdown': '~4,000',
-                    'reveal-guide': '~3,000'
+                    'reveal-guide': '~3,000',
+                    'html': '~2,000',
+                    'configuration': '~3,500'
                 }.get(topic, '~2,000')
                 print(f"  {topic:16} - {_get_guide_description(topic)}")
                 print(f"                     File: {file}")
@@ -190,6 +192,9 @@ def _get_guide_description(topic: str) -> str:
         'python-guide': 'Python adapter deep dive',
         'reveal-guide': 'reveal:// adapter reference',
         'markdown': 'Markdown feature guide',
+        'html': 'HTML feature guide',
+        'configuration': 'Configuration system (rules, env vars, precedence)',
+        'config': 'Alias for configuration',
         'anti-patterns': 'Common mistakes to avoid',
         'adapter-authoring': 'Build your own adapters',
         'tricks': 'Cool tricks and hidden features',
