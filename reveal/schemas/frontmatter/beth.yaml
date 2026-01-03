@@ -1,0 +1,46 @@
+name: "Beth Session Schema"
+description: "Validates Beth session README front matter"
+version: "1.0"
+
+# Required fields (must be present in front matter)
+required_fields:
+  - session_id
+  - beth_topics
+
+# Optional fields (commonly used but not required)
+optional_fields:
+  - related_docs
+  - tags
+  - status
+  - date
+  - type
+  - project
+  - files_modified
+  - files_created
+  - commits
+
+# Field type constraints
+field_types:
+  session_id: string
+  beth_topics: list
+  related_docs: list
+  tags: list
+  status: string
+  date: string          # YYYY-MM-DD format
+  type: string
+  project: string
+  files_modified: integer
+  files_created: integer
+  commits: integer
+
+# Custom validation rules
+validation_rules:
+  - code: F005
+    field: beth_topics
+    check: "len(value) >= 1"
+    message: "beth_topics must contain at least one topic"
+
+  - code: F005
+    field: session_id
+    check: "re.match(r'^[a-z]+-[a-z]+-\\d{4}$', value)"
+    message: "session_id format must be: word-word-MMDD (e.g., 'garnet-ember-0102')"
