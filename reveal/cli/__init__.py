@@ -18,6 +18,7 @@ from .handlers import (
     handle_agent_help_full,
     handle_rules_list,
     handle_explain_rule,
+    handle_list_schemas,
     handle_stdin_mode,
     handle_decorator_stats,
 )
@@ -40,6 +41,7 @@ __all__ = [
     'handle_agent_help_full',
     'handle_rules_list',
     'handle_explain_rule',
+    'handle_list_schemas',
     'handle_stdin_mode',
     'handle_decorator_stats',
     # Routing

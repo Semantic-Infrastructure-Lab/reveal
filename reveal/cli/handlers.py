@@ -116,6 +116,41 @@ def handle_explain_rule(rule_code: str):
     sys.exit(0)
 
 
+def handle_list_schemas():
+    """Handle --list-schemas flag to list all built-in schemas."""
+    from ..schemas.frontmatter import list_schemas, load_schema
+
+    schemas = list_schemas()
+
+    if not schemas:
+        print("No built-in schemas found")
+        sys.exit(0)
+
+    print("Built-in Schemas for Front Matter Validation\n")
+
+    # Print each schema with details
+    for schema_name in sorted(schemas):
+        schema = load_schema(schema_name)
+        if schema:
+            name = schema.get('name', schema_name)
+            description = schema.get('description', 'No description')
+            required = schema.get('required_fields', [])
+
+            print(f"  {schema_name}")
+            print(f"    Name: {name}")
+            print(f"    Description: {description}")
+            if required:
+                print(f"    Required fields: {', '.join(required)}")
+            else:
+                print(f"    Required fields: (none)")
+            print()
+
+    print(f"Total: {len(schemas)} schemas")
+    print("\nUsage: reveal <file.md> --validate-schema <schema-name>")
+    print("       reveal <file.md> --validate-schema /path/to/custom-schema.yaml")
+    sys.exit(0)
+
+
 def handle_stdin_mode(args: 'Namespace', handle_file_func):
     """Handle --stdin mode to process files from stdin.
 

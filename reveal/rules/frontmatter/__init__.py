@@ -117,7 +117,9 @@ def safe_eval_validation(check: str, context: Dict[str, Any]) -> bool:
         result = eval(check, {"__builtins__": {}}, eval_context)
         return bool(result)
     except Exception as e:
-        logger.error(f"Validation check failed: {check} - {e}")
+        # Debug-level logging to avoid confusing users
+        # (exceptions are expected when types don't match)
+        logger.debug(f"Validation check skipped due to error: {check} - {e}")
         return False
 
 

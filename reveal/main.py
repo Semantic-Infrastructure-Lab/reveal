@@ -14,6 +14,7 @@ from .cli import (
     handle_agent_help_full,
     handle_rules_list,
     handle_explain_rule,
+    handle_list_schemas,
     handle_stdin_mode,
     handle_decorator_stats,
     handle_uri,
@@ -119,6 +120,7 @@ def _handle_special_modes(args):
         (args.agent_help_full, handle_agent_help_full, []),
         (args.rules, handle_rules_list, [__version__]),
         (args.explain, handle_explain_rule, [args.explain]),
+        (getattr(args, 'list_schemas', False), handle_list_schemas, []),
         (getattr(args, 'decorator_stats', False), handle_decorator_stats, [args.path]),
         (args.stdin, handle_stdin_mode, [args, handle_file]),
     ]
@@ -323,6 +325,12 @@ def run_schema_validation(analyzer: FileAnalyzer, path: str, schema_name: str, o
     from .schemas.frontmatter import load_schema
     from .rules.frontmatter import set_validation_context, clear_validation_context
     from .rules import RuleRegistry
+
+    # Check if file is markdown (schema validation is for markdown front matter)
+    if not path.lower().endswith(('.md', '.markdown')):
+        print(f"Warning: Schema validation is designed for markdown files", file=sys.stderr)
+        print(f"         File '{path}' does not appear to be markdown", file=sys.stderr)
+        print(f"         Continuing anyway...\n", file=sys.stderr)
 
     # Load schema
     schema = load_schema(schema_name)

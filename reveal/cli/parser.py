@@ -246,6 +246,8 @@ def _add_schema_validation_options(parser: argparse.ArgumentParser) -> None:
     """Add schema validation options."""
     parser.add_argument('--validate-schema', type=str, metavar='SCHEMA',
                         help='Validate front matter against schema (built-in: beth, hugo, obsidian; or path to custom schema)')
+    parser.add_argument('--list-schemas', action='store_true',
+                        help='List all built-in schemas available for validation')
 
 
 def create_argument_parser(version: str) -> argparse.ArgumentParser:
