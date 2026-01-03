@@ -29,6 +29,10 @@ class RustExtractor(LanguageExtractor):
     extensions = {'.rs'}
     language_name = 'Rust'
 
+    # Compile regex patterns once at class level for performance
+    PUB_USE_PREFIX_PATTERN = re.compile(r'^\s*(?:pub\s*(?:\([^)]*\)\s*)?)?use\s+')
+    SCOPED_USE_PATTERN = re.compile(r'(?:pub\s*(?:\([^)]*\)\s*)?)?use\s+([\w:]+)::\{([^}]+)\}')
+
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all use declarations from Rust file using tree-sitter.
 
@@ -93,7 +97,7 @@ class RustExtractor(LanguageExtractor):
         # Single use statement
         # Pattern: use path::to::module[::*] [as alias];
         # Remove 'pub', 'pub(crate)', etc. and 'use' keyword
-        use_text = re.sub(r'^\s*(?:pub\s*(?:\([^)]*\)\s*)?)?use\s+', '', use_text)
+        use_text = self.PUB_USE_PREFIX_PATTERN.sub('', use_text)
         use_text = use_text.rstrip(';').strip()
 
         # Check for alias
@@ -113,7 +117,7 @@ class RustExtractor(LanguageExtractor):
 
         # Extract base path and nested items
         # Pattern: use base::path::{item1, item2 as alias2}
-        match = re.match(r'(?:pub\s*(?:\([^)]*\)\s*)?)?use\s+([\w:]+)::\{([^}]+)\}', use_text)
+        match = self.SCOPED_USE_PATTERN.match(use_text)
         if not match:
             return imports
 

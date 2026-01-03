@@ -4,6 +4,7 @@ import re
 import yaml
 import logging
 from typing import Dict, List, Any, Optional
+from urllib.parse import urlparse
 from ..base import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -211,12 +212,11 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             link_info['email'] = url.replace('mailto:', '')
         elif url.startswith(('http://', 'https://')):
             link_info['type'] = 'external'
-            link_info['protocol'] = 'https' if url.startswith('https') else 'http'
 
-            # Extract domain
-            domain_match = re.match(r'https?://([^/]+)', url)
-            if domain_match:
-                link_info['domain'] = domain_match.group(1)
+            # Parse URL to extract components
+            parsed = urlparse(url)
+            link_info['protocol'] = parsed.scheme
+            link_info['domain'] = parsed.netloc
         else:
             link_info['type'] = 'internal'
             link_info['target'] = url

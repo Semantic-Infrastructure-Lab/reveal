@@ -126,13 +126,13 @@ class GDScriptAnalyzer(FileAnalyzer):
         for i, line in enumerate(self.lines, 1):
             # Check for function
             if element_type == 'function':
-                func_match = re.match(r'^\s*func\s+(\w+)\s*\(', line)
+                func_match = self.FUNC_PATTERN.match(line)
                 if func_match and func_match.group(1) == name:
                     return self._extract_function(i)
 
             # Check for class
             elif element_type == 'class':
-                class_match = re.match(r'^\s*class\s+(\w+)\s*:', line)
+                class_match = self.CLASS_PATTERN.match(line)
                 if class_match and class_match.group(1) == name:
                     return self._extract_class(i)
 
@@ -166,7 +166,7 @@ class GDScriptAnalyzer(FileAnalyzer):
         source = '\n'.join(self.lines[start_line - 1:end_line])
 
         return {
-            'name': re.search(r'func\s+(\w+)', self.lines[start_line - 1]).group(1),
+            'name': self.FUNC_PATTERN.match(self.lines[start_line - 1]).group(1),
             'line_start': start_line,
             'line_end': end_line,
             'source': source,
@@ -189,7 +189,7 @@ class GDScriptAnalyzer(FileAnalyzer):
         source = '\n'.join(self.lines[start_line - 1:end_line])
 
         return {
-            'name': re.search(r'class\s+(\w+)', self.lines[start_line - 1]).group(1),
+            'name': self.CLASS_PATTERN.match(self.lines[start_line - 1]).group(1),
             'line_start': start_line,
             'line_end': end_line,
             'source': source,

@@ -28,6 +28,10 @@ class GoExtractor(LanguageExtractor):
     extensions = {'.go'}
     language_name = 'Go'
 
+    # Compile regex patterns once at class level for performance
+    PACKAGE_PATH_PATTERN = re.compile(r'"([^"]+)"')
+    ALIAS_PATTERN = re.compile(r'^\s*(\S+)\s+"')
+
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all import declarations from Go file using tree-sitter.
 
@@ -88,7 +92,7 @@ class GoExtractor(LanguageExtractor):
         line_number = spec_node.start_point[0] + 1
 
         # Extract package path from quotes
-        package_match = re.search(r'"([^"]+)"', spec_text)
+        package_match = self.PACKAGE_PATH_PATTERN.search(spec_text)
         if not package_match:
             return None
 
@@ -96,7 +100,7 @@ class GoExtractor(LanguageExtractor):
 
         # Check for alias (word before the quoted path)
         alias = None
-        alias_match = re.match(r'^\s*(\S+)\s+"', spec_text)
+        alias_match = self.ALIAS_PATTERN.match(spec_text)
         if alias_match:
             alias = alias_match.group(1)
 

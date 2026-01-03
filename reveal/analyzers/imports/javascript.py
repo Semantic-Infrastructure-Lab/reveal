@@ -29,6 +29,13 @@ class JavaScriptExtractor(LanguageExtractor):
     extensions = {'.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'}
     language_name = 'JavaScript/TypeScript'
 
+    # Compile regex patterns once at class level for performance
+    MODULE_PATH_PATTERN = re.compile(r'''['"]([^'"]+)['"]''')
+    NAMESPACE_ALIAS_PATTERN = re.compile(r'\*\s+as\s+(\w+)')
+    TYPE_KEYWORD_PATTERN = re.compile(r'^type\s+')
+    NAMED_IMPORTS_PATTERN = re.compile(r'\{([^}]+)\}')
+    DEFAULT_IMPORT_PATTERN = re.compile(r'(\w+)\s*,')
+
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all import statements from JavaScript/TypeScript file using tree-sitter.
 
@@ -95,7 +102,7 @@ class JavaScriptExtractor(LanguageExtractor):
 
         # Extract module path (always in quotes at end)
         # Pattern: from 'module' or from "module" or just 'module' for side-effects
-        module_match = re.search(r'''['"]([^'"]+)['"]''', import_text)
+        module_match = self.MODULE_PATH_PATTERN.search(import_text)
         if not module_match:
             return []
 
@@ -114,7 +121,7 @@ class JavaScriptExtractor(LanguageExtractor):
         # Namespace import: import * as foo from 'module'
         elif '* as ' in import_text:
             import_type = 'namespace_import'
-            alias_match = re.search(r'\*\s+as\s+(\w+)', import_text)
+            alias_match = self.NAMESPACE_ALIAS_PATTERN.search(import_text)
             if alias_match:
                 imported_names = ['*']
                 alias = alias_match.group(1)
@@ -126,12 +133,12 @@ class JavaScriptExtractor(LanguageExtractor):
             import_clause = import_clause.replace('import', '').strip()
 
             # Remove optional 'type' keyword (TypeScript)
-            import_clause = re.sub(r'^type\s+', '', import_clause)
+            import_clause = self.TYPE_KEYWORD_PATTERN.sub('', import_clause)
 
             # Named imports: { foo, bar }
             if '{' in import_clause:
                 # Extract content from braces
-                names_match = re.search(r'\{([^}]+)\}', import_clause)
+                names_match = self.NAMED_IMPORTS_PATTERN.search(import_clause)
                 if names_match:
                     names_str = names_match.group(1)
                     for name in names_str.split(','):
@@ -144,7 +151,7 @@ class JavaScriptExtractor(LanguageExtractor):
                         imported_names.append(name)
 
                 # Check for default import too: foo, { bar }
-                default_match = re.match(r'(\w+)\s*,', import_clause)
+                default_match = self.DEFAULT_IMPORT_PATTERN.match(import_clause)
                 if default_match:
                     imported_names.insert(0, default_match.group(1))
 
@@ -185,7 +192,7 @@ class JavaScriptExtractor(LanguageExtractor):
             return None
 
         # Extract module path from quotes
-        module_match = re.search(r'''['"]([^'"]+)['"]''', call_text)
+        module_match = self.MODULE_PATH_PATTERN.search(call_text)
         if not module_match:
             return None
 

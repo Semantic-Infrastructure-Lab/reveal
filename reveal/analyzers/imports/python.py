@@ -187,7 +187,7 @@ class PythonExtractor(LanguageExtractor):
             import_type = 'star_import'
         else:
             # Handle parenthesized imports: from x import (a, b, c)
-            names_part = re.sub(r'[()]', '', names_part)
+            names_part = names_part.strip('()')
 
             # Split by comma, handle aliases
             for name_part in names_part.split(','):
