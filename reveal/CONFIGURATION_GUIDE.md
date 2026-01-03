@@ -1,6 +1,6 @@
 # Reveal Configuration Guide
 
-**Version:** v0.28.0+
+**Version:** v0.29.0+
 
 Reveal's configuration system provides flexible, hierarchical control over rule checking behavior through `.reveal.yaml` files and environment variables.
 
@@ -626,4 +626,4 @@ Legacy paths still supported with deprecation warning:
 
 ---
 
-**Last Updated:** 2026-01-02 (v0.28.0)
+**Last Updated:** 2026-01-03 (v0.29.0)

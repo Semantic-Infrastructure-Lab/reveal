@@ -65,6 +65,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Available functions: len(), re.match(), isinstance(), str(), int(), bool()
   - Security: No file I/O, no network, no command execution
 
+- **`--list-schemas` Flag** - Discover available schemas
+  - Lists all built-in schemas with descriptions and required fields
+  - Professional formatted output for easy reference
+  - Usage: `reveal --list-schemas`
+  - Improves discoverability (previously had to trigger error to see schemas)
+
+- **Comprehensive Duplicate Detection Guide** (DUPLICATE_DETECTION_GUIDE.md)
+  - 488 lines covering D001 (exact duplicates) and D002 (similar code)
+  - Clear status indicators: ✅ works, ⚠️ experimental, 🚧 planned
+  - Documented D002 false positive rate (~90%) with examples
+  - Practical workarounds for cross-file detection using `ast://` queries
+  - Workflows, limitations, best practices, FAQ, roadmap
+  - Integrated into help system: `reveal help://duplicates`
+
 ### Changed
 - **Date Type Handling**: Enhanced to support YAML auto-parsed dates
   - `validate_type()` now accepts both `datetime.date` objects AND strings for "date" type
@@ -83,20 +97,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Cleaner, more focused output for schema validation
 
 ### Fixed
+- **Schema Validation UX Improvements** (from dogfooding reveal on itself)
+  - **Confusing error messages**: Changed validation exception logging from error to debug level
+    - Previously: "object of type 'int' has no len()" confused users
+    - Now: Clean type mismatch errors only (F004 reports the actual issue)
+  - **Non-markdown file warning**: Added warning when validating non-.md files
+    - Schema validation designed for markdown front matter
+    - Non-breaking (continues with warning to stderr)
+  - Impact: Better first-time user experience, clearer error messages
+
+- **Misleading Duplicate Detection Documentation**
+  - Removed cross-file detection examples from AGENT_HELP_FULL.md (feature not implemented)
+  - Added explicit warning: "Cross-file duplicate detection is not yet implemented"
+  - Updated examples to reflect actual single-file behavior
+  - Enhanced AGENT_HELP.md with status indicators and workarounds
+
 - **Test Suite Quality**: Fixed pre-existing test data issues
   - Corrected invalid session_id patterns in edge case tests
   - Updated test data to match Beth schema requirements
-  - All 1,274 tests now passing (100%)
+  - All 1,320 tests now passing (100%)
 
 ### Dogfooding
+- **Reveal on itself:** Comprehensive testing (20+ scenarios across all features)
+  - Tested: basic analysis, element extraction, quality checks, schema validation, custom schemas, all output formats, help system, URI adapters, edge cases
+  - Code quality analysis: Found 158 high-complexity functions (complexity > 15)
+  - Quality score: 96.8/100 (from `reveal stats://./reveal`)
+  - Issues found: 3 UX issues (confusing errors, missing --list-schemas, no non-markdown warning)
+  - All issues fixed in this release
+  - Result: v0.29.0 validated through real-world use
+
 - **Hugo schema validation:** Tested on SIF website (5 pages)
   - Found issue: `date` field required but static pages don't need dates
   - Fixed: Moved `date` from required → optional
   - Result: All 5 SIF pages now validate correctly
+
 - **Beth schema validation:** Tested on 24 TIA session READMEs
   - Pass rate: 66% (16/24)
   - Issues found: 6 missing front matter, 2 wrong field names
   - Proves schema validation catches real quality issues
+
 - **Web research validation:** All schemas validated against official documentation
   - Hugo: https://gohugo.io/content-management/front-matter/
   - Jekyll: https://jekyllrb.com/docs/front-matter/
@@ -112,12 +151,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Command-line reference
   - Common workflows and batch validation patterns
 
-- **reveal/AGENT_HELP.md**: Added schema validation section
-  - Task: "Validate Markdown front matter" with practical examples
-  - Built-in schemas reference
-  - F-series rules overview
-  - Exit code documentation
+- **reveal/DUPLICATE_DETECTION_GUIDE.md** (488 lines)
+  - Comprehensive guide for D001 (exact duplicates) and D002 (similar code)
+  - Clear documentation of implemented vs planned features
+  - Practical workarounds for cross-file detection using AST queries
+  - Workflows, limitations, best practices, FAQ, roadmap
+  - Accessible via `reveal help://duplicates`
+
+- **reveal/AGENT_HELP.md**: Enhanced duplicate detection and schema validation
+  - Expanded duplicate detection from 4 to 28 lines with status indicators
+  - Added cross-file workaround patterns using `ast://` queries
+  - Added schema validation section with practical examples
+  - Built-in schemas reference, F-series rules overview, exit codes
   - Updated version to 0.29.0
+
+- **reveal/AGENT_HELP_FULL.md**: Fixed misleading duplicate detection examples
+  - Removed cross-file detection example (feature not implemented)
+  - Added explicit warnings about limitations
+  - Updated output examples to reflect actual single-file behavior
+  - Added 3-step AST query workaround
 
 - **README.md**: Added Schema Validation feature section
   - Quick start examples for all five built-in schemas
@@ -125,6 +177,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - CI/CD integration example
   - Added F001-F005 to rule categories list
   - Link to comprehensive guide
+
+- **reveal/CONFIGURATION_GUIDE.md**: Updated to v0.29.0
 
 ### Performance
 - **Zero Performance Impact**: Schema validation only runs with `--validate-schema` flag
