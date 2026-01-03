@@ -22,12 +22,17 @@ class E501(BaseRule):
     file_patterns = ['*']  # Universal: works on any file
     version = "1.0.0"
 
-    # Maximum line length (100 is pragmatic for modern development)
+    # Default maximum line length (100 is pragmatic for modern development)
     # PEP 8 = 79, Black = 88, but many codebases use 100-120
-    MAX_LENGTH = 100
+    # Can be overridden in .reveal.yaml:
+    #   rules:
+    #     E501:
+    #       max_length: 120
+    #       ignore_urls: true
+    DEFAULT_MAX_LENGTH = 100
 
-    # Patterns to ignore (URLs, etc.)
-    IGNORE_PATTERNS = [
+    # Default patterns to ignore (URLs, etc.)
+    DEFAULT_IGNORE_PATTERNS = [
         'http://',
         'https://',
         'ftp://',
@@ -53,23 +58,28 @@ class E501(BaseRule):
         detections = []
         lines = content.splitlines()
 
+        # Get configuration
+        max_length = self.get_threshold('max_length', self.DEFAULT_MAX_LENGTH)
+        ignore_urls = self.get_threshold('ignore_urls', True)
+        ignore_patterns = self.DEFAULT_IGNORE_PATTERNS if ignore_urls else []
+
         for i, line in enumerate(lines, start=1):
             # Skip if line contains ignore patterns
-            if any(pattern in line for pattern in self.IGNORE_PATTERNS):
+            if any(pattern in line for pattern in ignore_patterns):
                 continue
 
             # Check length (excluding trailing whitespace)
             line_length = len(line.rstrip())
 
-            if line_length > self.MAX_LENGTH:
-                excess = line_length - self.MAX_LENGTH
+            if line_length > max_length:
+                excess = line_length - max_length
 
                 detections.append(Detection(
                     file_path=file_path,
                     line=i,
                     rule_code=self.code,
-                    message=f"{self.message} ({line_length} > {self.MAX_LENGTH} characters, {excess} over)",
-                    column=self.MAX_LENGTH + 1,
+                    message=f"{self.message} ({line_length} > {max_length} characters, {excess} over)",
+                    column=max_length + 1,
                     suggestion=f"Break line into multiple lines or refactor",
                     context=line[:80] + '...' if len(line) > 80 else line,
                     severity=self.severity,

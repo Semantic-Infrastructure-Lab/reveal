@@ -118,6 +118,53 @@ class RuleRegistry:
         logger.debug(f"Discovered rule: {rule_class.code} - {rule_class.message}")
 
     @classmethod
+    def _discover_built_in_rules(cls):
+        """Discover built-in rules from reveal/rules/*/."""
+        rules_dir = Path(__file__).parent
+        cls._discover_dir(rules_dir, "reveal.rules")
+
+    @classmethod
+    def _discover_user_rules(cls, config):
+        """Discover user rules from XDG or legacy location."""
+        user_rules_dir = config.user_data_dir / 'rules'
+
+        if user_rules_dir.exists():
+            cls._discover_dir(user_rules_dir, "user.rules")
+            return
+
+        # Legacy location: ~/.reveal/rules/ (backward compatibility)
+        legacy_paths = config.get_legacy_paths()
+        legacy_user_dir = legacy_paths['rules_user']
+
+        if not legacy_user_dir.exists():
+            return
+
+        migrate_cmd = (
+            f"mkdir -p {user_rules_dir} && "
+            f"mv {legacy_user_dir}/* {user_rules_dir}/"
+        )
+        logger.warning(
+            f"Using legacy rules directory: {legacy_user_dir}\n"
+            f"Please migrate to XDG-compliant location: {user_rules_dir}\n"
+            f"Run: {migrate_cmd}"
+        )
+        cls._discover_dir(legacy_user_dir, "user.rules")
+
+    @classmethod
+    def _discover_project_rules(cls, config):
+        """Discover project-local rules from ./.reveal/rules/."""
+        project_rules_dir = config.project_config_dir / 'rules'
+        if project_rules_dir.exists():
+            cls._discover_dir(project_rules_dir, "project.rules")
+
+    @classmethod
+    def _log_discovery_summary(cls):
+        """Log summary of discovered rules."""
+        num_rules = len(cls._rules)
+        num_categories = len(set(r.category for r in cls._rules if r.category))
+        logger.info(f"Discovered {num_rules} rules from {num_categories} categories")
+
+    @classmethod
     def discover(cls, force: bool = False):
         """
         Auto-discover all rules in reveal/rules/*/.
@@ -132,35 +179,12 @@ class RuleRegistry:
         cls._rules_by_code = {}
         config = get_config()
 
-        # Built-in rules
-        rules_dir = Path(__file__).parent
-        cls._discover_dir(rules_dir, "reveal.rules")
-
-        # User rules: ~/.local/share/reveal/rules/ (XDG_DATA_HOME)
-        user_rules_dir = config.user_data_dir / 'rules'
-        if user_rules_dir.exists():
-            cls._discover_dir(user_rules_dir, "user.rules")
-
-        # Legacy user rules: ~/.reveal/rules/ (backward compatibility)
-        legacy_paths = config.get_legacy_paths()
-        legacy_user_dir = legacy_paths['rules_user']
-        if legacy_user_dir.exists() and not user_rules_dir.exists():
-            logger.warning(
-                f"Using legacy rules directory: {legacy_user_dir}\n"
-                f"Please migrate to XDG-compliant location: {user_rules_dir}\n"
-                f"Run: mkdir -p {user_rules_dir} && mv {legacy_user_dir}/* {user_rules_dir}/"
-            )
-            cls._discover_dir(legacy_user_dir, "user.rules")
-
-        # Project rules: ./.reveal/rules/ (stays the same - project-local)
-        project_rules_dir = config.project_config_dir / 'rules'
-        if project_rules_dir.exists():
-            cls._discover_dir(project_rules_dir, "project.rules")
+        cls._discover_built_in_rules()
+        cls._discover_user_rules(config)
+        cls._discover_project_rules(config)
 
         cls._discovered = True
-        num_rules = len(cls._rules)
-        num_categories = len(set(r.category for r in cls._rules if r.category))
-        logger.info(f"Discovered {num_rules} rules from {num_categories} categories")
+        cls._log_discovery_summary()
 
     @classmethod
     def _discover_dir(cls, rules_dir: Path, module_prefix: str):
@@ -241,6 +265,32 @@ class RuleRegistry:
             )
 
     @classmethod
+    def _apply_select_filter(
+        cls,
+        rules: List[Type[BaseRule]],
+        select: List[str]
+    ) -> List[Type[BaseRule]]:
+        """Apply select patterns filter to rules."""
+        return [r for r in rules if cls._matches_patterns(r, select)]
+
+    @classmethod
+    def _apply_ignore_filter(
+        cls,
+        rules: List[Type[BaseRule]],
+        ignore: List[str]
+    ) -> List[Type[BaseRule]]:
+        """Apply ignore patterns filter to rules."""
+        return [r for r in rules if not cls._matches_patterns(r, ignore)]
+
+    @classmethod
+    def _apply_enabled_filter(
+        cls,
+        rules: List[Type[BaseRule]]
+    ) -> List[Type[BaseRule]]:
+        """Filter out disabled rules."""
+        return [r for r in rules if r.enabled]
+
+    @classmethod
     def get_rules(
         cls,
         select: Optional[List[str]] = None,
@@ -261,17 +311,14 @@ class RuleRegistry:
 
         rules = cls._rules.copy()
 
-        # Filter by select (if provided)
         if select:
-            rules = [r for r in rules if cls._matches_patterns(r, select)]
+            rules = cls._apply_select_filter(rules, select)
 
-        # Filter by ignore (if provided)
         if ignore:
-            rules = [r for r in rules if not cls._matches_patterns(r, ignore)]
+            rules = cls._apply_ignore_filter(rules, ignore)
 
-        # Filter out disabled rules (but allow explicitly selected disabled rules)
         if not select:
-            rules = [r for r in rules if r.enabled]
+            rules = cls._apply_enabled_filter(rules)
 
         return rules
 
@@ -326,6 +373,33 @@ class RuleRegistry:
 
         return False
 
+    @staticmethod
+    def _rule_to_dict(rule_class: Type[BaseRule]) -> Dict[str, Any]:
+        """
+        Convert a rule class to a metadata dictionary.
+
+        Args:
+            rule_class: Rule class to convert
+
+        Returns:
+            Dictionary with rule metadata
+        """
+        category_value = (
+            rule_class.category.value
+            if rule_class.category
+            else 'unknown'
+        )
+        return {
+            'code': rule_class.code,
+            'message': rule_class.message,
+            'category': category_value,
+            'severity': rule_class.severity.value,
+            'file_patterns': rule_class.file_patterns,
+            'uri_patterns': rule_class.uri_patterns,
+            'version': rule_class.version,
+            'enabled': rule_class.enabled,
+        }
+
     @classmethod
     def list_rules(
         cls,
@@ -350,20 +424,8 @@ class RuleRegistry:
         if category:
             rules = [r for r in rules if r.category == category]
 
-        result = []
-        for rule_class in sorted(rules, key=lambda r: r.code):
-            result.append({
-                'code': rule_class.code,
-                'message': rule_class.message,
-                'category': rule_class.category.value if rule_class.category else 'unknown',
-                'severity': rule_class.severity.value,
-                'file_patterns': rule_class.file_patterns,
-                'uri_patterns': rule_class.uri_patterns,
-                'version': rule_class.version,
-                'enabled': rule_class.enabled,
-            })
-
-        return result
+        sorted_rules = sorted(rules, key=lambda r: r.code)
+        return [cls._rule_to_dict(rule_class) for rule_class in sorted_rules]
 
     @classmethod
     def check_file(cls,
@@ -379,8 +441,8 @@ class RuleRegistry:
             file_path: Path to file
             structure: Parsed structure from analyzer
             content: File content
-            select: Rules to include
-            ignore: Rules to exclude
+            select: Rules to include (CLI override)
+            ignore: Rules to exclude (CLI override)
 
         Returns:
             List of all detections from all rules
@@ -388,6 +450,13 @@ class RuleRegistry:
         if not cls._discovered:
             cls.discover()
 
+        # Load config for this file
+        from pathlib import Path
+        file_path_obj = Path(file_path)
+        config = get_config(start_path=file_path_obj.parent)
+        file_config = config.get_file_config(file_path_obj)
+
+        # Get base rules filtered by CLI select/ignore
         rules = cls.get_rules(select=select, ignore=ignore)
         detections = []
 
@@ -396,10 +465,28 @@ class RuleRegistry:
             if not rule_class().matches_target(file_path):
                 continue
 
+            # Check if rule is enabled by config (unless CLI select overrides)
+            if not select and not file_config.is_rule_enabled(rule_class.code):
+                logger.debug(
+                    f"Rule {rule_class.code} disabled by config for {file_path}"
+                )
+                continue
+
             try:
                 # Instantiate rule and run check
                 rule = rule_class()
                 rule.set_current_file(file_path)
+
+                # Pass config values to rule if it needs them
+                # Access the raw config dict to get rule-specific config
+                rules_config = file_config._config.get('rules', {})
+                rule_config = rules_config.get(rule_class.code, {})
+                if rule_config and isinstance(rule_config, dict):
+                    # Update rule's config values
+                    for key, value in rule_config.items():
+                        if hasattr(rule, key):
+                            setattr(rule, key, value)
+
                 rule_detections = rule.check(file_path, structure, content)
                 detections.extend(rule_detections)
                 num_issues = len(rule_detections)
@@ -407,7 +494,10 @@ class RuleRegistry:
                     f"Rule {rule_class.code} found {num_issues} issues in {file_path}"
                 )
             except Exception as e:
-                logger.error(f"Rule {rule_class.code} failed on {file_path}: {e}", exc_info=True)
+                logger.error(
+                    f"Rule {rule_class.code} failed on {file_path}: {e}",
+                    exc_info=True
+                )
 
         return detections
 

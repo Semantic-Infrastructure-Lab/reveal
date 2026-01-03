@@ -22,8 +22,12 @@ class C901(BaseRule):
     file_patterns = ['*']  # Universal: works on any structured file
     version = "1.0.0"
 
-    # Complexity threshold (standard McCabe threshold)
-    THRESHOLD = 10
+    # Default complexity threshold (standard McCabe threshold)
+    # Can be overridden in .reveal.yaml:
+    #   rules:
+    #     C901:
+    #       threshold: 15
+    DEFAULT_THRESHOLD = 10
 
     def check(self,
              file_path: str,
@@ -46,6 +50,9 @@ class C901(BaseRule):
         if not structure:
             return detections
 
+        # Get threshold from config (allows per-project customization)
+        threshold = self.get_threshold('threshold', self.DEFAULT_THRESHOLD)
+
         # Get functions from structure
         functions = structure.get('functions', [])
 
@@ -56,7 +63,7 @@ class C901(BaseRule):
             if complexity is None:
                 complexity = self._calculate_complexity(func, content)
 
-            if complexity > self.THRESHOLD:
+            if complexity > threshold:
                 line = func.get('line', 0)
                 func_name = func.get('name', '<unknown>')
 
@@ -64,7 +71,7 @@ class C901(BaseRule):
                     file_path=file_path,
                     line=line,
                     rule_code=self.code,
-                    message=f"{self.message}: {func_name} (complexity: {complexity}, max: {self.THRESHOLD})",
+                    message=f"{self.message}: {func_name} (complexity: {complexity}, max: {threshold})",
                     column=1,
                     suggestion="Break into smaller functions or reduce branching",
                     context=f"Function: {func_name}",

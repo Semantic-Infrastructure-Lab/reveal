@@ -398,7 +398,7 @@ class TestHandleReveal:
             ignore=None
         )
 
-        with patch('reveal.cli.routing._handle_reveal_check') as mock_check:
+        with patch('reveal.cli.scheme_handlers.reveal._handle_reveal_check') as mock_check:
             _handle_reveal(mock_adapter_class, 'adapters', None, args)
 
         mock_check.assert_called_once_with('adapters', args)
@@ -550,7 +550,7 @@ class TestHandleMysql:
 
         args = Namespace(check=False, format='text')
 
-        with patch('reveal.cli.routing._render_mysql_result') as mock_render:
+        with patch('reveal.cli.scheme_handlers.mysql._render_mysql_result') as mock_render:
             _handle_mysql(mock_adapter_class, 'localhost/mydb', None, args)
 
         mock_adapter.get_structure.assert_called_once()

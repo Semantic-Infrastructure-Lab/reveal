@@ -195,9 +195,10 @@ class LayerConfig:
 
 
 def load_layer_config(start_path: Path) -> Optional[LayerConfig]:
-    """Load layer configuration from .reveal.yaml.
+    """Load layer configuration using unified config system.
 
-    Searches upward from start_path for .reveal.yaml file.
+    Uses RevealConfig to load architecture.layers from .reveal.yaml,
+    supporting multi-level precedence and directory walk-up.
 
     Args:
         start_path: Starting path (file or directory)
@@ -205,23 +206,41 @@ def load_layer_config(start_path: Path) -> Optional[LayerConfig]:
     Returns:
         LayerConfig if found, None otherwise
     """
-    import yaml
+    try:
+        # Use unified config system (supports precedence, walk-up, etc.)
+        from reveal.config import RevealConfig
 
-    # Search upward for .reveal.yaml
-    current = start_path if start_path.is_dir() else start_path.parent
+        config = RevealConfig.get(start_path)
+        layers_list = config.get_layers()
 
-    while current != current.parent:  # Stop at filesystem root
-        config_file = current / ".reveal.yaml"
-        if config_file.exists():
-            try:
-                with open(config_file) as f:
-                    config_dict = yaml.safe_load(f)
-                if config_dict:
-                    return LayerConfig.from_dict(config_dict)
-            except Exception as e:
-                logger.warning(f"Failed to load .reveal.yaml from {config_file}: {e}")
-                return None
+        if not layers_list:
+            return None
 
-        current = current.parent
+        # Convert to LayerConfig format
+        config_dict = {'architecture': {'layers': layers_list}}
+        return LayerConfig.from_dict(config_dict)
 
-    return None
+    except Exception as e:
+        logger.debug(f"Failed to load layer config from unified config: {e}")
+
+        # Fallback to old direct loading for backwards compatibility
+        # This ensures existing .reveal.yaml files still work during migration
+        import yaml
+
+        current = start_path if start_path.is_dir() else start_path.parent
+
+        while current != current.parent:
+            config_file = current / ".reveal.yaml"
+            if config_file.exists():
+                try:
+                    with open(config_file) as f:
+                        config_dict = yaml.safe_load(f)
+                    if config_dict:
+                        return LayerConfig.from_dict(config_dict)
+                except Exception as load_error:
+                    logger.warning(f"Failed to load .reveal.yaml from {config_file}: {load_error}")
+                    return None
+
+            current = current.parent
+
+        return None

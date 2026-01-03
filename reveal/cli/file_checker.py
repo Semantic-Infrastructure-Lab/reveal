@@ -158,6 +158,20 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         directory: Directory to check recursively
         args: Parsed arguments
     """
+    # Build CLI overrides for config system
+    cli_overrides = {}
+    if args.select or args.ignore:
+        rules_override = {}
+        if args.select:
+            rules_override['select'] = [r.strip() for r in args.select.split(',')]
+        if args.ignore:
+            rules_override['disable'] = [r.strip() for r in args.ignore.split(',')]
+        cli_overrides['rules'] = rules_override
+
+    # Initialize config with CLI overrides (highest precedence)
+    from reveal.config import RevealConfig
+    config = RevealConfig.get(start_path=directory, cli_overrides=cli_overrides if cli_overrides else None)
+
     # Load gitignore patterns and collect files
     gitignore_patterns = load_gitignore_patterns(directory)
     files_to_check = collect_files_to_check(directory, gitignore_patterns)
@@ -166,7 +180,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         print(f"No supported files found in {directory}")
         return
 
-    # Parse select/ignore options once
+    # Parse select/ignore options for backwards compatibility with RuleRegistry
     select = args.select.split(',') if args.select else None
     ignore = args.ignore.split(',') if args.ignore else None
 

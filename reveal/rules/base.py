@@ -9,6 +9,9 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 from pathlib import Path
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Severity(Enum):
@@ -195,6 +198,59 @@ class BaseRule(ABC):
 
     # For tracking current file during check (set by registry)
     _current_file: Optional[str] = None
+    _config = None  # Lazy-loaded config instance
+
+    def get_config(self):
+        """Get configuration instance (lazy-loaded).
+
+        Returns:
+            RevealConfig instance
+        """
+        if self._config is None:
+            try:
+                from reveal.config import RevealConfig
+                self._config = RevealConfig.get()
+            except Exception as e:
+                logger.debug(f"Failed to load config: {e}")
+                # Return a mock config that always uses defaults
+                class MockConfig:
+                    def get_rule_config(self, code, key, default=None):
+                        return default
+                    def is_rule_enabled(self, code, path=None):
+                        return True
+                self._config = MockConfig()
+        return self._config
+
+    def get_threshold(self, key: str, default: Any) -> Any:
+        """Get a configuration threshold for this rule.
+
+        This method allows rules to read their configuration from .reveal.yaml:
+
+        Example .reveal.yaml:
+            rules:
+              C901:
+                threshold: 15
+              E501:
+                max_length: 120
+
+        Args:
+            key: Configuration key (e.g., "threshold", "max_length")
+            default: Default value if not configured
+
+        Returns:
+            Configured value or default
+
+        Example:
+            class C901(BaseRule):
+                code = "C901"
+                DEFAULT_THRESHOLD = 10
+
+                def check(self, file_path, structure, content):
+                    threshold = self.get_threshold('threshold', self.DEFAULT_THRESHOLD)
+                    # Use threshold...
+        """
+        config = self.get_config()
+        return config.get_rule_config(self.code, key, default)
 
     @abstractmethod
     def check(self,

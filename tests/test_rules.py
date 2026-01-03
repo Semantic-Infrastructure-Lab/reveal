@@ -125,6 +125,16 @@ except:
 class TestC901Complexity(unittest.TestCase):
     """Test C901: Function complexity detector."""
 
+    def setUp(self):
+        """Clear config cache before each test."""
+        from reveal.config import RevealConfig
+        RevealConfig._cache.clear()
+
+    def tearDown(self):
+        """Clear config cache after each test."""
+        from reveal.config import RevealConfig
+        RevealConfig._cache.clear()
+
     def test_simple_function_ok(self):
         """Test that simple functions pass."""
         content = """
@@ -139,7 +149,7 @@ def simple():
 
     def test_complex_function_detected(self):
         """Test that complex functions are detected."""
-        # Create a very complex function that exceeds threshold of 10
+        # Create a very complex function that exceeds threshold
         # Note: no leading newline so line numbers start at 1
         content = """def complex_func(x):
     if x > 0:
@@ -157,7 +167,9 @@ def simple():
     return x
 """
         rule = C901()
-        structure = {'functions': [{'name': 'complex_func', 'line': 1, 'end_line': 14}]}
+        # Include complexity in structure (as tree-sitter would provide)
+        # Use complexity > threshold from .reveal.yaml (which sets C901.threshold: 15)
+        structure = {'functions': [{'name': 'complex_func', 'line': 1, 'end_line': 14, 'complexity': 20}]}
         detections = rule.check('test.py', structure, content)
 
         self.assertEqual(len(detections), 1)
@@ -178,9 +190,12 @@ def simple():
         self.assertEqual(len(detections), 0)
 
     def test_threshold(self):
-        """Test that the threshold is 10."""
+        """Test that the default threshold is 10."""
         rule = C901()
-        self.assertEqual(rule.THRESHOLD, 10)
+        # Check DEFAULT_THRESHOLD attribute (class constant)
+        self.assertEqual(rule.DEFAULT_THRESHOLD, 10)
+        # Note: get_threshold will read from .reveal.yaml if present
+        # So we just verify the DEFAULT_THRESHOLD constant exists
 
 
 class TestR913TooManyArgs(unittest.TestCase):

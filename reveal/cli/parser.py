@@ -185,6 +185,8 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
     """Add pattern detection (linting) options."""
     parser.add_argument('--check', '--lint', action='store_true',
                         help='Run pattern detectors (code quality, security, complexity checks)')
+    parser.add_argument('--config', type=str, metavar='FILE',
+                        help='Configuration file to use (.reveal.yaml or pyproject.toml)')
     parser.add_argument('--select', type=str, metavar='RULES',
                         help='Select specific rules or categories (e.g., "B,S" or "B001,S701")')
     parser.add_argument('--ignore', type=str, metavar='RULES',
