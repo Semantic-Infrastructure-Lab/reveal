@@ -43,7 +43,9 @@ class HelpAdapter(ResourceAdapter):
         'configuration': 'CONFIGURATION_GUIDE.md',  # Configuration system guide
         'config': 'CONFIGURATION_GUIDE.md',  # Alias for configuration
         'release': 'RELEASE_GUIDE.md',  # Release process for maintainers
-        'schemas': 'SCHEMA_VALIDATION_HELP.md'  # Schema validation guide (v0.29.0+)
+        'schemas': 'SCHEMA_VALIDATION_HELP.md',  # Schema validation guide (v0.29.0+)
+        'duplicates': 'DUPLICATE_DETECTION_GUIDE.md',  # Duplicate code detection guide
+        'duplicate-detection': 'DUPLICATE_DETECTION_GUIDE.md'  # Alias for duplicates
     }
 
     @staticmethod

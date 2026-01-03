@@ -467,14 +467,14 @@ find src/ -name "*.py" | reveal --stdin --format=json | \
 
 **Pattern:**
 ```bash
-# Run duplicate detection
-reveal file.py --check --select D
+# Run duplicate detection (within single file only)
+reveal file.py --check --select D001
 
-# D001: Exact duplicates (hash-based, reliable)
-# D002: Similar code (structural similarity, experimental)
+# D001: Exact duplicates (hash-based, reliable) ✅
+# D002: Similar code (experimental, high false positives) ⚠️
 ```
 
-**Note:** D002 currently has high false positive rate (mean similarity 0.935). Use D001 for exact duplicates only. D002 is being improved in future versions.
+**IMPORTANT:** Cross-file duplicate detection is not yet implemented. D001 and D002 only find duplicates within a single file.
 
 **Example output:**
 ```
@@ -482,20 +482,31 @@ File: src/handler.py (456 lines, Python)
 
 Quality Issues (2):
 
-  D001: Exact duplicate code (lines 45-58)
-    Duplicate of: lines 123-136
+  D001: Exact duplicate code (line 45)
+    Identical to 'process_request' (line 123)
+    Suggestion: Refactor to share implementation
+
+  D001: Exact duplicate code (line 234)
+    Identical to 'validate_input' (line 456)
     Suggestion: Extract to shared function
-
-  D001: Exact duplicate code (lines 234-245)
-    Duplicate of: src/utils.py lines 67-78
-    Suggestion: Use existing function from utils
 ```
 
-**Pipeline usage:**
+**Finding duplicates across files (workaround):**
 ```bash
-# Find all duplicates in project
-find src/ -name "*.py" | reveal --stdin --check --select D
+# 1. Find functions with similar names across files
+reveal 'ast://./src?name=*parse*'
+reveal 'ast://./src?name=*validate*'
+
+# 2. Find complex functions (duplication candidates)
+reveal 'ast://./src?complexity>10&lines>50'
+
+# 3. Check each file individually
+find src/ -name "*.py" | while read f; do
+    reveal "$f" --check --select D001
+done
 ```
+
+**See also:** `reveal/DUPLICATE_DETECTION_GUIDE.md` for comprehensive workflows and limitations.
 
 ---
 

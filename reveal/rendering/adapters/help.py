@@ -82,7 +82,7 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
     if static:
         # Organize static guides by category
         ai_guides = ['agent', 'agent-full']
-        feature_guides = ['python-guide', 'markdown', 'reveal-guide', 'html', 'configuration', 'schemas']
+        feature_guides = ['python-guide', 'markdown', 'reveal-guide', 'html', 'configuration', 'schemas', 'duplicates']
         best_practices = ['anti-patterns', 'tricks']
         dev_guides = ['adapter-authoring', 'help', 'release']
 
@@ -121,7 +121,8 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
                     'reveal-guide': '~3,000',
                     'html': '~2,000',
                     'configuration': '~3,500',
-                    'schemas': '~4,500'
+                    'schemas': '~4,500',
+                    'duplicates': '~5,500'
                 }.get(topic, '~2,000')
                 print(f"  {topic:16} - {_get_guide_description(topic)}")
                 print(f"                     File: {file}")
@@ -197,6 +198,8 @@ def _get_guide_description(topic: str) -> str:
         'configuration': 'Configuration system (rules, env vars, precedence)',
         'config': 'Alias for configuration',
         'schemas': 'Schema validation for markdown front matter (v0.29.0+)',
+        'duplicates': 'Duplicate code detection (D001/D002 rules, workflows, limitations)',
+        'duplicate-detection': 'Alias for duplicates',
         'anti-patterns': 'Common mistakes to avoid',
         'adapter-authoring': 'Build your own adapters',
         'tricks': 'Cool tricks and hidden features',

@@ -294,14 +294,28 @@ find src/ -name "*.py" | reveal --stdin --format=json | \
 
 **Pattern:**
 ```bash
-# Run duplicate detection
-reveal file.py --check --select D
+# Within a single file (only what's implemented)
+reveal file.py --check --select D001
 
-# D001: Exact duplicates (hash-based, reliable)
-# D002: Similar code (structural similarity, experimental)
+# D001: Exact duplicates (hash-based, reliable) ✅
+# D002: Similar code (experimental, ~90% false positives) ⚠️
 ```
 
-**Note:** D002 currently has high false positive rate. Use D001 for exact duplicates only.
+**Cross-file detection (workaround using AST):**
+```bash
+# Find functions with similar names
+reveal 'ast://./src?name=*parse*'
+reveal 'ast://./src?name=*validate*'
+reveal 'ast://./src?name=*process*'
+
+# Find duplication-prone code
+reveal 'ast://./src?complexity>10&lines>50'
+
+# Check hotspot files
+reveal 'stats://./src' --hotspots
+```
+
+**Note:** Cross-file duplicate detection not yet implemented. D001/D002 only work within single files. See `reveal/DUPLICATE_DETECTION_GUIDE.md` for comprehensive workflows.
 
 ---
 
