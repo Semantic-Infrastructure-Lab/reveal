@@ -164,54 +164,96 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             return self._extract_links_regex(link_type, domain)
 
         links = []
-
-        # Find all link nodes using tree-sitter
         link_nodes = self._find_nodes_by_type('link')
 
         for node in link_nodes:
-            # Extract link_text and link_destination from children
-            text = None
-            url = None
-
-            for child in node.children:
-                if child.type == 'link_text':
-                    # link_text has a text child - extract it
-                    for text_node in child.children:
-                        if text_node.type == 'text':
-                            text = text_node.text.decode('utf-8')
-                            break
-                elif child.type == 'link_destination':
-                    # link_destination has a text child - extract it
-                    for text_node in child.children:
-                        if text_node.type == 'text':
-                            url = text_node.text.decode('utf-8')
-                            break
+            text = self._extract_link_text(node)
+            url = self._extract_link_destination(node)
 
             if text and url:
-                # Get position (tree-sitter is 0-indexed)
-                line = node.start_point[0] + 1
-                column = node.start_point[1] + 1
+                link_info = self._build_link_info(node, text, url)
 
-                # Classify link (reuse existing logic)
-                link_info = self._classify_link(url, text, line)
-                link_info['column'] = column  # Add column position
-
-                # Apply type filter
-                if link_type and link_type != 'all':
-                    if link_info['type'] != link_type:
-                        continue
-
-                # Apply domain filter (for external links)
-                if domain:
-                    if link_info['type'] == 'external':
-                        if domain not in url:
-                            continue
-                    else:
-                        continue  # Domain filter only applies to external links
-
-                links.append(link_info)
+                if self._link_matches_filters(link_info, link_type, domain):
+                    links.append(link_info)
 
         return links
+
+    def _extract_link_text(self, node) -> Optional[str]:
+        """Extract text from a link node's link_text child.
+
+        Args:
+            node: Tree-sitter link node
+
+        Returns:
+            Link text or None if not found
+        """
+        for child in node.children:
+            if child.type == 'link_text':
+                for text_node in child.children:
+                    if text_node.type == 'text':
+                        return text_node.text.decode('utf-8')
+        return None
+
+    def _extract_link_destination(self, node) -> Optional[str]:
+        """Extract URL from a link node's link_destination child.
+
+        Args:
+            node: Tree-sitter link node
+
+        Returns:
+            Link URL or None if not found
+        """
+        for child in node.children:
+            if child.type == 'link_destination':
+                for text_node in child.children:
+                    if text_node.type == 'text':
+                        return text_node.text.decode('utf-8')
+        return None
+
+    def _build_link_info(self, node, text: str, url: str) -> Dict[str, Any]:
+        """Build link info dict with position and classification.
+
+        Args:
+            node: Tree-sitter link node
+            text: Link text
+            url: Link URL
+
+        Returns:
+            Dict with link metadata
+        """
+        line = node.start_point[0] + 1
+        column = node.start_point[1] + 1
+
+        link_info = self._classify_link(url, text, line)
+        link_info['column'] = column
+        return link_info
+
+    def _link_matches_filters(self, link_info: Dict[str, Any],
+                              link_type: Optional[str],
+                              domain: Optional[str]) -> bool:
+        """Check if link matches type and domain filters.
+
+        Args:
+            link_info: Link metadata dict
+            link_type: Type filter (internal, external, email, all)
+            domain: Domain filter (for external links)
+
+        Returns:
+            True if link matches filters
+        """
+        # Apply type filter
+        if link_type and link_type != 'all':
+            if link_info['type'] != link_type:
+                return False
+
+        # Apply domain filter (only for external links)
+        if domain:
+            if link_info['type'] == 'external':
+                return domain in link_info['url']
+            else:
+                return False  # Domain filter only applies to external links
+
+        return True
 
     def _extract_links_regex(self, link_type: Optional[str] = None,
                             domain: Optional[str] = None) -> List[Dict[str, Any]]:

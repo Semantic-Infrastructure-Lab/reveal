@@ -1,6 +1,85 @@
 """Help documentation for Python adapter."""
 
-from typing import Dict, Any
+from typing import Dict, Any, List
+
+
+def _get_workflows() -> List[Dict[str, Any]]:
+    """Get workflow examples for Python adapter.
+
+    Returns:
+        List of workflow dicts
+    """
+    return [
+        {
+            "name": "Debug 'My Changes Aren't Working'",
+            "scenario": "You edited code but Python keeps running the old version",
+            "steps": [
+                "reveal python://debug/bytecode     # Check for stale .pyc files",
+                "reveal python://module/mypackage   # Check import location",
+                "reveal python://syspath            # See import precedence",
+                "# If stale bytecode found:",
+                "find . -type d -name __pycache__ -exec rm -rf {} +",
+            ],
+        },
+        {
+            "name": "Debug 'Wrong Package Version'",
+            "scenario": "pip shows v2.0 but code runs v1.0 behavior",
+            "steps": [
+                "reveal python://module/package_name  # Compare pip vs import location",
+                "reveal python://syspath              # Check CWD shadowing",
+                "reveal python://venv                 # Verify venv is active",
+            ],
+        },
+        {
+            "name": "Environment Health Check",
+            "scenario": "Setting up new machine or debugging weird behavior",
+            "steps": [
+                "reveal python://doctor               # One-command diagnostics",
+                "reveal python://                     # Environment overview",
+                "reveal python://packages             # Installed packages",
+            ],
+        },
+    ]
+
+
+def _get_examples() -> List[Dict[str, str]]:
+    """Get usage examples for Python adapter.
+
+    Returns:
+        List of example dicts
+    """
+    return [
+        {"uri": "python://", "description": "Overview of Python environment"},
+        {"uri": "python://version", "description": "Detailed Python version information"},
+        {
+            "uri": "python://env",
+            "description": "Python's computed environment (sys.path, flags)",
+        },
+        {"uri": "python://venv", "description": "Virtual environment status and details"},
+        {"uri": "python://packages", "description": "List all installed packages"},
+        {
+            "uri": "python://packages/reveal-cli",
+            "description": "Details about a specific package",
+        },
+        {
+            "uri": "python://imports",
+            "description": "Currently loaded modules in sys.modules",
+        },
+        {
+            "uri": "python://module/reveal",
+            "description": "Analyze reveal module (pip vs import location)",
+        },
+        {
+            "uri": "python://syspath",
+            "description": "Analyze sys.path with conflict detection",
+        },
+        {"uri": "python://doctor", "description": "Run automated environment diagnostics"},
+        {
+            "uri": "python://debug/bytecode",
+            "description": "Check for stale .pyc files and bytecode issues",
+        },
+        {"uri": "python:// --format=json", "description": "JSON output for scripting"},
+    ]
 
 
 def get_help() -> Dict[str, Any]:
@@ -13,38 +92,7 @@ def get_help() -> Dict[str, Any]:
         "name": "python",
         "description": "Inspect Python runtime environment and debug common issues",
         "syntax": "python://[element]",
-        "examples": [
-            {"uri": "python://", "description": "Overview of Python environment"},
-            {"uri": "python://version", "description": "Detailed Python version information"},
-            {
-                "uri": "python://env",
-                "description": "Python's computed environment (sys.path, flags)",
-            },
-            {"uri": "python://venv", "description": "Virtual environment status and details"},
-            {"uri": "python://packages", "description": "List all installed packages"},
-            {
-                "uri": "python://packages/reveal-cli",
-                "description": "Details about a specific package",
-            },
-            {
-                "uri": "python://imports",
-                "description": "Currently loaded modules in sys.modules",
-            },
-            {
-                "uri": "python://module/reveal",
-                "description": "Analyze reveal module (pip vs import location)",
-            },
-            {
-                "uri": "python://syspath",
-                "description": "Analyze sys.path with conflict detection",
-            },
-            {"uri": "python://doctor", "description": "Run automated environment diagnostics"},
-            {
-                "uri": "python://debug/bytecode",
-                "description": "Check for stale .pyc files and bytecode issues",
-            },
-            {"uri": "python:// --format=json", "description": "JSON output for scripting"},
-        ],
+        "examples": _get_examples(),
         "elements": {
             "version": "Python version, implementation, and build details",
             "env": "Python environment configuration (sys.path, flags, encoding)",
@@ -90,37 +138,7 @@ def get_help() -> Dict[str, Any]:
             "reveal python://debug/bytecode",
             "reveal python://venv",
         ],
-        "workflows": [
-            {
-                "name": "Debug 'My Changes Aren't Working'",
-                "scenario": "You edited code but Python keeps running the old version",
-                "steps": [
-                    "reveal python://debug/bytecode     # Check for stale .pyc files",
-                    "reveal python://module/mypackage   # Check import location",
-                    "reveal python://syspath            # See import precedence",
-                    "# If stale bytecode found:",
-                    "find . -type d -name __pycache__ -exec rm -rf {} +",
-                ],
-            },
-            {
-                "name": "Debug 'Wrong Package Version'",
-                "scenario": "pip shows v2.0 but code runs v1.0 behavior",
-                "steps": [
-                    "reveal python://module/package_name  # Compare pip vs import location",
-                    "reveal python://syspath              # Check CWD shadowing",
-                    "reveal python://venv                 # Verify venv is active",
-                ],
-            },
-            {
-                "name": "Environment Health Check",
-                "scenario": "Setting up new machine or debugging weird behavior",
-                "steps": [
-                    "reveal python://doctor               # One-command diagnostics",
-                    "reveal python://                     # Environment overview",
-                    "reveal python://packages             # Installed packages",
-                ],
-            },
-        ],
+        "workflows": _get_workflows(),
         "anti_patterns": [
             {
                 "bad": "python -c \"import pkg; print(pkg.__file__)\"",
@@ -128,7 +146,10 @@ def get_help() -> Dict[str, Any]:
                 "why": "Structured output with conflict detection and recommendations",
             },
             {
-                "bad": "pip show package && python -c \"import package; print(package.__version__)\"",
+                "bad": (
+                    "pip show package && "
+                    "python -c \"import package; print(package.__version__)\""
+                ),
                 "good": "reveal python://packages/package",
                 "why": "Shows both pip metadata AND import location in one command",
             },

@@ -497,3 +497,144 @@ class TestEdgeCases:
         # Should return results without filtering
         assert 'summary' in result
         assert result['summary']['total_files'] >= 2
+
+
+class TestURIQueryParameters:
+    """Test URI query parameter parsing and integration."""
+
+    def test_parse_query_with_hotspots(self, tmp_path):
+        """Test parsing hotspots=true query parameter."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def hello(): pass")
+
+        adapter = StatsAdapter(str(tmp_path), query_string="hotspots=true")
+
+        assert 'hotspots' in adapter.query_params
+        assert adapter.query_params['hotspots'] is True
+
+    def test_parse_query_with_min_complexity(self, tmp_path):
+        """Test parsing min_complexity query parameter."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def hello(): pass")
+
+        adapter = StatsAdapter(str(tmp_path), query_string="min_complexity=5")
+
+        assert 'min_complexity' in adapter.query_params
+        assert adapter.query_params['min_complexity'] == 5
+
+    def test_parse_query_with_multiple_params(self, tmp_path):
+        """Test parsing multiple query parameters."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def hello(): pass")
+
+        adapter = StatsAdapter(
+            str(tmp_path),
+            query_string="hotspots=true&min_complexity=10&min_lines=50"
+        )
+
+        assert adapter.query_params['hotspots'] is True
+        assert adapter.query_params['min_complexity'] == 10
+        assert adapter.query_params['min_lines'] == 50
+
+    def test_parse_query_with_float_values(self, tmp_path):
+        """Test parsing float query parameters."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def hello(): pass")
+
+        adapter = StatsAdapter(str(tmp_path), query_string="max_complexity=3.5")
+
+        assert 'max_complexity' in adapter.query_params
+        assert adapter.query_params['max_complexity'] == 3.5
+
+    def test_parse_query_with_boolean_variants(self, tmp_path):
+        """Test parsing various boolean representations."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def hello(): pass")
+
+        # Test 'true'
+        adapter1 = StatsAdapter(str(tmp_path), query_string="hotspots=true")
+        assert adapter1.query_params['hotspots'] is True
+
+        # Test '1'
+        adapter2 = StatsAdapter(str(tmp_path), query_string="hotspots=1")
+        assert adapter2.query_params['hotspots'] is True
+
+        # Test 'yes'
+        adapter3 = StatsAdapter(str(tmp_path), query_string="hotspots=yes")
+        assert adapter3.query_params['hotspots'] is True
+
+        # Test 'false'
+        adapter4 = StatsAdapter(str(tmp_path), query_string="hotspots=false")
+        assert adapter4.query_params['hotspots'] is False
+
+        # Test '0'
+        adapter5 = StatsAdapter(str(tmp_path), query_string="hotspots=0")
+        assert adapter5.query_params['hotspots'] is False
+
+    def test_query_params_override_flag_params(self, tmp_path):
+        """Test that query params take precedence over flag params."""
+        # Create test files with different complexity
+        (tmp_path / "simple.py").write_text("def f(): pass")
+        (tmp_path / "complex.py").write_text("""
+def complex_function(a, b, c):
+    if a > 0:
+        for i in range(10):
+            if b > i:
+                while c > 0:
+                    c -= 1
+    return a + b + c
+""")
+
+        # Query param says hotspots=true, flag param says False
+        adapter = StatsAdapter(str(tmp_path), query_string="hotspots=true")
+        result = adapter.get_structure(hotspots=False)
+
+        # Query param should win
+        assert 'hotspots' in result
+
+    def test_query_params_with_filters_applied(self, tmp_path):
+        """Test that query params are properly applied to filtering."""
+        # Create files with different line counts
+        (tmp_path / "small.py").write_text("def f(): pass")  # ~1 line
+        (tmp_path / "medium.py").write_text("def g():\n" + "    pass\n" * 30)  # ~32 lines
+        (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)  # ~62 lines
+
+        # Filter for files with 50+ lines
+        adapter = StatsAdapter(str(tmp_path), query_string="min_lines=50")
+        result = adapter.get_structure()
+
+        # Should only include large.py
+        assert 'files' in result
+        filtered_files = [f for f in result['files'] if f['lines']['total'] >= 50]
+        assert len(filtered_files) >= 1
+        assert any('large.py' in f['file'] for f in filtered_files)
+
+    def test_empty_query_string(self, tmp_path):
+        """Test handling of empty query string."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def hello(): pass")
+
+        adapter = StatsAdapter(str(tmp_path), query_string="")
+
+        assert adapter.query_params == {}
+
+    def test_none_query_string(self, tmp_path):
+        """Test handling of None query string."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def hello(): pass")
+
+        adapter = StatsAdapter(str(tmp_path), query_string=None)
+
+        assert adapter.query_params == {}
+
+    def test_malformed_query_params_ignored(self, tmp_path):
+        """Test that malformed query params are handled gracefully."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def hello(): pass")
+
+        # Param without value should be ignored
+        adapter = StatsAdapter(str(tmp_path), query_string="hotspots&min_lines=50")
+
+        # Only properly formed params should be parsed
+        assert 'min_lines' in adapter.query_params
+        assert adapter.query_params['min_lines'] == 50

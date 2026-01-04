@@ -745,5 +745,218 @@ class TestMarkdownRegexFallback(unittest.TestCase):
             os.rmdir(temp_dir)
 
 
+class TestMarkdownLinkHelpers(unittest.TestCase):
+    """Test refactored link helper functions."""
+
+    def create_temp_markdown(self, content: str) -> str:
+        """Helper: Create temp markdown file."""
+        temp_dir = tempfile.mkdtemp()
+        path = os.path.join(temp_dir, "test.md")
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def test_extract_link_text_helper(self):
+        """Test _extract_link_text helper extracts text from link nodes."""
+        content = "[Example Link](https://example.com)"
+        path = self.create_temp_markdown(content)
+
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            links = analyzer._extract_links()
+
+            # Verify link was extracted
+            self.assertEqual(len(links), 1)
+            self.assertEqual(links[0]['text'], 'Example Link')
+
+        finally:
+            os.unlink(path)
+            os.rmdir(os.path.dirname(path))
+
+    def test_extract_link_destination_helper(self):
+        """Test _extract_link_destination helper extracts URLs from link nodes."""
+        content = "[Example](https://example.com/path/to/page)"
+        path = self.create_temp_markdown(content)
+
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            links = analyzer._extract_links()
+
+            # Verify URL was extracted correctly
+            self.assertEqual(len(links), 1)
+            self.assertEqual(links[0]['url'], 'https://example.com/path/to/page')
+
+        finally:
+            os.unlink(path)
+            os.rmdir(os.path.dirname(path))
+
+    def test_build_link_info_helper_with_external_link(self):
+        """Test _build_link_info helper builds metadata for external links."""
+        content = "[External](https://example.com)"
+        path = self.create_temp_markdown(content)
+
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            links = analyzer._extract_links()
+
+            # Verify link info includes metadata
+            self.assertEqual(len(links), 1)
+            link = links[0]
+            self.assertEqual(link['type'], 'external')
+            self.assertIn('line', link)
+            self.assertIn('column', link)
+            self.assertEqual(link['url'], 'https://example.com')
+
+        finally:
+            os.unlink(path)
+            os.rmdir(os.path.dirname(path))
+
+    def test_build_link_info_helper_with_internal_link(self):
+        """Test _build_link_info helper builds metadata for internal links."""
+        content = "[Internal](#section)"
+        path = self.create_temp_markdown(content)
+
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            links = analyzer._extract_links()
+
+            # Verify link info includes metadata
+            self.assertEqual(len(links), 1)
+            link = links[0]
+            self.assertEqual(link['type'], 'internal')
+            self.assertEqual(link['url'], '#section')
+
+        finally:
+            os.unlink(path)
+            os.rmdir(os.path.dirname(path))
+
+    def test_link_matches_filters_with_type_filter(self):
+        """Test _link_matches_filters helper filters by link type."""
+        content = """
+[External Link](https://example.com)
+[Internal Link](#section)
+[Email](mailto:test@example.com)
+"""
+        path = self.create_temp_markdown(content)
+
+        try:
+            analyzer = MarkdownAnalyzer(path)
+
+            # Filter for external links only
+            external_links = analyzer._extract_links(link_type='external')
+            self.assertEqual(len(external_links), 1)
+            self.assertEqual(external_links[0]['type'], 'external')
+
+            # Filter for internal links only
+            internal_links = analyzer._extract_links(link_type='internal')
+            self.assertEqual(len(internal_links), 1)
+            self.assertEqual(internal_links[0]['type'], 'internal')
+
+            # Filter for email links only
+            email_links = analyzer._extract_links(link_type='email')
+            self.assertEqual(len(email_links), 1)
+            self.assertEqual(email_links[0]['type'], 'email')
+
+        finally:
+            os.unlink(path)
+            os.rmdir(os.path.dirname(path))
+
+    def test_link_matches_filters_with_domain_filter(self):
+        """Test _link_matches_filters helper filters by domain."""
+        content = """
+[Example](https://example.com/page)
+[GitHub](https://github.com/user/repo)
+[Internal](#section)
+"""
+        path = self.create_temp_markdown(content)
+
+        try:
+            analyzer = MarkdownAnalyzer(path)
+
+            # Filter for example.com domain
+            example_links = analyzer._extract_links(domain='example.com')
+            self.assertEqual(len(example_links), 1)
+            self.assertIn('example.com', example_links[0]['url'])
+
+            # Filter for github.com domain
+            github_links = analyzer._extract_links(domain='github.com')
+            self.assertEqual(len(github_links), 1)
+            self.assertIn('github.com', github_links[0]['url'])
+
+        finally:
+            os.unlink(path)
+            os.rmdir(os.path.dirname(path))
+
+    def test_link_matches_filters_with_combined_filters(self):
+        """Test _link_matches_filters with both type and domain filters."""
+        content = """
+[Example](https://example.com/page)
+[GitHub](https://github.com/user/repo)
+[Internal](#section)
+"""
+        path = self.create_temp_markdown(content)
+
+        try:
+            analyzer = MarkdownAnalyzer(path)
+
+            # Filter for external links from github.com
+            github_links = analyzer._extract_links(
+                link_type='external',
+                domain='github.com'
+            )
+            self.assertEqual(len(github_links), 1)
+            self.assertEqual(github_links[0]['type'], 'external')
+            self.assertIn('github.com', github_links[0]['url'])
+
+        finally:
+            os.unlink(path)
+            os.rmdir(os.path.dirname(path))
+
+    def test_link_helpers_preserve_line_numbers(self):
+        """Test that refactored helpers preserve accurate line numbers."""
+        content = """# Title
+
+[First Link](https://first.com)
+
+Some text here.
+
+[Second Link](https://second.com)
+"""
+        path = self.create_temp_markdown(content)
+
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            links = analyzer._extract_links()
+
+            # Verify line numbers are correct
+            self.assertEqual(len(links), 2)
+            self.assertEqual(links[0]['line'], 3)  # First link on line 3
+            self.assertEqual(links[1]['line'], 7)  # Second link on line 7
+
+        finally:
+            os.unlink(path)
+            os.rmdir(os.path.dirname(path))
+
+    def test_link_helpers_handle_multiple_links_per_line(self):
+        """Test that helpers handle multiple links on same line."""
+        content = "[First](https://first.com) and [Second](https://second.com)"
+        path = self.create_temp_markdown(content)
+
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            links = analyzer._extract_links()
+
+            # Should extract both links
+            self.assertEqual(len(links), 2)
+            self.assertEqual(links[0]['url'], 'https://first.com')
+            self.assertEqual(links[1]['url'], 'https://second.com')
+            # Both should be on same line
+            self.assertEqual(links[0]['line'], links[1]['line'])
+
+        finally:
+            os.unlink(path)
+            os.rmdir(os.path.dirname(path))
+
+
 if __name__ == '__main__':
     unittest.main()

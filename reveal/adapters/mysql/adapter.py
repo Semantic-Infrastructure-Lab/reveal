@@ -237,7 +237,7 @@ class MySQLAdapter(ResourceAdapter):
         status_vars = {row['Variable_name']: row['Value']
                       for row in self._execute_query("SHOW GLOBAL STATUS")}
 
-        # Calculate metrics using helper methods
+        # Calculate uptime and health metrics
         uptime_days, uptime_hours, uptime_mins, server_start_time = (
             self._get_server_uptime_info(status_vars)
         )
@@ -247,41 +247,110 @@ class MySQLAdapter(ResourceAdapter):
         innodb_health = self._calculate_innodb_health(status_vars)
         resource_limits = self._calculate_resource_limits(status_vars)
 
-        # Performance (counters are cumulative since server start)
+        # Build subsystem info using extracted helpers
+        performance_metrics = self._build_performance_metrics(status_vars, uptime_seconds)
+        replication_info = self._build_replication_info()
+        storage_info = self._build_storage_info()
+        health_status, health_issues = self._build_health_assessment(
+            conn_health, innodb_health, replication_info
+        )
+
+        return {
+            'type': 'mysql_server',
+            'server': f"{self.host}:{self.port}",
+            'version': version_info['version'],
+            'uptime': f"{uptime_days}d {uptime_hours}h {uptime_mins}m",
+            'server_start_time': server_start_time.isoformat(),
+            'connection_health': {
+                **conn_health,
+                'percentage': f"{conn_health['percentage']:.1f}%",
+                'max_used_pct': f"{conn_health['max_used_pct']:.1f}%",
+                'note': 'If max_used_pct was 100%, connections were rejected (since server start)'
+            },
+            'performance': performance_metrics,
+            'innodb_health': {
+                'buffer_pool_hit_rate': f"{innodb_health['buffer_hit_rate']:.2f}% (since server start)",
+                'status': innodb_health['status'],
+                'row_lock_waits': f"{innodb_health['row_lock_waits']} (since server start)",
+                'deadlocks': f"{innodb_health['deadlocks']} (since server start)",
+            },
+            'replication': replication_info,
+            'storage': storage_info,
+            'resource_limits': {
+                'open_files': {
+                    **resource_limits['open_files'],
+                    'percentage': f"{resource_limits['open_files']['percentage']:.1f}%",
+                    'note': 'Approaching limit (>75%) can cause "too many open files" errors'
+                }
+            },
+            'health_status': health_status,
+            'health_issues': health_issues,
+            'next_steps': [
+                f"reveal mysql://{self.host}/connections       # Connection details",
+                f"reveal mysql://{self.host}/performance       # Query performance",
+                f"reveal mysql://{self.host}/innodb            # InnoDB details",
+                f"reveal mysql://{self.host} --check           # Run health checks",
+            ]
+        }
+
+    def _build_performance_metrics(self, status_vars: Dict[str, str],
+                                   uptime_seconds: int) -> Dict[str, Any]:
+        """Build performance metrics from status variables.
+
+        Args:
+            status_vars: SHOW GLOBAL STATUS results
+            uptime_seconds: Server uptime in seconds
+
+        Returns:
+            Dict with performance metrics
+        """
         questions = int(status_vars.get('Questions', 0))
         slow_queries = int(status_vars.get('Slow_queries', 0))
         qps = questions / uptime_seconds if uptime_seconds else 0
         slow_pct = (slow_queries / questions * 100) if questions else 0
         threads_running = int(status_vars.get('Threads_running', 0))
 
-        # Replication (check if slave)
+        return {
+            'qps': f"{qps:.1f}",
+            'slow_queries': f"{slow_queries} total ({slow_pct:.2f}% of all queries since server start)",
+            'threads_running': threads_running,
+        }
+
+    def _build_replication_info(self) -> Dict[str, Any]:
+        """Build replication status information.
+
+        Returns:
+            Dict with replication role and status
+        """
         try:
             slave_status = self._execute_single("SHOW SLAVE STATUS")
             if slave_status:
-                replication_role = "Slave"
-                lag = slave_status.get('Seconds_Behind_Master', 'Unknown')
-                io_running = slave_status.get('Slave_IO_Running', 'No') == 'Yes'
-                sql_running = slave_status.get('Slave_SQL_Running', 'No') == 'Yes'
-                replication_info = {
-                    'role': replication_role,
-                    'lag': lag,
-                    'io_running': io_running,
-                    'sql_running': sql_running,
+                return {
+                    'role': 'Slave',
+                    'lag': slave_status.get('Seconds_Behind_Master', 'Unknown'),
+                    'io_running': slave_status.get('Slave_IO_Running', 'No') == 'Yes',
+                    'sql_running': slave_status.get('Slave_SQL_Running', 'No') == 'Yes',
                 }
-            else:
-                # Check if master
-                slave_hosts = self._execute_query("SHOW SLAVE HOSTS")
-                if slave_hosts:
-                    replication_info = {
-                        'role': 'Master',
-                        'slaves': len(slave_hosts),
-                    }
-                else:
-                    replication_info = {'role': 'Standalone'}
-        except Exception as e:
-            replication_info = {'role': 'Unknown', 'error': str(e)}
 
-        # Storage
+            # Check if master
+            slave_hosts = self._execute_query("SHOW SLAVE HOSTS")
+            if slave_hosts:
+                return {
+                    'role': 'Master',
+                    'slaves': len(slave_hosts),
+                }
+
+            return {'role': 'Standalone'}
+
+        except Exception as e:
+            return {'role': 'Unknown', 'error': str(e)}
+
+    def _build_storage_info(self) -> Dict[str, Any]:
+        """Build storage usage information.
+
+        Returns:
+            Dict with database sizes and totals
+        """
         db_sizes = self._execute_query("""
             SELECT
                 table_schema as db_name,
@@ -296,16 +365,37 @@ class MySQLAdapter(ResourceAdapter):
         total_size_gb = sum(row['size_gb'] for row in db_sizes)
         largest_db = db_sizes[0] if db_sizes else None
 
-        # Overall health assessment
+        return {
+            'total_size_gb': total_size_gb,
+            'database_count': len(db_sizes),
+            'largest_db': f"{largest_db['db_name']} ({largest_db['size_gb']} GB)" if largest_db else 'N/A',
+        }
+
+    def _build_health_assessment(self, conn_health: Dict[str, Any],
+                                 innodb_health: Dict[str, Any],
+                                 replication_info: Dict[str, Any]) -> tuple:
+        """Build overall health assessment from subsystem metrics.
+
+        Args:
+            conn_health: Connection health metrics
+            innodb_health: InnoDB health metrics
+            replication_info: Replication status
+
+        Returns:
+            Tuple of (health_status, health_issues)
+        """
         health_issues = []
+
         if conn_health['percentage'] > 80:
             health_issues.append(
                 f"High connection usage ({conn_health['percentage']:.1f}%)"
             )
+
         if innodb_health['buffer_hit_rate'] < 99:
             health_issues.append(
                 f"Low buffer pool hit rate ({innodb_health['buffer_hit_rate']:.2f}%)"
             )
+
         if (replication_info.get('role') == 'Slave' and
                 replication_info.get('lag', 0) and
                 replication_info['lag'] != 'Unknown'):
@@ -316,51 +406,7 @@ class MySQLAdapter(ResourceAdapter):
                         '⚠️ WARNING' if len(health_issues) < 3 else
                         '❌ CRITICAL')
 
-        return {
-            'type': 'mysql_server',
-            'server': f"{self.host}:{self.port}",
-            'version': version_info['version'],
-            'uptime': f"{uptime_days}d {uptime_hours}h {uptime_mins}m",
-            'server_start_time': server_start_time.isoformat(),
-            'connection_health': {
-                **conn_health,
-                'percentage': f"{conn_health['percentage']:.1f}%",
-                'max_used_pct': f"{conn_health['max_used_pct']:.1f}%",
-                'note': 'If max_used_pct was 100%, connections were rejected (since server start)'
-            },
-            'performance': {
-                'qps': f"{qps:.1f}",
-                'slow_queries': f"{slow_queries} total ({slow_pct:.2f}% of all queries since server start)",
-                'threads_running': threads_running,
-            },
-            'innodb_health': {
-                'buffer_pool_hit_rate': f"{innodb_health['buffer_hit_rate']:.2f}% (since server start)",
-                'status': innodb_health['status'],
-                'row_lock_waits': f"{innodb_health['row_lock_waits']} (since server start)",
-                'deadlocks': f"{innodb_health['deadlocks']} (since server start)",
-            },
-            'replication': replication_info,
-            'storage': {
-                'total_size_gb': total_size_gb,
-                'database_count': len(db_sizes),
-                'largest_db': f"{largest_db['db_name']} ({largest_db['size_gb']} GB)" if largest_db else 'N/A',
-            },
-            'resource_limits': {
-                'open_files': {
-                    **resource_limits['open_files'],
-                    'percentage': f"{resource_limits['open_files']['percentage']:.1f}%",
-                    'note': 'Approaching limit (>75%) can cause "too many open files" errors'
-                }
-            },
-            'health_status': health_status,
-            'health_issues': health_issues if health_issues else ['No issues detected'],
-            'next_steps': [
-                f"reveal mysql://{self.host}/connections       # Connection details",
-                f"reveal mysql://{self.host}/performance       # Query performance",
-                f"reveal mysql://{self.host}/innodb            # InnoDB details",
-                f"reveal mysql://{self.host} --check           # Run health checks",
-            ]
-        }
+        return health_status, health_issues if health_issues else ['No issues detected']
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get details about a specific element.
