@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Refactored 3 high-complexity hotspots** using Extract Method pattern
+  - `analyzers/markdown.py`: Extracted `_extract_links` into 4 focused helpers (64→18 lines, quality 84.6→85.3/100)
+  - `adapters/mysql/adapter.py`: Extracted `get_structure` into 4 subsystem builders (135→66 lines, removed from top 10 hotspots)
+  - `adapters/python/help.py`: Extracted `get_help` into 2 data builders (152→94 lines, quality 55→passing, removed from top 10 hotspots)
+  - Overall quality improved from 97.2/100 to 97.4/100
+  - Established refactoring patterns: Nested Traversal→Extract Navigation, Monolithic Orchestration→Extract Builders
+
+### Added
+- **19 comprehensive integration tests** covering critical gaps
+  - 10 URI query parameter tests for `stats://` adapter (validates `?hotspots=true&min_complexity=10` syntax)
+  - 9 tests for refactored markdown.py link helpers (validates extraction, filtering, edge cases)
+  - Test coverage improved from 75% to 76%
+  - stats.py coverage improved from 84% to 92% (+8%)
+
 ## [0.29.0] - 2026-01-03
 
 ### Added
