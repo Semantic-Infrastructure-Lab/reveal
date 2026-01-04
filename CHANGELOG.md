@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Users on Python 3.8/3.9 should use reveal-cli <0.30.0
 
 ### Changed
+- **lxml is now optional** (moved to `[html]` extras for HTML analyzer performance)
+  - HTML analyzer uses stdlib `html.parser` by default (no C dependencies required)
+  - Install `pip install reveal-cli[html]` for faster lxml-based parsing (requires system libs: libxml2-dev, libxslt1-dev)
+  - Graceful fallback ensures HTML analysis works on all platforms without build tools
+  - Fixes CI failures since v0.17.0 (Dec 2025) caused by lxml C extension build issues
 - **Refactored 3 high-complexity hotspots** using Extract Method pattern
   - `analyzers/markdown.py`: Extracted `_extract_links` into 4 focused helpers (64→18 lines, quality 84.6→85.3/100)
   - `adapters/mysql/adapter.py`: Extracted `get_structure` into 4 subsystem builders (135→66 lines, removed from top 10 hotspots)

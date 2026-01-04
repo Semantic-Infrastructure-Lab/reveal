@@ -36,8 +36,7 @@ dependencies = [
     "rich>=13.0.0",  # For beautiful terminal output
     "tree-sitter==0.21.3",  # Semantic parsing for all languages
     "tree-sitter-languages>=1.10.0",  # Language grammar support (JS, TS, Rust, Go, etc.)
-    "beautifulsoup4>=4.12.0",  # HTML parsing for HTML analyzer
-    "lxml>=4.9.0",  # Fast XML/HTML parser backend for BeautifulSoup
+    "beautifulsoup4>=4.12.0",  # HTML parsing for HTML analyzer (uses stdlib html.parser)
 ]
 
 [project.optional-dependencies]
@@ -50,6 +49,11 @@ dev = [
 # DEPRECATED in v0.8.0: tree-sitter is now included by default
 # Kept for backward compatibility (install commands with [treesitter] still work)
 treesitter = []
+# HTML analyzer performance optimization (optional, provides faster parsing)
+# Falls back to stdlib html.parser if not installed
+html = [
+    "lxml>=4.9.0",  # Fast C-based XML/HTML parser (requires system libs: libxml2-dev, libxslt1-dev)
+]
 # Future: xlsx support
 excel = [
     "openpyxl>=3.0",
