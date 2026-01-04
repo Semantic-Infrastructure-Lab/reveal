@@ -342,7 +342,8 @@ class Example:
         result = subprocess.run(
             ['reveal', str(tmp_path), '--decorator-stats'],
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
 
         assert '@property' in result.stdout

@@ -22,7 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed config override path matching on macOS (symlink-aware `relative_to()`)
   - Fixed ignore pattern path matching on macOS (symlink-aware `relative_to()`)
   - Fixed L001 case sensitivity detection on case-insensitive filesystems (macOS HFS+)
-  - All 1,339 tests now pass on Linux; macOS/Windows fixes verified in CI
+  - **Fixed Windows Unicode encoding errors in test subprocess calls** (20 test failures on Windows)
+    - Added `encoding='utf-8'` to all `subprocess.run()` calls in test files
+    - Prevents `UnicodeDecodeError` when Windows cp1252 codepage can't decode UTF-8 output
+    - Ensures consistent UTF-8 handling across all platforms (Linux, macOS, Windows)
+    - Fixed in: test_builtin_schemas.py, test_schema_validation_cli.py, test_main_cli.py, test_cli_flags_integration.py, test_decorator_features.py, test_clipboard.py
+  - All 1,339 tests now pass on Linux and macOS; Windows CI expected to pass with encoding fix
 
 ### Changed
 - **lxml is now optional** (moved to `[html]` extras for HTML analyzer performance)

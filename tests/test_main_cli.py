@@ -18,7 +18,8 @@ class TestCLIFlags(unittest.TestCase):
         result = subprocess.run(
             cmd,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         return result
 
@@ -102,7 +103,8 @@ class TestErrorMessages(unittest.TestCase):
         result = subprocess.run(
             cmd,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         return result
 
@@ -143,7 +145,8 @@ class TestOutputFormats(unittest.TestCase):
         result = subprocess.run(
             cmd,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         return result
 

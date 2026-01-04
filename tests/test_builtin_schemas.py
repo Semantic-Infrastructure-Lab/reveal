@@ -24,6 +24,7 @@ def run_reveal(args, check=True):
         cmd,
         capture_output=True,
         text=True,
+        encoding='utf-8',
         check=False
     )
     if check and result.returncode != 0:

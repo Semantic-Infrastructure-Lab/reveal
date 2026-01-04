@@ -218,7 +218,8 @@ class TestCopyFlagCLI(unittest.TestCase):
         result = subprocess.run(
             cmd,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         return result
 
