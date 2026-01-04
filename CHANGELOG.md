@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+- **Minimum Python version raised to 3.10** (was 3.8)
+  - Python 3.8 reached EOL in October 2024
+  - Python 3.9 reaches EOL in October 2025
+  - Code uses walrus operators (`:=`) and modern type hints compatible with 3.10+
+  - CI now tests Python 3.10 and 3.12 on Ubuntu only (simplified from 3.8/3.12 on 3 platforms)
+  - Users on Python 3.8/3.9 should use reveal-cli <0.30.0
+
 ### Changed
 - **Refactored 3 high-complexity hotspots** using Extract Method pattern
   - `analyzers/markdown.py`: Extracted `_extract_links` into 4 focused helpers (64→18 lines, quality 84.6→85.3/100)
