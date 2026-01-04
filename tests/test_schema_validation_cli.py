@@ -578,7 +578,7 @@ badge: "Unicode 🎉 Test"
 ---
 
 # Unicode Test
-""")
+""", encoding='utf-8')
 
         result = run_reveal([str(readme), '--validate-schema', 'beth'])
         assert result.returncode == 0

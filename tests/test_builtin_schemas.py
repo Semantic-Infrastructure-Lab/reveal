@@ -48,7 +48,7 @@ class TestHugoSchema:
 
     def test_hugo_valid_post(self):
         """Test validation passes for valid Hugo post."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "My Blog Post"
 date: 2026-01-02
@@ -74,7 +74,7 @@ Content here.
 
     def test_hugo_missing_required_title(self):
         """Test validation fails when title is missing."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 date: 2026-01-02
 ---
@@ -93,7 +93,7 @@ date: 2026-01-02
 
     def test_hugo_date_optional_for_static_pages(self):
         """Test validation passes when date is missing (static pages don't need dates)."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "About Page"
 description: "Static page without date"
@@ -112,7 +112,7 @@ description: "Static page without date"
 
     def test_hugo_empty_title(self):
         """Test validation fails when title is empty string."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: ""
 date: 2026-01-02
@@ -132,7 +132,7 @@ date: 2026-01-02
 
     def test_hugo_invalid_date_format(self):
         """Test validation fails for invalid date format."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "My Post"
 date: 01/02/2026
@@ -152,7 +152,7 @@ date: 01/02/2026
 
     def test_hugo_wrong_field_types(self):
         """Test validation fails for wrong field types."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "My Post"
 date: 2026-01-02
@@ -174,7 +174,7 @@ tags: "python"
 
     def test_hugo_with_all_optional_fields(self):
         """Test validation passes with all optional fields."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "Complete Post"
 date: 2026-01-02
@@ -206,7 +206,7 @@ Full content with all metadata.
 
     def test_hugo_json_output(self):
         """Test Hugo validation with JSON output format."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "Test Post"
 description: "Static page without date"
@@ -242,7 +242,7 @@ class TestObsidianSchema:
 
     def test_obsidian_no_frontmatter(self):
         """Test Obsidian allows notes without frontmatter."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''# My Note
 
 Just a simple note without any frontmatter.
@@ -259,7 +259,7 @@ Just a simple note without any frontmatter.
 
     def test_obsidian_valid_note(self):
         """Test validation passes for valid Obsidian note."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 tags: [personal, productivity, notes]
 aliases: [productivity-tips, getting-things-done]
@@ -282,7 +282,7 @@ My notes on staying productive.
 
     def test_obsidian_empty_tags_list(self):
         """Test validation warns about empty tags list."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 tags: []
 ---
@@ -301,7 +301,7 @@ tags: []
 
     def test_obsidian_wrong_field_types(self):
         """Test validation fails for wrong field types."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 tags: "single-tag"
 aliases: "not-a-list"
@@ -321,7 +321,7 @@ publish: "yes"
 
     def test_obsidian_rating_validation(self):
         """Test rating field must be 1-5."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 rating: 10
 ---
@@ -340,7 +340,7 @@ rating: 10
 
     def test_obsidian_priority_validation(self):
         """Test priority field must be 1-5."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 priority: 0
 ---
@@ -359,7 +359,7 @@ priority: 0
 
     def test_obsidian_valid_rating(self):
         """Test valid rating values (1-5) pass validation."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 rating: 4
 priority: 2
@@ -378,7 +378,7 @@ tags: [important]
 
     def test_obsidian_cssclasses_vs_cssclass(self):
         """Test both cssclass (string) and cssclasses (list) work."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 cssclass: minimal
 cssclasses: [wide, clean]
@@ -397,7 +397,7 @@ tags: [meta]
 
     def test_obsidian_all_fields(self):
         """Test validation with all Obsidian fields."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 tags: [project, work, important]
 aliases: [work-project, proj-alpha]
@@ -443,7 +443,7 @@ class TestJekyllSchema:
 
     def test_jekyll_valid_post(self):
         """Test validation passes for valid Jekyll post."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 layout: post
 title: "My Jekyll Post"
@@ -469,7 +469,7 @@ Content here.
 
     def test_jekyll_missing_required_layout(self):
         """Test validation fails when layout is missing."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "Post Without Layout"
 date: 2026-01-03
@@ -492,7 +492,7 @@ date: 2026-01-03
         layouts = ['default', 'post', 'page', 'home']
 
         for layout_name in layouts:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
                 f.write(f'''---
 layout: {layout_name}
 title: "Test Page"
@@ -510,7 +510,7 @@ title: "Test Page"
 
     def test_jekyll_invalid_date_format(self):
         """Test validation fails for invalid date format."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 layout: post
 title: "My Post"
@@ -531,7 +531,7 @@ date: 01/03/2026
 
     def test_jekyll_permalink_validation(self):
         """Test permalink must start with /."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 layout: post
 title: "My Post"
@@ -552,7 +552,7 @@ permalink: posts/my-post
 
     def test_jekyll_published_boolean(self):
         """Test published field must be boolean."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 layout: post
 title: "My Post"
@@ -572,7 +572,7 @@ published: "yes"
 
     def test_jekyll_minimal_page(self):
         """Test minimal Jekyll page with only layout."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 layout: default
 ---
@@ -589,7 +589,7 @@ layout: default
 
     def test_jekyll_github_pages_example(self):
         """Test real-world GitHub Pages example."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 layout: post
 title: "Building with Jekyll on GitHub Pages"
@@ -629,7 +629,7 @@ class TestMkDocsSchema:
 
     def test_mkdocs_no_frontmatter(self):
         """Test MkDocs validation passes with no front matter (all optional)."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''# My Documentation Page
 
 This page has no front matter at all.
@@ -646,7 +646,7 @@ This page has no front matter at all.
 
     def test_mkdocs_minimal_valid(self):
         """Test minimal valid MkDocs page with minimal front matter."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "Documentation"
 ---
@@ -665,7 +665,7 @@ Minimal MkDocs page.
 
     def test_mkdocs_full_example(self):
         """Test comprehensive MkDocs example with many fields."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "API Reference"
 description: "Complete API documentation for the project"
@@ -700,7 +700,7 @@ Documentation content here.
 
     def test_mkdocs_material_theme_hide(self):
         """Test Material for MkDocs hide field validation."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "Clean Page"
 hide:
@@ -720,7 +720,7 @@ hide:
 
     def test_mkdocs_invalid_hide_option(self):
         """Test that invalid hide options are detected."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "Test Page"
 hide:
@@ -742,7 +742,7 @@ hide:
 
     def test_mkdocs_invalid_date_format(self):
         """Test that invalid date format is detected."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "Test Page"
 date: 01/03/2026
@@ -765,7 +765,7 @@ date: 01/03/2026
         statuses = ['new', 'deprecated', 'beta', 'experimental']
 
         for status_value in statuses:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
                 f.write(f'''---
 title: "Test Page"
 status: {status_value}
@@ -783,7 +783,7 @@ status: {status_value}
 
     def test_mkdocs_real_world_example(self):
         """Test real-world MkDocs example (FastAPI-style docs)."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: Tutorial - User Guide
 description: A comprehensive guide to using the API
@@ -829,7 +829,7 @@ class TestSchemaListing:
 
     def test_cli_lists_all_schemas_on_error(self):
         """Test CLI error message lists all available schemas."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('# Test\n')
             temp_path = f.name
 
@@ -849,7 +849,7 @@ class TestCrossSchemaComparison:
     def test_same_file_different_schemas(self):
         """Test same file validates differently with different schemas."""
         # A file with just title and date
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "Test Document"
 date: 2026-01-02
@@ -881,7 +881,7 @@ class TestEdgeCases:
 
     def test_hugo_date_with_time(self):
         """Test Hugo accepts date with time (RFC3339)."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "Post with Time"
 date: 2026-01-02T15:30:00Z
@@ -899,7 +899,7 @@ date: 2026-01-02T15:30:00Z
 
     def test_obsidian_tags_single_string(self):
         """Test Obsidian rejects single string tags (should be list)."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 tags: single-tag
 ---
@@ -918,7 +918,7 @@ tags: single-tag
 
     def test_hugo_unicode_in_title(self):
         """Test Hugo handles unicode in title."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
             f.write('''---
 title: "測試文章 🚀"
 date: 2026-01-02

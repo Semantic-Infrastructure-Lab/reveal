@@ -27,7 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Prevents `UnicodeDecodeError` when Windows cp1252 codepage can't decode UTF-8 output
     - Ensures consistent UTF-8 handling across all platforms (Linux, macOS, Windows)
     - Fixed in: test_builtin_schemas.py, test_schema_validation_cli.py, test_main_cli.py, test_cli_flags_integration.py, test_decorator_features.py, test_clipboard.py
-  - All 1,339 tests now pass on Linux and macOS; Windows CI expected to pass with encoding fix
+  - **Fixed Windows Unicode file writing errors in tests** (2 additional test failures)
+    - Added `encoding='utf-8'` to all `tempfile.NamedTemporaryFile()` and `Path.write_text()` calls
+    - Prevents `UnicodeEncodeError` when writing Unicode content (Chinese, Russian, Japanese, emoji) to test files
+    - Fixed in: test_builtin_schemas.py (21 instances), test_schema_validation_cli.py (1 instance)
+  - All 1,339 tests now pass on Linux and macOS; Windows CI expected to be fully green with encoding fixes
 
 ### Changed
 - **lxml is now optional** (moved to `[html]` extras for HTML analyzer performance)
