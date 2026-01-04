@@ -1,5 +1,5 @@
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.28.0
+**Version:** 0.29.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -1051,6 +1051,29 @@ reveal docs/setup.md --links --link-type internal
 
 ## Troubleshooting
 
+### Issue: "Nothing happens when I use --hotspots"
+
+**Problem:** `--hotspots` flag only works with the `stats://` adapter.
+
+**Wrong:**
+```bash
+reveal . --hotspots              # Error: --hotspots only works with stats://
+reveal file.py --hotspots        # Error: --hotspots only works with stats://
+```
+
+**Correct:**
+```bash
+# URI parameter (preferred):
+reveal stats://.?hotspots=true
+
+# Flag (legacy - shows migration hint):
+reveal stats://. --hotspots
+```
+
+**Why:** Adapter-specific features should use URI parameters, not global flags. This keeps the CLI consistent and prevents confusion about which flags work where.
+
+---
+
 ### Issue: "No structure found"
 
 **Symptoms:**
@@ -1639,8 +1662,8 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 
 ---
 
-**Version:** 0.26.0
-**Last updated:** 2025-12-20
+**Version:** 0.29.0
+**Last updated:** 2026-01-03
 **Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
 **PyPI:** https://pypi.org/project/reveal-cli/
 

@@ -311,8 +311,8 @@ reveal 'ast://./src?name=*process*'
 # Find duplication-prone code
 reveal 'ast://./src?complexity>10&lines>50'
 
-# Check hotspot files
-reveal 'stats://./src' --hotspots
+# Check hotspot files (URI param - preferred)
+reveal 'stats://./src?hotspots=true'
 ```
 
 **Note:** Cross-file duplicate detection not yet implemented. D001/D002 only work within single files. See `reveal/DUPLICATE_DETECTION_GUIDE.md` for comprehensive workflows.
@@ -620,6 +620,35 @@ reveal huge_dir/ --max-entries 100
 
 ---
 
+## URI Parameters vs Flags
+
+**Rule of thumb:** Adapter-specific features use URI parameters, global features use flags.
+
+**Global flags** (work everywhere):
+```bash
+--format=json         # Output format
+--outline             # Hierarchical view
+--check               # Run quality checks
+--head/--tail         # Slice output
+```
+
+**URI parameters** (adapter-specific):
+```bash
+stats://src?hotspots=true       # Show quality hotspots
+ast://src?complexity>10         # Filter by complexity
+stats://src?min_lines=50        # Filter files
+```
+
+**Why this matters:**
+- `reveal . --hotspots` → ❌ Error (--hotspots only works with stats://)
+- `reveal stats://.?hotspots=true` → ✅ Works (URI param)
+- `reveal stats://. --hotspots` → ✅ Works but shows migration hint
+
+**Common mistake:**
+Using adapter-specific flags on regular paths fails with a clear error message pointing you to the correct syntax.
+
+---
+
 ## Help System Overview
 
 **For AI agents (you):**
@@ -673,8 +702,8 @@ rg -l "authenticate" src/ | reveal --stdin --outline
 
 ---
 
-**Version:** 0.24.2
-**Last updated:** 2025-12-16
+**Version:** 0.29.0
+**Last updated:** 2026-01-03
 **Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
 **PyPI:** https://pypi.org/project/reveal-cli/
 

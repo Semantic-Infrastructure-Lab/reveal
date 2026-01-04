@@ -140,6 +140,17 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     """
     from ..tree_view import show_directory_tree
 
+    # Validate adapter-specific flags
+    if getattr(args, 'hotspots', False):
+        print("❌ Error: --hotspots only works with stats:// adapter", file=sys.stderr)
+        print(file=sys.stderr)
+        print("Examples:", file=sys.stderr)
+        print(f"  reveal stats://{path_str}?hotspots=true    # URI param (preferred)", file=sys.stderr)
+        print(f"  reveal stats://{path_str} --hotspots        # Flag (legacy)", file=sys.stderr)
+        print(file=sys.stderr)
+        print("Learn more: reveal help://stats", file=sys.stderr)
+        sys.exit(1)
+
     path = Path(path_str)
     if not path.exists():
         print(f"Error: {path_str} not found", file=sys.stderr)

@@ -2,7 +2,7 @@
 
 **Purpose:** Understand how reveal's help system works
 **Audience:** Users and contributors
-**Version:** 0.23.1
+**Version:** 0.29.0
 
 ---
 
@@ -390,4 +390,4 @@ A: Update estimates in `_render_help_list_mode()` token_estimate dictionaries
 ---
 
 **Last updated:** 2025-12-16
-**Version:** 0.23.1
+**Version:** 0.29.0

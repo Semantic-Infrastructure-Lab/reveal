@@ -25,8 +25,12 @@ class StatsAdapter(ResourceAdapter):
                     'description': 'Get overview statistics for src directory'
                 },
                 {
+                    'uri': 'stats://./src?hotspots=true',
+                    'description': 'Show top 10 files with quality issues (URI param - preferred)'
+                },
+                {
                     'uri': 'stats://./src --hotspots',
-                    'description': 'Show top 10 files with quality issues'
+                    'description': 'Show top 10 files with quality issues (flag - legacy)'
                 },
                 {
                     'uri': 'stats://./src/app.py',
@@ -54,6 +58,7 @@ class StatsAdapter(ResourceAdapter):
                 'CI/CD friendly JSON output'
             ],
             'filters': {
+                'hotspots': 'Show quality hotspots (e.g., ?hotspots=true)',
                 'min_lines': 'Minimum line count (e.g., ?min_lines=50)',
                 'max_lines': 'Maximum line count (e.g., ?max_lines=500)',
                 'min_complexity': 'Minimum avg complexity (e.g., ?min_complexity=5)',
@@ -119,15 +124,53 @@ class StatsAdapter(ResourceAdapter):
             ]
         }
 
-    def __init__(self, path: str):
+    def __init__(self, path: str, query_string: str = None):
         """Initialize stats adapter.
 
         Args:
             path: File or directory path to analyze
+            query_string: Query parameters (e.g., "hotspots=true&min_lines=50")
         """
         self.path = Path(path).resolve()
         if not self.path.exists():
             raise FileNotFoundError(f"Path not found: {path}")
+
+        # Parse query string
+        self.query_params = self._parse_query(query_string) if query_string else {}
+
+    def _parse_query(self, query_string: str) -> Dict[str, Any]:
+        """Parse query string into parameters.
+
+        Args:
+            query_string: URL query string (e.g., "hotspots=true&min_lines=50")
+
+        Returns:
+            Dict of parsed parameters
+        """
+        params = {}
+        if not query_string:
+            return params
+
+        for param in query_string.split('&'):
+            if '=' in param:
+                key, value = param.split('=', 1)
+                key = key.strip()
+                value = value.strip()
+
+                # Parse boolean values
+                if value.lower() in ('true', '1', 'yes'):
+                    params[key] = True
+                elif value.lower() in ('false', '0', 'no'):
+                    params[key] = False
+                # Parse numeric values
+                elif value.isdigit():
+                    params[key] = int(value)
+                elif value.replace('.', '', 1).isdigit():
+                    params[key] = float(value)
+                else:
+                    params[key] = value
+
+        return params
 
     def get_structure(self,
                      hotspots: bool = False,
@@ -140,7 +183,7 @@ class StatsAdapter(ResourceAdapter):
         """Get statistics for file or directory.
 
         Args:
-            hotspots: If True, include hotspot analysis
+            hotspots: If True, include hotspot analysis (flag - legacy)
             min_lines: Filter files with at least this many lines
             max_lines: Filter files with at most this many lines
             min_complexity: Filter files with avg complexity >= this
@@ -150,6 +193,13 @@ class StatsAdapter(ResourceAdapter):
         Returns:
             Dict containing statistics and optionally hotspots
         """
+        # Merge query params with flag params (query params take precedence)
+        hotspots = self.query_params.get('hotspots', hotspots)
+        min_lines = self.query_params.get('min_lines', min_lines)
+        max_lines = self.query_params.get('max_lines', max_lines)
+        min_complexity = self.query_params.get('min_complexity', min_complexity)
+        max_complexity = self.query_params.get('max_complexity', max_complexity)
+        min_functions = self.query_params.get('min_functions', min_functions)
         if self.path.is_file():
             return self._analyze_file(self.path)
 

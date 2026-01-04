@@ -309,17 +309,17 @@ rules:
 
 # Override rules for specific files
 overrides:
-  - files: ["tests/**/*.py"]
+  - files: "tests/**/*.py"
     rules:
       disable: [C901, R913]  # Tests can be complex
       E501:
         max_length: 150  # Longer lines in tests
 
-  - files: ["scripts/**/*.py"]
+  - files: "scripts/**/*.py"
     rules:
       disable: [C901, C905]  # Scripts can be messy
 
-  - files: ["src/core/**/*.py"]
+  - files: "src/core/**/*.py"
     rules:
       C901:
         threshold: 8  # Stricter for core code
@@ -336,10 +336,10 @@ overrides:
 
 ```yaml
 overrides:
-  - files: ["*.py"]          # All Python files
-  - files: ["src/**/*.py"]   # Python files in src/
-  - files: ["test_*.py"]     # Test files by naming convention
-  - files: ["**/__init__.py"] # All __init__.py files
+  - files: "*.py"          # All Python files
+  - files: "src/**/*.py"   # Python files in src/
+  - files: "test_*.py"     # Test files by naming convention
+  - files: "**/__init__.py" # All __init__.py files
 ```
 
 ---
@@ -370,7 +370,7 @@ ignore:
   - "dist/**"
 
 overrides:
-  - files: ["tests/**/*.py"]
+  - files: "tests/**/*.py"
     rules:
       disable: [C901, R913]  # Tests can be complex
 ```
@@ -393,17 +393,22 @@ ignore:
   - "dist/**"
 
 overrides:
-  - files: ["**/*.ts", "**/*.js"]
+  - files: "**/*.ts"
+    rules:
+      C901:
+        threshold: 15  # TypeScript complexity threshold
+
+  - files: "**/*.js"
     rules:
       C901:
         threshold: 15  # JavaScript complexity threshold
 
-  - files: ["**/*.py"]
+  - files: "**/*.py"
     rules:
       C901:
         threshold: 10  # Python complexity threshold
 
-  - files: ["tests/**/*"]
+  - files: "tests/**/*"
     rules:
       disable: [C901, C905, R913]
 ```
