@@ -168,18 +168,16 @@ class L001(BaseRule):
                 return (True, "target_is_directory")
 
             # Check for case mismatch (important on case-insensitive filesystems like macOS)
-            actual_name = target.name
             try:
-                # Get actual filename from parent directory
+                # Get actual filename from parent directory by comparing lowercase names
                 if target.parent.exists():
                     for actual_file in target.parent.iterdir():
-                        if actual_file == target:
-                            actual_name = actual_file.name
+                        # Compare lowercase names (works on case-insensitive filesystems)
+                        if actual_file.name.lower() == target.name.lower():
+                            # Found the file - check if case matches exactly
+                            if actual_file.name != target.name:
+                                return (True, "case_mismatch")
                             break
-
-                # If link case doesn't match actual file case, it's an error
-                if actual_name != target.name:
-                    return (True, "case_mismatch")
             except Exception:
                 pass  # If we can't check, assume it's ok
 
