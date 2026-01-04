@@ -23,11 +23,6 @@ class L001(BaseRule):
     file_patterns = ['.md', '.markdown']
     version = "1.0.0"
 
-    # Markdown link pattern: [text](url)
-    LINK_PATTERN = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
-    # Markdown heading pattern: # Heading text
-    HEADING_PATTERN = re.compile(r'^#{1,6}\s+(.+)$', re.MULTILINE)
-
     def check(self,
              file_path: str,
              structure: Optional[Dict[str, Any]],
@@ -37,44 +32,56 @@ class L001(BaseRule):
 
         Args:
             file_path: Path to markdown file
-            structure: Parsed structure (not used)
-            content: File content to parse for links
+            structure: Parsed structure from markdown analyzer
+            content: File content (used as fallback)
 
         Returns:
             List of detections for broken links
         """
         detections = []
-        lines = content.splitlines()
         base_path = Path(file_path).parent
 
-        for line_num, line in enumerate(lines, start=1):
-            # Find all markdown links in this line
-            for match in self.LINK_PATTERN.finditer(line):
-                text = match.group(1)
-                url = match.group(2)
+        # Get links from structure (analyzer already parsed them)
+        if structure and 'links' in structure:
+            links = structure['links']
+        else:
+            # Fallback: extract links if not in structure
+            from ...base import get_analyzer
+            analyzer_class = get_analyzer(file_path)
+            if analyzer_class:
+                analyzer = analyzer_class(file_path)
+                links = analyzer._extract_links()
+            else:
+                return detections
 
-                # Skip external links (http://, https://, mailto:)
-                if url.startswith(('http://', 'https://', 'mailto:', 'ftp://', '//')):
-                    continue
+        # Check each link for issues
+        for link in links:
+            text = link.get('text', '')
+            url = link.get('url', '')
+            line_num = link.get('line', 1)
 
-                # Check if this internal link is broken
-                is_broken, reason = self._is_broken_link(base_path, url, file_path)
+            # Skip external links (http://, https://, mailto:)
+            if url.startswith(('http://', 'https://', 'mailto:', 'ftp://', '//')):
+                continue
 
-                if is_broken:
-                    message = f"{self.message}: {url}"
-                    suggestion = self._suggest_fix(base_path, url, reason)
+            # Check if this internal link is broken
+            is_broken, reason = self._is_broken_link(base_path, url, file_path)
 
-                    detections.append(Detection(
-                        file_path=file_path,
-                        line=line_num,
-                        rule_code=self.code,
-                        message=message,
-                        column=match.start() + 1,  # 1-indexed
-                        suggestion=suggestion,
-                        context=line.strip(),
-                        severity=self.severity,
-                        category=self.category
-                    ))
+            if is_broken:
+                message = f"{self.message}: {url}"
+                suggestion = self._suggest_fix(base_path, url, reason)
+
+                detections.append(Detection(
+                    file_path=file_path,
+                    line=line_num,
+                    rule_code=self.code,
+                    message=message,
+                    column=1,  # Column not available from structure
+                    suggestion=suggestion,
+                    context=f"[{text}]({url})",
+                    severity=self.severity,
+                    category=self.category
+                ))
 
         return detections
 
@@ -88,15 +95,26 @@ class L001(BaseRule):
             List of anchor IDs (e.g., ['my-heading', 'another-section'])
         """
         try:
-            content = file_path.read_text(encoding='utf-8', errors='ignore')
+            # Use analyzer to extract headings (uses AST, not regex)
+            from ...base import get_analyzer
+            analyzer_class = get_analyzer(str(file_path))
+            if not analyzer_class:
+                return []
+
+            analyzer = analyzer_class(str(file_path))
+            headings = analyzer._extract_headings()
         except Exception as e:
-            logger.debug(f"Failed to read {file_path} for anchor extraction: {e}")
+            logger.debug(f"Failed to extract headings from {file_path}: {e}")
             return []
 
+        # Convert headings to anchor slugs (GitHub Flavored Markdown style)
         anchors = []
-        for match in self.HEADING_PATTERN.finditer(content):
-            heading_text = match.group(1).strip()
-            # Convert heading to anchor slug (GitHub Flavored Markdown style)
+        for heading in headings:
+            heading_text = heading.get('name', '').strip()
+            if not heading_text:
+                continue
+
+            # Convert heading to anchor slug
             anchor = heading_text.lower()
             anchor = re.sub(r'[^\w\s-]', '', anchor)  # Remove special chars except spaces and hyphens
             anchor = re.sub(r'[\s_]+', '-', anchor)   # Replace spaces/underscores with hyphens

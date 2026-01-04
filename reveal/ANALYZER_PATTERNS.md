@@ -292,7 +292,7 @@ jinja_vars = re.findall(r'\{\{\s*(\w+)\s*\}\}', content)  # Template vars
 
 ## Pattern 7: Rules Use Analyzer Structure
 
-### ✅ Good Example
+### ✅ Good Example (Post Phase 2 Refactoring)
 
 ```python
 class L001(BaseRule):
@@ -300,31 +300,59 @@ class L001(BaseRule):
 
     def check(self, file_path, structure, content):
         """Validate links from analyzer structure."""
-        # Use pre-parsed structure from analyzer
-        links = structure.get('links', [])
+        # Get links from structure (analyzer already parsed them)
+        if structure and 'links' in structure:
+            links = structure['links']
+        else:
+            # Fallback: extract links if not in structure
+            from ...base import get_analyzer
+            analyzer_class = get_analyzer(file_path)
+            if analyzer_class:
+                analyzer = analyzer_class(file_path)
+                links = analyzer._extract_links()
+            else:
+                return []
 
+        # Validate each link (no re-parsing!)
         for link in links:
-            if link['type'] == 'internal' and self._is_broken(link):
-                yield Detection(...)
+            url = link.get('url', '')
+            line_num = link.get('line', 1)
+            text = link.get('text', '')
+
+            if link.get('type') == 'internal' and self._is_broken(url):
+                yield Detection(
+                    line=line_num,
+                    context=f"[{text}]({url})",
+                    ...
+                )
 ```
 
 **Architecture:**
-- Analyzer parses content → structure
-- Rule validates structure
-- Single source of truth (analyzer)
+- **Primary:** Use `structure['links']` if available
+- **Fallback:** Create analyzer and extract links if not
+- **Benefits:**
+  - Single source of truth (analyzer)
+  - No duplicate parsing patterns
+  - Rules are validators, not parsers
 
-### ❌ Bad Example
+**Implementation Notes:**
+- File checker calls `analyzer.get_structure()` (defaults: only headings for markdown)
+- Rules request missing features via fallback
+- Future optimization: File checker could request `extract_links=True` for markdown
+
+### ❌ Bad Example (Pre Phase 2)
 
 ```python
 class L001(BaseRule):
     """Detect broken links."""
 
-    # Duplicate parsing pattern from analyzer
+    # ❌ Duplicate parsing pattern from analyzer
     LINK_PATTERN = re.compile(r'\[([^\]]+)\]\(([^\)]+)\)')
 
     def check(self, file_path, structure, content):
         """Re-parse content instead of using structure."""
-        # Ignores 'structure', re-parses 'content'!
+        # ❌ Ignores 'structure' parameter entirely!
+        # ❌ Re-parses 'content' with regex
         for match in self.LINK_PATTERN.finditer(content):
             text = match.group(1)
             url = match.group(2)
@@ -332,9 +360,17 @@ class L001(BaseRule):
 ```
 
 **Problems:**
-- Duplication (2 places to maintain)
-- Performance (parse twice)
-- Inconsistency (analyzer uses AST, rule uses regex)
+- ❌ **Duplication:** Same regex in analyzer AND rule
+- ❌ **Performance:** Parse content twice (analyzer + rule)
+- ❌ **Inconsistency:** Analyzer improves to AST, rule doesn't benefit
+- ❌ **Maintenance:** Bug fixes need two locations
+
+**Phase 2 Refactoring (2026-01-03):**
+- ✅ L001, L002, L003 now use `structure['links']`
+- ✅ Removed duplicate LINK_PATTERN definitions
+- ✅ Removed duplicate HEADING_PATTERN from L001
+- ✅ Rules use analyzer's `_extract_headings()` method
+- ✅ All 1320 tests passing, no regressions
 
 ---
 

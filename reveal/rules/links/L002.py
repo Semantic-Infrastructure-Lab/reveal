@@ -27,9 +27,6 @@ class L002(BaseRule):
     file_patterns = ['.md', '.markdown']
     version = "1.0.0"
 
-    # Markdown link pattern: [text](url)
-    LINK_PATTERN = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
-
     # HTTP request timeout (seconds)
     TIMEOUT = 5
 
@@ -45,43 +42,55 @@ class L002(BaseRule):
 
         Args:
             file_path: Path to markdown file
-            structure: Parsed structure (not used)
-            content: File content to parse for links
+            structure: Parsed structure from markdown analyzer
+            content: File content (used as fallback)
 
         Returns:
             List of detections for broken external links
         """
         detections = []
-        lines = content.splitlines()
 
-        for line_num, line in enumerate(lines, start=1):
-            # Find all markdown links in this line
-            for match in self.LINK_PATTERN.finditer(line):
-                text = match.group(1)
-                url = match.group(2)
+        # Get links from structure (analyzer already parsed them)
+        if structure and 'links' in structure:
+            links = structure['links']
+        else:
+            # Fallback: extract links if not in structure
+            from ...base import get_analyzer
+            analyzer_class = get_analyzer(file_path)
+            if analyzer_class:
+                analyzer = analyzer_class(file_path)
+                links = analyzer._extract_links()
+            else:
+                return detections
 
-                # Only check external HTTP(S) links
-                if not url.startswith(('http://', 'https://')):
-                    continue
+        # Check each external link for issues
+        for link in links:
+            text = link.get('text', '')
+            url = link.get('url', '')
+            line_num = link.get('line', 1)
 
-                # Check if this external link is broken
-                is_broken, reason, status = self._is_broken_link(url)
+            # Only check external HTTP(S) links
+            if not url.startswith(('http://', 'https://')):
+                continue
 
-                if is_broken:
-                    message = f"{self.message}: {url}"
-                    suggestion = self._suggest_fix(url, reason, status)
+            # Check if this external link is broken
+            is_broken, reason, status = self._is_broken_link(url)
 
-                    detections.append(Detection(
-                        file_path=file_path,
-                        line=line_num,
-                        rule_code=self.code,
-                        message=message,
-                        column=match.start() + 1,  # 1-indexed
-                        suggestion=suggestion,
-                        context=line.strip(),
-                        severity=self.severity,
-                        category=self.category
-                    ))
+            if is_broken:
+                message = f"{self.message}: {url}"
+                suggestion = self._suggest_fix(url, reason, status)
+
+                detections.append(Detection(
+                    file_path=file_path,
+                    line=line_num,
+                    rule_code=self.code,
+                    message=message,
+                    column=1,  # Column not available from structure
+                    suggestion=suggestion,
+                    context=f"[{text}]({url})",
+                    severity=self.severity,
+                    category=self.category
+                ))
 
         return detections
 

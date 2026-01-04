@@ -24,9 +24,6 @@ class L003(BaseRule):
     file_patterns = ['.md', '.markdown']
     version = "1.0.0"
 
-    # Markdown link pattern: [text](url)
-    LINK_PATTERN = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
-
     def __init__(self):
         super().__init__()
         # Framework configuration (could be loaded from config file)
@@ -42,14 +39,13 @@ class L003(BaseRule):
 
         Args:
             file_path: Path to markdown file
-            structure: Parsed structure (not used)
-            content: File content to parse for links
+            structure: Parsed structure from markdown analyzer
+            content: File content (used as fallback)
 
         Returns:
             List of detections for routing mismatches
         """
         detections = []
-        lines = content.splitlines()
 
         # Set docs_root based on file path if not already set
         if self.docs_root is None:
@@ -57,38 +53,51 @@ class L003(BaseRule):
 
         base_path = Path(file_path).parent
 
-        for line_num, line in enumerate(lines, start=1):
-            # Find all markdown links in this line
-            for match in self.LINK_PATTERN.finditer(line):
-                text = match.group(1)
-                url = match.group(2)
+        # Get links from structure (analyzer already parsed them)
+        if structure and 'links' in structure:
+            links = structure['links']
+        else:
+            # Fallback: extract links if not in structure
+            from ...base import get_analyzer
+            analyzer_class = get_analyzer(file_path)
+            if analyzer_class:
+                analyzer = analyzer_class(file_path)
+                links = analyzer._extract_links()
+            else:
+                return detections
 
-                # Only check absolute web paths (framework routing)
-                if not url.startswith('/'):
-                    continue
+        # Check each framework routing link for issues
+        for link in links:
+            text = link.get('text', '')
+            url = link.get('url', '')
+            line_num = link.get('line', 1)
 
-                # Skip external protocol-relative URLs (//example.com)
-                if url.startswith('//'):
-                    continue
+            # Only check absolute web paths (framework routing)
+            if not url.startswith('/'):
+                continue
 
-                # Check if this framework route has a mismatch
-                is_broken, reason, expected_path = self._is_broken_route(base_path, url)
+            # Skip external protocol-relative URLs (//example.com)
+            if url.startswith('//'):
+                continue
 
-                if is_broken:
-                    message = f"{self.message}: {url}"
-                    suggestion = self._suggest_fix(url, reason, expected_path)
+            # Check if this framework route has a mismatch
+            is_broken, reason, expected_path = self._is_broken_route(base_path, url)
 
-                    detections.append(Detection(
-                        file_path=file_path,
-                        line=line_num,
-                        rule_code=self.code,
-                        message=message,
-                        column=match.start() + 1,  # 1-indexed
-                        suggestion=suggestion,
-                        context=line.strip(),
-                        severity=self.severity,
-                        category=self.category
-                    ))
+            if is_broken:
+                message = f"{self.message}: {url}"
+                suggestion = self._suggest_fix(url, reason, expected_path)
+
+                detections.append(Detection(
+                    file_path=file_path,
+                    line=line_num,
+                    rule_code=self.code,
+                    message=message,
+                    column=1,  # Column not available from structure
+                    suggestion=suggestion,
+                    context=f"[{text}]({url})",
+                    severity=self.severity,
+                    category=self.category
+                ))
 
         return detections
 
