@@ -178,7 +178,10 @@ class Override:
         """
         if project_root:
             try:
-                rel_path = file_path.relative_to(project_root)
+                # Resolve both paths to handle symlinks consistently (macOS /var vs /private/var)
+                resolved_file = file_path.resolve()
+                resolved_root = project_root.resolve()
+                rel_path = resolved_file.relative_to(resolved_root)
             except ValueError:
                 rel_path = file_path
         else:
@@ -338,18 +341,18 @@ class RevealConfig:
                         with open(config_file) as f:
                             config = yaml.safe_load(f) or {}
                         if config.get('root'):
-                            return current
+                            return current.resolve()
                 except Exception:
                     pass
 
             # Check for .git (common project root marker)
             if (current / '.git').exists():
-                return current
+                return current.resolve()
 
             current = current.parent
 
         # Fallback to start_path
-        return start_path
+        return start_path.resolve()
 
     @classmethod
     def _load_and_merge(cls,
@@ -638,7 +641,10 @@ class RevealConfig:
         # Normalize to relative path
         if self._project_root:
             try:
-                rel_path = path.relative_to(self._project_root)
+                # Resolve both paths to handle symlinks consistently (macOS /var vs /private/var)
+                resolved_path = path.resolve()
+                resolved_root = self._project_root.resolve()
+                rel_path = resolved_path.relative_to(resolved_root)
             except ValueError:
                 rel_path = path
         else:

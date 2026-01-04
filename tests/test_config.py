@@ -298,7 +298,7 @@ class TestDirectoryWalkUp(unittest.TestCase):
         cfg = RevealConfig.get(module_dir)
 
         self.assertEqual(cfg._config['rules']['disable'], ['E501'])
-        self.assertEqual(cfg.project_root, project_dir)
+        self.assertEqual(cfg.project_root, project_dir.resolve())
 
     def test_stops_at_root_marker(self):
         """Test discovery stops at root: true marker."""

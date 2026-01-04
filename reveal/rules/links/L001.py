@@ -166,6 +166,23 @@ class L001(BaseRule):
         if target.exists():
             if target.is_dir():
                 return (True, "target_is_directory")
+
+            # Check for case mismatch (important on case-insensitive filesystems like macOS)
+            actual_name = target.name
+            try:
+                # Get actual filename from parent directory
+                if target.parent.exists():
+                    for actual_file in target.parent.iterdir():
+                        if actual_file == target:
+                            actual_name = actual_file.name
+                            break
+
+                # If link case doesn't match actual file case, it's an error
+                if actual_name != target.name:
+                    return (True, "case_mismatch")
+            except Exception:
+                pass  # If we can't check, assume it's ok
+
             # Validate anchor if present
             if anchor:
                 valid_anchors = self._extract_anchors_from_markdown(target)
@@ -230,6 +247,14 @@ class L001(BaseRule):
             index_file = target_path / "index.md"
             if index_file.exists():
                 suggestions.append(f"Use: {file_part}/index.md")
+
+        elif reason == "case_mismatch":
+            # Find the correct case
+            case_match = self._find_case_mismatch(target_path)
+            if case_match:
+                suggestions.append(f"Fix case to match actual file: {case_match}")
+            else:
+                suggestions.append("Fix filename case to match actual file")
 
         elif reason == "file_not_found":
             # Check if file exists with .md extension

@@ -46,6 +46,7 @@ dev = [
     "black>=23.0",
     "ruff>=0.1.0",
     "numpy>=1.20.0",  # Required for duplicate detection tests
+    "pymysql>=1.0.0",  # Required for MySQL adapter tests
 ]
 # DEPRECATED in v0.8.0: tree-sitter is now included by default
 # Kept for backward compatibility (install commands with [treesitter] still work)
