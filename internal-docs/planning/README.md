@@ -1,6 +1,6 @@
 # Reveal Planning Documentation
 
-**Last Updated:** 2026-01-02
+**Last Updated:** 2026-01-03
 **Current Release:** v0.28.0
 **Next Release:** v0.29.0 (Schema Validation)
 
@@ -39,6 +39,41 @@ Knowledge graph construction: schema validation, link following, metadata querie
 - Phase 1 (v0.29.0): Design schema validation framework, define YAML schema format
 - Create built-in schemas (beth, hugo, obsidian)
 - Implement validation rules engine (F001-F005)
+
+---
+
+### 🔧 AST Migration & Analyzer Quality (v0.29.0+)
+
+**Status:** Phase 1-4 complete, Phase 5 planned
+**Priority:** MEDIUM (quality/maintainability, fits between major features)
+**Effort:** Opportunistic (1 day per phase)
+
+Progressive migration from regex-based analyzers to AST parsing for better accuracy and maintainability.
+
+**Primary Document:**
+- **[AST_MIGRATION_ROADMAP.md](./AST_MIGRATION_ROADMAP.md)** - Complete roadmap and pattern guide
+
+**Completed (Jan 2026):**
+- ✅ Phase 1-4: Markdown AST migration with column tracking (3 sessions)
+- ✅ Pattern established: Optional dependencies + fallback mechanisms
+- ✅ Research: GDScript (defer), nginx/crossplane (viable)
+
+**Planned:**
+- 🎯 Phase 5: Nginx crossplane enhancement (v0.29.0-v0.31.0, optional)
+  - Optional dependency pattern: `pip install reveal[nginx]`
+  - Complete directive extraction (upstream servers, SSL config, etc.)
+  - Fallback to current regex parser
+  - Effort: 1 day
+- 📋 Phase 6+: Monitor GDScript, evaluate bash/Dockerfile (quarterly review)
+
+**Integration with Knowledge Graph:**
+- AST migrations are opportunistic quality improvements
+- Implemented during foundation work between major features
+- Phase 5 nginx enhancement could ship alongside v0.29.0-v0.31.0 if time permits
+
+**Completion Reports:**
+- **[../PHASES_3_4_AST_MIGRATION.md](../PHASES_3_4_AST_MIGRATION.md)** - Phase 3/4 session work
+- **[../NGINX_SUPPORT_DOCUMENTATION.md](../NGINX_SUPPORT_DOCUMENTATION.md)** - Crossplane implementation spec
 
 ---
 
