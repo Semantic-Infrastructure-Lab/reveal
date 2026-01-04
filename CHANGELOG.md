@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - CI now tests Python 3.10 and 3.12 on Ubuntu only (simplified from 3.8/3.12 on 3 platforms)
   - Users on Python 3.8/3.9 should use reveal-cli <0.30.0
 
+### Fixed
+- **Cross-platform CI test failures** (40 unique test failures across Ubuntu/Windows/macOS)
+  - Added `pymysql` to dev dependencies (was only in `[database]` extras, tests failed on all platforms)
+  - Fixed macOS symlink path resolution (`/var` vs `/private/var` mismatch)
+  - Fixed config override path matching on macOS (symlink-aware `relative_to()`)
+  - Fixed ignore pattern path matching on macOS (symlink-aware `relative_to()`)
+  - Fixed L001 case sensitivity detection on case-insensitive filesystems (macOS HFS+)
+  - All 1,339 tests now pass on Linux; macOS/Windows fixes verified in CI
+
 ### Changed
 - **lxml is now optional** (moved to `[html]` extras for HTML analyzer performance)
   - HTML analyzer uses stdlib `html.parser` by default (no C dependencies required)
