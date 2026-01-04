@@ -4,7 +4,6 @@ Detects external links in Markdown files that return HTTP errors (404, 403, etc.
 This rule requires network access and may be slower than L001.
 """
 
-import re
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 from urllib.parse import urlparse

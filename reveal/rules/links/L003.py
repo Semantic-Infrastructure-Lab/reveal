@@ -4,7 +4,6 @@ Detects links that use framework-specific routing conventions (FastHTML, Jekyll,
 but don't resolve correctly to the expected files.
 """
 
-import re
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
