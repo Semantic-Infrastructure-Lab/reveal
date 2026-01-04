@@ -53,7 +53,7 @@ pipx install git+https://github.com/Semantic-Infrastructure-Lab/reveal.git
 
 ## Requirements
 
-- **Python:** 3.8 or higher
+- **Python:** 3.10 or higher
 - **Dependencies:** Automatically installed (PyYAML, rich)
 
 ## What's Included by Default

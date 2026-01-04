@@ -105,7 +105,7 @@ reveal --rules                   # List all rules
 reveal --explain B001            # Explain specific rule
 ```
 
-**36 built-in rules** across 12 categories: bugs (B001-B005), complexity (C901-C905), duplicates (D001-D002), style (E501), frontmatter (F001-F005), imports (I001-I003), links (L001-L003), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V011). New in v0.25.0: link validation (L001-L003). New in v0.28.0: import analysis (I001-I003) for unused imports, circular dependencies, and layer violations. New in v0.29.0: schema validation (F001-F005) for markdown front matter.
+**41 built-in rules** across 12 categories: bugs (B001-B005), complexity (C901-C905), duplicates (D001-D002), style (E501), frontmatter (F001-F005), imports (I001-I003), links (L001-L003), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V011). New in v0.25.0: link validation (L001-L003). New in v0.28.0: import analysis (I001-I003) for unused imports, circular dependencies, and layer violations. New in v0.29.0: schema validation (F001-F005) for markdown front matter.
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
 
 ### 📝 Schema Validation (v0.29.0+)
@@ -442,4 +442,4 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 [![Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/Semantic-Infrastructure-Lab/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
