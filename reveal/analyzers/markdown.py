@@ -150,14 +150,74 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
     def _extract_links(self, link_type: Optional[str] = None,
                       domain: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Extract all links from markdown.
+        """Extract all links from markdown using tree-sitter AST.
 
         Args:
             link_type: Filter by type (internal, external, email, all)
             domain: Filter by domain (for external links)
 
         Returns:
-            List of link dicts with line, text, url, type, etc.
+            List of link dicts with line, column, text, url, type, etc.
+        """
+        if not self.tree:
+            # Fallback to regex if tree-sitter fails
+            return self._extract_links_regex(link_type, domain)
+
+        links = []
+
+        # Find all link nodes using tree-sitter
+        link_nodes = self._find_nodes_by_type('link')
+
+        for node in link_nodes:
+            # Extract link_text and link_destination from children
+            text = None
+            url = None
+
+            for child in node.children:
+                if child.type == 'link_text':
+                    # link_text has a text child - extract it
+                    for text_node in child.children:
+                        if text_node.type == 'text':
+                            text = text_node.text.decode('utf-8')
+                            break
+                elif child.type == 'link_destination':
+                    # link_destination has a text child - extract it
+                    for text_node in child.children:
+                        if text_node.type == 'text':
+                            url = text_node.text.decode('utf-8')
+                            break
+
+            if text and url:
+                # Get position (tree-sitter is 0-indexed)
+                line = node.start_point[0] + 1
+                column = node.start_point[1] + 1
+
+                # Classify link (reuse existing logic)
+                link_info = self._classify_link(url, text, line)
+                link_info['column'] = column  # Add column position
+
+                # Apply type filter
+                if link_type and link_type != 'all':
+                    if link_info['type'] != link_type:
+                        continue
+
+                # Apply domain filter (for external links)
+                if domain:
+                    if link_info['type'] == 'external':
+                        if domain not in url:
+                            continue
+                    else:
+                        continue  # Domain filter only applies to external links
+
+                links.append(link_info)
+
+        return links
+
+    def _extract_links_regex(self, link_type: Optional[str] = None,
+                            domain: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Fallback regex-based link extraction.
+
+        Note: This doesn't provide column positions - only used if tree-sitter fails.
         """
         links = []
 
@@ -171,6 +231,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
                 # Classify link
                 link_info = self._classify_link(url, text, i)
+                link_info['column'] = 1  # No column tracking in regex fallback
 
                 # Apply type filter
                 if link_type and link_type != 'all':
@@ -252,7 +313,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
     def _extract_code_blocks(self, language: Optional[str] = None,
                             include_inline: bool = False) -> List[Dict[str, Any]]:
-        """Extract code blocks from markdown.
+        """Extract code blocks from markdown using tree-sitter AST.
 
         Args:
             language: Filter by programming language
@@ -260,6 +321,63 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         Returns:
             List of code block dicts with line, language, source, etc.
+        """
+        if not self.tree:
+            # Fallback to state machine if tree-sitter fails
+            return self._extract_code_blocks_state_machine(language, include_inline)
+
+        code_blocks = []
+
+        # Extract fenced code blocks using tree-sitter
+        fence_nodes = self._find_nodes_by_type('fenced_code_block')
+
+        for node in fence_nodes:
+            # Extract language from info_string and code from code_fence_content
+            block_lang = 'text'  # Default
+            source = ''
+
+            for child in node.children:
+                if child.type == 'info_string':
+                    # Language tag (e.g., 'python', 'javascript')
+                    # info_string has a text child
+                    for text_node in child.children:
+                        if text_node.type == 'text':
+                            block_lang = text_node.text.decode('utf-8')
+                            break
+                elif child.type == 'code_fence_content':
+                    # The actual code content
+                    source = child.text.decode('utf-8')
+
+            # Apply language filter
+            if language and block_lang != language:
+                continue
+
+            # Get position (tree-sitter is 0-indexed)
+            line_start = node.start_point[0] + 1
+            line_end = node.end_point[0] + 1
+            line_count = source.count('\n') + 1 if source else 0
+
+            code_blocks.append({
+                'line_start': line_start,
+                'line_end': line_end,
+                'language': block_lang,
+                'source': source,
+                'line_count': line_count,
+                'type': 'fenced',
+            })
+
+        # Extract inline code if requested
+        if include_inline:
+            inline_blocks = self._extract_inline_code_ast(language)
+            code_blocks.extend(inline_blocks)
+
+        return code_blocks
+
+    def _extract_code_blocks_state_machine(self, language: Optional[str] = None,
+                                          include_inline: bool = False) -> List[Dict[str, Any]]:
+        """Fallback state machine-based code block extraction.
+
+        Note: Only used if tree-sitter fails.
         """
         code_blocks = []
 
@@ -309,6 +427,47 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             code_blocks.extend(inline_blocks)
 
         return code_blocks
+
+    def _extract_inline_code_ast(self, language: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Extract inline code snippets using tree-sitter AST.
+
+        Args:
+            language: Language filter (not applicable to inline code)
+
+        Returns:
+            List of inline code dicts with line, column, source, etc.
+        """
+        if not self.tree:
+            # Fallback to regex
+            return self._extract_inline_code(language)
+
+        inline_blocks = []
+
+        # Find all code_span nodes
+        code_span_nodes = self._find_nodes_by_type('code_span')
+
+        for node in code_span_nodes:
+            # Extract the code text
+            source = ''
+            for child in node.children:
+                if child.type == 'text':
+                    source = child.text.decode('utf-8')
+                    break
+
+            if source:
+                # Get position (tree-sitter is 0-indexed)
+                line = node.start_point[0] + 1
+                column = node.start_point[1] + 1
+
+                inline_blocks.append({
+                    'line': line,
+                    'column': column,
+                    'language': 'inline',
+                    'source': source,
+                    'type': 'inline',
+                })
+
+        return inline_blocks
 
     def _extract_inline_code(self, language: Optional[str] = None) -> List[Dict[str, Any]]:
         """Extract inline code snippets (`code`).

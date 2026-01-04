@@ -374,6 +374,125 @@ class L001(BaseRule):
 
 ---
 
+## Pattern 8: Migrate Regex to AST Where Parsers Exist
+
+### ✅ Good Example (Post Phase 3 AST Migration)
+
+```python
+class MarkdownAnalyzer(TreeSitterAnalyzer):
+    """Markdown analyzer using tree-sitter AST."""
+
+    language = 'markdown'
+
+    def _extract_links(self, link_type=None, domain=None):
+        """Extract links using tree-sitter AST."""
+        if not self.tree:
+            return self._extract_links_regex(link_type, domain)  # Fallback
+
+        links = []
+
+        # Find all 'link' nodes in AST
+        link_nodes = self._find_nodes_by_type('link')
+
+        for node in link_nodes:
+            text = None
+            url = None
+
+            # Navigate AST children
+            for child in node.children:
+                if child.type == 'link_text':
+                    for text_node in child.children:
+                        if text_node.type == 'text':
+                            text = text_node.text.decode('utf-8')
+                            break
+                elif child.type == 'link_destination':
+                    for text_node in child.children:
+                        if text_node.type == 'text':
+                            url = text_node.text.decode('utf-8')
+                            break
+
+            if text and url:
+                # ✅ Column position tracking from AST
+                line = node.start_point[0] + 1
+                column = node.start_point[1] + 1
+
+                link_info = self._classify_link(url, text, line)
+                link_info['column'] = column  # AST provides precise position
+                links.append(link_info)
+
+        return links
+```
+
+**Benefits:**
+- ✅ **Column position tracking:** AST provides exact position (line + column)
+- ✅ **Edge case handling:** Ignores links in code blocks automatically
+- ✅ **Correctness:** Handles escaped brackets, nested syntax
+- ✅ **Maintainability:** AST parser maintained by tree-sitter community
+- ✅ **Future-proof:** Parser improvements benefit code automatically
+
+### ❌ Bad Example (Pre Phase 3 Regex)
+
+```python
+def _extract_links(self, link_type=None, domain=None):
+    """Extract links using regex."""
+    links = []
+
+    # ❌ Regex can't handle edge cases correctly
+    link_pattern = r'\[([^\]]+)\]\(([^\)]+)\)'
+
+    for i, line in enumerate(self.lines, 1):
+        for match in re.finditer(link_pattern, line):
+            text = match.group(1)
+            url = match.group(2)
+            # ❌ No column tracking
+            # ❌ Matches links inside code blocks (wrong!)
+            # ❌ Breaks on nested brackets: [text [nested]](url)
+            # ❌ Breaks on escaped brackets: [text \]](url)
+            links.append({
+                'line': i,
+                'text': text,
+                'url': url,
+                # ❌ No column position
+            })
+
+    return links
+```
+
+**Problems:**
+- ❌ **No column tracking:** Can't point to exact position
+- ❌ **Code fence bug:** Extracts links from code blocks
+- ❌ **Edge cases:** Fails on nested/escaped brackets
+- ❌ **Maintenance:** Regex becomes complex for edge cases
+
+### Phase 3 Migration Results (2026-01-03)
+
+**Links Migration:**
+- ✅ Migrated `_extract_links()` to use tree-sitter 'link' nodes
+- ✅ Added `_extract_links_regex()` fallback
+- ✅ Column position tracking (node.start_point[1])
+- ✅ Correctly ignores links in code blocks
+- ✅ Handles all link types (internal, external, email)
+
+**Code Blocks Migration:**
+- ✅ Migrated `_extract_code_blocks()` to use 'fenced_code_block' nodes
+- ✅ Migrated `_extract_inline_code_ast()` to use 'code_span' nodes
+- ✅ Added `_extract_code_blocks_state_machine()` fallback
+- ✅ Preserves language filtering and inline code extraction
+- ✅ Column position tracking for inline code
+
+**Test Results:**
+- ✅ All 1517 tests passing (no regressions)
+- ✅ AST-based extraction 100% compatible with existing API
+- ✅ Fallback mechanisms maintain reliability
+
+**Edge Cases Handled:**
+- ✅ Links inside code blocks (ignored by AST)
+- ✅ Nested syntax in links (AST handles correctly)
+- ✅ Multiple code blocks with different languages
+- ✅ Inline code within paragraphs
+
+---
+
 ## Decision Matrix
 
 ### Should I use AST or Regex?
