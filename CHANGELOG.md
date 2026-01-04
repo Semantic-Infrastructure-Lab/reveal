@@ -79,6 +79,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Workflows, limitations, best practices, FAQ, roadmap
   - Integrated into help system: `reveal help://duplicates`
 
+- **URI Parameter Support for stats://** - Query parameters as alternative to global flags
+  - Three-tier parameter model: global flags → URI params → element paths
+  - **Parameters**: `?hotspots=true`, `?min_lines=N`, `?min_complexity=N`
+  - **Usage**: `reveal stats://reveal?hotspots=true&min_complexity=10`
+  - **Migration hints**: Helpful error messages guide users from old flag syntax
+  - **Implementation**: Query parameter parsing, validation, documentation
+  - Files: stats.py (+56 lines), routing.py (+11 lines), scheme_handlers/stats.py (+20 lines)
+  - Documentation: AGENT_HELP.md (+37 lines), AGENT_HELP_FULL.md (+29 lines)
+
 ### Changed
 - **Date Type Handling**: Enhanced to support YAML auto-parsed dates
   - `validate_type()` now accepts both `datetime.date` objects AND strings for "date" type
@@ -117,11 +126,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated test data to match Beth schema requirements
   - All 1,320 tests now passing (100%)
 
+- **Version Metadata Consistency** (from comprehensive validation)
+  - Updated version footers in AGENT_HELP.md (0.24.2 → 0.29.0)
+  - Updated version footers in AGENT_HELP_FULL.md (0.26.0 → 0.29.0)
+  - Updated version in HELP_SYSTEM_GUIDE.md (0.23.1 → 0.29.0, 2 occurrences)
+  - Updated metadata version in adapters/imports.py (0.28.0 → 0.29.0)
+  - Impact: Consistent version reporting across all documentation
+
+- **Configuration Guide Documentation** (from validation testing)
+  - Fixed override `files` pattern syntax (array → string, 7 occurrences)
+  - **Before**: `files: ["tests/**/*.py"]` (caused validation errors)
+  - **After**: `files: "tests/**/*.py"` (matches schema)
+  - Impact: Users copying examples no longer get validation errors
+
 ### Dogfooding
-- **Reveal on itself:** Comprehensive testing (20+ scenarios across all features)
-  - Tested: basic analysis, element extraction, quality checks, schema validation, custom schemas, all output formats, help system, URI adapters, edge cases
-  - Code quality analysis: Found 158 high-complexity functions (complexity > 15)
-  - Quality score: 96.8/100 (from `reveal stats://./reveal`)
+- **Reveal on itself:** Comprehensive validation (25+ scenarios, v0.29.0 production readiness)
+  - Tested: basic analysis, element extraction, quality checks, schema validation, custom schemas, all output formats, help system, URI adapters, URI parameters, edge cases
+  - Code quality analysis: 191 files, 42,161 lines, 1,177 functions, 173 classes
+  - Quality score: **97.2/100** (from `reveal stats://reveal?hotspots=true`)
+  - Hotspots identified: 10 files with quality issues (config.py: 91.7/100, markdown.py: 84.6/100)
+  - Most complex function: `analyzers/markdown.py:_extract_links` (complexity 38)
+  - URI parameter validation: `reveal stats://reveal?hotspots=true&min_complexity=10` works perfectly
   - Issues found: 3 UX issues (confusing errors, missing --list-schemas, no non-markdown warning)
   - All issues fixed in this release
   - Result: v0.29.0 validated through real-world use
