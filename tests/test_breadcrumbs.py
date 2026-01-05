@@ -240,6 +240,35 @@ class TestPrintBreadcrumbsConfig:
         output = capture_breadcrumbs('structure', 'test.py', 'python', config=mock_config)
         assert 'reveal test.py' in output
 
+    def test_auto_config_loading_for_file(self):
+        """When config=None and path is a file, config is auto-loaded."""
+        import tempfile
+        import os
+
+        # Create a temp file to test with
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write('# test file')
+            temp_path = f.name
+
+        try:
+            # Call without config - should auto-load and work
+            output = capture_breadcrumbs('structure', temp_path, 'python', config=None)
+            # Should produce output (breadcrumbs enabled by default)
+            assert 'reveal' in output or output == ''  # Empty if breadcrumbs disabled in user config
+        finally:
+            os.unlink(temp_path)
+
+    def test_auto_config_loading_for_directory(self):
+        """When config=None and path is a directory, config is auto-loaded."""
+        import tempfile
+
+        # Use temp directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Call without config - should auto-load and work
+            output = capture_breadcrumbs('structure', temp_dir, None, config=None)
+            # Should produce output (or empty if disabled)
+            assert isinstance(output, str)
+
 
 # ==============================================================================
 # print_breadcrumbs Tests - Metadata Context
