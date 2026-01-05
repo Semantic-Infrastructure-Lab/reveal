@@ -47,12 +47,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Established refactoring patterns: Nested Traversal→Extract Navigation, Monolithic Orchestration→Extract Builders
 
 ### Added
-- **Ruby 💎, Kotlin 🟣, and Lua 🌙 language support** (3-line tree-sitter pattern)
+- **Ruby 💎 and Lua 🌙 language support** (3-line tree-sitter pattern)
   - Ruby: Extracts classes, methods, modules via tree-sitter
-  - Kotlin: Extracts classes, functions, objects (Android/JVM development)
-  - Lua: Extracts functions (game development, embedded scripting)
-  - Added node type support: `method` (Ruby), `object_declaration` (Kotlin), `function_definition_statement` (Lua)
-  - Total built-in languages: 28 → 31
+  - Lua: Extracts global and local functions (game development, embedded scripting)
+  - Added node type support: `method` (Ruby), `function_definition_statement` and `local_function_definition_statement` (Lua)
+  - Total built-in languages: 28 → 30
+
+### Removed
+- **Kotlin language support** removed before release
+  - Tree-sitter grammar had upstream limitations preventing reliable function extraction
+  - Class extraction worked, but partial support deemed insufficient
+  - Removed Kotlin analyzer, file extensions (.kt, .kts), and `object_declaration` node type
+  - Focus on languages with reliable tree-sitter grammars (Ruby, Lua working well)
+  - Can be re-added when upstream grammar improves
 - **`diff://` Adapter - Semantic Structural Diff**
   - **Semantic comparison**: Compare functions, classes, and imports - not just text lines
   - **File diffing**: `diff://app.py:backup/app.py` shows structural changes (signature, complexity, line count)

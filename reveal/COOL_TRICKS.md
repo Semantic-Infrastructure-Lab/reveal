@@ -621,7 +621,7 @@ reveal lib.rs            # Rust
 ### Tree-Sitter Fallback (37+ Languages)
 
 ```bash
-# C, C++, Java, Ruby, PHP, Kotlin, Scala, Haskell, OCaml, Lua...
+# C, C++, Java, Ruby, PHP, Scala, Haskell, OCaml, Lua...
 reveal Main.java         # Works!
 reveal app.rb            # Works!
 reveal script.lua        # Works!

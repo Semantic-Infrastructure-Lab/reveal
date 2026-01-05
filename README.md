@@ -9,7 +9,7 @@ reveal app.py                  # file → structure
 reveal app.py load_config      # element → code
 ```
 
-Zero config. 31 languages built-in. 50+ via tree-sitter.
+Zero config. 30 languages built-in. 50+ via tree-sitter.
 
 ---
 
@@ -29,7 +29,7 @@ reveal --agent-help-full     # Complete reference (~1215 lines)
 
 **Quick Install:**
 ```bash
-pip install reveal-cli              # Full-featured by default (31 languages, 8 adapters)
+pip install reveal-cli              # Full-featured by default (30 languages, 8 adapters)
 pip install reveal-cli[database]    # Add MySQL database inspection
 ```
 See [INSTALL.md](INSTALL.md) for details on what's included.
