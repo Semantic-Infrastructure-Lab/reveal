@@ -96,6 +96,25 @@ def print_breadcrumbs(context, path, file_type=None, config=None, **kwargs):
         element_placeholder = get_element_placeholder(file_type)
         print(f"Next: reveal {path} {element_placeholder}   # Extract specific element")
 
+        # Check structure for smart suggestions
+        structure = kwargs.get('structure', {})
+
+        # Check for many imports - suggest imports:// adapter
+        if structure and 'imports' in structure:
+            import_count = len(structure.get('imports', []))
+            if import_count > 5 and file_type in ['python', 'javascript', 'typescript']:
+                print(f"      reveal 'imports://{path}'   # Analyze dependencies ({import_count} imports)")
+
+        # Check for large files - suggest AST queries for navigation
+        if structure:
+            total_elements = sum(len(items) for items in structure.values() if isinstance(items, list))
+            if total_elements > 20 and file_type in ['python', 'javascript', 'typescript', 'rust', 'go']:
+                # Large file - suggest AST queries for finding hotspots
+                print(f"      reveal 'ast://{path}?complexity>10'   # Find complex functions")
+                print(f"      reveal 'ast://{path}?lines>50'        # Find large elements")
+                print(f"      reveal {path} --check      # Check code quality")
+                return  # Skip standard suggestions for large files
+
         if file_type in ['python', 'javascript', 'typescript', 'rust', 'go', 'bash', 'gdscript']:
             print(f"      reveal {path} --check      # Check code quality")
             print(f"      reveal {path} --outline    # Nested structure")

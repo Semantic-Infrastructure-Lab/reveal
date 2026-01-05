@@ -433,7 +433,8 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
     # Navigation hints
     if output_format == 'text':
         file_type = get_file_type_from_analyzer(analyzer)
-        print_breadcrumbs('structure', path, file_type=file_type, config=config)
+        print_breadcrumbs('structure', path, file_type=file_type, config=config,
+                         structure=structure)
 
 
 def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config=None):
