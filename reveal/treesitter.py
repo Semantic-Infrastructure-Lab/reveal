@@ -98,6 +98,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'use_declaration',       # Rust
             'using_directive',       # C#
             'import_from_statement', # Python
+            'preproc_include',       # C/C++
         ]
 
         for import_type in import_types:
@@ -198,6 +199,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         class_types = [
             'class_definition',      # Python
             'class_declaration',     # Java, C#, JavaScript
+            'class_specifier',       # C++
             'struct_item',           # Rust (treated as class)
         ]
 
@@ -345,10 +347,18 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
     def _get_node_name(self, node) -> Optional[str]:
         """Get the name of a node (function/class/struct name)."""
-        # Look for 'name' or 'identifier' child
+        # Look for 'name', 'identifier', or 'type_identifier' child (direct)
         for child in node.children:
-            if child.type in ('identifier', 'name'):
+            if child.type in ('identifier', 'name', 'type_identifier'):
                 return self._get_node_text(child)
+
+        # For C/C++: Look inside function_declarator, declarator, etc.
+        for child in node.children:
+            if child.type in ('function_declarator', 'declarator', 'field_identifier'):
+                # Recursively search for identifier
+                for subchild in child.children:
+                    if subchild.type in ('identifier', 'name', 'type_identifier'):
+                        return self._get_node_text(subchild)
 
         return None
 

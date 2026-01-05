@@ -10,6 +10,8 @@ Each analyzer is typically 10-20 lines of code!
 from .python import PythonAnalyzer
 from .rust import RustAnalyzer
 from .go import GoAnalyzer
+from .c import CAnalyzer
+from .cpp import CppAnalyzer
 from .markdown import MarkdownAnalyzer
 from .yaml_json import YamlAnalyzer, JsonAnalyzer
 from .jsonl import JsonlAnalyzer
@@ -37,6 +39,8 @@ __all__ = [
     'PythonAnalyzer',
     'RustAnalyzer',
     'GoAnalyzer',
+    'CAnalyzer',
+    'CppAnalyzer',
     'MarkdownAnalyzer',
     'YamlAnalyzer',
     'JsonAnalyzer',
