@@ -6,13 +6,14 @@ from reveal.base import FileAnalyzer
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 
 
-def extract_element(analyzer: FileAnalyzer, element: str, output_format: str):
+def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, config=None):
     """Extract a specific element.
 
     Args:
         analyzer: File analyzer
         element: Element name to extract
         output_format: Output format
+        config: Optional RevealConfig instance
     """
     # For tree-sitter analyzers, try all types with tree-sitter first
     # before falling back to grep. This prevents matching type variables
@@ -89,5 +90,5 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str):
         # Navigation hints
         file_type = get_file_type_from_analyzer(analyzer)
         line_count = line_end - line_start + 1
-        print_breadcrumbs('element', path, file_type=file_type,
+        print_breadcrumbs('element', path, file_type=file_type, config=config,
                          element_name=name, line_count=line_count, line_start=line_start)

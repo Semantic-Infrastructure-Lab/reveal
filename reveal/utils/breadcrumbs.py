@@ -62,15 +62,30 @@ def get_file_type_from_analyzer(analyzer):
     return mapping.get(class_name, None)
 
 
-def print_breadcrumbs(context, path, file_type=None, **kwargs):
+def print_breadcrumbs(context, path, file_type=None, config=None, **kwargs):
     """Print navigation breadcrumbs with reveal command suggestions.
 
     Args:
         context: 'structure', 'element', 'metadata', 'typed'
         path: File or directory path
         file_type: Optional file type for context-specific suggestions
+        config: Optional RevealConfig instance (if None, loads default)
         **kwargs: Additional context (element_name, line_count, etc.)
     """
+    # Check if breadcrumbs are enabled
+    if config is None:
+        from pathlib import Path as PathLib
+        from reveal.config import RevealConfig
+        # Get config for the file's directory
+        file_path = PathLib(path) if isinstance(path, str) else path
+        if file_path.is_file():
+            config = RevealConfig.get(start_path=file_path.parent)
+        else:
+            config = RevealConfig.get(start_path=file_path)
+
+    if not config.is_breadcrumbs_enabled():
+        return  # Exit early if breadcrumbs are disabled
+
     print()  # Blank line before breadcrumbs
 
     if context == 'metadata':

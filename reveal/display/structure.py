@@ -186,6 +186,7 @@ def _render_typed_structure_output(
     structure: Dict[str, List[Dict[str, Any]]],
     output_format: str = "text",
     category_filter: str = None,
+    config=None,
 ) -> None:
     """Render structure using the new Type-First Architecture.
 
@@ -254,7 +255,7 @@ def _render_typed_structure_output(
     # Navigation hints
     print()
     file_type = get_file_type_from_analyzer(analyzer)
-    print_breadcrumbs("typed", file_path, file_type=file_type)
+    print_breadcrumbs("typed", file_path, file_type=file_type, config=config)
 
 
 def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
@@ -367,7 +368,7 @@ def _build_outline_hierarchy(structure: Dict[str, List[Dict[str, Any]]]):
 
 
 def _handle_outline_mode(structure: Dict[str, List[Dict[str, Any]]],
-                         path: Path, is_fallback: bool, fallback_lang: str) -> None:
+                         path: Path, is_fallback: bool, fallback_lang: str, config=None) -> None:
     """Handle outline mode rendering.
 
     Args:
@@ -393,11 +394,11 @@ def _handle_outline_mode(structure: Dict[str, List[Dict[str, Any]]],
     type_map = {'py': 'python', 'js': 'javascript', 'ts': 'typescript',
                 'rs': 'rust', 'go': 'go', 'sh': 'bash', 'md': 'markdown'}
     file_type = type_map.get(suffix, suffix)
-    print_breadcrumbs("typed", str(path), file_type=file_type)
+    print_breadcrumbs("typed", str(path), file_type=file_type, config=config)
 
 
 def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]],
-                            output_format: str, is_fallback: bool, fallback_lang: str) -> None:
+                            output_format: str, is_fallback: bool, fallback_lang: str, config=None) -> None:
     """Handle standard JSON or text output.
 
     Args:
@@ -432,10 +433,10 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
     # Navigation hints
     if output_format == 'text':
         file_type = get_file_type_from_analyzer(analyzer)
-        print_breadcrumbs('structure', path, file_type=file_type)
+        print_breadcrumbs('structure', path, file_type=file_type, config=config)
 
 
-def show_structure(analyzer: FileAnalyzer, output_format: str, args=None):
+def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config=None):
     """Show file structure.
 
     Refactored to reduce complexity from 42 → ~18 by extracting mode handlers.
@@ -444,6 +445,7 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None):
         analyzer: File analyzer instance
         output_format: Output format ('text', 'json', 'typed')
         args: Optional command-line arguments
+        config: Optional RevealConfig instance
     """
     # Build kwargs and get structure
     kwargs = _build_analyzer_kwargs(analyzer, args)
@@ -463,13 +465,13 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None):
     if args and getattr(args, 'typed', False):
         json_format = "json" if output_format == "json" else "text"
         category_filter = getattr(args, 'filter', None)
-        _render_typed_structure_output(analyzer, structure, json_format, category_filter)
+        _render_typed_structure_output(analyzer, structure, json_format, category_filter, config=config)
         return
 
     # Handle outline mode
     if args and getattr(args, 'outline', False):
-        _handle_outline_mode(structure, path, is_fallback, fallback_lang)
+        _handle_outline_mode(structure, path, is_fallback, fallback_lang, config=config)
         return
 
     # Handle standard output (JSON or text)
-    _handle_standard_output(analyzer, structure, output_format, is_fallback, fallback_lang)
+    _handle_standard_output(analyzer, structure, output_format, is_fallback, fallback_lang, config=config)

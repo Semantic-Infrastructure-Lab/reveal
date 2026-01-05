@@ -179,6 +179,8 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
                         help='Show hierarchical outline (classes with methods, nested structures)')
     parser.add_argument('--hotspots', action='store_true',
                         help='Identify quality hotspots (requires stats:// adapter, shows worst 10 files by quality)')
+    parser.add_argument('--no-breadcrumbs', action='store_true',
+                        help='Disable breadcrumb navigation hints')
 
 
 def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:

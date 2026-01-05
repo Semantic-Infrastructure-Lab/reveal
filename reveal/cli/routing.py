@@ -187,6 +187,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
     """
     from ..base import get_analyzer
     from ..display import show_structure, show_metadata, extract_element
+    from ..config import RevealConfig
 
     allow_fallback = not getattr(args, 'no_fallback', False) if args else True
 
@@ -201,8 +202,19 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
 
     analyzer = analyzer_class(path)
 
+    # Build CLI overrides for config (including --no-breadcrumbs)
+    cli_overrides = {}
+    if args and getattr(args, 'no_breadcrumbs', False):
+        cli_overrides['display'] = {'breadcrumbs': False}
+
+    # Load config with CLI overrides
+    config = RevealConfig.get(
+        start_path=Path(path).parent if Path(path).is_file() else Path(path),
+        cli_overrides=cli_overrides if cli_overrides else None
+    )
+
     if show_meta:
-        show_metadata(analyzer, output_format)
+        show_metadata(analyzer, output_format, config=config)
         return
 
     if args and getattr(args, 'validate_schema', None):
@@ -216,10 +228,10 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         return
 
     if element:
-        extract_element(analyzer, element, output_format)
+        extract_element(analyzer, element, output_format, config=config)
         return
 
-    show_structure(analyzer, output_format, args)
+    show_structure(analyzer, output_format, args, config=config)
 
 
 # Backward compatibility aliases

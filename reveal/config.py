@@ -153,7 +153,14 @@ CONFIG_SCHEMA = {
         "adapters": {"type": "object"},
         "plugins": {"type": "object"},
         "output": {"type": "object"},
-        "cache": {"type": "object"}
+        "cache": {"type": "object"},
+        "display": {
+            "type": "object",
+            "properties": {
+                "breadcrumbs": {"type": "boolean"}
+            },
+            "additionalProperties": False
+        }
     },
     "additionalProperties": False
 }
@@ -515,6 +522,7 @@ class RevealConfig:
         - REVEAL_IGNORE: Comma-separated glob patterns to ignore
         - REVEAL_C901_THRESHOLD: Complexity threshold for C901 rule
         - REVEAL_E501_MAX_LENGTH: Max line length for E501 rule
+        - REVEAL_BREADCRUMBS: Enable/disable breadcrumbs (0/1, false/true, no/yes)
 
         Examples:
             export REVEAL_RULES_DISABLE="E501,D001"
@@ -523,6 +531,7 @@ class RevealConfig:
             export REVEAL_IGNORE="*.min.js,vendor/**"
             export REVEAL_C901_THRESHOLD=20
             export REVEAL_E501_MAX_LENGTH=120
+            export REVEAL_BREADCRUMBS=0
         """
         config: Dict[str, Any] = {}
 
@@ -556,6 +565,12 @@ class RevealConfig:
                 config.setdefault('rules', {})['E501'] = {'max_length': int(max_length)}
             except ValueError:
                 logger.warning(f"Invalid REVEAL_E501_MAX_LENGTH value: {max_length}")
+
+        # REVEAL_BREADCRUMBS=0 (or 1, false, true, no, yes)
+        if breadcrumbs_env := os.getenv('REVEAL_BREADCRUMBS'):
+            config.setdefault('display', {})['breadcrumbs'] = (
+                breadcrumbs_env.lower() not in ('0', 'false', 'no')
+            )
 
         return config
 
@@ -730,6 +745,18 @@ class RevealConfig:
             'rules_user': Path.home() / '.reveal' / 'rules',
             'rules_project': Path.cwd() / '.reveal' / 'rules',
         }
+
+    def is_breadcrumbs_enabled(self) -> bool:
+        """Check if breadcrumbs are enabled.
+
+        Breadcrumbs are navigation hints printed after reveal output.
+        They can be disabled via config, environment, or CLI.
+
+        Returns:
+            True if breadcrumbs should be displayed (default: True)
+        """
+        display_config = self._config.get('display', {})
+        return display_config.get('breadcrumbs', True)
 
 
 def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:

@@ -6,7 +6,7 @@ from reveal.base import FileAnalyzer
 from reveal.utils import safe_json_dumps, print_breadcrumbs
 
 
-def show_metadata(analyzer: FileAnalyzer, output_format: str):
+def show_metadata(analyzer: FileAnalyzer, output_format: str, config=None):
     """Show file metadata."""
     meta = analyzer.get_metadata()
 
@@ -18,7 +18,7 @@ def show_metadata(analyzer: FileAnalyzer, output_format: str):
         print(f"Size:     {meta['size_human']}")
         print(f"Lines:    {meta['lines']}")
         print(f"Encoding: {meta['encoding']}")
-        print_breadcrumbs('metadata', meta['path'])
+        print_breadcrumbs('metadata', meta['path'], config=config)
 
 
 def _print_file_header(path: Path, is_fallback: bool = False, fallback_lang: str = None) -> None:
