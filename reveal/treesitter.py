@@ -125,7 +125,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'method_declaration',    # Java, C#, Kotlin
             'function',              # Generic
             'method',                # Ruby
-            'function_definition_statement',  # Lua
+            'function_definition_statement',  # Lua (global functions)
+            'local_function_definition_statement',  # Lua (local functions)
         ]
 
         # Step 1: Find decorated functions (Python)

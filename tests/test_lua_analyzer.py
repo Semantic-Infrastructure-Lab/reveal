@@ -37,7 +37,12 @@ greet()
             os.unlink(temp_path)
 
     def test_multiple_functions(self):
-        """Should handle multiple function definitions."""
+        """Should handle multiple function definitions.
+
+        Note: tree-sitter Lua grammar has parse errors with multiple functions.
+        When grammar improves, should extract: add, multiply, printResult.
+        Currently validates at least first function is extracted.
+        """
         code = '''function add(a, b)
     return a + b
 end
@@ -59,14 +64,26 @@ end
             analyzer = LuaAnalyzer(temp_path)
             structure = analyzer.get_structure()
 
-            # Should not crash
-            self.assertIsInstance(structure, dict)
+            # Should at least extract first function (grammar limitations)
+            self.assertIn('functions', structure)
+            functions = structure['functions']
+            self.assertGreater(len(functions), 0)
+
+            # Verify first function has proper metadata
+            first_func = functions[0]
+            self.assertIn('name', first_func)
+            self.assertIn('line', first_func)
+            self.assertGreater(first_func['line_count'], 0)
 
         finally:
             os.unlink(temp_path)
 
     def test_local_functions(self):
-        """Should handle local function definitions."""
+        """Should handle local function definitions.
+
+        Note: tree-sitter Lua grammar has parse errors with local functions.
+        This test verifies the analyzer doesn't crash.
+        """
         code = '''local function helper()
     return 42
 end
@@ -85,7 +102,7 @@ end
             analyzer = LuaAnalyzer(temp_path)
             structure = analyzer.get_structure()
 
-            # Should not crash
+            # Should not crash (grammar has parse errors, extraction may be incomplete)
             self.assertIsInstance(structure, dict)
 
         finally:
