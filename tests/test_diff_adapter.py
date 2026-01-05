@@ -325,6 +325,29 @@ def foo():
         self.assertEqual(result['type'], 'removed')
         self.assertEqual(result['name'], 'bar')
 
+    def test_element_search_in_class_methods(self):
+        """Test element search finds methods in classes."""
+        v1 = """
+class MyClass:
+    def method_one(self):
+        pass
+"""
+        v2 = """
+class MyClass:
+    def method_one(self, x):
+        return x * 2
+"""
+        path1 = self.create_file(v1, "v1.py")
+        path2 = self.create_file(v2, "v2.py")
+
+        adapter = DiffAdapter(path1, path2)
+        result = adapter.get_element('method_one')
+
+        # Verify found and modified
+        self.assertEqual(result['type'], 'modified')
+        self.assertEqual(result['name'], 'method_one')
+        self.assertIn('signature', result['changes'])
+
 
 class TestDiffURIParsing(unittest.TestCase):
     """Test URI parsing for diff:// adapter."""
@@ -487,6 +510,38 @@ class TestDirectoryDiff(unittest.TestCase):
         self.assertEqual(result['summary']['functions']['added'], 0)
         self.assertEqual(result['summary']['functions']['removed'], 0)
 
+    def test_directory_with_imports(self):
+        """Test directory diff includes import changes."""
+        left_dir = Path(self.temp_dir) / "left"
+        right_dir = Path(self.temp_dir) / "right"
+        left_dir.mkdir()
+        right_dir.mkdir()
+
+        # Create files with different imports
+        (left_dir / "module.py").write_text("import os\nimport sys\ndef foo(): pass")
+        (right_dir / "module.py").write_text("import os\nimport json\ndef foo(): pass")
+
+        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        result = adapter.get_structure()
+
+        # Should detect import changes
+        self.assertEqual(result['summary']['imports']['added'], 1)
+        self.assertEqual(result['summary']['imports']['removed'], 1)
+
+        # Verify file metadata is preserved in imports
+        if result['diff']['imports']:
+            import_elem = result['diff']['imports'][0]
+            if 'left' in import_elem and import_elem['left']:
+                self.assertEqual(import_elem['left']['file'], 'module.py')
+
+    def test_directory_not_found_error(self):
+        """Test error when directory doesn't exist."""
+        adapter = DiffAdapter("/nonexistent/path", str(self.temp_dir))
+        with self.assertRaises(ValueError) as ctx:
+            adapter.get_structure()
+        # When directory doesn't exist, it's treated as a file with no analyzer
+        self.assertIn("No analyzer found", str(ctx.exception))
+
 
 class TestGitDiff(unittest.TestCase):
     """Test git integration for diffing."""
@@ -545,6 +600,73 @@ class TestGitDiff(unittest.TestCase):
         result = adapter.get_structure()
 
         self.assertEqual(result['summary']['functions']['added'], 1)
+
+    def test_git_directory_diff(self):
+        """Test diffing directories across git commits."""
+        # Create directory structure in first commit
+        (self.git_dir / "src").mkdir()
+        (self.git_dir / "src" / "a.py").write_text("def foo(): pass")
+        (self.git_dir / "src" / "b.py").write_text("def bar(): pass")
+        subprocess.run(['git', 'add', '.'], cwd=self.git_dir, check=True, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'Initial'],
+                      cwd=self.git_dir, check=True, capture_output=True)
+
+        # Modify directory in second commit
+        (self.git_dir / "src" / "a.py").write_text("def foo(): pass\ndef new_foo(): pass")
+        (self.git_dir / "src" / "c.py").write_text("def baz(): pass")
+        subprocess.run(['git', 'add', '.'], cwd=self.git_dir, check=True, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'Add functions'],
+                      cwd=self.git_dir, check=True, capture_output=True)
+
+        # Test directory diff
+        os.chdir(self.git_dir)
+        adapter = DiffAdapter('git://HEAD~1/src/', 'git://HEAD/src/')
+        result = adapter.get_structure()
+
+        # Should detect added functions (new_foo in a.py, baz in c.py)
+        self.assertGreaterEqual(result['summary']['functions']['added'], 2)
+
+    def test_git_not_in_repo_error(self):
+        """Test error when not in git repository."""
+        # Create temp directory outside git
+        temp_not_git = Path(tempfile.mkdtemp())
+        (temp_not_git / "test.py").write_text("def foo(): pass")
+
+        try:
+            os.chdir(temp_not_git)
+            adapter = DiffAdapter('git://HEAD/test.py', 'test.py')
+            with self.assertRaises(ValueError) as ctx:
+                adapter.get_structure()
+            self.assertIn("Not in a git repository", str(ctx.exception))
+        finally:
+            shutil.rmtree(temp_not_git)
+
+    def test_git_file_not_found_error(self):
+        """Test error when file not found in git ref."""
+        # Create repo with one file
+        (self.git_dir / "exists.py").write_text("def foo(): pass")
+        subprocess.run(['git', 'add', '.'], cwd=self.git_dir, check=True, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'Initial'],
+                      cwd=self.git_dir, check=True, capture_output=True)
+
+        os.chdir(self.git_dir)
+        adapter = DiffAdapter('git://HEAD/nonexistent.py', 'exists.py')
+        with self.assertRaises(ValueError) as ctx:
+            adapter.get_structure()
+        self.assertIn("Path not found", str(ctx.exception))
+
+    def test_git_invalid_uri_format(self):
+        """Test error for invalid git URI format."""
+        (self.git_dir / "test.py").write_text("def foo(): pass")
+        subprocess.run(['git', 'add', '.'], cwd=self.git_dir, check=True, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'Initial'],
+                      cwd=self.git_dir, check=True, capture_output=True)
+
+        os.chdir(self.git_dir)
+        adapter = DiffAdapter('git://HEAD', 'test.py')  # Missing path
+        with self.assertRaises(ValueError) as ctx:
+            adapter.get_structure()
+        self.assertIn("Git URI must be in format", str(ctx.exception))
 
 
 class TestDiffMetadata(unittest.TestCase):

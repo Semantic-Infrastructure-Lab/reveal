@@ -48,8 +48,24 @@ class DiffAdapter(ResourceAdapter):
                     'description': 'Compare two Python files - see function/class changes'
                 },
                 {
-                    'uri': 'diff://file:app.py:file:old_app.py',
-                    'description': 'Explicit file:// scheme (optional)'
+                    'uri': 'diff://src/:backup/src/',
+                    'description': 'Compare directories (aggregates all files)'
+                },
+                {
+                    'uri': 'diff://git://HEAD~1/app.py:git://HEAD/app.py',
+                    'description': 'Compare file across git commits'
+                },
+                {
+                    'uri': 'diff://git://HEAD/src/:src/',
+                    'description': 'Compare git HEAD vs working tree (pre-commit validation)'
+                },
+                {
+                    'uri': 'diff://git://main/.:git://feature/refactor/.',
+                    'description': 'Compare branches (merge impact assessment)'
+                },
+                {
+                    'uri': 'diff://app.py:old.py/handle_request',
+                    'description': 'Compare specific function (element-specific diff)'
                 },
                 {
                     'uri': 'diff://env://:env://production',
@@ -58,19 +74,13 @@ class DiffAdapter(ResourceAdapter):
                 {
                     'uri': 'diff://mysql://localhost/users:mysql://staging/users',
                     'description': 'Database schema drift detection'
-                },
-                {
-                    'uri': 'diff://app.py:old.py/handle_request',
-                    'description': 'Compare specific function (element-specific diff)'
-                },
-                {
-                    'uri': 'diff://src/:backup/src/',
-                    'description': 'Compare directories (shows file-level changes)'
                 }
             ],
             'features': [
                 'Semantic diff - compares structure, not text',
                 'Works with ANY adapter (file, env, mysql, etc.)',
+                'Directory comparison - aggregates changes from all files',
+                'Git integration - compare commits, branches, working tree',
                 'Two-level output: summary (counts) + details (changes)',
                 'Element-specific diff support',
                 'Shows complexity and line count changes',
@@ -78,11 +88,19 @@ class DiffAdapter(ResourceAdapter):
             ],
             'workflows': [
                 {
+                    'name': 'Pre-Commit Validation',
+                    'scenario': 'Check uncommitted changes before commit',
+                    'steps': [
+                        "reveal diff://git://HEAD/src/:src/ --format=json  # See what changed",
+                        "# Flag if complexity increased significantly",
+                    ]
+                },
+                {
                     'name': 'Code Review Workflow',
                     'scenario': 'Review what changed in a feature branch',
                     'steps': [
-                        "reveal diff://main.py:feature/main.py    # See structural changes",
-                        "reveal diff://main.py:feature/main.py/process_data  # Specific function",
+                        "reveal diff://git://main/.:git://feature/.  # Full branch comparison",
+                        "reveal diff://git://main/app.py:git://feature/app.py/process_data  # Specific function",
                     ]
                 },
                 {
@@ -94,10 +112,11 @@ class DiffAdapter(ResourceAdapter):
                     ]
                 },
                 {
-                    'name': 'Environment Audit',
-                    'scenario': 'Compare local vs production environment',
+                    'name': 'Migration Validation',
+                    'scenario': 'Ensure no functionality lost during migration',
                     'steps': [
-                        "reveal diff://env://:env://production    # See config drift",
+                        "reveal diff://legacy_system/:new_system/  # Compare directory structures",
+                        "# Verify all functions/classes migrated",
                     ]
                 }
             ],
@@ -109,7 +128,8 @@ class DiffAdapter(ResourceAdapter):
             'notes': [
                 'Complements git diff (semantic vs line-level)',
                 'Works with existing adapters via composition',
-                'Future: time-travel (diff://time:file:@v1:file:@v2)',
+                'Git URI format: git://REF/path (e.g., git://HEAD~1/file.py, git://main/src/)',
+                'Directory diffs aggregate all analyzable files (skips .git, node_modules, etc.)',
                 'For complex URIs with colons, use explicit scheme://'
             ],
             'try_now': [

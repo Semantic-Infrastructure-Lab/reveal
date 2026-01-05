@@ -309,12 +309,22 @@ reveal 'imports://src?unused'               # Find unused imports (I001 rule)
 reveal 'imports://src?circular'             # Detect circular dependencies (I002 rule)
 reveal 'imports://src?violations'           # Check layer violations (I003 rule)
 reveal imports://src/app.py                 # Imports for specific file
+
+# Semantic diff - compare structures, not text (v0.30.0+) 🆕
+reveal diff://app.py:backup/app.py          # Compare files (shows function/class changes)
+reveal diff://src/:backup/src/              # Compare directories (aggregates all changes)
+reveal diff://git://HEAD~1/app.py:git://HEAD/app.py    # Compare across commits
+reveal diff://git://HEAD/src/:src/          # Compare git vs working tree (pre-commit check)
+reveal diff://git://main/.:git://feature/.:  # Compare branches
+reveal diff://app.py:new.py/handle_request  # Element-specific diff
+reveal diff://env://:env://production        # Environment drift detection
+reveal help://diff                           # Complete diff guide
 ```
 
 **Extensibility Example:**
 The `reveal://` adapter demonstrates that reveal can inspect **any resource**, not just files. Use it as a reference for creating custom adapters for your own projects (APIs, databases, containers, etc.). See `reveal help://reveal` for the complete guide.
 
-**9 Built-in Adapters:**
+**10 Built-in Adapters:**
 - `help://` - Self-documenting help system (discover all adapters)
 - `env://` - Environment variables (cross-language)
 - `ast://` - Static code analysis & queries (cross-language)
@@ -323,7 +333,8 @@ The `reveal://` adapter demonstrates that reveal can inspect **any resource**, n
 - `reveal://` - Self-inspection & validation (v0.22.0+)
 - `stats://` - Code quality metrics & hotspot detection
 - `mysql://` - MySQL database inspection with DBA tuning ratios (requires `[database]` extra)
-- `imports://` - Import graph analysis with unused/circular detection (v0.28.0+) 🆕
+- `imports://` - Import graph analysis with unused/circular detection (v0.28.0+)
+- `diff://` - Semantic structural diff (files, directories, git refs) (v0.30.0+) 🆕
 
 **Self-documenting:** Every adapter exposes help via `reveal help://<scheme>`
 

@@ -47,6 +47,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Established refactoring patterns: Nested Traversal→Extract Navigation, Monolithic Orchestration→Extract Builders
 
 ### Added
+- **`diff://` Adapter - Semantic Structural Diff**
+  - **Semantic comparison**: Compare functions, classes, and imports - not just text lines
+  - **File diffing**: `diff://app.py:backup/app.py` shows structural changes (signature, complexity, line count)
+  - **Directory diffing**: `diff://src/:backup/src/` aggregates changes across all analyzable files
+  - **Git integration**: Compare commits, branches, and working tree
+    - `diff://git://HEAD~1/file.py:git://HEAD/file.py` - Compare across commits
+    - `diff://git://HEAD/src/:src/` - Pre-commit validation (uncommitted changes)
+    - `diff://git://main/.:git://feature/.:` - Branch comparison (merge impact assessment)
+  - **Element-specific diffs**: `diff://app.py:new.py/handle_request` compares specific function
+  - **Cross-adapter composition**: Works with ANY adapter (env://, mysql://, etc.)
+  - **Progressive disclosure**: Summary (counts) → Details (changes) → Context (file paths)
+  - **Two-level output**: Aggregate summary + per-element details with old→new values
+  - **Usage**: `reveal diff://app.py:backup.py`, `reveal diff://git://HEAD/src/:src/ --format=json`
+  - **Test coverage**: 34 tests (100% pass rate), 77% coverage on diff.py
+  - **Documentation**: README examples, enhanced help text (`reveal help://diff`), AI_DIFF_USAGE.md guide
+  - **Implementation**: Three-session effort (cooling-hurricane-0104, sacred-sphinx-0104, fallen-leviathan-0104)
+  - **Git URI format**: `git://REF/path` (REF = HEAD, HEAD~1, main, branch-name, commit-sha)
+  - **Directory handling**: Skips common ignore dirs (.git, node_modules, __pycache__, etc.)
+  - **Composition pattern**: Delegates to existing adapters (file analyzers, env://, mysql://, etc.)
 - **19 comprehensive integration tests** covering critical gaps
   - 10 URI query parameter tests for `stats://` adapter (validates `?hotspots=true&min_complexity=10` syntax)
   - 9 tests for refactored markdown.py link helpers (validates extraction, filtering, edge cases)

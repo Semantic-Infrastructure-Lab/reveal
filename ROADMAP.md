@@ -3,7 +3,7 @@
 > **Vision:** Universal resource exploration with progressive disclosure
 
 **Current version:** v0.29.0
-**Last updated:** 2026-01-03
+**Last updated:** 2026-01-04
 
 ---
 
@@ -227,7 +227,92 @@ reveal file.md --validate-schema custom.yaml # Custom schema
 
 ---
 
-### v0.30.0 (Q2 2026): Link Following & Knowledge Graph Navigation
+### v0.30.0 (Jan 2026): Semantic Diff Adapter
+
+**diff:// Adapter** - Semantic structural comparison for code review:
+```bash
+reveal diff://app.py:backup/app.py         # Compare files (functions/classes)
+reveal diff://src/:backup/src/              # Compare directories (aggregated)
+reveal diff://git://HEAD~1/:git://HEAD/:    # Compare commits
+reveal diff://git://HEAD/.:src/             # Compare git vs working tree
+reveal diff://git://main/.:git://feature/:  # Compare branches
+reveal diff://app.py:new.py/handle_request # Element-specific diff
+```
+
+**Features:**
+- ✅ File and directory comparison
+- ✅ Git integration (commits, branches, working tree)
+- ✅ Structural diff (functions, classes, imports, decorators)
+- ✅ Element-level diff for deep dives
+- ✅ JSON output for CI/CD integration
+- ✅ AI agent optimized (comprehensive usage guide)
+
+**Breaking Changes:**
+- **Python 3.10+ required** (was 3.8+)
+  - Python 3.8 EOL: October 2024
+  - Python 3.9 EOL: October 2025
+
+**Status:** 🚧 In progress (90% complete)
+**Implementation:** 2-3 weeks
+**See:** `AI_DIFF_USAGE.md` for AI agent guide
+
+---
+
+### v0.30.1 (Feb 2026): Breadcrumb Navigation Fixes
+
+**Critical Breadcrumb Fixes** - Fix broken navigation hints:
+```bash
+# Fixed: --typed output now shows breadcrumbs
+reveal file.py --typed   # Shows next steps
+```
+
+**Fixes:**
+- ❌ BUG FIX: "typed" context handler (was silently failing)
+- ✅ HTML analyzer mapping (enable breadcrumbs for HTML files)
+- ✅ Test coverage for all breadcrumb contexts
+
+**Implementation:** 1-2 hours
+**Priority:** HIGH (broken functionality)
+**See:** `internal-docs/planning/BREADCRUMB_IMPROVEMENTS_2026.md` Phase 1
+
+---
+
+### v0.31.0 (Q2 2026): Enhanced Breadcrumbs & UX Polish
+
+**Breadcrumb Adapter Awareness** - Guide users to advanced features:
+```bash
+# After viewing large file:
+reveal large_module.py
+# Breadcrumbs suggest: reveal 'ast://large_module.py?complexity>10'
+
+# After --check finds issues:
+reveal app.py --check
+# Breadcrumbs suggest: reveal stats://app.py  # Analyze trends
+
+# After viewing imports:
+reveal utils.py
+# Breadcrumbs suggest: reveal imports://utils.py  # Dependency analysis
+```
+
+**Features:**
+- Large file detection → AST adapter suggestions
+- Post-check quality guidance
+- Import analysis breadcrumbs
+- diff:// workflow hints
+- Token-efficient feature discovery (50-200 token savings per session)
+
+**UX Improvements:**
+- Enhanced breadcrumb system (Phase 2: Adapter awareness)
+- `--quiet` mode for scripting
+- Global config support (`~/.config/reveal/config.yaml`)
+- Improved error messages and suggestions
+
+**Implementation:** 3-4 weeks
+**See:** `internal-docs/planning/BREADCRUMB_IMPROVEMENTS_2026.md` Phase 2
+
+---
+
+### v0.32.0 (Q3 2026): Knowledge Graph Navigation
 
 **Related Documents Viewer** - Follow knowledge graph links:
 ```bash
@@ -242,13 +327,19 @@ reveal file.md --related --depth 2       # Follow links recursively (max depth 2
 - Auto-detect link field patterns
 - Works with Beth, Hugo, Obsidian, and custom link patterns
 
-**Implementation:** 2-3 weeks
+**Breadcrumb Workflow Guidance** (Phase 3):
+- Pre-commit workflow detection and guidance
+- Code review workflow hints
+- Refactoring workflow support
+- Help system integration
 
-**Note:** The `architecture://` adapter originally planned for this release has been deprecated. Layer violation detection is already handled by the I003 rule (shipped in v0.28.0). A dedicated URI adapter was deemed too narrow in scope compared to knowledge graph features.
+**Implementation:** 4-6 weeks total
+- Link following: 2-3 weeks
+- Breadcrumb workflows: 2-3 weeks
 
 ---
 
-### v0.31.0 (Q3 2026): Metadata Queries & Quality Checks
+### v0.33.0 (Q3 2026): Metadata Queries & Quality Checks
 
 **`markdown://` URI Adapter** - Query markdown files by front matter:
 ```bash
@@ -281,14 +372,7 @@ reveal docs/**/*.md --check-metadata --summary  # Aggregate report
 
 ---
 
-### v0.32.0 (Q3 2026): Polish for v1.0
-
-**UX Improvements:**
-- `--watch` mode: Live feedback for file changes
-- Color themes (light/dark/high-contrast)
-- Global config support (`~/.config/reveal/config.yaml`)
-- `--quiet` mode for scripting
-- Interactive mode exploration
+### v0.34.0 (Q4 2026): Documentation & Polish for v1.0
 
 **Knowledge Graph Documentation:**
 - Complete knowledge graph guide (ships as `reveal help://knowledge-graph`)
@@ -300,24 +384,31 @@ reveal docs/**/*.md --check-metadata --summary  # Aggregate report
 - Complete adapter authoring guide
 - CI/CD integration examples
 - Performance benchmarking suite
+- Comprehensive troubleshooting guide
+
+**Optional Features:**
+- `--watch` mode: Live feedback for file changes (if time permits)
+- Color themes (light/dark/high-contrast) (if time permits)
 
 ---
 
-### v1.0 (Q4 2026): Stable Foundation
+### v1.0 (Q1 2027): Stable Foundation
 
 **Stability commitment:**
 - API freeze (CLI flags, output formats, adapter protocol)
-- 60%+ test coverage
+- 75%+ test coverage (currently at 76%)
 - All 18 built-in languages tested
 - Comprehensive documentation
 - Performance guarantees
 
 **Included Features:**
 - Code structure exploration (core competency)
-- 8+ URI adapters (ast://, json://, python://, env://, mysql://, imports://, architecture://, markdown://)
-- Quality rules (32+ rules across B/S/C/E/L/I/M/D/N/V/F categories)
-- Knowledge graph construction (schema validation, link following, metadata queries)
+- **11 URI adapters:** help://, env://, ast://, json://, python://, reveal://, stats://, mysql://, imports://, diff://, markdown://
+- **38+ quality rules** across B/S/C/E/L/I/M/D/N/V/F/U categories
+- Knowledge graph construction (schema validation, link following, metadata queries, quality checks)
 - Progressive disclosure patterns for code and documentation
+- Enhanced breadcrumb navigation with workflow guidance
+- Cross-platform support (Linux, macOS, Windows)
 
 ### Post-v1.0: Advanced URI Schemes
 
