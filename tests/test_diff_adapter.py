@@ -16,10 +16,13 @@ class TestDiffAdapter(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
+        self.original_cwd = os.getcwd()
 
     def tearDown(self):
         """Clean up test fixtures."""
         import shutil
+        # Restore original working directory
+        os.chdir(self.original_cwd)
         try:
             shutil.rmtree(self.temp_dir)
         except Exception:
@@ -393,8 +396,11 @@ class TestDirectoryDiff(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
+        self.original_cwd = os.getcwd()
 
     def tearDown(self):
+        # Restore original working directory
+        os.chdir(self.original_cwd)
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
 
@@ -550,6 +556,7 @@ class TestGitDiff(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         self.git_dir = Path(self.temp_dir) / "git_repo"
         self.git_dir.mkdir()
+        self.original_cwd = os.getcwd()
 
         # Initialize git repo
         subprocess.run(['git', 'init'], cwd=self.git_dir, check=True, capture_output=True)
@@ -559,6 +566,8 @@ class TestGitDiff(unittest.TestCase):
                       cwd=self.git_dir, check=True, capture_output=True)
 
     def tearDown(self):
+        # Restore original working directory
+        os.chdir(self.original_cwd)
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
 
@@ -675,10 +684,13 @@ class TestDiffMetadata(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
+        self.original_cwd = os.getcwd()
 
     def tearDown(self):
         """Clean up test fixtures."""
         import shutil
+        # Restore original working directory
+        os.chdir(self.original_cwd)
         try:
             shutil.rmtree(self.temp_dir)
         except Exception:
