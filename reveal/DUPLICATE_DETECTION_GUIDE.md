@@ -362,7 +362,7 @@ reveal file.py --check --select D001
 
 The good news: **Complete architecture designed** in `internal-docs/planning/`:
 - ✅ `DUPLICATE_DETECTION_DESIGN.md` - Full system architecture
-- ✅ `DUPLICATE_DETECTION_GUIDE.md` - Implementation plan
+- ✅ `DUPLICATE_DETECTION_ARCHITECTURE.md` - Complete architectural guide
 - ✅ `DUPLICATE_DETECTION_OPTIMIZATION.md` - D002 fixes
 - ✅ `DUPLICATE_DETECTION_OVERVIEW.md` - Complete vision
 
@@ -452,7 +452,7 @@ A: Architecture is complete, implementation is planned. It's the highest-priorit
 
 **Planning Documents (Internal):**
 - `internal-docs/planning/DUPLICATE_DETECTION_DESIGN.md` - Full architecture
-- `internal-docs/planning/DUPLICATE_DETECTION_GUIDE.md` - Implementation guide
+- `internal-docs/planning/DUPLICATE_DETECTION_ARCHITECTURE.md` - Complete architectural guide
 - `internal-docs/planning/DUPLICATE_DETECTION_OPTIMIZATION.md` - D002 improvements
 - `internal-docs/planning/DUPLICATE_DETECTION_OVERVIEW.md` - System overview
 

@@ -67,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Two-level output**: Aggregate summary + per-element details with old→new values
   - **Usage**: `reveal diff://app.py:backup.py`, `reveal diff://git://HEAD/src/:src/ --format=json`
   - **Test coverage**: 34 tests (100% pass rate), 77% coverage on diff.py
-  - **Documentation**: README examples, enhanced help text (`reveal help://diff`), AI_DIFF_USAGE.md guide
+  - **Documentation**: README examples, enhanced help text (`reveal help://diff`), docs/DIFF_ADAPTER_GUIDE.md guide
   - **Implementation**: Three-session effort (cooling-hurricane-0104, sacred-sphinx-0104, fallen-leviathan-0104)
   - **Git URI format**: `git://REF/path` (REF = HEAD, HEAD~1, main, branch-name, commit-sha)
   - **Directory handling**: Skips common ignore dirs (.git, node_modules, __pycache__, etc.)

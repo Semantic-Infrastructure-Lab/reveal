@@ -29,7 +29,7 @@ Semantic structural comparison for code review and impact assessment.
 **Breaking Change:** Python 3.10+ minimum (was 3.8+)
 
 **Documents:**
-- `AI_DIFF_USAGE.md` - AI agent integration guide
+- `../../docs/DIFF_ADAPTER_GUIDE.md` - AI agent integration guide
 - See ROADMAP.md for feature details
 
 ---
@@ -186,7 +186,7 @@ These documents reflect work from v0.20.0-v0.26.0 timeframe:
 
 **Duplicate Detection:**
 - [DUPLICATE_DETECTION_DESIGN.md](./DUPLICATE_DETECTION_DESIGN.md) - System architecture
-- [DUPLICATE_DETECTION_GUIDE.md](./DUPLICATE_DETECTION_GUIDE.md) - User guide
+- [DUPLICATE_DETECTION_ARCHITECTURE.md](./DUPLICATE_DETECTION_ARCHITECTURE.md) - Complete architectural guide
 - [DUPLICATE_DETECTION_OPTIMIZATION.md](./DUPLICATE_DETECTION_OPTIMIZATION.md) - Mathematical framework
 - [DUPLICATE_DETECTION_OVERVIEW.md](./DUPLICATE_DETECTION_OVERVIEW.md) - Visual overview
 
