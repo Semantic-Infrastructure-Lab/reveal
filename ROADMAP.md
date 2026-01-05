@@ -2,8 +2,8 @@
 
 > **Vision:** Universal resource exploration with progressive disclosure
 
-**Current version:** v0.29.0
-**Last updated:** 2026-01-04
+**Current version:** v0.30.0
+**Last updated:** 2026-01-05
 
 ---
 
@@ -227,7 +227,7 @@ reveal file.md --validate-schema custom.yaml # Custom schema
 
 ---
 
-### v0.30.0 (Jan 2026): Semantic Diff Adapter
+### v0.30.0 ✅ SHIPPED (Jan 2026): Semantic Diff & Smart Breadcrumbs
 
 **diff:// Adapter** - Semantic structural comparison for code review:
 ```bash
@@ -239,78 +239,61 @@ reveal diff://git://main/.:git://feature/:  # Compare branches
 reveal diff://app.py:new.py/handle_request # Element-specific diff
 ```
 
-**Features:**
-- ✅ File and directory comparison
+**Smart Breadcrumbs** - Context-aware navigation hints:
+```bash
+# After viewing large file (>20 elements):
+reveal large_module.py
+# Breadcrumbs suggest: reveal 'ast://large_module.py?complexity>10'
+
+# After viewing file with many imports (>5):
+reveal utils.py
+# Breadcrumbs suggest: reveal imports://utils.py  # Dependency analysis
+
+# File-type specific suggestions:
+reveal docs/guide.md    # Suggests: --links
+reveal app.html         # Suggests: --check, --links
+reveal config.yaml      # Suggests: --check
+```
+
+**Features:** ✅ All delivered
+- ✅ diff:// adapter with file, directory, and git comparison
 - ✅ Git integration (commits, branches, working tree)
 - ✅ Structural diff (functions, classes, imports, decorators)
 - ✅ Element-level diff for deep dives
 - ✅ JSON output for CI/CD integration
-- ✅ AI agent optimized (comprehensive usage guide)
+- ✅ Smart breadcrumbs with large file detection
+- ✅ Import analysis hints (Python, JS, TS, Rust, Go)
+- ✅ File-type specific suggestions (Markdown, HTML, YAML, Dockerfile, Nginx)
+- ✅ Configurable breadcrumbs (global, project, env vars)
 
 **Breaking Changes:**
 - **Python 3.10+ required** (was 3.8+)
   - Python 3.8 EOL: October 2024
   - Python 3.9 EOL: October 2025
 
-**Status:** ✅ Complete - Ready to ship
-**Test Coverage:** 34 tests (100% pass rate), 77% coverage
+**Test Coverage:** 1,600+ tests, 77% coverage (100% on breadcrumbs.py, diff.py)
 **Documentation:** README, help text, docs/DIFF_ADAPTER_GUIDE.md, CHANGELOG
-**Sessions:** cooling-hurricane-0104, sacred-sphinx-0104, fallen-leviathan-0104
+**Sessions:** cooling-hurricane-0104, sacred-sphinx-0104, fallen-leviathan-0104, infernal-omega-0105, yutazu-0105
 **See:** `docs/DIFF_ADAPTER_GUIDE.md` for AI agent guide
 
 ---
 
-### v0.30.1 (Feb 2026): Breadcrumb Navigation Fixes
+### v0.31.0 (Q2 2026): UX Polish & Workflow Hints
 
-**Critical Breadcrumb Fixes** - Fix broken navigation hints:
+**Post-Check Guidance** - After --check finds issues, suggest fixes:
 ```bash
-# Fixed: --typed output now shows breadcrumbs
-reveal file.py --typed   # Shows next steps
-```
-
-**Fixes:**
-- ❌ BUG FIX: "typed" context handler (was silently failing)
-- ✅ HTML analyzer mapping (enable breadcrumbs for HTML files)
-- ✅ Test coverage for all breadcrumb contexts
-
-**Implementation:** 1-2 hours
-**Priority:** HIGH (broken functionality)
-**See:** `internal-docs/planning/BREADCRUMB_IMPROVEMENTS_2026.md` Phase 1
-
----
-
-### v0.31.0 (Q2 2026): Enhanced Breadcrumbs & UX Polish
-
-**Breadcrumb Adapter Awareness** - Guide users to advanced features:
-```bash
-# After viewing large file:
-reveal large_module.py
-# Breadcrumbs suggest: reveal 'ast://large_module.py?complexity>10'
-
-# After --check finds issues:
 reveal app.py --check
 # Breadcrumbs suggest: reveal stats://app.py  # Analyze trends
-
-# After viewing imports:
-reveal utils.py
-# Breadcrumbs suggest: reveal imports://utils.py  # Dependency analysis
+# Breadcrumbs suggest: reveal 'ast://app.py?complexity>10'  # Find hotspots
 ```
 
 **Features:**
-- Large file detection → AST adapter suggestions
-- Post-check quality guidance
-- Import analysis breadcrumbs
-- diff:// workflow hints
-- Token-efficient feature discovery (50-200 token savings per session)
-
-**UX Improvements:**
-- Enhanced breadcrumb system (Phase 2: Adapter awareness)
+- Post-check quality guidance (Phase 2.2)
+- diff:// workflow hints (pre-commit, code review)
 - `--quiet` mode for scripting
-- Global config support (`~/.config/reveal/config.yaml`)
 - Improved error messages and suggestions
 
-**Implementation:** 3-4 weeks
-**See:** `internal-docs/planning/BREADCRUMB_IMPROVEMENTS_2026.md` Phase 2
+**See:** `internal-docs/planning/BREADCRUMB_IMPROVEMENTS_2026.md` Phase 2.2, Phase 3
 
 ---
 

@@ -9,7 +9,7 @@ try:
     __version__ = version("reveal-cli")
 except Exception:
     # Fallback for development/editable installs
-    __version__ = "0.29.0-dev"
+    __version__ = "0.30.0-dev"
 
 # Import base classes for external use
 from .base import FileAnalyzer

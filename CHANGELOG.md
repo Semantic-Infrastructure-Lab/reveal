@@ -52,14 +52,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Lua: Extracts global and local functions (game development, embedded scripting)
   - Added node type support: `method` (Ruby), `function_definition_statement` and `local_function_definition_statement` (Lua)
   - Total built-in languages: 28 → 30
-
-### Removed
-- **Kotlin language support** removed before release
-  - Tree-sitter grammar had upstream limitations preventing reliable function extraction
-  - Class extraction worked, but partial support deemed insufficient
-  - Removed Kotlin analyzer, file extensions (.kt, .kts), and `object_declaration` node type
-  - Focus on languages with reliable tree-sitter grammars (Ruby, Lua working well)
-  - Can be re-added when upstream grammar improves
 - **`diff://` Adapter - Semantic Structural Diff**
   - **Semantic comparison**: Compare functions, classes, and imports - not just text lines
   - **File diffing**: `diff://app.py:backup/app.py` shows structural changes (signature, complexity, line count)
@@ -75,15 +67,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Usage**: `reveal diff://app.py:backup.py`, `reveal diff://git://HEAD/src/:src/ --format=json`
   - **Test coverage**: 34 tests (100% pass rate), 77% coverage on diff.py
   - **Documentation**: README examples, enhanced help text (`reveal help://diff`), docs/DIFF_ADAPTER_GUIDE.md guide
-  - **Implementation**: Three-session effort (cooling-hurricane-0104, sacred-sphinx-0104, fallen-leviathan-0104)
   - **Git URI format**: `git://REF/path` (REF = HEAD, HEAD~1, main, branch-name, commit-sha)
   - **Directory handling**: Skips common ignore dirs (.git, node_modules, __pycache__, etc.)
   - **Composition pattern**: Delegates to existing adapters (file analyzers, env://, mysql://, etc.)
+- **Enhanced breadcrumb system with smart suggestions**
+  - **Configurable breadcrumbs**: Multi-layer config support (global, project, env vars)
+  - **File-type specific suggestions**: Markdown (--links), HTML (--check, --links), YAML/JSON/TOML (--check), Dockerfile/Nginx (--check)
+  - **Large file detection**: Files with >20 elements suggest AST queries (`ast://file.py?complexity>10`)
+  - **Import analysis hints**: Files with >5 imports suggest `imports://file.py` for dependency analysis
+  - **Supports**: Python, JavaScript, TypeScript, Rust, Go
+  - **Test coverage**: 68 breadcrumb tests (100% coverage on breadcrumbs.py)
 - **19 comprehensive integration tests** covering critical gaps
   - 10 URI query parameter tests for `stats://` adapter (validates `?hotspots=true&min_complexity=10` syntax)
   - 9 tests for refactored markdown.py link helpers (validates extraction, filtering, edge cases)
-  - Test coverage improved from 75% to 76%
+  - Test coverage improved from 75% to 77%
   - stats.py coverage improved from 84% to 92% (+8%)
+
+### Removed
+- **Kotlin language support** removed before release
+  - Tree-sitter grammar had upstream limitations preventing reliable function extraction
+  - Class extraction worked, but partial support deemed insufficient
+  - Removed Kotlin analyzer, file extensions (.kt, .kts), and `object_declaration` node type
+  - Focus on languages with reliable tree-sitter grammars (Ruby, Lua working well)
+  - Can be re-added when upstream grammar improves
 
 ## [0.29.0] - 2026-01-03
 

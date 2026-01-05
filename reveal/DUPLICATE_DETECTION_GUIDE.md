@@ -1,6 +1,6 @@
 # Duplicate Code Detection in Reveal
 
-**Version:** 0.29.0
+**Version:** 0.30.0
 **Status:** Partial implementation (single-file only)
 **Last Updated:** 2026-01-03
 
@@ -485,4 +485,4 @@ Want to help implement these features? See:
 - 🚧 Configuration system - Designed, not implemented
 - 🚧 Self-reflection - Designed, not implemented
 
-Last updated: 2026-01-03 | Version: 0.29.0
+Last updated: 2026-01-03 | Version: 0.30.0

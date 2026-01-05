@@ -123,7 +123,7 @@ class ImportsAdapter(ResourceAdapter):
             'total_files': self._graph.get_file_count(),
             'has_cycles': len(self._graph.find_cycles()) > 0,
             'analyzer': 'imports',
-            'version': '0.29.0'
+            'version': '0.30.0'
         }
 
     @staticmethod
