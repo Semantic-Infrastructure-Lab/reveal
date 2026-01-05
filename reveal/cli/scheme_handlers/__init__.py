@@ -17,6 +17,7 @@ from .reveal import handle_reveal
 from .stats import handle_stats
 from .mysql import handle_mysql
 from .imports import handle_imports
+from .diff import handle_diff
 
 __all__ = [
     'handle_env',
@@ -28,4 +29,5 @@ __all__ = [
     'handle_stats',
     'handle_mysql',
     'handle_imports',
+    'handle_diff',
 ]

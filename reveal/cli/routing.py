@@ -28,6 +28,7 @@ from .scheme_handlers import (
     handle_stats,
     handle_mysql,
     handle_imports,
+    handle_diff,
 )
 
 from .file_checker import (
@@ -49,6 +50,7 @@ _handle_reveal = handle_reveal
 _handle_stats = handle_stats
 _handle_mysql = handle_mysql
 _handle_imports = handle_imports
+_handle_diff = handle_diff
 
 # File checking functions (extracted to cli/file_checker.py)
 _load_gitignore_patterns = load_gitignore_patterns
@@ -72,6 +74,7 @@ SCHEME_HANDLERS: Dict[str, Callable] = {
     'reveal': _handle_reveal,
     'stats': _handle_stats,
     'imports': _handle_imports,
+    'diff': _handle_diff,
 }
 
 
@@ -96,7 +99,7 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
     # Look up adapter from registry
     from ..adapters.base import get_adapter_class, list_supported_schemes
     # Import adapters to trigger registration
-    from ..adapters import env, ast, help, python, json_adapter, reveal, mysql, imports  # noqa: F401, E402
+    from ..adapters import env, ast, help, python, json_adapter, reveal, mysql, imports, diff  # noqa: F401, E402
 
     adapter_class = get_adapter_class(scheme)
     if not adapter_class:
