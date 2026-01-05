@@ -65,7 +65,7 @@ def print_breadcrumbs(context, path, file_type=None, **kwargs):
     """Print navigation breadcrumbs with reveal command suggestions.
 
     Args:
-        context: 'structure', 'element', 'metadata'
+        context: 'structure', 'element', 'metadata', 'typed'
         path: File or directory path
         file_type: Optional file type for context-specific suggestions
         **kwargs: Additional context (element_name, line_count, etc.)
@@ -91,6 +91,14 @@ def print_breadcrumbs(context, path, file_type=None, **kwargs):
             print(f"      reveal {path} --check      # Validate syntax")
         elif file_type in ['dockerfile', 'nginx']:
             print(f"      reveal {path} --check      # Validate configuration")
+
+    elif context == 'typed':
+        # Outline/hierarchical view context
+        element_placeholder = get_element_placeholder(file_type)
+        print(f"Next: reveal {path} {element_placeholder}   # Extract specific element")
+        print(f"      reveal {path}              # See flat structure")
+        if file_type in ['python', 'javascript', 'typescript', 'rust', 'go', 'bash', 'gdscript']:
+            print(f"      reveal {path} --check      # Check code quality")
 
     elif context == 'element':
         element_name = kwargs.get('element_name', '')

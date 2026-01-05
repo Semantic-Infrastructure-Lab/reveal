@@ -385,6 +385,16 @@ def _handle_outline_mode(structure: Dict[str, List[Dict[str, Any]]],
     hierarchy = _build_outline_hierarchy(structure)
     render_outline(hierarchy, path)
 
+    # Navigation hints
+    print()
+    file_type = get_file_type_from_analyzer(None)  # TODO: pass analyzer if needed
+    # Infer file type from path extension for now
+    suffix = path.suffix.lstrip('.')
+    type_map = {'py': 'python', 'js': 'javascript', 'ts': 'typescript',
+                'rs': 'rust', 'go': 'go', 'sh': 'bash', 'md': 'markdown'}
+    file_type = type_map.get(suffix, suffix)
+    print_breadcrumbs("typed", str(path), file_type=file_type)
+
 
 def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]],
                             output_format: str, is_fallback: bool, fallback_lang: str) -> None:
