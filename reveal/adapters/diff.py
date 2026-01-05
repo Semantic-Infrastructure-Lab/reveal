@@ -1,7 +1,11 @@
 """Diff adapter for comparing two reveal resources."""
 
 import inspect
-from typing import Dict, Any, Optional
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Dict, Any, Optional, List
 from .base import ResourceAdapter, register_adapter, get_adapter_class
 
 
@@ -177,6 +181,264 @@ class DiffAdapter(ResourceAdapter):
 
         return compute_element_diff(left_elem, right_elem, element_name)
 
+    def _find_analyzable_files(self, directory: Path) -> List[Path]:
+        """Find all files in directory that can be analyzed.
+
+        Args:
+            directory: Directory path to scan
+
+        Returns:
+            List of file paths that have analyzers
+        """
+        from ..base import get_analyzer
+
+        analyzable = []
+        for root, dirs, files in os.walk(directory):
+            # Skip common ignore directories
+            dirs[:] = [d for d in dirs if d not in {
+                '.git', '__pycache__', 'node_modules', '.venv', 'venv',
+                'dist', 'build', '.pytest_cache', '.mypy_cache', '.tox',
+                'htmlcov', '.coverage', 'eggs', '*.egg-info'
+            }]
+
+            for file in files:
+                file_path = Path(root) / file
+                # Check if reveal can analyze this file
+                if get_analyzer(str(file_path), allow_fallback=False):
+                    analyzable.append(file_path)
+
+        return analyzable
+
+    def _resolve_git_ref(self, git_ref: str, path: str) -> Dict[str, Any]:
+        """Resolve a git reference to a structure.
+
+        Args:
+            git_ref: Git reference (HEAD, main, HEAD~1, etc.)
+            path: Path to file or directory in the git tree
+
+        Returns:
+            Structure dict from the git version
+
+        Raises:
+            ValueError: If git command fails or path not found
+        """
+        # Check if we're in a git repository
+        try:
+            subprocess.run(['git', 'rev-parse', '--git-dir'],
+                          check=True, capture_output=True)
+        except subprocess.CalledProcessError:
+            raise ValueError("Not in a git repository")
+
+        # Check if it's a directory or file in git
+        try:
+            # Try to list the path to see if it's a directory
+            result = subprocess.run(
+                ['git', 'ls-tree', '-r', git_ref, path],
+                capture_output=True, text=True, check=True
+            )
+
+            if not result.stdout.strip():
+                raise ValueError(f"Path not found in {git_ref}: {path}")
+
+            # If we got multiple lines, it's a directory
+            lines = result.stdout.strip().split('\n')
+            is_directory = len(lines) > 1 or lines[0].split()[1] == 'tree'
+
+        except subprocess.CalledProcessError as e:
+            raise ValueError(f"Git error: {e.stderr}")
+
+        if is_directory:
+            return self._resolve_git_directory(git_ref, path)
+        else:
+            return self._resolve_git_file(git_ref, path)
+
+    def _resolve_git_file(self, git_ref: str, path: str) -> Dict[str, Any]:
+        """Get structure from a file in git.
+
+        Args:
+            git_ref: Git reference
+            path: File path in git tree
+
+        Returns:
+            Structure dict
+        """
+        from ..base import get_analyzer
+
+        # Get file content from git
+        try:
+            result = subprocess.run(
+                ['git', 'show', f'{git_ref}:{path}'],
+                capture_output=True, text=True, check=True
+            )
+            content = result.stdout
+        except subprocess.CalledProcessError as e:
+            raise ValueError(f"Failed to get file from git: {e.stderr}")
+
+        # Write to temp file for analysis
+        with tempfile.NamedTemporaryFile(mode='w', suffix=Path(path).suffix, delete=False) as f:
+            f.write(content)
+            temp_path = f.name
+
+        try:
+            analyzer_class = get_analyzer(temp_path, allow_fallback=True)
+            if not analyzer_class:
+                raise ValueError(f"No analyzer found for file: {path}")
+            analyzer = analyzer_class(temp_path)
+            return analyzer.get_structure()
+        finally:
+            os.unlink(temp_path)
+
+    def _resolve_git_directory(self, git_ref: str, dir_path: str) -> Dict[str, Any]:
+        """Get aggregated structure from a directory in git.
+
+        Args:
+            git_ref: Git reference
+            dir_path: Directory path in git tree
+
+        Returns:
+            Aggregated structure dict
+        """
+        from ..base import get_analyzer
+
+        # Get list of files in the directory
+        try:
+            result = subprocess.run(
+                ['git', 'ls-tree', '-r', git_ref, dir_path],
+                capture_output=True, text=True, check=True
+            )
+            if not result.stdout.strip():
+                raise ValueError(f"Directory not found in {git_ref}: {dir_path}")
+        except subprocess.CalledProcessError as e:
+            raise ValueError(f"Git error: {e.stderr}")
+
+        # Parse git ls-tree output
+        all_functions = []
+        all_classes = []
+        all_imports = []
+        file_count = 0
+
+        for line in result.stdout.strip().split('\n'):
+            parts = line.split(maxsplit=3)
+            if len(parts) < 4:
+                continue
+
+            mode, obj_type, sha, file_path = parts
+            if obj_type != 'blob':  # Only process files, not trees
+                continue
+
+            # Check if we have an analyzer for this file type
+            if not get_analyzer(file_path, allow_fallback=False):
+                continue
+
+            # Get file content and analyze
+            try:
+                content_result = subprocess.run(
+                    ['git', 'show', f'{git_ref}:{file_path}'],
+                    capture_output=True, text=True, check=True
+                )
+                content = content_result.stdout
+
+                # Write to temp file
+                with tempfile.NamedTemporaryFile(mode='w', suffix=Path(file_path).suffix, delete=False) as f:
+                    f.write(content)
+                    temp_path = f.name
+
+                # Analyze
+                analyzer_class = get_analyzer(temp_path, allow_fallback=False)
+                if analyzer_class:
+                    analyzer = analyzer_class(temp_path)
+                    structure = analyzer.get_structure()
+                    struct = structure.get('structure', structure)
+
+                    # Add file context
+                    rel_path = file_path
+                    if dir_path and dir_path != '.':
+                        rel_path = file_path[len(dir_path.rstrip('/')) + 1:]
+
+                    for func in struct.get('functions', []):
+                        func['file'] = rel_path
+                        all_functions.append(func)
+
+                    for cls in struct.get('classes', []):
+                        cls['file'] = rel_path
+                        all_classes.append(cls)
+
+                    for imp in struct.get('imports', []):
+                        imp['file'] = rel_path
+                        all_imports.append(imp)
+
+                    file_count += 1
+
+                os.unlink(temp_path)
+
+            except (subprocess.CalledProcessError, Exception):
+                # Skip files that fail to process
+                continue
+
+        return {
+            'type': 'git_directory',
+            'ref': git_ref,
+            'path': dir_path,
+            'file_count': file_count,
+            'functions': all_functions,
+            'classes': all_classes,
+            'imports': all_imports
+        }
+
+    def _resolve_directory(self, dir_path: str) -> Dict[str, Any]:
+        """Resolve a directory to aggregated structure.
+
+        Args:
+            dir_path: Path to directory
+
+        Returns:
+            Dict with aggregated structures from all files
+        """
+        from ..base import get_analyzer
+
+        directory = Path(dir_path).resolve()
+        if not directory.is_dir():
+            raise ValueError(f"Not a directory: {dir_path}")
+
+        files = self._find_analyzable_files(directory)
+
+        # Aggregate all structures
+        all_functions = []
+        all_classes = []
+        all_imports = []
+
+        for file_path in files:
+            rel_path = file_path.relative_to(directory)
+            analyzer_class = get_analyzer(str(file_path), allow_fallback=False)
+            if analyzer_class:
+                analyzer = analyzer_class(str(file_path))
+                structure = analyzer.get_structure()
+
+                # Extract structure (handle both nested and flat)
+                struct = structure.get('structure', structure)
+
+                # Add file context to each element
+                for func in struct.get('functions', []):
+                    func['file'] = str(rel_path)
+                    all_functions.append(func)
+
+                for cls in struct.get('classes', []):
+                    cls['file'] = str(rel_path)
+                    all_classes.append(cls)
+
+                for imp in struct.get('imports', []):
+                    imp['file'] = str(rel_path)
+                    all_imports.append(imp)
+
+        return {
+            'type': 'directory',
+            'path': str(directory),
+            'file_count': len(files),
+            'functions': all_functions,
+            'classes': all_classes,
+            'imports': all_imports
+        }
+
     def _resolve_uri(self, uri: str, **kwargs) -> Dict[str, Any]:
         """Resolve a URI to its structure using existing adapters.
 
@@ -198,8 +460,22 @@ class DiffAdapter(ResourceAdapter):
 
         scheme, resource = uri.split('://', 1)
 
+        # Handle git scheme: git://REF/path
+        if scheme == 'git':
+            # Parse git://REF/path format (e.g., git://HEAD~1/file.py, git://main/src/)
+            if '/' not in resource:
+                raise ValueError("Git URI must be in format git://REF/path (e.g., git://HEAD~1/file.py)")
+            git_ref, path = resource.split('/', 1)
+            return self._resolve_git_ref(git_ref, path)
+
         # For file scheme, handle differently (no adapter class, uses get_analyzer)
         if scheme == 'file':
+            # Check if it's a directory
+            path = Path(resource).resolve()
+            if path.is_dir():
+                return self._resolve_directory(str(path))
+
+            # Single file - use analyzer
             from ..base import get_analyzer
             analyzer_class = get_analyzer(resource, allow_fallback=True)
             if not analyzer_class:

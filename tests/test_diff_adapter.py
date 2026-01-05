@@ -3,6 +3,8 @@
 import unittest
 import tempfile
 import os
+import shutil
+import subprocess
 from pathlib import Path
 from reveal.adapters.diff import DiffAdapter
 from reveal.cli.scheme_handlers.diff import parse_diff_uris
@@ -361,6 +363,188 @@ class TestDiffURIParsing(unittest.TestCase):
         """Test error handling for invalid format."""
         with self.assertRaises(ValueError):
             parse_diff_uris("nocolon")
+
+
+class TestDirectoryDiff(unittest.TestCase):
+    """Test directory comparison functionality."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def test_directory_diff_basic(self):
+        """Test basic directory diff with files in both directories."""
+        left_dir = Path(self.temp_dir) / "left"
+        right_dir = Path(self.temp_dir) / "right"
+        left_dir.mkdir()
+        right_dir.mkdir()
+
+        # Create same file with different content
+        (left_dir / "module.py").write_text("def foo(): pass")
+        (right_dir / "module.py").write_text("def foo(): pass\ndef bar(): pass")
+
+        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        result = adapter.get_structure()
+
+        self.assertEqual(result['type'], 'diff')
+        self.assertEqual(result['left']['type'], 'directory')
+        self.assertEqual(result['right']['type'], 'directory')
+
+        # Should detect added function
+        self.assertEqual(result['summary']['functions']['added'], 1)
+        self.assertEqual(result['summary']['functions']['removed'], 0)
+
+    def test_directory_with_new_file(self):
+        """Test directory diff when file only exists in right."""
+        left_dir = Path(self.temp_dir) / "left"
+        right_dir = Path(self.temp_dir) / "right"
+        left_dir.mkdir()
+        right_dir.mkdir()
+
+        # File only in right
+        (right_dir / "new_module.py").write_text("def new_func(): pass")
+
+        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        result = adapter.get_structure()
+
+        # Should show function added
+        self.assertEqual(result['summary']['functions']['added'], 1)
+
+    def test_directory_with_removed_file(self):
+        """Test directory diff when file only exists in left."""
+        left_dir = Path(self.temp_dir) / "left"
+        right_dir = Path(self.temp_dir) / "right"
+        left_dir.mkdir()
+        right_dir.mkdir()
+
+        # File only in left
+        (left_dir / "old_module.py").write_text("def old_func(): pass")
+
+        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        result = adapter.get_structure()
+
+        # Should show function removed
+        self.assertEqual(result['summary']['functions']['removed'], 1)
+
+    def test_directory_file_metadata(self):
+        """Test that file metadata is preserved in directory diffs."""
+        left_dir = Path(self.temp_dir) / "left"
+        right_dir = Path(self.temp_dir) / "right"
+        left_dir.mkdir()
+        right_dir.mkdir()
+
+        (left_dir / "a.py").write_text("def foo(x): pass")
+        (right_dir / "a.py").write_text("def foo(x, y): pass")
+
+        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        result = adapter.get_structure()
+
+        # Find the modified function
+        modified = [f for f in result['diff']['functions'] if f['type'] == 'modified'][0]
+
+        # Should have file metadata in both left and right
+        self.assertEqual(modified['left']['file'], 'a.py')
+        self.assertEqual(modified['right']['file'], 'a.py')
+
+    def test_directory_nested_structure(self):
+        """Test directory diff with nested directories."""
+        left_dir = Path(self.temp_dir) / "left"
+        right_dir = Path(self.temp_dir) / "right"
+        left_dir.mkdir()
+        right_dir.mkdir()
+        (left_dir / "subdir").mkdir()
+        (right_dir / "subdir").mkdir()
+
+        # Create files in subdirectories
+        (left_dir / "subdir" / "module.py").write_text("def foo(): pass")
+        (right_dir / "subdir" / "module.py").write_text("def foo(): pass\ndef bar(): pass")
+
+        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        result = adapter.get_structure()
+
+        # Should detect changes in nested files
+        self.assertEqual(result['summary']['functions']['added'], 1)
+
+        # Check file path includes subdirectory
+        modified = result['diff']['functions'][0]
+        if 'file' in modified:
+            self.assertIn('subdir', modified['file'])
+
+    def test_empty_directories(self):
+        """Test diff of empty directories."""
+        left_dir = Path(self.temp_dir) / "left"
+        right_dir = Path(self.temp_dir) / "right"
+        left_dir.mkdir()
+        right_dir.mkdir()
+
+        adapter = DiffAdapter(str(left_dir), str(right_dir))
+        result = adapter.get_structure()
+
+        # Should show no changes
+        self.assertEqual(result['summary']['functions']['added'], 0)
+        self.assertEqual(result['summary']['functions']['removed'], 0)
+
+
+class TestGitDiff(unittest.TestCase):
+    """Test git integration for diffing."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.git_dir = Path(self.temp_dir) / "git_repo"
+        self.git_dir.mkdir()
+
+        # Initialize git repo
+        subprocess.run(['git', 'init'], cwd=self.git_dir, check=True, capture_output=True)
+        subprocess.run(['git', 'config', 'user.email', 'test@example.com'],
+                      cwd=self.git_dir, check=True, capture_output=True)
+        subprocess.run(['git', 'config', 'user.name', 'Test User'],
+                      cwd=self.git_dir, check=True, capture_output=True)
+
+    def tearDown(self):
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def test_git_file_diff(self):
+        """Test diffing files across git commits."""
+        # Create and commit initial version
+        (self.git_dir / "file.py").write_text("def foo(): pass")
+        subprocess.run(['git', 'add', 'file.py'], cwd=self.git_dir, check=True, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'Initial'],
+                      cwd=self.git_dir, check=True, capture_output=True)
+
+        # Create second version
+        (self.git_dir / "file.py").write_text("def foo(): pass\ndef bar(): pass")
+        subprocess.run(['git', 'add', 'file.py'], cwd=self.git_dir, check=True, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'Add bar'],
+                      cwd=self.git_dir, check=True, capture_output=True)
+
+        # Test diff
+        os.chdir(self.git_dir)
+        adapter = DiffAdapter('git://HEAD~1/file.py', 'git://HEAD/file.py')
+        result = adapter.get_structure()
+
+        self.assertEqual(result['summary']['functions']['added'], 1)
+
+    def test_git_working_tree_diff(self):
+        """Test diffing git HEAD vs working tree."""
+        # Commit a file
+        (self.git_dir / "module.py").write_text("def original(): pass")
+        subprocess.run(['git', 'add', 'module.py'], cwd=self.git_dir, check=True, capture_output=True)
+        subprocess.run(['git', 'commit', '-m', 'Initial'],
+                      cwd=self.git_dir, check=True, capture_output=True)
+
+        # Modify without committing
+        (self.git_dir / "module.py").write_text("def original(): pass\ndef new_func(): pass")
+
+        # Compare HEAD vs working tree
+        os.chdir(self.git_dir)
+        adapter = DiffAdapter('git://HEAD/module.py', 'module.py')
+        result = adapter.get_structure()
+
+        self.assertEqual(result['summary']['functions']['added'], 1)
 
 
 class TestDiffMetadata(unittest.TestCase):
