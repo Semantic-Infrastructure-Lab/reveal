@@ -14,12 +14,49 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str):
         element: Element name to extract
         output_format: Output format
     """
-    # Try common element types
-    for element_type in ['function', 'class', 'struct', 'section', 'server', 'location', 'upstream']:
-        result = analyzer.extract_element(element_type, element)
-        if result:
-            break
-    else:
+    # For tree-sitter analyzers, try all types with tree-sitter first
+    # before falling back to grep. This prevents matching type variables
+    # or other non-semantic matches when a proper definition exists.
+    from ..treesitter import TreeSitterAnalyzer
+
+    result = None
+    if isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
+        # Try common element types with tree-sitter only (no grep fallback)
+        for element_type in ['class', 'function', 'struct', 'section', 'server', 'location', 'upstream']:
+            # Try tree-sitter types for this element
+            type_map = {
+                'function': ['function_definition', 'function_declaration', 'function_item', 'method_declaration'],
+                'class': ['class_definition', 'class_declaration'],
+                'struct': ['struct_item', 'struct_specifier', 'struct_declaration'],
+            }
+            node_types = type_map.get(element_type, [element_type])
+
+            for node_type in node_types:
+                nodes = analyzer._find_nodes_by_type(node_type)
+                for node in nodes:
+                    node_name = analyzer._get_node_name(node)
+                    if node_name == element:
+                        result = {
+                            'name': element,
+                            'line_start': node.start_point[0] + 1,
+                            'line_end': node.end_point[0] + 1,
+                            'source': analyzer._get_node_text(node),
+                        }
+                        break
+                if result:
+                    break
+            if result:
+                break
+
+    # Fallback: try extract_element with grep for non-tree-sitter analyzers
+    # or if tree-sitter didn't find anything
+    if not result:
+        for element_type in ['function', 'class', 'struct', 'section', 'server', 'location', 'upstream']:
+            result = analyzer.extract_element(element_type, element)
+            if result:
+                break
+
+    if not result:
         # Not found
         print(f"Error: Element '{element}' not found in {analyzer.path}", file=sys.stderr)
         sys.exit(1)
