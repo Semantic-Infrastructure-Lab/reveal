@@ -9,7 +9,7 @@ reveal app.py                  # file → structure
 reveal app.py load_config      # element → code
 ```
 
-Zero config. 26 languages built-in. 50+ via tree-sitter.
+Zero config. 31 languages built-in. 50+ via tree-sitter.
 
 ---
 
@@ -29,7 +29,7 @@ reveal --agent-help-full     # Complete reference (~1215 lines)
 
 **Quick Install:**
 ```bash
-pip install reveal-cli              # Full-featured by default (26 languages, 8 adapters)
+pip install reveal-cli              # Full-featured by default (31 languages, 8 adapters)
 pip install reveal-cli[database]    # Add MySQL database inspection
 ```
 See [INSTALL.md](INSTALL.md) for details on what's included.
@@ -353,9 +353,9 @@ reveal app.py --meta             # metadata only
 
 ### Supported Languages
 
-**Built-in (28):** Python, Rust, Go, **C, C++**, JavaScript, TypeScript, GDScript, Bash, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
+**Built-in (31):** Python, Rust, Go, **C, C++**, Java, PHP, **Ruby, Kotlin, Lua**, JavaScript, TypeScript, GDScript, Bash, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
 
-**Via tree-sitter (50+):** C#, Java, PHP, Swift, Kotlin, Ruby, Lua, Scala, and more. Add new languages in 3 lines of code.
+**Via tree-sitter (50+):** C#, Swift, Scala, Perl, R, SQL, and more. Add new languages in 3 lines of code.
 
 **Shebang detection:** Extensionless scripts auto-detected (`#!/usr/bin/env python3`)
 

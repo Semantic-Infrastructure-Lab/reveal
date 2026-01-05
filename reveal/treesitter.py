@@ -122,8 +122,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'function_definition',   # Python
             'function_declaration',  # Go, C, JavaScript
             'function_item',         # Rust
-            'method_declaration',    # Java, C#
+            'method_declaration',    # Java, C#, Kotlin
             'function',              # Generic
+            'method',                # Ruby
+            'function_definition_statement',  # Lua
         ]
 
         # Step 1: Find decorated functions (Python)
@@ -198,9 +200,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         class_types = [
             'class_definition',      # Python
-            'class_declaration',     # Java, C#, JavaScript
+            'class_declaration',     # Java, C#, JavaScript, Kotlin
             'class_specifier',       # C++
             'struct_item',           # Rust (treated as class)
+            'class',                 # Ruby
+            'object_declaration',    # Kotlin
         ]
 
         # Step 1: Find decorated classes (Python)
