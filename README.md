@@ -19,8 +19,8 @@ Zero config. 30 languages built-in. 50+ via tree-sitter.
 
 **Using reveal CLI?** Get usage patterns and optimization techniques:
 ```bash
-reveal --agent-help          # Quick start + discovery patterns (~382 lines)
-reveal --agent-help-full     # Complete reference (~1215 lines)
+reveal --agent-help          # Quick start + discovery patterns (~720 lines)
+reveal --agent-help-full     # Complete reference (~1680 lines)
 ```
 
 **Token efficiency:** Structure view = 50 tokens vs 7,500 for reading full file. Validated 7-150x reduction in production.
@@ -29,7 +29,7 @@ reveal --agent-help-full     # Complete reference (~1215 lines)
 
 **Quick Install:**
 ```bash
-pip install reveal-cli              # Full-featured by default (30 languages, 8 adapters)
+pip install reveal-cli              # Full-featured by default (30 languages, 10 adapters)
 pip install reveal-cli[database]    # Add MySQL database inspection
 ```
 See [INSTALL.md](INSTALL.md) for details on what's included.
