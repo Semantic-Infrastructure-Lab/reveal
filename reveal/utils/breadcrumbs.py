@@ -116,8 +116,18 @@ def print_breadcrumbs(context, path, file_type=None, config=None, **kwargs):
         element_placeholder = get_element_placeholder(file_type)
         print(f"Next: reveal {path} {element_placeholder}   # Extract specific element")
         print(f"      reveal {path}              # See flat structure")
+
         if file_type in ['python', 'javascript', 'typescript', 'rust', 'go', 'bash', 'gdscript']:
             print(f"      reveal {path} --check      # Check code quality")
+        elif file_type == 'markdown':
+            print(f"      reveal {path} --links      # Extract links")
+        elif file_type == 'html':
+            print(f"      reveal {path} --check      # Validate HTML")
+            print(f"      reveal {path} --links      # Extract all links")
+        elif file_type in ['yaml', 'json', 'toml', 'jsonl']:
+            print(f"      reveal {path} --check      # Validate syntax")
+        elif file_type in ['dockerfile', 'nginx']:
+            print(f"      reveal {path} --check      # Validate configuration")
 
     elif context == 'element':
         element_name = kwargs.get('element_name', '')
