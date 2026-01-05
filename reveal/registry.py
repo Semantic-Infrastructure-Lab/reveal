@@ -156,8 +156,6 @@ def _guess_treesitter_language(ext: str) -> Optional[str]:
         '.rb': 'ruby',
         '.php': 'php',
         '.swift': 'swift',
-        '.kt': 'kotlin',
-        '.kts': 'kotlin',
         '.scala': 'scala',
         '.cs': 'c_sharp',
         '.lua': 'lua',

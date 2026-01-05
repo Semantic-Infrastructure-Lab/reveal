@@ -188,7 +188,6 @@ def _get_tree_sitter_fallbacks(registered_analyzers):
         '.rb': ('ruby', 'Ruby'),
         '.php': ('php', 'PHP'),
         '.swift': ('swift', 'Swift'),
-        '.kt': ('kotlin', 'Kotlin'),
         '.scala': ('scala', 'Scala'),
         '.lua': ('lua', 'Lua'),
         '.hs': ('haskell', 'Haskell'),

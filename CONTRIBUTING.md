@@ -32,13 +32,13 @@ Two paths depending on language support:
 
 **Tree-sitter languages (10 lines):**
 ```python
-# reveal/analyzers/kotlin.py
+# reveal/analyzers/lua.py
 from ..base import register
 from ..treesitter import TreeSitterAnalyzer
 
-@register('.kt', name='Kotlin', icon='🟣')
-class KotlinAnalyzer(TreeSitterAnalyzer):
-    language = 'kotlin'
+@register('.lua', name='Lua', icon='🌙')
+class LuaAnalyzer(TreeSitterAnalyzer):
+    language = 'lua'
 ```
 
 **Custom analyzers (50-200 lines):**
@@ -59,7 +59,7 @@ class IniAnalyzer(FileAnalyzer):
 
 **Check tree-sitter support:**
 ```bash
-python -c "from tree_sitter_languages import get_language; get_language('kotlin')"
+python -c "from tree_sitter_languages import get_language; get_language('lua')"
 ```
 
 ### 2. Add URI Adapters
@@ -181,26 +181,26 @@ pytest tests/
 **Test template:**
 
 ```python
-def test_kotlin_structure():
-    from reveal.analyzers.kotlin import KotlinAnalyzer
+def test_lua_structure():
+    from reveal.analyzers.lua import LuaAnalyzer
 
-    content = "fun main() { println(\"Hello\") }"
-    analyzer = KotlinAnalyzer('/tmp/test.kt', content)
+    content = "function greet() print('Hello') end"
+    analyzer = LuaAnalyzer('/tmp/test.lua', content)
     structure = analyzer.get_structure()
 
     assert 'functions' in structure
-    assert structure['functions'][0]['name'] == 'main'
+    assert structure['functions'][0]['name'] == 'greet'
 ```
 
 ---
 
 ## Submitting Changes
 
-1. **Create branch:** `git checkout -b add-kotlin-support`
+1. **Create branch:** `git checkout -b add-lua-support`
 2. **Add analyzer** in `reveal/analyzers/`
 3. **Register** in `reveal/analyzers/__init__.py`
 4. **Test** manually and with pytest
-5. **Commit:** `git commit -m "feat: add Kotlin analyzer"`
+5. **Commit:** `git commit -m "feat: add Lua analyzer"`
 6. **Submit PR:** `gh pr create`
 
 **Commit style:** Conventional commits (`feat:`, `fix:`, `docs:`, `test:`)

@@ -353,7 +353,7 @@ reveal app.py --meta             # metadata only
 
 ### Supported Languages
 
-**Built-in (31):** Python, Rust, Go, **C, C++**, Java, PHP, **Ruby, Kotlin, Lua**, JavaScript, TypeScript, GDScript, Bash, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
+**Built-in (30):** Python, Rust, Go, **C, C++**, Java, PHP, **Ruby, Lua**, JavaScript, TypeScript, GDScript, Bash, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
 
 **Via tree-sitter (50+):** C#, Swift, Scala, Perl, R, SQL, and more. Add new languages in 3 lines of code.
 
