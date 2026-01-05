@@ -56,6 +56,33 @@ def _render_diff_header(left: Dict[str, Any], right: Dict[str, Any]) -> None:
     print()
 
 
+def _has_changes(data: Dict[str, int]) -> bool:
+    """Check if category has any changes."""
+    return any(data.get(key, 0) > 0 for key in ['added', 'removed', 'modified'])
+
+
+def _render_category_summary(category_name: str, data: Dict[str, int], show_modified: bool = True) -> bool:
+    """Render summary for a single category.
+
+    Args:
+        category_name: Name of category (e.g., 'Functions', 'Classes')
+        data: Dict with 'added', 'removed', and optionally 'modified' counts
+        show_modified: Whether to include modified count in output
+
+    Returns:
+        True if category has changes, False otherwise
+    """
+    if not _has_changes(data):
+        return False
+
+    if show_modified and data.get('modified', 0) > 0:
+        print(f"  {category_name}:  +{data['added']} -{data['removed']} ~{data['modified']}")
+    else:
+        print(f"  {category_name}:  +{data['added']} -{data['removed']}")
+
+    return True
+
+
 def _render_diff_summary(summary: Dict[str, Any]) -> bool:
     """Render summary section.
 
@@ -68,22 +95,13 @@ def _render_diff_summary(summary: Dict[str, Any]) -> bool:
     has_changes = False
 
     if summary.get('functions'):
-        f = summary['functions']
-        if f['added'] > 0 or f['removed'] > 0 or f['modified'] > 0:
-            has_changes = True
-            print(f"  Functions:  +{f['added']} -{f['removed']} ~{f['modified']}")
+        has_changes |= _render_category_summary('Functions', summary['functions'])
 
     if summary.get('classes'):
-        c = summary['classes']
-        if c['added'] > 0 or c['removed'] > 0 or c['modified'] > 0:
-            has_changes = True
-            print(f"  Classes:    +{c['added']} -{c['removed']} ~{c['modified']}")
+        has_changes |= _render_category_summary('Classes', summary['classes'])
 
     if summary.get('imports'):
-        i = summary['imports']
-        if i['added'] > 0 or i['removed'] > 0:
-            has_changes = True
-            print(f"  Imports:    +{i['added']} -{i['removed']}")
+        has_changes |= _render_category_summary('Imports', summary['imports'], show_modified=False)
 
     if not has_changes:
         print("  No structural changes detected")

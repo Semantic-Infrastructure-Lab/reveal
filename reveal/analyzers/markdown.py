@@ -19,6 +19,47 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
     language = 'markdown'
 
+    def _should_include_headings(self, extract_links: bool, extract_code: bool,
+                                  head: int, tail: int, range: tuple,
+                                  outline_mode: bool) -> bool:
+        """Determine if headings should be included in output.
+
+        Args:
+            extract_links: Whether links are being extracted
+            extract_code: Whether code blocks are being extracted
+            head: Head slicing parameter
+            tail: Tail slicing parameter
+            range: Range slicing parameter
+            outline_mode: Whether outline mode is active
+
+        Returns:
+            True if headings should be included
+        """
+        specific_features_requested = extract_links or extract_code
+        navigation_mode = head is not None or tail is not None or range is not None
+
+        # Include headings when:
+        # - No specific features requested (default: show structure)
+        # - Navigation mode active (head/tail/range with features)
+        # - Outline mode active (requires headings for hierarchy)
+        return not specific_features_requested or navigation_mode or outline_mode
+
+    def _apply_slicing_to_results(self, result: Dict[str, List[Dict[str, Any]]],
+                                   head: int, tail: int, range: tuple) -> None:
+        """Apply semantic slicing to all result categories except frontmatter.
+
+        Args:
+            result: Results dict to modify in place
+            head: Show first N items
+            tail: Show last N items
+            range: Show items in range (start, end)
+        """
+        for category in result:
+            if category != 'frontmatter':
+                result[category] = self._apply_semantic_slice(
+                    result[category], head, tail, range
+                )
+
     def get_structure(self, head: int = None, tail: int = None,
                      range: tuple = None,
                      extract_links: bool = False,
@@ -56,16 +97,9 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         if extract_frontmatter:
             result['frontmatter'] = self._extract_frontmatter()
 
-        # Determine mode: filtering (only requested features) vs navigation (headings + features)
-        specific_features_requested = extract_links or extract_code
-        navigation_mode = head is not None or tail is not None or range is not None
+        # Include headings based on mode
         outline_mode = kwargs.get('outline', False)
-
-        # Include headings when:
-        # - No specific features requested (default: show structure)
-        # - Navigation mode active (head/tail/range with features)
-        # - Outline mode active (requires headings for hierarchy)
-        if not specific_features_requested or navigation_mode or outline_mode:
+        if self._should_include_headings(extract_links, extract_code, head, tail, range, outline_mode):
             result['headings'] = self._extract_headings()
 
         # Extract links if requested
@@ -81,11 +115,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         # Apply semantic slicing to each category (but not frontmatter - it's unique)
         if head or tail or range:
-            for category in result:
-                if category != 'frontmatter':
-                    result[category] = self._apply_semantic_slice(
-                        result[category], head, tail, range
-                    )
+            self._apply_slicing_to_results(result, head, tail, range)
 
         return result
 
@@ -353,6 +383,63 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         return True
 
+    def _extract_fence_language(self, node) -> str:
+        """Extract language identifier from fenced code block node.
+
+        Args:
+            node: Fenced code block tree-sitter node
+
+        Returns:
+            Language identifier or 'text' if not specified
+        """
+        for child in node.children:
+            if child.type == 'info_string':
+                # Language tag (e.g., 'python', 'javascript')
+                # info_string has a text child
+                for text_node in child.children:
+                    if text_node.type == 'text':
+                        return text_node.text.decode('utf-8')
+        return 'text'
+
+    def _extract_fence_source(self, node) -> str:
+        """Extract source code from fenced code block node.
+
+        Args:
+            node: Fenced code block tree-sitter node
+
+        Returns:
+            Source code string
+        """
+        for child in node.children:
+            if child.type == 'code_fence_content':
+                return child.text.decode('utf-8')
+        return ''
+
+    def _build_fenced_block_info(self, node, block_lang: str, source: str) -> Dict[str, Any]:
+        """Build code block info dict from node and extracted data.
+
+        Args:
+            node: Fenced code block tree-sitter node
+            block_lang: Language identifier
+            source: Source code
+
+        Returns:
+            Dict with line_start, line_end, language, source, etc.
+        """
+        # Get position (tree-sitter is 0-indexed)
+        line_start = node.start_point[0] + 1
+        line_end = node.end_point[0] + 1
+        line_count = source.count('\n') + 1 if source else 0
+
+        return {
+            'line_start': line_start,
+            'line_end': line_end,
+            'language': block_lang,
+            'source': source,
+            'line_count': line_count,
+            'type': 'fenced',
+        }
+
     def _extract_code_blocks(self, language: Optional[str] = None,
                             include_inline: bool = False) -> List[Dict[str, Any]]:
         """Extract code blocks from markdown using tree-sitter AST.
@@ -374,39 +461,14 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         fence_nodes = self._find_nodes_by_type('fenced_code_block')
 
         for node in fence_nodes:
-            # Extract language from info_string and code from code_fence_content
-            block_lang = 'text'  # Default
-            source = ''
-
-            for child in node.children:
-                if child.type == 'info_string':
-                    # Language tag (e.g., 'python', 'javascript')
-                    # info_string has a text child
-                    for text_node in child.children:
-                        if text_node.type == 'text':
-                            block_lang = text_node.text.decode('utf-8')
-                            break
-                elif child.type == 'code_fence_content':
-                    # The actual code content
-                    source = child.text.decode('utf-8')
+            block_lang = self._extract_fence_language(node)
+            source = self._extract_fence_source(node)
 
             # Apply language filter
             if language and block_lang != language:
                 continue
 
-            # Get position (tree-sitter is 0-indexed)
-            line_start = node.start_point[0] + 1
-            line_end = node.end_point[0] + 1
-            line_count = source.count('\n') + 1 if source else 0
-
-            code_blocks.append({
-                'line_start': line_start,
-                'line_end': line_end,
-                'language': block_lang,
-                'source': source,
-                'line_count': line_count,
-                'type': 'fenced',
-            })
+            code_blocks.append(self._build_fenced_block_info(node, block_lang, source))
 
         # Extract inline code if requested
         if include_inline:
