@@ -346,19 +346,63 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return content_bytes[start_byte:end_byte].decode('utf-8')
 
     def _get_node_name(self, node) -> Optional[str]:
-        """Get the name of a node (function/class/struct name)."""
-        # Look for 'name', 'identifier', or 'type_identifier' child (direct)
+        """Get the name of a node (function/class/struct name).
+
+        CRITICAL: For functions with return types (C/C++), the tree structure is:
+            function_definition:
+                type_identifier (return type) - NOT the function name!
+                function_declarator (contains actual name)
+                    identifier (actual function name!)
+
+        We must search declarators BEFORE looking at type_identifier to avoid
+        extracting the return type instead of the function name.
+        """
+        # PRIORITY 1: For C/C++ functions, look inside declarators FIRST
+        # These contain the actual function/variable name, not the type
         for child in node.children:
-            if child.type in ('identifier', 'name', 'type_identifier'):
+            if child.type in ('function_declarator', 'pointer_declarator', 'declarator'):
+                # Recursively search for identifier (may be nested deep)
+                name = self._find_identifier_in_tree(child)
+                if name:
+                    return name
+
+        # PRIORITY 2: Direct identifier/name children (most languages)
+        for child in node.children:
+            if child.type in ('identifier', 'name'):
                 return self._get_node_text(child)
 
-        # For C/C++: Look inside function_declarator, declarator, etc.
+        # PRIORITY 3: type_identifier (fallback for structs, classes)
+        # Only use this if we haven't found a name in declarators
         for child in node.children:
-            if child.type in ('function_declarator', 'declarator', 'field_identifier'):
-                # Recursively search for identifier
-                for subchild in child.children:
-                    if subchild.type in ('identifier', 'name', 'type_identifier'):
-                        return self._get_node_text(subchild)
+            if child.type == 'type_identifier':
+                return self._get_node_text(child)
+
+        # PRIORITY 4: field_identifier (for struct fields)
+        for child in node.children:
+            if child.type == 'field_identifier':
+                return self._get_node_text(child)
+
+        return None
+
+    def _find_identifier_in_tree(self, node) -> Optional[str]:
+        """Recursively search for an identifier in a node tree.
+
+        Used to extract names from deeply nested declarators.
+        Example: pointer_declarator → function_declarator → identifier
+        """
+        # Check current node
+        if node.type in ('identifier', 'name'):
+            return self._get_node_text(node)
+
+        # Search children recursively
+        for child in node.children:
+            # Skip pointer/reference symbols and parameter lists
+            if child.type in ('*', '&', 'parameter_list', 'parameters'):
+                continue
+
+            name = self._find_identifier_in_tree(child)
+            if name:
+                return name
 
         return None
 

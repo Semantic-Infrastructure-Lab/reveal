@@ -448,6 +448,247 @@ int complex_function(int x, int y) {
         finally:
             os.unlink(temp_path)
 
+    def test_function_pointers(self):
+        """Should handle function pointers as parameters and return types."""
+        code = '''#include <stdio.h>
+
+typedef int (*callback_t)(int, int);
+
+int add(int a, int b) {
+    return a + b;
+}
+
+int apply_operation(int x, int y, int (*op)(int, int)) {
+    return op(x, y);
+}
+
+callback_t get_operation(char op) {
+    if (op == '+') {
+        return add;
+    }
+    return NULL;
+}
+
+int main(void) {
+    callback_t func = get_operation('+');
+    int result = apply_operation(5, 3, func);
+    return 0;
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            self.assertIn('functions', structure)
+            functions = structure['functions']
+            func_names = [f['name'] for f in functions]
+
+            # Should extract all functions including those with function pointer params
+            self.assertIn('add', func_names)
+            self.assertIn('apply_operation', func_names)
+            self.assertIn('get_operation', func_names)
+            self.assertIn('main', func_names)
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_const_volatile_qualifiers(self):
+        """Should extract functions with const and volatile qualifiers."""
+        code = '''#include <stdio.h>
+
+const char* get_message(void) {
+    return "Hello";
+}
+
+int process_data(const int *input, volatile int *output) {
+    *output = *input * 2;
+    return 0;
+}
+
+const volatile int* get_status_register(void) {
+    static volatile int status = 0;
+    return &status;
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            self.assertIn('functions', structure)
+            functions = structure['functions']
+            func_names = [f['name'] for f in functions]
+
+            # Should extract functions with const/volatile qualifiers
+            self.assertIn('get_message', func_names)
+            self.assertIn('process_data', func_names)
+            self.assertIn('get_status_register', func_names)
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_variadic_functions(self):
+        """Should extract variadic functions (functions with variable arguments)."""
+        code = '''#include <stdio.h>
+#include <stdarg.h>
+
+int sum_all(int count, ...) {
+    va_list args;
+    va_start(args, count);
+
+    int total = 0;
+    for (int i = 0; i < count; i++) {
+        total += va_arg(args, int);
+    }
+
+    va_end(args);
+    return total;
+}
+
+void log_message(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            self.assertIn('functions', structure)
+            functions = structure['functions']
+            func_names = [f['name'] for f in functions]
+
+            # Should extract variadic functions
+            self.assertIn('sum_all', func_names)
+            self.assertIn('log_message', func_names)
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_array_parameters(self):
+        """Should extract functions with array parameters."""
+        code = '''#include <stdio.h>
+
+int sum_array(int arr[], int size) {
+    int total = 0;
+    for (int i = 0; i < size; i++) {
+        total += arr[i];
+    }
+    return total;
+}
+
+void matrix_multiply(int a[3][3], int b[3][3], int result[3][3]) {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            result[i][j] = 0;
+            for (int k = 0; k < 3; k++) {
+                result[i][j] += a[i][k] * b[k][j];
+            }
+        }
+    }
+}
+
+int process_buffer(char buffer[static 256]) {
+    return buffer[0];
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            self.assertIn('functions', structure)
+            functions = structure['functions']
+            func_names = [f['name'] for f in functions]
+
+            # Should extract functions with array parameters
+            self.assertIn('sum_array', func_names)
+            self.assertIn('matrix_multiply', func_names)
+            self.assertIn('process_buffer', func_names)
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_named_structs(self):
+        """Should extract named struct definitions (not typedef'd anonymous structs)."""
+        code = '''#include <stdio.h>
+
+// Named structs (should be extracted)
+struct Point {
+    int x;
+    int y;
+};
+
+struct Rectangle {
+    struct Point top_left;
+    struct Point bottom_right;
+};
+
+struct Node {
+    int value;
+    struct Node *next;
+};
+
+// Typedef'd anonymous struct (won't be extracted - no name)
+typedef struct {
+    int width;
+    int height;
+} Size;
+
+int calculate_area(struct Rectangle rect) {
+    int width = rect.bottom_right.x - rect.top_left.x;
+    int height = rect.bottom_right.y - rect.top_left.y;
+    return width * height;
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.c', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            # Should extract structs
+            self.assertIn('structs', structure)
+            structs = structure['structs']
+            struct_names = [s['name'] for s in structs]
+
+            # Should find named structs
+            self.assertIn('Point', struct_names)
+            self.assertIn('Rectangle', struct_names)
+            self.assertIn('Node', struct_names)
+
+            # Should extract function
+            self.assertIn('functions', structure)
+            functions = structure['functions']
+            func_names = [f['name'] for f in functions]
+            self.assertIn('calculate_area', func_names)
+
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()

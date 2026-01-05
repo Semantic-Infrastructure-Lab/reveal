@@ -423,6 +423,266 @@ int calculate_sum(int a, int b) {
         finally:
             os.unlink(temp_path)
 
+    def test_operator_overloading(self):
+        """Should extract operator overloads."""
+        code = '''#include <iostream>
+
+class Complex {
+private:
+    double real, imag;
+
+public:
+    Complex(double r = 0, double i = 0) : real(r), imag(i) {}
+
+    Complex operator+(const Complex& other) {
+        return Complex(real + other.real, imag + other.imag);
+    }
+
+    Complex operator-(const Complex& other) {
+        return Complex(real - other.real, imag - other.imag);
+    }
+
+    bool operator==(const Complex& other) {
+        return real == other.real && imag == other.imag;
+    }
+
+    friend std::ostream& operator<<(std::ostream& out, const Complex& c) {
+        out << c.real << " + " << c.imag << "i";
+        return out;
+    }
+};
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CppAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            # Should extract the class
+            self.assertIn('classes', structure)
+            classes = structure['classes']
+            class_names = [c['name'] for c in classes]
+            self.assertIn('Complex', class_names)
+
+            # Operator overloads are functions, may or may not be extracted depending on tree-sitter
+            # This test mainly verifies the analyzer doesn't crash on operator overloads
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_inheritance(self):
+        """Should extract classes with inheritance."""
+        code = '''#include <iostream>
+#include <string>
+
+class Animal {
+protected:
+    std::string name;
+
+public:
+    Animal(const std::string& n) : name(n) {}
+    virtual void speak() = 0;  // Pure virtual
+    virtual ~Animal() {}
+};
+
+class Dog : public Animal {
+public:
+    Dog(const std::string& n) : Animal(n) {}
+
+    void speak() override {
+        std::cout << name << " says: Woof!" << std::endl;
+    }
+};
+
+class Cat : public Animal {
+public:
+    Cat(const std::string& n) : Animal(n) {}
+
+    void speak() override {
+        std::cout << name << " says: Meow!" << std::endl;
+    }
+};
+
+// Multiple inheritance
+class Bird {
+public:
+    virtual void fly() { std::cout << "Flying" << std::endl; }
+};
+
+class Bat : public Animal, public Bird {
+public:
+    Bat(const std::string& n) : Animal(n) {}
+
+    void speak() override {
+        std::cout << name << " says: Screech!" << std::endl;
+    }
+};
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CppAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            # Should extract all classes
+            self.assertIn('classes', structure)
+            classes = structure['classes']
+            class_names = [c['name'] for c in classes]
+
+            self.assertIn('Animal', class_names)
+            self.assertIn('Dog', class_names)
+            self.assertIn('Cat', class_names)
+            self.assertIn('Bird', class_names)
+            self.assertIn('Bat', class_names)
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_const_member_functions(self):
+        """Should extract const member functions."""
+        code = '''#include <string>
+
+class Person {
+private:
+    std::string name;
+    int age;
+
+public:
+    Person(const std::string& n, int a) : name(n), age(a) {}
+
+    std::string getName() const {
+        return name;
+    }
+
+    int getAge() const {
+        return age;
+    }
+
+    void setAge(int a) {
+        age = a;
+    }
+
+    const std::string& getNameRef() const {
+        return name;
+    }
+};
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CppAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            # Should extract the class
+            self.assertIn('classes', structure)
+            classes = structure['classes']
+            class_names = [c['name'] for c in classes]
+            self.assertIn('Person', class_names)
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_static_members(self):
+        """Should extract static member functions."""
+        code = '''#include <iostream>
+
+class Counter {
+private:
+    static int count;
+    int id;
+
+public:
+    Counter() : id(++count) {}
+
+    static int getCount() {
+        return count;
+    }
+
+    static void resetCount() {
+        count = 0;
+    }
+
+    int getId() const {
+        return id;
+    }
+};
+
+int Counter::count = 0;
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CppAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            # Should extract the class
+            self.assertIn('classes', structure)
+            classes = structure['classes']
+            class_names = [c['name'] for c in classes]
+            self.assertIn('Counter', class_names)
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_lambda_expressions(self):
+        """Should handle lambda expressions and not crash."""
+        code = '''#include <algorithm>
+#include <vector>
+#include <iostream>
+
+int main() {
+    std::vector<int> numbers = {1, 2, 3, 4, 5};
+
+    // Lambda expression
+    auto square = [](int x) { return x * x; };
+
+    // Lambda with capture
+    int factor = 2;
+    auto multiply = [factor](int x) { return x * factor; };
+
+    // Lambda in algorithm
+    std::for_each(numbers.begin(), numbers.end(), [](int n) {
+        std::cout << n << " ";
+    });
+
+    // Generic lambda (C++14)
+    auto add = [](auto a, auto b) { return a + b; };
+
+    return 0;
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = CppAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            # Should extract main function
+            self.assertIn('functions', structure)
+            functions = structure['functions']
+            func_names = [f['name'] for f in functions]
+            self.assertIn('main', func_names)
+
+            # This test mainly verifies the analyzer doesn't crash on lambdas
+
+        finally:
+            os.unlink(temp_path)
+
 
 if __name__ == '__main__':
     unittest.main()

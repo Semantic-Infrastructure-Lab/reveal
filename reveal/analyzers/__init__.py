@@ -12,6 +12,8 @@ from .rust import RustAnalyzer
 from .go import GoAnalyzer
 from .c import CAnalyzer
 from .cpp import CppAnalyzer
+from .java import JavaAnalyzer
+from .php import PhpAnalyzer
 from .markdown import MarkdownAnalyzer
 from .yaml_json import YamlAnalyzer, JsonAnalyzer
 from .jsonl import JsonlAnalyzer
@@ -41,6 +43,8 @@ __all__ = [
     'GoAnalyzer',
     'CAnalyzer',
     'CppAnalyzer',
+    'JavaAnalyzer',
+    'PhpAnalyzer',
     'MarkdownAnalyzer',
     'YamlAnalyzer',
     'JsonAnalyzer',
