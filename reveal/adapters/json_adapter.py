@@ -16,69 +16,94 @@ class JsonAdapter(ResourceAdapter):
     """
 
     @staticmethod
+    def _get_path_syntax() -> Dict[str, str]:
+        """Path syntax documentation."""
+        return {
+            '/key': 'Access object key',
+            '/0': 'Access array index (0-based)',
+            '/key/subkey': 'Navigate nested paths',
+            '/arr[0:3]': 'Array slice (first 3 elements)',
+            '/arr[-1]': 'Negative index (last element)',
+        }
+
+    @staticmethod
+    def _get_queries_help() -> Dict[str, str]:
+        """Query parameters documentation."""
+        return {
+            'schema': 'Show type structure of data',
+            'flatten': 'Flatten to grep-able lines (gron-style output)',
+            'gron': 'Alias for flatten (named after github.com/tomnomnom/gron)',
+            'type': 'Show type at current path',
+            'keys': 'List keys (objects) or length (arrays)',
+            'length': 'Get array/string length or object key count',
+        }
+
+    @staticmethod
+    def _get_examples() -> List[Dict[str, str]]:
+        """Usage examples."""
+        return [
+            {'uri': 'json://package.json', 'description': 'View entire JSON file (pretty-printed)'},
+            {'uri': 'json://package.json/name', 'description': 'Get package name'},
+            {'uri': 'json://package.json/scripts', 'description': 'Get all scripts'},
+            {'uri': 'json://data.json/users/0', 'description': 'Get first user from array'},
+            {'uri': 'json://data.json/users[0:3]', 'description': 'Get first 3 users (array slice)'},
+            {'uri': 'json://config.json?schema', 'description': 'Show type structure of entire file'},
+            {'uri': 'json://data.json/users?schema', 'description': 'Show schema of users array'},
+            {'uri': 'json://config.json?flatten', 'description': 'Flatten to grep-able format (also: ?gron)'},
+            {'uri': 'json://data.json/users?type', 'description': 'Get type at path (e.g., Array[Object])'},
+            {'uri': 'json://package.json/dependencies?keys', 'description': 'List all dependency names'},
+        ]
+
+    @staticmethod
+    def _get_workflows() -> List[Dict[str, Any]]:
+        """Scenario-based workflow patterns."""
+        return [
+            {
+                'name': 'Explore Unknown JSON Structure',
+                'scenario': 'Large JSON file, need to understand what\'s in it',
+                'steps': [
+                    "reveal json://data.json?schema       # See type structure",
+                    "reveal json://data.json?keys         # Top-level keys",
+                    "reveal json://data.json/users?schema # Drill into nested",
+                    "reveal json://data.json/users/0      # Sample first element",
+                ],
+            },
+            {
+                'name': 'Search JSON Content',
+                'scenario': 'Find specific values in a large JSON file',
+                'steps': [
+                    "reveal json://config.json?flatten | grep -i 'database'",
+                    "reveal json://config.json?flatten | grep 'url'",
+                ],
+            },
+        ]
+
+    @staticmethod
+    def _get_anti_patterns() -> List[Dict[str, str]]:
+        """What NOT to do."""
+        return [
+            {
+                'bad': "cat config.json | jq '.database.host'",
+                'good': "reveal json://config.json/database/host",
+                'why': "No jq dependency, consistent syntax with other reveal URIs",
+            },
+            {
+                'bad': "cat large.json | python -c 'import json,sys; print(json.load(sys.stdin).keys())'",
+                'good': "reveal json://large.json?keys",
+                'why': "One command, handles errors gracefully",
+            },
+        ]
+
+    @staticmethod
     def get_help() -> Dict[str, Any]:
         """Get help documentation for json:// adapter."""
         return {
             'name': 'json',
             'description': 'Navigate and query JSON files - path access, schema discovery, gron-style output',
             'syntax': 'json://<file>[/path/to/key][?query]',
-            'path_syntax': {
-                '/key': 'Access object key',
-                '/0': 'Access array index (0-based)',
-                '/key/subkey': 'Navigate nested paths',
-                '/arr[0:3]': 'Array slice (first 3 elements)',
-                '/arr[-1]': 'Negative index (last element)',
-            },
-            'queries': {
-                'schema': 'Show type structure of data',
-                'flatten': 'Flatten to grep-able lines (gron-style output)',
-                'gron': 'Alias for flatten (named after github.com/tomnomnom/gron)',
-                'type': 'Show type at current path',
-                'keys': 'List keys (objects) or length (arrays)',
-                'length': 'Get array/string length or object key count',
-            },
-            'examples': [
-                {
-                    'uri': 'json://package.json',
-                    'description': 'View entire JSON file (pretty-printed)'
-                },
-                {
-                    'uri': 'json://package.json/name',
-                    'description': 'Get package name'
-                },
-                {
-                    'uri': 'json://package.json/scripts',
-                    'description': 'Get all scripts'
-                },
-                {
-                    'uri': 'json://data.json/users/0',
-                    'description': 'Get first user from array'
-                },
-                {
-                    'uri': 'json://data.json/users[0:3]',
-                    'description': 'Get first 3 users (array slice)'
-                },
-                {
-                    'uri': 'json://config.json?schema',
-                    'description': 'Show type structure of entire file'
-                },
-                {
-                    'uri': 'json://data.json/users?schema',
-                    'description': 'Show schema of users array'
-                },
-                {
-                    'uri': 'json://config.json?flatten',
-                    'description': 'Flatten to grep-able format (also: ?gron)'
-                },
-                {
-                    'uri': 'json://data.json/users?type',
-                    'description': 'Get type at path (e.g., Array[Object])'
-                },
-                {
-                    'uri': 'json://package.json/dependencies?keys',
-                    'description': 'List all dependency names'
-                },
-            ],
+            'path_syntax': JsonAdapter._get_path_syntax(),
+            'queries': JsonAdapter._get_queries_help(),
+            'examples': JsonAdapter._get_examples(),
             'features': [
                 'Path navigation with dot notation support',
                 'Array indexing and slicing (Python-style)',
@@ -86,46 +111,13 @@ class JsonAdapter(ResourceAdapter):
                 'Gron-style flattening for grep/search workflows',
                 'Type introspection at any path',
             ],
-            # Executable examples (assumes package.json exists)
             'try_now': [
                 "reveal json://package.json?schema",
                 "reveal json://package.json/name",
                 "reveal json://package.json?flatten | head -20",
             ],
-            # Scenario-based workflow patterns
-            'workflows': [
-                {
-                    'name': 'Explore Unknown JSON Structure',
-                    'scenario': 'Large JSON file, need to understand what\'s in it',
-                    'steps': [
-                        "reveal json://data.json?schema       # See type structure",
-                        "reveal json://data.json?keys         # Top-level keys",
-                        "reveal json://data.json/users?schema # Drill into nested",
-                        "reveal json://data.json/users/0      # Sample first element",
-                    ],
-                },
-                {
-                    'name': 'Search JSON Content',
-                    'scenario': 'Find specific values in a large JSON file',
-                    'steps': [
-                        "reveal json://config.json?flatten | grep -i 'database'",
-                        "reveal json://config.json?flatten | grep 'url'",
-                    ],
-                },
-            ],
-            # What NOT to do
-            'anti_patterns': [
-                {
-                    'bad': "cat config.json | jq '.database.host'",
-                    'good': "reveal json://config.json/database/host",
-                    'why': "No jq dependency, consistent syntax with other reveal URIs",
-                },
-                {
-                    'bad': "cat large.json | python -c 'import json,sys; print(json.load(sys.stdin).keys())'",
-                    'good': "reveal json://large.json?keys",
-                    'why': "One command, handles errors gracefully",
-                },
-            ],
+            'workflows': JsonAdapter._get_workflows(),
+            'anti_patterns': JsonAdapter._get_anti_patterns(),
             'notes': [
                 'Paths use / separator (like URLs)',
                 'Array indices are 0-based',
