@@ -148,8 +148,8 @@ def simple():
         self.assertEqual(len(detections), 0)
 
     def test_complex_function_detected(self):
-        """Test that complex functions are detected."""
-        # Create a very complex function that exceeds threshold
+        """Test that complex functions are detected using McCabe algorithm."""
+        # Create a function with McCabe complexity of 11 (verified with mccabe library)
         # Note: no leading newline so line numbers start at 1
         content = """def complex_func(x):
     if x > 0:
@@ -167,13 +167,13 @@ def simple():
     return x
 """
         rule = C901()
-        # Include complexity in structure (as tree-sitter would provide)
-        # Use complexity > threshold from .reveal.yaml (which sets C901.threshold: 21)
-        structure = {'functions': [{'name': 'complex_func', 'line': 1, 'end_line': 14, 'complexity': 25}]}
+        # Patch get_threshold to return 10 (default) - McCabe complexity is 11
+        rule.get_threshold = lambda key, default: 10
+        structure = {'functions': [{'name': 'complex_func', 'line': 1, 'end_line': 14}]}
         detections = rule.check('test.py', structure, content)
 
         self.assertEqual(len(detections), 1)
-        self.assertIn('complexity', detections[0].message.lower())
+        self.assertIn('complexity: 11', detections[0].message)  # McCabe-calculated
 
     def test_no_structure(self):
         """Test handling when no structure provided."""

@@ -1,11 +1,15 @@
 """C901: Function complexity detector.
 
 Detects functions that are too complex based on cyclomatic complexity.
-Universal rule that works with reveal's structure output.
+Uses McCabe algorithm for Python (matching Ruff/flake8), with heuristic
+fallback for other languages.
 """
 
+import ast
 import logging
 from typing import List, Dict, Any, Optional
+
+from mccabe import PathGraphingAstVisitor
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 
@@ -13,16 +17,20 @@ logger = logging.getLogger(__name__)
 
 
 class C901(BaseRule):
-    """Detect overly complex functions (cyclomatic complexity)."""
+    """Detect overly complex functions (cyclomatic complexity).
+
+    Uses the McCabe algorithm for Python files, matching Ruff's C901 rule.
+    For non-Python files, uses a heuristic based on control flow keywords.
+    """
 
     code = "C901"
     message = "Function is too complex"
     category = RulePrefix.C
     severity = Severity.MEDIUM
     file_patterns = ['*']  # Universal: works on any structured file
-    version = "1.0.0"
+    version = "1.1.0"  # v1.1.0: McCabe-based calculation (aligned with Ruff)
 
-    # Default complexity threshold (standard McCabe threshold)
+    # Default complexity threshold - matches Ruff's default
     # Can be overridden in .reveal.yaml:
     #   rules:
     #     C901:
@@ -53,19 +61,28 @@ class C901(BaseRule):
         # Get threshold from config (allows per-project customization)
         threshold = self.get_threshold('threshold', self.DEFAULT_THRESHOLD)
 
+        # For Python files, use McCabe on the whole file for accuracy
+        is_python = file_path.endswith('.py')
+        mccabe_results = {}
+        if is_python and content:
+            mccabe_results = self._get_mccabe_complexity(content)
+
         # Get functions from structure
         functions = structure.get('functions', [])
 
         for func in functions:
-            # Use complexity from structure if available (tree-sitter calculated)
-            # Otherwise fall back to manual calculation
-            complexity = func.get('complexity')
-            if complexity is None:
-                complexity = self._calculate_complexity(func, content)
+            func_name = func.get('name', '<unknown>')
+
+            # Priority: 1) McCabe result, 2) structure complexity, 3) heuristic
+            if func_name in mccabe_results:
+                complexity = mccabe_results[func_name]
+            elif func.get('complexity') is not None:
+                complexity = func['complexity']
+            else:
+                complexity = self._calculate_complexity_heuristic(func, content)
 
             if complexity > threshold:
                 line = func.get('line', 0)
-                func_name = func.get('name', '<unknown>')
 
                 detections.append(Detection(
                     file_path=file_path,
@@ -81,12 +98,44 @@ class C901(BaseRule):
 
         return detections
 
-    def _calculate_complexity(self, func: Dict[str, Any], content: str) -> int:
+    def _get_mccabe_complexity(self, content: str) -> Dict[str, int]:
         """
-        Calculate cyclomatic complexity for a function.
+        Calculate McCabe cyclomatic complexity for all functions in Python code.
 
-        This is a simplified heuristic based on counting decision points.
-        A proper implementation would use AST analysis.
+        Uses the same algorithm as Ruff and flake8-mccabe for consistent results.
+
+        Args:
+            content: Python source code
+
+        Returns:
+            Dict mapping function names to complexity scores
+        """
+        results = {}
+        try:
+            tree = ast.parse(content)
+            visitor = PathGraphingAstVisitor()
+            visitor.preorder(tree, visitor)
+
+            for graph in visitor.graphs.values():
+                # Graph entity is the function/method name
+                name = graph.entity
+                # Handle method names (Class.method -> method)
+                if '.' in name:
+                    name = name.split('.')[-1]
+                results[name] = graph.complexity()
+        except SyntaxError:
+            logger.debug("Could not parse Python for McCabe analysis")
+        except Exception as e:
+            logger.debug(f"McCabe analysis failed: {e}")
+
+        return results
+
+    def _calculate_complexity_heuristic(self, func: Dict[str, Any], content: str) -> int:
+        """
+        Calculate complexity using heuristics for non-Python files.
+
+        Counts control flow keywords as a proxy for cyclomatic complexity.
+        Less accurate than McCabe but works for any language.
 
         Args:
             func: Function metadata from structure
@@ -96,14 +145,13 @@ class C901(BaseRule):
             Estimated complexity score
         """
         # Get function content if we have line numbers
-        # Accept both 'end_line' and 'line_end' (tree-sitter uses 'line_end')
         start_line = func.get('line', 0)
         end_line = func.get('end_line') or func.get('line_end') or start_line
 
         if start_line == 0 or end_line == 0:
-            # Fall back to simple heuristics from metadata
+            # Fall back to line count heuristic
             line_count = func.get('line_count', 0)
-            return max(1, line_count // 10)  # Very rough estimate
+            return max(1, line_count // 10)
 
         # Extract function content
         lines = content.splitlines()
@@ -112,32 +160,25 @@ class C901(BaseRule):
 
         func_content = '\n'.join(lines[start_line - 1:end_line])
 
-        # Calculate complexity: start at 1, add 1 for each decision point
+        # Start at 1 (base complexity)
         complexity = 1
 
-        # Decision keywords that increase complexity
-        # Each represents a branch in the code flow
-        decision_keywords = [
-            'if ',
-            'elif ',
-            'else:',
-            'else ',
-            'for ',
-            'while ',
-            'and ',
-            'or ',
-            'try:',
-            'except ',
-            'except:',
-            'case ',  # match/case in Python 3.10+
-            'when ',
+        # Control flow patterns that add complexity
+        # These are language-agnostic patterns
+        patterns = [
+            ' if ', ' if(',       # conditionals
+            ' else if ', 'elif ', # else-if chains
+            ' for ', ' for(',     # loops
+            ' while ', ' while(',
+            ' && ', ' and ',      # boolean operators
+            ' || ', ' or ',
+            ' case ',             # switch/match cases
+            ' catch ', ' catch(', # exception handling
+            ' except ',
+            ' ? ',                # ternary operator
         ]
 
-        for keyword in decision_keywords:
-            # Count occurrences (simple but effective)
-            complexity += func_content.count(keyword)
-
-        # Also check for ternary operators (? : in many languages, if/else in Python expressions)
-        complexity += func_content.count(' if ') - func_content.count('if ')  # Ternary in Python
+        for pattern in patterns:
+            complexity += func_content.count(pattern)
 
         return complexity

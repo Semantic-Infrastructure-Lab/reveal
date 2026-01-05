@@ -37,6 +37,7 @@ dependencies = [
     "tree-sitter==0.21.3",  # Semantic parsing for all languages
     "tree-sitter-languages>=1.10.0",  # Language grammar support (JS, TS, Rust, Go, etc.)
     "beautifulsoup4>=4.12.0",  # HTML parsing for HTML analyzer (uses stdlib html.parser)
+    "mccabe>=0.7.0",  # McCabe cyclomatic complexity (aligns C901 with Ruff)
 ]
 
 [project.optional-dependencies]
