@@ -142,7 +142,7 @@ class TestDuplicateConfig:
 # ==============================================================================
 
 
-class TestFeatureExtractor(DuplicateFeatureExtractor):
+class ConcreteFeatureExtractor(DuplicateFeatureExtractor):
     """Concrete implementation for testing."""
 
     def extract_chunks(self, content: str, structure: Dict) -> List[Chunk]:
@@ -179,7 +179,7 @@ class TestDuplicateFeatureExtractor:
 
     def test_extract_structural_features_basic(self):
         """Test basic structural feature extraction."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
         code = """def test():
     if True:
         return 42"""
@@ -199,14 +199,14 @@ class TestDuplicateFeatureExtractor:
 
     def test_extract_structural_features_empty_code(self):
         """Test structural features with empty code."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
         features = extractor.extract_structural_features("")
 
         assert features['line_count'] == 0  # Empty string has 0 lines after splitlines()
 
     def test_extract_structural_features_nesting(self):
         """Test nesting depth calculation."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
         code = """def func():
     if True:
         while True:
@@ -225,7 +225,7 @@ class TestDuplicateFeatureExtractor:
             use_structural=True,
             use_semantic=True
         )
-        extractor = TestFeatureExtractor(config)
+        extractor = ConcreteFeatureExtractor(config)
         chunk = Chunk(
             type='function',
             name='test',
@@ -249,7 +249,7 @@ class TestDuplicateFeatureExtractor:
             use_structural=False,
             use_semantic=False
         )
-        extractor = TestFeatureExtractor(config)
+        extractor = ConcreteFeatureExtractor(config)
         chunk = Chunk(
             type='function',
             name='test',
@@ -266,7 +266,7 @@ class TestDuplicateFeatureExtractor:
     def test_normalize_removes_comments(self):
         """Test comment removal normalization."""
         config = DuplicateConfig(normalize_comments=True)
-        extractor = TestFeatureExtractor(config)
+        extractor = ConcreteFeatureExtractor(config)
 
         code = """# This is a comment
 def test():  # inline comment
@@ -280,7 +280,7 @@ def test():  # inline comment
     def test_normalize_whitespace(self):
         """Test whitespace normalization."""
         config = DuplicateConfig(normalize_whitespace=True, normalize_comments=False)
-        extractor = TestFeatureExtractor(config)
+        extractor = ConcreteFeatureExtractor(config)
 
         code = """def    test():
 
@@ -299,7 +299,7 @@ def test():  # inline comment
             normalize_comments=False,
             normalize_whitespace=False
         )
-        extractor = TestFeatureExtractor(config)
+        extractor = ConcreteFeatureExtractor(config)
 
         code = "user_name = get_user_name()"
         normalized = extractor._normalize(code)
@@ -316,7 +316,7 @@ def test():  # inline comment
             normalize_whitespace=False,
             normalize_identifiers=False
         )
-        extractor = TestFeatureExtractor(config)
+        extractor = ConcreteFeatureExtractor(config)
 
         code = 'x = "hello" + 42 + 3.14'
         normalized = extractor._normalize(code)
@@ -328,7 +328,7 @@ def test():  # inline comment
 
     def test_remove_comments_python(self):
         """Test Python comment removal."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         code = """# Single line comment
 def test():
@@ -343,7 +343,7 @@ def test():
 
     def test_remove_comments_c_style(self):
         """Test C-style comment removal."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         code = """// Single line
 int x = 42; /* Block comment */"""
@@ -355,7 +355,7 @@ int x = 42; /* Block comment */"""
 
     def test_normalize_whitespace_multiple_spaces(self):
         """Test multiple space normalization."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         code = "x    =     42"
         result = extractor._normalize_whitespace(code)
@@ -365,7 +365,7 @@ int x = 42; /* Block comment */"""
 
     def test_normalize_identifiers_preserves_keywords(self):
         """Test identifier normalization preserves keywords."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         code = "if x > 0: return x else: return 0"
         result = extractor._normalize_identifiers(code)
@@ -377,7 +377,7 @@ int x = 42; /* Block comment */"""
 
     def test_normalize_literals_strings(self):
         """Test string literal normalization."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         code = '''name = "John" + 'Doe' '''
         result = extractor._normalize_literals(code)
@@ -388,7 +388,7 @@ int x = 42; /* Block comment */"""
 
     def test_normalize_literals_numbers(self):
         """Test number literal normalization."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         code = "x = 42 + 3.14"
         result = extractor._normalize_literals(code)
@@ -398,7 +398,7 @@ int x = 42; /* Block comment */"""
 
     def test_estimate_complexity_simple(self):
         """Test complexity estimation for simple code."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         code = "return 42"
         complexity = extractor._estimate_complexity(code)
@@ -407,7 +407,7 @@ int x = 42; /* Block comment */"""
 
     def test_estimate_complexity_branches(self):
         """Test complexity estimation with branches."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         code = """if x > 0:
     return x
@@ -423,7 +423,7 @@ else:
     def test_compute_similarity_cosine(self):
         """Test cosine similarity computation."""
         config = DuplicateConfig(similarity_metric=SimilarityMetric.COSINE)
-        extractor = TestFeatureExtractor(config)
+        extractor = ConcreteFeatureExtractor(config)
 
         vec1 = {'a': 1.0, 'b': 2.0, 'c': 3.0}
         vec2 = {'a': 1.0, 'b': 2.0, 'c': 3.0}
@@ -435,7 +435,7 @@ else:
     def test_compute_similarity_jaccard(self):
         """Test Jaccard similarity computation."""
         config = DuplicateConfig(similarity_metric=SimilarityMetric.JACCARD)
-        extractor = TestFeatureExtractor(config)
+        extractor = ConcreteFeatureExtractor(config)
 
         vec1 = {'a': 1.0, 'b': 1.0, 'c': 1.0}
         vec2 = {'a': 1.0, 'b': 1.0, 'd': 1.0}
@@ -448,7 +448,7 @@ else:
     def test_compute_similarity_euclidean(self):
         """Test Euclidean similarity computation."""
         config = DuplicateConfig(similarity_metric=SimilarityMetric.EUCLIDEAN)
-        extractor = TestFeatureExtractor(config)
+        extractor = ConcreteFeatureExtractor(config)
 
         vec1 = {'a': 1.0, 'b': 2.0}
         vec2 = {'a': 1.0, 'b': 2.0}
@@ -459,7 +459,7 @@ else:
 
     def test_cosine_similarity_identical(self):
         """Test cosine similarity with identical vectors."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         vec1 = {'x': 3.0, 'y': 4.0}
         vec2 = {'x': 3.0, 'y': 4.0}
@@ -470,7 +470,7 @@ else:
 
     def test_cosine_similarity_orthogonal(self):
         """Test cosine similarity with orthogonal vectors."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         vec1 = {'x': 1.0}
         vec2 = {'y': 1.0}
@@ -481,7 +481,7 @@ else:
 
     def test_cosine_similarity_empty_vectors(self):
         """Test cosine similarity with empty vectors."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         similarity = extractor._cosine_similarity({}, {})
 
@@ -489,7 +489,7 @@ else:
 
     def test_cosine_similarity_zero_magnitude(self):
         """Test cosine similarity when one vector has zero magnitude."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         vec1 = {'x': 1.0}
         vec2 = {'x': 0.0}
@@ -500,7 +500,7 @@ else:
 
     def test_jaccard_similarity_identical_sets(self):
         """Test Jaccard similarity with identical sets."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         vec1 = {'a': 1.0, 'b': 1.0, 'c': 1.0}
         vec2 = {'a': 1.0, 'b': 1.0, 'c': 1.0}
@@ -511,7 +511,7 @@ else:
 
     def test_jaccard_similarity_disjoint_sets(self):
         """Test Jaccard similarity with disjoint sets."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         vec1 = {'a': 1.0}
         vec2 = {'b': 1.0}
@@ -522,7 +522,7 @@ else:
 
     def test_jaccard_similarity_empty_sets(self):
         """Test Jaccard similarity with empty sets."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         similarity = extractor._jaccard_similarity({}, {})
 
@@ -530,7 +530,7 @@ else:
 
     def test_jaccard_similarity_partial_overlap(self):
         """Test Jaccard similarity with partial overlap."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         vec1 = {'a': 1.0, 'b': 1.0, 'c': 1.0}
         vec2 = {'b': 1.0, 'c': 1.0, 'd': 1.0}
@@ -542,7 +542,7 @@ else:
 
     def test_euclidean_similarity_identical(self):
         """Test Euclidean similarity with identical vectors."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         vec1 = {'x': 1.0, 'y': 2.0}
         vec2 = {'x': 1.0, 'y': 2.0}
@@ -554,7 +554,7 @@ else:
 
     def test_euclidean_similarity_different(self):
         """Test Euclidean similarity with different vectors."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         vec1 = {'x': 0.0}
         vec2 = {'x': 10.0}
@@ -566,7 +566,7 @@ else:
 
     def test_euclidean_similarity_empty_vectors(self):
         """Test Euclidean similarity with empty vectors."""
-        extractor = TestFeatureExtractor(DuplicateConfig())
+        extractor = ConcreteFeatureExtractor(DuplicateConfig())
 
         similarity = extractor._euclidean_similarity({}, {})
 
