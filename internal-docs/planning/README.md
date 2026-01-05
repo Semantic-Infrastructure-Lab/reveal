@@ -1,8 +1,8 @@
 # Reveal Planning Documentation
 
-**Last Updated:** 2026-01-03
-**Current Release:** v0.28.0
-**Next Release:** v0.29.0 (Schema Validation)
+**Last Updated:** 2026-01-04
+**Current Release:** v0.29.0
+**Next Release:** v0.30.0 (Semantic Diff Adapter)
 
 Internal planning documents for future and in-progress features.
 
@@ -10,11 +10,77 @@ Internal planning documents for future and in-progress features.
 
 ## Active Plans
 
-### 🎯 Knowledge Graph Features (v0.29.0-v0.32.0)
+### 🚧 diff:// Adapter (v0.30.0)
 
-**Status:** Planning complete, roadmap integrated
-**Target:** v0.29.0 (Schema validation), v0.30.0 (Link following), v0.31.0 (Queries + checks), v0.32.0 (Docs)
+**Status:** 🚧 In progress (90% complete)
+**Target:** v0.30.0 (Jan 2026)
 **Priority:** HIGH
+**Effort:** 2-3 weeks
+
+Semantic structural comparison for code review and impact assessment.
+
+**Features:**
+- File and directory comparison
+- Git integration (commits, branches, working tree)
+- Element-level diff for deep dives
+- JSON output for CI/CD
+- AI agent optimized usage guide
+
+**Breaking Change:** Python 3.10+ minimum (was 3.8+)
+
+**Documents:**
+- `AI_DIFF_USAGE.md` - AI agent integration guide
+- See ROADMAP.md for feature details
+
+---
+
+### 🎯 Breadcrumb Navigation Enhancements (v0.30.1-v0.32.0)
+
+**Status:** Design complete, implementation pending
+**Target:** v0.30.1 (Feb 2026), v0.31.0 (Q2 2026), v0.32.0 (Q3 2026)
+**Priority:** HIGH (Phase 1), MEDIUM (Phase 2-3)
+**Effort:** 1-2 hours (Phase 1), 3-4 weeks (Phase 2), 2-3 weeks (Phase 3)
+
+Enhanced breadcrumb system to guide users through Reveal's full feature set.
+
+**Primary Document:**
+- **[BREADCRUMB_IMPROVEMENTS_2026.md](./BREADCRUMB_IMPROVEMENTS_2026.md)** - Complete design with 5-phase implementation plan
+
+**Roadmap:**
+- **Phase 1 (v0.30.1):** Critical fixes (1-2 hours)
+  - Fix "typed" context bug (broken functionality)
+  - Add HTML analyzer mapping
+  - Test coverage for all contexts
+- **Phase 2 (v0.31.0):** Adapter awareness (3-4 weeks)
+  - Large file detection → AST suggestions
+  - Post-check quality guidance
+  - Import analysis breadcrumbs
+  - diff:// workflow hints
+  - Token savings: 50-200 per session
+- **Phase 3 (v0.32.0):** Workflow guidance (2-3 weeks)
+  - Pre-commit workflow detection
+  - Code review workflow hints
+  - Refactoring workflow support
+  - Help system integration
+- **Phase 4-5 (Future):** Context awareness and advanced features
+
+**Key Principles:**
+- Agent-first design (token efficiency)
+- Progressive disclosure (guide to advanced features)
+- Workflow-oriented (complete tasks, not just commands)
+- Opportunistic (leverage existing infrastructure)
+
+**Next Steps:**
+- Phase 1: Fix critical bug in v0.30.1 (1-2 hours)
+- Phase 2: Design adapter-specific breadcrumbs for v0.31.0
+
+---
+
+### 🎯 Knowledge Graph Features (v0.29.0-v0.33.0)
+
+**Status:** Phase 1 complete ✅, remaining phases planned
+**Target:** v0.29.0 ✅ (Schema validation), v0.32.0 (Link following), v0.33.0 (Queries + checks)
+**Priority:** MEDIUM
 **Effort:** 10-12 weeks over 4 releases
 
 Knowledge graph construction: schema validation, link following, metadata queries, quality checks.
@@ -24,21 +90,19 @@ Knowledge graph construction: schema validation, link following, metadata querie
 - **[KNOWLEDGE_GRAPH_ARCHITECTURE.md](./KNOWLEDGE_GRAPH_ARCHITECTURE.md)** - Technical architecture & implementation specs
 - **[KNOWLEDGE_GRAPH_GUIDE.md](./KNOWLEDGE_GRAPH_GUIDE.md)** - User-facing guide (ships as `reveal help://knowledge-graph`)
 
-**Roadmap (Hybrid Integration - Option D):**
-- v0.29.0 (Q2 2026): Schema validation framework (2-3 weeks)
-- v0.30.0 (Q2 2026): Link following with --related flag (2-3 weeks)
-- v0.31.0 (Q3 2026): markdown:// adapter + quality checks (5-6 weeks)
-- v0.32.0 (Q3 2026): Complete documentation suite (1-2 weeks)
+**Roadmap (Updated):**
+- ✅ v0.29.0 (Jan 2026): Schema validation framework - SHIPPED
+- v0.32.0 (Q3 2026): Link following with --related flag (2-3 weeks)
+- v0.33.0 (Q3 2026): markdown:// adapter + quality checks (5-6 weeks)
+- v0.34.0 (Q4 2026): Complete documentation suite (1-2 weeks)
 
 **Key Principles:**
 - Generic features (not Beth-specific) - works with Hugo, Obsidian, Jekyll, custom schemas
 - Stateless architecture (max depth 2 for link following)
-- Ships with reference schemas: beth.yaml, hugo.yaml, obsidian.yaml
+- Ships with reference schemas: beth.yaml, hugo.yaml, jekyll.yaml, mkdocs.yaml, obsidian.yaml
 
-**Next Steps:**
-- Phase 1 (v0.29.0): Design schema validation framework, define YAML schema format
-- Create built-in schemas (beth, hugo, obsidian)
-- Implement validation rules engine (F001-F005)
+**Completed:**
+- ✅ v0.29.0: Schema validation with 5 built-in schemas, F001-F005 rules, comprehensive guide
 
 ---
 
@@ -88,6 +152,14 @@ Progressive migration from regex-based analyzers to AST parsing for better accur
 ---
 
 ## Reference Documents
+
+### Production Testing & Validation
+
+**[../research/POPULAR_REPOS_TESTING.md](../research/POPULAR_REPOS_TESTING.md)** - Real-world validation on popular open-source projects
+- ✅ Tested on Requests, Flask, FastAPI, Django (Jan 2026, v0.29.0)
+- Performance: Sub-second analysis, up to 2,708x token savings
+- Quality: Found real issues in production code (circular deps, god functions)
+- User guide: `../../docs/PRODUCTION_TESTING_GUIDE.md`
 
 ### Foundation & Quality
 

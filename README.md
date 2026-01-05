@@ -25,7 +25,7 @@ reveal --agent-help-full     # Complete reference (~1215 lines)
 
 **Token efficiency:** Structure view = 50 tokens vs 7,500 for reading full file. Validated 7-150x reduction in production.
 
-**Documentation:** [Installation](INSTALL.md) • [Contributing](CONTRIBUTING.md) • [Changelog](CHANGELOG.md)
+**Documentation:** [Installation](INSTALL.md) • [Contributing](CONTRIBUTING.md) • [Changelog](CHANGELOG.md) • [Production Guide](docs/PRODUCTION_TESTING_GUIDE.md)
 
 **Quick Install:**
 ```bash
@@ -430,6 +430,7 @@ reveal/
 **Clean architecture:** Most analyzers < 50 lines. Modular packages since v0.22.0.
 
 **Power users:** [COOL_TRICKS.md](reveal/COOL_TRICKS.md) - Hidden features and advanced workflows
+**Production workflows:** [PRODUCTION_TESTING_GUIDE.md](docs/PRODUCTION_TESTING_GUIDE.md) - Real-world testing, CI/CD integration, performance at scale
 
 ---
 
