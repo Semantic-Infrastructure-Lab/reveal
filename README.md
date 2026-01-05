@@ -353,9 +353,9 @@ reveal app.py --meta             # metadata only
 
 ### Supported Languages
 
-**Built-in (26):** Python, Rust, Go, JavaScript, TypeScript, GDScript, Bash, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
+**Built-in (28):** Python, Rust, Go, **C, C++**, JavaScript, TypeScript, GDScript, Bash, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
 
-**Via tree-sitter (50+):** C, C++, C#, Java, PHP, Swift, Kotlin, Ruby, etc.
+**Via tree-sitter (50+):** C#, Java, PHP, Swift, Kotlin, Ruby, Lua, Scala, and more. Add new languages in 3 lines of code.
 
 **Shebang detection:** Extensionless scripts auto-detected (`#!/usr/bin/env python3`)
 
