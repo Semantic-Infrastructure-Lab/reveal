@@ -56,6 +56,7 @@ def get_file_type_from_analyzer(analyzer):
         'NginxAnalyzer': 'nginx',
         'GDScriptAnalyzer': 'gdscript',
         'JupyterAnalyzer': 'jupyter',
+        'HtmlAnalyzer': 'html',
         'TreeSitterAnalyzer': None,  # Generic fallback
     }
     return mapping.get(class_name, None)
@@ -87,6 +88,9 @@ def print_breadcrumbs(context, path, file_type=None, **kwargs):
             print(f"      reveal {path} --links      # Extract links")
             print(f"      reveal {path} --code       # Extract code blocks")
             print(f"      reveal {path} --frontmatter # Extract YAML front matter")
+        elif file_type == 'html':
+            print(f"      reveal {path} --check      # Validate HTML")
+            print(f"      reveal {path} --links      # Extract all links")
         elif file_type in ['yaml', 'json', 'toml', 'jsonl']:
             print(f"      reveal {path} --check      # Validate syntax")
         elif file_type in ['dockerfile', 'nginx']:

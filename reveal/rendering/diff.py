@@ -33,14 +33,35 @@ def render_diff_text(diff_result: Dict[str, Any]) -> None:
     summary = diff_result.get('summary', {})
     details = diff_result.get('diff', {})
 
-    # Header
+    _render_diff_header(left, right)
+
+    has_changes = _render_diff_summary(summary)
+    if not has_changes:
+        return
+
+    print()
+
+    # Detailed changes
+    _render_functions_section(details.get('functions', []))
+    _render_classes_section(details.get('classes', []))
+    _render_imports_section(details.get('imports', []))
+
+
+def _render_diff_header(left: Dict[str, Any], right: Dict[str, Any]) -> None:
+    """Render diff header."""
     print()
     print("=" * 70)
     print(f"Structure Diff: {left.get('uri', '?')} → {right.get('uri', '?')}")
     print("=" * 70)
     print()
 
-    # Summary
+
+def _render_diff_summary(summary: Dict[str, Any]) -> bool:
+    """Render summary section.
+
+    Returns:
+        True if changes detected, False otherwise
+    """
     print("📊 Summary:")
     print()
 
@@ -67,130 +88,166 @@ def render_diff_text(diff_result: Dict[str, Any]) -> None:
     if not has_changes:
         print("  No structural changes detected")
         print()
+
+    return has_changes
+
+
+def _render_functions_section(functions: list) -> None:
+    """Render functions detail section."""
+    if not functions:
         return
 
+    print("🔧 Functions:")
     print()
+    for func in functions:
+        _render_function_change(func)
 
-    # Detailed changes - Functions
-    func_details = details.get('functions', [])
-    if func_details:
-        print("🔧 Functions:")
+
+def _render_function_change(func: Dict[str, Any]) -> None:
+    """Render a single function change."""
+    change_type = func['type']
+    name = func['name']
+
+    if change_type == 'added':
+        print(f"  + {name}")
+        _render_function_metadata(func)
+        line_count = func.get('line_count', '?')
+        complexity = func.get('complexity', '?')
+        print(f"      [NEW - {line_count} lines, complexity {complexity}]")
         print()
-        for func in func_details:
-            if func['type'] == 'added':
-                print(f"  + {func['name']}")
-                line = func.get('line')
-                line_count = func.get('line_count', '?')
-                complexity = func.get('complexity', '?')
-                sig = func.get('signature', '')
-                if line:
-                    print(f"      Line {line}")
-                if sig:
-                    print(f"      {sig}")
-                print(f"      [NEW - {line_count} lines, complexity {complexity}]")
-                print()
 
-            elif func['type'] == 'removed':
-                print(f"  - {func['name']}")
-                line = func.get('line')
-                sig = func.get('signature', '')
-                if line:
-                    print(f"      Line {line}")
-                if sig:
-                    print(f"      {sig}")
-                print(f"      [REMOVED]")
-                print()
-
-            elif func['type'] == 'modified':
-                print(f"  ~ {func['name']}")
-                changes = func.get('changes', {})
-
-                if 'signature' in changes:
-                    print(f"      Signature:")
-                    print(f"        - {changes['signature']['old']}")
-                    print(f"        + {changes['signature']['new']}")
-
-                if 'complexity' in changes:
-                    old_cx = changes['complexity']['old']
-                    new_cx = changes['complexity']['new']
-                    delta = changes['complexity']['delta']
-                    sign = '+' if delta > 0 else ''
-                    print(f"      Complexity: {old_cx} → {new_cx} ({sign}{delta})")
-
-                if 'line_count' in changes:
-                    old_lines = changes['line_count']['old']
-                    new_lines = changes['line_count']['new']
-                    delta = changes['line_count']['delta']
-                    sign = '+' if delta > 0 else ''
-                    print(f"      Lines: {old_lines} → {new_lines} ({sign}{delta})")
-
-                if 'line' in changes:
-                    print(f"      Line: {changes['line']['old']} → {changes['line']['new']}")
-
-                print()
-
-    # Detailed changes - Classes
-    class_details = details.get('classes', [])
-    if class_details:
-        print("📦 Classes:")
+    elif change_type == 'removed':
+        print(f"  - {name}")
+        _render_function_metadata(func)
+        print(f"      [REMOVED]")
         print()
-        for cls in class_details:
-            if cls['type'] == 'added':
-                print(f"  + {cls['name']}")
-                line = cls.get('line')
-                bases = cls.get('bases', [])
-                method_count = cls.get('method_count', 0)
-                if line:
-                    print(f"      Line {line}")
-                if bases:
-                    print(f"      Bases: {', '.join(bases)}")
-                print(f"      [NEW - {method_count} methods]")
-                print()
 
-            elif cls['type'] == 'removed':
-                print(f"  - {cls['name']}")
-                line = cls.get('line')
-                if line:
-                    print(f"      Line {line}")
-                print(f"      [REMOVED]")
-                print()
-
-            elif cls['type'] == 'modified':
-                print(f"  ~ {cls['name']}")
-                changes = cls.get('changes', {})
-
-                if 'bases' in changes:
-                    old_bases = changes['bases']['old']
-                    new_bases = changes['bases']['new']
-                    print(f"      Bases:")
-                    print(f"        - {', '.join(old_bases) if old_bases else '(none)'}")
-                    print(f"        + {', '.join(new_bases) if new_bases else '(none)'}")
-
-                if 'methods' in changes:
-                    added = changes['methods']['added']
-                    removed = changes['methods']['removed']
-                    old_count = changes['methods']['count_old']
-                    new_count = changes['methods']['count_new']
-
-                    if added:
-                        print(f"      Methods added: {', '.join(added)}")
-                    if removed:
-                        print(f"      Methods removed: {', '.join(removed)}")
-                    print(f"      Method count: {old_count} → {new_count}")
-
-                print()
-
-    # Detailed changes - Imports
-    import_details = details.get('imports', [])
-    if import_details:
-        print("📥 Imports:")
+    elif change_type == 'modified':
+        print(f"  ~ {name}")
+        _render_function_modifications(func.get('changes', {}))
         print()
-        for imp in import_details:
-            if imp['type'] == 'added':
-                print(f"  + {imp['content']}")
-            elif imp['type'] == 'removed':
-                print(f"  - {imp['content']}")
+
+
+def _render_function_metadata(func: Dict[str, Any]) -> None:
+    """Render function metadata (line, signature)."""
+    line = func.get('line')
+    sig = func.get('signature', '')
+    if line:
+        print(f"      Line {line}")
+    if sig:
+        print(f"      {sig}")
+
+
+def _render_function_modifications(changes: Dict[str, Any]) -> None:
+    """Render function modifications."""
+    if 'signature' in changes:
+        print(f"      Signature:")
+        print(f"        - {changes['signature']['old']}")
+        print(f"        + {changes['signature']['new']}")
+
+    if 'complexity' in changes:
+        old_cx = changes['complexity']['old']
+        new_cx = changes['complexity']['new']
+        delta = changes['complexity']['delta']
+        sign = '+' if delta > 0 else ''
+        print(f"      Complexity: {old_cx} → {new_cx} ({sign}{delta})")
+
+    if 'line_count' in changes:
+        old_lines = changes['line_count']['old']
+        new_lines = changes['line_count']['new']
+        delta = changes['line_count']['delta']
+        sign = '+' if delta > 0 else ''
+        print(f"      Lines: {old_lines} → {new_lines} ({sign}{delta})")
+
+    if 'line' in changes:
+        print(f"      Line: {changes['line']['old']} → {changes['line']['new']}")
+
+
+def _render_classes_section(classes: list) -> None:
+    """Render classes detail section."""
+    if not classes:
+        return
+
+    print("📦 Classes:")
+    print()
+    for cls in classes:
+        _render_class_change(cls)
+
+
+def _render_class_change(cls: Dict[str, Any]) -> None:
+    """Render a single class change."""
+    change_type = cls['type']
+    name = cls['name']
+
+    if change_type == 'added':
+        print(f"  + {name}")
+        _render_class_metadata(cls, show_method_count=True)
         print()
+
+    elif change_type == 'removed':
+        print(f"  - {name}")
+        line = cls.get('line')
+        if line:
+            print(f"      Line {line}")
+        print(f"      [REMOVED]")
+        print()
+
+    elif change_type == 'modified':
+        print(f"  ~ {name}")
+        _render_class_modifications(cls.get('changes', {}))
+        print()
+
+
+def _render_class_metadata(cls: Dict[str, Any], show_method_count: bool = False) -> None:
+    """Render class metadata."""
+    line = cls.get('line')
+    bases = cls.get('bases', [])
+
+    if line:
+        print(f"      Line {line}")
+    if bases:
+        print(f"      Bases: {', '.join(bases)}")
+
+    if show_method_count:
+        method_count = cls.get('method_count', 0)
+        print(f"      [NEW - {method_count} methods]")
+
+
+def _render_class_modifications(changes: Dict[str, Any]) -> None:
+    """Render class modifications."""
+    if 'bases' in changes:
+        old_bases = changes['bases']['old']
+        new_bases = changes['bases']['new']
+        print(f"      Bases:")
+        print(f"        - {', '.join(old_bases) if old_bases else '(none)'}")
+        print(f"        + {', '.join(new_bases) if new_bases else '(none)'}")
+
+    if 'methods' in changes:
+        added = changes['methods']['added']
+        removed = changes['methods']['removed']
+        old_count = changes['methods']['count_old']
+        new_count = changes['methods']['count_new']
+
+        if added:
+            print(f"      Methods added: {', '.join(added)}")
+        if removed:
+            print(f"      Methods removed: {', '.join(removed)}")
+        print(f"      Method count: {old_count} → {new_count}")
+
+
+def _render_imports_section(imports: list) -> None:
+    """Render imports detail section."""
+    if not imports:
+        return
+
+    print("📥 Imports:")
+    print()
+    for imp in imports:
+        if imp['type'] == 'added':
+            print(f"  + {imp['content']}")
+        elif imp['type'] == 'removed':
+            print(f"  - {imp['content']}")
+    print()
 
 
 def render_element_diff_text(diff_result: Dict[str, Any]) -> None:
