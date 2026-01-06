@@ -9,6 +9,38 @@
 
 ## What We've Shipped
 
+### v0.31.0 - UX Polish & Workflow Hints (Jan 2026)
+
+**Enhanced Breadcrumbs & Scripting:**
+- **Post-check quality guidance** with function name extraction for complex functions
+- **diff:// workflow hints** with "Try It Now" examples and related adapters
+- **`-q`/`--quiet` mode** for scripting pipelines (alias for `--no-breadcrumbs`)
+- **I001 aligned with Ruff F401** - partial unused import detection
+- **Workflow-aware breadcrumbs** (Phase 3): Pre-commit and code review workflows
+- **Breaking:** Python 3.10+ required (black/ruff target-version updated)
+- Test coverage: 1,611 tests passing, 100% coverage on breadcrumbs.py
+
+### v0.30.0 - Semantic Diff & Smart Breadcrumbs (Jan 2026)
+
+**diff:// Adapter - Structural Comparison:**
+- `diff://app.py:backup.py` - Compare files (functions, classes, imports)
+- `diff://src/:backup/src/` - Compare directories (aggregated changes)
+- `diff://git://HEAD~1/:git://HEAD/:` - Compare commits
+- `diff://git://main/.:git://feature/.:` - Compare branches
+- `diff://app.py:new.py/handle_request` - Element-specific diff
+- Cross-adapter composition (env://, mysql://, etc.)
+
+**Smart Breadcrumbs:**
+- Large file detection (>20 elements → suggest AST queries)
+- Import analysis hints (>5 imports → suggest imports://)
+- File-type specific suggestions (Markdown, HTML, YAML, Dockerfile, Nginx)
+- Configurable via global, project, and environment variables
+
+**Breaking:** Python 3.10+ required (Python 3.8 EOL Oct 2024, Python 3.9 EOL Oct 2025)
+- Ruby 💎 and Lua 🌙 language support added
+- lxml moved to optional `[html]` extras
+- Test coverage: 1,600+ tests, 77% overall
+
 ### v0.29.0 - Schema Validation (Jan 2026)
 
 **Markdown Front Matter Validation:**
@@ -191,114 +223,6 @@
 ---
 
 ## What's Next
-
-### v0.29.0 ✅ SHIPPED (Jan 2026): Schema Validation for Knowledge Graphs
-
-**Front Matter Schema Validation** - Validate markdown metadata against schemas:
-```bash
-reveal file.md --validate-schema beth       # TIA sessions
-reveal file.md --validate-schema hugo       # Static sites
-reveal file.md --validate-schema jekyll     # GitHub Pages
-reveal file.md --validate-schema mkdocs     # Python docs
-reveal file.md --validate-schema obsidian   # Knowledge bases
-reveal file.md --validate-schema custom.yaml # Custom schema
-```
-
-**Features:** ✅ All delivered
-- ✅ Schema-based validation framework
-- ✅ Built-in schemas: `beth.yaml`, `hugo.yaml`, `jekyll.yaml`, `mkdocs.yaml`, `obsidian.yaml`
-- ✅ Custom validation rules (YAML-based, safe eval)
-- ✅ CI/CD integration for documentation quality gates
-- ✅ Validation rules: F001-F005 (front matter quality)
-- ✅ 103 comprehensive tests (100% passing)
-- ✅ 808-line documentation guide
-- ✅ Dogfooded on real data (SIF website, TIA sessions)
-- ✅ Web-validated against official docs
-
-**Implementation:** Completed in 5 sessions (5 phases + dogfooding + Jekyll/MkDocs addition)
-**See:** `docs/SCHEMA_VALIDATION_GUIDE.md` for complete guide
-
-**Community Reach:**
-- Jekyll schema: 1M+ GitHub Pages users
-- MkDocs schema: Large Python documentation ecosystem (FastAPI, NumPy, Pydantic)
-- Hugo/Obsidian/Beth: Static sites, knowledge bases, TIA sessions
-
-**Rationale:** Lightweight feature (builds on existing `--frontmatter` from v0.23.0), foundational for knowledge graph construction. Extended with Jekyll/MkDocs for broader community impact.
-
----
-
-### v0.30.0 ✅ SHIPPED (Jan 2026): Semantic Diff & Smart Breadcrumbs
-
-**diff:// Adapter** - Semantic structural comparison for code review:
-```bash
-reveal diff://app.py:backup/app.py         # Compare files (functions/classes)
-reveal diff://src/:backup/src/              # Compare directories (aggregated)
-reveal diff://git://HEAD~1/:git://HEAD/:    # Compare commits
-reveal diff://git://HEAD/.:src/             # Compare git vs working tree
-reveal diff://git://main/.:git://feature/:  # Compare branches
-reveal diff://app.py:new.py/handle_request # Element-specific diff
-```
-
-**Smart Breadcrumbs** - Context-aware navigation hints:
-```bash
-# After viewing large file (>20 elements):
-reveal large_module.py
-# Breadcrumbs suggest: reveal 'ast://large_module.py?complexity>10'
-
-# After viewing file with many imports (>5):
-reveal utils.py
-# Breadcrumbs suggest: reveal imports://utils.py  # Dependency analysis
-
-# File-type specific suggestions:
-reveal docs/guide.md    # Suggests: --links
-reveal app.html         # Suggests: --check, --links
-reveal config.yaml      # Suggests: --check
-```
-
-**Features:** ✅ All delivered
-- ✅ diff:// adapter with file, directory, and git comparison
-- ✅ Git integration (commits, branches, working tree)
-- ✅ Structural diff (functions, classes, imports, decorators)
-- ✅ Element-level diff for deep dives
-- ✅ JSON output for CI/CD integration
-- ✅ Smart breadcrumbs with large file detection
-- ✅ Import analysis hints (Python, JS, TS, Rust, Go)
-- ✅ File-type specific suggestions (Markdown, HTML, YAML, Dockerfile, Nginx)
-- ✅ Configurable breadcrumbs (global, project, env vars)
-
-**Breaking Changes:**
-- **Python 3.10+ required** (was 3.8+)
-  - Python 3.8 EOL: October 2024
-  - Python 3.9 EOL: October 2025
-
-**Test Coverage:** 1,600+ tests, 77% coverage (100% on breadcrumbs.py, diff.py)
-**Documentation:** README, help text, docs/DIFF_ADAPTER_GUIDE.md, CHANGELOG
-**Sessions:** cooling-hurricane-0104, sacred-sphinx-0104, fallen-leviathan-0104, infernal-omega-0105, yutazu-0105
-**See:** `docs/DIFF_ADAPTER_GUIDE.md` for AI agent guide
-
----
-
-### v0.31.0 ✅ SHIPPED (Jan 2026): UX Polish & Workflow Hints
-
-**Post-Check Guidance** - After --check finds issues, suggest fixes:
-```bash
-reveal app.py --check
-# Breadcrumbs suggest: reveal app.py handle_request  # View complex function
-# Breadcrumbs suggest: reveal stats://app.py         # Analyze trends
-```
-
-**Features:** ✅ All delivered
-- ✅ Post-check quality guidance with function name extraction
-- ✅ diff:// workflow hints ("Try It Now" examples)
-- ✅ `-q`/`--quiet` mode for scripting pipelines
-- ✅ I001 aligned with Ruff F401 (partial unused import detection)
-- ✅ black/ruff target-version updated to py310
-
-**Test Coverage:** 1,606 tests, 100% coverage on breadcrumbs.py
-**Sessions:** risen-god-0105, risen-armor-0105
-**See:** `internal-docs/planning/BREADCRUMB_IMPROVEMENTS_2026.md` Phase 2 complete
-
----
 
 ### v0.32.0 (Q2 2026): Knowledge Graph Navigation
 
