@@ -16,6 +16,9 @@ from .java import JavaAnalyzer
 from .php import PhpAnalyzer
 from .ruby import RubyAnalyzer
 from .lua import LuaAnalyzer
+from .csharp import CSharpAnalyzer
+from .scala import ScalaAnalyzer
+from .sql import SQLAnalyzer
 from .markdown import MarkdownAnalyzer
 from .yaml_json import YamlAnalyzer, JsonAnalyzer
 from .jsonl import JsonlAnalyzer
@@ -49,6 +52,9 @@ __all__ = [
     'PhpAnalyzer',
     'RubyAnalyzer',
     'LuaAnalyzer',
+    'CSharpAnalyzer',
+    'ScalaAnalyzer',
+    'SQLAnalyzer',
     'MarkdownAnalyzer',
     'YamlAnalyzer',
     'JsonAnalyzer',

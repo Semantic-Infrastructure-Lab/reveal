@@ -856,8 +856,8 @@ exit 0
 
 **reveal auto-detects and provides structure for:**
 
-### Programming Languages (17)
-Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, GDScript, Bash, SQL, PHP, Ruby, Swift, C#, Lua, Scala
+### Programming Languages (16)
+Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, GDScript, Bash, SQL, PHP, Ruby, Lua
 
 **Structure provided:** Functions, classes, methods, imports, decorators, complexity
 

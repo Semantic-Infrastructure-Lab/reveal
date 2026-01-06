@@ -453,7 +453,7 @@ reveal doc.md --frontmatter
 
 **reveal auto-detects and provides structure for:**
 
-**Languages:** Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, GDScript, Bash, SQL, PHP, Ruby, Swift, Lua (17 languages)
+**Languages:** Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, GDScript, Bash, SQL, PHP, Ruby, Lua (16 languages)
 
 **Configs:** Nginx, Dockerfile, TOML, YAML, JSON
 
