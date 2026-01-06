@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-01-05
+
 ### Breaking Changes
 - **Minimum Python version raised to 3.10** (was 3.8)
   - Python 3.8 reached EOL in October 2024

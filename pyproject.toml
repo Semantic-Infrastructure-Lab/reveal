@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reveal-cli"
-version = "0.30.0"
+version = "0.31.0"
 description = "Semantic code exploration with progressive disclosure - explore directories, files, and code elements with smart defaults"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -117,8 +117,8 @@ exclude_lines = [
 
 [tool.black]
 line-length = 100
-target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+target-version = ['py310', 'py311', 'py312']
 
 [tool.ruff]
 line-length = 100
-target-version = "py38"
+target-version = "py310"
