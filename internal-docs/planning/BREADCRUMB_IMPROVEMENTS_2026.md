@@ -548,14 +548,14 @@ After: reveal file.py SomeClass
 - [x] Import analysis breadcrumbs (already in v0.30.x)
 - [x] diff:// workflow hints (help://diff + diff output)
 - [x] `--quiet` / `-q` mode for scripting
-- [ ] Bundle with v0.31.0 release
+- [x] Bundle with v0.31.0 release ✅ SHIPPED
 
-### Phase 3: Workflow Guidance (Week 4-6)
-- [ ] Pre-commit workflow detection
-- [ ] Code review workflow detection
-- [ ] Refactoring workflow detection
-- [ ] Help system breadcrumbs enhancement
-- [ ] Release as minor version (v0.32.0)
+### Phase 3: Workflow Guidance (Week 4-6) ✅ COMPLETE
+- [x] Pre-commit workflow detection (directory-check context)
+- [x] Code review workflow detection (code-review context, git:// URI detection)
+- [ ] Refactoring workflow detection (future)
+- [ ] Help system breadcrumbs enhancement (future)
+- [x] Integrated into v0.32.0 (unreleased)
 
 ### Phase 4: Context Awareness (Future)
 - [ ] Content-based suggestions (TODO detection, test files, etc.)

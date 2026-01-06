@@ -354,9 +354,17 @@ def _render_diff_breadcrumbs(left: Dict[str, Any], right: Dict[str, Any],
     print("---")
     print()
 
-    # Extract path from right URI (the "after" version)
+    # Extract URIs and path
+    left_uri = left.get('uri', '')
     right_uri = right.get('uri', '')
     path = right.get('file', right_uri)
+
+    # Detect code review workflow (using git refs)
+    is_code_review = 'git://' in left_uri or 'git://' in right_uri
+
+    if is_code_review:
+        print("Code Review Workflow:")
+        print()
 
     # Get changed functions to suggest deep dive
     functions = details.get('functions', [])
@@ -366,12 +374,18 @@ def _render_diff_breadcrumbs(left: Dict[str, Any], right: Dict[str, Any],
         # Suggest viewing a modified function
         func_name = modified_funcs[0].get('name', '')
         if func_name:
-            left_uri = left.get('uri', '')
-            print(f"Next: reveal 'diff://{left_uri}:{right_uri}/{func_name}'   # Diff specific function")
+            print(f"  1. reveal 'diff://{left_uri}:{right_uri}/{func_name}'")
+            print(f"     └─ Deep dive into {func_name} changes")
+            print()
 
-    print(f"      reveal stats://{path}      # Analyze complexity trends")
-    print(f"      reveal {path} --check      # Check quality after changes")
-    print(f"      reveal help://diff         # Learn more about diff adapter")
+    if is_code_review:
+        print(f"  2. reveal stats://{path}            # Check complexity trends")
+        print(f"  3. reveal imports://. --circular    # Check for new cycles")
+        print(f"  4. reveal {path} --check            # Quality check")
+    else:
+        print(f"Next: reveal stats://{path}      # Analyze complexity trends")
+        print(f"      reveal {path} --check      # Check quality after changes")
+        print(f"      reveal help://diff         # Learn more about diff adapter")
 
 
 def render_diff_json(diff_result: Dict[str, Any]) -> None:

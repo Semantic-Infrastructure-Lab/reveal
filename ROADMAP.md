@@ -2,7 +2,7 @@
 
 > **Vision:** Universal resource exploration with progressive disclosure
 
-**Current version:** v0.30.0
+**Current version:** v0.31.0
 **Last updated:** 2026-01-05
 
 ---
@@ -278,22 +278,25 @@ reveal config.yaml      # Suggests: --check
 
 ---
 
-### v0.31.0 (Q2 2026): UX Polish & Workflow Hints
+### v0.31.0 ✅ SHIPPED (Jan 2026): UX Polish & Workflow Hints
 
 **Post-Check Guidance** - After --check finds issues, suggest fixes:
 ```bash
 reveal app.py --check
-# Breadcrumbs suggest: reveal stats://app.py  # Analyze trends
-# Breadcrumbs suggest: reveal 'ast://app.py?complexity>10'  # Find hotspots
+# Breadcrumbs suggest: reveal app.py handle_request  # View complex function
+# Breadcrumbs suggest: reveal stats://app.py         # Analyze trends
 ```
 
-**Features:**
-- Post-check quality guidance (Phase 2.2)
-- diff:// workflow hints (pre-commit, code review)
-- `--quiet` mode for scripting
-- Improved error messages and suggestions
+**Features:** ✅ All delivered
+- ✅ Post-check quality guidance with function name extraction
+- ✅ diff:// workflow hints ("Try It Now" examples)
+- ✅ `-q`/`--quiet` mode for scripting pipelines
+- ✅ I001 aligned with Ruff F401 (partial unused import detection)
+- ✅ black/ruff target-version updated to py310
 
-**See:** `internal-docs/planning/BREADCRUMB_IMPROVEMENTS_2026.md` Phase 2.2, Phase 3
+**Test Coverage:** 1,606 tests, 100% coverage on breadcrumbs.py
+**Sessions:** risen-god-0105, risen-armor-0105
+**See:** `internal-docs/planning/BREADCRUMB_IMPROVEMENTS_2026.md` Phase 2 complete
 
 ---
 

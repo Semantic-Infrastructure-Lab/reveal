@@ -757,3 +757,93 @@ class TestPrintBreadcrumbsQualityCheck:
         # Should suggest structure, not a specific function
         assert 'reveal test.py' in output
         assert '# See structure' in output
+
+
+# ==============================================================================
+# print_breadcrumbs Tests - Directory Check Context (Phase 3)
+# ==============================================================================
+
+class TestPrintBreadcrumbsDirectoryCheck:
+    """Tests for directory-check context breadcrumbs (pre-commit workflow)."""
+
+    def test_issues_found_shows_precommit_workflow(self):
+        """When issues found, shows pre-commit workflow with fix suggestion."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs(
+            'directory-check', 'src/',
+            config=mock_config,
+            total_issues=5,
+            files_with_issues=2,
+            files_checked=10
+        )
+        assert 'Pre-Commit Workflow:' in output
+        assert 'Fix the 5 issues' in output
+        assert 'diff://git://HEAD/.:.' in output
+        assert 'stats://src/' in output
+
+    def test_no_issues_shows_clean_workflow(self):
+        """When no issues, shows clean pre-commit workflow."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs(
+            'directory-check', 'src/',
+            config=mock_config,
+            total_issues=0,
+            files_with_issues=0,
+            files_checked=15
+        )
+        assert 'Pre-Commit Workflow:' in output
+        assert '✅ All 15 files clean' in output
+        assert 'git commit' in output
+        assert 'diff://git://HEAD/.:.' in output
+
+    def test_directory_check_respects_config(self):
+        """Directory check respects breadcrumbs config."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = False
+
+        output = capture_breadcrumbs(
+            'directory-check', 'src/',
+            config=mock_config,
+            total_issues=0,
+            files_checked=10
+        )
+        assert output == ''
+
+
+# ==============================================================================
+# print_breadcrumbs Tests - Code Review Context (Phase 3)
+# ==============================================================================
+
+class TestPrintBreadcrumbsCodeReview:
+    """Tests for code-review context breadcrumbs."""
+
+    def test_code_review_shows_workflow(self):
+        """Code review context shows workflow steps."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs(
+            'code-review', 'src/app.py',
+            config=mock_config,
+            left_ref='main',
+            right_ref='feature'
+        )
+        assert 'Code Review Workflow:' in output
+        assert 'stats://src/app.py' in output
+        assert 'imports://. --circular' in output
+        assert '--check' in output
+
+    def test_code_review_respects_config(self):
+        """Code review context respects breadcrumbs config."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = False
+
+        output = capture_breadcrumbs(
+            'code-review', 'src/app.py',
+            config=mock_config
+        )
+        assert output == ''

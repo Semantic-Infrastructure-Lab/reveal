@@ -199,10 +199,22 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     print(f"Checked {len(files_to_check)} files")
     if total_issues > 0:
         print(f"Found {total_issues} issue{'s' if total_issues != 1 else ''} in {files_with_issues} file{'s' if files_with_issues != 1 else ''}")
-        sys.exit(1)
     else:
         print(f"✅ No issues found")
-        sys.exit(0)
+
+    # Print workflow breadcrumbs
+    from ..utils.breadcrumbs import print_breadcrumbs
+    print_breadcrumbs(
+        'directory-check',
+        str(directory),
+        config=config,
+        total_issues=total_issues,
+        files_with_issues=files_with_issues,
+        files_checked=len(files_to_check)
+    )
+
+    # Exit with appropriate code
+    sys.exit(1 if total_issues > 0 else 0)
 
 
 # Legacy underscore-prefixed names for backwards compatibility

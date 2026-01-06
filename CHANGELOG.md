@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Workflow-aware breadcrumbs** (Phase 3)
+  - Pre-commit workflow: After directory checks, suggests fix → review → commit flow
+  - Code review workflow: After git-based diffs, suggests stats → circular imports → quality check flow
+  - Context-sensitive numbered steps for guided workflows
+
 ## [0.31.0] - 2026-01-05
 
 ### Breaking Changes

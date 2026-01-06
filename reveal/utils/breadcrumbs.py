@@ -200,3 +200,35 @@ def print_breadcrumbs(context, path, file_type=None, config=None, **kwargs):
 
         print(f"      reveal stats://{path}      # Analyze complexity trends")
         print(f"      reveal help://rules        # Learn about rules")
+
+    elif context == 'directory-check':
+        # Pre-commit workflow - after checking a directory
+        total_issues = kwargs.get('total_issues', 0)
+        files_with_issues = kwargs.get('files_with_issues', 0)
+        files_checked = kwargs.get('files_checked', 0)
+
+        if total_issues > 0:
+            # Issues found - suggest fixes
+            print()
+            print("Pre-Commit Workflow:")
+            print(f"  1. Fix the {total_issues} issues above")
+            print(f"  2. reveal diff://git://HEAD/.:.     # Review all changes")
+            print(f"  3. reveal stats://{path}            # Check complexity trends")
+        else:
+            # Clean - suggest commit
+            print()
+            print("Pre-Commit Workflow:")
+            print(f"  ✅ All {files_checked} files clean")
+            print(f"  1. reveal diff://git://HEAD/.:.     # Review staged changes")
+            print(f"  2. git commit                       # Ready to commit")
+
+    elif context == 'code-review':
+        # After viewing a diff with git refs
+        left_ref = kwargs.get('left_ref', 'HEAD')
+        right_ref = kwargs.get('right_ref', 'working tree')
+
+        print()
+        print("Code Review Workflow:")
+        print(f"  1. reveal stats://{path}            # Check complexity trends")
+        print(f"  2. reveal imports://. --circular    # Check for new cycles")
+        print(f"  3. reveal {path} --check            # Quality check changed files")
