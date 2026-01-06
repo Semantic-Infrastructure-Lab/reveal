@@ -46,6 +46,9 @@ def render_diff_text(diff_result: Dict[str, Any]) -> None:
     _render_classes_section(details.get('classes', []))
     _render_imports_section(details.get('imports', []))
 
+    # Breadcrumbs - suggest next steps
+    _render_diff_breadcrumbs(left, right, details)
+
 
 def _render_diff_header(left: Dict[str, Any], right: Dict[str, Any]) -> None:
     """Render diff header."""
@@ -336,6 +339,39 @@ def _render_element_details(element: Dict[str, Any]) -> None:
             continue
         print(f"  {key}: {value}")
     print()
+
+
+def _render_diff_breadcrumbs(left: Dict[str, Any], right: Dict[str, Any],
+                             details: Dict[str, Any]) -> None:
+    """Render breadcrumbs after diff output.
+
+    Args:
+        left: Left side metadata
+        right: Right side metadata
+        details: Diff details with changed elements
+    """
+    print()
+    print("---")
+    print()
+
+    # Extract path from right URI (the "after" version)
+    right_uri = right.get('uri', '')
+    path = right.get('file', right_uri)
+
+    # Get changed functions to suggest deep dive
+    functions = details.get('functions', [])
+    modified_funcs = [f for f in functions if f.get('change') == 'modified']
+
+    if modified_funcs:
+        # Suggest viewing a modified function
+        func_name = modified_funcs[0].get('name', '')
+        if func_name:
+            left_uri = left.get('uri', '')
+            print(f"Next: reveal 'diff://{left_uri}:{right_uri}/{func_name}'   # Diff specific function")
+
+    print(f"      reveal stats://{path}      # Analyze complexity trends")
+    print(f"      reveal {path} --check      # Check quality after changes")
+    print(f"      reveal help://diff         # Learn more about diff adapter")
 
 
 def render_diff_json(diff_result: Dict[str, Any]) -> None:

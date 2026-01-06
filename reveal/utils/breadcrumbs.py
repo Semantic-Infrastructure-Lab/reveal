@@ -1,4 +1,5 @@
 """Breadcrumb system for agent-friendly navigation hints."""
+import re
 
 
 def get_element_placeholder(file_type):
@@ -23,6 +24,7 @@ def get_element_placeholder(file_type):
         'jsonl': '<entry>',
         'toml': '<key>',
         'markdown': '<heading>',
+        'html': '<element>',
         'dockerfile': '<instruction>',
         'nginx': '<directive>',
         'jupyter': '<cell>',
@@ -159,3 +161,42 @@ def print_breadcrumbs(context, path, file_type=None, config=None, **kwargs):
         print(info)
         print(f"  → Back: reveal {path}          # See full structure")
         print(f"  → Check: reveal {path} --check # Quality analysis")
+
+    elif context == 'quality-check':
+        detections = kwargs.get('detections', [])
+
+        if not detections:
+            # No issues - suggest exploration
+            print(f"Next: reveal {path}              # See structure")
+            print(f"      reveal {path} --outline    # Nested hierarchy")
+            return
+
+        # Group detections by rule_code to find patterns
+        rules = {}
+        for d in detections:
+            rule_code = d.rule_code
+            if rule_code not in rules:
+                rules[rule_code] = []
+            rules[rule_code].append(d)
+
+        # Check for complexity issues (C901, C902)
+        complexity_rules = ['C901', 'C902']
+        complex_elements = []
+        for rule_code in complexity_rules:
+            if rule_code in rules:
+                for d in rules[rule_code]:
+                    # Extract function name from context if available
+                    if d.context:
+                        # Context format: "Function: name" or "Function: name (N lines)"
+                        match = re.search(r'Function:\s*(\w+)', d.context)
+                        if match:
+                            complex_elements.append(match.group(1))
+
+        if complex_elements:
+            # Suggest viewing the first complex element
+            print(f"Next: reveal {path} {complex_elements[0]}   # View complex function")
+        else:
+            print(f"Next: reveal {path}              # See structure")
+
+        print(f"      reveal stats://{path}      # Analyze complexity trends")
+        print(f"      reveal help://rules        # Learn about rules")

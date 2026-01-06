@@ -75,6 +75,10 @@ class TestGetElementPlaceholder:
         """Nginx config uses <directive> placeholder."""
         assert get_element_placeholder('nginx') == '<directive>'
 
+    def test_html_placeholder(self):
+        """HTML files use <element> placeholder."""
+        assert get_element_placeholder('html') == '<element>'
+
     def test_jupyter_placeholder(self):
         """Jupyter notebooks use <cell> placeholder."""
         assert get_element_placeholder('jupyter') == '<cell>'
@@ -664,3 +668,92 @@ class TestPrintBreadcrumbsUnknown:
         output = capture_breadcrumbs('unknown', 'test.py', config=mock_config)
         # Only blank line from print() at start
         assert output.strip() == ''
+
+
+# ==============================================================================
+# print_breadcrumbs Tests - Quality Check Context
+# ==============================================================================
+
+class TestPrintBreadcrumbsQualityCheck:
+    """Tests for quality-check context breadcrumbs."""
+
+    def test_no_issues_suggests_exploration(self):
+        """When no issues found, suggests exploration paths."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs(
+            'quality-check', 'test.py', 'python',
+            config=mock_config, detections=[]
+        )
+        assert 'reveal test.py' in output
+        assert '# See structure' in output
+        assert '--outline' in output
+
+    def test_issues_found_suggests_stats(self):
+        """When issues found, suggests stats adapter."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        mock_detection = Mock()
+        mock_detection.rule_code = 'E501'
+        mock_detection.context = None
+
+        output = capture_breadcrumbs(
+            'quality-check', 'test.py', 'python',
+            config=mock_config, detections=[mock_detection]
+        )
+        assert 'stats://test.py' in output
+        assert 'help://rules' in output
+
+    def test_complexity_issues_suggest_function(self):
+        """When complexity issues found, suggests viewing complex function."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        mock_detection = Mock()
+        mock_detection.rule_code = 'C901'
+        mock_detection.context = 'Function: complex_handler'
+
+        output = capture_breadcrumbs(
+            'quality-check', 'test.py', 'python',
+            config=mock_config, detections=[mock_detection]
+        )
+        assert 'reveal test.py complex_handler' in output
+        assert '# View complex function' in output
+
+    def test_multiple_complexity_issues_suggest_first(self):
+        """With multiple complexity issues, suggests first function."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        mock_d1 = Mock()
+        mock_d1.rule_code = 'C901'
+        mock_d1.context = 'Function: first_complex'
+
+        mock_d2 = Mock()
+        mock_d2.rule_code = 'C902'
+        mock_d2.context = 'Function: second_long (150 lines)'
+
+        output = capture_breadcrumbs(
+            'quality-check', 'test.py', 'python',
+            config=mock_config, detections=[mock_d1, mock_d2]
+        )
+        assert 'reveal test.py first_complex' in output
+
+    def test_non_complexity_issues_suggest_structure(self):
+        """Non-complexity issues suggest structure view."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        mock_detection = Mock()
+        mock_detection.rule_code = 'B001'
+        mock_detection.context = None
+
+        output = capture_breadcrumbs(
+            'quality-check', 'test.py', 'python',
+            config=mock_config, detections=[mock_detection]
+        )
+        # Should suggest structure, not a specific function
+        assert 'reveal test.py' in output
+        assert '# See structure' in output

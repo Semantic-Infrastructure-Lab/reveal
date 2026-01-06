@@ -75,8 +75,8 @@ class I001(BaseRule):
                           stmt,
                           symbols_used: set,
                           exports: set,
-                          file_path: str) -> Optional[Detection]:
-        """Check if 'from X import Y' style import is unused.
+                          file_path: str) -> List[Detection]:
+        """Check if 'from X import Y' style import has unused names.
 
         Args:
             stmt: ImportStatement to check
@@ -85,32 +85,28 @@ class I001(BaseRule):
             file_path: Path to the file being checked
 
         Returns:
-            Detection if import is unused, None otherwise
+            List of detections for each unused import name (matches Ruff F401)
         """
+        detections = []
+
         if not stmt.imported_names:
-            return None
+            return detections
 
-        unused_names = []
-
-        # Check each imported name
+        # Check each imported name individually (aligned with Ruff F401)
         for name in stmt.imported_names:
             actual_name = name.split(' as ')[-1] if ' as ' in name else name
             # Check if used in code OR exported via __all__
             if actual_name not in symbols_used and actual_name not in exports:
-                unused_names.append(name)  # Keep original name with alias
+                import_str = f"from {stmt.module_name} import {name}"
+                detections.append(self.create_detection(
+                    file_path=file_path,
+                    line=stmt.line_number,
+                    column=1,
+                    suggestion=f"Remove unused import: `{actual_name}`",
+                    context=import_str
+                ))
 
-        # Create detection if ALL imported names are unused AND not exported
-        if len(unused_names) == len(stmt.imported_names):
-            import_str = f"from {stmt.module_name} import {', '.join(stmt.imported_names)}"
-            return self.create_detection(
-                file_path=file_path,
-                line=stmt.line_number,
-                column=1,
-                suggestion=f"Remove unused import: {import_str}",
-                context=import_str
-            )
-
-        return None
+        return detections
 
     def _check_regular_import(self,
                              stmt,
@@ -180,11 +176,11 @@ class I001(BaseRule):
 
             # Check import based on type (from-import vs regular import)
             if stmt.imported_names:
-                detection = self._check_from_import(stmt, symbols_used, exports, file_path)
+                # from-import returns list of detections (one per unused name)
+                detections.extend(self._check_from_import(stmt, symbols_used, exports, file_path))
             else:
                 detection = self._check_regular_import(stmt, symbols_used, exports, file_path)
-
-            if detection:
-                detections.append(detection)
+                if detection:
+                    detections.append(detection)
 
         return detections

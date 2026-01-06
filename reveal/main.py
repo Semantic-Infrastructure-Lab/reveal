@@ -5,7 +5,7 @@ import os
 import logging
 from .base import get_all_analyzers, FileAnalyzer
 from . import __version__
-from .utils import copy_to_clipboard, safe_json_dumps, check_for_updates
+from .utils import copy_to_clipboard, safe_json_dumps, check_for_updates, print_breadcrumbs, get_file_type_from_analyzer
 from .cli import (
     create_argument_parser,
     validate_navigation_args,
@@ -276,7 +276,7 @@ def _format_detections_text(path, detections):
         print()
 
 
-def run_pattern_detection(analyzer: FileAnalyzer, path: str, output_format: str, args):
+def run_pattern_detection(analyzer: FileAnalyzer, path: str, output_format: str, args, config=None):
     """Run pattern detection rules on a file.
 
     Args:
@@ -284,6 +284,7 @@ def run_pattern_detection(analyzer: FileAnalyzer, path: str, output_format: str,
         path: File path
         output_format: Output format ('text', 'json', 'grep')
         args: CLI arguments (for --select, --ignore)
+        config: Optional RevealConfig for breadcrumb settings
     """
     from .rules import RuleRegistry
 
@@ -309,6 +310,12 @@ def run_pattern_detection(analyzer: FileAnalyzer, path: str, output_format: str,
 
     formatter = formatters.get(output_format, formatters['text'])
     formatter()
+
+    # Print breadcrumbs after text output (not for json/grep)
+    if output_format == 'text':
+        file_type = get_file_type_from_analyzer(analyzer)
+        print_breadcrumbs('quality-check', path, file_type=file_type, config=config,
+                         detections=detections)
 
 
 def run_schema_validation(analyzer: FileAnalyzer, path: str, schema_name: str, output_format: str, args):

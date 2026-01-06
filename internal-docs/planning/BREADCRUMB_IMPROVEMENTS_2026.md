@@ -536,18 +536,19 @@ After: reveal file.py SomeClass
 
 ## Implementation Plan
 
-### Phase 1: Critical Fixes (Week 1)
-- [ ] Fix "typed" context bug
-- [ ] Add HTML analyzer mapping
-- [ ] Test all existing contexts still work
-- [ ] Release as patch (v0.29.1 or v0.30.1)
+### Phase 1: Critical Fixes (Week 1) ✅ COMPLETE
+- [x] Fix "typed" context bug (already fixed in codebase)
+- [x] Add HTML analyzer mapping (already had HtmlAnalyzer→html, added to element placeholder)
+- [x] Test all existing contexts still work (69 tests passing)
+- [ ] Bundle with v0.31.0 release
 
-### Phase 2: Adapter Awareness (Week 2-3)
-- [ ] Large file detection → AST suggestions
-- [ ] Post-check quality guidance
-- [ ] Import analysis breadcrumbs
-- [ ] diff:// workflow hints
-- [ ] Release as minor version (v0.31.0)
+### Phase 2: Adapter Awareness (Week 2-3) ✅ COMPLETE
+- [x] Large file detection → AST suggestions (already in v0.30.x)
+- [x] Post-check quality guidance (quality-check context)
+- [x] Import analysis breadcrumbs (already in v0.30.x)
+- [x] diff:// workflow hints (help://diff + diff output)
+- [x] `--quiet` / `-q` mode for scripting
+- [ ] Bundle with v0.31.0 release
 
 ### Phase 3: Workflow Guidance (Week 4-6)
 - [ ] Pre-commit workflow detection

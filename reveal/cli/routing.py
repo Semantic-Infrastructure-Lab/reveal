@@ -224,7 +224,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
 
     if args and getattr(args, 'check', False):
         from ..main import run_pattern_detection
-        run_pattern_detection(analyzer, path, output_format, args)
+        run_pattern_detection(analyzer, path, output_format, args, config=config)
         return
 
     if element:

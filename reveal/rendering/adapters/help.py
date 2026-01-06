@@ -26,7 +26,23 @@ def _render_help_breadcrumbs(scheme: str, data: Dict[str, Any]) -> None:
         'env': ['python'],
         'json': ['ast'],
         'help': ['ast', 'python'],
+        'diff': ['stats', 'ast'],
+        'stats': ['ast', 'diff'],
+        'imports': ['ast', 'stats'],
     }
+
+    # Special workflow hints for diff adapter
+    if scheme == 'diff':
+        print("## Try It Now")
+        print("  # Compare uncommitted changes:")
+        print("  reveal 'diff://git://HEAD/.:.'")
+        print()
+        print("  # Compare specific files:")
+        print("  reveal 'diff://old.py:new.py'")
+        print()
+        print("  # Compare a specific function:")
+        print("  reveal 'diff://old.py:new.py/function_name'")
+        print()
 
     related_adapters = related.get(scheme, [])
     if related_adapters:

@@ -510,7 +510,7 @@ def main():
             self.teardown_file(path)
 
     def test_from_import_unused(self):
-        """Test unused from imports."""
+        """Test unused from imports flag each name individually."""
         content = """
 from pathlib import Path
 from typing import Dict, List
@@ -523,14 +523,14 @@ def main():
             rule = I001()
             detections = rule.check(path, None, content)
 
-            # Both Path and Dict, List are unused
-            self.assertEqual(len(detections), 2)
+            # Path, Dict, and List are all unused - each flagged individually
+            self.assertEqual(len(detections), 3)
 
         finally:
             self.teardown_file(path)
 
     def test_from_import_partially_used(self):
-        """Test partially used from imports are not flagged."""
+        """Test partially used from imports flag each unused name (aligned with Ruff F401)."""
         content = """
 from typing import Dict, List
 
@@ -542,9 +542,10 @@ def main(x: List[str]) -> None:
             rule = I001()
             detections = rule.check(path, None, content)
 
-            # Dict is unused, but List is used - don't flag partial imports
-            # (user might be using other names later, or keeping them for consistency)
-            self.assertEqual(len(detections), 0)
+            # Dict is unused - should be flagged individually (Ruff F401 alignment)
+            # List is used - should NOT be flagged
+            self.assertEqual(len(detections), 1)
+            self.assertIn('Dict', detections[0].context)
 
         finally:
             self.teardown_file(path)
