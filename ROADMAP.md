@@ -306,7 +306,7 @@ reveal docs/**/*.md --check-metadata --summary  # Aggregate report
 **Stability commitment:**
 - API freeze (CLI flags, output formats, adapter protocol)
 - 75%+ test coverage (currently at 76%)
-- All 18 built-in languages tested
+- All 31 built-in formats tested
 - Comprehensive documentation
 - Performance guarantees
 

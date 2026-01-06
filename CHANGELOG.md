@@ -8,12 +8,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **C# language support** (.cs files) - classes, interfaces, methods via tree-sitter
+- **Scala language support** (.scala files) - classes, objects, traits, functions via tree-sitter
+- **SQL language support** (.sql files) - tables, views, functions/procedures via tree-sitter
 - **Workflow-aware breadcrumbs** (Phase 3)
   - Pre-commit workflow: After directory checks, suggests fix → review → commit flow
   - Code review workflow: After git-based diffs, suggests stats → circular imports → quality check flow
   - Context-sensitive numbered steps for guided workflows
 
+### Fixed
+- **AGENT_HELP.md** claimed Swift support (not available in tree_sitter_languages)
+
 ## [0.31.0] - 2026-01-05
+
+### Fixed
+- **I001 now detects partial unused imports** (aligned with Ruff F401)
+  - Previously only flagged imports when ALL names were unused
+  - Now correctly flags each unused name individually
+  - Example: `from typing import Dict, List` with only `List` used now flags `Dict`
+- **Breadcrumbs: Added HTML to element placeholder mapping**
+  - HTML files now correctly show `<element>` placeholder in breadcrumb hints
+
+### Added
+- **Enhanced breadcrumb system Phase 2 additions**:
+  - **Post-check quality guidance**: After `--check`, suggests viewing complex functions, stats analysis
+    - Detects complexity issues (C901, C902) and suggests viewing the specific function
+    - Links to `stats://` and `help://rules` for further analysis
+  - **diff:// workflow hints**: After `reveal help://diff`, shows practical try-it-now examples
+    - Added related adapters mapping (diff→stats, ast; stats→ast, diff; imports→ast, stats)
+    - Breadcrumbs after diff output suggest element-specific diffs, stats, and quality checks
+  - **`--quiet` / `-q` scripting mode**: Alias for `--no-breadcrumbs` for scripting pipelines
+  - **Test coverage**: 68 → 74 breadcrumb tests (100% coverage on breadcrumbs.py)
+
+## [0.30.0] - 2026-01-05
 
 ### Breaking Changes
 - **Minimum Python version raised to 3.10** (was 3.8)
@@ -24,12 +51,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Users on Python 3.8/3.9 should use reveal-cli <0.30.0
 
 ### Fixed
-- **I001 now detects partial unused imports** (aligned with Ruff F401)
-  - Previously only flagged imports when ALL names were unused
-  - Now correctly flags each unused name individually
-  - Example: `from typing import Dict, List` with only `List` used now flags `Dict`
-- **Breadcrumbs: Added HTML to element placeholder mapping**
-  - HTML files now correctly show `<element>` placeholder in breadcrumb hints
 - **Cross-platform CI test failures** (40 unique test failures across Ubuntu/Windows/macOS)
   - Added `pymysql` to dev dependencies (was only in `[database]` extras, tests failed on all platforms)
   - Fixed macOS symlink path resolution (`/var` vs `/private/var` mismatch)
@@ -84,20 +105,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Git URI format**: `git://REF/path` (REF = HEAD, HEAD~1, main, branch-name, commit-sha)
   - **Directory handling**: Skips common ignore dirs (.git, node_modules, __pycache__, etc.)
   - **Composition pattern**: Delegates to existing adapters (file analyzers, env://, mysql://, etc.)
-- **Enhanced breadcrumb system with smart suggestions** (Phase 2 complete)
+- **Smart breadcrumb system with contextual suggestions** (Phase 1)
   - **Configurable breadcrumbs**: Multi-layer config support (global, project, env vars)
   - **File-type specific suggestions**: Markdown (--links), HTML (--check, --links), YAML/JSON/TOML (--check), Dockerfile/Nginx (--check)
   - **Large file detection**: Files with >20 elements suggest AST queries (`ast://file.py?complexity>10`)
   - **Import analysis hints**: Files with >5 imports suggest `imports://file.py` for dependency analysis
-  - **Post-check quality guidance**: After `--check`, suggests viewing complex functions, stats analysis
-    - Detects complexity issues (C901, C902) and suggests viewing the specific function
-    - Links to `stats://` and `help://rules` for further analysis
-  - **diff:// workflow hints**: After `reveal help://diff`, shows practical try-it-now examples
-    - Added related adapters mapping (diff→stats, ast; stats→ast, diff; imports→ast, stats)
-    - Breadcrumbs after diff output suggest element-specific diffs, stats, and quality checks
-  - **`--quiet` / `-q` scripting mode**: Alias for `--no-breadcrumbs` for scripting pipelines
   - **Supports**: Python, JavaScript, TypeScript, Rust, Go
-  - **Test coverage**: 74 breadcrumb tests (100% coverage on breadcrumbs.py)
+  - **Test coverage**: 68 breadcrumb tests (100% coverage on breadcrumbs.py)
 - **19 comprehensive integration tests** covering critical gaps
   - 10 URI query parameter tests for `stats://` adapter (validates `?hotspots=true&min_complexity=10` syntax)
   - 9 tests for refactored markdown.py link helpers (validates extraction, filtering, edge cases)
