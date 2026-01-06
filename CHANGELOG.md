@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **AGENT_HELP.md** claimed Swift support (not available in tree_sitter_languages)
+- **I003 rule missing category** - rule now correctly shows under "I Rules" instead of "UNKNOWN Rules" in `--rules` output
+- **AGENT_HELP.md File Type Support** - Added missing JSONL, HTML, and LibreOffice formats to match README
 
 ## [0.31.0] - 2026-01-05
 

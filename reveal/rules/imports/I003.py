@@ -50,6 +50,7 @@ class I003(BaseRule):
     """
 
     code = "I003"
+    category = RulePrefix.I
     severity = Severity.HIGH
     message = "Architectural layer violation"
 

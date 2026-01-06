@@ -455,11 +455,11 @@ reveal doc.md --frontmatter
 
 **Languages:** Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, GDScript, Bash, SQL, PHP, Ruby, Lua (16 languages)
 
-**Configs:** Nginx, Dockerfile, TOML, YAML, JSON
+**Configs:** Nginx, Dockerfile, TOML, YAML, JSON, JSONL
 
-**Documents:** Markdown, Jupyter notebooks
+**Documents:** Markdown, HTML, Jupyter notebooks
 
-**Office:** Excel (.xlsx), Word (.docx), PowerPoint (.pptx)
+**Office:** Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (.odt/.ods/.odp)
 
 **Check supported types:** `reveal --list-supported`
 
