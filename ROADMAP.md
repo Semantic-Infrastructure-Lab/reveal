@@ -300,7 +300,12 @@ reveal app.py --check
 
 ---
 
-### v0.32.0 (Q3 2026): Knowledge Graph Navigation
+### v0.32.0 (Q2 2026): Knowledge Graph Navigation
+
+**Workflow Breadcrumbs** (Phase 3) ✅ Already implemented:
+- Pre-commit workflow detection (after directory checks)
+- Code review workflow detection (git:// URI diffs)
+- Numbered step guidance for multi-step operations
 
 **Related Documents Viewer** - Follow knowledge graph links:
 ```bash
@@ -315,15 +320,7 @@ reveal file.md --related --depth 2       # Follow links recursively (max depth 2
 - Auto-detect link field patterns
 - Works with Beth, Hugo, Obsidian, and custom link patterns
 
-**Breadcrumb Workflow Guidance** (Phase 3):
-- Pre-commit workflow detection and guidance
-- Code review workflow hints
-- Refactoring workflow support
-- Help system integration
-
-**Implementation:** 4-6 weeks total
-- Link following: 2-3 weeks
-- Breadcrumb workflows: 2-3 weeks
+**Implementation:** 2-3 weeks for link following
 
 ---
 
