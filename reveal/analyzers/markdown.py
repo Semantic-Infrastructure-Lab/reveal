@@ -717,6 +717,45 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             logging.debug(f"Unexpected error parsing frontmatter: {e}")
             return None
 
+    def _process_related_path(
+        self, rel_path: str, base_dir: 'Path', depth: int, _visited: set
+    ) -> Optional[Dict[str, Any]]:
+        """Process a single related document path.
+
+        Returns None if path should be skipped (URL or non-markdown).
+        """
+        from pathlib import Path
+
+        # Skip URLs
+        if rel_path.startswith(('http://', 'https://', 'mailto:')):
+            return None
+
+        # Resolve the path
+        resolved = Path(rel_path) if rel_path.startswith('/') else (base_dir / rel_path).resolve()
+
+        # Check if file exists
+        if not resolved.exists():
+            return {'path': rel_path, 'resolved_path': str(resolved), 'exists': False, 'headings': [], 'related': []}
+
+        # Skip non-markdown files
+        if resolved.suffix.lower() not in ('.md', '.markdown'):
+            return None
+
+        # Extract headings from related file
+        try:
+            related_analyzer = MarkdownAnalyzer(str(resolved))
+            headings = related_analyzer._extract_headings()
+            result = {
+                'path': rel_path, 'resolved_path': str(resolved), 'exists': True,
+                'headings': [h.get('name', '') for h in headings[:10]], 'related': []
+            }
+            if depth > 1:
+                result['related'] = related_analyzer._extract_related(depth=depth - 1, _visited=_visited)
+            return result
+        except Exception as e:
+            logging.debug(f"Failed to analyze related file {resolved}: {e}")
+            return {'path': rel_path, 'resolved_path': str(resolved), 'exists': True, 'error': str(e), 'headings': [], 'related': []}
+
     def _extract_related(self, depth: int = 1, _visited: Optional[set] = None) -> List[Dict[str, Any]]:
         """Extract related documents from front matter.
 
@@ -734,7 +773,6 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             List of related document info dicts with headings
         """
         from pathlib import Path
-        import os
 
         # Initialize visited set for cycle detection
         if _visited is None:
@@ -768,70 +806,13 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         if not related_paths:
             return []
 
-        # Resolve paths relative to current file
+        # Process each related path using helper method
         base_dir = current_path.parent
         results = []
-
         for rel_path in related_paths:
-            # Skip non-markdown files and URLs
-            if rel_path.startswith(('http://', 'https://', 'mailto:')):
-                continue
-
-            # Resolve the path
-            if rel_path.startswith('/'):
-                # Absolute path from some root - try to resolve
-                resolved = Path(rel_path)
-            else:
-                # Relative path
-                resolved = (base_dir / rel_path).resolve()
-
-            # Check if file exists and is markdown
-            if not resolved.exists():
-                results.append({
-                    'path': rel_path,
-                    'resolved_path': str(resolved),
-                    'exists': False,
-                    'headings': [],
-                    'related': []
-                })
-                continue
-
-            if resolved.suffix.lower() not in ('.md', '.markdown'):
-                continue
-
-            # Extract headings from related file
-            try:
-                related_analyzer = MarkdownAnalyzer(str(resolved))
-                headings = related_analyzer._extract_headings()
-
-                result = {
-                    'path': rel_path,
-                    'resolved_path': str(resolved),
-                    'exists': True,
-                    'headings': [h.get('name', '') for h in headings[:10]],  # Limit to 10 headings
-                    'related': []
-                }
-
-                # Recursively get related docs if depth > 1
-                if depth > 1:
-                    nested_related = related_analyzer._extract_related(
-                        depth=depth - 1,
-                        _visited=_visited
-                    )
-                    result['related'] = nested_related
-
+            result = self._process_related_path(rel_path, base_dir, depth, _visited)
+            if result is not None:
                 results.append(result)
-
-            except Exception as e:
-                logging.debug(f"Failed to analyze related file {resolved}: {e}")
-                results.append({
-                    'path': rel_path,
-                    'resolved_path': str(resolved),
-                    'exists': True,
-                    'error': str(e),
-                    'headings': [],
-                    'related': []
-                })
 
         return results
 
