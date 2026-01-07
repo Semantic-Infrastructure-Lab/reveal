@@ -448,7 +448,6 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Calculate maximum nesting depth within a function node.
 
         Counts control flow structures: if, for, while, with, try, match, etc.
-        Inspired by TIA's complexity scanner.
 
         Args:
             node: Tree-sitter node (function/method)

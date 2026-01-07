@@ -1515,13 +1515,6 @@ location / {
 
 ## Integration with Other Tools
 
-### With TIA (if available)
-```bash
-tia search all "keyword"          # Find files containing keyword
-reveal path/to/file.py            # See structure
-reveal path/to/file.py func       # Extract specific code
-```
-
 ### With Claude Code workflow
 ```bash
 # 1. Structure first (what you should do!)

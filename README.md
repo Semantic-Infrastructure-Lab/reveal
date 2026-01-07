@@ -125,7 +125,7 @@ reveal doc.md --validate-schema /path/to/schema.yaml
 reveal README.md --validate-schema beth --format json
 ```
 
-**Built-in schemas:** beth (TIA sessions), hugo (static sites), jekyll (GitHub Pages), mkdocs (Python docs), obsidian (knowledge bases)
+**Built-in schemas:** beth (session READMEs), hugo (static sites), jekyll (GitHub Pages), mkdocs (Python docs), obsidian (knowledge bases)
 **Validation rules (F-series):** F001 (missing front matter), F002 (empty), F003 (required fields), F004 (type mismatches), F005 (custom validation)
 **Docs:** [Schema Validation Guide](docs/SCHEMA_VALIDATION_GUIDE.md)
 

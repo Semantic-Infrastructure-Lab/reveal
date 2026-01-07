@@ -34,7 +34,7 @@ reveal README.md --validate-schema beth --select F003,F004
 
 | Schema | Purpose | Required Fields | Use Case |
 |--------|---------|----------------|----------|
-| **beth** | Beth session READMEs | `session_id`, `beth_topics` | TIA session documentation |
+| **beth** | Beth session READMEs | `session_id`, `beth_topics` | Workflow session documentation |
 | **hugo** | Hugo static sites | `title` | Blog posts, static pages |
 | **jekyll** | Jekyll sites (GitHub Pages) | `layout` | GitHub Pages blogs |
 | **mkdocs** | MkDocs documentation | _(none)_ | Python project docs (FastAPI, NumPy) |
@@ -186,7 +186,7 @@ session_id: my-session-0102
 
 ## Beth Schema
 
-**Purpose:** Validate Beth session README files in TIA system
+**Purpose:** Validate Beth session README files
 
 **Required fields:**
 - `session_id` - Session identifier (format: `word-word-MMDD`)

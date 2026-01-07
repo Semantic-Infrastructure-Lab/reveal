@@ -45,7 +45,7 @@
 
 **Markdown Front Matter Validation:**
 - `--validate-schema` flag for markdown front matter validation
-- **Built-in schemas:** beth (TIA sessions), hugo (static sites), jekyll (GitHub Pages), mkdocs (Python docs), obsidian (knowledge bases)
+- **Built-in schemas:** beth (session READMEs), hugo (static sites), jekyll (GitHub Pages), mkdocs (Python docs), obsidian (knowledge bases)
 - **F-series rules:** F001-F005 for front matter quality checks
   - F001: Missing front matter detection
   - F002: Empty front matter detection
@@ -320,8 +320,6 @@ reveal docs/**/*.md --check-metadata --summary  # Aggregate report
 - Cross-platform support (Linux, macOS, Windows)
 
 ### Post-v1.0: Advanced URI Schemes
-
-**See:** `internal-docs/planning/ADVANCED_URI_SCHEMES.md` for detailed roadmap
 
 **Phases (v1.1-v1.4):**
 - `query://` - SQL-like cross-resource queries

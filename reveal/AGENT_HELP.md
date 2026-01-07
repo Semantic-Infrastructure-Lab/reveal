@@ -139,10 +139,10 @@ reveal README.md --validate-schema beth --format json
 reveal README.md --validate-schema beth --select F003,F004
 ```
 
-**Why this works:** Schema validation ensures consistent front matter across markdown files. Essential for documentation sites (Hugo, MkDocs), GitHub Pages (Jekyll), knowledge bases (Obsidian), and TIA sessions (Beth).
+**Why this works:** Schema validation ensures consistent front matter across markdown files. Essential for documentation sites (Hugo, MkDocs), GitHub Pages (Jekyll), and knowledge bases (Obsidian).
 
 **Built-in schemas:**
-- **beth** - TIA session READMEs (requires `session_id`, `beth_topics`)
+- **beth** - Session/workflow READMEs (requires `session_id`, `beth_topics`)
 - **hugo** - Hugo static sites (requires `title`)
 - **jekyll** - Jekyll sites / GitHub Pages (requires `layout`)
 - **mkdocs** - MkDocs documentation (all fields optional)
@@ -664,13 +664,6 @@ Using adapter-specific flags on regular paths fails with a clear error message p
 ---
 
 ## Integration with Other Tools
-
-### With TIA (if available)
-```bash
-tia search all "keyword"          # Find files containing keyword
-reveal path/to/file.py            # See structure
-reveal path/to/file.py func       # Extract specific code
-```
 
 ### With Claude Code workflow
 ```bash

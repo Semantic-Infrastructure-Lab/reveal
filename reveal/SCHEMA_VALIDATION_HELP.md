@@ -48,14 +48,14 @@ reveal README.md --validate-schema beth --select F003,F004
 
 | Schema | Purpose | Required Fields | Community Reach |
 |--------|---------|----------------|----------------|
-| **beth** | Beth session READMEs | `session_id`, `beth_topics` | TIA internal |
+| **beth** | Beth session READMEs | `session_id`, `beth_topics` | Workflow sessions |
 | **hugo** | Hugo static sites | `title` | 500K+ users |
 | **jekyll** | Jekyll (GitHub Pages) | `layout` | **1M+ users** |
 | **mkdocs** | MkDocs documentation | _(none)_ | Large Python ecosystem |
 | **obsidian** | Obsidian vaults | _(none)_ | 500K+ users |
 
 ### Beth Schema
-**Target:** TIA session README files
+**Target:** Session README files
 **Required:**
 - `session_id` - Pattern: `word-word-MMDD` (e.g., `cloudy-steam-0103`)
 - `beth_topics` - List of topics (minimum 1)
