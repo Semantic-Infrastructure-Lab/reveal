@@ -53,7 +53,8 @@ class MySQLConnection:
             uri: Connection URI (mysql://[user:pass@]host[:port][/element])
         """
         if not uri or uri == "mysql://":
-            self.host = "localhost"
+            # Don't set host here - let _resolve_credentials handle defaults
+            # This allows MYSQL_HOST env var and ~/.my.cnf to take effect
             return
 
         # Remove mysql:// prefix
@@ -81,7 +82,8 @@ class MySQLConnection:
             self.host, port_str = host_port.split(':', 1)
             self.port = int(port_str)
         else:
-            self.host = host_port or "localhost"
+            # Don't default to localhost - let _resolve_credentials handle it
+            self.host = host_port or None
 
     def _try_tia_secrets(self) -> bool:
         """Try to load credentials from TIA secrets.
