@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--related-limit N` - Safeguard to stop at N files (default: 100)
   - Summary header shows "N docs across M levels" for multi-level traversals
   - Cycle detection and file limits prevent runaway traversal
+- **`markdown://` URI adapter** - Query markdown files by front matter
+  - `reveal markdown://docs/` - List all markdown files in directory
+  - `reveal 'markdown://?beth_topics=reveal'` - Filter by field value
+  - `reveal 'markdown://?!status'` - Find files missing a field
+  - `reveal 'markdown://?type=*guide*'` - Wildcard matching
+  - Multiple filters with AND logic: `field1=val1&field2=val2`
+  - Recursive directory traversal
+  - JSON and grep output formats for tooling
 
 ### Fixed
 - **`--related` crashes on dict-format frontmatter entries** - Related fields with structured

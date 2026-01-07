@@ -242,28 +242,35 @@
 
 ## What's Next
 
-### v0.33.0 (Q2 2026): Deep Knowledge Graph & Metadata Queries
+### v0.33.0 (Q1 2026): Deep Knowledge Graph & Metadata Queries ✅ IMPLEMENTED
 
-**Recursive Related Documents:**
+> **Status:** Implemented on master, pending release
+
+**Recursive Related Documents:** ✅
 ```bash
-reveal file.md --related --depth 2       # Follow links recursively (max depth 2)
-reveal file.md --related --all           # All connected documents (BFS traversal)
+reveal file.md --related-depth 3         # Follow links to depth 3
+reveal file.md --related-all             # All connected documents (unlimited)
+reveal file.md --related-flat            # Flat path list (grep-friendly)
+reveal file.md --related-limit 50        # Cap traversal at 50 files
 ```
 
-**`markdown://` URI Adapter** - Query markdown files by front matter:
+**`markdown://` URI Adapter:** ✅
 ```bash
 reveal markdown://sessions/?beth_topics=reveal  # Find by topic
-reveal markdown://content/?tags=python          # Find by tag
-reveal markdown://?!beth_topics                 # Find missing fields
+reveal markdown://docs/?tags=python             # Find by tag
+reveal 'markdown://?!beth_topics'               # Find missing fields
+reveal 'markdown://?type=*guide*'               # Wildcard matching
 ```
 
-**Features:**
-- Local directory tree queries (not corpus-wide)
-- Field filtering with wildcards
-- Multiple criteria support
-- Integration with --related, --validate
-
-**Implementation:** 3-4 weeks
+**Features Implemented:**
+- Deep traversal with configurable depth (0=unlimited)
+- Flat output for piping to other tools
+- File count limits prevent runaway traversal
+- Dict-format frontmatter support (uri/path/href fields)
+- Local directory tree queries (recursive)
+- Field filtering with wildcards and missing-field checks
+- Multiple criteria support (AND logic)
+- JSON and grep output formats
 
 ---
 

@@ -163,6 +163,51 @@ reveal README.md --validate-schema beth --select F003,F004
 
 ---
 
+### Task: "Find markdown files by metadata"
+
+**Pattern:**
+```bash
+# List all markdown files in docs/
+reveal markdown://docs/
+
+# Find files by specific field value
+reveal 'markdown://sessions/?beth_topics=reveal'
+
+# Find files with specific tag
+reveal 'markdown://docs/?tags=python'
+
+# Find files missing required metadata
+reveal 'markdown://?!beth_topics'
+
+# Wildcard pattern matching
+reveal 'markdown://?type=*guide*'
+
+# Multiple filters (AND logic)
+reveal 'markdown://docs/?status=active&type=guide'
+
+# Get paths for piping (grep format)
+reveal 'markdown://docs/?beth_topics=reveal' --format=grep
+
+# JSON output for scripting
+reveal 'markdown://docs/?status=draft' --format=json
+```
+
+**Why this works:** Queries markdown files by front matter fields. Essential for finding related documentation, identifying files missing metadata, or filtering by topic.
+
+**Query syntax:**
+- `field=value` - Exact match (or contains for list fields)
+- `field=*pattern*` - Glob-style wildcard matching
+- `!field` - Files missing this field
+- `field1=val1&field2=val2` - Multiple filters (AND)
+
+**Use cases:**
+- Find all docs related to a topic: `markdown://?beth_topics=authentication`
+- Find draft content: `markdown://?status=draft`
+- Quality check - find missing metadata: `markdown://?!title`
+- Combine with `--related`: Find docs, then traverse their links
+
+---
+
 ### Task: "Extract specific code element"
 
 **Pattern:**
