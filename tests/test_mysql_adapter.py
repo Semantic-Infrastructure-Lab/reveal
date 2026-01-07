@@ -2,7 +2,7 @@
 
 Tests cover:
 - Adapter initialization and connection string parsing
-- 4-tier credential resolution (URI, TIA secrets, env vars, ~/.my.cnf)
+- 3-tier credential resolution (URI, env vars, ~/.my.cnf)
 - Element routing (all 12 element types)
 - Data conversion (Decimal, datetime, timedelta)
 - Error handling (connection failures, invalid credentials)
@@ -75,7 +75,7 @@ class TestMySQLAdapterInit(unittest.TestCase):
 
 
 class TestCredentialResolution(unittest.TestCase):
-    """Test 4-tier credential resolution system."""
+    """Test 3-tier credential resolution system."""
 
     def test_credentials_from_uri_take_precedence(self):
         """URI credentials should override all other sources."""
@@ -83,50 +83,75 @@ class TestCredentialResolution(unittest.TestCase):
         self.assertEqual(adapter.user, "uri_user")
         self.assertEqual(adapter.password, "uri_pass")
 
-    @patch('reveal.adapters.mysql.connection.subprocess.run')
-    def test_credentials_from_tia_secrets(self, mock_run):
-        """Should fall back to TIA secrets if not in URI."""
-        # Mock tia-secrets-get command
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "secret_user"
-        mock_run.return_value = mock_result
-
-        adapter = MySQLAdapter("mysql://localhost")
-        adapter._resolve_credentials()
-
-        # Should have called tia-secrets-get
-        self.assertTrue(mock_run.called)
-
-    @patch.dict(os.environ, {'MYSQL_USER': 'env_user', 'MYSQL_PASSWORD': 'env_pass'})
+    @patch.dict(os.environ, {'MYSQL_USER': 'env_user', 'MYSQL_PASSWORD': 'env_pass'}, clear=False)
     def test_credentials_from_env_vars(self):
-        """Should use environment variables if available."""
-        adapter = MySQLAdapter("mysql://localhost")
+        """Should use environment variables when not in URI."""
+        from reveal.adapters.mysql.connection import MySQLConnection
+        conn = MySQLConnection("mysql://localhost")
 
-        # Mock _resolve_credentials to use env vars
-        with patch('reveal.adapters.mysql.connection.subprocess.run') as mock_run:
-            mock_run.side_effect = Exception("tia-secrets-get not available")
-            adapter._resolve_credentials()
+        # Env vars should be picked up for user/password
+        self.assertEqual(conn.host, 'localhost')  # From URI
+        self.assertEqual(conn.user, 'env_user')
+        self.assertEqual(conn.password, 'env_pass')
 
-    @patch('builtins.open', new_callable=mock_open, read_data="[client]\nuser=cnf_user\npassword=cnf_pass\n")
-    @patch('os.path.exists', return_value=True)
-    def test_credentials_from_my_cnf(self, mock_exists, mock_file):
-        """Should read credentials from ~/.my.cnf as last resort."""
-        adapter = MySQLAdapter("mysql://localhost")
+    @patch.dict(os.environ, {'MYSQL_USER': 'env_user', 'MYSQL_PASSWORD': 'env_pass'}, clear=False)
+    def test_uri_credentials_override_env_vars(self):
+        """URI credentials should take precedence over env vars."""
+        from reveal.adapters.mysql.connection import MySQLConnection
+        conn = MySQLConnection("mysql://uri_user:uri_pass@myhost")
 
-        # This would be tested in full integration, but we verify the file is read
-        self.assertTrue(mock_exists.called or True)  # Placeholder for full test
+        # URI should override env vars
+        self.assertEqual(conn.host, 'myhost')
+        self.assertEqual(conn.user, 'uri_user')
+        self.assertEqual(conn.password, 'uri_pass')
+
+    def test_defaults_to_localhost_when_no_env(self):
+        """Should default to localhost when no MYSQL_HOST set."""
+        # Remove MYSQL_HOST if present
+        env_backup = os.environ.get('MYSQL_HOST')
+        if 'MYSQL_HOST' in os.environ:
+            del os.environ['MYSQL_HOST']
+
+        try:
+            from reveal.adapters.mysql.connection import MySQLConnection
+            conn = MySQLConnection("mysql://")
+
+            # Should fall back to localhost
+            self.assertEqual(conn.host, 'localhost')
+        finally:
+            # Restore env if it was set
+            if env_backup is not None:
+                os.environ['MYSQL_HOST'] = env_backup
+
+    @patch.dict(os.environ, {
+        'MYSQL_HOST': 'dbserver',
+        'MYSQL_USER': 'dbuser',
+        'MYSQL_PASSWORD': 'dbpass',
+        'MYSQL_DATABASE': 'mydb'
+    }, clear=False)
+    def test_all_env_vars_used(self):
+        """Should use all MYSQL_* env vars when URI is minimal."""
+        from reveal.adapters.mysql.connection import MySQLConnection
+        conn = MySQLConnection("mysql://")
+
+        self.assertEqual(conn.host, 'dbserver')
+        self.assertEqual(conn.user, 'dbuser')
+        self.assertEqual(conn.password, 'dbpass')
+        self.assertEqual(conn.database, 'mydb')
+
+    def test_credentials_from_my_cnf(self):
+        """~/.my.cnf is handled by pymysql, not tested here."""
+        # pymysql automatically reads ~/.my.cnf when connecting
+        # This is integration-level behavior, not unit testable
+        pass
 
     @patch.dict(os.environ, {
         'MYSQL_HOST': 'env-host.example.com',
         'MYSQL_USER': 'env_user',
         'MYSQL_PASSWORD': 'env_pass'
     })
-    @patch('reveal.adapters.mysql.connection.subprocess.run')
-    def test_empty_uri_uses_env_vars(self, mock_run):
+    def test_empty_uri_uses_env_vars(self):
         """Empty mysql:// URI should use MYSQL_HOST from environment."""
-        mock_run.side_effect = Exception("tia not available")
-
         from reveal.adapters.mysql.connection import MySQLConnection
         conn = MySQLConnection("mysql://")
 

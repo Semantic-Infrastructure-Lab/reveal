@@ -1,7 +1,6 @@
 """MySQL connection management and credential resolution."""
 
 import os
-import subprocess
 from typing import Dict, Any, Optional
 
 try:
@@ -16,7 +15,7 @@ class MySQLConnection:
     """Handles MySQL connection lifecycle and credential resolution.
 
     Manages connection URI parsing, credential resolution from multiple sources
-    (TIA secrets, environment variables, ~/.my.cnf), and query execution.
+    (environment variables, ~/.my.cnf), and query execution.
     """
 
     def __init__(self, connection_string: str = ""):
@@ -85,51 +84,16 @@ class MySQLConnection:
             # Don't default to localhost - let _resolve_credentials handle it
             self.host = host_port or None
 
-    def _try_tia_secrets(self) -> bool:
-        """Try to load credentials from TIA secrets.
-
-        Returns:
-            True if credentials were loaded, False otherwise
-        """
-        if not self.host:
-            return False
-
-        try:
-            result = subprocess.run(
-                ['tia', 'secrets', 'get', f'mysql:{self.host}'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            return False
-
-        if result.returncode != 0 or not result.stdout:
-            return False
-
-        # Expected format: user:password
-        secret = result.stdout.strip()
-        if ':' not in secret:
-            return False
-
-        self.user, self.password = secret.split(':', 1)
-        return True
-
     def _resolve_credentials(self):
         """Resolve credentials from multiple sources.
 
         Priority:
         1. URI credentials (already parsed)
-        2. TIA secrets (tia secrets get mysql:<host>)
-        3. Environment variables
-        4. ~/.my.cnf
+        2. Environment variables (MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE)
+        3. ~/.my.cnf (handled automatically by pymysql)
         """
         # URI credentials take precedence (already set)
         if self.user and self.password:
-            return
-
-        # Try TIA secrets
-        if self._try_tia_secrets():
             return
 
         # Try environment variables
@@ -137,8 +101,6 @@ class MySQLConnection:
         self.user = self.user or os.environ.get('MYSQL_USER')
         self.password = self.password or os.environ.get('MYSQL_PASSWORD')
         self.database = self.database or os.environ.get('MYSQL_DATABASE')
-
-        # ~/.my.cnf is handled by pymysql automatically
 
     def get_connection(self):
         """Get MySQL connection (lazy initialization).
@@ -172,8 +134,7 @@ class MySQLConnection:
             raise Exception(
                 f"Failed to connect to MySQL at {self.host}:{self.port}\n"
                 f"Error: {str(e)}\n"
-                f"Hint: Check credentials, network, or try:\n"
-                f"  tia secrets set mysql:{self.host} user:password"
+                f"Hint: Set MYSQL_USER/MYSQL_PASSWORD env vars or configure ~/.my.cnf"
             )
 
     def convert_decimals(self, obj):

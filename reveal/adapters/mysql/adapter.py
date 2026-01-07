@@ -77,7 +77,7 @@ class MySQLAdapter(ResourceAdapter):
                 'Time context accuracy (uses MySQL clock, not local machine)',
                 'Index usage analysis (most used, unused)',
                 'Health checks with pass/warn/fail thresholds',
-                'Credential resolution (TIA secrets, env vars, ~/.my.cnf)',
+                'Credential resolution (env vars, ~/.my.cnf)',
                 'Token-efficient for AI agent consumption',
             ],
             'try_now': [
@@ -121,7 +121,7 @@ class MySQLAdapter(ResourceAdapter):
             'notes': [
                 '⚠️  IMPORTANT: Requires pymysql dependency',
                 'Install: pip install reveal-cli[database] OR pip install pymysql',
-                'Credentials: URI > TIA secrets > env vars > ~/.my.cnf',
+                'Credentials: URI > env vars > ~/.my.cnf',
                 'Env vars: MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE',
                 ('Health thresholds: connections <80%, buffer pool >99%, '
                  'replication lag <60s'),
@@ -224,7 +224,8 @@ class MySQLAdapter(ResourceAdapter):
 
     def __del__(self):
         """Close MySQL connection."""
-        self.conn.close()
+        if hasattr(self, 'conn') and self.conn:
+            self.conn.close()
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get MySQL health overview (DBA snapshot).
