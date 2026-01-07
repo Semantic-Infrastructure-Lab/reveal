@@ -71,6 +71,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                      extract_frontmatter: bool = False,
                      extract_related: bool = False,
                      related_depth: int = 1,
+                     related_limit: int = 100,
                      **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract markdown structure.
 
@@ -86,7 +87,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             inline_code: Include inline code snippets
             extract_frontmatter: Include YAML front matter extraction
             extract_related: Include related documents from front matter
-            related_depth: Depth for related docs (1=immediate, 2=recursive)
+            related_depth: Depth for related docs (1=immediate, 0=unlimited)
+            related_limit: Max files to traverse for related (default: 100)
             **kwargs: Additional parameters (unused)
 
         Returns:
@@ -119,7 +121,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         # Extract related documents if requested
         if extract_related:
-            result['related'] = self._extract_related(depth=related_depth)
+            result['related'] = self._extract_related(depth=related_depth, limit=related_limit)
 
         # Apply semantic slicing to each category (but not frontmatter - it's unique)
         if head or tail or range:
@@ -717,14 +719,45 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             logging.debug(f"Unexpected error parsing frontmatter: {e}")
             return None
 
+    def _normalize_related_entry(self, entry: Any) -> Optional[str]:
+        """Normalize a related entry to a path string.
+
+        Handles both simple string paths and structured dict entries with
+        uri/path/href fields (common in TIA documentation).
+
+        Args:
+            entry: Either a string path or dict with path in uri/path/href field
+
+        Returns:
+            Normalized path string, or None if no path could be extracted
+        """
+        if isinstance(entry, str):
+            return entry
+        if isinstance(entry, dict):
+            # Try common path field names
+            for field in ('uri', 'path', 'href', 'url', 'file'):
+                if field in entry and isinstance(entry[field], str):
+                    path = entry[field]
+                    # Strip doc:// prefix if present
+                    if path.startswith('doc://'):
+                        path = path[6:]  # Remove 'doc://'
+                    return path
+        return None
+
     def _process_related_path(
-        self, rel_path: str, base_dir: 'Path', depth: int, _visited: set
+        self, rel_path: str, base_dir: 'Path', depth: int, _visited: set,
+        _file_count: Optional[Dict[str, Any]] = None, limit: int = 100
     ) -> Optional[Dict[str, Any]]:
         """Process a single related document path.
 
         Returns None if path should be skipped (URL or non-markdown).
         """
         from pathlib import Path
+
+        # Check file limit
+        if _file_count and _file_count['count'] >= limit:
+            _file_count['truncated'] = True
+            return None
 
         # Skip URLs
         if rel_path.startswith(('http://', 'https://', 'mailto:')):
@@ -741,6 +774,10 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         if resolved.suffix.lower() not in ('.md', '.markdown'):
             return None
 
+        # Increment file count
+        if _file_count:
+            _file_count['count'] += 1
+
         # Extract headings from related file
         try:
             related_analyzer = MarkdownAnalyzer(str(resolved))
@@ -749,14 +786,21 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 'path': rel_path, 'resolved_path': str(resolved), 'exists': True,
                 'headings': [h.get('name', '') for h in headings[:10]], 'related': []
             }
-            if depth > 1:
-                result['related'] = related_analyzer._extract_related(depth=depth - 1, _visited=_visited)
+            # depth=0 means unlimited, depth>1 means continue recursing
+            if depth == 0 or depth > 1:
+                next_depth = 0 if depth == 0 else depth - 1
+                result['related'] = related_analyzer._extract_related(
+                    depth=next_depth, _visited=_visited, _file_count=_file_count, limit=limit
+                )
             return result
         except Exception as e:
             logging.debug(f"Failed to analyze related file {resolved}: {e}")
             return {'path': rel_path, 'resolved_path': str(resolved), 'exists': True, 'error': str(e), 'headings': [], 'related': []}
 
-    def _extract_related(self, depth: int = 1, _visited: Optional[set] = None) -> List[Dict[str, Any]]:
+    def _extract_related(
+        self, depth: int = 1, _visited: Optional[set] = None,
+        _file_count: Optional[Dict[str, Any]] = None, limit: int = 100
+    ) -> List[Dict[str, Any]]:
         """Extract related documents from front matter.
 
         Looks for these fields in front matter:
@@ -766,8 +810,10 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         - references
 
         Args:
-            depth: How deep to follow links (1=immediate, 2=recursive)
+            depth: How deep to follow links (1=immediate, 0=unlimited)
             _visited: Internal set to prevent cycles (don't pass this)
+            _file_count: Internal counter for limit tracking (don't pass this)
+            limit: Maximum number of files to traverse (default: 100)
 
         Returns:
             List of related document info dicts with headings
@@ -777,6 +823,15 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         # Initialize visited set for cycle detection
         if _visited is None:
             _visited = set()
+
+        # Initialize file counter
+        if _file_count is None:
+            _file_count = {'count': 0, 'truncated': False}
+
+        # Check limit before processing
+        if _file_count['count'] >= limit:
+            _file_count['truncated'] = True
+            return []
 
         # Add current file to visited
         current_path = Path(self.path).resolve()
@@ -799,9 +854,16 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             value = data.get(field)
             if value:
                 if isinstance(value, list):
-                    related_paths.extend(value)
+                    for item in value:
+                        path = self._normalize_related_entry(item)
+                        if path:
+                            related_paths.append(path)
                 elif isinstance(value, str):
                     related_paths.append(value)
+                elif isinstance(value, dict):
+                    path = self._normalize_related_entry(value)
+                    if path:
+                        related_paths.append(path)
 
         if not related_paths:
             return []
@@ -810,7 +872,13 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         base_dir = current_path.parent
         results = []
         for rel_path in related_paths:
-            result = self._process_related_path(rel_path, base_dir, depth, _visited)
+            # Check limit before each path
+            if _file_count['count'] >= limit:
+                _file_count['truncated'] = True
+                break
+            result = self._process_related_path(
+                rel_path, base_dir, depth, _visited, _file_count, limit
+            )
             if result is not None:
                 results.append(result)
 

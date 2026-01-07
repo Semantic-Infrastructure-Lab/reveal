@@ -231,8 +231,14 @@ def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
                         help='Extract YAML front matter from markdown files')
     parser.add_argument('--related', action='store_true',
                         help='Show related documents from front matter (related, related_docs, see_also, references)')
-    parser.add_argument('--related-depth', type=int, default=1, choices=[1, 2],
-                        help='Depth for --related: 1=immediate (default), 2=follow links recursively')
+    parser.add_argument('--related-depth', type=int, default=1,
+                        help='Depth for --related traversal (default: 1, 0=unlimited)')
+    parser.add_argument('--related-all', action='store_true',
+                        help='Follow all related links (sets --related --related-depth 0)')
+    parser.add_argument('--related-flat', action='store_true',
+                        help='Output related docs as flat path list (grep-friendly)')
+    parser.add_argument('--related-limit', type=int, default=100,
+                        help='Max files to traverse for --related (default: 100)')
 
 
 def _add_html_options(parser: argparse.ArgumentParser) -> None:

@@ -1,5 +1,5 @@
 # Reveal - AI Agent Reference
-**Version:** 0.31.0
+**Version:** 0.32.0
 **Purpose:** Practical patterns for AI code assistants
 **Token Cost:** ~2,400 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -424,8 +424,17 @@ reveal doc.md --frontmatter
 # Navigate related documents (from front matter)
 reveal doc.md --related
 
-# Follow related links recursively (depth 2)
-reveal doc.md --related --related-depth 2
+# Follow related links recursively (depth 3)
+reveal doc.md --related --related-depth 3
+
+# Follow ALL related links (unlimited depth)
+reveal doc.md --related-all
+
+# Get flat list of paths for piping
+reveal doc.md --related-all --related-flat | xargs reveal
+
+# Limit traversal to 50 files
+reveal doc.md --related-all --related-limit 50
 ```
 
 **Link types:**
@@ -701,7 +710,7 @@ rg -l "authenticate" src/ | reveal --stdin --outline
 
 ---
 
-**Version:** 0.31.0
+**Version:** 0.32.0
 **Last updated:** 2026-01-05
 **Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
 **PyPI:** https://pypi.org/project/reveal-cli/

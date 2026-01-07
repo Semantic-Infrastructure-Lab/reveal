@@ -216,8 +216,60 @@ def _format_related_item(
             _format_related_item(nested, indent=indent + "    ", output_format=output_format)
 
 
+def _count_related_stats(items: List[Dict[str, Any]], depth: int = 1) -> Dict[str, int]:
+    """Count total docs and max depth in related tree.
+
+    Args:
+        items: List of related document info dicts
+        depth: Current depth level
+
+    Returns:
+        Dict with 'total' count and 'max_depth'
+    """
+    total = len(items)
+    max_depth = depth if items else 0
+
+    for item in items:
+        nested = item.get('related', [])
+        if nested:
+            nested_stats = _count_related_stats(nested, depth + 1)
+            total += nested_stats['total']
+            max_depth = max(max_depth, nested_stats['max_depth'])
+
+    return {'total': total, 'max_depth': max_depth}
+
+
+def _format_related_flat(
+    items: List[Dict[str, Any]], seen: Optional[set] = None
+) -> List[str]:
+    """Extract flat list of paths from related tree (grep-friendly).
+
+    Args:
+        items: List of related document info dicts
+        seen: Set of already-seen paths (for deduplication)
+
+    Returns:
+        List of unique resolved paths
+    """
+    if seen is None:
+        seen = set()
+
+    paths = []
+    for item in items:
+        resolved = item.get('resolved_path') or item.get('path', '')
+        if resolved and resolved not in seen:
+            seen.add(resolved)
+            paths.append(resolved)
+            nested = item.get('related', [])
+            if nested:
+                paths.extend(_format_related_flat(nested, seen))
+
+    return paths
+
+
 def _format_related(
-    items: List[Dict[str, Any]], path: Path, output_format: str
+    items: List[Dict[str, Any]], path: Path, output_format: str,
+    flat: bool = False, show_summary: bool = True
 ) -> None:
     """Format and display related documents from front matter.
 
@@ -225,9 +277,18 @@ def _format_related(
         items: List of related document info dicts
         path: Source file path
         output_format: Output format ('grep', 'json', or default)
+        flat: If True, output only paths (grep-friendly)
+        show_summary: If True, show summary header for multi-level trees
     """
     if not items:
         print("  (No related documents found in front matter)")
+        return
+
+    # Flat output mode - just paths
+    if flat:
+        paths = _format_related_flat(items)
+        for p in paths:
+            print(p)
         return
 
     if output_format == 'grep':
@@ -236,6 +297,11 @@ def _format_related(
             exists = "EXISTS" if item.get('exists', False) else "MISSING"
             print(f"{path}:related:{rel_path}:{exists}")
         return
+
+    # Show summary header for deep traversals
+    stats = _count_related_stats(items)
+    if show_summary and stats['max_depth'] > 1:
+        print(f"  ({stats['total']} docs across {stats['max_depth']} levels)")
 
     # Default text format
     for i, item in enumerate(items, 1):
@@ -523,9 +589,15 @@ def _build_analyzer_kwargs(analyzer: FileAnalyzer, args) -> Dict[str, Any]:
         if args.frontmatter:
             kwargs['extract_frontmatter'] = True
 
-        if getattr(args, 'related', False):
+        # Handle --related-all shorthand
+        if getattr(args, 'related_all', False):
+            kwargs['extract_related'] = True
+            kwargs['related_depth'] = 0  # unlimited
+            kwargs['related_limit'] = getattr(args, 'related_limit', 100)
+        elif getattr(args, 'related', False):
             kwargs['extract_related'] = True
             kwargs['related_depth'] = getattr(args, 'related_depth', 1)
+            kwargs['related_limit'] = getattr(args, 'related_limit', 100)
 
     # HTML-specific filters
     if args and hasattr(analyzer, '_extract_metadata'):

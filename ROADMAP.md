@@ -2,12 +2,30 @@
 
 > **Vision:** Universal resource exploration with progressive disclosure
 
-**Current version:** v0.31.0
-**Last updated:** 2026-01-05
+**Current version:** v0.32.0
+**Last updated:** 2026-01-06
 
 ---
 
 ## What We've Shipped
+
+### v0.32.0 - Knowledge Graph Navigation (Jan 2026)
+
+**`--related` Flag - Follow Knowledge Graph Links:**
+- `reveal file.md --related` shows immediate related documents
+- Extracts links from frontmatter fields: `related_docs`, `see_also`, `references`
+- Works with Beth, Hugo, Obsidian, and custom link patterns
+- Tree view of document relationships
+- First step toward full knowledge graph construction
+
+**Language Support:**
+- C#, Scala, SQL language support via tree-sitter
+- 29 built-in languages now supported
+
+**Fixes:**
+- MySQL `MYSQL_HOST` environment variable now respected
+- Documentation: rule count, GitHub URLs, related_docs paths corrected
+- AGENT_HELP updated with `--related` examples
 
 ### v0.31.0 - UX Polish & Workflow Hints (Jan 2026)
 
@@ -224,31 +242,13 @@
 
 ## What's Next
 
-### v0.32.0 (Q2 2026): Knowledge Graph Navigation
+### v0.33.0 (Q2 2026): Deep Knowledge Graph & Metadata Queries
 
-**Workflow Breadcrumbs** (Phase 3) ✅ Already implemented:
-- Pre-commit workflow detection (after directory checks)
-- Code review workflow detection (git:// URI diffs)
-- Numbered step guidance for multi-step operations
-
-**Related Documents Viewer** - Follow knowledge graph links:
+**Recursive Related Documents:**
 ```bash
-reveal file.md --related                 # Show immediate related docs
 reveal file.md --related --depth 2       # Follow links recursively (max depth 2)
+reveal file.md --related --all           # All connected documents (BFS traversal)
 ```
-
-**Features:**
-- Configurable link fields (related_docs, see_also, references)
-- Tree view of document relationships
-- Max depth 2 (maintains stateless architecture)
-- Auto-detect link field patterns
-- Works with Beth, Hugo, Obsidian, and custom link patterns
-
-**Implementation:** 2-3 weeks for link following
-
----
-
-### v0.33.0 (Q3 2026): Metadata Queries & Quality Checks
 
 **`markdown://` URI Adapter** - Query markdown files by front matter:
 ```bash
@@ -263,7 +263,13 @@ reveal markdown://?!beth_topics                 # Find missing fields
 - Multiple criteria support
 - Integration with --related, --validate
 
-**Quality Checks** - Knowledge graph health metrics:
+**Implementation:** 3-4 weeks
+
+---
+
+### v0.34.0 (Q3 2026): Quality Checks & Documentation
+
+**Metadata Quality Checks:**
 ```bash
 reveal file.md --check-metadata                 # Single file check
 reveal docs/**/*.md --check-metadata --summary  # Aggregate report
@@ -275,25 +281,23 @@ reveal docs/**/*.md --check-metadata --summary  # Aggregate report
 - Link density (connectivity)
 - Topic coverage
 
-**Implementation:**
-- markdown://: 3-4 weeks
-- --check-metadata: 2 weeks
-
----
-
-### v0.34.0 (Q4 2026): Documentation & Polish for v1.0
-
 **Knowledge Graph Documentation:**
 - Complete knowledge graph guide (ships as `reveal help://knowledge-graph`)
 - Integration guides: Beth, Hugo, Obsidian
 - Best practices and workflow examples
-- Update `AGENT_HELP.md` with KG patterns
 
-**General Documentation:**
+**Implementation:** 3-4 weeks
+
+---
+
+### v0.35.0 (Q4 2026): Final Polish for v1.0
+
+**Documentation:**
 - Complete adapter authoring guide
 - CI/CD integration examples
 - Performance benchmarking suite
 - Comprehensive troubleshooting guide
+- Update `AGENT_HELP.md` with KG workflow patterns
 
 **Optional Features:**
 - `--watch` mode: Live feedback for file changes (if time permits)

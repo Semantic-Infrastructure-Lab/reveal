@@ -465,6 +465,14 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
     is_fallback = getattr(analyzer, 'is_fallback', False)
     fallback_lang = getattr(analyzer, 'fallback_language', None)
 
+    # Handle --related-flat: output just paths, no decoration
+    if args and getattr(args, 'related_flat', False) and 'related' in structure:
+        from .formatting import _format_related_flat
+        paths = _format_related_flat(structure['related'])
+        for p in paths:
+            print(p)
+        return
+
     # Handle --typed flag (new Type-First Architecture)
     if args and getattr(args, 'typed', False):
         json_format = "json" if output_format == "json" else "text"

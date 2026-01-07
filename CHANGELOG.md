@@ -5,6 +5,24 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Deep knowledge graph traversal** - Extended `--related` with unlimited depth support
+  - `--related-depth N` - Now supports any depth (was limited to 1-2)
+  - `--related-depth 0` - Unlimited traversal until graph exhausted
+  - `--related-all` - Shorthand for `--related --related-depth 0`
+  - `--related-flat` - Output flat list of paths (grep-friendly, pipeable)
+  - `--related-limit N` - Safeguard to stop at N files (default: 100)
+  - Summary header shows "N docs across M levels" for multi-level traversals
+  - Cycle detection and file limits prevent runaway traversal
+
+### Fixed
+- **`--related` crashes on dict-format frontmatter entries** - Related fields with structured
+  entries (common in TIA docs) like `{uri: "doc://path", title: "Title"}` now correctly
+  extract the path from `uri`, `path`, `href`, `url`, or `file` fields. Also strips `doc://`
+  prefix automatically.
+
 ## [0.32.0] - 2026-01-06
 
 ### Added

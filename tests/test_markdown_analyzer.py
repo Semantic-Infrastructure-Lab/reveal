@@ -1186,6 +1186,266 @@ related:
         # .txt file should be skipped entirely
         self.assertEqual(structure['related'], [])
 
+    def test_related_depth_3(self):
+        """Test related document extraction at depth 3."""
+        # Create chain: main -> doc1 -> doc2 -> doc3
+        doc3_content = '''---
+title: Doc 3
+---
+
+# Doc 3
+## Final Level
+'''
+        self.create_temp_markdown('doc3.md', doc3_content)
+
+        doc2_content = '''---
+title: Doc 2
+related:
+  - ./doc3.md
+---
+
+# Doc 2
+## Second Level
+'''
+        self.create_temp_markdown('doc2.md', doc2_content)
+
+        doc1_content = '''---
+title: Doc 1
+related:
+  - ./doc2.md
+---
+
+# Doc 1
+## First Level
+'''
+        self.create_temp_markdown('doc1.md', doc1_content)
+
+        main_content = '''---
+title: Main
+related:
+  - ./doc1.md
+---
+
+# Main Document
+'''
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        structure = analyzer.get_structure(extract_related=True, related_depth=3)
+
+        # Verify chain: main -> doc1 -> doc2 -> doc3
+        related = structure['related']
+        self.assertEqual(len(related), 1)
+        self.assertEqual(related[0]['path'], './doc1.md')
+
+        # doc1's related (depth 2)
+        doc1_related = related[0]['related']
+        self.assertEqual(len(doc1_related), 1)
+        self.assertEqual(doc1_related[0]['path'], './doc2.md')
+
+        # doc2's related (depth 3)
+        doc2_related = doc1_related[0]['related']
+        self.assertEqual(len(doc2_related), 1)
+        self.assertEqual(doc2_related[0]['path'], './doc3.md')
+
+    def test_related_depth_0_unlimited(self):
+        """Test that depth=0 means unlimited traversal (until exhausted)."""
+        # Create chain: main -> doc1 -> doc2 -> doc3 -> doc4
+        doc4_content = '''---
+title: Doc 4
+---
+
+# Doc 4
+'''
+        self.create_temp_markdown('doc4.md', doc4_content)
+
+        doc3_content = '''---
+title: Doc 3
+related:
+  - ./doc4.md
+---
+
+# Doc 3
+'''
+        self.create_temp_markdown('doc3.md', doc3_content)
+
+        doc2_content = '''---
+title: Doc 2
+related:
+  - ./doc3.md
+---
+
+# Doc 2
+'''
+        self.create_temp_markdown('doc2.md', doc2_content)
+
+        doc1_content = '''---
+title: Doc 1
+related:
+  - ./doc2.md
+---
+
+# Doc 1
+'''
+        self.create_temp_markdown('doc1.md', doc1_content)
+
+        main_content = '''---
+title: Main
+related:
+  - ./doc1.md
+---
+
+# Main
+'''
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        # depth=0 should follow all links
+        structure = analyzer.get_structure(extract_related=True, related_depth=0)
+
+        # Traverse the chain
+        related = structure['related']
+        self.assertEqual(len(related), 1)
+
+        # Follow to doc4 (4 levels deep)
+        level1 = related[0]['related']
+        self.assertEqual(len(level1), 1)
+
+        level2 = level1[0]['related']
+        self.assertEqual(len(level2), 1)
+
+        level3 = level2[0]['related']
+        self.assertEqual(len(level3), 1)
+        self.assertEqual(level3[0]['path'], './doc4.md')
+
+    def test_related_limit_stops_at_n(self):
+        """Test that related_limit stops traversal at N files."""
+        # Create many interconnected docs
+        for i in range(10):
+            next_doc = f'./doc{i+1}.md' if i < 9 else None
+            related_line = f'related:\n  - {next_doc}' if next_doc else ''
+            content = f'''---
+title: Doc {i}
+{related_line}
+---
+
+# Doc {i}
+'''
+            self.create_temp_markdown(f'doc{i}.md', content)
+
+        main_content = '''---
+title: Main
+related:
+  - ./doc0.md
+---
+
+# Main
+'''
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        # Limit to 3 files
+        structure = analyzer.get_structure(extract_related=True, related_depth=0, related_limit=3)
+
+        # Count total files found (should be <= 3)
+        def count_related(items):
+            total = len(items)
+            for item in items:
+                total += count_related(item.get('related', []))
+            return total
+
+        total = count_related(structure['related'])
+        self.assertLessEqual(total, 3)
+
+    def test_related_dict_format_entries(self):
+        """Test that structured dict entries in related field are handled.
+
+        Some docs use dict format like:
+            related:
+              - uri: doc://path/to/doc.md
+                title: Document Title
+                description: Some description
+        """
+        # Create related doc
+        related_content = '''---
+title: Related Doc
+---
+
+# Related Doc
+
+Some content.
+'''
+        self.create_temp_markdown('related_doc.md', related_content)
+
+        # Main doc with dict-format related entries
+        main_content = '''---
+title: Main Doc
+related:
+  - uri: ./related_doc.md
+    title: Related Document
+    description: A related document
+  - path: ./missing.md
+    title: Missing Doc
+  - href: ./related_doc.md
+    title: Another reference
+---
+
+# Main Doc
+
+Content here.
+'''
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        structure = analyzer.get_structure(extract_related=True)
+
+        # Should extract 3 related entries (2 pointing to same file, 1 missing)
+        self.assertEqual(len(structure['related']), 3)
+
+        # First entry (uri field) - exists
+        self.assertEqual(structure['related'][0]['path'], './related_doc.md')
+        self.assertTrue(structure['related'][0]['exists'])
+
+        # Second entry (path field) - missing
+        self.assertEqual(structure['related'][1]['path'], './missing.md')
+        self.assertFalse(structure['related'][1]['exists'])
+
+        # Third entry (href field) - exists
+        self.assertEqual(structure['related'][2]['path'], './related_doc.md')
+        self.assertTrue(structure['related'][2]['exists'])
+
+    def test_related_dict_format_with_doc_prefix(self):
+        """Test that doc:// prefixes in uri fields are stripped."""
+        # Create related doc
+        related_content = '''---
+title: Infrastructure Doc
+---
+
+# Infrastructure Doc
+'''
+        self.create_temp_markdown('infrastructure.md', related_content)
+
+        # Main doc with doc:// prefixed URIs
+        main_content = '''---
+title: Main Doc
+related:
+  - uri: doc://infrastructure.md
+    title: Infrastructure
+    relationship: core
+---
+
+# Main Doc
+'''
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        structure = analyzer.get_structure(extract_related=True)
+
+        # doc:// prefix should be stripped, path should be 'infrastructure.md'
+        self.assertEqual(len(structure['related']), 1)
+        self.assertEqual(structure['related'][0]['path'], 'infrastructure.md')
+        self.assertTrue(structure['related'][0]['exists'])
+
 
 if __name__ == '__main__':
     unittest.main()
