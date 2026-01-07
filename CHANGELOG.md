@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`--related` flag for knowledge graph navigation** - Show related documents from front matter
+  - Extracts links from `related`, `related_docs`, `see_also`, and `references` fields
+  - Shows headings from each related document for quick context
+  - Use `--related-depth 2` to follow links recursively (max depth 2)
+  - Detects missing files, skips URLs and non-markdown files
+  - Cycle detection prevents infinite loops
+  - JSON output includes full resolved paths for tooling integration
 - **C# language support** (.cs files) - classes, interfaces, methods via tree-sitter
 - **Scala language support** (.scala files) - classes, objects, traits, functions via tree-sitter
 - **SQL language support** (.sql files) - tables, views, functions/procedures via tree-sitter
@@ -17,9 +24,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Context-sensitive numbered steps for guided workflows
 
 ### Fixed
+- **MySQL adapter ignores MYSQL_HOST env var** - `reveal mysql://` now correctly uses
+  MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE environment variables when
+  URI doesn't specify these values
 - **AGENT_HELP.md** claimed Swift support (not available in tree_sitter_languages)
 - **I003 rule missing category** - rule now correctly shows under "I Rules" instead of "UNKNOWN Rules" in `--rules` output
 - **AGENT_HELP.md File Type Support** - Added missing JSONL, HTML, and LibreOffice formats to match README
+- **README rule count** - Architecture section now correctly states 41 quality rules (was 24)
+- **GitHub Stars badge URL** - Now correctly points to Semantic-Infrastructure-Lab/reveal
+- **KNOWLEDGE_GRAPH_GUIDE.md related_docs paths** - Fixed broken relative paths to planning docs
+- **AGENT_HELP.md** - Added `--related` flag documentation to Markdown-Specific Features section
+- **ROADMAP.md** - Added Image & Asset Adapters to Long-term Ecosystem vision (image://, svg://, pHash)
+
+### Changed
+- **MySQL credential resolution simplified** - Removed TIA-specific integration,
+  now uses standard 3-tier resolution: URI > environment variables > ~/.my.cnf
+- **TIA references removed** - User-facing documentation cleaned for open-source distribution
 
 ## [0.31.0] - 2026-01-05
 

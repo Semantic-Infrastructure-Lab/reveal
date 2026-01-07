@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 
 from .base import ResourceAdapter, register_adapter
 from ..registry import get_analyzer

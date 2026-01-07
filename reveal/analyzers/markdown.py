@@ -69,6 +69,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                      language: Optional[str] = None,
                      inline_code: bool = False,
                      extract_frontmatter: bool = False,
+                     extract_related: bool = False,
+                     related_depth: int = 1,
                      **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract markdown structure.
 
@@ -83,10 +85,12 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             language: Filter code blocks by language
             inline_code: Include inline code snippets
             extract_frontmatter: Include YAML front matter extraction
+            extract_related: Include related documents from front matter
+            related_depth: Depth for related docs (1=immediate, 2=recursive)
             **kwargs: Additional parameters (unused)
 
         Returns:
-            Dict with headings and optionally links/code/frontmatter
+            Dict with headings and optionally links/code/frontmatter/related
 
         Note: Slicing applies to each category independently
         (e.g., --head 5 shows first 5 headings AND first 5 links)
@@ -112,6 +116,10 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 language=language,
                 include_inline=inline_code
             )
+
+        # Extract related documents if requested
+        if extract_related:
+            result['related'] = self._extract_related(depth=related_depth)
 
         # Apply semantic slicing to each category (but not frontmatter - it's unique)
         if head or tail or range:
@@ -708,6 +716,124 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             # Any other error - graceful degradation
             logging.debug(f"Unexpected error parsing frontmatter: {e}")
             return None
+
+    def _extract_related(self, depth: int = 1, _visited: Optional[set] = None) -> List[Dict[str, Any]]:
+        """Extract related documents from front matter.
+
+        Looks for these fields in front matter:
+        - related
+        - related_docs
+        - see_also
+        - references
+
+        Args:
+            depth: How deep to follow links (1=immediate, 2=recursive)
+            _visited: Internal set to prevent cycles (don't pass this)
+
+        Returns:
+            List of related document info dicts with headings
+        """
+        from pathlib import Path
+        import os
+
+        # Initialize visited set for cycle detection
+        if _visited is None:
+            _visited = set()
+
+        # Add current file to visited
+        current_path = Path(self.path).resolve()
+        if current_path in _visited:
+            return []
+        _visited.add(current_path)
+
+        # Get front matter
+        fm = self._extract_frontmatter()
+        if not fm or not fm.get('data'):
+            return []
+
+        data = fm['data']
+
+        # Look for related document fields
+        related_fields = ['related', 'related_docs', 'see_also', 'references']
+        related_paths = []
+
+        for field in related_fields:
+            value = data.get(field)
+            if value:
+                if isinstance(value, list):
+                    related_paths.extend(value)
+                elif isinstance(value, str):
+                    related_paths.append(value)
+
+        if not related_paths:
+            return []
+
+        # Resolve paths relative to current file
+        base_dir = current_path.parent
+        results = []
+
+        for rel_path in related_paths:
+            # Skip non-markdown files and URLs
+            if rel_path.startswith(('http://', 'https://', 'mailto:')):
+                continue
+
+            # Resolve the path
+            if rel_path.startswith('/'):
+                # Absolute path from some root - try to resolve
+                resolved = Path(rel_path)
+            else:
+                # Relative path
+                resolved = (base_dir / rel_path).resolve()
+
+            # Check if file exists and is markdown
+            if not resolved.exists():
+                results.append({
+                    'path': rel_path,
+                    'resolved_path': str(resolved),
+                    'exists': False,
+                    'headings': [],
+                    'related': []
+                })
+                continue
+
+            if resolved.suffix.lower() not in ('.md', '.markdown'):
+                continue
+
+            # Extract headings from related file
+            try:
+                related_analyzer = MarkdownAnalyzer(str(resolved))
+                headings = related_analyzer._extract_headings()
+
+                result = {
+                    'path': rel_path,
+                    'resolved_path': str(resolved),
+                    'exists': True,
+                    'headings': [h.get('name', '') for h in headings[:10]],  # Limit to 10 headings
+                    'related': []
+                }
+
+                # Recursively get related docs if depth > 1
+                if depth > 1:
+                    nested_related = related_analyzer._extract_related(
+                        depth=depth - 1,
+                        _visited=_visited
+                    )
+                    result['related'] = nested_related
+
+                results.append(result)
+
+            except Exception as e:
+                logging.debug(f"Failed to analyze related file {resolved}: {e}")
+                results.append({
+                    'path': rel_path,
+                    'resolved_path': str(resolved),
+                    'exists': True,
+                    'error': str(e),
+                    'headings': [],
+                    'related': []
+                })
+
+        return results
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a markdown section.

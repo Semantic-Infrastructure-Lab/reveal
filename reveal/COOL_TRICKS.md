@@ -14,6 +14,7 @@
 - [Quality Gatekeeping](#quality-gatekeeping)
 - [Discovery Patterns](#discovery-patterns)
 - [Format Transformations](#format-transformations)
+- [JSON Deep Dive](#json-deep-dive-json-adapter) (json:// adapter)
 - [Multi-Language Exploration](#multi-language-exploration)
 
 ---
@@ -604,6 +605,102 @@ reveal app.py --format=grep
 
 ---
 
+## JSON Deep Dive (json:// Adapter)
+
+The `json://` adapter turns reveal into a powerful JSON explorer—no jq required for basic operations.
+
+### Explore Unknown JSON Structure
+
+```bash
+# What's in this JSON file?
+reveal json://config.json?schema
+
+# Output:
+# Schema:
+# {
+#   "database": {
+#     "host": "str",
+#     "port": "int",
+#     "credentials": {
+#       "username": "str",
+#       "password": "str"
+#     }
+#   },
+#   "features": "Array[str]"
+# }
+```
+
+**Why this matters:** AI agents constantly work with `package.json`, `tsconfig.json`, API responses. Schema inference shows structure without reading the whole file.
+
+### Navigate to Specific Keys
+
+```bash
+# Get nested value
+reveal json://package.json/scripts
+reveal json://config.json/database/host
+
+# Array access
+reveal json://data.json/users/0           # First user
+reveal json://data.json/users[0:3]        # First 3 users (slice)
+```
+
+### Search Inside JSON (Gron-Style)
+
+```bash
+# Flatten to grep-able format
+reveal json://config.json?flatten
+
+# Output:
+# json = {}
+# json.database = {}
+# json.database.host = "localhost"
+# json.database.port = 5432
+# json.database.credentials = {}
+# json.database.credentials.username = "admin"
+
+# Now search!
+reveal json://config.json?flatten | grep -i password
+reveal json://large-config.json?flatten | grep 'api.*key'
+```
+
+### Real-World Patterns
+
+```bash
+# Explore package.json
+reveal json://package.json?schema           # See structure
+reveal json://package.json/dependencies     # List deps
+reveal json://package.json/scripts          # See npm scripts
+
+# Explore tsconfig.json
+reveal json://tsconfig.json/compilerOptions
+reveal json://tsconfig.json?flatten | grep strict
+
+# Debug API response (saved to file)
+reveal json://api-response.json?schema      # Understand structure
+reveal json://api-response.json/data/0      # First result
+```
+
+### Compare: json:// vs cat + jq
+
+```bash
+# ❌ Old way
+cat config.json | jq '.database.host'
+
+# ✅ Reveal way
+reveal json://config.json/database/host
+
+# ❌ Old way (understand structure)
+cat large.json | jq 'keys'
+cat large.json | jq '.[0] | keys'
+
+# ✅ Reveal way
+reveal json://large.json?schema
+```
+
+**Token savings:** For AI agents, `json://?schema` gives structure understanding in ~100 tokens vs ~5000 tokens for the full file.
+
+---
+
 ## Multi-Language Exploration
 
 ### Built-in Analyzers (Full Support)
@@ -724,7 +821,10 @@ reveal 'ast://./src?lines>50&complexity<3'       # Long but simple (inline?)
 | Pipeline | `git diff --name-only \| reveal --stdin` |
 | Python env | `reveal python://doctor` |
 | Imports | `reveal python://module/name` |
-| JSON | `reveal file.py --format=json` |
+| JSON output | `reveal file.py --format=json` |
+| JSON schema | `reveal json://config.json?schema` |
+| JSON path | `reveal json://config.json/database/host` |
+| JSON search | `reveal json://config.json?flatten \| grep key` |
 | Slice | `reveal file.py --head 5` |
 | Help | `reveal help://` |
 

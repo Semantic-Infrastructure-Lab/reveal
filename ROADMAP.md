@@ -346,6 +346,16 @@ reveal https://api.github.com            # REST API exploration
 reveal docker://container-name           # Container inspection
 ```
 
+**Image & Asset Adapters:**
+```bash
+reveal image://photo.png                 # Dimensions, color depth, EXIF
+reveal svg://icon.svg                    # viewBox, paths, groups, embedded text
+reveal image://a.png --hash              # MD5, SHA256, perceptual hash (pHash)
+reveal "diff://image://a.png?image://b.png"  # Visual similarity score
+```
+
+*Use case:* Asset management pipelines (e.g., mapping source SVGs to rendered PNGs via perceptual hashing when direct provenance is lost).
+
 **Plugin System:**
 ```bash
 pip install reveal-adapter-mongodb       # Community adapters

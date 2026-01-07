@@ -575,24 +575,20 @@ reveal content/**/*.md --check-metadata --summary
 
 ## Implementation Roadmap
 
-### Phase 1: Foundation (v0.29.0)
-**Target**: Jan 2025
-**Goal**: Schema validation framework
+### Phase 1: Schema Validation (v0.29.0) ✅ SHIPPED
 
-- [ ] Schema file format design (`reveal/schemas/*.yaml`)
-- [ ] Built-in schemas: `beth.yaml`, `hugo.yaml`, `obsidian.yaml`
-- [ ] `--validate-schema <name|path>` CLI flag
-- [ ] Validation rule engine (F001-F005 for Beth)
-- [ ] Error reporting format
-- [ ] Tests (50+ covering all built-in schemas)
-- [ ] Docs: `SCHEMA_VALIDATION_GUIDE.md`
-
-**Deliverable**: `reveal file.md --validate-schema beth`
+**Delivered Jan 2026:**
+- Schema file format (`reveal/schemas/*.yaml`)
+- Built-in schemas: beth, hugo, jekyll, mkdocs, obsidian
+- `--validate-schema <name|path>` CLI flag
+- F001-F005 validation rules
+- Comprehensive test coverage
+- User guide: `docs/SCHEMA_VALIDATION_GUIDE.md`
 
 ---
 
-### Phase 2: Link Following (v0.30.0)
-**Target**: Feb 2025
+### Phase 2: Link Following (v0.32.0)
+**Target**: Q2 2026
 **Goal**: Related docs viewer
 
 - [ ] `--related` CLI flag
@@ -600,61 +596,36 @@ reveal content/**/*.md --check-metadata --summary
 - [ ] Link field detection (config + auto-detect)
 - [ ] Recursive structure extraction
 - [ ] Output formatting (tree view)
-- [ ] `.revealrc` config file support
 - [ ] Tests (30+ covering depth limits, cycles, missing files)
-- [ ] Docs: Update `MARKDOWN_GUIDE.md` with `--related`
 
 **Deliverable**: `reveal file.md --related --depth 2`
 
 ---
 
-### Phase 3: Metadata Querying (v0.31.0)
-**Target**: Mar 2025
-**Goal**: Markdown URI adapter
+### Phase 3: Markdown Adapter (v0.33.0)
+**Target**: Q3 2026
+**Goal**: Metadata querying via URI scheme
 
 - [ ] New adapter: `reveal/adapters/markdown.py`
-- [ ] Query parser (`?field=value&field2=value2`)
+- [ ] Query parser (`markdown://?field=value`)
 - [ ] Glob + filter implementation
-- [ ] Missing field checks (`!field`)
-- [ ] Wildcard support (`session_id=*-1213`)
-- [ ] Integration with `--related`, `--validate`
+- [ ] Missing field checks, wildcard support
+- [ ] Quality checks integration (`--check-metadata`)
 - [ ] Tests (40+ covering query combinations)
-- [ ] Docs: `MARKDOWN_ADAPTER_GUIDE.md`
 
 **Deliverable**: `reveal markdown://?beth_topics=reveal`
 
 ---
 
-### Phase 4: Quality Checks (v0.32.0)
-**Target**: Apr 2025
-**Goal**: Knowledge graph quality metrics
-
-- [ ] `--check-metadata` CLI flag
-- [ ] Quality metrics framework
-- [ ] Aggregate reporting (`--summary`)
-- [ ] Configurable thresholds
-- [ ] Integration with schemas
-- [ ] Link density analysis
-- [ ] Tests (20+ covering metrics)
-- [ ] Docs: `KNOWLEDGE_GRAPH_QUALITY_GUIDE.md`
-
-**Deliverable**: `reveal sessions/**/*.md --check-metadata --summary`
-
----
-
-### Phase 5: Documentation & Integration (v0.33.0)
-**Target**: May 2025
+### Phase 4: Documentation (v0.34.0)
+**Target**: Q4 2026
 **Goal**: Complete knowledge graph story
 
-- [ ] **New Guide**: `KNOWLEDGE_GRAPH_GUIDE.md` (this document, refined)
-- [ ] **Beth Integration**: `BETH_INTEGRATION_GUIDE.md`
-- [ ] **Obsidian Integration**: `OBSIDIAN_INTEGRATION_GUIDE.md`
-- [ ] **Hugo Integration**: `HUGO_INTEGRATION_GUIDE.md`
+- [ ] Refine `docs/KNOWLEDGE_GRAPH_GUIDE.md`
+- [ ] Integration examples (Beth, Obsidian, Hugo)
 - [ ] Update `AGENT_HELP.md` with knowledge graph patterns
-- [ ] Update `README.md` with use cases
-- [ ] Video tutorial (5-10 min)
 
-**Deliverable**: Complete knowledge graph documentation suite
+**Deliverable**: Complete documentation suite
 
 ---
 

@@ -11,6 +11,7 @@ from .formatting import (
     _format_frontmatter,
     _format_links,
     _format_code_blocks,
+    _format_related,
     _format_standard_items,
     _build_analyzer_kwargs,
 )
@@ -26,6 +27,7 @@ __all__ = [
     '_format_frontmatter',
     '_format_links',
     '_format_code_blocks',
+    '_format_related',
     '_format_standard_items',
     '_build_analyzer_kwargs',
 ]

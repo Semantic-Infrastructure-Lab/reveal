@@ -117,7 +117,17 @@ def handle_mysql(adapter_class: type, resource: str, element: Optional[str],
     # Build connection string from resource and element
     connection_string = f"mysql://{resource}"
 
-    adapter = adapter_class(connection_string)
+    try:
+        adapter = adapter_class(connection_string)
+    except ImportError as e:
+        # Clean error for missing optional dependency
+        print("Error: mysql:// adapter requires pymysql", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Install with:", file=sys.stderr)
+        print("  pip install reveal-cli[database]", file=sys.stderr)
+        print("  # or", file=sys.stderr)
+        print("  pip install pymysql", file=sys.stderr)
+        sys.exit(1)
 
     # Handle --check flag: run health checks with thresholds
     if getattr(args, 'check', False):

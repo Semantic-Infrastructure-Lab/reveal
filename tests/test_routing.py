@@ -556,6 +556,29 @@ class TestHandleMysql:
         mock_adapter.get_structure.assert_called_once()
         mock_render.assert_called_once()
 
+    def test_handle_mysql_import_error_clean_exit(self, capsys):
+        """Should show clean error message when pymysql not installed."""
+        # Mock adapter class that raises ImportError (simulating missing pymysql)
+        mock_adapter_class = Mock()
+        mock_adapter_class.side_effect = ImportError("No module named 'pymysql'")
+
+        args = Namespace(check=False, format='text')
+
+        with pytest.raises(SystemExit) as exc_info:
+            _handle_mysql(mock_adapter_class, 'localhost', None, args)
+
+        # Should exit with code 1
+        assert exc_info.value.code == 1
+
+        # Check stderr has clean error message
+        captured = capsys.readouterr()
+        assert 'mysql://' in captured.err
+        assert 'pymysql' in captured.err
+        assert 'pip install' in captured.err
+        assert 'reveal-cli[database]' in captured.err
+        # Should NOT have traceback
+        assert 'Traceback' not in captured.err
+
 
 # ==============================================================================
 # Test URI and Adapter Handling

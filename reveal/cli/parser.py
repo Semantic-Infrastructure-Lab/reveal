@@ -181,6 +181,8 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
                         help='Identify quality hotspots (requires stats:// adapter, shows worst 10 files by quality)')
     parser.add_argument('--no-breadcrumbs', '-q', '--quiet', action='store_true',
                         help='Disable breadcrumb navigation hints (scripting mode)')
+    parser.add_argument('--disable-breadcrumbs', action='store_true',
+                        help='Permanently disable breadcrumbs in user config')
 
 
 def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
@@ -227,6 +229,10 @@ def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
                         help='Include inline code snippets (requires --code)')
     parser.add_argument('--frontmatter', action='store_true',
                         help='Extract YAML front matter from markdown files')
+    parser.add_argument('--related', action='store_true',
+                        help='Show related documents from front matter (related, related_docs, see_also, references)')
+    parser.add_argument('--related-depth', type=int, default=1, choices=[1, 2],
+                        help='Depth for --related: 1=immediate (default), 2=follow links recursively')
 
 
 def _add_html_options(parser: argparse.ArgumentParser) -> None:

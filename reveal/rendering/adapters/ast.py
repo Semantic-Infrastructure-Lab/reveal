@@ -60,10 +60,10 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
             line_count = elem.get('line_count', 0)
             complexity = elem.get('complexity')
 
-            # Format output
+            # Format output - path already shown in "File:" header above
             if complexity:
-                print(f"  {file_path}:{line:>4}  {name} [{line_count} lines, complexity: {complexity}]")
+                print(f"  :{line:>4}  {name} [{line_count} lines, complexity: {complexity}]")
             else:
-                print(f"  {file_path}:{line:>4}  {name} [{line_count} lines]")
+                print(f"  :{line:>4}  {name} [{line_count} lines]")
 
         print()

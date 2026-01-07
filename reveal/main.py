@@ -6,6 +6,7 @@ import logging
 from .base import get_all_analyzers, FileAnalyzer
 from . import __version__
 from .utils import copy_to_clipboard, safe_json_dumps, check_for_updates, print_breadcrumbs, get_file_type_from_analyzer
+from .config import disable_breadcrumbs_permanently
 from .cli import (
     create_argument_parser,
     validate_navigation_args,
@@ -123,6 +124,7 @@ def _handle_special_modes(args):
         (getattr(args, 'list_schemas', False), handle_list_schemas, []),
         (getattr(args, 'decorator_stats', False), handle_decorator_stats, [args.path]),
         (args.stdin, handle_stdin_mode, [args, handle_file]),
+        (getattr(args, 'disable_breadcrumbs', False), disable_breadcrumbs_permanently, []),
     ]
 
     for condition, handler, handler_args in special_modes:

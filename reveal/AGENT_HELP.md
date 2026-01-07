@@ -420,6 +420,12 @@ reveal doc.md --code --language python
 
 # Get YAML frontmatter
 reveal doc.md --frontmatter
+
+# Navigate related documents (from front matter)
+reveal doc.md --related
+
+# Follow related links recursively (depth 2)
+reveal doc.md --related --related-depth 2
 ```
 
 **Link types:**

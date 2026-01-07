@@ -183,6 +183,15 @@ Patterns support:
 - Globstar: `vendor/**/*.py`
 - Negation: `!important.js` (not yet implemented)
 
+### Display Options
+
+```yaml
+display:
+  breadcrumbs: false  # Disable navigation hints (default: true for TTY)
+```
+
+**Note:** Breadcrumbs are automatically hidden when output is piped.
+
 ### Layer Violations (I003)
 
 ```yaml
@@ -282,6 +291,19 @@ Set max line length for E501:
 export REVEAL_E501_MAX_LENGTH=120
 reveal --check file.py
 ```
+
+#### `REVEAL_BREADCRUMBS`
+Control navigation hints after output:
+
+```bash
+# Disable breadcrumbs permanently
+export REVEAL_BREADCRUMBS=0
+
+# Or use the CLI command (updates config file)
+reveal --disable-breadcrumbs
+```
+
+**Note:** Breadcrumbs are automatically hidden when output is piped (TTY detection).
 
 ### Environment Variable Combinations
 

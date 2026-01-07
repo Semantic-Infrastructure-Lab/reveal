@@ -16,6 +16,7 @@ YAML is the primary format. TOML support via pyproject.toml [tool.reveal] sectio
 
 from pathlib import Path
 import os
+import sys
 import logging
 import json
 import re
@@ -752,11 +753,29 @@ class RevealConfig:
         Breadcrumbs are navigation hints printed after reveal output.
         They can be disabled via config, environment, or CLI.
 
+        TTY Detection:
+            When stdout is not a TTY (piped to file, AI agent, etc.),
+            breadcrumbs are automatically suppressed.
+
+        First-run hint:
+            On first use in a terminal, shows a hint about --no-breadcrumbs.
+
         Returns:
-            True if breadcrumbs should be displayed (default: True)
+            True if breadcrumbs should be displayed (default: True for TTY)
         """
         display_config = self._config.get('display', {})
-        return display_config.get('breadcrumbs', True)
+
+        # Explicit config always wins
+        if 'breadcrumbs' in display_config:
+            return display_config['breadcrumbs']
+
+        # TTY detection: suppress breadcrumbs when output is piped
+        if not sys.stdout.isatty():
+            return False
+
+        # First time in terminal: hint about disabling
+        _show_breadcrumb_hint_once()
+        return True
 
 
 def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
@@ -878,3 +897,61 @@ def get_data_path(name: str) -> Path:
     data_dir = Path(os.getenv('XDG_DATA_HOME', Path.home() / '.local' / 'share')) / 'reveal'
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir / name
+
+
+def _show_breadcrumb_hint_once() -> None:
+    """Show a one-time hint about disabling breadcrumbs.
+
+    Prints to stderr so it doesn't interfere with piped output.
+    Only shows once per user (tracked via state file).
+    """
+    hint_file = get_data_path('seen_breadcrumb_hint')
+    if hint_file.exists():
+        return
+
+    # Mark as seen before printing to avoid race conditions
+    try:
+        hint_file.touch()
+    except OSError:
+        return  # Can't track state, skip the hint
+
+    print(
+        "Tip: Permanently disable navigation hints with: reveal --disable-breadcrumbs",
+        file=sys.stderr
+    )
+
+
+def disable_breadcrumbs_permanently() -> bool:
+    """Disable breadcrumbs by updating user config file.
+
+    Creates or updates ~/.config/reveal/config.yaml with:
+        display:
+          breadcrumbs: false
+
+    Returns:
+        True if successful, False otherwise
+    """
+    config_path = RevealConfig._get_user_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Load existing config or start fresh
+    config = {}
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                config = yaml.safe_load(f) or {}
+        except Exception:
+            pass
+
+    # Update display.breadcrumbs
+    config.setdefault('display', {})['breadcrumbs'] = False
+
+    # Write back
+    try:
+        with open(config_path, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False)
+        print(f"Breadcrumbs disabled in {config_path}")
+        return True
+    except Exception as e:
+        print(f"Failed to update config: {e}", file=sys.stderr)
+        return False

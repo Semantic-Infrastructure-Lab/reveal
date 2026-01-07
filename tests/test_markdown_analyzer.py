@@ -958,5 +958,234 @@ Some text here.
             os.rmdir(os.path.dirname(path))
 
 
+class TestMarkdownRelatedDocs(unittest.TestCase):
+    """Tests for the --related feature that extracts related documents from front matter."""
+
+    def setUp(self):
+        """Create a temp directory for test files."""
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        """Clean up temp directory."""
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def create_temp_markdown(self, filename: str, content: str) -> str:
+        """Create a temp markdown file with given content."""
+        path = os.path.join(self.temp_dir, filename)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    def test_related_extraction_basic(self):
+        """Test basic related document extraction from front matter."""
+        # Create a related file
+        related_path = self.create_temp_markdown('related.md', '''# Related Doc
+
+## Section 1
+
+Some content.
+''')
+
+        # Create main file with related field
+        main_content = f'''---
+title: Main Doc
+related:
+  - ./related.md
+---
+
+# Main Document
+
+Content here.
+'''
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        structure = analyzer.get_structure(extract_related=True)
+
+        self.assertIn('related', structure)
+        related = structure['related']
+        self.assertEqual(len(related), 1)
+        self.assertEqual(related[0]['path'], './related.md')
+        self.assertTrue(related[0]['exists'])
+        self.assertIn('Related Doc', related[0]['headings'])
+
+    def test_related_extraction_multiple_fields(self):
+        """Test extraction from multiple related fields (related, related_docs, see_also)."""
+        # Create related files
+        self.create_temp_markdown('doc1.md', '# Doc 1')
+        self.create_temp_markdown('doc2.md', '# Doc 2')
+        self.create_temp_markdown('doc3.md', '# Doc 3')
+
+        main_content = '''---
+title: Main
+related:
+  - ./doc1.md
+related_docs:
+  - ./doc2.md
+see_also:
+  - ./doc3.md
+---
+
+# Main
+'''
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        structure = analyzer.get_structure(extract_related=True)
+
+        related = structure['related']
+        self.assertEqual(len(related), 3)
+        paths = [r['path'] for r in related]
+        self.assertIn('./doc1.md', paths)
+        self.assertIn('./doc2.md', paths)
+        self.assertIn('./doc3.md', paths)
+
+    def test_related_missing_file(self):
+        """Test that missing related files are marked as not found."""
+        main_content = '''---
+title: Main
+related:
+  - ./nonexistent.md
+---
+
+# Main
+'''
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        structure = analyzer.get_structure(extract_related=True)
+
+        related = structure['related']
+        self.assertEqual(len(related), 1)
+        self.assertFalse(related[0]['exists'])
+        self.assertEqual(related[0]['headings'], [])
+
+    def test_related_depth_2(self):
+        """Test recursive related document extraction with depth=2."""
+        # Create chain: main -> doc1 -> doc2
+        self.create_temp_markdown('doc2.md', '# Doc 2\n\n## Section')
+
+        doc1_content = '''---
+title: Doc 1
+related:
+  - ./doc2.md
+---
+
+# Doc 1
+'''
+        self.create_temp_markdown('doc1.md', doc1_content)
+
+        main_content = '''---
+title: Main
+related:
+  - ./doc1.md
+---
+
+# Main
+'''
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        structure = analyzer.get_structure(extract_related=True, related_depth=2)
+
+        related = structure['related']
+        self.assertEqual(len(related), 1)
+
+        # Check that doc1's related docs are included
+        doc1_related = related[0]['related']
+        self.assertEqual(len(doc1_related), 1)
+        self.assertEqual(doc1_related[0]['path'], './doc2.md')
+        self.assertTrue(doc1_related[0]['exists'])
+
+    def test_related_cycle_detection(self):
+        """Test that circular references don't cause infinite loops."""
+        # Create cycle: main -> doc1 -> main
+        doc1_content = '''---
+title: Doc 1
+related:
+  - ./main.md
+---
+
+# Doc 1
+'''
+        self.create_temp_markdown('doc1.md', doc1_content)
+
+        main_content = '''---
+title: Main
+related:
+  - ./doc1.md
+---
+
+# Main
+'''
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        # This should complete without infinite loop
+        structure = analyzer.get_structure(extract_related=True, related_depth=2)
+
+        related = structure['related']
+        self.assertEqual(len(related), 1)
+        # doc1's related should not include main again (cycle detected)
+
+    def test_related_no_frontmatter(self):
+        """Test that files without front matter return empty related list."""
+        main_content = '''# Main Document
+
+No front matter here.
+'''
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        structure = analyzer.get_structure(extract_related=True)
+
+        self.assertIn('related', structure)
+        self.assertEqual(structure['related'], [])
+
+    def test_related_skips_urls(self):
+        """Test that URLs are skipped in related docs."""
+        main_content = '''---
+title: Main
+related:
+  - https://example.com/doc.md
+  - ./local.md
+---
+
+# Main
+'''
+        self.create_temp_markdown('local.md', '# Local')
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        structure = analyzer.get_structure(extract_related=True)
+
+        related = structure['related']
+        # Should only have the local file, not the URL
+        self.assertEqual(len(related), 1)
+        self.assertEqual(related[0]['path'], './local.md')
+
+    def test_related_skips_non_markdown(self):
+        """Test that non-markdown files are skipped."""
+        self.create_temp_markdown('doc.txt', 'Not markdown')  # Wrong extension
+
+        main_content = '''---
+title: Main
+related:
+  - ./doc.txt
+---
+
+# Main
+'''
+        main_path = self.create_temp_markdown('main.md', main_content)
+
+        analyzer = MarkdownAnalyzer(main_path)
+        structure = analyzer.get_structure(extract_related=True)
+
+        # .txt file should be skipped entirely
+        self.assertEqual(structure['related'], [])
+
+
 if __name__ == '__main__':
     unittest.main()

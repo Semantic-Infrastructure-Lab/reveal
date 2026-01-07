@@ -420,7 +420,7 @@ reveal/
 ├── cli/          # Argument parsing, routing, handlers
 ├── display/      # Terminal output formatting
 ├── rendering/    # Adapter-specific renderers
-├── rules/        # 24 quality rules (B, C, D, E, M, N, R, S, U, V)
+├── rules/        # 41 quality rules (B, C, D, E, F, I, L, M, N, R, S, U, V)
 ├── analyzers/    # 26 file types (Python, Rust, HTML, Markdown, etc.)
 ├── adapters/     # URI support (help://, env://, ast://, python://)
 ├── schemas/      # Type definitions (renamed from types/ in v0.23.0)
@@ -452,6 +452,6 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 **License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](reveal/COOL_TRICKS.md) | [Issues](https://github.com/Semantic-Infrastructure-Lab/reveal/issues)
 
-[![Stars](https://img.shields.io/github/stars/scottsen/reveal?style=social)](https://github.com/Semantic-Infrastructure-Lab/reveal)
+[![Stars](https://img.shields.io/github/stars/Semantic-Infrastructure-Lab/reveal?style=social)](https://github.com/Semantic-Infrastructure-Lab/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)

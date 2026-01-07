@@ -13,14 +13,17 @@ beth_topics:
   - obsidian
   - beth
 related_docs:
-  - ./KNOWLEDGE_GRAPH_PROPOSAL.md
-  - ./KNOWLEDGE_GRAPH_ARCHITECTURE.md
-  - ../../ROADMAP.md
+  - ../internal-docs/planning/KNOWLEDGE_GRAPH_ARCHITECTURE.md
+  - ../ROADMAP.md
 status: ready-for-implementation
 ships_as: "reveal help://knowledge-graph"
 ---
 
 <!-- Source: KNOWLEDGE_GRAPH_GUIDE.md | Type: User Guide | Access: reveal help://knowledge-graph -->
+
+> **Note:** The `--related` flag is available in v0.32.0+.
+> The `--check-metadata` flag is planned for a future release.
+> Currently available: `--frontmatter`, `--validate-schema`, and `--related`.
 
 # Building Knowledge Graphs with Reveal
 

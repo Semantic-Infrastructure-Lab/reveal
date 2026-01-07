@@ -173,6 +173,76 @@ def _format_code_blocks(
         _format_inline_code_items(by_lang['inline'], path, output_format)
 
 
+def _format_related_item(
+    item: Dict[str, Any],
+    indent: str = "  ",
+    output_format: str = "text"
+) -> None:
+    """Format and display a single related document.
+
+    Args:
+        item: Related document info dict
+        indent: Indentation prefix
+        output_format: Output format ('grep' or default)
+    """
+    path = item.get('path', '?')
+    exists = item.get('exists', False)
+    headings = item.get('headings', [])
+    error = item.get('error')
+    nested_related = item.get('related', [])
+
+    # Status indicator
+    if not exists:
+        status = "✗ NOT FOUND"
+    elif error:
+        status = f"⚠ {error}"
+    else:
+        status = "✓"
+
+    print(f"{indent}{path} {status}")
+
+    # Show headings if available
+    if headings and exists and not error:
+        print(f"{indent}  Headings ({len(headings)}):")
+        for heading in headings[:5]:
+            print(f"{indent}    - {heading}")
+        if len(headings) > 5:
+            print(f"{indent}    ... and {len(headings) - 5} more")
+
+    # Show nested related docs (for depth=2)
+    if nested_related:
+        print(f"{indent}  Related ({len(nested_related)}):")
+        for nested in nested_related:
+            _format_related_item(nested, indent=indent + "    ", output_format=output_format)
+
+
+def _format_related(
+    items: List[Dict[str, Any]], path: Path, output_format: str
+) -> None:
+    """Format and display related documents from front matter.
+
+    Args:
+        items: List of related document info dicts
+        path: Source file path
+        output_format: Output format ('grep', 'json', or default)
+    """
+    if not items:
+        print("  (No related documents found in front matter)")
+        return
+
+    if output_format == 'grep':
+        for item in items:
+            rel_path = item.get('path', '?')
+            exists = "EXISTS" if item.get('exists', False) else "MISSING"
+            print(f"{path}:related:{rel_path}:{exists}")
+        return
+
+    # Default text format
+    for i, item in enumerate(items, 1):
+        print(f"\n  {i}. ", end="")
+        _format_related_item(item, indent="     ", output_format=output_format)
+
+
 def _format_script_summary(script: Dict[str, Any]) -> None:
     """Format and display a single script summary.
 
@@ -231,18 +301,18 @@ def _format_script_element(
 
     Args:
         elem: Script element dict
-        path: File path
+        path: File path (kept for API compatibility, not displayed - shown in header)
         line: Line number
     """
     if elem['type'] == 'external':
-        print(f"  {path}:{line:<6} [external] {elem['src']}")
+        print(f"  :{line:<6} [external] {elem['src']}")
         return
 
     preview = elem.get('preview', '')
     if preview:
-        print(f"  {path}:{line:<6} [inline] {preview[:60]}...")
+        print(f"  :{line:<6} [inline] {preview[:60]}...")
     else:
-        print(f"  {path}:{line:<6} [inline]")
+        print(f"  :{line:<6} [inline]")
 
 
 def _format_style_element(
@@ -252,18 +322,18 @@ def _format_style_element(
 
     Args:
         elem: Style element dict
-        path: File path
+        path: File path (kept for API compatibility, not displayed - shown in header)
         line: Line number
     """
     if elem['type'] == 'external':
-        print(f"  {path}:{line:<6} [external] {elem['href']}")
+        print(f"  :{line:<6} [external] {elem['href']}")
         return
 
     preview = elem.get('preview', '')
     if preview:
-        print(f"  {path}:{line:<6} [inline] {preview[:60]}...")
+        print(f"  :{line:<6} [inline] {preview[:60]}...")
     else:
-        print(f"  {path}:{line:<6} [inline]")
+        print(f"  :{line:<6} [inline]")
 
 
 def _format_semantic_element(
@@ -273,7 +343,7 @@ def _format_semantic_element(
 
     Args:
         elem: Semantic element dict
-        path: File path
+        path: File path (kept for API compatibility, not displayed - shown in header)
         line: Line number
     """
     tag = elem.get('tag', '')
@@ -295,7 +365,7 @@ def _format_semantic_element(
         first_class = elem_class.split()[0] if elem_class else ''
         label += f" .{first_class}"
 
-    print(f"  {path}:{line:<6} {label}")
+    print(f"  :{line:<6} {label}")
 
 
 def _format_html_elements(
@@ -338,21 +408,22 @@ def _format_standard_items(
                 metrics = f" [{', '.join(parts)}]"
 
         # Format based on what's available
+        # Note: path is already shown in file header, so text format omits it
         if signature and name:
             if output_format == 'grep':
                 print(f"{path}:{line}:{name}{signature}")
             else:
-                print(f"  {path}:{line:<6} {name}{signature}{metrics}")
+                print(f"  :{line:<6} {name}{signature}{metrics}")
         elif name:
             if output_format == 'grep':
                 print(f"{path}:{line}:{name}")
             else:
-                print(f"  {path}:{line:<6} {name}{metrics}")
+                print(f"  :{line:<6} {name}{metrics}")
         elif content:
             if output_format == 'grep':
                 print(f"{path}:{line}:{content}")
             else:
-                print(f"  {path}:{line:<6} {content}")
+                print(f"  :{line:<6} {content}")
 
 
 def _add_navigation_kwargs(kwargs: Dict[str, Any], args) -> None:
@@ -451,6 +522,10 @@ def _build_analyzer_kwargs(analyzer: FileAnalyzer, args) -> Dict[str, Any]:
 
         if args.frontmatter:
             kwargs['extract_frontmatter'] = True
+
+        if getattr(args, 'related', False):
+            kwargs['extract_related'] = True
+            kwargs['related_depth'] = getattr(args, 'related_depth', 1)
 
     # HTML-specific filters
     if args and hasattr(analyzer, '_extract_metadata'):
