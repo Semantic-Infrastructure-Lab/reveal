@@ -1,8 +1,8 @@
 # Reveal Planning Documentation
 
-**Last Updated:** 2026-01-04
-**Current Release:** v0.29.0
-**Next Release:** v0.30.0 (Semantic Diff Adapter)
+**Last Updated:** 2026-01-06
+**Current Release:** v0.31.0
+**Next Release:** v0.32.0 (Link Following with --related)
 
 Internal planning documents for future and in-progress features.
 
@@ -10,138 +10,63 @@ Internal planning documents for future and in-progress features.
 
 ## Active Plans
 
-### 🚧 diff:// Adapter (v0.30.0)
+### 🎯 Knowledge Graph Features (v0.32.0-v0.34.0)
 
-**Status:** 🚧 In progress (90% complete)
-**Target:** v0.30.0 (Jan 2026)
+**Status:** Schema validation ✅ SHIPPED, link following planned
+**Target:** v0.32.0 (Link following), v0.33.0 (markdown:// adapter), v0.34.0 (Documentation)
 **Priority:** HIGH
-**Effort:** 2-3 weeks
+**Effort:** 8-10 weeks remaining
 
-Semantic structural comparison for code review and impact assessment.
-
-**Features:**
-- File and directory comparison
-- Git integration (commits, branches, working tree)
-- Element-level diff for deep dives
-- JSON output for CI/CD
-- AI agent optimized usage guide
-
-**Breaking Change:** Python 3.10+ minimum (was 3.8+)
-
-**Documents:**
-- `../../docs/DIFF_ADAPTER_GUIDE.md` - AI agent integration guide
-- See ROADMAP.md for feature details
-
----
-
-### 🎯 Breadcrumb Navigation Enhancements (v0.30.1-v0.32.0)
-
-**Status:** Design complete, implementation pending
-**Target:** v0.30.1 (Feb 2026), v0.31.0 (Q2 2026), v0.32.0 (Q3 2026)
-**Priority:** HIGH (Phase 1), MEDIUM (Phase 2-3)
-**Effort:** 1-2 hours (Phase 1), 3-4 weeks (Phase 2), 2-3 weeks (Phase 3)
-
-Enhanced breadcrumb system to guide users through Reveal's full feature set.
-
-**Primary Document:**
-- **[BREADCRUMB_IMPROVEMENTS_2026.md](./BREADCRUMB_IMPROVEMENTS_2026.md)** - Complete design with 5-phase implementation plan
-
-**Roadmap:**
-- **Phase 1 (v0.30.1):** Critical fixes (1-2 hours)
-  - Fix "typed" context bug (broken functionality)
-  - Add HTML analyzer mapping
-  - Test coverage for all contexts
-- **Phase 2 (v0.31.0):** Adapter awareness (3-4 weeks)
-  - Large file detection → AST suggestions
-  - Post-check quality guidance
-  - Import analysis breadcrumbs
-  - diff:// workflow hints
-  - Token savings: 50-200 per session
-- **Phase 3 (v0.32.0):** Workflow guidance (2-3 weeks)
-  - Pre-commit workflow detection
-  - Code review workflow hints
-  - Refactoring workflow support
-  - Help system integration
-- **Phase 4-5 (Future):** Context awareness and advanced features
-
-**Key Principles:**
-- Agent-first design (token efficiency)
-- Progressive disclosure (guide to advanced features)
-- Workflow-oriented (complete tasks, not just commands)
-- Opportunistic (leverage existing infrastructure)
-
-**Next Steps:**
-- Phase 1: Fix critical bug in v0.30.1 (1-2 hours)
-- Phase 2: Design adapter-specific breadcrumbs for v0.31.0
-
----
-
-### 🎯 Knowledge Graph Features (v0.29.0-v0.33.0)
-
-**Status:** Phase 1 complete ✅, remaining phases planned
-**Target:** v0.29.0 ✅ (Schema validation), v0.32.0 (Link following), v0.33.0 (Queries + checks)
-**Priority:** MEDIUM
-**Effort:** 10-12 weeks over 4 releases
-
-Knowledge graph construction: schema validation, link following, metadata queries, quality checks.
+Knowledge graph construction: link following, metadata queries, quality checks.
 
 **Primary Documents:**
 - **[KNOWLEDGE_GRAPH_PROPOSAL.md](./KNOWLEDGE_GRAPH_PROPOSAL.md)** - Executive decision document (Option A approved)
 - **[KNOWLEDGE_GRAPH_ARCHITECTURE.md](./KNOWLEDGE_GRAPH_ARCHITECTURE.md)** - Technical architecture & implementation specs
-- **[KNOWLEDGE_GRAPH_GUIDE.md](./KNOWLEDGE_GRAPH_GUIDE.md)** - User-facing guide (ships as `reveal help://knowledge-graph`)
+- **[KNOWLEDGE_GRAPH_GUIDE.md](./KNOWLEDGE_GRAPH_GUIDE.md)** - User-facing guide
 
-**Roadmap (Updated):**
-- ✅ v0.29.0 (Jan 2026): Schema validation framework - SHIPPED
-- v0.32.0 (Q3 2026): Link following with --related flag (2-3 weeks)
-- v0.33.0 (Q3 2026): markdown:// adapter + quality checks (5-6 weeks)
-- v0.34.0 (Q4 2026): Complete documentation suite (1-2 weeks)
+**Roadmap:**
+- ✅ v0.29.0: Schema validation framework - SHIPPED
+- 🎯 v0.32.0 (Q2 2026): `--related` flag for link following (2-3 weeks)
+- 🎯 v0.33.0 (Q3 2026): `markdown://` adapter + quality checks (5-6 weeks)
+- 🎯 v0.34.0 (Q4 2026): Complete documentation suite (1-2 weeks)
 
 **Key Principles:**
 - Generic features (not Beth-specific) - works with Hugo, Obsidian, Jekyll, custom schemas
 - Stateless architecture (max depth 2 for link following)
 - Ships with reference schemas: beth.yaml, hugo.yaml, jekyll.yaml, mkdocs.yaml, obsidian.yaml
 
-**Completed:**
-- ✅ v0.29.0: Schema validation with 5 built-in schemas, F001-F005 rules, comprehensive guide
-
 ---
 
-### 🔧 AST Migration & Analyzer Quality (v0.29.0+)
+### 🔧 AST Migration - Nginx Phase (v0.32.0, optional)
 
-**Status:** Phase 1-4 complete, Phase 5 planned
-**Priority:** MEDIUM (quality/maintainability, fits between major features)
-**Effort:** Opportunistic (1 day per phase)
+**Status:** Pattern established ✅, nginx enhancement planned
+**Priority:** LOW (quality/maintainability)
+**Effort:** 1 day (opportunistic)
 
-Progressive migration from regex-based analyzers to AST parsing for better accuracy and maintainability.
-
-**Primary Document:**
-- **[AST_MIGRATION_ROADMAP.md](./AST_MIGRATION_ROADMAP.md)** - Complete roadmap and pattern guide
-
-**Completed (Jan 2026):**
-- ✅ Phase 1-4: Markdown AST migration with column tracking (3 sessions)
-- ✅ Pattern established: Optional dependencies + fallback mechanisms
-- ✅ Research: GDScript (defer), nginx/crossplane (viable)
+**Primary Document:** [AST_MIGRATION_ROADMAP.md](./AST_MIGRATION_ROADMAP.md)
 
 **Planned:**
-- 🎯 Phase 5: Nginx crossplane enhancement (v0.29.0-v0.31.0, optional)
-  - Optional dependency pattern: `pip install reveal[nginx]`
-  - Complete directive extraction (upstream servers, SSL config, etc.)
-  - Fallback to current regex parser
-  - Effort: 1 day
-- 📋 Phase 6+: Monitor GDScript, evaluate bash/Dockerfile (quarterly review)
-
-**Integration with Knowledge Graph:**
-- AST migrations are opportunistic quality improvements
-- Implemented during foundation work between major features
-- Phase 5 nginx enhancement could ship alongside v0.29.0-v0.31.0 if time permits
-
-**Completion Reports:**
-- **[../PHASES_3_4_AST_MIGRATION.md](../PHASES_3_4_AST_MIGRATION.md)** - Phase 3/4 session work
-- **[../NGINX_SUPPORT_DOCUMENTATION.md](../NGINX_SUPPORT_DOCUMENTATION.md)** - Crossplane implementation spec
+- Nginx crossplane enhancement: `pip install reveal[nginx]`
+- Complete directive extraction (upstream servers, SSL config)
+- Fallback to current regex parser
 
 ---
 
 ## Shipped Plans
+
+### ✅ diff:// Adapter (v0.30.0)
+
+**Status:** ✅ SHIPPED (Jan 2026)
+**Features:** File/directory comparison, Git integration (commits, branches), element-level diff, JSON output
+**Document:** [../../docs/DIFF_ADAPTER_GUIDE.md](../../docs/DIFF_ADAPTER_GUIDE.md)
+
+### ✅ Smart Breadcrumbs (v0.30.0-v0.31.0)
+
+**Status:** ✅ SHIPPED (Jan 2026)
+**Features:**
+- v0.30.0: Large file detection, import analysis hints, file-type suggestions
+- v0.31.0: Post-check quality guidance, diff:// workflow hints, -q/--quiet mode, pre-commit/code review workflows
+**Document:** [BREADCRUMB_IMPROVEMENTS_2026.md](./BREADCRUMB_IMPROVEMENTS_2026.md) (phases 1-3 complete)
 
 ### ✅ imports:// Adapter (v0.28.0)
 
@@ -180,37 +105,20 @@ Progressive migration from regex-based analyzers to AST parsing for better accur
 - Decorator-aware queries, API surface detection, semantic diff
 - Some ideas implemented in v0.23.0-v0.27.1
 
-### Historical Plans (Reference Only)
-
-These documents reflect work from v0.20.0-v0.26.0 timeframe:
-
-**Duplicate Detection:**
-- [DUPLICATE_DETECTION_DESIGN.md](./DUPLICATE_DETECTION_DESIGN.md) - System architecture
-- [DUPLICATE_DETECTION_ARCHITECTURE.md](./DUPLICATE_DETECTION_ARCHITECTURE.md) - Complete architectural guide
-- [DUPLICATE_DETECTION_OPTIMIZATION.md](./DUPLICATE_DETECTION_OPTIMIZATION.md) - Mathematical framework
-- [DUPLICATE_DETECTION_OVERVIEW.md](./DUPLICATE_DETECTION_OVERVIEW.md) - Visual overview
-
-**Code Quality:**
-- [CODE_QUALITY_ARCHITECTURE.md](./CODE_QUALITY_ARCHITECTURE.md) - Pattern discovery
-- [CODE_QUALITY_REFACTORING.md](./CODE_QUALITY_REFACTORING.md) - Refactoring plan
-- ✅ Completed in v0.27.1
-
-**Type System:**
-- [CONTAINMENT_MODEL_DESIGN.md](./CONTAINMENT_MODEL_DESIGN.md) - Type-first architecture
-- ✅ Completed in v0.23.0
-
-**Adapters:**
-- [NGINX_ADAPTER_ENHANCEMENTS.md](./NGINX_ADAPTER_ENHANCEMENTS.md) - Nginx enhancements
-- [LINK_VALIDATION_SPEC.md](./LINK_VALIDATION_SPEC.md) - Link validation (L-series rules)
-- ✅ Link validation completed in v0.26.0
-
----
-
 ## Archive
 
-For historical planning documents, see:
+Historical planning documents for completed features have been moved to `../archive/`:
+
+**Completed Feature Docs:**
+- Duplicate detection (4 docs) - v0.20.0-v0.26.0
+- Code quality (2 docs) - v0.27.1
+- Type system containment model - v0.23.0
+- Nginx/link validation adapters (2 docs) - v0.26.0
+- Documentation audits (3 docs) - Dec 2025-Jan 2026
+
+**Reference:**
 - **`../archive/PENDING_WORK_ARCHIVED_2025-12-31.md`** - Pre-v0.27.0 pending work index
-- **`../archive/`** - Version-specific checklists, specs, and validation reports
+- **`../archive/`** - Full archive directory
 
 See **`../../ROADMAP.md`** for the complete release roadmap and feature timeline.
 
