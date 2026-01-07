@@ -359,16 +359,54 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         return link_info
 
+    def _heading_to_slug(self, heading: str) -> str:
+        """Convert a heading to a URL-safe anchor slug.
+
+        Uses GitHub-style slug generation:
+        - Lowercase the heading
+        - Replace spaces and underscores with hyphens
+        - Remove special characters (except hyphens)
+        - Collapse multiple hyphens into one
+
+        Args:
+            heading: The heading text
+
+        Returns:
+            URL-safe anchor slug
+        """
+        slug = heading.lower()
+        # Replace spaces and underscores with hyphens
+        slug = re.sub(r'[\s_]+', '-', slug)
+        # Remove special characters except hyphens and alphanumerics
+        slug = re.sub(r'[^\w-]', '', slug)
+        # Collapse multiple hyphens
+        slug = re.sub(r'-+', '-', slug)
+        # Strip leading/trailing hyphens
+        slug = slug.strip('-')
+        return slug
+
     def _is_broken_link(self, url: str) -> bool:
         """Check if an internal link is broken.
 
+        Handles both anchor links (#heading) and file links (path/to/file).
+
         Args:
-            url: Internal link path
+            url: Internal link path or anchor
 
         Returns:
             True if link target doesn't exist
         """
-        # Resolve relative to markdown file's directory
+        # Handle anchor links (same-document links)
+        if url.startswith('#'):
+            anchor = url[1:]  # Remove the leading #
+            # Get all headings and check if any matches
+            headings = self._extract_headings()
+            for heading in headings:
+                if self._heading_to_slug(heading['name']) == anchor:
+                    return False
+            return True
+
+        # Handle file links - resolve relative to markdown file's directory
         base_dir = self.path.parent
         target = base_dir / url
 
