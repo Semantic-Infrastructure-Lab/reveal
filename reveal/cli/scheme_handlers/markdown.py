@@ -14,7 +14,7 @@ def handle_markdown(adapter_class: type, resource: str, element: Optional[str],
     Examples:
         markdown://                      - All markdown in current dir
         markdown://docs/                 - All markdown in docs/
-        markdown://?beth_topics=reveal   - Filter by field value
+        markdown://?topics=reveal   - Filter by field value
         markdown://docs/?!status         - Find files missing 'status'
     """
     from ...rendering.adapters.markdown_query import render_markdown_query

@@ -247,13 +247,13 @@ class TestF003RequiredFields:
         """Test detection when required field is missing."""
         schema = {
             'name': 'Test Schema',
-            'required_fields': ['session_id', 'beth_topics']
+            'required_fields': ['session_id', 'topics']
         }
         set_validation_context(schema)
 
         structure = {
             'frontmatter': {
-                'data': {'beth_topics': ['topic1']},  # Missing session_id
+                'data': {'topics': ['topic1']},  # Missing session_id
                 'line_start': 1
             }
         }
@@ -266,7 +266,7 @@ class TestF003RequiredFields:
         """Test no detection when all required fields present."""
         schema = {
             'name': 'Test Schema',
-            'required_fields': ['session_id', 'beth_topics']
+            'required_fields': ['session_id', 'topics']
         }
         set_validation_context(schema)
 
@@ -274,7 +274,7 @@ class TestF003RequiredFields:
             'frontmatter': {
                 'data': {
                     'session_id': 'test-session-0101',
-                    'beth_topics': ['topic1']
+                    'topics': ['topic1']
                 },
                 'line_start': 1
             }
@@ -333,7 +333,7 @@ class TestF004TypeMismatch:
         schema = {
             'name': 'Test Schema',
             'field_types': {
-                'beth_topics': 'list',
+                'topics': 'list',
                 'session_id': 'string'
             }
         }
@@ -342,7 +342,7 @@ class TestF004TypeMismatch:
         structure = {
             'frontmatter': {
                 'data': {
-                    'beth_topics': 'single-topic',  # Should be list
+                    'topics': 'single-topic',  # Should be list
                     'session_id': 'test-0101'
                 },
                 'line_start': 1
@@ -351,7 +351,7 @@ class TestF004TypeMismatch:
         detections = self.rule.check('test.md', structure, '')
         assert len(detections) == 1
         assert detections[0].rule_code == 'F004'
-        assert 'beth_topics' in detections[0].message
+        assert 'topics' in detections[0].message
         assert 'list' in detections[0].message
 
     def test_correct_types_no_detection(self):
@@ -359,7 +359,7 @@ class TestF004TypeMismatch:
         schema = {
             'name': 'Test Schema',
             'field_types': {
-                'beth_topics': 'list',
+                'topics': 'list',
                 'session_id': 'string',
                 'count': 'integer'
             }
@@ -369,7 +369,7 @@ class TestF004TypeMismatch:
         structure = {
             'frontmatter': {
                 'data': {
-                    'beth_topics': ['topic1', 'topic2'],
+                    'topics': ['topic1', 'topic2'],
                     'session_id': 'test-0101',
                     'count': 5
                 },
@@ -440,9 +440,9 @@ class TestF005CustomValidation:
             'validation_rules': [
                 {
                     'code': 'F005',
-                    'field': 'beth_topics',
+                    'field': 'topics',
                     'check': 'len(value) >= 1',
-                    'message': 'beth_topics must have at least one topic'
+                    'message': 'topics must have at least one topic'
                 }
             ]
         }
@@ -450,7 +450,7 @@ class TestF005CustomValidation:
 
         structure = {
             'frontmatter': {
-                'data': {'beth_topics': []},  # Empty list fails validation
+                'data': {'topics': []},  # Empty list fails validation
                 'line_start': 1
             }
         }
@@ -557,28 +557,28 @@ class TestF005CustomValidation:
         assert '.md' in self.rule.file_patterns
 
 
-class TestBethSchemaIntegration:
-    """Test F-series rules with real beth.yaml schema."""
+class TestSessionSchemaIntegration:
+    """Test F-series rules with real session.yaml schema."""
 
     def setup_method(self):
-        """Load beth schema and clear context."""
+        """Load session schema and clear context."""
         clear_cache()
         clear_validation_context()
-        self.schema = load_schema('beth')
+        self.schema = load_schema('session')
         assert self.schema is not None
 
     def teardown_method(self):
         """Clear context after test."""
         clear_validation_context()
 
-    def test_beth_schema_required_fields(self):
-        """Test F003 with beth schema required fields."""
+    def test_session_schema_required_fields(self):
+        """Test F003 with session schema required fields."""
         set_validation_context(self.schema)
         rule = F003()
 
         structure = {
             'frontmatter': {
-                'data': {},  # Missing session_id and beth_topics
+                'data': {},  # Missing session_id and topics
                 'line_start': 1
             }
         }
@@ -586,10 +586,10 @@ class TestBethSchemaIntegration:
         assert len(detections) == 2
         field_names = [d.message for d in detections]
         assert any('session_id' in msg for msg in field_names)
-        assert any('beth_topics' in msg for msg in field_names)
+        assert any('topics' in msg for msg in field_names)
 
-    def test_beth_schema_type_validation(self):
-        """Test F004 with beth schema field types."""
+    def test_session_schema_type_validation(self):
+        """Test F004 with session schema field types."""
         set_validation_context(self.schema)
         rule = F004()
 
@@ -597,7 +597,7 @@ class TestBethSchemaIntegration:
             'frontmatter': {
                 'data': {
                     'session_id': 123,  # Should be string
-                    'beth_topics': 'single',  # Should be list
+                    'topics': 'single',  # Should be list
                     'files_modified': '5'  # Should be integer
                 },
                 'line_start': 1
@@ -606,8 +606,8 @@ class TestBethSchemaIntegration:
         detections = rule.check('README.md', structure, '')
         assert len(detections) == 3
 
-    def test_beth_schema_custom_validation(self):
-        """Test F005 with beth schema custom rules."""
+    def test_session_schema_custom_validation(self):
+        """Test F005 with session schema custom rules."""
         set_validation_context(self.schema)
         rule = F005()
 
@@ -615,7 +615,7 @@ class TestBethSchemaIntegration:
             'frontmatter': {
                 'data': {
                     'session_id': 'invalid_format',  # Bad format
-                    'beth_topics': []  # Empty list
+                    'topics': []  # Empty list
                 },
                 'line_start': 1
             }
@@ -623,15 +623,15 @@ class TestBethSchemaIntegration:
         detections = rule.check('README.md', structure, '')
         assert len(detections) == 2
 
-    def test_valid_beth_session(self):
-        """Test no detections for valid beth session."""
+    def test_valid_session(self):
+        """Test no detections for valid session."""
         set_validation_context(self.schema)
 
         structure = {
             'frontmatter': {
                 'data': {
                     'session_id': 'garnet-ember-0102',
-                    'beth_topics': ['reveal', 'testing'],
+                    'topics': ['reveal', 'testing'],
                     'date': '2026-01-02',
                     'type': 'production',
                     'files_modified': 5

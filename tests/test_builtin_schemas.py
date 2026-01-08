@@ -821,7 +821,7 @@ class TestSchemaListing:
         """Test list_schemas includes all built-in schemas."""
         from reveal.schemas.frontmatter import list_schemas
         schemas = list_schemas()
-        assert 'beth' in schemas
+        assert 'session' in schemas
         assert 'hugo' in schemas
         assert 'jekyll' in schemas
         assert 'mkdocs' in schemas
@@ -836,7 +836,7 @@ class TestSchemaListing:
         try:
             result = run_reveal([temp_path, '--validate-schema', 'nonexistent'], check=False)
             assert result.returncode != 0
-            assert 'beth' in result.stderr
+            assert 'session' in result.stderr
             assert 'hugo' in result.stderr
             assert 'obsidian' in result.stderr
         finally:
@@ -860,10 +860,10 @@ date: 2026-01-02
             temp_path = f.name
 
         try:
-            # Should fail Beth validation (missing session_id, beth_topics)
-            beth_result = run_reveal([temp_path, '--validate-schema', 'beth'], check=False)
-            assert beth_result.returncode != 0
-            assert 'session_id' in beth_result.stdout or 'beth_topics' in beth_result.stdout
+            # Should fail Session validation (missing session_id, topics)
+            session_result = run_reveal([temp_path, '--validate-schema', 'session'], check=False)
+            assert session_result.returncode != 0
+            assert 'session_id' in session_result.stdout or 'topics' in session_result.stdout
 
             # Should pass Hugo validation (has required title and date)
             hugo_result = run_reveal([temp_path, '--validate-schema', 'hugo'])

@@ -660,7 +660,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         ---
         title: Document Title
-        beth_topics:
+        topics:
           - topic1
           - topic2
         tags: [tag1, tag2]

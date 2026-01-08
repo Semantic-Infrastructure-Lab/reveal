@@ -108,7 +108,7 @@ def _render_query_results(data: Dict[str, Any], output_format: str) -> None:
         print("  " + " ".join(parts))
 
         # Show matching fields (tags, topics)
-        for field in ['tags', 'beth_topics']:
+        for field in ['tags', 'topics']:
             if field in result:
                 values = result[field]
                 if isinstance(values, list):

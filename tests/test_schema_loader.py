@@ -24,19 +24,19 @@ class TestSchemaLoading:
         clear_cache()
 
     def test_load_builtin_schema_by_name(self):
-        """Test loading beth.yaml by name 'beth'."""
-        schema = load_schema('beth')
+        """Test loading session.yaml by name 'session'."""
+        schema = load_schema('session')
         assert schema is not None
-        assert schema['name'] == 'Beth Session Schema'
+        assert schema['name'] == 'Session/Workflow Schema'
         assert 'required_fields' in schema
         assert 'session_id' in schema['required_fields']
-        assert 'beth_topics' in schema['required_fields']
+        assert 'topics' in schema['required_fields']
 
     def test_load_builtin_schema_with_yaml_extension(self):
         """Test loading schema with .yaml extension works."""
-        schema = load_schema('beth.yaml')
+        schema = load_schema('session.yaml')
         assert schema is not None
-        assert schema['name'] == 'Beth Session Schema'
+        assert schema['name'] == 'Session/Workflow Schema'
 
     def test_load_nonexistent_schema(self):
         """Test loading nonexistent schema returns None."""
@@ -88,14 +88,14 @@ class TestSchemaCaching:
 
     def test_schema_caching(self):
         """Test schemas are cached after first load."""
-        schema1 = load_schema('beth')
-        schema2 = load_schema('beth')
+        schema1 = load_schema('session')
+        schema2 = load_schema('session')
         # Should be the exact same object (cached)
         assert schema1 is schema2
 
     def test_cache_per_name(self):
         """Test different schema names cached separately."""
-        schema1 = load_schema('beth')
+        schema1 = load_schema('session')
 
         # Create temporary custom schema
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
@@ -112,9 +112,9 @@ class TestSchemaCaching:
 
     def test_clear_cache(self):
         """Test cache can be cleared."""
-        schema1 = load_schema('beth')
+        schema1 = load_schema('session')
         clear_cache()
-        schema2 = load_schema('beth')
+        schema2 = load_schema('session')
         # Should be different objects after cache clear
         assert schema1 is not schema2
         # But same content
@@ -226,36 +226,36 @@ class TestBuiltinSchemas:
         """Test listing built-in schemas."""
         schemas = list_schemas()
         assert isinstance(schemas, list)
-        assert len(schemas) >= 1  # At least beth
-        assert 'beth' in schemas
+        assert len(schemas) >= 1  # At least session
+        assert 'session' in schemas
         # Should be sorted
         assert schemas == sorted(schemas)
 
-    def test_beth_schema_structure(self):
-        """Test beth schema has expected structure."""
-        schema = load_schema('beth')
+    def test_session_schema_structure(self):
+        """Test session schema has expected structure."""
+        schema = load_schema('session')
         assert schema is not None
-        assert schema['name'] == 'Beth Session Schema'
+        assert schema['name'] == 'Session/Workflow Schema'
         assert 'description' in schema
         assert 'version' in schema
 
         # Required fields
         assert 'required_fields' in schema
         assert 'session_id' in schema['required_fields']
-        assert 'beth_topics' in schema['required_fields']
+        assert 'topics' in schema['required_fields']
 
         # Field types
         assert 'field_types' in schema
         assert schema['field_types']['session_id'] == 'string'
-        assert schema['field_types']['beth_topics'] == 'list'
+        assert schema['field_types']['topics'] == 'list'
 
         # Validation rules
         assert 'validation_rules' in schema
         assert len(schema['validation_rules']) >= 2
 
-    def test_beth_schema_validation_rules(self):
-        """Test beth schema has proper validation rules."""
-        schema = load_schema('beth')
+    def test_session_schema_validation_rules(self):
+        """Test session schema has proper validation rules."""
+        schema = load_schema('session')
         rules = schema['validation_rules']
 
         # Should have session_id pattern rule
@@ -264,8 +264,8 @@ class TestBuiltinSchemas:
         assert session_id_rule['code'] == 'F005'
         assert 're.match' in session_id_rule['check']
 
-        # Should have beth_topics length rule
-        topics_rule = next((r for r in rules if r['field'] == 'beth_topics'), None)
+        # Should have topics length rule
+        topics_rule = next((r for r in rules if r['field'] == 'topics'), None)
         assert topics_rule is not None
         assert topics_rule['code'] == 'F005'
         assert 'len(value)' in topics_rule['check']
@@ -280,14 +280,14 @@ class TestSchemaLoaderClass:
 
     def test_resolve_schema_path_builtin(self):
         """Test resolving built-in schema name to path."""
-        path = SchemaLoader._resolve_schema_path('beth')
+        path = SchemaLoader._resolve_schema_path('session')
         assert path is not None
         assert path.exists()
-        assert path.name == 'beth.yaml'
+        assert path.name == 'session.yaml'
 
     def test_resolve_schema_path_with_extension(self):
         """Test resolving schema name with .yaml extension."""
-        path = SchemaLoader._resolve_schema_path('beth.yaml')
+        path = SchemaLoader._resolve_schema_path('session.yaml')
         assert path is not None
         assert path.exists()
 
@@ -343,7 +343,7 @@ class TestPublicAPI:
 
     def test_load_schema_function(self):
         """Test public load_schema function."""
-        schema = load_schema('beth')
+        schema = load_schema('session')
         assert schema is not None
         assert isinstance(schema, dict)
 
@@ -355,7 +355,7 @@ class TestPublicAPI:
 
     def test_clear_cache_function(self):
         """Test public clear_cache function."""
-        schema1 = load_schema('beth')
+        schema1 = load_schema('session')
         clear_cache()
-        schema2 = load_schema('beth')
+        schema2 = load_schema('session')
         assert schema1 is not schema2

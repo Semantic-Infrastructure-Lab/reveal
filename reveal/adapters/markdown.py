@@ -22,7 +22,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
         Args:
             base_path: Directory to search for markdown files
-            query: Query string (e.g., 'beth_topics=reveal', '!status')
+            query: Query string (e.g., 'topics=reveal', '!status')
         """
         self.base_path = Path(base_path).resolve()
         self.query = query
@@ -45,16 +45,16 @@ class MarkdownQueryAdapter(ResourceAdapter):
                     'description': 'List all markdown files in docs/ directory'
                 },
                 {
-                    'uri': 'markdown://sessions/?beth_topics=reveal',
-                    'description': 'Find files where beth_topics contains "reveal"'
+                    'uri': 'markdown://sessions/?topics=reveal',
+                    'description': 'Find files where topics contains "reveal"'
                 },
                 {
                     'uri': 'markdown://docs/?tags=python&status=active',
                     'description': 'Multiple filters (AND logic)'
                 },
                 {
-                    'uri': 'markdown://?!beth_topics',
-                    'description': 'Find files missing beth_topics field'
+                    'uri': 'markdown://?!topics',
+                    'description': 'Find files missing topics field'
                 },
                 {
                     'uri': 'markdown://?type=*guide*',
@@ -94,7 +94,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                     'name': 'Find Undocumented Files',
                     'scenario': 'Identify files missing required metadata',
                     'steps': [
-                        "reveal markdown://?!beth_topics      # Missing topics",
+                        "reveal markdown://?!topics      # Missing topics",
                         "reveal markdown://?!status           # Missing status",
                     ],
                 },
@@ -102,7 +102,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
                     'name': 'Explore Knowledge Graph',
                     'scenario': 'Find and traverse related documents',
                     'steps': [
-                        "reveal markdown://sessions/?beth_topics=reveal",
+                        "reveal markdown://sessions/?topics=reveal",
                         "reveal <found-file> --related-all    # Follow links",
                     ],
                 },
@@ -288,7 +288,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
                 # Include key frontmatter fields
                 if frontmatter:
-                    for key in ['title', 'type', 'status', 'tags', 'beth_topics']:
+                    for key in ['title', 'type', 'status', 'tags', 'topics']:
                         if key in frontmatter:
                             result[key] = frontmatter[key]
 

@@ -23,14 +23,14 @@ def temp_dir():
 
 
 @pytest.fixture
-def valid_beth_readme(temp_dir):
+def valid_session_readme(temp_dir):
     """Create a valid Beth session README."""
     readme = temp_dir / "README.md"
     readme.write_text("""---
 session_id: test-session-0102
 date: 2026-01-02
 badge: "Test Session"
-beth_topics: [testing, validation]
+topics: [testing, validation]
 type: testing
 ---
 
@@ -42,7 +42,7 @@ This is a test session README.
 
 
 @pytest.fixture
-def invalid_beth_readme(temp_dir):
+def invalid_session_readme(temp_dir):
     """Create an invalid Beth session README (missing required fields)."""
     readme = temp_dir / "README.md"
     readme.write_text("""---
@@ -52,7 +52,7 @@ badge: "Test Session"
 
 # Test Session
 
-Missing session_id and beth_topics.
+Missing session_id and topics.
 """)
     return readme
 
@@ -90,7 +90,7 @@ def type_mismatch_readme(temp_dir):
 session_id: test-session-0102
 date: 2026-01-02
 badge: "Test Session"
-beth_topics: "should be a list"
+topics: "should be a list"
 type: 123
 ---
 
@@ -187,15 +187,15 @@ class TestCLIFlagParsing:
         assert '--validate-schema' in result.stdout
         assert 'SCHEMA' in result.stdout
 
-    def test_validate_schema_requires_argument(self, valid_beth_readme):
+    def test_validate_schema_requires_argument(self, valid_session_readme):
         """Test that --validate-schema requires a schema argument."""
-        result = run_reveal([str(valid_beth_readme), '--validate-schema'], check=False)
+        result = run_reveal([str(valid_session_readme), '--validate-schema'], check=False)
         assert result.returncode != 0
         # argparse should complain about missing argument
 
-    def test_validate_schema_with_builtin(self, valid_beth_readme):
+    def test_validate_schema_with_builtin(self, valid_session_readme):
         """Test --validate-schema with built-in schema name."""
-        result = run_reveal([str(valid_beth_readme), '--validate-schema', 'beth'], check=False)
+        result = run_reveal([str(valid_session_readme), '--validate-schema', 'session'], check=False)
         # Should succeed (valid readme)
         assert result.returncode == 0 or 'F00' not in result.stdout
 
@@ -214,35 +214,35 @@ class TestCLIFlagParsing:
 # ============================================================================
 
 class TestBethSchemaValidation:
-    """Test validation against built-in beth schema."""
+    """Test validation against built-in session schema."""
 
-    def test_valid_beth_readme_passes(self, valid_beth_readme):
+    def test_valid_session_readme_passes(self, valid_session_readme):
         """Test that valid Beth README passes validation."""
-        result = run_reveal([str(valid_beth_readme), '--validate-schema', 'beth'])
+        result = run_reveal([str(valid_session_readme), '--validate-schema', 'session'])
         assert result.returncode == 0
         # Should have no F-series detections or only info-level
 
-    def test_missing_required_fields(self, invalid_beth_readme):
+    def test_missing_required_fields(self, invalid_session_readme):
         """Test detection of missing required fields."""
-        result = run_reveal([str(invalid_beth_readme), '--validate-schema', 'beth'], check=False)
+        result = run_reveal([str(invalid_session_readme), '--validate-schema', 'session'], check=False)
         # Should detect F003 (missing required fields)
         assert 'F003' in result.stdout or result.returncode != 0
 
     def test_type_mismatch_detection(self, type_mismatch_readme):
         """Test detection of type mismatches."""
-        result = run_reveal([str(type_mismatch_readme), '--validate-schema', 'beth'], check=False)
+        result = run_reveal([str(type_mismatch_readme), '--validate-schema', 'session'], check=False)
         # Should detect F004 (type mismatch)
         assert 'F004' in result.stdout or result.returncode != 0
 
     def test_empty_frontmatter_detection(self, empty_frontmatter_readme):
         """Test detection of empty front matter."""
-        result = run_reveal([str(empty_frontmatter_readme), '--validate-schema', 'beth'], check=False)
+        result = run_reveal([str(empty_frontmatter_readme), '--validate-schema', 'session'], check=False)
         # Should detect F002 (empty) or F003 (missing required)
         assert 'F00' in result.stdout or result.returncode != 0
 
     def test_missing_frontmatter_detection(self, no_frontmatter_readme):
         """Test detection of missing front matter."""
-        result = run_reveal([str(no_frontmatter_readme), '--validate-schema', 'beth'], check=False)
+        result = run_reveal([str(no_frontmatter_readme), '--validate-schema', 'session'], check=False)
         # Should detect F001 (missing front matter)
         assert 'F001' in result.stdout or result.returncode != 0
 
@@ -322,27 +322,27 @@ Empty title and tags.
 class TestErrorHandling:
     """Test error handling and edge cases."""
 
-    def test_nonexistent_schema(self, valid_beth_readme):
+    def test_nonexistent_schema(self, valid_session_readme):
         """Test error when schema doesn't exist."""
         result = run_reveal(
-            [str(valid_beth_readme), '--validate-schema', 'nonexistent'],
+            [str(valid_session_readme), '--validate-schema', 'nonexistent'],
             check=False
         )
         assert result.returncode != 0
         assert 'not found' in result.stderr.lower() or 'error' in result.stderr.lower()
 
-    def test_invalid_schema_file(self, valid_beth_readme, temp_dir):
+    def test_invalid_schema_file(self, valid_session_readme, temp_dir):
         """Test error when schema file is invalid YAML."""
         bad_schema = temp_dir / "bad.yaml"
         bad_schema.write_text("{ invalid yaml [")
 
         result = run_reveal(
-            [str(valid_beth_readme), '--validate-schema', str(bad_schema)],
+            [str(valid_session_readme), '--validate-schema', str(bad_schema)],
             check=False
         )
         assert result.returncode != 0
 
-    def test_schema_missing_name(self, valid_beth_readme, temp_dir):
+    def test_schema_missing_name(self, valid_session_readme, temp_dir):
         """Test error when schema missing required 'name' field."""
         bad_schema = temp_dir / "no_name.yaml"
         bad_schema.write_text("""required_fields:
@@ -350,7 +350,7 @@ class TestErrorHandling:
 """)
 
         result = run_reveal(
-            [str(valid_beth_readme), '--validate-schema', str(bad_schema)],
+            [str(valid_session_readme), '--validate-schema', str(bad_schema)],
             check=False
         )
         assert result.returncode != 0
@@ -359,19 +359,19 @@ class TestErrorHandling:
         """Test error when file doesn't exist."""
         nonexistent = temp_dir / "doesnt_exist.md"
 
-        result = run_reveal([str(nonexistent), '--validate-schema', 'beth'], check=False)
+        result = run_reveal([str(nonexistent), '--validate-schema', 'session'], check=False)
         assert result.returncode != 0
         assert 'not found' in result.stderr.lower() or 'error' in result.stderr.lower()
 
-    def test_lists_available_schemas_on_error(self, valid_beth_readme):
+    def test_lists_available_schemas_on_error(self, valid_session_readme):
         """Test that available schemas are listed when schema not found."""
         result = run_reveal(
-            [str(valid_beth_readme), '--validate-schema', 'nonexistent'],
+            [str(valid_session_readme), '--validate-schema', 'nonexistent'],
             check=False
         )
         assert result.returncode != 0
         # Should list available built-in schemas
-        assert 'available' in result.stderr.lower() or 'beth' in result.stderr.lower()
+        assert 'available' in result.stderr.lower() or 'session' in result.stderr.lower()
 
 
 # ============================================================================
@@ -381,17 +381,17 @@ class TestErrorHandling:
 class TestOutputFormats:
     """Test different output formats."""
 
-    def test_text_format_output(self, invalid_beth_readme):
+    def test_text_format_output(self, invalid_session_readme):
         """Test text format output (default)."""
-        result = run_reveal([str(invalid_beth_readme), '--validate-schema', 'beth'], check=False)
+        result = run_reveal([str(invalid_session_readme), '--validate-schema', 'session'], check=False)
         # Text format should be human-readable
         assert 'F00' in result.stdout
         # Should show line numbers or positions
 
-    def test_json_format_output(self, invalid_beth_readme):
+    def test_json_format_output(self, invalid_session_readme):
         """Test JSON format output."""
         result = run_reveal(
-            [str(invalid_beth_readme), '--validate-schema', 'beth', '--format', 'json'],
+            [str(invalid_session_readme), '--validate-schema', 'session', '--format', 'json'],
             check=False
         )
 
@@ -402,10 +402,10 @@ class TestOutputFormats:
         except json.JSONDecodeError:
             pytest.fail("Output is not valid JSON")
 
-    def test_grep_format_output(self, invalid_beth_readme):
+    def test_grep_format_output(self, invalid_session_readme):
         """Test grep format output."""
         result = run_reveal(
-            [str(invalid_beth_readme), '--validate-schema', 'beth', '--format', 'grep'],
+            [str(invalid_session_readme), '--validate-schema', 'session', '--format', 'grep'],
             check=False
         )
 
@@ -413,7 +413,7 @@ class TestOutputFormats:
         lines = result.stdout.strip().split('\n')
         if lines and lines[0]:  # If there are detections
             # Should contain file path
-            assert str(invalid_beth_readme) in result.stdout or 'README.md' in result.stdout
+            assert str(invalid_session_readme) in result.stdout or 'README.md' in result.stdout
 
 
 # ============================================================================
@@ -423,10 +423,10 @@ class TestOutputFormats:
 class TestFlagCombinations:
     """Test --validate-schema with other flags."""
 
-    def test_with_select_flag(self, invalid_beth_readme):
+    def test_with_select_flag(self, invalid_session_readme):
         """Test --validate-schema with --select."""
         result = run_reveal(
-            [str(invalid_beth_readme), '--validate-schema', 'beth', '--select', 'F003'],
+            [str(invalid_session_readme), '--validate-schema', 'session', '--select', 'F003'],
             check=False
         )
         # Should only show F003 detections
@@ -434,29 +434,29 @@ class TestFlagCombinations:
             assert 'F003' in result.stdout
             assert 'F004' not in result.stdout
 
-    def test_with_ignore_flag(self, invalid_beth_readme):
+    def test_with_ignore_flag(self, invalid_session_readme):
         """Test --validate-schema with --ignore."""
         result = run_reveal(
-            [str(invalid_beth_readme), '--validate-schema', 'beth', '--ignore', 'F003'],
+            [str(invalid_session_readme), '--validate-schema', 'session', '--ignore', 'F003'],
             check=False
         )
         # Should not show F003 detections
         if 'F00' in result.stdout:
             assert 'F003' not in result.stdout
 
-    def test_defaults_to_f_series_rules(self, invalid_beth_readme):
+    def test_defaults_to_f_series_rules(self, invalid_session_readme):
         """Test that --validate-schema defaults to F-series rules."""
-        result = run_reveal([str(invalid_beth_readme), '--validate-schema', 'beth'], check=False)
+        result = run_reveal([str(invalid_session_readme), '--validate-schema', 'session'], check=False)
         # Should run F-series rules, not B/S/C/etc.
         if result.stdout:
             # If there are detections, they should be F-series
             assert 'F00' in result.stdout or result.returncode == 0
 
-    def test_mutually_exclusive_with_check(self, valid_beth_readme):
+    def test_mutually_exclusive_with_check(self, valid_session_readme):
         """Test behavior when both --validate-schema and --check are used."""
         # --validate-schema should take precedence (check routing.py order)
         result = run_reveal(
-            [str(valid_beth_readme), '--validate-schema', 'beth', '--check'],
+            [str(valid_session_readme), '--validate-schema', 'session', '--check'],
             check=False
         )
         # Should run schema validation (not general --check)
@@ -478,7 +478,7 @@ class TestEndToEndWorkflows:
 session_id: production-session-0102
 date: 2026-01-02
 badge: "Production Session"
-beth_topics: [reveal, schema-validation]
+topics: [reveal, schema-validation]
 type: production-execution
 ---
 
@@ -486,7 +486,7 @@ type: production-execution
 """)
 
         # Validate
-        result = run_reveal([str(readme), '--validate-schema', 'beth'])
+        result = run_reveal([str(readme), '--validate-schema', 'session'])
         assert result.returncode == 0
 
     def test_ci_pipeline_workflow(self, temp_dir):
@@ -498,7 +498,7 @@ type: production-execution
             readme.write_text(f"""---
 session_id: session-test-{i:04d}
 date: 2026-01-02
-beth_topics: [topic{i}]
+topics: [topic{i}]
 ---
 
 # Session {i}
@@ -507,7 +507,7 @@ beth_topics: [topic{i}]
 
         # Validate each file
         for readme in readmes:
-            result = run_reveal([str(readme), '--validate-schema', 'beth'])
+            result = run_reveal([str(readme), '--validate-schema', 'session'])
             assert result.returncode == 0
 
     def test_bulk_validation_workflow(self, temp_dir):
@@ -516,7 +516,7 @@ beth_topics: [topic{i}]
         valid = temp_dir / "valid.md"
         valid.write_text("""---
 session_id: valid-test-0102
-beth_topics: [test]
+topics: [test]
 ---
 # Valid
 """)
@@ -529,11 +529,11 @@ date: 2026-01-02
 """)
 
         # Validate valid
-        result1 = run_reveal([str(valid), '--validate-schema', 'beth'])
+        result1 = run_reveal([str(valid), '--validate-schema', 'session'])
         assert result1.returncode == 0
 
         # Validate invalid
-        result2 = run_reveal([str(invalid), '--validate-schema', 'beth'], check=False)
+        result2 = run_reveal([str(invalid), '--validate-schema', 'session'], check=False)
         assert result2.returncode != 0 or 'F00' in result2.stdout
 
     def test_documentation_generation_workflow(self, custom_schema_readme, custom_schema):
@@ -559,13 +559,13 @@ class TestEdgeCases:
         # Create front matter with many fields
         fields = {f"field_{i}": f"value_{i}" for i in range(100)}
         fields['session_id'] = 'large-test-0102'
-        fields['beth_topics'] = ['test']
+        fields['topics'] = ['test']
 
         import yaml
         frontmatter = yaml.dump(fields)
         readme.write_text(f"---\n{frontmatter}---\n\n# Large\n")
 
-        result = run_reveal([str(readme), '--validate-schema', 'beth'])
+        result = run_reveal([str(readme), '--validate-schema', 'session'])
         assert result.returncode == 0
 
     def test_unicode_in_frontmatter(self, temp_dir):
@@ -573,14 +573,14 @@ class TestEdgeCases:
         readme = temp_dir / "unicode.md"
         readme.write_text("""---
 session_id: unicode-test-0102
-beth_topics: [测试, тест, テスト]
+topics: [测试, тест, テスト]
 badge: "Unicode 🎉 Test"
 ---
 
 # Unicode Test
 """, encoding='utf-8')
 
-        result = run_reveal([str(readme), '--validate-schema', 'beth'])
+        result = run_reveal([str(readme), '--validate-schema', 'session'])
         assert result.returncode == 0
 
     def test_multiline_values(self, temp_dir):
@@ -588,7 +588,7 @@ badge: "Unicode 🎉 Test"
         readme = temp_dir / "multiline.md"
         readme.write_text("""---
 session_id: multiline-test-0102
-beth_topics: [test]
+topics: [test]
 badge: |
   This is a
   multiline
@@ -598,7 +598,7 @@ badge: |
 # Multiline
 """)
 
-        result = run_reveal([str(readme), '--validate-schema', 'beth'])
+        result = run_reveal([str(readme), '--validate-schema', 'session'])
         assert result.returncode == 0
 
     def test_special_yaml_types(self, temp_dir):
@@ -606,7 +606,7 @@ badge: |
         readme = temp_dir / "special.md"
         readme.write_text("""---
 session_id: special-types-0102
-beth_topics: [test]
+topics: [test]
 date: 2026-01-02
 null_field: null
 bool_field: true
@@ -617,5 +617,5 @@ float_field: 3.14
 # Special Types
 """)
 
-        result = run_reveal([str(readme), '--validate-schema', 'beth'])
+        result = run_reveal([str(readme), '--validate-schema', 'session'])
         assert result.returncode == 0

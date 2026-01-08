@@ -112,16 +112,16 @@ find docs -name "*.md" -exec reveal {} --check --select L001,L003 \;
   - Checks for `_index.md` (section pages)
 - **Static:** Fallback for simple file mapping
 
-**Auto-detection:** Scans current directory for framework indicators. Defaults to FastHTML for SIL projects.
+**Auto-detection:** Scans current directory for framework indicators (config files, directory structure).
 
 ---
 
-## Real-World Example: SIL Website
+## Real-World Example
 
-**Validation run on SIL website docs (64 markdown files, 1,245 links):**
+**Validation run on a documentation site (64 markdown files, 1,245 links):**
 
 ```bash
-reveal /home/scottsen/src/projects/sil-website/docs/meta/FAQ.md --check --select L
+reveal docs/FAQ.md --check --select L
 ```
 
 **Found 21 issues:**
@@ -134,9 +134,9 @@ reveal /home/scottsen/src/projects/sil-website/docs/meta/FAQ.md --check --select
    - Should be: `https://github.com/org/repo/blob/main/CONTRIBUTING.md` ✅
 
 2. **Case mismatches (FastHTML routing):**
-   - Link: `/foundations/founders-letter` ❌
-   - File: `foundations/FOUNDERS_LETTER.md` ✅
-   - Suggestion: Use `/foundations/FOUNDERS_LETTER` or rename file
+   - Link: `/docs/getting-started` ❌
+   - File: `docs/GETTING_STARTED.md` ✅
+   - Suggestion: Use `/docs/GETTING_STARTED` or rename file
 
 3. **Missing overview files:**
    - Link: `/systems/overview` ❌
@@ -338,7 +338,7 @@ Link: `foundations/SIL_GLOSSARY.md`
 
 | Project | Files | Links | Issues Found | Time |
 |---------|-------|-------|--------------|------|
-| SIL Website | 64 | 1,245 | 21 | 2m 15s |
+| Documentation Site | 64 | 1,245 | 21 | 2m 15s |
 | Reveal Docs | 12 | 156 | 3 | 18s |
 
 **Issue breakdown:**

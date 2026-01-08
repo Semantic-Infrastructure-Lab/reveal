@@ -3,16 +3,16 @@
 Schema-aware rule that validates field types match schema expectations.
 Only runs when --validate-schema is used.
 
-Example violation (beth schema):
+Example violation (session schema):
     ---
     session_id: garnet-ember-0102
-    beth_topics: "single-topic"    # Should be list, not string
+    topics: "single-topic"    # Should be list, not string
     ---
 
 Should be:
     ---
     session_id: garnet-ember-0102
-    beth_topics: [single-topic]
+    topics: [single-topic]
     ---
 """
 

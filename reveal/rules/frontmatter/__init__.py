@@ -148,7 +148,7 @@ def set_validation_context(schema: Optional[Dict[str, Any]]) -> None:
 
     Example:
         >>> from reveal.schemas.frontmatter import load_schema
-        >>> schema = load_schema('beth')
+        >>> schema = load_schema('session')
         >>> set_validation_context(schema)
         >>> # ... run F-series rules ...
         >>> set_validation_context(None)  # Clear

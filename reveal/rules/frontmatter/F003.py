@@ -3,7 +3,7 @@
 Schema-aware rule that validates required fields are present.
 Only runs when --validate-schema is used.
 
-Example violation (beth schema):
+Example violation (session schema):
     ---
     type: session
     ---
@@ -13,7 +13,7 @@ Example violation (beth schema):
 Should be:
     ---
     session_id: garnet-ember-0102
-    beth_topics: [reveal, schema-validation]
+    topics: [reveal, schema-validation]
     type: session
     ---
 """

@@ -3,16 +3,16 @@
 Schema-aware rule that runs custom validation checks defined in schema.
 Only runs when --validate-schema is used.
 
-Example violation (beth schema):
+Example violation (session schema):
     ---
     session_id: invalid_format     # Must match: word-word-MMDD
-    beth_topics: []                # Must have at least 1 topic
+    topics: []                # Must have at least 1 topic
     ---
 
 Should be:
     ---
     session_id: garnet-ember-0102
-    beth_topics: [reveal]
+    topics: [reveal]
     ---
 """
 

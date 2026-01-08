@@ -1,11 +1,11 @@
-name: "Beth Session Schema"
-description: "Validates Beth session README front matter"
+name: "Session/Workflow Schema"
+description: "Validates session or workflow README front matter - useful for tracking work sessions, sprints, or development workflows"
 version: "1.0"
 
 # Required fields (must be present in front matter)
 required_fields:
   - session_id
-  - beth_topics
+  - topics
 
 # Optional fields (commonly used but not required)
 optional_fields:
@@ -22,7 +22,7 @@ optional_fields:
 # Field type constraints
 field_types:
   session_id: string
-  beth_topics: list
+  topics: list
   related_docs: list
   tags: list
   status: string
@@ -36,11 +36,11 @@ field_types:
 # Custom validation rules
 validation_rules:
   - code: F005
-    field: beth_topics
+    field: topics
     check: "len(value) >= 1"
-    message: "beth_topics must contain at least one topic"
+    message: "topics must contain at least one topic"
 
   - code: F005
     field: session_id
-    check: "re.match(r'^[a-z]+-[a-z]+-\\d{4}$', value)"
-    message: "session_id format must be: word-word-MMDD (e.g., 'garnet-ember-0102')"
+    check: "re.match(r'^[a-z0-9-]+$', value)"
+    message: "session_id should be a valid identifier (lowercase letters, numbers, hyphens)"

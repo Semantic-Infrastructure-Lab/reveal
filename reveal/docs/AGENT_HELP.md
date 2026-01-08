@@ -114,8 +114,8 @@ reveal nginx.conf --check              # Nginx validation
 
 **Pattern:**
 ```bash
-# Validate Beth session README
-reveal README.md --validate-schema beth
+# Validate session README
+reveal README.md --validate-schema session
 
 # Validate Hugo blog post or static page
 reveal content/posts/article.md --validate-schema hugo
@@ -133,16 +133,16 @@ reveal vault/notes/project.md --validate-schema obsidian
 reveal document.md --validate-schema /path/to/custom-schema.yaml
 
 # JSON output for CI/CD
-reveal README.md --validate-schema beth --format json
+reveal README.md --validate-schema session --format json
 
 # Select specific validation rules
-reveal README.md --validate-schema beth --select F003,F004
+reveal README.md --validate-schema session --select F003,F004
 ```
 
 **Why this works:** Schema validation ensures consistent front matter across markdown files. Essential for documentation sites (Hugo, MkDocs), GitHub Pages (Jekyll), and knowledge bases (Obsidian).
 
 **Built-in schemas:**
-- **beth** - Session/workflow READMEs (requires `session_id`, `beth_topics`)
+- **session** - Session/workflow READMEs (requires `session_id`, `topics`)
 - **hugo** - Hugo static sites (requires `title`)
 - **jekyll** - Jekyll sites / GitHub Pages (requires `layout`)
 - **mkdocs** - MkDocs documentation (all fields optional)
@@ -171,13 +171,13 @@ reveal README.md --validate-schema beth --select F003,F004
 reveal markdown://docs/
 
 # Find files by specific field value
-reveal 'markdown://sessions/?beth_topics=reveal'
+reveal 'markdown://sessions/?topics=reveal'
 
 # Find files with specific tag
 reveal 'markdown://docs/?tags=python'
 
 # Find files missing required metadata
-reveal 'markdown://?!beth_topics'
+reveal 'markdown://?!topics'
 
 # Wildcard pattern matching
 reveal 'markdown://?type=*guide*'
@@ -186,7 +186,7 @@ reveal 'markdown://?type=*guide*'
 reveal 'markdown://docs/?status=active&type=guide'
 
 # Get paths for piping (grep format)
-reveal 'markdown://docs/?beth_topics=reveal' --format=grep
+reveal 'markdown://docs/?topics=reveal' --format=grep
 
 # JSON output for scripting
 reveal 'markdown://docs/?status=draft' --format=json
@@ -201,7 +201,7 @@ reveal 'markdown://docs/?status=draft' --format=json
 - `field1=val1&field2=val2` - Multiple filters (AND)
 
 **Use cases:**
-- Find all docs related to a topic: `markdown://?beth_topics=authentication`
+- Find all docs related to a topic: `markdown://?topics=authentication`
 - Find draft content: `markdown://?status=draft`
 - Quality check - find missing metadata: `markdown://?!title`
 - Combine with `--related`: Find docs, then traverse their links

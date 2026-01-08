@@ -5,9 +5,9 @@ Schemas define required fields, type constraints, and custom validation rules.
 
 Example:
     >>> from reveal.schemas.frontmatter import load_schema
-    >>> schema = load_schema('beth')
+    >>> schema = load_schema('session')
     >>> print(schema['name'])
-    'Beth Session Schema'
+    'Session/Workflow Schema'
 """
 
 import yaml
@@ -28,7 +28,7 @@ class SchemaLoader:
     Custom schemas can be loaded from any file path.
 
     Example:
-        >>> schema = SchemaLoader.load_schema('beth')
+        >>> schema = SchemaLoader.load_schema('session')
         >>> schema = SchemaLoader.load_schema('/path/to/custom.yaml')
         >>> schemas = SchemaLoader.list_builtin_schemas()
     """
@@ -41,13 +41,13 @@ class SchemaLoader:
         """Load schema by name or file path.
 
         Args:
-            schema_name_or_path: Schema name (beth, hugo, obsidian) or path to YAML file
+            schema_name_or_path: Schema name (session, hugo, obsidian) or path to YAML file
 
         Returns:
             Schema dict or None if not found/invalid
 
         Example:
-            >>> schema = SchemaLoader.load_schema('beth')
+            >>> schema = SchemaLoader.load_schema('session')
             >>> schema = SchemaLoader.load_schema('/tmp/custom.yaml')
         """
         # Check cache
@@ -87,6 +87,11 @@ class SchemaLoader:
             logger.error(f"Failed to load schema {schema_path}: {e}")
             return None
 
+    # Schema aliases for backward compatibility
+    _schema_aliases = {
+        'beth': 'session',  # beth renamed to session for open source
+    }
+
     @classmethod
     def _resolve_schema_path(cls, name_or_path: str) -> Optional[Path]:
         """Resolve schema name to file path.
@@ -99,9 +104,13 @@ class SchemaLoader:
 
         Resolution order:
             1. If it's an existing file path, use it
-            2. Try as built-in schema (name.yaml in schema directory)
-            3. Try with .yaml extension if missing
+            2. Check for schema aliases (backward compatibility)
+            3. Try as built-in schema (name.yaml in schema directory)
+            4. Try with .yaml extension if missing
         """
+        # Check for aliases
+        name_or_path = cls._schema_aliases.get(name_or_path, name_or_path)
+
         path = Path(name_or_path)
 
         # If it's an existing absolute/relative file, use it
@@ -170,7 +179,7 @@ class SchemaLoader:
         Example:
             >>> schemas = SchemaLoader.list_builtin_schemas()
             >>> print(schemas)
-            ['beth', 'hugo', 'obsidian']
+            ['session', 'hugo', 'obsidian']
         """
         schemas = []
         for file in cls._schema_dir.glob('*.yaml'):
@@ -195,13 +204,13 @@ def load_schema(name_or_path: str) -> Optional[Dict[str, Any]]:
     Public API for schema loading. Schemas are cached after first load.
 
     Args:
-        name_or_path: Schema name (beth, hugo, obsidian) or path to YAML file
+        name_or_path: Schema name (session, hugo, obsidian) or path to YAML file
 
     Returns:
         Schema dict or None if not found/invalid
 
     Example:
-        >>> schema = load_schema('beth')
+        >>> schema = load_schema('session')
         >>> if schema:
         ...     print(f"Loaded schema: {schema['name']}")
     """

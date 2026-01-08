@@ -347,7 +347,7 @@ Extract YAML front matter metadata from markdown files. Front matter is metadata
 title: Document Title
 author: Author Name
 date: 2025-12-13
-beth_topics:
+topics:
   - topic1
   - topic2
 tags: [tag1, tag2]
@@ -369,7 +369,7 @@ Frontmatter (5):
     title: Document Title
     author: Author Name
     date: 2025-12-13
-    beth_topics:
+    topics:
       - topic1
       - topic2
     tags:
@@ -392,7 +392,7 @@ reveal README.md --frontmatter --format=json
         "title": "Document Title",
         "author": "Author Name",
         "date": "2025-12-13",
-        "beth_topics": ["topic1", "topic2"],
+        "topics": ["topic1", "topic2"],
         "tags": ["tag1", "tag2"]
       },
       "line_start": 1,
@@ -451,16 +451,16 @@ done
 
 #### Real-World Integration Example
 
-The Semantic Infrastructure Lab uses reveal for metadata extraction in their Beth knowledge graph system:
+Use reveal for metadata extraction in documentation pipelines:
 
 ```bash
-# Extract semantic topics for indexing
-reveal sessions/*/README*.md --frontmatter --format=json | \
-  jq -r '.structure.frontmatter.data.beth_topics[]?' | \
+# Extract tags/topics for indexing
+reveal docs/**/*.md --frontmatter --format=json | \
+  jq -r '.structure.frontmatter.data.tags[]?' | \
   sort | uniq -c | sort -rn
 ```
 
-[Learn more about semantic search integration with reveal](https://semanticinfrastructurelab.org/docs/canonical/REVEAL_BETH_PROGRESSIVE_KNOWLEDGE_SYSTEM)
+This pattern works well for building topic indexes, documentation search, and content categorization.
 
 ### Combined with Other Features
 
@@ -500,7 +500,7 @@ reveal no-frontmatter.md --frontmatter
 ### Use Cases
 
 1. **Metadata Validation**: Audit front matter consistency across documentation
-2. **Topic Analysis**: Extract and analyze `beth_topics` distribution
+2. **Topic Analysis**: Extract and analyze `tags` distribution across files
 3. **Bibliography Generation**: Collect author/date metadata for citations
 4. **Documentation Indexes**: Build metadata-driven navigation
 5. **Quality Checks**: Ensure required fields present in all docs
