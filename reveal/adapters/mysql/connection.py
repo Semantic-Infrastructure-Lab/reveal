@@ -36,7 +36,7 @@ class MySQLConnection:
 
         self.connection_string = connection_string
         self.host = None
-        self.port = 3306
+        self.port = None  # Don't default to 3306 - let pymysql read from .my.cnf
         self.user = None
         self.password = None
         self.database = None
@@ -89,15 +89,19 @@ class MySQLConnection:
 
         Priority:
         1. URI credentials (already parsed)
-        2. Environment variables (MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE)
-        3. ~/.my.cnf (handled automatically by pymysql)
+        2. Environment variables (MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE)
+        3. ~/.my.cnf (handled automatically by pymysql when params not explicitly set)
+
+        Note: We don't apply defaults here - that's done in get_connection() only if
+        neither env vars nor .my.cnf provide values. This allows .my.cnf to work correctly.
         """
         # URI credentials take precedence (already set)
         if self.user and self.password:
             return
 
-        # Try environment variables
-        self.host = self.host or os.environ.get('MYSQL_HOST', 'localhost')
+        # Try environment variables (but don't apply defaults yet)
+        self.host = self.host or os.environ.get('MYSQL_HOST')
+        self.port = self.port or (int(os.environ.get('MYSQL_PORT')) if os.environ.get('MYSQL_PORT') else None)
         self.user = self.user or os.environ.get('MYSQL_USER')
         self.password = self.password or os.environ.get('MYSQL_PASSWORD')
         self.database = self.database or os.environ.get('MYSQL_DATABASE')
@@ -114,12 +118,17 @@ class MySQLConnection:
         if self._connection:
             return self._connection
 
+        # Always pass read_default_file so pymysql can read ~/.my.cnf
         connection_params = {
-            'host': self.host or 'localhost',
-            'port': self.port,
             'read_default_file': os.path.expanduser('~/.my.cnf'),
         }
 
+        # Only pass parameters that were explicitly set (URI or env vars)
+        # This allows pymysql to read missing values from .my.cnf
+        if self.host:
+            connection_params['host'] = self.host
+        if self.port:
+            connection_params['port'] = self.port
         if self.user:
             connection_params['user'] = self.user
         if self.password:
@@ -127,14 +136,23 @@ class MySQLConnection:
         if self.database:
             connection_params['database'] = self.database
 
+        # Apply final defaults only if nothing was set anywhere
+        # (not in URI, not in env vars, and presumably not in .my.cnf)
+        if 'host' not in connection_params:
+            connection_params['host'] = 'localhost'
+        if 'port' not in connection_params:
+            connection_params['port'] = 3306
+
         try:
             self._connection = pymysql.connect(**connection_params)
             return self._connection
         except Exception as e:
+            host_display = self.host or 'localhost'
+            port_display = self.port or 3306
             raise Exception(
-                f"Failed to connect to MySQL at {self.host}:{self.port}\n"
+                f"Failed to connect to MySQL at {host_display}:{port_display}\n"
                 f"Error: {str(e)}\n"
-                f"Hint: Set MYSQL_USER/MYSQL_PASSWORD env vars or configure ~/.my.cnf"
+                f"Hint: Set MYSQL_* env vars or configure ~/.my.cnf"
             )
 
     def convert_decimals(self, obj):

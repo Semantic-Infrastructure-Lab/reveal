@@ -34,8 +34,10 @@ class TestMySQLAdapterInit(unittest.TestCase):
 
         adapter = MySQLAdapter("")
         self.assertEqual(adapter.connection_string, "")
-        self.assertEqual(adapter.host, "localhost")  # Defaults to localhost
-        self.assertEqual(adapter.port, 3306)  # Default port
+        # host and port are None until get_connection() applies defaults
+        # This allows .my.cnf to be read by pymysql
+        self.assertIsNone(adapter.host)
+        self.assertIsNone(adapter.port)
         self.assertIsNone(adapter.database)
         # user/password depend on _resolve_credentials which is mocked
 
@@ -43,7 +45,8 @@ class TestMySQLAdapterInit(unittest.TestCase):
         """Should parse minimal connection string (host only)."""
         adapter = MySQLAdapter("mysql://localhost")
         self.assertEqual(adapter.host, "localhost")
-        self.assertEqual(adapter.port, 3306)  # Default port
+        # Port is None when not in URI - defaults applied in get_connection()
+        self.assertIsNone(adapter.port)
         self.assertIsNone(adapter.database)
 
     def test_init_with_full_connection_string(self):
@@ -116,8 +119,9 @@ class TestCredentialResolution(unittest.TestCase):
             from reveal.adapters.mysql.connection import MySQLConnection
             conn = MySQLConnection("mysql://")
 
-            # Should fall back to localhost
-            self.assertEqual(conn.host, 'localhost')
+            # Host is None after init - defaults applied in get_connection()
+            # This allows .my.cnf to be read properly
+            self.assertIsNone(conn.host)
         finally:
             # Restore env if it was set
             if env_backup is not None:
@@ -159,6 +163,120 @@ class TestCredentialResolution(unittest.TestCase):
         self.assertEqual(conn.host, 'env-host.example.com')
         self.assertEqual(conn.user, 'env_user')
         self.assertEqual(conn.password, 'env_pass')
+
+    @patch.dict(os.environ, {'MYSQL_PORT': '25060'}, clear=False)
+    def test_mysql_port_env_var(self):
+        """MYSQL_PORT environment variable should be used."""
+        from reveal.adapters.mysql.connection import MySQLConnection
+        conn = MySQLConnection("mysql://")
+
+        # Port should come from MYSQL_PORT env var
+        self.assertEqual(conn.port, 25060)
+
+    @patch.dict(os.environ, {
+        'MYSQL_HOST': 'dbserver',
+        'MYSQL_PORT': '3307',
+        'MYSQL_USER': 'dbuser',
+        'MYSQL_PASSWORD': 'dbpass'
+    })
+    def test_all_env_vars_including_port(self):
+        """Should use all MYSQL_* env vars including PORT."""
+        from reveal.adapters.mysql.connection import MySQLConnection
+        conn = MySQLConnection("mysql://")
+
+        self.assertEqual(conn.host, 'dbserver')
+        self.assertEqual(conn.port, 3307)
+        self.assertEqual(conn.user, 'dbuser')
+        self.assertEqual(conn.password, 'dbpass')
+
+    def test_uri_port_overrides_env_port(self):
+        """URI port should take precedence over MYSQL_PORT env var."""
+        with patch.dict(os.environ, {'MYSQL_PORT': '3307'}):
+            from reveal.adapters.mysql.connection import MySQLConnection
+            conn = MySQLConnection("mysql://localhost:25060")
+
+            # URI port should override env var
+            self.assertEqual(conn.host, 'localhost')
+            self.assertEqual(conn.port, 25060)
+
+    @patch('reveal.adapters.mysql.connection.pymysql')
+    def test_my_cnf_used_when_no_explicit_params(self, mock_pymysql):
+        """When host/port not in URI or env, pymysql should read from .my.cnf."""
+        from reveal.adapters.mysql.connection import MySQLConnection
+
+        # Remove any MYSQL_* env vars
+        env_backup = {}
+        for key in ['MYSQL_HOST', 'MYSQL_PORT', 'MYSQL_USER', 'MYSQL_PASSWORD']:
+            if key in os.environ:
+                env_backup[key] = os.environ[key]
+                del os.environ[key]
+
+        try:
+            conn = MySQLConnection("mysql://")
+            conn.get_connection()
+
+            # Verify pymysql.connect was called
+            mock_pymysql.connect.assert_called_once()
+            call_kwargs = mock_pymysql.connect.call_args[1]
+
+            # Should have read_default_file
+            self.assertIn('read_default_file', call_kwargs)
+            self.assertTrue(call_kwargs['read_default_file'].endswith('.my.cnf'))
+
+            # Should have defaults for host/port (since not in URI or env)
+            self.assertEqual(call_kwargs.get('host'), 'localhost')
+            self.assertEqual(call_kwargs.get('port'), 3306)
+
+            # Should NOT have explicit user/password (let .my.cnf provide them)
+            # If they're not in call_kwargs, pymysql will read them from .my.cnf
+        finally:
+            # Restore env vars
+            for key, value in env_backup.items():
+                os.environ[key] = value
+
+    @patch('reveal.adapters.mysql.connection.pymysql')
+    def test_explicit_params_override_my_cnf(self, mock_pymysql):
+        """Explicit URI params should override .my.cnf values."""
+        from reveal.adapters.mysql.connection import MySQLConnection
+
+        conn = MySQLConnection("mysql://myuser:mypass@myhost:25060")
+        conn.get_connection()
+
+        mock_pymysql.connect.assert_called_once()
+        call_kwargs = mock_pymysql.connect.call_args[1]
+
+        # Explicit values should be passed to pymysql
+        self.assertEqual(call_kwargs.get('host'), 'myhost')
+        self.assertEqual(call_kwargs.get('port'), 25060)
+        self.assertEqual(call_kwargs.get('user'), 'myuser')
+        self.assertEqual(call_kwargs.get('password'), 'mypass')
+
+        # These will override anything in .my.cnf
+        # (pymysql uses explicit params over .my.cnf values)
+
+    @patch('reveal.adapters.mysql.connection.pymysql')
+    def test_env_vars_passed_as_explicit_params(self, mock_pymysql):
+        """Env vars should be passed as explicit params, overriding .my.cnf."""
+        from reveal.adapters.mysql.connection import MySQLConnection
+
+        with patch.dict(os.environ, {
+            'MYSQL_HOST': 'env-host',
+            'MYSQL_PORT': '25060',
+            'MYSQL_USER': 'env-user'
+        }):
+            conn = MySQLConnection("mysql://")
+            conn.get_connection()
+
+            mock_pymysql.connect.assert_called_once()
+            call_kwargs = mock_pymysql.connect.call_args[1]
+
+            # Env vars should be passed explicitly
+            self.assertEqual(call_kwargs.get('host'), 'env-host')
+            self.assertEqual(call_kwargs.get('port'), 25060)
+            self.assertEqual(call_kwargs.get('user'), 'env-user')
+
+            # Password not in env, so not in call_kwargs
+            # pymysql will read it from .my.cnf if present
 
 
 class TestElementRouting(unittest.TestCase):

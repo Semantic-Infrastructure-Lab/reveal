@@ -122,7 +122,8 @@ class MySQLAdapter(ResourceAdapter):
                 '⚠️  IMPORTANT: Requires pymysql dependency',
                 'Install: pip install reveal-cli[database] OR pip install pymysql',
                 'Credentials: URI > env vars > ~/.my.cnf',
-                'Env vars: MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE',
+                'Env vars: MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE',
+                '~/.my.cnf: Reads [client] section when params not explicitly set',
                 ('Health thresholds: connections <80%, buffer pool >99%, '
                  'replication lag <60s'),
                 ('DBA tuning ratios: table scans <25%, thread cache miss <10%, '
