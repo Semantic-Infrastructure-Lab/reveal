@@ -5,7 +5,7 @@ Prevents broken `reveal help://topic` commands from deployed code.
 
 Example violation:
     - STATIC_HELP entry: 'markdown': 'MARKDOWN_GUIDE.md'
-    - File missing: reveal/MARKDOWN_GUIDE.md doesn't exist
+    - File missing: reveal/docs/MARKDOWN_GUIDE.md doesn't exist
     - Result: `reveal help://markdown` fails
 """
 
@@ -54,9 +54,10 @@ class V005(BaseRule):
             ))
             return detections
 
-        # Check each referenced file
+        # Check each referenced file (help docs are in reveal/docs/)
+        docs_dir = reveal_root / 'docs'
         for topic, file_path_str in static_help.items():
-            help_file = reveal_root / file_path_str
+            help_file = docs_dir / file_path_str
 
             if not help_file.exists():
                 detections.append(self.create_detection(
@@ -134,11 +135,16 @@ class V005(BaseRule):
             '*GUIDE.md',
         ]
 
+        # Help docs are in reveal/docs/
+        docs_dir = reveal_root / 'docs'
+        if not docs_dir.exists():
+            return
+
         registered_files = set(static_help.values())
 
         for pattern in guide_patterns:
-            for guide_file in reveal_root.rglob(pattern):
-                relative_path = str(guide_file.relative_to(reveal_root))
+            for guide_file in docs_dir.rglob(pattern):
+                relative_path = str(guide_file.relative_to(docs_dir))
 
                 # Skip if already registered
                 if relative_path in registered_files:

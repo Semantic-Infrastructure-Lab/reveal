@@ -87,8 +87,11 @@ class V001(BaseRule):
         """Check that referenced help files actually exist."""
         detections = []
 
+        # Help docs are in reveal/docs/ subdirectory
+        docs_dir = reveal_root / 'docs'
+
         for topic, help_file in static_help.items():
-            help_path = reveal_root / help_file
+            help_path = docs_dir / help_file
             if not help_path.exists():
                 detections.append(self.create_detection(
                     file_path="reveal/adapters/help.py",
