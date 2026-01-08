@@ -112,7 +112,7 @@ reveal --explain B001            # Explain specific rule
 
 ```bash
 # Validate markdown front matter against built-in schemas
-reveal README.md --validate-schema beth       # Beth session READMEs
+reveal README.md --validate-schema session    # Session/workflow READMEs
 reveal post.md --validate-schema hugo         # Hugo blog posts/pages
 reveal post.md --validate-schema jekyll       # Jekyll (GitHub Pages)
 reveal docs/api.md --validate-schema mkdocs   # MkDocs documentation
@@ -122,10 +122,10 @@ reveal note.md --validate-schema obsidian     # Obsidian notes
 reveal doc.md --validate-schema /path/to/schema.yaml
 
 # CI/CD integration
-reveal README.md --validate-schema beth --format json
+reveal README.md --validate-schema session --format json
 ```
 
-**Built-in schemas:** beth (session READMEs), hugo (static sites), jekyll (GitHub Pages), mkdocs (Python docs), obsidian (knowledge bases)
+**Built-in schemas:** session (workflow READMEs), hugo (static sites), jekyll (GitHub Pages), mkdocs (Python docs), obsidian (knowledge bases)
 **Validation rules (F-series):** F001 (missing front matter), F002 (empty), F003 (required fields), F004 (type mismatches), F005 (custom validation)
 **Docs:** [Schema Validation Guide](docs/SCHEMA_VALIDATION_GUIDE.md)
 
