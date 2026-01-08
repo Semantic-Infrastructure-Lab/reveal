@@ -223,12 +223,12 @@ class TestCredentialResolution(unittest.TestCase):
             self.assertIn('read_default_file', call_kwargs)
             self.assertTrue(call_kwargs['read_default_file'].endswith('.my.cnf'))
 
-            # Should have defaults for host/port (since not in URI or env)
-            self.assertEqual(call_kwargs.get('host'), 'localhost')
-            self.assertEqual(call_kwargs.get('port'), 3306)
-
-            # Should NOT have explicit user/password (let .my.cnf provide them)
-            # If they're not in call_kwargs, pymysql will read them from .my.cnf
+            # Should NOT have explicit host/port/user/password
+            # pymysql will read them from .my.cnf, or use its own defaults
+            self.assertNotIn('host', call_kwargs)
+            self.assertNotIn('port', call_kwargs)
+            self.assertNotIn('user', call_kwargs)
+            self.assertNotIn('password', call_kwargs)
         finally:
             # Restore env vars
             for key, value in env_backup.items():

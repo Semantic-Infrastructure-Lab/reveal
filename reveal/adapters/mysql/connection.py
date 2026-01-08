@@ -125,6 +125,7 @@ class MySQLConnection:
 
         # Only pass parameters that were explicitly set (URI or env vars)
         # This allows pymysql to read missing values from .my.cnf
+        # If we don't pass them, pymysql reads from .my.cnf then defaults to localhost:3306
         if self.host:
             connection_params['host'] = self.host
         if self.port:
@@ -136,12 +137,8 @@ class MySQLConnection:
         if self.database:
             connection_params['database'] = self.database
 
-        # Apply final defaults only if nothing was set anywhere
-        # (not in URI, not in env vars, and presumably not in .my.cnf)
-        if 'host' not in connection_params:
-            connection_params['host'] = 'localhost'
-        if 'port' not in connection_params:
-            connection_params['port'] = 3306
+        # DON'T apply defaults here - let pymysql handle it
+        # pymysql will: 1) Read from .my.cnf, 2) Default to localhost:3306 if not in file
 
         try:
             self._connection = pymysql.connect(**connection_params)
