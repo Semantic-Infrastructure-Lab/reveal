@@ -26,10 +26,10 @@ class V001(BaseRule):
     severity = Severity.MEDIUM
     file_patterns = ['*']  # Runs on any target (checks reveal internals)
 
-    # Known file types that should have help
+    # Known file types that should have help (paths relative to reveal/docs/)
     EXPECTED_HELP_TOPICS = {
         'markdown': 'MARKDOWN_GUIDE.md',
-        'python': 'adapters/PYTHON_ADAPTER_GUIDE.md',
+        'python': 'PYTHON_ADAPTER_GUIDE.md',
         # Add more as they're documented
     }
 

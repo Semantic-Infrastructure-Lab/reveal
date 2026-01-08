@@ -11,8 +11,8 @@ Example violation:
 Checks:
     - pyproject.toml (source of truth)
     - CHANGELOG.md (must have section for current version)
-    - reveal/AGENT_HELP.md (version reference)
-    - reveal/AGENT_HELP_FULL.md (version reference)
+    - reveal/docs/AGENT_HELP.md (version reference)
+    - reveal/docs/AGENT_HELP_FULL.md (version reference)
     - ROADMAP.md (current version reference)
     - README.md (version badge, if present)
 """
@@ -179,14 +179,15 @@ class V007(BaseRule):
         detections: List[Detection]
     ) -> None:
         """Validate a single AGENT_HELP*.md file version."""
-        file_path = reveal_root / filename
+        # AGENT_HELP files are in reveal/docs/
+        file_path = reveal_root / 'docs' / filename
         if not file_path.exists():
             return
 
         found_version = self._extract_version_from_markdown(file_path)
         if found_version and found_version != canonical:
             detections.append(self.create_detection(
-                file_path=f"reveal/{filename}",
+                file_path=f"reveal/docs/{filename}",
                 line=1,
                 message=f"{filename} version mismatch: "
                        f"{found_version} != {canonical}",
