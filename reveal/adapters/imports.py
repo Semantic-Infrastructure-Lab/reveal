@@ -205,7 +205,9 @@ class ImportsAdapter(ResourceAdapter):
             base_path = file_path.parent
             for stmt in imports:
                 resolved = extractor.resolve_import(stmt, base_path)
-                if resolved:
+                # Skip self-references (e.g., logging.py importing stdlib logging
+                # should not create logging.py → logging.py dependency)
+                if resolved and resolved != file_path:
                     self._graph.add_dependency(file_path, resolved)
                     self._graph.resolved_paths[stmt.module_name] = resolved
 

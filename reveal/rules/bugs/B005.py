@@ -11,6 +11,7 @@ from typing import List, Dict, Any, Optional
 from importlib.util import find_spec
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..imports import STDLIB_MODULES
 
 logger = logging.getLogger(__name__)
 
@@ -24,47 +25,6 @@ class B005(BaseRule):
     severity = Severity.HIGH
     file_patterns = ['.py']
     version = "1.0.0"
-
-    # Standard library modules that might not resolve via find_spec
-    STDLIB_MODULES = {
-        'abc', 'aifc', 'argparse', 'array', 'ast', 'asynchat', 'asyncio',
-        'asyncore', 'atexit', 'audioop', 'base64', 'bdb', 'binascii',
-        'binhex', 'bisect', 'builtins', 'bz2', 'calendar', 'cgi', 'cgitb',
-        'chunk', 'cmath', 'cmd', 'code', 'codecs', 'codeop', 'collections',
-        'colorsys', 'compileall', 'concurrent', 'configparser', 'contextlib',
-        'contextvars', 'copy', 'copyreg', 'cProfile', 'crypt', 'csv',
-        'ctypes', 'curses', 'dataclasses', 'datetime', 'dbm', 'decimal',
-        'difflib', 'dis', 'distutils', 'doctest', 'email', 'encodings',
-        'enum', 'errno', 'faulthandler', 'fcntl', 'filecmp', 'fileinput',
-        'fnmatch', 'fractions', 'ftplib', 'functools', 'gc', 'getopt',
-        'getpass', 'gettext', 'glob', 'graphlib', 'grp', 'gzip', 'hashlib',
-        'heapq', 'hmac', 'html', 'http', 'idlelib', 'imaplib', 'imghdr',
-        'imp', 'importlib', 'inspect', 'io', 'ipaddress', 'itertools',
-        'json', 'keyword', 'lib2to3', 'linecache', 'locale', 'logging',
-        'lzma', 'mailbox', 'mailcap', 'marshal', 'math', 'mimetypes',
-        'mmap', 'modulefinder', 'multiprocessing', 'netrc', 'nis',
-        'nntplib', 'numbers', 'operator', 'optparse', 'os', 'ossaudiodev',
-        'pathlib', 'pdb', 'pickle', 'pickletools', 'pipes', 'pkgutil',
-        'platform', 'plistlib', 'poplib', 'posix', 'posixpath', 'pprint',
-        'profile', 'pstats', 'pty', 'pwd', 'py_compile', 'pyclbr',
-        'pydoc', 'queue', 'quopri', 'random', 're', 'readline', 'reprlib',
-        'resource', 'rlcompleter', 'runpy', 'sched', 'secrets', 'select',
-        'selectors', 'shelve', 'shlex', 'shutil', 'signal', 'site',
-        'smtpd', 'smtplib', 'sndhdr', 'socket', 'socketserver', 'spwd',
-        'sqlite3', 'ssl', 'stat', 'statistics', 'string', 'stringprep',
-        'struct', 'subprocess', 'sunau', 'symtable', 'sys', 'sysconfig',
-        'syslog', 'tabnanny', 'tarfile', 'telnetlib', 'tempfile', 'termios',
-        'test', 'textwrap', 'threading', 'time', 'timeit', 'tkinter',
-        'token', 'tokenize', 'tomllib', 'trace', 'traceback', 'tracemalloc',
-        'tty', 'turtle', 'turtledemo', 'types', 'typing', 'unicodedata',
-        'unittest', 'urllib', 'uu', 'uuid', 'venv', 'warnings', 'wave',
-        'weakref', 'webbrowser', 'winreg', 'winsound', 'wsgiref', 'xdrlib',
-        'xml', 'xmlrpc', 'zipapp', 'zipfile', 'zipimport', 'zlib',
-        # typing extensions
-        'typing_extensions', 'TYPE_CHECKING',
-        # Common third-party that are often optional
-        '__future__',
-    }
 
     def _check_import_statement(self,
                                 node: ast.Import,
@@ -174,7 +134,7 @@ class B005(BaseRule):
     def _module_exists(self, module_name: str, file_dir: Path) -> bool:
         """Check if a module exists."""
         # Skip stdlib modules
-        if module_name in self.STDLIB_MODULES:
+        if module_name in STDLIB_MODULES:
             return True
 
         # Check if it's a local module (file in same directory or package)

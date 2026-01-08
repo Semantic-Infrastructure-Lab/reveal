@@ -108,7 +108,9 @@ class I002(BaseRule):
 
             for stmt in imports:
                 resolved = resolve_python_import(stmt, base_path)
-                if resolved:
+                # Skip self-references (e.g., logging.py importing stdlib logging
+                # should not create logging.py → logging.py dependency)
+                if resolved and resolved != file_path:
                     graph.add_dependency(file_path, resolved)
 
         return graph

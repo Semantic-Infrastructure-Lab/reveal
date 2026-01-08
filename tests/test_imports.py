@@ -342,3 +342,46 @@ class TestImportsAdapter:
         adapter = ImportsAdapter()
         metadata = adapter.get_metadata()
         assert metadata['status'] == 'not_analyzed'
+
+
+class TestStdlibShadowing:
+    """Test handling of local files that shadow stdlib modules."""
+
+    def test_logging_py_importing_stdlib_logging(self, tmp_path):
+        """Test that logging.py importing stdlib logging doesn't create false circular.
+
+        When a file like 'logging.py' does 'import logging' (intending stdlib),
+        the resolver finds the local file first. This should NOT create a
+        self-dependency (logging.py -> logging.py) that gets flagged as circular.
+
+        Regression test for: https://github.com/scottsen/reveal/issues/XX
+        """
+        # Create a directory structure with a local logging.py
+        (tmp_path / "logging.py").write_text("import logging\n\nlogger = logging.getLogger(__name__)\n")
+
+        adapter = ImportsAdapter()
+        result = adapter.get_structure(f"imports://{tmp_path}?circular")
+
+        # Should find no cycles - the self-reference should be filtered out
+        assert result['type'] == 'circular_dependencies'
+        assert result['count'] == 0, (
+            "Self-reference (logging.py -> logging.py) should not be flagged as circular. "
+            "Local files importing their stdlib counterparts should be ignored."
+        )
+
+    def test_self_import_not_added_to_graph(self, tmp_path):
+        """Test that resolved imports equal to source file are not added as dependencies."""
+        # Create logging.py that imports logging (stdlib)
+        (tmp_path / "logging.py").write_text("import logging\n")
+
+        adapter = ImportsAdapter()
+        adapter.get_structure(f"imports://{tmp_path}")
+
+        # Get the internal graph
+        graph = adapter._graph
+        logging_file = tmp_path / "logging.py"
+
+        # The dependency graph should NOT have logging.py depending on itself
+        assert logging_file not in graph.dependencies.get(logging_file, set()), (
+            "Self-dependency should not be added to the import graph"
+        )

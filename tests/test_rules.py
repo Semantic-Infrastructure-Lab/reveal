@@ -1355,5 +1355,192 @@ import this is not valid python syntax
             self.teardown_project(temp_dir)
 
 
+class TestI004StdlibShadowing(unittest.TestCase):
+    """Test I004: Standard library shadowing detector."""
+
+    def create_temp_python(self, filename: str, content: str) -> str:
+        """Helper: Create temp Python file with specific name."""
+        temp_dir = tempfile.mkdtemp()
+        path = os.path.join(temp_dir, filename)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def teardown_file(self, path: str):
+        """Helper: Clean up temp file."""
+        os.unlink(path)
+        os.rmdir(os.path.dirname(path))
+
+    def test_logging_py_shadows_stdlib(self):
+        """Test that logging.py is detected as shadowing stdlib."""
+        from reveal.rules.imports.I004 import I004
+
+        content = "import logging\n\nlogger = logging.getLogger(__name__)\n"
+        path = self.create_temp_python("logging.py", content)
+        try:
+            rule = I004()
+            detections = rule.check(path, None, content)
+
+            self.assertEqual(len(detections), 1)
+            self.assertEqual(detections[0].rule_code, 'I004')
+            self.assertIn('shadows', detections[0].context.lower())
+            self.assertIn('logging', detections[0].context)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_json_py_shadows_stdlib(self):
+        """Test that json.py is detected as shadowing stdlib."""
+        from reveal.rules.imports.I004 import I004
+
+        content = "# Custom JSON utilities\n"
+        path = self.create_temp_python("json.py", content)
+        try:
+            rule = I004()
+            detections = rule.check(path, None, content)
+
+            self.assertEqual(len(detections), 1)
+            self.assertEqual(detections[0].rule_code, 'I004')
+
+        finally:
+            self.teardown_file(path)
+
+    def test_types_py_shadows_stdlib(self):
+        """Test that types.py is detected as shadowing stdlib."""
+        from reveal.rules.imports.I004 import I004
+
+        content = "# Type definitions\n"
+        path = self.create_temp_python("types.py", content)
+        try:
+            rule = I004()
+            detections = rule.check(path, None, content)
+
+            self.assertEqual(len(detections), 1)
+            self.assertIn('types', detections[0].context)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_non_stdlib_name_ok(self):
+        """Test that non-stdlib names don't trigger detection."""
+        from reveal.rules.imports.I004 import I004
+
+        content = "# My utilities\n"
+        path = self.create_temp_python("my_utils.py", content)
+        try:
+            rule = I004()
+            detections = rule.check(path, None, content)
+
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_test_file_allowed(self):
+        """Test that test files are allowed to shadow (test_logging.py)."""
+        from reveal.rules.imports.I004 import I004
+
+        content = "# Tests for logging\n"
+        path = self.create_temp_python("test_logging.py", content)
+        try:
+            rule = I004()
+            detections = rule.check(path, None, content)
+
+            # Test files should be allowed
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_test_suffix_allowed(self):
+        """Test that _test suffix files are allowed (logging_test.py)."""
+        from reveal.rules.imports.I004 import I004
+
+        content = "# Tests for logging\n"
+        path = self.create_temp_python("logging_test.py", content)
+        try:
+            rule = I004()
+            detections = rule.check(path, None, content)
+
+            # Test suffix files should be allowed
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_noqa_comment_suppresses(self):
+        """Test that # noqa: I004 suppresses detection."""
+        from reveal.rules.imports.I004 import I004
+
+        content = "# noqa: I004\nimport logging\n"
+        path = self.create_temp_python("logging.py", content)
+        try:
+            rule = I004()
+            detections = rule.check(path, None, content)
+
+            # noqa should suppress
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_generic_noqa_suppresses(self):
+        """Test that generic # noqa suppresses detection."""
+        from reveal.rules.imports.I004 import I004
+
+        content = "# noqa\nimport logging\n"
+        path = self.create_temp_python("logging.py", content)
+        try:
+            rule = I004()
+            detections = rule.check(path, None, content)
+
+            # Generic noqa should suppress
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            self.teardown_file(path)
+
+    def test_suggestion_includes_rename(self):
+        """Test that detection includes rename suggestion."""
+        from reveal.rules.imports.I004 import I004
+
+        content = "# Custom logging\n"
+        path = self.create_temp_python("logging.py", content)
+        try:
+            rule = I004()
+            detections = rule.check(path, None, content)
+
+            self.assertEqual(len(detections), 1)
+            self.assertIsNotNone(detections[0].suggestion)
+            self.assertIn('rename', detections[0].suggestion.lower())
+
+        finally:
+            self.teardown_file(path)
+
+    def test_in_tests_directory_allowed(self):
+        """Test that files in tests/ directory are allowed."""
+        from reveal.rules.imports.I004 import I004
+
+        temp_dir = tempfile.mkdtemp()
+        tests_dir = os.path.join(temp_dir, "tests")
+        os.makedirs(tests_dir)
+        path = os.path.join(tests_dir, "logging.py")
+        content = "# Test logging utilities\n"
+        with open(path, 'w') as f:
+            f.write(content)
+
+        try:
+            rule = I004()
+            detections = rule.check(path, None, content)
+
+            # Files in tests/ should be allowed
+            self.assertEqual(len(detections), 0)
+
+        finally:
+            os.unlink(path)
+            os.rmdir(tests_dir)
+            os.rmdir(temp_dir)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -5,7 +5,24 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.32.1] - 2026-01-07
+
+### Added
+- **I004: Standard library shadowing detection** - New rule detects when local Python files
+  shadow stdlib modules (e.g., `logging.py`, `json.py`, `types.py`)
+  - Warns about potential import confusion and subtle bugs
+  - Allows test files (`test_*.py`, `*_test.py`) and files in `tests/` directories
+  - Supports `# noqa: I004` to suppress warnings
+  - Provides rename suggestions (e.g., "consider `utils_logging.py` or `logger.py`")
+
+### Fixed
+- **Circular import false positive** - Files that shadow stdlib modules (like `logging.py`
+  importing stdlib `logging`) no longer create false `A → A` self-dependency cycles
+  - Fixed in both `imports://` adapter and I002 rule
+
+### Changed
+- **STDLIB_MODULES refactored to shared location** - Moved from B005 class attribute to
+  `reveal.rules.imports` module for reuse by I004 and future rules
 
 ## [0.32.0] - 2026-01-07
 
