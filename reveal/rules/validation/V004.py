@@ -20,7 +20,7 @@ class V004(BaseRule):
 
     code = "V004"
     message = "Analyzer missing test file"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.V
     severity = Severity.LOW  # Nice to have but not critical
     file_patterns = ['*']
 

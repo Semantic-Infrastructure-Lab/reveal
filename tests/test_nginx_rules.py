@@ -400,8 +400,8 @@ class TestNginxRulesIntegration(unittest.TestCase):
         self.assertIn('N002', rule_codes)
         self.assertIn('N003', rule_codes)
 
-    def test_rules_in_i_category(self):
-        """Nginx rules should be in Infrastructure (I) category."""
+    def test_rules_in_n_category(self):
+        """Nginx rules should be in Nginx (N) category."""
         from reveal.rules import RuleRegistry
         RuleRegistry.discover(force=True)
 
@@ -409,7 +409,7 @@ class TestNginxRulesIntegration(unittest.TestCase):
             rule_class = RuleRegistry.get_rule(code)
             self.assertIsNotNone(rule_class, f"Rule {code} not found")
             from reveal.rules.base import RulePrefix
-            self.assertEqual(rule_class.category, RulePrefix.I)
+            self.assertEqual(rule_class.category, RulePrefix.N)
 
     def test_select_nginx_rules(self):
         """Should be able to select nginx rules by prefix."""

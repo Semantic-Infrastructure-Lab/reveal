@@ -22,7 +22,7 @@ class V001(BaseRule):
 
     code = "V001"
     message = "File type analyzer missing help documentation"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.V
     severity = Severity.MEDIUM
     file_patterns = ['*']  # Runs on any target (checks reveal internals)
 

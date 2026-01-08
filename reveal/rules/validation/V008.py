@@ -41,7 +41,7 @@ class V008(BaseRule):
 
     code = "V008"
     message = "Analyzer get_structure() missing **kwargs parameter"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.V
     severity = Severity.HIGH  # High because this causes runtime errors
     file_patterns = ['*']  # Runs on any target (checks reveal internals)
 

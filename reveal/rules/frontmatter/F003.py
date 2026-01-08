@@ -28,7 +28,7 @@ class F003(BaseRule):
 
     code = "F003"
     message = "Required field missing from front matter"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.F
     severity = Severity.MEDIUM  # Schema violation
     file_patterns = ['.md', '.markdown']
 

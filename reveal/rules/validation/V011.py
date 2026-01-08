@@ -24,7 +24,7 @@ class V011(BaseRule):
 
     code = "V011"
     message = "Not ready for release"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.V
     severity = Severity.HIGH  # Blocker for releases
     file_patterns = ['*']
 

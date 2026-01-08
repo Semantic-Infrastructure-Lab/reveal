@@ -30,7 +30,7 @@ class V007(BaseRule):
 
     code = "V007"
     message = "Version mismatch across project files"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.V
     severity = Severity.HIGH  # Blocker for releases
     file_patterns = ['*']
 

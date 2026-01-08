@@ -21,7 +21,7 @@ class V005(BaseRule):
 
     code = "V005"
     message = "Help file referenced in STATIC_HELP but does not exist"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.V
     severity = Severity.HIGH  # Broken help commands are serious
     file_patterns = ['*']
 

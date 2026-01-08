@@ -21,7 +21,7 @@ class V006(BaseRule):
 
     code = "V006"
     message = "Analyzer may not properly support all output formats"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.V
     severity = Severity.MEDIUM
     file_patterns = ['*']
 

@@ -22,7 +22,7 @@ class V002(BaseRule):
 
     code = "V002"
     message = "Analyzer file exists but may not be registered"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.V
     severity = Severity.HIGH  # Unregistered analyzers silently don't work
     file_patterns = ['*']
 

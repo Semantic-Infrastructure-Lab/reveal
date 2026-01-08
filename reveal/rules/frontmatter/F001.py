@@ -25,7 +25,7 @@ class F001(BaseRule):
 
     code = "F001"
     message = "Markdown file missing front matter"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.F
     severity = Severity.LOW  # Not critical, but good practice
     file_patterns = ['.md', '.markdown']
 

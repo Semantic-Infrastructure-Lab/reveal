@@ -40,7 +40,7 @@ class V003(BaseRule):
 
     code = "V003"
     message = "Analyzer may be missing common feature support"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.V
     severity = Severity.MEDIUM
     file_patterns = ['*']
 

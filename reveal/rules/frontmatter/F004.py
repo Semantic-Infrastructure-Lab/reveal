@@ -26,7 +26,7 @@ class F004(BaseRule):
 
     code = "F004"
     message = "Field type mismatch in front matter"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.F
     severity = Severity.MEDIUM  # Schema violation
     file_patterns = ['.md', '.markdown']
 

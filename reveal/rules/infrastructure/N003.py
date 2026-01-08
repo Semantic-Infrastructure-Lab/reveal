@@ -21,7 +21,7 @@ class N003(BaseRule):
 
     code = "N003"
     message = "Proxy location missing recommended headers"
-    category = RulePrefix.I
+    category = RulePrefix.N
     severity = Severity.MEDIUM
     file_patterns = ['.conf', '.nginx', 'nginx.conf']
 

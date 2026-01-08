@@ -23,7 +23,7 @@ class V009(BaseRule):
 
     code = "V009"
     message = "Broken documentation cross-reference"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.V
     severity = Severity.MEDIUM
     file_patterns = ['*.md']  # Only check markdown files
 

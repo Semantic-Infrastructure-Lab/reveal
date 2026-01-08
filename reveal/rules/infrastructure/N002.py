@@ -21,7 +21,7 @@ class N002(BaseRule):
 
     code = "N002"
     message = "SSL server block missing certificate configuration"
-    category = RulePrefix.I
+    category = RulePrefix.N
     severity = Severity.CRITICAL
     file_patterns = ['.conf', '.nginx', 'nginx.conf']
 

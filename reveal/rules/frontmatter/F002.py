@@ -27,7 +27,7 @@ class F002(BaseRule):
 
     code = "F002"
     message = "Front matter is empty (no fields)"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.F
     severity = Severity.LOW  # Not critical, but suspicious
     file_patterns = ['.md', '.markdown']
 

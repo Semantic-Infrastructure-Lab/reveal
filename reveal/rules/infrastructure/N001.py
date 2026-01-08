@@ -24,7 +24,7 @@ class N001(BaseRule):
 
     code = "N001"
     message = "Multiple upstreams point to the same backend server"
-    category = RulePrefix.I
+    category = RulePrefix.N
     severity = Severity.HIGH
     file_patterns = ['.conf', '.nginx', 'nginx.conf']
 

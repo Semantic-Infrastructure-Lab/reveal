@@ -26,7 +26,7 @@ class F005(BaseRule):
 
     code = "F005"
     message = "Custom validation failed for front matter field"
-    category = RulePrefix.M  # Maintainability
+    category = RulePrefix.F
     severity = Severity.MEDIUM  # Schema violation
     file_patterns = ['.md', '.markdown']
 

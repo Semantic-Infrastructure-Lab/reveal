@@ -115,6 +115,24 @@ class RulePrefix(Enum):
     # L002: Broken external links (HTTP)
     # L003: Framework routing mismatches
 
+    # Frontmatter (F) - markdown metadata validation
+    F = "F"  # Markdown front matter validation
+    # F001: Missing front matter
+    # F002: Empty front matter
+    # F003: Required field missing
+    # F004: Type mismatch
+    # F005: Custom validation failed
+
+    # Nginx (N) - nginx configuration
+    N = "N"  # Nginx/web server configuration
+    # N001: Duplicate backend servers
+    # N002: Missing SSL configuration
+    # N003: Missing proxy headers
+
+    # Validation (V) - reveal self-validation
+    V = "V"  # Reveal internal validation rules
+    # V001-V011: Completeness and consistency checks
+
 
 @dataclass
 class Detection:
