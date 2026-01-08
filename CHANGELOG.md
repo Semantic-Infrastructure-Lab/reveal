@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-01-07
+
 ### Added
+- **`--related` flag for knowledge graph navigation** - Show related documents from front matter
+  - Extracts links from `related`, `related_docs`, `see_also`, and `references` fields
+  - Shows headings from each related document for quick context
+  - Detects missing files, skips URLs and non-markdown files
+  - Cycle detection prevents infinite loops
+  - JSON output includes full resolved paths for tooling integration
 - **Deep knowledge graph traversal** - Extended `--related` with unlimited depth support
   - `--related-depth N` - Now supports any depth (was limited to 1-2)
   - `--related-depth 0` - Unlimited traversal until graph exhausted
@@ -15,32 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--related-flat` - Output flat list of paths (grep-friendly, pipeable)
   - `--related-limit N` - Safeguard to stop at N files (default: 100)
   - Summary header shows "N docs across M levels" for multi-level traversals
-  - Cycle detection and file limits prevent runaway traversal
 - **`markdown://` URI adapter** - Query markdown files by front matter
   - `reveal markdown://docs/` - List all markdown files in directory
-  - `reveal 'markdown://?beth_topics=reveal'` - Filter by field value
+  - `reveal 'markdown://?topics=reveal'` - Filter by field value
   - `reveal 'markdown://?!status'` - Find files missing a field
   - `reveal 'markdown://?type=*guide*'` - Wildcard matching
   - Multiple filters with AND logic: `field1=val1&field2=val2`
   - Recursive directory traversal
   - JSON and grep output formats for tooling
-
-### Fixed
-- **`--related` crashes on dict-format frontmatter entries** - Related fields with structured
-  entries (common in TIA docs) like `{uri: "doc://path", title: "Title"}` now correctly
-  extract the path from `uri`, `path`, `href`, `url`, or `file` fields. Also strips `doc://`
-  prefix automatically.
-
-## [0.32.0] - 2026-01-06
-
-### Added
-- **`--related` flag for knowledge graph navigation** - Show related documents from front matter
-  - Extracts links from `related`, `related_docs`, `see_also`, and `references` fields
-  - Shows headings from each related document for quick context
-  - Use `--related-depth 2` to follow links recursively (max depth 2)
-  - Detects missing files, skips URLs and non-markdown files
-  - Cycle detection prevents infinite loops
-  - JSON output includes full resolved paths for tooling integration
 - **C# language support** (.cs files) - classes, interfaces, methods via tree-sitter
 - **Scala language support** (.scala files) - classes, objects, traits, functions via tree-sitter
 - **SQL language support** (.sql files) - tables, views, functions/procedures via tree-sitter
@@ -50,22 +40,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Context-sensitive numbered steps for guided workflows
 
 ### Fixed
+- **`--related` crashes on dict-format frontmatter entries** - Related fields with structured
+  entries like `{uri: "doc://path", title: "Title"}` now correctly extract the path from
+  `uri`, `path`, `href`, `url`, or `file` fields. Also strips `doc://` prefix automatically.
 - **MySQL adapter ignores MYSQL_HOST env var** - `reveal mysql://` now correctly uses
   MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE environment variables when
   URI doesn't specify these values
+- **Validation rules (V001, V005, V007)** - Fixed path detection after docs reorganization
+  - Rules now correctly find help files in `reveal/docs/` subdirectory
+  - V007 AGENT_HELP path detection updated for new structure
 - **AGENT_HELP.md** claimed Swift support (not available in tree_sitter_languages)
 - **I003 rule missing category** - rule now correctly shows under "I Rules" instead of "UNKNOWN Rules" in `--rules` output
 - **AGENT_HELP.md File Type Support** - Added missing JSONL, HTML, and LibreOffice formats to match README
 - **README rule count** - Architecture section now correctly states 41 quality rules (was 24)
 - **GitHub Stars badge URL** - Now correctly points to Semantic-Infrastructure-Lab/reveal
-- **KNOWLEDGE_GRAPH_GUIDE.md related_docs paths** - Fixed broken relative paths to planning docs
-- **AGENT_HELP.md** - Added `--related` flag documentation to Markdown-Specific Features section
-- **ROADMAP.md** - Added Image & Asset Adapters to Long-term Ecosystem vision (image://, svg://, pHash)
+- **Test suite consolidation** - Recovered 197 orphaned tests (1793 → 1990 tests, 77% coverage)
 
 ### Changed
+- **Project structure reorganized** for Python packaging best practices
+  - Documentation moved to `reveal/docs/` (now ships with pip package)
+  - Three-tier docs: user guides (packaged), internal docs (dev only), archived (historical)
+  - Tests consolidated under `tests/` directory
+- **Schema renamed: `beth` → `session`** for generic open source use
+  - `session.yaml` schema for workflow/session README validation
+  - `topics` field replaces `beth_topics`
+  - Backward compatible: `load_schema('beth')` still works via alias
+  - Generic `session_id` pattern (was TIA-specific `word-word-MMDD`)
 - **MySQL credential resolution simplified** - Removed TIA-specific integration,
   now uses standard 3-tier resolution: URI > environment variables > ~/.my.cnf
-- **TIA references removed** - User-facing documentation cleaned for open-source distribution
+- **Documentation cleaned for open source** - Removed internal references,
+  updated examples to use generic paths and field names
 
 ## [0.31.0] - 2026-01-05
 
@@ -190,15 +194,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Multiple output formats**: text (human-readable), json (CI/CD), grep (pipeable)
   - **Exit codes**: 0 for pass, 1 for failure (CI/CD integration ready)
   - **CLI flag**: `--validate-schema <name-or-path>`
-  - **Usage**: `reveal README.md --validate-schema beth`
+  - **Usage**: `reveal README.md --validate-schema session`
   - **Implementation**: 5 phases complete across 4 sessions (garnet-ember-0102, amber-rainbow-0102, dark-constellation-0102, pearl-spark-0102)
   - **Test coverage**: 103 comprehensive tests (27 loader + 44 rules + 33 CLI + 43 schemas), 100% passing, 75% coverage overall
   - **Documentation**: 800+ line [Schema Validation Guide](docs/SCHEMA_VALIDATION_GUIDE.md)
 
-- **Beth Schema (`beth.yaml`)** - TIA session README validation
-  - Required fields: `session_id` (pattern: word-word-MMDD), `beth_topics` (min 1 topic)
+- **Session Schema (`session.yaml`)** - Workflow/session README validation (renamed from `beth` in v0.32.0)
+  - Required fields: `session_id`, `topics` (min 1 topic)
   - Optional fields: date, badge, type, project, files_modified, files_created, commits
   - Custom validation: session_id format checking, topic count validation
+  - Backward compatible: `--validate-schema beth` still works via alias
 
 - **Hugo Schema (`hugo.yaml`)** - Static site front matter validation
   - Required fields: `title` (non-empty)
