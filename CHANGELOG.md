@@ -5,6 +5,26 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.2] - 2026-01-08
+
+### Fixed
+- **MySQL adapter `.my.cnf` support completely broken** - Adapter always set explicit `host` and
+  `port` values, causing pymysql to ignore `read_default_file` parameter
+  - `reveal mysql://` now properly reads credentials from `~/.my.cnf` (600 permissions)
+  - Enables proper Unix-style credential management (no passwords in env vars or process lists)
+  - Fixed credential resolution order: URI params → env vars → `~/.my.cnf` → pymysql defaults
+  - Added `MYSQL_PORT` environment variable support (was missing)
+  - Verified on production with 187GB managed MySQL database
+- **Rule categorization bug in `--rules` output** - F, N, and V rules displayed under wrong categories
+  - F001-F005 (frontmatter validation) now correctly show under "F Rules" (was "M Rules")
+  - N001-N003 (nginx configuration) now correctly show under "N Rules" (was "I Rules")
+  - V001-V011 (reveal self-validation) now correctly show under "V Rules" (was "M Rules")
+  - Root cause: `RulePrefix` enum was missing F, N, V entries
+  - Total: 42 enabled rules properly organized into 12 categories
+
+### Changed
+- **.gitignore** - Added `.coverage.*` pattern to exclude pytest-xdist parallel coverage artifacts
+
 ## [0.32.1] - 2026-01-07
 
 ### Added
