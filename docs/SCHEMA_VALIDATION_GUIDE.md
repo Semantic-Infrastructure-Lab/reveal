@@ -1048,7 +1048,7 @@ A: Yes! Add to `.pre-commit-config.yaml`:
 ## See Also
 
 - [Link Validation Guide](LINK_VALIDATION_GUIDE.md) - L-series rules
-- [reveal --help](../reveal/AGENT_HELP.md) - Full CLI reference
+- [reveal --help](../reveal/docs/AGENT_HELP.md) - Full CLI reference
 - [ROADMAP.md](../ROADMAP.md) - Feature roadmap
 
 ---

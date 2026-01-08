@@ -308,9 +308,9 @@ class TestIssue2HelpSystemIntegration(unittest.TestCase):
         self.assertIn('markdown', HelpAdapter.STATIC_HELP,
                      "Markdown should be in STATIC_HELP dict")
 
-        # Check that the file exists
+        # Check that the file exists (help docs are in reveal/docs/)
         guide_path = HelpAdapter.STATIC_HELP['markdown']
-        adapter_dir = Path(__file__).parent.parent / 'reveal'
+        adapter_dir = Path(__file__).parent.parent / 'reveal' / 'docs'
         full_path = adapter_dir / guide_path
 
         self.assertTrue(full_path.exists(),

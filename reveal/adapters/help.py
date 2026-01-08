@@ -27,17 +27,17 @@ class HelpAdapter(ResourceAdapter):
     # Valid section names for help://adapter/section queries
     VALID_SECTIONS = {'workflows', 'try-now', 'anti-patterns'}
 
-    # Static help files (markdown documentation)
+    # Static help files (markdown documentation in reveal/docs/)
     STATIC_HELP = {
         'agent': 'AGENT_HELP.md',
         'agent-full': 'AGENT_HELP_FULL.md',
-        'python': 'adapters/PYTHON_ADAPTER_GUIDE.md',  # Alias for python-guide
-        'python-guide': 'adapters/PYTHON_ADAPTER_GUIDE.md',
+        'python': 'PYTHON_ADAPTER_GUIDE.md',  # Alias for python-guide
+        'python-guide': 'PYTHON_ADAPTER_GUIDE.md',
         'reveal-guide': 'REVEAL_ADAPTER_GUIDE.md',  # Reference implementation
         'markdown': 'MARKDOWN_GUIDE.md',
         'html': 'HTML_GUIDE.md',  # HTML features guide
         'anti-patterns': 'ANTI_PATTERNS.md',
-        'adapter-authoring': 'adapters/ADAPTER_AUTHORING_GUIDE.md',
+        'adapter-authoring': 'ADAPTER_AUTHORING_GUIDE.md',
         'tricks': 'COOL_TRICKS.md',
         'help': 'HELP_SYSTEM_GUIDE.md',  # Meta-documentation about help system
         'configuration': 'CONFIGURATION_GUIDE.md',  # Configuration system guide
@@ -394,8 +394,8 @@ class HelpAdapter(ResourceAdapter):
         if not filename:
             return None
 
-        # Help files are in reveal/ directory (same as this file's parent)
-        help_path = Path(__file__).parent.parent / filename
+        # Help files are in reveal/docs/ directory
+        help_path = Path(__file__).parent.parent / 'docs' / filename
 
         try:
             with open(help_path, 'r', encoding='utf-8') as f:

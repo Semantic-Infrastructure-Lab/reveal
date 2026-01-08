@@ -385,7 +385,7 @@ A: Update estimates in `_render_help_list_mode()` token_estimate dictionaries
 - **Implementation:** `reveal/adapters/help.py` (adapter logic)
 - **Rendering:** `reveal/rendering/adapters/help.py` (display logic)
 - **Content Files:** `reveal/*.md` (static guides)
-- **Agent Guide:** `reveal/AGENT_HELP.md` (AI agent reference)
+- **Agent Guide:** `reveal/docs/AGENT_HELP.md` (AI agent reference)
 
 ---
 

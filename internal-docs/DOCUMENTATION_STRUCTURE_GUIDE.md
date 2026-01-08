@@ -1,6 +1,6 @@
 # Reveal - Documentation Structure Guide
 
-**Last Updated:** 2025-12-12 (cyber-phoenix-1212)
+**Last Updated:** 2026-01-07 (shimmering-twilight-0107)
 **Based On:** TIA's proven two-tier pattern from `SIL_ECOSYSTEM_PROJECT_LAYOUT.md`
 
 ---
@@ -37,26 +37,30 @@ Reveal follows **Pattern B (Lightweight TIA Tracking)** - a mature, stable proje
 
 ```
 reveal/
-├── docs/                          # 📚 Official Documentation (PUBLIC)
-│   ├── *.md                       # Audits, investigations, reference material
-│   └── archive/                   # Historical completed work
+├── docs/                          # 📚 External Documentation (PUBLIC - GitHub)
+│   ├── *.md                       # User guides, feature docs
+│   └── *.yaml                     # Example configurations
 │
 ├── internal-docs/                 # 🔒 Development Documentation (PUBLIC but internal-facing)
 │   ├── planning/                  # Future features, roadmaps, specs
-│   │   ├── PENDING_WORK.md       # 📌 Master index of ALL pending work
-│   │   ├── README.md             # Planning index (lists active/shipped/archived)
-│   │   ├── DUPLICATE_DETECTION_*.md
-│   │   ├── CODE_QUALITY_*.md
-│   │   └── *_SPEC.md             # Feature specifications
 │   ├── archive/                   # Completed planning docs (shipped features)
-│   └── releasing/                 # Release process documentation
-│
-├── scripts/                       # 🛠️ Development Tools
-│   ├── analyze_*.py              # Analysis and validation scripts
-│   └── *.sh                      # Build/release automation
+│   └── research/                  # Research notes and analysis
 │
 ├── reveal/                        # 📦 Source Code
-├── tests/                         # ✅ Test Suite
+│   ├── docs/                      # 📖 Help System Docs (SHIPPED IN PACKAGE)
+│   │   ├── AGENT_HELP.md         # AI agent quick reference
+│   │   ├── AGENT_HELP_FULL.md    # Comprehensive agent guide
+│   │   └── *_GUIDE.md            # Feature guides accessible via help://
+│   ├── adapters/                  # URI adapters (diff://, ast://, etc.)
+│   ├── analyzers/                 # File type analyzers
+│   ├── cli/                       # CLI entry points
+│   ├── rules/                     # Quality rules (F/B/C/D/I/L/M/N/S/U/V series)
+│   └── ...                        # Other code modules
+│
+├── tests/                         # ✅ Test Suite (ALL tests in one place)
+│   ├── samples/                   # Test fixtures
+│   └── test_*.py                  # Test files
+│
 ├── README.md                      # Main project README
 ├── CHANGELOG.md                   # Version history
 ├── CONTRIBUTING.md                # Contribution guidelines
@@ -65,35 +69,93 @@ reveal/
 └── .gitignore                     # ⚠️ CRITICAL: Blocks session artifacts
 ```
 
+### Three Documentation Tiers
+
+| Location | Purpose | Shipped? | Access |
+|----------|---------|----------|--------|
+| `reveal/docs/` | Help system guides | Yes (in package) | `reveal help://topic` |
+| `docs/` | External/GitHub docs | No | Browse on GitHub |
+| `internal-docs/` | Planning/development | No | Internal use |
+
 ---
 
 ## Documentation Homes (What Goes Where)
 
-### docs/ - Official Documentation
+### reveal/docs/ - Help System Documentation (SHIPPED)
 
-**Purpose:** Public-facing reference material, investigations, audits
+**Purpose:** Documentation accessible via `help://` adapter, shipped with the pip package
 
 **Contents:**
-- Engineering audits (`REVEAL_ENGINEERING_REVIEW_2025-12-12.md`)
-- Root cause analyses (`ROOT_CAUSE_ANALYSIS_MARKDOWN_BUGS.md`)
-- Self-audits (`REVEAL_SELF_AUDIT_2025-12-11.md`)
-- User guides and tutorials
-- Architecture overviews (for users, not developers)
+- `AGENT_HELP.md` - Quick reference for AI agents (~2,400 tokens)
+- `AGENT_HELP_FULL.md` - Comprehensive agent guide
+- `*_GUIDE.md` - Feature guides (CONFIGURATION, MARKDOWN, HTML, etc.)
+- `ADAPTER_AUTHORING_GUIDE.md` - How to create new adapters
+- `ANTI_PATTERNS.md` - Common mistakes to avoid
+- `COOL_TRICKS.md` - Advanced usage patterns
+
+**Access:**
+```bash
+reveal help://agent           # AGENT_HELP.md
+reveal help://configuration   # CONFIGURATION_GUIDE.md
+reveal help://tricks          # COOL_TRICKS.md
+reveal help://                # List all topics
+```
+
+**Rules:**
+- ✅ Must be useful for `help://` queries
+- ✅ Concise, task-oriented, with examples
+- ✅ Updated when features change
+- ❌ NO planning/internal docs
+- ❌ NO session artifacts
+
+**Current Topics (15 guides):**
+```
+reveal/docs/
+├── AGENT_HELP.md              # help://agent
+├── AGENT_HELP_FULL.md         # help://agent-full
+├── ADAPTER_AUTHORING_GUIDE.md # help://adapter-authoring
+├── ANALYZER_PATTERNS.md       # (internal reference)
+├── ANTI_PATTERNS.md           # help://anti-patterns
+├── CONFIGURATION_GUIDE.md     # help://configuration, help://config
+├── COOL_TRICKS.md             # help://tricks
+├── DUPLICATE_DETECTION_GUIDE.md # help://duplicates
+├── HELP_SYSTEM_GUIDE.md       # help://help
+├── HTML_GUIDE.md              # help://html
+├── MARKDOWN_GUIDE.md          # help://markdown
+├── PYTHON_ADAPTER_GUIDE.md    # help://python, help://python-guide
+├── RELEASE_GUIDE.md           # help://release
+├── REVEAL_ADAPTER_GUIDE.md    # help://reveal-guide
+└── SCHEMA_VALIDATION_HELP.md  # help://schemas
+```
+
+---
+
+### docs/ - External Documentation (GitHub)
+
+**Purpose:** Public-facing guides and reference material (NOT shipped in package)
+
+**Contents:**
+- Feature deep-dives (KNOWLEDGE_GRAPH_GUIDE.md, LINK_VALIDATION_GUIDE.md)
+- Production guides (PRODUCTION_TESTING_GUIDE.md)
+- Example configurations (mysql-health-checks.example.yaml)
+- Design rationale (WHY_TYPED.md)
 
 **Rules:**
 - Permanent reference material
 - Well-written, ready for external eyes
-- No work-in-progress documents
-- Archive old audits to `docs/archive/` when superseded
+- Not shipped in pip package (reduces size)
+- Linked from README.md for discoverability
 
 **Examples:**
 ```
 docs/
-├── REVEAL_ENGINEERING_REVIEW_2025-12-12.md   # Engineering audit
-├── ROOT_CAUSE_ANALYSIS_MARKDOWN_BUGS.md       # Investigation
-├── REVEAL_SELF_AUDIT_2025-12-11.md            # Self-assessment
-└── archive/
-    └── launch-2025-12-08/                     # Historical milestones
+├── DIFF_ADAPTER_GUIDE.md           # diff:// advanced usage
+├── KNOWLEDGE_GRAPH_GUIDE.md        # --related flag deep-dive
+├── LINK_VALIDATION_GUIDE.md        # L-series rules guide
+├── PRODUCTION_TESTING_GUIDE.md     # CI/CD integration
+├── SCHEMA_VALIDATION_GUIDE.md      # Schema validation deep-dive
+├── WHY_TYPED.md                    # Type-first architecture rationale
+└── mysql-health-checks.example.yaml # Example config
 ```
 
 ---
