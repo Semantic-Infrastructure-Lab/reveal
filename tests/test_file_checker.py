@@ -134,7 +134,7 @@ class TestCollectFilesToCheck:
         (tmp_path / 'test2.py').write_text('# Test file 2')
         (tmp_path / 'readme.txt').write_text('Not Python')
 
-        with patch('reveal.base.get_analyzer') as mock_get_analyzer:
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             # Mock get_analyzer to return True for .py files, False for others
             def analyzer_mock(path, allow_fallback=True):
                 return Mock() if path.endswith('.py') else None
@@ -156,7 +156,7 @@ class TestCollectFilesToCheck:
         # Create included file
         (tmp_path / 'included.py').write_text('# Should be included')
 
-        with patch('reveal.base.get_analyzer') as mock_get_analyzer:
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()  # Return analyzer for all files
             files = collect_files_to_check(tmp_path, [])
 
@@ -172,7 +172,7 @@ class TestCollectFilesToCheck:
 
         patterns = ['*.pyc', 'also_ignore.py']
 
-        with patch('reveal.base.get_analyzer') as mock_get_analyzer:
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
             files = collect_files_to_check(tmp_path, patterns)
 
@@ -187,7 +187,7 @@ class TestCollectFilesToCheck:
         (tmp_path / 'src' / 'app.py').write_text('# App')
         (tmp_path / 'src' / 'lib' / 'utils.py').write_text('# Utils')
 
-        with patch('reveal.base.get_analyzer') as mock_get_analyzer:
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             mock_get_analyzer.return_value = Mock()
             files = collect_files_to_check(tmp_path, [])
 
@@ -204,7 +204,7 @@ class TestCheckAndReportFile:
         test_file = tmp_path / 'clean.py'
         test_file.write_text('# Clean code')
 
-        with patch('reveal.base.get_analyzer') as mock_get_analyzer, \
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer, \
              patch('reveal.rules.RuleRegistry.check_file') as mock_check_file:
 
             # Mock analyzer
@@ -237,7 +237,7 @@ class TestCheckAndReportFile:
         mock_detection.suggestion = 'Fix it'
         mock_detection.context = 'More info'
 
-        with patch('reveal.base.get_analyzer') as mock_get_analyzer, \
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer, \
              patch('reveal.rules.RuleRegistry.check_file') as mock_check_file:
 
             # Mock analyzer
@@ -262,7 +262,7 @@ class TestCheckAndReportFile:
         test_file = tmp_path / 'unknown.xyz'
         test_file.write_text('Unknown file type')
 
-        with patch('reveal.base.get_analyzer') as mock_get_analyzer:
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             # No analyzer available
             mock_get_analyzer.return_value = None
 
@@ -275,7 +275,7 @@ class TestCheckAndReportFile:
         test_file = tmp_path / 'error.py'
         test_file.write_text('# Will error')
 
-        with patch('reveal.base.get_analyzer') as mock_get_analyzer:
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
             # Analyzer raises exception
             mock_analyzer = Mock()
             mock_analyzer.get_structure.side_effect = Exception("Parse error")
@@ -291,7 +291,7 @@ class TestCheckAndReportFile:
         test_file = tmp_path / 'test.py'
         test_file.write_text('# Test')
 
-        with patch('reveal.base.get_analyzer') as mock_get_analyzer, \
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer, \
              patch('reveal.rules.RuleRegistry.check_file') as mock_check_file:
 
             mock_analyzer = Mock()
