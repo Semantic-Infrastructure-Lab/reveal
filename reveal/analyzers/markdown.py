@@ -3,11 +3,40 @@
 import re
 import yaml
 import logging
-from typing import Dict, List, Any, Optional
+from dataclasses import dataclass, field
+from typing import Dict, List, Any, Optional, Set
 from urllib.parse import urlparse
+from pathlib import Path
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..structure_options import StructureOptions
+
+
+@dataclass
+class RelatedTracker:
+    """Tracks state during related document extraction."""
+    depth: int = 1
+    visited: Set[Path] = field(default_factory=set)
+    file_count: int = 0
+    limit: int = 100
+    truncated: bool = False
+
+    def should_continue(self) -> bool:
+        """Check if we should continue processing more files."""
+        return self.file_count < self.limit
+
+    def increment(self) -> None:
+        """Increment file counter."""
+        self.file_count += 1
+        if self.file_count >= self.limit:
+            self.truncated = True
+
+    def mark_visited(self, path: Path) -> bool:
+        """Mark path as visited. Returns True if it was already visited."""
+        if path in self.visited:
+            return True
+        self.visited.add(path)
+        return False
 
 
 @register('.md', '.markdown', name='Markdown', icon='')
@@ -65,24 +94,18 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         return results
 
-    def _should_include_headings(self, extract_links: bool, extract_code: bool,
-                                  head: int, tail: int, range: tuple,
-                                  outline_mode: bool) -> bool:
+    def _should_include_headings(self, options: StructureOptions, outline_mode: bool) -> bool:
         """Determine if headings should be included in output.
 
         Args:
-            extract_links: Whether links are being extracted
-            extract_code: Whether code blocks are being extracted
-            head: Head slicing parameter
-            tail: Tail slicing parameter
-            range: Range slicing parameter
+            options: StructureOptions containing extraction parameters
             outline_mode: Whether outline mode is active
 
         Returns:
             True if headings should be included
         """
-        specific_features_requested = extract_links or extract_code
-        navigation_mode = head is not None or tail is not None or range is not None
+        specific_features_requested = options.extract_links or options.extract_code
+        navigation_mode = options.head is not None or options.tail is not None or options.range is not None
 
         # Include headings when:
         # - No specific features requested (default: show structure)
@@ -146,10 +169,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         # Include headings based on mode
         outline_mode = options.extra.get('outline', False) or options.outline
-        if self._should_include_headings(
-            options.extract_links, options.extract_code,
-            options.head, options.tail, options.range, outline_mode
-        ):
+        if self._should_include_headings(options, outline_mode):
             result['headings'] = self._extract_headings()
 
         # Extract links if requested
@@ -792,18 +812,21 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         return None
 
     def _process_related_path(
-        self, rel_path: str, base_dir: 'Path', depth: int, _visited: set,
-        _file_count: Optional[Dict[str, Any]] = None, limit: int = 100
+        self, rel_path: str, base_dir: Path, tracker: RelatedTracker
     ) -> Optional[Dict[str, Any]]:
         """Process a single related document path.
 
-        Returns None if path should be skipped (URL or non-markdown).
-        """
-        from pathlib import Path
+        Args:
+            rel_path: Relative path to process
+            base_dir: Base directory for resolving relative paths
+            tracker: RelatedTracker instance for state management
 
+        Returns:
+            Dict with file info, or None if path should be skipped (URL or non-markdown)
+        """
         # Check file limit
-        if _file_count and _file_count['count'] >= limit:
-            _file_count['truncated'] = True
+        if not tracker.should_continue():
+            tracker.truncated = True
             return None
 
         # Skip URLs
@@ -822,8 +845,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             return None
 
         # Increment file count
-        if _file_count:
-            _file_count['count'] += 1
+        tracker.increment()
 
         # Extract headings from related file
         try:
@@ -834,71 +856,40 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 'headings': [h.get('name', '') for h in headings[:10]], 'related': []
             }
             # depth=0 means unlimited, depth>1 means continue recursing
-            if depth == 0 or depth > 1:
-                next_depth = 0 if depth == 0 else depth - 1
-                result['related'] = related_analyzer._extract_related(
-                    depth=next_depth, _visited=_visited, _file_count=_file_count, limit=limit
+            if tracker.depth == 0 or tracker.depth > 1:
+                next_depth = 0 if tracker.depth == 0 else tracker.depth - 1
+                next_tracker = RelatedTracker(
+                    depth=next_depth,
+                    visited=tracker.visited,
+                    file_count=tracker.file_count,
+                    limit=tracker.limit,
+                    truncated=tracker.truncated
                 )
+                result['related'] = related_analyzer._extract_related(tracker=next_tracker)
+                # Update parent tracker with child's counts
+                tracker.file_count = next_tracker.file_count
+                tracker.truncated = next_tracker.truncated
             return result
         except Exception as e:
             logging.debug(f"Failed to analyze related file {resolved}: {e}")
             return {'path': rel_path, 'resolved_path': str(resolved), 'exists': True, 'error': str(e), 'headings': [], 'related': []}
 
-    def _extract_related(
-        self, depth: int = 1, _visited: Optional[set] = None,
-        _file_count: Optional[Dict[str, Any]] = None, limit: int = 100
-    ) -> List[Dict[str, Any]]:
-        """Extract related documents from front matter.
+    def _find_related_paths(self, frontmatter_data: Dict[str, Any]) -> List[str]:
+        """Extract related document paths from frontmatter data.
 
-        Looks for these fields in front matter:
-        - related
-        - related_docs
-        - see_also
-        - references
+        Looks for these fields: related, related_docs, see_also, references.
 
         Args:
-            depth: How deep to follow links (1=immediate, 0=unlimited)
-            _visited: Internal set to prevent cycles (don't pass this)
-            _file_count: Internal counter for limit tracking (don't pass this)
-            limit: Maximum number of files to traverse (default: 100)
+            frontmatter_data: Frontmatter data dict
 
         Returns:
-            List of related document info dicts with headings
+            List of related document paths
         """
-        from pathlib import Path
-
-        # Initialize visited set for cycle detection
-        if _visited is None:
-            _visited = set()
-
-        # Initialize file counter
-        if _file_count is None:
-            _file_count = {'count': 0, 'truncated': False}
-
-        # Check limit before processing
-        if _file_count['count'] >= limit:
-            _file_count['truncated'] = True
-            return []
-
-        # Add current file to visited
-        current_path = Path(self.path).resolve()
-        if current_path in _visited:
-            return []
-        _visited.add(current_path)
-
-        # Get front matter
-        fm = self._extract_frontmatter()
-        if not fm or not fm.get('data'):
-            return []
-
-        data = fm['data']
-
-        # Look for related document fields
         related_fields = ['related', 'related_docs', 'see_also', 'references']
         related_paths = []
 
         for field in related_fields:
-            value = data.get(field)
+            value = frontmatter_data.get(field)
             if value:
                 if isinstance(value, list):
                     for item in value:
@@ -912,22 +903,70 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                     if path:
                         related_paths.append(path)
 
+        return related_paths
+
+    def _extract_related(
+        self, depth: int = 1, _visited: Optional[set] = None,
+        _file_count: Optional[Dict[str, Any]] = None, limit: int = 100,
+        tracker: Optional[RelatedTracker] = None
+    ) -> List[Dict[str, Any]]:
+        """Extract related documents from front matter.
+
+        Args:
+            depth: How deep to follow links (1=immediate, 0=unlimited) [deprecated, use tracker]
+            _visited: Internal set to prevent cycles [deprecated, use tracker]
+            _file_count: Internal counter for limit tracking [deprecated, use tracker]
+            limit: Maximum number of files to traverse [deprecated, use tracker]
+            tracker: RelatedTracker instance (recommended)
+
+        Returns:
+            List of related document info dicts with headings
+        """
+        # Support legacy call signature for backward compatibility
+        if tracker is None:
+            tracker = RelatedTracker(
+                depth=depth,
+                visited=_visited or set(),
+                file_count=_file_count['count'] if _file_count else 0,
+                limit=limit,
+                truncated=_file_count.get('truncated', False) if _file_count else False
+            )
+
+        # Check limit before processing
+        if not tracker.should_continue():
+            tracker.truncated = True
+            return []
+
+        # Add current file to visited (skip if already visited)
+        current_path = Path(self.path).resolve()
+        if tracker.mark_visited(current_path):
+            return []
+
+        # Get front matter
+        fm = self._extract_frontmatter()
+        if not fm or not fm.get('data'):
+            return []
+
+        # Find related paths from frontmatter
+        related_paths = self._find_related_paths(fm['data'])
         if not related_paths:
             return []
 
-        # Process each related path using helper method
+        # Process each related path
         base_dir = current_path.parent
         results = []
         for rel_path in related_paths:
-            # Check limit before each path
-            if _file_count['count'] >= limit:
-                _file_count['truncated'] = True
+            if not tracker.should_continue():
+                tracker.truncated = True
                 break
-            result = self._process_related_path(
-                rel_path, base_dir, depth, _visited, _file_count, limit
-            )
+            result = self._process_related_path(rel_path, base_dir, tracker)
             if result is not None:
                 results.append(result)
+
+        # Update legacy _file_count dict if provided (backward compatibility)
+        if _file_count is not None:
+            _file_count['count'] = tracker.file_count
+            _file_count['truncated'] = tracker.truncated
 
         return results
 
