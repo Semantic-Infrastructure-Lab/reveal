@@ -5,6 +5,7 @@ import logging
 from typing import Dict, List, Any, Optional
 from ..base import FileAnalyzer
 from ..registry import register
+from ..structure_options import StructureOptions
 
 # Try to import BeautifulSoup4 - required for HTML parsing
 try:
@@ -43,28 +44,19 @@ class HTMLAnalyzer(FileAnalyzer):
         # Detect template type
         self.template_type = self._detect_template_type()
 
-    def get_structure(self,
-                     head: int = None,
-                     tail: int = None,
-                     range: tuple = None,
-                     semantic: Optional[str] = None,
-                     links: bool = False,
-                     link_type: Optional[str] = None,
-                     domain: Optional[str] = None,
-                     broken: bool = False,
-                     metadata: bool = False,
-                     scripts: Optional[str] = None,
-                     styles: Optional[str] = None,
-                     outline: bool = False,
-                     **kwargs) -> Dict[str, Any]:
+    def get_structure(self, options: Optional[StructureOptions] = None, **kwargs) -> Dict[str, Any]:
         """Extract HTML structure progressively.
 
         Args:
+            options: StructureOptions config object (recommended)
+            **kwargs: Individual options for backward compatibility
+
+        Supported options (via StructureOptions or kwargs):
             head: Show first N lines
             tail: Show last N lines
             range: Show line range (start, end)
             semantic: Extract semantic elements (navigation, content, forms, media, etc.)
-            links: Extract all links
+            links: Extract all links (maps to extract_links in StructureOptions)
             link_type: Filter links by type (internal, external, anchor, mailto, tel)
             domain: Filter links by domain
             broken: Check for broken links (local files only)
@@ -72,30 +64,36 @@ class HTMLAnalyzer(FileAnalyzer):
             scripts: Extract script tags (inline, external, all)
             styles: Extract stylesheets (inline, external, all)
             outline: Show document outline (hierarchy view)
-            **kwargs: Additional parameters
 
         Returns:
             Dict with HTML structure based on requested features
         """
+        # Backward compatibility: convert kwargs to StructureOptions
+        if options is None:
+            options = StructureOptions.from_kwargs(**kwargs)
+            # Handle 'links' kwarg mapping to 'extract_links'
+            if 'links' in kwargs:
+                options.extract_links = kwargs['links']
+
         # Handle line extraction (head/tail/range)
-        if head or tail or range:
-            return self._extract_lines(head, tail, range)
+        if options.head or options.tail or options.range:
+            return self._extract_lines(options.head, options.tail, options.range)
 
         # Specialized extractions (filtering mode)
-        if metadata:
+        if options.metadata:
             return {'metadata': self._extract_metadata()}
 
-        if links:
-            return {'links': self._extract_links(link_type, domain, broken)}
+        if options.extract_links:
+            return {'links': self._extract_links(options.link_type, options.domain, options.broken)}
 
-        if semantic:
-            return {'semantic': self._extract_semantic_elements(semantic)}
+        if options.semantic:
+            return {'semantic': self._extract_semantic_elements(options.semantic)}
 
-        if scripts:
-            return {'scripts': self._extract_scripts(scripts)}
+        if options.scripts:
+            return {'scripts': self._extract_scripts(options.scripts)}
 
-        if styles:
-            return {'styles': self._extract_styles(styles)}
+        if options.styles:
+            return {'styles': self._extract_styles(options.styles)}
 
         # Default: Full structure overview (progressive disclosure)
         return self._get_default_structure()

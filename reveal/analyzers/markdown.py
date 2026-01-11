@@ -7,6 +7,7 @@ from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
+from ..structure_options import StructureOptions
 
 
 @register('.md', '.markdown', name='Markdown', icon='')
@@ -105,22 +106,14 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                     result[category], head, tail, range
                 )
 
-    def get_structure(self, head: int = None, tail: int = None,
-                     range: tuple = None,
-                     extract_links: bool = False,
-                     link_type: Optional[str] = None,
-                     domain: Optional[str] = None,
-                     extract_code: bool = False,
-                     language: Optional[str] = None,
-                     inline_code: bool = False,
-                     extract_frontmatter: bool = False,
-                     extract_related: bool = False,
-                     related_depth: int = 1,
-                     related_limit: int = 100,
-                     **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, options: Optional[StructureOptions] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract markdown structure.
 
         Args:
+            options: StructureOptions config object (recommended)
+            **kwargs: Individual options for backward compatibility
+
+        Supported options (via StructureOptions or kwargs):
             head: Show first N semantic units (per category)
             tail: Show last N semantic units (per category)
             range: Show semantic units in range (start, end) - 1-indexed (per category)
@@ -134,7 +127,6 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             extract_related: Include related documents from front matter
             related_depth: Depth for related docs (1=immediate, 0=unlimited)
             related_limit: Max files to traverse for related (default: 100)
-            **kwargs: Additional parameters (unused)
 
         Returns:
             Dict with headings and optionally links/code/frontmatter/related
@@ -142,35 +134,48 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         Note: Slicing applies to each category independently
         (e.g., --head 5 shows first 5 headings AND first 5 links)
         """
+        # Backward compatibility: convert kwargs to StructureOptions
+        if options is None:
+            options = StructureOptions.from_kwargs(**kwargs)
+
         result = {}
 
         # Extract front matter if requested (always first, not affected by slicing)
-        if extract_frontmatter:
+        if options.extract_frontmatter:
             result['frontmatter'] = self._extract_frontmatter()
 
         # Include headings based on mode
-        outline_mode = kwargs.get('outline', False)
-        if self._should_include_headings(extract_links, extract_code, head, tail, range, outline_mode):
+        outline_mode = options.extra.get('outline', False) or options.outline
+        if self._should_include_headings(
+            options.extract_links, options.extract_code,
+            options.head, options.tail, options.range, outline_mode
+        ):
             result['headings'] = self._extract_headings()
 
         # Extract links if requested
-        if extract_links:
-            result['links'] = self._extract_links(link_type=link_type, domain=domain)
+        if options.extract_links:
+            result['links'] = self._extract_links(
+                link_type=options.link_type,
+                domain=options.domain
+            )
 
         # Extract code blocks if requested
-        if extract_code:
+        if options.extract_code:
             result['code_blocks'] = self._extract_code_blocks(
-                language=language,
-                include_inline=inline_code
+                language=options.language,
+                include_inline=options.inline_code
             )
 
         # Extract related documents if requested
-        if extract_related:
-            result['related'] = self._extract_related(depth=related_depth, limit=related_limit)
+        if options.extract_related:
+            result['related'] = self._extract_related(
+                depth=options.related_depth,
+                limit=options.related_limit
+            )
 
         # Apply semantic slicing to each category (but not frontmatter - it's unique)
-        if head or tail or range:
-            self._apply_slicing_to_results(result, head, tail, range)
+        if options.head or options.tail or options.range:
+            self._apply_slicing_to_results(result, options.head, options.tail, options.range)
 
         return result
 
