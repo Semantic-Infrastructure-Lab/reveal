@@ -2,7 +2,8 @@
 
 > **Mission:** Make AI coding assistants (Claude Code, TIA, Copilot) more effective by providing maximum understanding per token across popular tech stacks.
 
-**Last Updated:** 2026-01-07
+**Last Updated:** 2026-01-10
+**Current Version:** v0.32.2
 
 ---
 
@@ -16,6 +17,36 @@ Reveal solves this by providing:
 - **Progressive disclosure** - Overview → Details → Specifics
 
 **Measured impact:** 10-25x token reduction on real codebases (tested on Django, FastAPI, Flask, Requests).
+
+---
+
+## Recent Releases
+
+### v0.32.2 (2026-01-08)
+- Fixed MySQL adapter `.my.cnf` support (proper credential resolution)
+- Fixed rule categorization bug (F, N, V rules now show under correct categories)
+
+### v0.32.1 (2026-01-07)
+- **I004 rule:** Standard library shadowing detection
+
+### v0.32.0 (2026-01-07)
+- **markdown:// adapter** - Query markdown files by front matter (`reveal 'markdown://?topics=reveal'`)
+- **--related flags** - Knowledge graph navigation with unlimited depth support
+- **C#, Scala, SQL language support** via tree-sitter
+- **Workflow-aware breadcrumbs** (Phase 3) - Pre-commit and code review workflows
+
+### v0.30.0-v0.31.0 Highlights
+- **diff:// adapter** (v0.30.0) - Semantic structural comparison (files, directories, git refs)
+- **Enhanced breadcrumbs** (v0.30.0-v0.31.0) - Context-aware workflow suggestions
+- **I001 partial imports** (v0.31.0) - Detects each unused name individually (Ruff F401 alignment)
+
+### Notable Older Features
+- **imports://** adapter (v0.28.0) - Dependency analysis, circular import detection, layer violations
+- **.reveal.yaml config** (v0.28.0) - Project-level rule configuration with environment variable overrides
+- **mysql://** adapter (v0.17.0+) - Database schema exploration with DBA tuning ratios
+- **python://** adapter (v0.17.0+) - Runtime inspection, package conflicts, bytecode debugging
+- **ast://** queries (v0.15.0+) - Query code as a database (`ast://src?complexity>10`)
+- **stats://** adapter - Code quality metrics and hotspot detection
 
 ---
 
@@ -183,13 +214,22 @@ Excel, Word, PowerPoint, LibreOffice (ODF)
 | Adapter | Priority | Status |
 |---------|----------|--------|
 | `sqlite://` | Tier 1 | Not started |
-| `git://` | Tier 2 | Not started |
+| `git://` | Tier 2 | Partial (git refs work via `diff://git://HEAD/...`) |
+
+### Explicitly Deprioritized
+| Adapter | Why Deprioritized |
+|---------|-------------------|
+| `architecture://` | Complex, unclear ROI vs effort. Use `imports://` + `stats://` instead |
+| `calls://` | Dead code detection requires full call graph analysis. Deferred post-v1.0 |
 
 ---
 
 ## Quality Rules Status
 
-**41 rules** across categories: B (bugs), S (security), C (complexity), E (style), L (links), I (imports), M (maintainability), D (duplicates), N (nginx), V (validation), F (frontmatter), U (urls), R (refactoring)
+**42 rules** across categories: B (bugs), S (security), C (complexity), E (style), L (links), I (imports), M (maintainability), D (duplicates), N (nginx), V (validation), F (frontmatter), U (urls), R (refactoring)
+
+**Recent additions:**
+- **I004** (v0.32.1) - Detects Python files shadowing stdlib modules (e.g., `logging.py`, `json.py`)
 
 ### Ruff Alignment
 Reveal complements Ruff, doesn't replace it. Aligned rules: E501, C901, I001 (F401), R913.
