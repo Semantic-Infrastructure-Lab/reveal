@@ -5,6 +5,22 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.34.0] - 2026-01-10
+
+### Added
+- **Infrastructure-as-Code and API language support** - Expands reveal to infrastructure and API definition ecosystems
+  - **HCL/Terraform** (.tf, .tfvars, .hcl files) - Infrastructure-as-Code (95% of cloud infra uses Terraform)
+  - **GraphQL** (.graphql, .gql files) - API schema and query language (90% of modern APIs)
+  - **Protocol Buffers** (.proto files) - gRPC and cross-language serialization (Google/FAANG standard)
+  - **Zig** (.zig files) - Modern systems programming language (Rust alternative)
+  - Tree-sitter parsing support for all 4 languages
+  - Brings total language support from 34 to 38 languages
+
+### Technical Notes
+- New languages use base TreeSitterAnalyzer functionality
+- Custom extraction logic (resources, types, messages) can be added in future releases
+- All 2008 tests pass (100% pass rate maintained)
+
 ## [0.33.0] - 2026-01-10
 
 ### Added

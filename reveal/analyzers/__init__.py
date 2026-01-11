@@ -34,6 +34,10 @@ from .html import HTMLAnalyzer
 from .kotlin import KotlinAnalyzer
 from .swift import SwiftAnalyzer
 from .dart import DartAnalyzer
+from .hcl import HCLAnalyzer
+from .graphql import GraphQLAnalyzer
+from .protobuf import ProtobufAnalyzer
+from .zig import ZigAnalyzer
 
 # Office document analyzers (ZIP+XML based)
 from .office import (
@@ -74,6 +78,10 @@ __all__ = [
     'KotlinAnalyzer',
     'SwiftAnalyzer',
     'DartAnalyzer',
+    'HCLAnalyzer',
+    'GraphQLAnalyzer',
+    'ProtobufAnalyzer',
+    'ZigAnalyzer',
     # Office documents
     'DocxAnalyzer',
     'XlsxAnalyzer',

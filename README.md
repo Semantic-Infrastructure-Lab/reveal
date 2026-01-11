@@ -9,7 +9,7 @@ reveal app.py                  # file → structure
 reveal app.py load_config      # element → code
 ```
 
-Zero config. 34 languages built-in. 165+ via tree-sitter.
+Zero config. 38 languages built-in. 165+ via tree-sitter.
 
 ---
 
@@ -29,7 +29,7 @@ reveal --agent-help-full     # Complete reference (~1680 lines)
 
 **Quick Install:**
 ```bash
-pip install reveal-cli              # Full-featured by default (34 languages, 10 adapters)
+pip install reveal-cli              # Full-featured by default (38 languages, 10 adapters)
 pip install reveal-cli[database]    # Add MySQL database inspection
 ```
 See [INSTALL.md](INSTALL.md) for details on what's included.
@@ -353,7 +353,7 @@ reveal app.py --meta             # metadata only
 
 ### Supported Languages
 
-**Built-in (34):** Python, Rust, Go, **C, C++**, **C#, Scala**, Java, PHP, **Ruby, Lua**, JavaScript, TypeScript, **Kotlin, Swift, Dart**, GDScript, Bash, **SQL**, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
+**Built-in (38):** Python, Rust, Go, **C, C++**, **C#, Scala**, Java, PHP, **Ruby, Lua**, JavaScript, TypeScript, **Kotlin, Swift, Dart**, **HCL/Terraform, GraphQL, Protobuf, Zig**, GDScript, Bash, **SQL**, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
 
 **Via tree-sitter (165+):** Perl, R, Haskell, Elixir, Zig, and more. Add new languages in 3 lines of code.
 
