@@ -72,6 +72,19 @@ Reveal solves this by providing:
 
 **Impact:** These three cover mobile development, which Reveal currently ignores entirely.
 
+**Implementation Note (2026-01-10):**
+
+Current blocker: `tree-sitter-languages` package (used by Reveal) is unmaintained and missing Swift/Dart. Kotlin is available but was previously removed due to function extraction limitations (class extraction works).
+
+**Solution:** Migrate to [`tree-sitter-language-pack`](https://github.com/Goldziher/tree-sitter-language-pack):
+- ✅ **165+ languages** including Kotlin, Swift, Dart
+- ✅ **Actively maintained** (vs tree-sitter-languages unmaintained)
+- ✅ **Tested working** (Jan 10 2026: all three languages parse successfully)
+- ✅ **Python 3.10+ compatible** (Reveal already requires 3.10)
+- 📦 **Migration effort:** Update pyproject.toml dependency + imports
+
+**Decision:** Add all three languages once migration complete (estimated: ~1-2 hours total).
+
 ### sqlite:// Adapter
 
 ```bash
