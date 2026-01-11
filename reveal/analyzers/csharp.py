@@ -10,4 +10,4 @@ class CSharpAnalyzer(TreeSitterAnalyzer):
 
     Extracts classes, interfaces, methods automatically using tree-sitter.
     """
-    language = 'c_sharp'
+    language = 'csharp'

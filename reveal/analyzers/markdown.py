@@ -19,6 +19,51 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
     language = 'markdown'
 
+    def __init__(self, path: str):
+        """Initialize markdown analyzer with dual-parser support.
+
+        Markdown grammar uses two parsers:
+        - 'markdown' for block structure (headings, paragraphs, lists)
+        - 'markdown_inline' for inline elements (links, emphasis, code spans)
+        """
+        super().__init__(path)
+
+        # Parse inline content separately for link/code extraction
+        self.inline_tree = None
+        try:
+            from tree_sitter_language_pack import get_parser
+            import warnings
+            warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
+
+            inline_parser = get_parser('markdown_inline')
+            self.inline_tree = inline_parser.parse(self.content.encode('utf-8'))
+        except Exception:
+            # Inline parsing failed - fall back to regex for links/code
+            pass
+
+    def _find_nodes_in_tree(self, tree, node_type: str) -> List:
+        """Find all nodes of a given type in a specific tree.
+
+        Args:
+            tree: Tree-sitter tree to search
+            node_type: Type of node to find
+
+        Returns:
+            List of matching nodes
+        """
+        results = []
+
+        def _traverse(node):
+            if node.type == node_type:
+                results.append(node)
+            for child in node.children:
+                _traverse(child)
+
+        if tree and tree.root_node:
+            _traverse(tree.root_node)
+
+        return results
+
     def _should_include_headings(self, extract_links: bool, extract_code: bool,
                                   head: int, tail: int, range: tuple,
                                   outline_mode: bool) -> bool:
@@ -149,12 +194,12 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             title = None
 
             # The first child is usually the marker (atx_h1_marker, atx_h2_marker, etc.)
-            # The second child is heading_content
+            # The second child is inline (heading content)
             for child in node.children:
                 if 'marker' in child.type:
                     # atx_h1_marker, atx_h2_marker, etc.
                     level = int(child.type[5])  # Extract number from 'atx_h1_marker'
-                elif child.type == 'heading_content':
+                elif child.type == 'inline':
                     title = child.text.decode('utf-8').strip()
 
             if level and title:
@@ -190,7 +235,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
     def _extract_links(self, link_type: Optional[str] = None,
                       domain: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Extract all links from markdown using tree-sitter AST.
+        """Extract all links from markdown using tree-sitter inline parser.
 
         Args:
             link_type: Filter by type (internal, external, email, all)
@@ -199,12 +244,13 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         Returns:
             List of link dicts with line, column, text, url, type, etc.
         """
-        if not self.tree:
-            # Fallback to regex if tree-sitter fails
+        if not self.inline_tree:
+            # Fallback to regex if inline parser fails
             return self._extract_links_regex(link_type, domain)
 
         links = []
-        link_nodes = self._find_nodes_by_type('link')
+        # Use inline parser which properly parses links
+        link_nodes = self._find_nodes_in_tree(self.inline_tree, 'inline_link')
 
         for node in link_nodes:
             text = self._extract_link_text(node)
@@ -222,32 +268,30 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         """Extract text from a link node's link_text child.
 
         Args:
-            node: Tree-sitter link node
+            node: Tree-sitter inline_link node
 
         Returns:
             Link text or None if not found
         """
         for child in node.children:
             if child.type == 'link_text':
-                for text_node in child.children:
-                    if text_node.type == 'text':
-                        return text_node.text.decode('utf-8')
+                # In inline grammar, link_text contains the text directly
+                return child.text.decode('utf-8')
         return None
 
     def _extract_link_destination(self, node) -> Optional[str]:
         """Extract URL from a link node's link_destination child.
 
         Args:
-            node: Tree-sitter link node
+            node: Tree-sitter inline_link node
 
         Returns:
             Link URL or None if not found
         """
         for child in node.children:
             if child.type == 'link_destination':
-                for text_node in child.children:
-                    if text_node.type == 'text':
-                        return text_node.text.decode('utf-8')
+                # In inline grammar, link_destination contains the URL directly
+                return child.text.decode('utf-8')
         return None
 
     def _build_link_info(self, node, text: str, url: str) -> Dict[str, Any]:
@@ -443,10 +487,9 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         for child in node.children:
             if child.type == 'info_string':
                 # Language tag (e.g., 'python', 'javascript')
-                # info_string has a text child
-                for text_node in child.children:
-                    if text_node.type == 'text':
-                        return text_node.text.decode('utf-8')
+                # In new grammar, info_string directly contains the language text
+                lang = child.text.decode('utf-8').strip()
+                return lang if lang else 'text'
         return 'text'
 
     def _extract_fence_source(self, node) -> str:
@@ -581,7 +624,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         return code_blocks
 
     def _extract_inline_code_ast(self, language: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Extract inline code snippets using tree-sitter AST.
+        """Extract inline code snippets using tree-sitter inline parser.
 
         Args:
             language: Language filter (not applicable to inline code)
@@ -589,22 +632,21 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         Returns:
             List of inline code dicts with line, column, source, etc.
         """
-        if not self.tree:
+        if not self.inline_tree:
             # Fallback to regex
             return self._extract_inline_code(language)
 
         inline_blocks = []
 
-        # Find all code_span nodes
-        code_span_nodes = self._find_nodes_by_type('code_span')
+        # Find all code_span nodes from inline parser
+        code_span_nodes = self._find_nodes_in_tree(self.inline_tree, 'code_span')
 
         for node in code_span_nodes:
-            # Extract the code text
-            source = ''
-            for child in node.children:
-                if child.type == 'text':
-                    source = child.text.decode('utf-8')
-                    break
+            # Extract the code text - in new grammar, code_span text includes backticks
+            # So we need to strip them
+            full_text = node.text.decode('utf-8')
+            # Remove leading/trailing backticks
+            source = full_text.strip('`').strip()
 
             if source:
                 # Get position (tree-sitter is 0-indexed)

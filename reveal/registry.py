@@ -199,7 +199,7 @@ def _try_treesitter_fallback(ext: str) -> Optional[type]:
 
     try:
         # Test if parser is available
-        from tree_sitter_languages import get_parser
+        from tree_sitter_language_pack import get_parser
         get_parser(language)
 
         # Import TreeSitterAnalyzer dynamically to avoid circular import

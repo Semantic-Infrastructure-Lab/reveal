@@ -7,7 +7,7 @@ from .base import FileAnalyzer
 # Suppress tree-sitter deprecation warnings globally
 warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
 
-from tree_sitter_languages import get_parser
+from tree_sitter_language_pack import get_parser
 
 
 class TreeSitterAnalyzer(FileAnalyzer):

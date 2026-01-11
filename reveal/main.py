@@ -173,7 +173,7 @@ def _get_tree_sitter_fallbacks(registered_analyzers):
     try:
         import warnings
         warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
-        from tree_sitter_languages import get_language
+        from tree_sitter_language_pack import get_language
     except ImportError:
         return []
 

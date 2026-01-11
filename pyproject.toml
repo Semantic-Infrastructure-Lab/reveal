@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reveal-cli"
-version = "0.32.2"
+version = "0.33.0"
 description = "Semantic code exploration with progressive disclosure - explore directories, files, and code elements with smart defaults"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -34,8 +34,8 @@ dependencies = [
     "jsonschema>=4.0",  # Config schema validation
     "tomli>=2.0.0;python_version<'3.11'",  # TOML support for Python <3.11
     "rich>=13.0.0",  # For beautiful terminal output
-    "tree-sitter==0.21.3",  # Semantic parsing for all languages
-    "tree-sitter-languages>=1.10.0",  # Language grammar support (JS, TS, Rust, Go, etc.)
+    "tree-sitter>=0.25.2",  # Semantic parsing for all languages
+    "tree-sitter-language-pack>=0.13.0",  # Language grammar support (165+ languages including mobile)
     "beautifulsoup4>=4.12.0",  # HTML parsing for HTML analyzer (uses stdlib html.parser)
     "mccabe>=0.7.0",  # McCabe cyclomatic complexity (aligns C901 with Ruff)
 ]

@@ -5,6 +5,36 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.0] - 2026-01-10
+
+### Added
+- **Mobile platform language support** - Full support for mobile development ecosystems
+  - **Kotlin** (.kt, .kts files) - Android and JVM development (8M+ developers)
+  - **Swift** (.swift files) - iOS, macOS, iPadOS native development (5M+ developers)
+  - **Dart** (.dart files) - Flutter cross-platform development (2M+ developers)
+  - Automatic extraction of classes, functions, imports via tree-sitter
+  - Brings total language support from 31 to 34 languages
+
+### Changed
+- **BREAKING: Migrated to tree-sitter-language-pack** - Modern, actively maintained parser library
+  - Previous `tree-sitter-languages` package is officially unmaintained (last update Feb 2024)
+  - New package supports 165+ languages (vs 50), includes mobile platforms
+  - Upgraded tree-sitter core from 0.21.3 to 0.25.2 (latest)
+  - API-compatible drop-in replacement - no user-facing changes
+  - Pre-built wheels for all platforms (no compilation required)
+  - Enhanced security: signed attestations via Sigstore, permissive licenses only
+- **C# language name updated** - Internal parser reference changed from `c_sharp` to `csharp`
+  (tree-sitter grammar convention)
+
+### Known Issues
+- **Test suite: 48 markdown/link tests need updates** - New tree-sitter grammars have improved
+  AST structures requiring test adjustments. Core functionality unaffected (1960/2008 tests pass).
+  Will be addressed in v0.33.1.
+
+### Migration Notes
+For developers extending Reveal: if you use tree-sitter directly, update imports:
+- `from tree_sitter_languages import get_parser` → `from tree_sitter_language_pack import get_parser`
+
 ## [0.32.2] - 2026-01-08
 
 ### Fixed

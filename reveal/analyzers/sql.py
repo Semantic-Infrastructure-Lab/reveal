@@ -15,10 +15,19 @@ class SQLAnalyzer(TreeSitterAnalyzer):
     language = 'sql'
 
     def _find_identifier_child(self, node) -> Optional[str]:
-        """Find the first identifier child's text."""
+        """Find the first identifier child's text (searches recursively)."""
+        # Check direct children first
         for child in node.children:
             if child.type == 'identifier':
                 return self._get_node_text(child)
+
+        # In new grammar, identifier is often nested in object_reference
+        for child in node.children:
+            if child.type == 'object_reference':
+                for grandchild in child.children:
+                    if grandchild.type == 'identifier':
+                        return self._get_node_text(grandchild)
+
         return None
 
     def _node_to_function_dict(self, node, name: str) -> Dict[str, Any]:
@@ -50,7 +59,9 @@ class SQLAnalyzer(TreeSitterAnalyzer):
     def _extract_functions(self) -> List[Dict[str, Any]]:
         """Extract SQL functions and procedures."""
         functions = []
-        func_types = ('create_function_statement', 'create_procedure_statement')
+        # New grammar uses create_function, create_procedure (no _statement suffix)
+        func_types = ('create_function', 'create_procedure',
+                     'create_function_statement', 'create_procedure_statement')
 
         for func_type in func_types:
             for node in self._find_nodes_by_type(func_type):
@@ -63,7 +74,9 @@ class SQLAnalyzer(TreeSitterAnalyzer):
     def _extract_classes(self) -> List[Dict[str, Any]]:
         """Extract SQL tables, views as 'classes'."""
         tables = []
-        table_types = ('create_table_statement', 'create_view_statement')
+        # New grammar uses create_table, create_view (no _statement suffix)
+        table_types = ('create_table', 'create_view',
+                      'create_table_statement', 'create_view_statement')
 
         for table_type in table_types:
             for node in self._find_nodes_by_type(table_type):

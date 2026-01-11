@@ -31,6 +31,9 @@ from .nginx import NginxAnalyzer
 from .toml import TomlAnalyzer
 from .dockerfile import DockerfileAnalyzer
 from .html import HTMLAnalyzer
+from .kotlin import KotlinAnalyzer
+from .swift import SwiftAnalyzer
+from .dart import DartAnalyzer
 
 # Office document analyzers (ZIP+XML based)
 from .office import (
@@ -68,6 +71,9 @@ __all__ = [
     'TomlAnalyzer',
     'DockerfileAnalyzer',
     'HTMLAnalyzer',
+    'KotlinAnalyzer',
+    'SwiftAnalyzer',
+    'DartAnalyzer',
     # Office documents
     'DocxAnalyzer',
     'XlsxAnalyzer',
