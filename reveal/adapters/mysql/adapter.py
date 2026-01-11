@@ -1,5 +1,6 @@
 """MySQL database adapter (mysql://)."""
 
+from dataclasses import dataclass
 from typing import Dict, Any, List, Optional
 from ..base import ResourceAdapter, register_adapter
 from ..help_data import load_help_data
@@ -8,6 +9,18 @@ from .health import HealthMetrics
 from .performance import PerformanceAnalyzer
 from .replication import ReplicationMonitor
 from .storage import StorageAnalyzer
+
+
+@dataclass
+class HealthCheckThresholds:
+    """Thresholds for health check evaluation.
+
+    Reduces parameter count in _evaluate_health_check() (R913 fix).
+    """
+    pass_threshold: float
+    warn_threshold: float
+    severity: str
+    operator: str = '<'
 
 
 @register_adapter('mysql')
@@ -798,33 +811,29 @@ class MySQLAdapter(ResourceAdapter):
             'buffer_hit_rate': buffer_hit_rate,
         }
 
-    def _evaluate_health_check(self, name: str, value: float, pass_threshold: float,
-                               warn_threshold: float, severity: str, operator: str = '<') -> Dict[str, Any]:
+    def _evaluate_health_check(self, name: str, value: float, thresholds: HealthCheckThresholds) -> Dict[str, Any]:
         """Evaluate a single health check against thresholds.
 
         Args:
             name: Check name
             value: Measured value
-            pass_threshold: Passing threshold
-            warn_threshold: Warning threshold
-            severity: Severity level
-            operator: Comparison operator ('<' or '>')
+            thresholds: HealthCheckThresholds config with pass/warn thresholds, severity, operator
 
         Returns:
             Check result dict with status, value, threshold, etc.
         """
         # Determine status based on operator and thresholds
-        if operator == '<':
-            if value < pass_threshold:
+        if thresholds.operator == '<':
+            if value < thresholds.pass_threshold:
                 status = 'pass'
-            elif value < warn_threshold:
+            elif value < thresholds.warn_threshold:
                 status = 'warning'
             else:
                 status = 'failure'
         else:  # operator == '>'
-            if value > pass_threshold:
+            if value > thresholds.pass_threshold:
                 status = 'pass'
-            elif value > warn_threshold:
+            elif value > thresholds.warn_threshold:
                 status = 'warning'
             else:
                 status = 'failure'
@@ -837,8 +846,8 @@ class MySQLAdapter(ResourceAdapter):
             'name': name,
             'status': status,
             'value': value_str,
-            'threshold': f'{operator}{pass_threshold}%',
-            'severity': severity
+            'threshold': f'{thresholds.operator}{thresholds.pass_threshold}%',
+            'severity': thresholds.severity
         }
 
     def _calculate_check_summary(self, checks: List[Dict[str, Any]]) -> tuple:
@@ -913,13 +922,16 @@ class MySQLAdapter(ResourceAdapter):
         for check_def in config.get('checks', []):
             metric_name = check_def.get('metric')
             if metric_name in metrics:
-                check_result = self._evaluate_health_check(
-                    name=check_def['name'],
-                    value=metrics[metric_name],
+                thresholds = HealthCheckThresholds(
                     pass_threshold=check_def['pass_threshold'],
                     warn_threshold=check_def['warn_threshold'],
                     severity=check_def['severity'],
                     operator=check_def.get('operator', '<')
+                )
+                check_result = self._evaluate_health_check(
+                    name=check_def['name'],
+                    value=metrics[metric_name],
+                    thresholds=thresholds
                 )
                 checks.append(check_result)
 
