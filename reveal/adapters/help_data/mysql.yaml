@@ -1,0 +1,88 @@
+# MySQL Adapter Help Data
+# Extracted from mysql/adapter.py::get_help() to reduce function complexity
+
+name: mysql
+description: 'MySQL database inspection - progressive disclosure of health, connections, InnoDB, replication'
+syntax: 'mysql://[user:password@]host[:port][/element]'
+
+examples:
+  - uri: 'mysql://localhost'
+    description: 'Health overview (connections, InnoDB, replication, storage)'
+  - uri: 'mysql://localhost/connections'
+    description: 'Detailed connection info and processlist'
+  - uri: 'mysql://localhost/innodb'
+    description: 'InnoDB buffer pool, locks, pending I/O'
+  - uri: 'mysql://localhost/replication'
+    description: 'Replication status and lag'
+  - uri: 'mysql://localhost/storage'
+    description: 'Storage usage by database'
+  - uri: 'mysql://localhost --check'
+    description: 'Run health checks with thresholds'
+
+elements:
+  connections: 'Connection details and processlist'
+  performance: 'Query performance metrics'
+  innodb: 'InnoDB engine status'
+  replication: 'Replication status and lag'
+  storage: 'Storage usage by database'
+  storage/<db>: 'Specific database tables'
+  errors: 'Error indicators'
+  variables: 'Server configuration'
+  health: 'Comprehensive health check'
+  databases: 'Database list'
+
+features:
+  - 'DBA health snapshot (~100 tokens vs 5000+ for raw SQL)'
+  - 'Progressive disclosure (structure → element → detail)'
+  - 'Industry-standard tuning ratios (table scans, thread cache, temp tables, etc.)'
+  - 'Time context accuracy (uses MySQL clock, not local machine)'
+  - 'Index usage analysis (most used, unused)'
+  - 'Health checks with pass/warn/fail thresholds'
+  - 'Credential resolution (env vars, ~/.my.cnf)'
+  - 'Token-efficient for AI agent consumption'
+
+try_now:
+  - "reveal mysql://localhost"
+  - "reveal mysql://localhost/connections"
+  - "reveal mysql://localhost --check"
+
+workflows:
+  - name: 'Quick Health Check'
+    scenario: 'Need to quickly assess database health'
+    steps:
+      - "reveal mysql://localhost              # Overview"
+      - "reveal mysql://localhost --check      # Health checks"
+      - "reveal mysql://localhost/replication  # If issues found"
+  - name: 'Debug Slow Performance'
+    scenario: 'Database is slow, need to find bottleneck'
+    steps:
+      - "reveal mysql://localhost/performance  # Check slow queries"
+      - "reveal mysql://localhost/innodb       # Buffer pool hit rate"
+      - "reveal mysql://localhost/connections  # Check for blocking"
+
+anti_patterns:
+  - bad: "mysql -e 'SHOW STATUS' | grep -i innodb"
+    good: "reveal mysql://localhost/innodb"
+    why: "50x fewer tokens, structured output, DBA-relevant signals only"
+  - bad: "mysql -e 'SHOW PROCESSLIST\\G'"
+    good: "reveal mysql://localhost/connections"
+    why: "Categorized by state, highlights long-running queries"
+
+notes:
+  - '⚠️  IMPORTANT: Requires pymysql dependency'
+  - 'Install: pip install reveal-cli[database] OR pip install pymysql'
+  - 'Credentials: URI > env vars > ~/.my.cnf'
+  - 'Env vars: MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE'
+  - '~/.my.cnf: Reads [client] section when params not explicitly set'
+  - 'Health thresholds: connections <80%, buffer pool >99%, replication lag <60s'
+  - 'DBA tuning ratios: table scans <25%, thread cache miss <10%, temp tables on disk <25%'
+  - 'All metrics show "since server start" with accurate MySQL timestamps'
+
+output_formats:
+  - text
+  - json
+  - grep
+
+see_also:
+  - 'reveal help://env - Environment variables'
+  - 'reveal help://python - Python runtime inspection'

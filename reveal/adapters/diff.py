@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from .base import ResourceAdapter, register_adapter, get_adapter_class
+from .help_data import load_help_data
 
 
 @register_adapter('diff')
@@ -37,113 +38,12 @@ class DiffAdapter(ResourceAdapter):
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
-        """Get help documentation for diff:// adapter."""
-        return {
-            'name': 'diff',
-            'description': 'Compare two reveal resources - semantic structural diff',
-            'syntax': 'diff://<left-uri>:<right-uri>[/element]',
-            'examples': [
-                {
-                    'uri': 'diff://app.py:backup/app.py',
-                    'description': 'Compare two Python files - see function/class changes'
-                },
-                {
-                    'uri': 'diff://src/:backup/src/',
-                    'description': 'Compare directories (aggregates all files)'
-                },
-                {
-                    'uri': 'diff://git://HEAD~1/app.py:git://HEAD/app.py',
-                    'description': 'Compare file across git commits'
-                },
-                {
-                    'uri': 'diff://git://HEAD/src/:src/',
-                    'description': 'Compare git HEAD vs working tree (pre-commit validation)'
-                },
-                {
-                    'uri': 'diff://git://main/.:git://feature/refactor/.',
-                    'description': 'Compare branches (merge impact assessment)'
-                },
-                {
-                    'uri': 'diff://app.py:old.py/handle_request',
-                    'description': 'Compare specific function (element-specific diff)'
-                },
-                {
-                    'uri': 'diff://env://:env://production',
-                    'description': 'Compare environment variables (local vs production)'
-                },
-                {
-                    'uri': 'diff://mysql://localhost/users:mysql://staging/users',
-                    'description': 'Database schema drift detection'
-                }
-            ],
-            'features': [
-                'Semantic diff - compares structure, not text',
-                'Works with ANY adapter (file, env, mysql, etc.)',
-                'Directory comparison - aggregates changes from all files',
-                'Git integration - compare commits, branches, working tree',
-                'Two-level output: summary (counts) + details (changes)',
-                'Element-specific diff support',
-                'Shows complexity and line count changes',
-                'Language-agnostic (works with Python, JS, etc.)'
-            ],
-            'workflows': [
-                {
-                    'name': 'Pre-Commit Validation',
-                    'scenario': 'Check uncommitted changes before commit',
-                    'steps': [
-                        "reveal diff://git://HEAD/src/:src/ --format=json  # See what changed",
-                        "# Flag if complexity increased significantly",
-                    ]
-                },
-                {
-                    'name': 'Code Review Workflow',
-                    'scenario': 'Review what changed in a feature branch',
-                    'steps': [
-                        "reveal diff://git://main/.:git://feature/.  # Full branch comparison",
-                        "reveal diff://git://main/app.py:git://feature/app.py/process_data  # Specific function",
-                    ]
-                },
-                {
-                    'name': 'Refactoring Validation',
-                    'scenario': 'Verify refactoring improved complexity',
-                    'steps': [
-                        "reveal diff://old.py:new.py              # Check complexity delta",
-                        "# Look for 'complexity: 8 → 4' in output",
-                    ]
-                },
-                {
-                    'name': 'Migration Validation',
-                    'scenario': 'Ensure no functionality lost during migration',
-                    'steps': [
-                        "reveal diff://legacy_system/:new_system/  # Compare directory structures",
-                        "# Verify all functions/classes migrated",
-                    ]
-                }
-            ],
-            'output_format': {
-                'summary': '+N -M ~K format (added, removed, modified)',
-                'details': 'Per-element changes with old → new values',
-                'supports': ['text', 'json', 'markdown (future)']
-            },
-            'notes': [
-                'Complements git diff (semantic vs line-level)',
-                'Works with existing adapters via composition',
-                'Git URI format: git://REF/path (e.g., git://HEAD~1/file.py, git://main/src/)',
-                'Directory diffs aggregate all analyzable files (skips .git, node_modules, etc.)',
-                'For complex URIs with colons, use explicit scheme://'
-            ],
-            'try_now': [
-                "# Create test files",
-                "echo 'def foo(): return 42' > v1.py",
-                "echo 'def foo(): return 42\\ndef bar(): return 99' > v2.py",
-                "reveal diff://v1.py:v2.py",
-            ],
-            'see_also': [
-                'reveal help://file - File structure analysis',
-                'reveal help://env - Environment variable inspection',
-                'reveal help://mysql - Database schema exploration'
-            ]
-        }
+        """Get help documentation for diff:// adapter.
+
+        Help data loaded from reveal/adapters/help_data/diff.yaml
+        to reduce function complexity.
+        """
+        return load_help_data('diff') or {}
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get diff summary between two resources.

@@ -1,0 +1,86 @@
+# Stats Adapter Help Data
+# Extracted from stats.py::get_help() to reduce function complexity
+
+name: stats
+description: 'Analyze codebase metrics, identify hotspots, and assess code quality'
+syntax: 'stats://<path>[?<filters>]'
+
+examples:
+  - uri: 'stats://./src'
+    description: 'Get overview statistics for src directory'
+  - uri: 'stats://./src?hotspots=true'
+    description: 'Show top 10 files with quality issues (URI param - preferred)'
+  - uri: 'stats://./src --hotspots'
+    description: 'Show top 10 files with quality issues (flag - legacy)'
+  - uri: 'stats://./src/app.py'
+    description: 'Get detailed statistics for a specific file'
+  - uri: 'stats://./src?min_lines=50'
+    description: 'Filter files with 50+ lines'
+  - uri: 'stats://./src?max_complexity=10'
+    description: 'Show files with average complexity <= 10'
+  - uri: 'stats://./src --format=json'
+    description: 'JSON output for CI/CD integration'
+
+features:
+  - 'Aggregate codebase metrics (lines, functions, classes, complexity)'
+  - 'Hotspot identification (largest/most complex files)'
+  - 'Per-file statistics with quality scoring'
+  - 'Filter by metrics (lines, complexity, function count)'
+  - 'Multi-language support (Python, JS, Go, Rust, etc.)'
+  - 'CI/CD friendly JSON output'
+
+filters:
+  hotspots: 'Show quality hotspots (e.g., ?hotspots=true)'
+  min_lines: 'Minimum line count (e.g., ?min_lines=50)'
+  max_lines: 'Maximum line count (e.g., ?max_lines=500)'
+  min_complexity: 'Minimum avg complexity (e.g., ?min_complexity=5)'
+  max_complexity: 'Maximum avg complexity (e.g., ?max_complexity=10)'
+  min_functions: 'Minimum function count (e.g., ?min_functions=10)'
+  type: 'Filter by file type (e.g., ?type=python)'
+
+workflows:
+  - name: 'Find Refactoring Targets'
+    scenario: 'Need to identify code that needs cleanup'
+    steps:
+      - 'stats://./src --hotspots              # See worst files'
+      - 'stats://./src?min_complexity=15      # High complexity files'
+      - 'reveal <hotspot-file> --check        # Analyze specific issues'
+  - name: 'CI/CD Quality Gate'
+    scenario: 'Fail build if complexity increases'
+    steps:
+      - 'stats://./src --format=json > before.json'
+      - '# Make changes...'
+      - 'stats://./src --format=json > after.json'
+      - 'jq -r ".summary.avg_complexity" before.json after.json  # Compare'
+  - name: 'Architecture Assessment'
+    scenario: 'Understand codebase structure and size'
+    steps:
+      - 'stats://./src                        # Overall metrics'
+      - 'stats://./src/core                   # Core subsystem'
+      - 'stats://./src/plugins                # Plugins subsystem'
+      - '# Compare metrics to identify imbalanced architecture'
+
+anti_patterns:
+  - bad: 'find . -name "*.py" | xargs wc -l'
+    good: 'stats://.'
+    why: 'Provides context (functions, classes, complexity), not just line counts'
+  - bad: 'grep -r "def " | wc -l'
+    good: 'stats://. --format=json | jq .summary.total_functions'
+    why: 'Accurate parsing with structured output, not text munging'
+
+notes:
+  - 'Recursively analyzes all supported file types in directory'
+  - 'Complexity calculated using cyclomatic complexity heuristic'
+  - 'Hotspots ranked by: long functions, deep nesting, high complexity'
+  - 'Use --hotspots flag to see top 10 worst files'
+  - 'Quality score: 0-100 (higher is better)'
+
+output_formats:
+  - text
+  - json
+  - grep
+
+see_also:
+  - 'reveal help://ast - Query code structure'
+  - 'reveal --check - Run quality checks'
+  - 'reveal help://tricks - Power user workflows'
