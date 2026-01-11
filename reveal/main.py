@@ -3,7 +3,8 @@
 import sys
 import os
 import logging
-from .base import get_all_analyzers, FileAnalyzer
+from .base import FileAnalyzer
+from .registry import get_all_analyzers
 from . import __version__
 from .utils import copy_to_clipboard, safe_json_dumps, check_for_updates, print_breadcrumbs, get_file_type_from_analyzer
 from .config import disable_breadcrumbs_permanently

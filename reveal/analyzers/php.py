@@ -1,6 +1,6 @@
 """PHP analyzer using tree-sitter."""
 
-from ..base import register
+from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
 

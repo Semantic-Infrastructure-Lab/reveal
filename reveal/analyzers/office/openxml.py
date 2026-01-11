@@ -10,7 +10,7 @@ All are ZIP archives containing XML files following the ECMA-376 standard.
 
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Optional
-from ...base import register
+from ...registry import register
 from .base import ZipXMLAnalyzer
 
 

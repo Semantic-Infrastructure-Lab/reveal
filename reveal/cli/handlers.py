@@ -196,7 +196,7 @@ def _extract_decorators_from_file(file_path: str):
     Returns:
         Tuple of (decorators_found dict, file_has_decorators bool) or None if file can't be analyzed
     """
-    from ..base import get_analyzer
+    from ..registry import get_analyzer
 
     try:
         analyzer_class = get_analyzer(file_path)

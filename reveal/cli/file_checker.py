@@ -66,7 +66,7 @@ def collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> Li
     Returns:
         List of file paths to check
     """
-    from ..base import get_analyzer
+    from ..registry import get_analyzer
 
     files_to_check = []
     excluded_dirs = {'.git', '__pycache__', 'node_modules', '.venv', 'venv'}
@@ -108,7 +108,7 @@ def check_and_report_file(
     Returns:
         Number of issues found (0 if no issues or on error)
     """
-    from ..base import get_analyzer
+    from ..registry import get_analyzer
     from ..rules import RuleRegistry
 
     try:

@@ -210,7 +210,7 @@ class DiffAdapter(ResourceAdapter):
         Returns:
             List of file paths that have analyzers
         """
-        from ..base import get_analyzer
+        from ..registry import get_analyzer
 
         analyzable = []
         for root, dirs, files in os.walk(directory):
@@ -282,7 +282,7 @@ class DiffAdapter(ResourceAdapter):
         Returns:
             Structure dict
         """
-        from ..base import get_analyzer
+        from ..registry import get_analyzer
 
         # Get file content from git
         try:
@@ -318,7 +318,7 @@ class DiffAdapter(ResourceAdapter):
         Returns:
             Aggregated structure dict
         """
-        from ..base import get_analyzer
+        from ..registry import get_analyzer
 
         # Get list of files in the directory
         try:
@@ -414,7 +414,7 @@ class DiffAdapter(ResourceAdapter):
         Returns:
             Dict with aggregated structures from all files
         """
-        from ..base import get_analyzer
+        from ..registry import get_analyzer
 
         directory = Path(dir_path).resolve()
         if not directory.is_dir():
@@ -496,7 +496,7 @@ class DiffAdapter(ResourceAdapter):
                 return self._resolve_directory(str(path))
 
             # Single file - use analyzer
-            from ..base import get_analyzer
+            from ..registry import get_analyzer
             analyzer_class = get_analyzer(resource, allow_fallback=True)
             if not analyzer_class:
                 raise ValueError(f"No analyzer found for file: {resource}")
@@ -530,7 +530,7 @@ class DiffAdapter(ResourceAdapter):
         """
         # For file scheme, we need to use the file analyzer
         if scheme == 'file':
-            from ..base import get_analyzer
+            from ..registry import get_analyzer
             analyzer_class = get_analyzer(resource, allow_fallback=True)
             if not analyzer_class:
                 raise ValueError(f"No analyzer found for file: {resource}")

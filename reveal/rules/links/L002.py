@@ -54,7 +54,7 @@ class L002(BaseRule):
             links = structure['links']
         else:
             # Fallback: extract links if not in structure
-            from ...base import get_analyzer
+            from ...registry import get_analyzer
             analyzer_class = get_analyzer(file_path)
             if analyzer_class:
                 analyzer = analyzer_class(file_path)

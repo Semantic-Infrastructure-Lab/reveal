@@ -2,7 +2,8 @@
 
 import json
 from typing import Dict, Any, List, Tuple
-from ..base import FileAnalyzer, register
+from ..base import FileAnalyzer
+from ..registry import register
 
 
 @register('.ipynb', name='Jupyter', icon='')

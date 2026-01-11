@@ -1,6 +1,6 @@
 """C++ file analyzer - tree-sitter based."""
 
-from ..base import register
+from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
 

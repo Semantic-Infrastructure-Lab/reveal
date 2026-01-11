@@ -46,7 +46,7 @@ class L001(BaseRule):
             links = structure['links']
         else:
             # Fallback: extract links if not in structure
-            from ...base import get_analyzer
+            from ...registry import get_analyzer
             analyzer_class = get_analyzer(file_path)
             if analyzer_class:
                 analyzer = analyzer_class(file_path)
@@ -96,7 +96,7 @@ class L001(BaseRule):
         """
         try:
             # Use analyzer to extract headings (uses AST, not regex)
-            from ...base import get_analyzer
+            from ...registry import get_analyzer
             analyzer_class = get_analyzer(str(file_path))
             if not analyzer_class:
                 return []

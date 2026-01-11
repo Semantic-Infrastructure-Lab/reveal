@@ -10,7 +10,7 @@ from typing import List, Set
 
 from . import ImportStatement
 from .base import LanguageExtractor, register_extractor
-from ...base import get_analyzer
+from ...registry import get_analyzer
 
 
 @register_extractor

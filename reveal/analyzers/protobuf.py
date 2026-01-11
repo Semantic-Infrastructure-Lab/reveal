@@ -1,13 +1,262 @@
 """Protocol Buffers analyzer using tree-sitter."""
+from typing import Dict, List, Any, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
 
 @register('.proto', name='Protocol Buffers', icon='📦')
 class ProtobufAnalyzer(TreeSitterAnalyzer):
-    """Protocol Buffers (protobuf) language analyzer.
+    """Protocol Buffers (.proto) file analyzer.
 
-    Supports Protocol Buffer definition files (.proto)
-    used for gRPC and cross-language serialization.
+    Supports both proto2 and proto3 syntax for gRPC service definitions
+    and message schemas.
     """
     language = 'proto'
+
+    def get_structure(self, head: int = None, tail: int = None,
+                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+        """Extract Protocol Buffers structure."""
+        if not self.tree:
+            return {}
+
+        structure = {}
+
+        # Extract package info
+        package = self._extract_package()
+        if package:
+            structure['package'] = [package]
+
+        # Extract schema elements
+        services_data = self._extract_services()
+        structure['services'] = [{'line': s['line'], 'name': s['name']} for s in services_data]
+
+        # Extract RPCs as separate category
+        rpcs = []
+        for service in services_data:
+            for rpc in service.get('rpcs', []):
+                rpcs.append(rpc)
+        if rpcs:
+            structure['rpcs'] = rpcs
+
+        structure['messages'] = self._extract_messages()
+        structure['enums'] = self._extract_enums()
+
+        # Apply semantic slicing to each category
+        if head or tail or range:
+            for category in structure:
+                if category != 'package':  # Don't slice package (only one)
+                    structure[category] = self._apply_semantic_slice(
+                        structure[category], head, tail, range
+                    )
+
+        # Remove empty categories
+        return {k: v for k, v in structure.items() if v}
+
+    def _extract_package(self) -> Optional[Dict[str, Any]]:
+        """Extract package declaration."""
+        package_nodes = self._find_nodes_by_type('package')
+
+        for pkg_node in package_nodes:
+            for child in pkg_node.children:
+                if child.type == 'full_ident':
+                    package_name = self._get_node_text(child)
+                    return {
+                        'line': pkg_node.start_point[0] + 1,
+                        'name': package_name,
+                    }
+
+        return None
+
+    def _extract_services(self) -> List[Dict[str, Any]]:
+        """Extract gRPC service definitions."""
+        services = []
+
+        service_nodes = self._find_nodes_by_type('service')
+
+        for service_node in service_nodes:
+            service_name = None
+            rpcs = []
+
+            # Get service name
+            for child in service_node.children:
+                if child.type == 'service_name':
+                    for name_child in child.children:
+                        if name_child.type == 'identifier':
+                            service_name = self._get_node_text(name_child)
+
+            if not service_name:
+                continue
+
+            # Extract RPC methods
+            rpc_nodes = self._find_nodes_in_subtree(service_node, 'rpc')
+
+            for rpc_node in rpc_nodes:
+                rpc_name = None
+                request_type = None
+                response_type = None
+                is_streaming_request = False
+                is_streaming_response = False
+
+                for child in rpc_node.children:
+                    if child.type == 'rpc_name':
+                        for name_child in child.children:
+                            if name_child.type == 'identifier':
+                                rpc_name = self._get_node_text(name_child)
+                    elif child.type == 'message_or_enum_type':
+                        # This is the request type (first occurrence)
+                        if request_type is None:
+                            for type_child in child.children:
+                                if type_child.type == 'identifier':
+                                    request_type = self._get_node_text(type_child)
+                        else:
+                            # This is the response type (second occurrence)
+                            for type_child in child.children:
+                                if type_child.type == 'identifier':
+                                    response_type = self._get_node_text(type_child)
+                    elif child.type == 'stream':
+                        # Check if this is before request or response
+                        # Need to look at position relative to returns keyword
+                        stream_pos = child.start_point[0]
+                        returns_pos = None
+                        for returns_child in rpc_node.children:
+                            if returns_child.type == 'returns':
+                                returns_pos = returns_child.start_point[0]
+                                break
+
+                        if returns_pos is None or stream_pos < returns_pos:
+                            is_streaming_request = True
+                        else:
+                            is_streaming_response = True
+
+                if rpc_name and request_type and response_type:
+                    # Build signature
+                    req = f"stream {request_type}" if is_streaming_request else request_type
+                    resp = f"stream {response_type}" if is_streaming_response else response_type
+                    signature = f"{rpc_name}({req}) returns ({resp})"
+
+                    rpcs.append({
+                        'name': rpc_name,
+                        'signature': signature,
+                        'line': rpc_node.start_point[0] + 1,
+                    })
+
+            services.append({
+                'line': service_node.start_point[0] + 1,
+                'name': service_name,
+                'rpcs': rpcs,
+            })
+
+        return services
+
+    def _extract_messages(self) -> List[Dict[str, Any]]:
+        """Extract message definitions."""
+        messages = []
+
+        message_nodes = self._find_nodes_by_type('message')
+
+        for msg_node in message_nodes:
+            message_name = None
+            fields = []
+
+            # Get message name
+            for child in msg_node.children:
+                if child.type == 'message_name':
+                    for name_child in child.children:
+                        if name_child.type == 'identifier':
+                            message_name = self._get_node_text(name_child)
+
+            if not message_name:
+                continue
+
+            # Extract fields
+            field_nodes = self._find_nodes_in_subtree(msg_node, 'field')
+
+            for field_node in field_nodes:
+                field_type = None
+                field_name = None
+                field_number = None
+
+                for child in field_node.children:
+                    if child.type == 'type':
+                        field_type = self._get_node_text(child)
+                    elif child.type == 'identifier':
+                        field_name = self._get_node_text(child)
+                    elif child.type == 'field_number':
+                        field_number = self._get_node_text(child)
+
+                if field_name:
+                    field_info = field_name
+                    if field_type:
+                        field_info = f"{field_type} {field_name}"
+                    if field_number:
+                        field_info += f" = {field_number}"
+                    fields.append(field_info)
+
+            messages.append({
+                'line': msg_node.start_point[0] + 1,
+                'name': message_name,
+                'fields': fields,
+            })
+
+        return messages
+
+    def _extract_enums(self) -> List[Dict[str, Any]]:
+        """Extract enum definitions."""
+        enums = []
+
+        enum_nodes = self._find_nodes_by_type('enum')
+
+        for enum_node in enum_nodes:
+            enum_name = None
+            values = []
+
+            # Get enum name
+            for child in enum_node.children:
+                if child.type == 'enum_name':
+                    for name_child in child.children:
+                        if name_child.type == 'identifier':
+                            enum_name = self._get_node_text(name_child)
+
+            if not enum_name:
+                continue
+
+            # Extract enum values
+            for child in enum_node.children:
+                if child.type == 'enum_body':
+                    for body_child in child.children:
+                        if body_child.type == 'enum_field':
+                            value_name = None
+                            value_number = None
+
+                            for field_child in body_child.children:
+                                if field_child.type == 'identifier':
+                                    value_name = self._get_node_text(field_child)
+                                elif field_child.type == 'int_lit':
+                                    value_number = self._get_node_text(field_child)
+
+                            if value_name:
+                                if value_number:
+                                    values.append(f"{value_name} = {value_number}")
+                                else:
+                                    values.append(value_name)
+
+            enums.append({
+                'line': enum_node.start_point[0] + 1,
+                'name': enum_name,
+                'values': values,
+            })
+
+        return enums
+
+    def _find_nodes_in_subtree(self, root_node, node_type: str) -> List:
+        """Find all nodes of a specific type within a subtree."""
+        nodes = []
+
+        def walk(node):
+            if node.type == node_type:
+                nodes.append(node)
+            for child in node.children:
+                walk(child)
+
+        walk(root_node)
+        return nodes

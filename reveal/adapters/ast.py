@@ -384,7 +384,7 @@ class AstAdapter(ResourceAdapter):
         Returns:
             Dict with file structure, or None if analysis fails
         """
-        from ..base import get_analyzer
+        from ..registry import get_analyzer
 
         try:
             analyzer_class = get_analyzer(file_path)

@@ -5,7 +5,7 @@ import yaml
 import logging
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse
-from ..base import register
+from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
 

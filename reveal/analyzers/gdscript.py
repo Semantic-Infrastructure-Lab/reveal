@@ -2,7 +2,8 @@
 
 import re
 from typing import Dict, List, Any, Optional
-from ..base import FileAnalyzer, register
+from ..base import FileAnalyzer
+from ..registry import register
 
 
 @register('.gd', name='GDScript', icon='')

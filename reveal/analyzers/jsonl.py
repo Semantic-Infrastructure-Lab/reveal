@@ -6,7 +6,8 @@ Handles conversation logs, streaming data, and other line-delimited JSON formats
 import json
 import logging
 from typing import Dict, List, Any, Optional
-from ..base import FileAnalyzer, register
+from ..base import FileAnalyzer
+from ..registry import register
 
 logger = logging.getLogger(__name__)
 

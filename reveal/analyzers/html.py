@@ -3,7 +3,8 @@
 import re
 import logging
 from typing import Dict, List, Any, Optional
-from ..base import FileAnalyzer, register
+from ..base import FileAnalyzer
+from ..registry import register
 
 # Try to import BeautifulSoup4 - required for HTML parsing
 try:

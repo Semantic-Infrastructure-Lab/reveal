@@ -188,7 +188,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         output_format: Output format ('text', 'json', 'grep')
         args: Full argument namespace (for filter options)
     """
-    from ..base import get_analyzer
+    from ..registry import get_analyzer
     from ..display import show_structure, show_metadata, extract_element
     from ..config import RevealConfig
 

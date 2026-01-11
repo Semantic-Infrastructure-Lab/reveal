@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 from typing import List
-from .base import get_analyzer
+from .registry import get_analyzer
 
 
 def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,

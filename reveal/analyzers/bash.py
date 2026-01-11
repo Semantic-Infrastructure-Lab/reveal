@@ -1,7 +1,7 @@
 """Bash/Shell script analyzer - tree-sitter based."""
 
 from typing import Optional
-from ..base import register
+from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
 
