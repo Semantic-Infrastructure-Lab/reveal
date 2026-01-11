@@ -112,13 +112,29 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return imports
 
     def _extract_functions(self) -> List[Dict[str, Any]]:
-        """Extract function definitions with complexity metrics and decorators."""
-        functions = []
-        # Track by (line, name) to avoid duplicates (tree-sitter may return different objects)
-        processed_funcs = set()
+        """Extract function definitions with complexity metrics and decorators.
 
-        # Common function node types
-        function_types = [
+        Handles both decorated and undecorated functions across multiple languages.
+        """
+        functions = []
+        processed_funcs = set()  # Track (func_node_line, name) to avoid duplicates
+
+        function_types = self._get_function_node_types()
+
+        # Extract decorated functions first (Python-specific)
+        decorated_funcs, decorated_lines = self._extract_decorated_functions(function_types)
+        functions.extend(decorated_funcs)
+        processed_funcs.update(decorated_lines)
+
+        # Extract undecorated functions
+        undecorated_funcs = self._extract_undecorated_functions(function_types, processed_funcs)
+        functions.extend(undecorated_funcs)
+
+        return functions
+
+    def _get_function_node_types(self) -> List[str]:
+        """Get common function node types across languages."""
+        return [
             'function_definition',   # Python
             'function_declaration',  # Go, C, JavaScript
             'function_item',         # Rust
@@ -129,14 +145,21 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'local_function_definition_statement',  # Lua (local functions)
         ]
 
-        # Step 1: Find decorated functions (Python)
-        # decorated_definition contains decorator(s) + function/class
-        decorated_nodes = self._find_nodes_by_type('decorated_definition')
-        for decorated_node in decorated_nodes:
-            func_node = None
-            decorators = []
+    def _extract_decorated_functions(self, function_types: List[str]):
+        """Extract decorated functions (Python-specific).
 
-            # Find function_definition child and decorator siblings
+        decorated_definition contains decorator(s) + function/class.
+        Returns tuple: (functions_list, tracking_set)
+        tracking_set contains (func_node_line, name) for deduplication.
+        """
+        functions = []
+        tracking_lines = set()
+        decorated_nodes = self._find_nodes_by_type('decorated_definition')
+
+        for decorated_node in decorated_nodes:
+            func_node, decorators = None, []
+
+            # Find function child and collect decorators
             for child in decorated_node.children:
                 if child.type in function_types:
                     func_node = child
@@ -146,26 +169,24 @@ class TreeSitterAnalyzer(FileAnalyzer):
             if func_node:
                 name = self._get_node_name(func_node)
                 if name:
-                    # Use decorated_definition bounds (includes decorators)
-                    line_start = decorated_node.start_point[0] + 1
-                    line_end = decorated_node.end_point[0] + 1
-                    line_count = line_end - line_start + 1
-                    # Track by func_node line (not decorated_node) to match step 2
+                    func_dict = self._build_function_dict(
+                        node=func_node,
+                        decorated_node=decorated_node,
+                        name=name,
+                        decorators=decorators
+                    )
+                    functions.append(func_dict)
+                    # Track by func_node line (not decorated_node line) for matching
                     func_line = func_node.start_point[0] + 1
+                    tracking_lines.add((func_line, name))
 
-                    functions.append({
-                        'line': line_start,
-                        'line_end': line_end,
-                        'name': name,
-                        'signature': self._get_signature(func_node),
-                        'line_count': line_count,
-                        'depth': self._get_nesting_depth(func_node),
-                        'complexity': self._calculate_complexity(func_node),
-                        'decorators': decorators,
-                    })
-                    processed_funcs.add((func_line, name))
+        return functions, tracking_lines
 
-        # Step 2: Find undecorated functions
+    def _extract_undecorated_functions(self, function_types: List[str],
+                                      processed_funcs: set) -> List[Dict[str, Any]]:
+        """Extract undecorated functions across all supported languages."""
+        functions = []
+
         for func_type in function_types:
             nodes = self._find_nodes_by_type(func_type)
             for node in nodes:
@@ -177,29 +198,64 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 if (line_start, name) in processed_funcs:
                     continue  # Already processed as decorated
 
-                line_end = node.end_point[0] + 1
-                line_count = line_end - line_start + 1
-
-                functions.append({
-                    'line': line_start,
-                    'line_end': line_end,
-                    'name': name,
-                    'signature': self._get_signature(node),
-                    'line_count': line_count,
-                    'depth': self._get_nesting_depth(node),
-                    'complexity': self._calculate_complexity(node),
-                    'decorators': [],
-                })
+                functions.append(self._build_function_dict(
+                    node=node,
+                    name=name,
+                    decorators=[]
+                ))
 
         return functions
 
-    def _extract_classes(self) -> List[Dict[str, Any]]:
-        """Extract class definitions with decorators."""
-        classes = []
-        # Track by (line, name) to avoid duplicates (tree-sitter may return different objects)
-        processed_classes = set()
+    def _build_function_dict(self, node, name: str, decorators: List[str],
+                            decorated_node=None) -> Dict[str, Any]:
+        """Build function dictionary with metrics.
 
-        class_types = [
+        Args:
+            node: Function node
+            name: Function name
+            decorators: List of decorator strings
+            decorated_node: Optional parent decorated_definition node
+        """
+        # Use decorated_node bounds if available (includes decorators)
+        bounds_node = decorated_node if decorated_node else node
+        line_start = bounds_node.start_point[0] + 1
+        line_end = bounds_node.end_point[0] + 1
+
+        return {
+            'line': line_start,
+            'line_end': line_end,
+            'name': name,
+            'signature': self._get_signature(node),
+            'line_count': line_end - line_start + 1,
+            'depth': self._get_nesting_depth(node),
+            'complexity': self._calculate_complexity(node),
+            'decorators': decorators,
+        }
+
+    def _extract_classes(self) -> List[Dict[str, Any]]:
+        """Extract class definitions with decorators.
+
+        Handles both decorated and undecorated classes across multiple languages.
+        """
+        classes = []
+        processed_classes = set()  # Track (class_node_line, name) to avoid duplicates
+
+        class_types = self._get_class_node_types()
+
+        # Extract decorated classes first (Python-specific)
+        decorated_classes, decorated_lines = self._extract_decorated_classes(class_types)
+        classes.extend(decorated_classes)
+        processed_classes.update(decorated_lines)
+
+        # Extract undecorated classes
+        undecorated_classes = self._extract_undecorated_classes(class_types, processed_classes)
+        classes.extend(undecorated_classes)
+
+        return classes
+
+    def _get_class_node_types(self) -> List[str]:
+        """Get common class node types across languages."""
+        return [
             'class_definition',      # Python
             'class_declaration',     # Java, C#, JavaScript
             'class_specifier',       # C++
@@ -207,13 +263,21 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'class',                 # Ruby
         ]
 
-        # Step 1: Find decorated classes (Python)
-        decorated_nodes = self._find_nodes_by_type('decorated_definition')
-        for decorated_node in decorated_nodes:
-            class_node = None
-            decorators = []
+    def _extract_decorated_classes(self, class_types: List[str]):
+        """Extract decorated classes (Python-specific).
 
-            # Find class_definition child and decorator siblings
+        decorated_definition contains decorator(s) + class.
+        Returns tuple: (classes_list, tracking_set)
+        tracking_set contains (class_node_line, name) for deduplication.
+        """
+        classes = []
+        tracking_lines = set()
+        decorated_nodes = self._find_nodes_by_type('decorated_definition')
+
+        for decorated_node in decorated_nodes:
+            class_node, decorators = None, []
+
+            # Find class child and collect decorators
             for child in decorated_node.children:
                 if child.type in class_types:
                     class_node = child
@@ -223,20 +287,24 @@ class TreeSitterAnalyzer(FileAnalyzer):
             if class_node:
                 name = self._get_node_name(class_node)
                 if name:
-                    # Use decorated_definition bounds (includes decorators)
-                    line_start = decorated_node.start_point[0] + 1
-                    line_end = decorated_node.end_point[0] + 1
-                    # Track by class_node line (not decorated_node) to match step 2
+                    class_dict = self._build_class_dict(
+                        node=class_node,
+                        decorated_node=decorated_node,
+                        name=name,
+                        decorators=decorators
+                    )
+                    classes.append(class_dict)
+                    # Track by class_node line (not decorated_node line) for matching
                     class_line = class_node.start_point[0] + 1
-                    classes.append({
-                        'line': line_start,
-                        'line_end': line_end,
-                        'name': name,
-                        'decorators': decorators,
-                    })
-                    processed_classes.add((class_line, name))
+                    tracking_lines.add((class_line, name))
 
-        # Step 2: Find undecorated classes
+        return classes, tracking_lines
+
+    def _extract_undecorated_classes(self, class_types: List[str],
+                                    processed_classes: set) -> List[Dict[str, Any]]:
+        """Extract undecorated classes across all supported languages."""
+        classes = []
+
         for class_type in class_types:
             nodes = self._find_nodes_by_type(class_type)
             for node in nodes:
@@ -248,15 +316,35 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 if (line_start, name) in processed_classes:
                     continue  # Already processed as decorated
 
-                line_end = node.end_point[0] + 1
-                classes.append({
-                    'line': line_start,
-                    'line_end': line_end,
-                    'name': name,
-                    'decorators': [],
-                })
+                classes.append(self._build_class_dict(
+                    node=node,
+                    name=name,
+                    decorators=[]
+                ))
 
         return classes
+
+    def _build_class_dict(self, node, name: str, decorators: List[str],
+                         decorated_node=None) -> Dict[str, Any]:
+        """Build class dictionary.
+
+        Args:
+            node: Class node
+            name: Class name
+            decorators: List of decorator strings
+            decorated_node: Optional parent decorated_definition node
+        """
+        # Use decorated_node bounds if available (includes decorators)
+        bounds_node = decorated_node if decorated_node else node
+        line_start = bounds_node.start_point[0] + 1
+        line_end = bounds_node.end_point[0] + 1
+
+        return {
+            'line': line_start,
+            'line_end': line_end,
+            'name': name,
+            'decorators': decorators,
+        }
 
     def _extract_structs(self) -> List[Dict[str, Any]]:
         """Extract struct definitions (for languages that have them)."""

@@ -211,8 +211,6 @@ class FileAnalyzer:
         }
 
 
-# Re-export registry functions for backward compatibility
-# New code should import directly from reveal.registry
-from .registry import register, get_analyzer, get_all_analyzers
-
-__all__ = ['FileAnalyzer', 'register', 'get_analyzer', 'get_all_analyzers']
+# Note: registry functions (register, get_analyzer, etc.) should be imported
+# directly from reveal.registry to avoid circular dependencies
+__all__ = ['FileAnalyzer']
