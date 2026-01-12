@@ -27,6 +27,7 @@ from .scheme_handlers import (
     handle_reveal,
     handle_stats,
     handle_mysql,
+    handle_sqlite,
     handle_imports,
     handle_diff,
     handle_markdown,
@@ -50,6 +51,7 @@ _handle_json = handle_json
 _handle_reveal = handle_reveal
 _handle_stats = handle_stats
 _handle_mysql = handle_mysql
+_handle_sqlite = handle_sqlite
 _handle_imports = handle_imports
 _handle_diff = handle_diff
 _handle_markdown = handle_markdown
@@ -70,6 +72,7 @@ SCHEME_HANDLERS: Dict[str, Callable] = {
     'env': _handle_env,
     'ast': _handle_ast,
     'mysql': _handle_mysql,
+    'sqlite': _handle_sqlite,
     'help': _handle_help,
     'python': _handle_python,
     'json': _handle_json,
@@ -102,7 +105,7 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
     # Look up adapter from registry
     from ..adapters.base import get_adapter_class, list_supported_schemes
     # Import adapters to trigger registration
-    from ..adapters import env, ast, help, python, json_adapter, reveal, mysql, imports, diff, markdown  # noqa: F401, E402
+    from ..adapters import env, ast, help, python, json_adapter, reveal, mysql, sqlite, imports, diff, markdown  # noqa: F401, E402
 
     adapter_class = get_adapter_class(scheme)
     if not adapter_class:

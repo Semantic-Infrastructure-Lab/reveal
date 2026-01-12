@@ -8,6 +8,7 @@ from .json_adapter import JsonAdapter
 from .reveal import RevealAdapter
 from .stats import StatsAdapter
 from .mysql import MySQLAdapter
+from .sqlite import SQLiteAdapter
 from .imports import ImportsAdapter
 
-__all__ = ['EnvAdapter', 'AstAdapter', 'HelpAdapter', 'PythonAdapter', 'JsonAdapter', 'RevealAdapter', 'StatsAdapter', 'MySQLAdapter', 'ImportsAdapter']
+__all__ = ['EnvAdapter', 'AstAdapter', 'HelpAdapter', 'PythonAdapter', 'JsonAdapter', 'RevealAdapter', 'StatsAdapter', 'MySQLAdapter', 'SQLiteAdapter', 'ImportsAdapter']

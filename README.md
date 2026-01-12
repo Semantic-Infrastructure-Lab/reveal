@@ -303,6 +303,13 @@ reveal mysql://localhost/indexes            # Index usage analysis
 reveal mysql://localhost/slow-queries       # Slow query analysis (last 24h)
 reveal mysql://localhost/innodb             # InnoDB buffer pool & locks
 
+# SQLite database inspection 🆕
+# No dependencies - uses Python's built-in sqlite3 module
+reveal sqlite:///path/to/app.db             # Database overview & schema
+reveal sqlite:///path/to/app.db/users       # Table structure with columns, indexes, FKs
+reveal sqlite://./relative.db               # Relative paths supported
+reveal sqlite:///data/prod.db --format=json # JSON output for scripting
+
 # Import graph analysis (v0.28.0+) 🆕
 reveal imports://src                        # List all imports in directory
 reveal 'imports://src?unused'               # Find unused imports (I001 rule)

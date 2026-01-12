@@ -16,6 +16,7 @@ from .json import handle_json
 from .reveal import handle_reveal
 from .stats import handle_stats
 from .mysql import handle_mysql
+from .sqlite import handle_sqlite
 from .imports import handle_imports
 from .diff import handle_diff
 from .markdown import handle_markdown
@@ -29,6 +30,7 @@ __all__ = [
     'handle_reveal',
     'handle_stats',
     'handle_mysql',
+    'handle_sqlite',
     'handle_imports',
     'handle_diff',
     'handle_markdown',
