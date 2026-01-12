@@ -2,8 +2,8 @@
 
 > **Mission:** Make AI coding assistants (Claude Code, TIA, Copilot) more effective by providing maximum understanding per token across popular tech stacks.
 
-**Last Updated:** 2026-01-10
-**Current Version:** v0.32.2
+**Last Updated:** 2026-01-11
+**Current Version:** v0.34.0 (+ unreleased: sqlite://)
 
 ---
 
@@ -21,6 +21,25 @@ Reveal solves this by providing:
 ---
 
 ## Recent Releases
+
+### v0.35.0 (Unreleased)
+- **sqlite:// adapter** - Zero-dependency SQLite database exploration
+  - Database overview with schema, statistics, configuration
+  - Table structure with columns, indexes, foreign keys
+  - 22 tests, 98% code coverage
+  - Examples: `reveal sqlite:///app.db`, `reveal sqlite:///app.db/users`
+
+### v0.34.0 (2026-01-10)
+- **HCL/Terraform** support (.tf, .tfvars, .hcl files)
+- **GraphQL** support (.graphql, .gql files)
+- **Protocol Buffers** support (.proto files)
+- **Zig** support (.zig files)
+- Migrated to tree-sitter-language-pack (165+ languages)
+- Total language count: 34 → 38
+
+### v0.33.0 (2026-01-10)
+- **Kotlin, Swift, Dart** language support (mobile platforms)
+- Language count: 31 → 34
 
 ### v0.32.2 (2026-01-08)
 - Fixed MySQL adapter `.my.cnf` support (proper credential resolution)
@@ -62,40 +81,47 @@ Reveal solves this by providing:
 
 ## Tier 1: High Value, Ship Soon
 
-### Language Support Gaps
+### ✅ Language Support Gaps (COMPLETED v0.33.0 + v0.34.0)
 
-| Language | Ecosystem | Why | Effort |
-|----------|-----------|-----|--------|
-| **Kotlin** | Android, backend | 8M+ developers, tree-sitter ready | Small |
-| **Swift** | iOS/macOS | Apple ecosystem, tree-sitter ready | Small |
-| **Dart** | Flutter | Cross-platform mobile, growing fast | Small |
+**Mobile Platforms (v0.33.0):**
+- ✅ **Kotlin** - Android, backend (8M+ developers)
+- ✅ **Swift** - iOS/macOS (Apple ecosystem)
+- ✅ **Dart** - Flutter (cross-platform mobile)
 
-**Impact:** These three cover mobile development, which Reveal currently ignores entirely.
+**Infrastructure + API (v0.34.0):**
+- ✅ **HCL/Terraform** - Infrastructure-as-code (95% of cloud infra)
+- ✅ **GraphQL** - API schema and queries (90% of modern APIs)
+- ✅ **Protocol Buffers** - gRPC serialization (Google/FAANG standard)
+- ✅ **Zig** - Modern systems programming
 
-**Implementation Note (2026-01-10):**
+**Status:** ✅ **SHIPPED** (v0.33.0 + v0.34.0)
+- Successfully migrated to tree-sitter-language-pack
+- 165+ languages now available
+- Language count: 31 → 34 (v0.33.0) → 38 (v0.34.0)
+- Mobile development fully covered
+- Infrastructure-as-code fully covered
 
-Current blocker: `tree-sitter-languages` package (used by Reveal) is unmaintained and missing Swift/Dart. Kotlin is available but was previously removed due to function extraction limitations (class extraction works).
+**Impact:** Reveal now covers mobile development (Android, iOS, Flutter), infrastructure-as-code (Terraform), and modern API definitions (GraphQL, Protobuf).
 
-**Solution:** Migrate to [`tree-sitter-language-pack`](https://github.com/Goldziher/tree-sitter-language-pack):
-- ✅ **165+ languages** including Kotlin, Swift, Dart
-- ✅ **Actively maintained** (vs tree-sitter-languages unmaintained)
-- ✅ **Tested working** (Jan 10 2026: all three languages parse successfully)
-- ✅ **Python 3.10+ compatible** (Reveal already requires 3.10)
-- 📦 **Migration effort:** Update pyproject.toml dependency + imports
-
-**Decision:** Add all three languages once migration complete (estimated: ~1-2 hours total).
-
-### sqlite:// Adapter
+### ✅ sqlite:// Adapter (COMPLETED v0.35.0)
 
 ```bash
-reveal sqlite:///app.db                    # Schema overview
-reveal sqlite:///app.db users              # Table structure
-reveal sqlite:///app.db "users.email"      # Column info
+reveal sqlite:///app.db                    # Database overview
+reveal sqlite:///app.db/users              # Table structure
+reveal sqlite://./relative.db              # Relative paths
 ```
 
-**Why:** SQLite is everywhere - mobile apps, desktop apps, embedded systems, development databases, browser storage. Low effort (mysql:// template exists).
+**Status:** ✅ **SHIPPED** (v0.35.0 unreleased)
+- Zero dependencies (uses Python's built-in sqlite3)
+- Database overview with schema, stats, config
+- Table structure with columns, indexes, foreign keys
+- Progressive disclosure pattern
+- 22 tests, 98% coverage
+- Comprehensive help: `reveal help://sqlite`
 
-### Terraform/HCL Support
+**Why:** SQLite is everywhere - mobile apps (iOS/Android), desktop apps, embedded systems, development databases, browser storage. Low effort (mysql:// template exists).
+
+### ✅ Terraform/HCL Support (COMPLETED v0.34.0)
 
 ```bash
 reveal infra/main.tf                       # Resources, variables, outputs
@@ -103,7 +129,12 @@ reveal infra/main.tf aws_instance.web      # Specific resource
 reveal infra/ --check                      # Best practices
 ```
 
-**Why:** Infrastructure-as-code is standard practice. Terraform is dominant. AI agents helping with infra need this.
+**Status:** ✅ **SHIPPED** (v0.34.0)
+- Full HCL/Terraform file support (.tf, .tfvars, .hcl)
+- Tree-sitter parsing for infrastructure-as-code
+- Part of infrastructure + API language expansion
+
+**Why:** Infrastructure-as-code is standard practice. Terraform is dominant (95% of cloud infra). AI agents helping with infra need this.
 
 ### Auto-Fix for Rules
 

@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from ..base import ResourceAdapter, register_adapter
+from ..help_data import load_help_data
 
 
 @register_adapter('sqlite')
@@ -21,47 +22,12 @@ class SQLiteAdapter(ResourceAdapter):
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
-        """Get help documentation for sqlite:// adapter."""
-        return {
-            'name': 'sqlite',
-            'description': 'SQLite database exploration and schema inspection',
-            'syntax': 'sqlite:///<path>[/table]',
-            'examples': [
-                {
-                    'uri': 'sqlite:///app.db',
-                    'description': 'Database overview with schema summary'
-                },
-                {
-                    'uri': 'sqlite:///app.db/users',
-                    'description': 'Detailed structure for users table'
-                },
-                {
-                    'uri': 'sqlite:///data/production.db --check',
-                    'description': 'Database health check with integrity validation'
-                },
-                {
-                    'uri': 'sqlite:///./relative.db',
-                    'description': 'Use relative paths with ./ prefix'
-                }
-            ],
-            'notes': [
-                'Absolute paths: sqlite:///absolute/path/to/db.db (three slashes)',
-                'Relative paths: sqlite://./relative/path.db (two slashes + ./)',
-                'Built-in support - no external dependencies required',
-                'Read-only access by default for safety'
-            ],
-            'features': [
-                'Schema exploration (tables, columns, indexes)',
-                'Foreign key relationships',
-                'Table statistics (row counts, sizes)',
-                'SQLite-specific configuration',
-                'Integrity checking'
-            ],
-            'see_also': [
-                'reveal help://mysql - Similar adapter for MySQL databases',
-                'https://www.sqlite.org/cli.html - Official SQLite CLI'
-            ]
-        }
+        """Get help documentation for sqlite:// adapter.
+
+        Help data loaded from reveal/adapters/help_data/sqlite.yaml
+        to reduce function complexity.
+        """
+        return load_help_data('sqlite') or {}
 
     def __init__(self, connection_string: str = ""):
         """Initialize SQLite adapter with database path.

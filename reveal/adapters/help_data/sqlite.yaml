@@ -1,0 +1,87 @@
+# SQLite Adapter Help Data
+# Extracted from sqlite/adapter.py::get_help() to reduce function complexity
+
+name: sqlite
+description: 'SQLite database exploration and schema inspection - zero dependencies'
+syntax: 'sqlite:///<path>[/table]'
+
+examples:
+  - uri: 'sqlite:///path/to/app.db'
+    description: 'Database overview with schema summary'
+  - uri: 'sqlite:///path/to/app.db/users'
+    description: 'Detailed structure for users table'
+  - uri: 'sqlite://./relative.db'
+    description: 'Use relative paths with ./ prefix'
+  - uri: 'sqlite:///data/production.db --format=json'
+    description: 'JSON output for scripting and automation'
+
+elements:
+  '<table>': 'Table structure (columns, indexes, foreign keys)'
+
+features:
+  - 'Schema exploration (tables, columns, indexes)'
+  - 'Foreign key relationships'
+  - 'Table statistics (row counts, sizes)'
+  - 'SQLite-specific configuration (page size, journal mode, encoding)'
+  - 'Zero dependencies (uses Python built-in sqlite3)'
+  - 'Read-only access by default for safety'
+  - 'Progressive disclosure (database → table → details)'
+
+try_now:
+  - "reveal sqlite:///path/to/app.db"
+  - "reveal sqlite:///path/to/app.db/users"
+  - "reveal sqlite://./test.db"
+
+workflows:
+  - name: 'Explore Unknown Database'
+    scenario: 'Need to understand schema of unfamiliar SQLite database'
+    steps:
+      - "reveal sqlite:///app.db              # See all tables"
+      - "reveal sqlite:///app.db/users        # Inspect key table"
+      - "reveal sqlite:///app.db/posts        # Check relationships"
+  - name: 'Migration Planning'
+    scenario: 'Planning database migration or schema changes'
+    steps:
+      - "reveal sqlite:///old.db --format=json > old_schema.json"
+      - "reveal sqlite:///new.db --format=json > new_schema.json"
+      - "diff old_schema.json new_schema.json  # Compare schemas"
+  - name: 'Documentation Generation'
+    scenario: 'Need to document database schema for team'
+    steps:
+      - "reveal sqlite:///app.db              # Generate overview"
+      - "for table in users posts comments; do reveal sqlite:///app.db/$table; done"
+
+anti_patterns:
+  - bad: "sqlite3 app.db .schema"
+    good: "reveal sqlite:///app.db"
+    why: "Structured output with statistics, relationships, and progressive disclosure"
+  - bad: "sqlite3 app.db 'PRAGMA table_info(users)'"
+    good: "reveal sqlite:///app.db/users"
+    why: "Shows columns, indexes, FKs, row counts in human-readable format"
+
+notes:
+  - '✅ Zero dependencies - uses Python built-in sqlite3 module'
+  - 'URI format: sqlite:///absolute/path or sqlite://./relative/path'
+  - 'Three slashes for absolute paths: sqlite:///var/data/app.db'
+  - 'Two slashes + ./ for relative: sqlite://./local.db'
+  - 'Read-only mode by default (safe for production inspection)'
+  - 'Shows PRIMARY KEY columns as NOT NULL (SQLite implicit constraint)'
+  - 'Filters out auto-generated indexes (sqlite_autoindex_*)'
+  - 'Foreign keys may be disabled at runtime (check configuration)'
+
+use_cases:
+  - 'Mobile app database inspection (iOS, Android)'
+  - 'Embedded systems database analysis'
+  - 'Development database schema validation'
+  - 'Web application SQLite backend inspection'
+  - 'Data science notebook database exploration'
+  - 'Schema documentation generation'
+
+output_formats:
+  - text
+  - json
+
+see_also:
+  - 'reveal help://mysql - Similar adapter for MySQL databases'
+  - 'https://www.sqlite.org/cli.html - Official SQLite CLI'
+  - 'https://www.sqlite.org/pragma.html - SQLite PRAGMA commands'

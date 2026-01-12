@@ -5,6 +5,24 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **SQLite database adapter (sqlite://)** - Zero-dependency database exploration
+  - Database overview with schema summary, statistics, and configuration
+  - Table structure inspection with columns, indexes, and foreign keys
+  - Progressive disclosure pattern (database → table → details)
+  - Uses Python's built-in sqlite3 module (no external dependencies)
+  - Human-readable CLI output with table/view icons and relationship display
+  - Comprehensive help system: `reveal help://sqlite`
+  - Examples:
+    - `reveal sqlite:///path/to/app.db` - Database overview
+    - `reveal sqlite:///path/to/app.db/users` - Table structure
+    - `reveal sqlite://./relative.db` - Relative paths supported
+    - `reveal sqlite:///data/prod.db --format=json` - JSON output
+  - Perfect for mobile, embedded, and development databases
+  - 22 comprehensive tests with 98% code coverage
+
 ## [0.34.0] - 2026-01-10
 
 ### Added
