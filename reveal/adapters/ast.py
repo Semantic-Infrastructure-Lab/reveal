@@ -2,14 +2,14 @@
 
 import os
 import sys
-import warnings
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, register_adapter
+from ..core import suppress_treesitter_warnings
 
-# Suppress tree-sitter warnings
-warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
+# Suppress tree-sitter warnings (centralized in core module)
+suppress_treesitter_warnings()
 
 
 @register_adapter('ast')

@@ -2,12 +2,15 @@
 
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from .registry import get_analyzer
+from .display.filtering import PathFilter
 
 
 def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
-                        max_entries: int = 200, fast: bool = False) -> str:
+                        max_entries: int = 200, fast: bool = False,
+                        respect_gitignore: bool = True,
+                        exclude_patterns: Optional[List[str]] = None) -> str:
     """Show directory tree with file info.
 
     Args:
@@ -16,6 +19,8 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
         show_hidden: Whether to show hidden files/dirs
         max_entries: Maximum entries to display (0=unlimited)
         fast: Skip expensive line counting for performance
+        respect_gitignore: Whether to respect .gitignore rules (default: True)
+        exclude_patterns: Additional patterns to exclude (e.g., ['*.log', 'tmp/'])
 
     Returns:
         Formatted tree string
@@ -25,8 +30,16 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
     if not path.is_dir():
         return f"Error: {path} is not a directory"
 
+    # Create path filter
+    path_filter = PathFilter(
+        root_path=path,
+        respect_gitignore=respect_gitignore,
+        exclude_patterns=exclude_patterns,
+        include_defaults=True
+    )
+
     # Count total entries first for warnings
-    total_entries = _count_entries(path, depth, show_hidden)
+    total_entries = _count_entries(path, depth, show_hidden, path_filter)
 
     lines = [f"{path.name or path}/\n"]
 
@@ -40,7 +53,7 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
     # Track how many entries we've shown
     context = {'count': 0, 'max_entries': max_entries, 'truncated': 0}
     _walk_directory(path, lines, depth=depth, show_hidden=show_hidden,
-                   fast=fast, context=context)
+                   fast=fast, context=context, path_filter=path_filter)
 
     # Show truncation message if we hit the limit
     if context['truncated'] > 0:
@@ -52,7 +65,7 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
     return '\n'.join(lines)
 
 
-def _count_entries(path: Path, depth: int, show_hidden: bool) -> int:
+def _count_entries(path: Path, depth: int, show_hidden: bool, path_filter: PathFilter) -> int:
     """Count total entries in directory tree (fast, no analysis)."""
     if depth <= 0:
         return 0
@@ -62,19 +75,24 @@ def _count_entries(path: Path, depth: int, show_hidden: bool) -> int:
     except PermissionError:
         return 0
 
+    # Apply filtering
     if not show_hidden:
         entries = [e for e in entries if not e.name.startswith('.')]
+
+    # Apply path filtering (gitignore, noise patterns, custom excludes)
+    entries = [e for e in entries if not path_filter.should_filter(e)]
 
     count = len(entries)
     for entry in entries:
         if entry.is_dir():
-            count += _count_entries(entry, depth - 1, show_hidden)
+            count += _count_entries(entry, depth - 1, show_hidden, path_filter)
 
     return count
 
 
 def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int = 3,
-                   show_hidden: bool = False, fast: bool = False, context: dict = None):
+                   show_hidden: bool = False, fast: bool = False, context: dict = None,
+                   path_filter: Optional[PathFilter] = None):
     """Recursively walk directory and build tree.
 
     Args:
@@ -85,6 +103,7 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
         show_hidden: Show hidden files
         fast: Skip expensive operations
         context: Shared context dict with 'count', 'max_entries', 'truncated'
+        path_filter: PathFilter for smart filtering
     """
     if depth <= 0:
         return
@@ -100,6 +119,10 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
     # Filter hidden files/dirs
     if not show_hidden:
         entries = [e for e in entries if not e.name.startswith('.')]
+
+    # Apply path filtering (gitignore, noise patterns, custom excludes)
+    if path_filter:
+        entries = [e for e in entries if not path_filter.should_filter(e)]
 
     for i, entry in enumerate(entries):
         # Check if we've hit the entry limit
@@ -130,7 +153,7 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
             context['count'] += 1
             # Recurse into subdirectory
             _walk_directory(entry, lines, prefix + extension, depth - 1,
-                          show_hidden, fast, context)
+                          show_hidden, fast, context, path_filter)
 
 
 def _get_file_info(path: Path, fast: bool = False) -> str:

@@ -1,11 +1,11 @@
 """Tree-sitter based analyzer for multi-language support."""
 
-import warnings
 from typing import Dict, List, Any, Optional
 from .base import FileAnalyzer
+from .core import suppress_treesitter_warnings
 
-# Suppress tree-sitter deprecation warnings globally
-warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
+# Suppress tree-sitter deprecation warnings (centralized in core module)
+suppress_treesitter_warnings()
 
 from tree_sitter_language_pack import get_parser
 

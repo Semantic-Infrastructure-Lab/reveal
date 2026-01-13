@@ -188,10 +188,10 @@ def _try_treesitter_fallback(ext: str) -> Optional[type]:
     Returns:
         Dynamic analyzer class or None if TreeSitter doesn't support it
     """
-    import warnings
+    from .core import suppress_treesitter_warnings
 
-    # Suppress tree-sitter deprecation warnings
-    warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
+    # Suppress tree-sitter deprecation warnings (centralized in core module)
+    suppress_treesitter_warnings()
 
     language = _guess_treesitter_language(ext)
     if not language:
@@ -241,3 +241,13 @@ def get_all_analyzers() -> Dict[str, Dict[str, Any]]:
             'class': cls,
         }
     return result
+
+
+def get_analyzer_mapping() -> Dict[str, type]:
+    """Get raw analyzer registry mapping.
+
+    Returns:
+        Dict mapping extension to analyzer class
+        e.g., {'.py': PythonAnalyzer, '.rs': RustAnalyzer}
+    """
+    return _ANALYZER_REGISTRY.copy()

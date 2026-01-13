@@ -12,6 +12,7 @@ from .cli import (
     create_argument_parser,
     validate_navigation_args,
     handle_list_supported,
+    handle_languages,
     handle_agent_help,
     handle_agent_help_full,
     handle_rules_list,
@@ -118,6 +119,7 @@ def _handle_special_modes(args):
     # Special mode handlers (flag -> (handler, *handler_args))
     special_modes = [
         (args.list_supported, handle_list_supported, [list_supported_types]),
+        (getattr(args, 'languages', False), handle_languages, []),
         (args.agent_help, handle_agent_help, []),
         (args.agent_help_full, handle_agent_help_full, []),
         (args.rules, handle_rules_list, [__version__]),

@@ -14,6 +14,7 @@ from .parser import (
 
 from .handlers import (
     handle_list_supported,
+    handle_languages,
     handle_agent_help,
     handle_agent_help_full,
     handle_rules_list,
@@ -37,6 +38,7 @@ __all__ = [
     'validate_navigation_args',
     # Handlers
     'handle_list_supported',
+    'handle_languages',
     'handle_agent_help',
     'handle_agent_help_full',
     'handle_rules_list',

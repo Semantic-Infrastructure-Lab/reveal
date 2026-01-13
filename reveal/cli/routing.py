@@ -171,7 +171,9 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
             handle_recursive_check(path, args)
         else:
             output = show_directory_tree(str(path), depth=args.depth,
-                                         max_entries=args.max_entries, fast=args.fast)
+                                         max_entries=args.max_entries, fast=args.fast,
+                                         respect_gitignore=args.respect_gitignore,
+                                         exclude_patterns=args.exclude)
             print(output)
     elif path.is_file():
         handle_file(str(path), args.element, args.meta, args.format, args)

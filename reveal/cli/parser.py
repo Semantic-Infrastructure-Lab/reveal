@@ -137,6 +137,8 @@ def _add_basic_arguments(parser: argparse.ArgumentParser, version: str) -> None:
     parser.add_argument('--version', action='version', version=f'reveal {version}')
     parser.add_argument('--list-supported', '-l', action='store_true',
                         help='List all supported file types')
+    parser.add_argument('--languages', action='store_true',
+                        help='List all supported languages with explicit vs fallback analyzers')
     parser.add_argument('--agent-help', action='store_true',
                         help='Show agent usage guide (llms.txt-style brief reference)')
     parser.add_argument('--agent-help-full', action='store_true',
@@ -175,6 +177,12 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
                         help='Maximum entries to show in directory tree (default: 200, 0=unlimited)')
     parser.add_argument('--fast', action='store_true',
                         help='Fast mode: skip line counting for better performance')
+    parser.add_argument('--respect-gitignore', action='store_true', default=True,
+                        help='Respect .gitignore rules when showing directory trees (default: enabled)')
+    parser.add_argument('--no-gitignore', action='store_false', dest='respect_gitignore',
+                        help='Ignore .gitignore rules and show all files')
+    parser.add_argument('--exclude', action='append', metavar='PATTERN',
+                        help='Exclude files/directories matching pattern (e.g., --exclude "*.log" --exclude "tmp/")')
     parser.add_argument('--outline', action='store_true',
                         help='Show hierarchical outline (classes with methods, nested structures)')
     parser.add_argument('--hotspots', action='store_true',

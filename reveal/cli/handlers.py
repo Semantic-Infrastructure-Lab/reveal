@@ -22,6 +22,17 @@ def handle_list_supported(list_supported_types_func):
     sys.exit(0)
 
 
+def handle_languages():
+    """Handle --languages flag.
+
+    Shows all supported languages with distinction between explicit
+    analyzers (full featured) and tree-sitter fallback (basic).
+    """
+    from .languages import list_supported_languages
+    print(list_supported_languages())
+    sys.exit(0)
+
+
 def handle_agent_help():
     """Handle --agent-help flag."""
     agent_help_path = Path(__file__).parent.parent / 'AGENT_HELP.md'
