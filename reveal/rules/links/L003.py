@@ -144,7 +144,7 @@ class L003(BaseRule):
         if (cwd / "config.toml").exists() or (cwd / "hugo.toml").exists():
             return 'hugo'
 
-        # Default to FastHTML (SIL's primary framework)
+        # Default to FastHTML
         return 'fasthtml'
 
     def _find_docs_root(self, file_path: str) -> Path:

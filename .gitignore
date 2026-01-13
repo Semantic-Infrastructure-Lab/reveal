@@ -1,8 +1,8 @@
 # ============================================================
-# TIA Session Artifacts (belong in ~/src/tia/projects/reveal/)
+# Development Artifacts
 # ============================================================
 
-# Session documentation patterns
+# Session/analysis documentation
 *_SUMMARY.md
 *_COMPLETE.md
 *_ANALYSIS.md
@@ -22,16 +22,7 @@ INTERNAL_*.md
 MEETING_*.md
 DRAFT_*.md
 
-# TIA directories (root-level only - allows internal-docs/)
-.tia/
-.beth/
-/analysis/
-/research/
-/sessions/
-/internal/
-/planning/
-
-# TIA project metadata
+# Project management
 project.yaml
 
 # ============================================================

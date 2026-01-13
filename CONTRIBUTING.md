@@ -24,6 +24,26 @@ pytest tests/
 
 ---
 
+## Project Structure
+
+This repository contains only the public-facing open source project:
+
+```
+reveal/                    # This repository (public)
+├── reveal/               # Core library
+│   ├── analyzers/       # File type handlers
+│   ├── adapters/        # URI adapters
+│   ├── rules/           # Quality checks
+│   └── base.py          # Registration system
+├── tests/               # Test suite
+├── docs/                # Documentation
+└── README.md            # Public documentation
+```
+
+**For maintainers:** Internal planning, research, and development artifacts live in `../internal-docs/` (outside this repository). This keeps the public repo clean and focused on the OSS project.
+
+---
+
 ## Ways to Contribute
 
 ### 1. Add File Type Analyzers (Most Impactful)

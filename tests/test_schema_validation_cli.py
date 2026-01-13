@@ -24,7 +24,7 @@ def temp_dir():
 
 @pytest.fixture
 def valid_session_readme(temp_dir):
-    """Create a valid Beth session README."""
+    """Create a valid session README with proper frontmatter."""
     readme = temp_dir / "README.md"
     readme.write_text("""---
 session_id: test-session-0102
@@ -43,7 +43,7 @@ This is a test session README.
 
 @pytest.fixture
 def invalid_session_readme(temp_dir):
-    """Create an invalid Beth session README (missing required fields)."""
+    """Create an invalid session README (missing required fields)."""
     readme = temp_dir / "README.md"
     readme.write_text("""---
 date: 2026-01-02
@@ -213,11 +213,11 @@ class TestCLIFlagParsing:
 # Built-in Schema Tests
 # ============================================================================
 
-class TestBethSchemaValidation:
+class TestSessionSchemaValidation:
     """Test validation against built-in session schema."""
 
     def test_valid_session_readme_passes(self, valid_session_readme):
-        """Test that valid Beth README passes validation."""
+        """Test that valid session README passes validation."""
         result = run_reveal([str(valid_session_readme), '--validate-schema', 'session'])
         assert result.returncode == 0
         # Should have no F-series detections or only info-level

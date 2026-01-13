@@ -801,7 +801,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         """Normalize a related entry to a path string.
 
         Handles both simple string paths and structured dict entries with
-        uri/path/href fields (common in TIA documentation).
+        uri/path/href fields (common in structured documentation).
 
         Args:
             entry: Either a string path or dict with path in uri/path/href field

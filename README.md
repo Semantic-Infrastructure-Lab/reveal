@@ -105,7 +105,7 @@ reveal --rules                   # List all rules
 reveal --explain B001            # Explain specific rule
 ```
 
-**41 built-in rules** across 12 categories: bugs (B001-B005), complexity (C901-C905), duplicates (D001-D002), style (E501), frontmatter (F001-F005), imports (I001-I003), links (L001-L003), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V011). New in v0.25.0: link validation (L001-L003). New in v0.28.0: import analysis (I001-I003) for unused imports, circular dependencies, and layer violations. New in v0.29.0: schema validation (F001-F005) for markdown front matter.
+**47 built-in rules** across 12 categories: bugs (B001-B005), complexity (C901-C905), duplicates (D001-D002), style (E501), frontmatter (F001-F005), imports (I001-I004), links (L001-L003), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V014). New in v0.25.0: link validation (L001-L003). New in v0.28.0: import analysis (I001-I003) for unused imports, circular dependencies, and layer violations. New in v0.29.0: schema validation (F001-F005) for markdown front matter. New in v0.32.1: stdlib shadowing (I004). New in v0.35.0: validation rules (V012-V014).
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
 
 ### 📝 Schema Validation (v0.29.0+)
@@ -331,7 +331,7 @@ reveal help://diff                           # Complete diff guide
 **Extensibility Example:**
 The `reveal://` adapter demonstrates that reveal can inspect **any resource**, not just files. Use it as a reference for creating custom adapters for your own projects (APIs, databases, containers, etc.). See `reveal help://reveal` for the complete guide.
 
-**10 Built-in Adapters:**
+**12 Built-in Adapters:**
 - `help://` - Self-documenting help system (discover all adapters)
 - `env://` - Environment variables (cross-language)
 - `ast://` - Static code analysis & queries (cross-language)
@@ -340,8 +340,10 @@ The `reveal://` adapter demonstrates that reveal can inspect **any resource**, n
 - `reveal://` - Self-inspection & validation (v0.22.0+)
 - `stats://` - Code quality metrics & hotspot detection
 - `mysql://` - MySQL database inspection with DBA tuning ratios (requires `[database]` extra)
+- `sqlite://` - SQLite database exploration (zero dependencies, v0.35.0+) 🆕
 - `imports://` - Import graph analysis with unused/circular detection (v0.28.0+)
-- `diff://` - Semantic structural diff (files, directories, git refs) (v0.30.0+) 🆕
+- `diff://` - Semantic structural diff (files, directories, git refs) (v0.30.0+)
+- `markdown://` - Frontmatter queries for knowledge graphs (v0.32.0+)
 
 **Self-documenting:** Every adapter exposes help via `reveal help://<scheme>`
 

@@ -12,11 +12,13 @@ How it counts:
     - Counts unique file extension registrations
     - Each @register() call adds to the count
     - Example: yaml_json.py registers 2 (.yaml, .yml counted as 1, .json as 1)
+
+Note: Checks ALL language count claims in README, not just first occurrence.
 """
 
 import re
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
@@ -58,20 +60,19 @@ class V012(BaseRule):
         if actual_count is None:
             return detections
 
-        # Extract claimed count from README
-        claimed_count = self._extract_language_count_from_readme(readme_file)
-        if claimed_count is None:
-            return detections
+        # Extract ALL claimed counts from README
+        claims = self._extract_language_count_from_readme(readme_file)
 
-        # Check for mismatch
-        if actual_count != claimed_count:
-            detections.append(self.create_detection(
-                file_path="README.md",
-                line=1,
-                message=f"Language count mismatch: claims {claimed_count}, actual {actual_count}",
-                suggestion=f"Update README.md to: '{actual_count} languages built-in' or verify count logic",
-                context=f"Claimed: {claimed_count}, Actual: {actual_count} registered language extensions"
-            ))
+        # Flag ALL incorrect claims
+        for line_num, claimed in claims:
+            if claimed != actual_count:
+                detections.append(self.create_detection(
+                    file_path="README.md",
+                    line=line_num,
+                    message=f"Language count mismatch: claims {claimed}, actual {actual_count}",
+                    suggestion=f"Update README.md line {line_num} to: '{actual_count} languages built-in'",
+                    context=f"Claimed: {claimed}, Actual: {actual_count} registered language analyzers"
+                ))
 
         return detections
 
@@ -97,8 +98,10 @@ class V012(BaseRule):
         except Exception:
             return None
 
-    def _extract_language_count_from_readme(self, readme_file: Path) -> Optional[int]:
-        """Extract language count claim from README.
+    def _extract_language_count_from_readme(self, readme_file: Path) -> List[Tuple[int, int]]:
+        """Extract ALL language count claims from README.
+
+        Returns: List of (line_number, count) tuples
 
         Looks for patterns like:
         - "38 languages built-in"
@@ -107,23 +110,25 @@ class V012(BaseRule):
         """
         try:
             content = readme_file.read_text()
+            lines = content.split('\n')
 
-            # Pattern 1: "N languages built-in"
-            match = re.search(r'(\d+)\s+languages?\s+built-in', content, re.IGNORECASE)
-            if match:
-                return int(match.group(1))
+            claims = []
+            for i, line in enumerate(lines, 1):
+                # Pattern 1: "N languages built-in"
+                matches = re.finditer(r'(\d+)\s+languages?\s+built-in', line, re.IGNORECASE)
+                for match in matches:
+                    claims.append((i, int(match.group(1))))
 
-            # Pattern 2: "Built-in (N):"
-            match = re.search(r'Built-in\s*\((\d+)\):', content)
-            if match:
-                return int(match.group(1))
+                # Pattern 2: "Built-in (N):"
+                matches = re.finditer(r'Built-in\s*\((\d+)\):', line)
+                for match in matches:
+                    claims.append((i, int(match.group(1))))
 
-            # Pattern 3: "Zero config. N languages"
-            match = re.search(r'Zero config\.\s*(\d+)\s+languages', content, re.IGNORECASE)
-            if match:
-                return int(match.group(1))
+                # Pattern 3: "Zero config. N languages"
+                matches = re.finditer(r'Zero config\.\s*(\d+)\s+languages', line, re.IGNORECASE)
+                for match in matches:
+                    claims.append((i, int(match.group(1))))
 
+            return claims
         except Exception:
-            pass
-
-        return None
+            return []
