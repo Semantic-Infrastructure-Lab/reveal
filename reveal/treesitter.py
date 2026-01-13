@@ -136,8 +136,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Get common function node types across languages."""
         return [
             'function_definition',   # Python
-            'function_declaration',  # Go, C, JavaScript
+            'function_declaration',  # Go, C, JavaScript, Kotlin, Swift
             'function_item',         # Rust
+            'function_signature',    # Dart
             'method_declaration',    # Java, C#
             'function',              # Generic
             'method',                # Ruby
@@ -460,7 +461,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         # PRIORITY 2: Direct identifier/name children (most languages)
         for child in node.children:
-            if child.type in ('identifier', 'name', 'constant'):
+            if child.type in ('identifier', 'name', 'constant', 'simple_identifier'):
                 return self._get_node_text(child)
 
         # PRIORITY 3: type_identifier (fallback for structs, classes)
@@ -483,7 +484,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         Example: pointer_declarator → function_declarator → identifier
         """
         # Check current node
-        if node.type in ('identifier', 'name'):
+        if node.type in ('identifier', 'name', 'simple_identifier'):
             return self._get_node_text(node)
 
         # Search children recursively
