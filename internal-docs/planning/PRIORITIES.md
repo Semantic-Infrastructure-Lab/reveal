@@ -2,8 +2,8 @@
 
 > **Mission:** Make AI coding assistants (Claude Code, TIA, Copilot) more effective by providing maximum understanding per token across popular tech stacks.
 
-**Last Updated:** 2026-01-11
-**Current Version:** v0.34.0 (+ unreleased: sqlite://)
+**Last Updated:** 2026-01-13
+**Current Version:** v0.35.0
 
 ---
 
@@ -22,7 +22,7 @@ Reveal solves this by providing:
 
 ## Recent Releases
 
-### v0.35.0 (Unreleased)
+### v0.35.0 (2026-01-13)
 - **sqlite:// adapter** - Zero-dependency SQLite database exploration
   - Database overview with schema, statistics, configuration
   - Table structure with columns, indexes, foreign keys
@@ -111,7 +111,7 @@ reveal sqlite:///app.db/users              # Table structure
 reveal sqlite://./relative.db              # Relative paths
 ```
 
-**Status:** ✅ **SHIPPED** (v0.35.0 unreleased)
+**Status:** ✅ **SHIPPED** (v0.35.0)
 - Zero dependencies (uses Python's built-in sqlite3)
 - Database overview with schema, stats, config
 - Table structure with columns, indexes, foreign keys
