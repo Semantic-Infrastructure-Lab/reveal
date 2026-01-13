@@ -28,9 +28,19 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
         This test would have caught the bug where diff.py and markdown.py had
         @register_adapter but weren't imported in __init__.py.
         """
-        # Find all adapter files
+        # Find all adapter files (including subdirectories)
         adapters_dir = Path(__file__).parent.parent / 'reveal' / 'adapters'
-        adapter_files = list(adapters_dir.glob('*.py'))
+
+        # Scan both top-level and subdirectories
+        adapter_files = []
+        adapter_files.extend(adapters_dir.glob('*.py'))
+
+        # Scan subdirectories for adapter.py files
+        for subdir in adapters_dir.iterdir():
+            if subdir.is_dir() and subdir.name not in ('__pycache__', 'help_data'):
+                adapter_files.extend(subdir.glob('*.py'))
+
+        # Filter out non-adapter files
         adapter_files = [f for f in adapter_files if f.stem not in ('__init__', 'base', 'help_data')]
 
         # Find which ones have @register_adapter
@@ -213,9 +223,10 @@ class TestRevealAdapterOutputIntegrity(unittest.TestCase):
         adapter = RevealAdapter()
         structure = adapter.get_structure()
 
-        # Get adapter info from structure
-        adapter_info = structure.get('adapters', {})
-        listed_adapters = set(adapter_info.keys())
+        # Get adapter info from structure (it's a list of dicts)
+        adapter_info = structure.get('adapters', [])
+        # Extract scheme from each adapter dict
+        listed_adapters = set(a['scheme'] for a in adapter_info)
 
         # Get actually registered adapters
         registered_adapters = set(list_supported_schemes())
@@ -237,9 +248,10 @@ class TestRevealAdapterOutputIntegrity(unittest.TestCase):
         adapter = RevealAdapter()
         structure = adapter.get_structure()
 
-        # Get analyzer info from structure
-        analyzer_info = structure.get('analyzers', {})
-        listed_analyzers = set(analyzer_info.keys())
+        # Get analyzer info from structure (it's a list of dicts)
+        analyzer_info = structure.get('analyzers', [])
+        # Extract name from each analyzer dict
+        listed_analyzers = set(a['name'] for a in analyzer_info)
 
         # Get actually registered analyzers (these are file extensions)
         # get_all_analyzers() returns {ext: {name, ...}}
