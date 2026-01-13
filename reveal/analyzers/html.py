@@ -44,12 +44,15 @@ class HTMLAnalyzer(FileAnalyzer):
         # Detect template type
         self.template_type = self._detect_template_type()
 
-    def get_structure(self, options: Optional[StructureOptions] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, options: Optional[StructureOptions] = None, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """Extract HTML structure progressively.
 
         Args:
             options: StructureOptions config object (recommended)
-            **kwargs: Individual options for backward compatibility
+            head: Show first N lines
+            tail: Show last N lines
+            range: Line range (e.g., "10-20")
+            **kwargs: Additional options for backward compatibility
 
         Supported options (via StructureOptions or kwargs):
             head: Show first N lines
@@ -70,6 +73,14 @@ class HTMLAnalyzer(FileAnalyzer):
         """
         # Backward compatibility: convert kwargs to StructureOptions
         if options is None:
+            # Merge explicit parameters into kwargs
+            if head is not None:
+                kwargs['head'] = head
+            if tail is not None:
+                kwargs['tail'] = tail
+            if range is not None:
+                kwargs['range'] = range
+
             options = StructureOptions.from_kwargs(**kwargs)
             # Handle 'links' kwarg mapping to 'extract_links'
             if 'links' in kwargs:
