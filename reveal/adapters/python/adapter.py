@@ -5,15 +5,17 @@ import platform
 import os
 from typing import Dict, Any, Optional
 
-from ..base import ResourceAdapter, register_adapter
+from ..base import ResourceAdapter, register_adapter, register_renderer
 from .bytecode import check_bytecode, pyc_to_source
 from .packages import get_packages, get_packages_list, get_package_details
 from .modules import get_module_analysis, get_syspath_analysis
 from .doctor import run_doctor
 from .help import get_help
+from .renderer import PythonRenderer
 
 
 @register_adapter("python")
+@register_renderer(PythonRenderer)
 class PythonAdapter(ResourceAdapter):
     """Adapter for Python runtime inspection via python:// URIs."""
 

@@ -5,14 +5,35 @@ import sys
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from .base import ResourceAdapter, register_adapter
+from .base import ResourceAdapter, register_adapter, register_renderer
 from ..core import suppress_treesitter_warnings
 
 # Suppress tree-sitter warnings (centralized in core module)
 suppress_treesitter_warnings()
 
 
+class AstRenderer:
+    """Renderer for AST query results."""
+
+    @staticmethod
+    def render_structure(result: dict, format: str = 'text') -> None:
+        """Render AST query results.
+
+        Args:
+            result: Query result dict from AstAdapter.get_structure()
+            format: Output format ('text', 'json', 'grep')
+        """
+        from ..rendering import render_ast_structure
+        render_ast_structure(result, format)
+
+    @staticmethod
+    def render_error(error: Exception) -> None:
+        """Render user-friendly errors."""
+        print(f"Error querying AST: {error}", file=sys.stderr)
+
+
 @register_adapter('ast')
+@register_renderer(AstRenderer)
 class AstAdapter(ResourceAdapter):
     """Adapter for querying code as an AST database via ast:// URIs.
 

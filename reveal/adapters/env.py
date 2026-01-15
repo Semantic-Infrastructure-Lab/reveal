@@ -1,11 +1,44 @@
 """Environment variable adapter (env://)."""
 
 import os
+import sys
 from typing import Dict, Any, Optional
-from .base import ResourceAdapter, register_adapter
+from .base import ResourceAdapter, register_adapter, register_renderer
+
+
+class EnvRenderer:
+    """Renderer for environment variable results."""
+
+    @staticmethod
+    def render_structure(result: dict, format: str = 'text') -> None:
+        """Render all environment variables.
+
+        Args:
+            result: Structure dict from EnvAdapter.get_structure()
+            format: Output format ('text', 'json', 'grep')
+        """
+        from ..rendering import render_env_structure
+        render_env_structure(result, format)
+
+    @staticmethod
+    def render_element(result: dict, format: str = 'text') -> None:
+        """Render specific environment variable.
+
+        Args:
+            result: Element dict from EnvAdapter.get_element()
+            format: Output format ('text', 'json', 'grep')
+        """
+        from ..rendering import render_env_variable
+        render_env_variable(result, format)
+
+    @staticmethod
+    def render_error(error: Exception) -> None:
+        """Render user-friendly errors."""
+        print(f"Error accessing environment: {error}", file=sys.stderr)
 
 
 @register_adapter('env')
+@register_renderer(EnvRenderer)
 class EnvAdapter(ResourceAdapter):
     """Adapter for exploring environment variables via env:// URIs."""
 

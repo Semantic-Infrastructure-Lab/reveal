@@ -29,7 +29,7 @@ reveal --agent-help-full     # Complete reference (~1680 lines)
 
 **Quick Install:**
 ```bash
-pip install reveal-cli              # Full-featured by default (38 languages, 12 adapters)
+pip install reveal-cli              # Full-featured by default (38 languages, 13 adapters)
 pip install reveal-cli[database]    # Add MySQL database inspection
 ```
 See [INSTALL.md](INSTALL.md) for details on what's included.
@@ -331,7 +331,7 @@ reveal help://diff                           # Complete diff guide
 **Extensibility Example:**
 The `reveal://` adapter demonstrates that reveal can inspect **any resource**, not just files. Use it as a reference for creating custom adapters for your own projects (APIs, databases, containers, etc.). See `reveal help://reveal` for the complete guide.
 
-**12 Built-in Adapters:**
+**13 Built-in Adapters:**
 - `help://` - Self-documenting help system (discover all adapters)
 - `env://` - Environment variables (cross-language)
 - `ast://` - Static code analysis & queries (cross-language)

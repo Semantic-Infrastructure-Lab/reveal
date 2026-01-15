@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reveal-cli"
-version = "0.35.0"
+version = "0.36.0"
 description = "Semantic code exploration with progressive disclosure - explore directories, files, and code elements with smart defaults"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -68,6 +68,10 @@ syntax = [
 # Database adapter support (mysql://, postgres://, etc.)
 database = [
     "pymysql>=1.0.0",
+]
+# Git repository inspection (git:// adapter)
+git = [
+    "pygit2>=1.14.0",  # Stable libgit2 bindings with Python 3.10-3.12 support
 ]
 
 [project.urls]

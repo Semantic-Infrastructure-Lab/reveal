@@ -1,15 +1,91 @@
 """Statistics adapter (stats://) for codebase metrics and hotspots."""
 
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
-from .base import ResourceAdapter, register_adapter
+from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
 from ..registry import get_analyzer
 
 
+class StatsRenderer:
+    """Renderer for statistics adapter results."""
+
+    @staticmethod
+    def render_structure(result: dict, format: str = 'text') -> None:
+        """Render codebase statistics.
+
+        Args:
+            result: Structure dict from StatsAdapter.get_structure()
+            format: Output format ('text', 'json')
+        """
+        if format == 'json':
+            from ..main import safe_json_dumps
+            print(safe_json_dumps(result))
+            return
+
+        # Text format - directory stats
+        if 'summary' in result:
+            path = result.get('path', '.')
+            s = result['summary']
+            print(f"Codebase Statistics: {path}\n")
+            print(f"Files:      {s['total_files']}")
+            print(f"Lines:      {s['total_lines']:,} ({s['total_code_lines']:,} code)")
+            print(f"Functions:  {s['total_functions']}")
+            print(f"Classes:    {s['total_classes']}")
+            print(f"Complexity: {s['avg_complexity']:.2f} (avg)")
+            print(f"Quality:    {s['avg_quality_score']:.1f}/100")
+
+            # Show hotspots if present
+            if 'hotspots' in result and result['hotspots']:
+                print(f"\nTop Hotspots ({len(result['hotspots'])}):")
+                for i, h in enumerate(result['hotspots'], 1):
+                    print(f"\n{i}. {h['file']}")
+                    print(f"   Quality: {h['quality_score']:.1f}/100 | Score: {h['hotspot_score']:.1f}")
+                    print(f"   Issues: {', '.join(h['issues'])}")
+
+    @staticmethod
+    def render_element(result: dict, format: str = 'text') -> None:
+        """Render file-specific statistics.
+
+        Args:
+            result: Element dict from StatsAdapter.get_element()
+            format: Output format ('text', 'json')
+        """
+        if format == 'json':
+            from ..main import safe_json_dumps
+            print(safe_json_dumps(result))
+            return
+
+        # Text format - file stats
+        print(f"File: {result.get('file', 'unknown')}")
+        print(f"\nLines:")
+        print(f"  Total:    {result['lines']['total']}")
+        print(f"  Code:     {result['lines']['code']}")
+        print(f"  Comments: {result['lines']['comments']}")
+        print(f"  Empty:    {result['lines']['empty']}")
+        print(f"\nElements:")
+        print(f"  Functions: {result['elements']['functions']}")
+        print(f"  Classes:   {result['elements']['classes']}")
+        print(f"  Imports:   {result['elements']['imports']}")
+        print(f"\nComplexity:")
+        print(f"  Average:   {result['complexity']['average']:.2f}")
+        print(f"  Max:       {result['complexity']['max']}")
+        print(f"\nQuality:")
+        print(f"  Score:     {result['quality']['score']:.1f}/100")
+        print(f"  Long funcs: {result['quality']['long_functions']}")
+        print(f"  Deep nest:  {result['quality']['deep_nesting']}")
+
+    @staticmethod
+    def render_error(error: Exception) -> None:
+        """Render user-friendly errors."""
+        print(f"Error analyzing statistics: {error}", file=sys.stderr)
+
+
 @register_adapter('stats')
+@register_renderer(StatsRenderer)
 class StatsAdapter(ResourceAdapter):
     """Adapter for analyzing codebase statistics and identifying hotspots."""
 

@@ -68,19 +68,27 @@ from .scheme_handlers.reveal import _format_check_detections  # noqa: E402
 
 # Dispatch table: scheme -> handler function
 # To add a new scheme: create a _handle_<scheme> function and register here
+# NOTE: Schemes migrated to renderer-based system don't need entries here
 SCHEME_HANDLERS: Dict[str, Callable] = {
-    'env': _handle_env,
-    'ast': _handle_ast,
-    'mysql': _handle_mysql,
-    'sqlite': _handle_sqlite,
-    'help': _handle_help,
-    'python': _handle_python,
-    'json': _handle_json,
-    'reveal': _handle_reveal,
-    'stats': _handle_stats,
+    # Simple adapters migrated to renderer-based system (Phase 3.1):
+    # 'ast': _handle_ast,        # Migrated to AstRenderer
+    # 'env': _handle_env,        # Migrated to EnvRenderer
+    # 'json': _handle_json,      # Migrated to JsonRenderer
+    # 'python': _handle_python,  # Migrated to PythonRenderer
+    # 'help': _handle_help,      # Migrated to HelpRenderer
+    # 'mysql': _handle_mysql,    # Migrated to MySQLRenderer (Phase 2)
+
+    # Medium adapters migrated (Phase 3.2):
+    # 'markdown': _handle_markdown,  # Migrated to MarkdownRenderer
+    # 'stats': _handle_stats,        # Migrated to StatsRenderer
+
+    # Complex adapters migrated (Phase 3.3):
+    # 'sqlite': _handle_sqlite,      # Migrated to SqliteRenderer
+
+    # Remaining adapters (to be migrated):
+    'reveal': _handle_reveal,  # Special handling for element extraction
     'imports': _handle_imports,
     'diff': _handle_diff,
-    'markdown': _handle_markdown,
 }
 
 
@@ -118,11 +126,159 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
     handle_adapter(adapter_class, scheme, resource, element, args)
 
 
+def generic_adapter_handler(adapter_class: type, renderer_class: type,
+                           scheme: str, resource: str, element: Optional[str],
+                           args: 'Namespace') -> None:
+    """Generic handler for adapters with registered renderers.
+
+    This is the new simplified handler that works with any adapter/renderer pair.
+    Replaces the need for scheme-specific handlers in most cases.
+
+    Args:
+        adapter_class: The adapter class to instantiate
+        renderer_class: The renderer class for output
+        scheme: URI scheme (for building full URI if needed)
+        resource: Resource part of URI
+        element: Optional element to extract
+        args: CLI arguments
+    """
+    import json
+
+    # Try to instantiate adapter with different initialization patterns
+    # Different adapters have different conventions:
+    # - No-arg: env, python (take no resource in __init__)
+    # - Resource-arg: help (take resource string)
+    # - Query-parsing: ast, json (parse resource to extract path/query)
+    # - URI: mysql (expect full URI like mysql://host:port)
+    adapter = None
+    init_error = None
+
+    # Try 1: No arguments (env, python)
+    try:
+        adapter = adapter_class()
+    except TypeError:
+        pass  # Not a no-arg adapter
+
+    # Try 2: Resource with query parsing (ast, json)
+    if adapter is None and '?' in resource:
+        try:
+            path, query = resource.split('?', 1)
+            # Default empty path to current directory for ast-like adapters
+            if not path:
+                path = '.'
+            adapter = adapter_class(path, query)
+        except (TypeError, ValueError):
+            pass  # Not a query-parsing adapter
+
+    # Try 3: Keyword args (markdown with base_path/query)
+    if adapter is None:
+        try:
+            if '?' in resource:
+                path_part, query = resource.split('?', 1)
+                path = path_part.rstrip('/') if path_part else '.'
+            else:
+                path = resource.rstrip('/') if resource else '.'
+                query = None
+            adapter = adapter_class(base_path=path, query=query)
+        except TypeError:
+            pass  # Not a keyword-arg adapter
+
+    # Try 4: Resource argument (help, ast without query, json without query)
+    if adapter is None and resource:
+        try:
+            # For ast/json, if no query, just pass path
+            if '?' not in resource:
+                path = resource if resource else '.'
+                try:
+                    # Try with query=None for query-parsing adapters
+                    adapter = adapter_class(path, None)
+                except TypeError:
+                    # Try simple resource argument
+                    adapter = adapter_class(resource)
+            else:
+                adapter = adapter_class(resource)
+        except (TypeError, ValueError) as e:
+            init_error = e
+
+    # Try 5: Full URI (mysql, sqlite with element)
+    if adapter is None:
+        try:
+            # Construct full URI with element if provided (for sqlite://path/table pattern)
+            full_uri = f"{scheme}://{resource}"
+            if element and '://' in full_uri:  # Only append element for URI-based adapters
+                full_uri = f"{full_uri}/{element}"
+            adapter = adapter_class(full_uri)
+        except (TypeError, ValueError) as e:
+            init_error = e
+
+    # Check if initialization failed
+    if adapter is None:
+        if isinstance(init_error, ImportError):
+            # Render user-friendly error for missing dependencies
+            renderer_class.render_error(init_error)
+        else:
+            print(f"Error initializing {scheme}:// adapter: {init_error}", file=sys.stderr)
+        sys.exit(1)
+
+    # Handle --check flag if adapter supports it
+    if getattr(args, 'check', False) and hasattr(adapter, 'check'):
+        # Pass select/ignore args if adapter's check() method supports them
+        import inspect
+        sig = inspect.signature(adapter.check)
+        check_kwargs = {}
+
+        if 'select' in sig.parameters and hasattr(args, 'select') and args.select:
+            check_kwargs['select'] = args.select.split(',') if isinstance(args.select, str) else args.select
+        if 'ignore' in sig.parameters and hasattr(args, 'ignore') and args.ignore:
+            check_kwargs['ignore'] = args.ignore.split(',') if isinstance(args.ignore, str) else args.ignore
+
+        result = adapter.check(**check_kwargs)
+
+        # Render check results
+        if hasattr(renderer_class, 'render_check'):
+            renderer_class.render_check(result, args.format)
+        else:
+            # Fallback to generic JSON rendering
+            if args.format == 'json':
+                print(json.dumps(result, indent=2))
+            else:
+                print(result)
+
+        # Exit with appropriate code if provided
+        exit_code = result.get('exit_code', 0) if isinstance(result, dict) else 0
+        sys.exit(exit_code)
+
+    # Get element or structure based on adapter capabilities
+    # Adapters with render_element (env, python, help) support element-based access
+    # Others (ast, json) always use get_structure()
+    supports_elements = hasattr(renderer_class, 'render_element')
+
+    if supports_elements and (element or resource):
+        # Element-based adapters: check element or resource
+        element_name = element if element else resource
+        result = adapter.get_element(element_name)
+
+        if result is None:
+            print(f"Error: Element '{element_name}' not found", file=sys.stderr)
+            # Try to show available elements if adapter provides them
+            if hasattr(adapter, 'list_elements'):
+                elements = adapter.list_elements()
+                print(f"Available elements: {', '.join(elements)}", file=sys.stderr)
+            sys.exit(1)
+
+        renderer_class.render_element(result, args.format)
+    else:
+        # Structure-based adapters: always use get_structure()
+        result = adapter.get_structure()
+        renderer_class.render_structure(result, args.format)
+
+
 def handle_adapter(adapter_class: type, scheme: str, resource: str,
                    element: Optional[str], args: 'Namespace') -> None:
     """Handle adapter-specific logic for different URI schemes.
 
-    Uses dispatch table for clean, extensible routing.
+    Uses dispatch table for clean, extensible routing. Falls back to generic
+    handler if adapter has a registered renderer.
 
     Args:
         adapter_class: The adapter class to instantiate
@@ -131,13 +287,22 @@ def handle_adapter(adapter_class: type, scheme: str, resource: str,
         element: Optional element to extract
         args: CLI arguments
     """
+    # Try old-style scheme handler first (backward compatibility)
     handler = SCHEME_HANDLERS.get(scheme)
     if handler:
         handler(adapter_class, resource, element, args)
-    else:
-        # Fallback for unknown schemes (shouldn't happen if registry is in sync)
-        print(f"Error: No handler for scheme '{scheme}'", file=sys.stderr)
-        sys.exit(1)
+        return
+
+    # Try new-style renderer-based handler
+    from ..adapters.base import get_renderer_class
+    renderer_class = get_renderer_class(scheme)
+    if renderer_class:
+        generic_adapter_handler(adapter_class, renderer_class, scheme, resource, element, args)
+        return
+
+    # No handler found (shouldn't happen if registry is in sync)
+    print(f"Error: No handler for scheme '{scheme}'", file=sys.stderr)
+    sys.exit(1)
 
 
 def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:

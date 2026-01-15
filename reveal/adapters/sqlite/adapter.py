@@ -4,11 +4,13 @@ import os
 import sqlite3
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from ..base import ResourceAdapter, register_adapter
+from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
+from .renderer import SqliteRenderer
 
 
 @register_adapter('sqlite')
+@register_renderer(SqliteRenderer)
 class SQLiteAdapter(ResourceAdapter):
     """Adapter for inspecting SQLite databases via sqlite:// URIs.
 

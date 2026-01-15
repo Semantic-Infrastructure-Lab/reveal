@@ -12,16 +12,166 @@ Usage:
     reveal 'imports://src?circular'          # Find cycles
 """
 
+import sys
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 from urllib.parse import urlparse
 
-from .base import ResourceAdapter, register_adapter
+from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.imports import ImportGraph, ImportStatement
+
+
+class ImportsRenderer:
+    """Renderer for import analysis results."""
+
+    @staticmethod
+    def _render_unused_imports(result: dict, verbose: bool) -> None:
+        """Render unused imports results."""
+        count = result['count']
+        print(f"\n{'='*60}")
+        print(f"Unused Imports: {count}")
+        print(f"{'='*60}\n")
+
+        if count == 0:
+            print("  ✅ No unused imports found!\n")
+        else:
+            if verbose:
+                for imp in result['unused']:
+                    print(f"  {imp['file']}:{imp['line']} - {imp['module']}")
+            else:
+                for imp in result['unused'][:10]:
+                    print(f"  {imp['file']}:{imp['line']} - {imp['module']}")
+                if count > 10:
+                    print(f"\n  ... and {count - 10} more unused imports")
+                    print(f"  Run with --verbose to see all {count} unused imports\n")
+
+    @staticmethod
+    def _render_circular_dependencies(result: dict, verbose: bool) -> None:
+        """Render circular dependency results."""
+        count = result['count']
+        print(f"\n{'='*60}")
+        print(f"Circular Dependencies: {count}")
+        print(f"{'='*60}\n")
+
+        if count == 0:
+            print("  ✅ No circular dependencies found!\n")
+        else:
+            if verbose:
+                for i, cycle in enumerate(result['cycles'], 1):
+                    print(f"  {i}. {' -> '.join(cycle)}")
+            else:
+                for i, cycle in enumerate(result['cycles'][:5], 1):
+                    print(f"  {i}. {' -> '.join(cycle)}")
+                if count > 5:
+                    print(f"\n  ... and {count - 5} more circular dependencies")
+                    print(f"  Run with --verbose to see all {count} cycles\n")
+
+    @staticmethod
+    def _render_layer_violations(result: dict, verbose: bool) -> None:
+        """Render layer violation results."""
+        count = result['count']
+        print(f"\n{'='*60}")
+        print(f"Layer Violations: {count}")
+        print(f"{'='*60}\n")
+
+        if count == 0:
+            print(f"  ✅ {result.get('note', 'No violations found')}\n")
+        else:
+            violations = result.get('violations', [])
+            if verbose:
+                for v in violations:
+                    print(f"  {v['file']}:{v['line']} - {v['message']}")
+            else:
+                for v in violations[:10]:
+                    print(f"  {v['file']}:{v['line']} - {v['message']}")
+                if count > 10:
+                    print(f"\n  ... and {count - 10} more violations")
+                    print(f"  Run with --verbose to see all {count} violations\n")
+
+    @staticmethod
+    def _render_import_summary(result: dict, resource: str) -> None:
+        """Render import analysis summary."""
+        metadata = result.get('metadata', {})
+        total_files = metadata.get('total_files', 0)
+        total_imports = metadata.get('total_imports', 0)
+        has_cycles = metadata.get('has_cycles', False)
+
+        print(f"\n{'='*60}")
+        print(f"Import Analysis: {resource}")
+        print(f"{'='*60}\n")
+        print(f"  Total Files:   {total_files}")
+        print(f"  Total Imports: {total_imports}")
+        print(f"  Cycles Found:  {'❌ Yes' if has_cycles else '✅ No'}")
+        print()
+        print(f"Query options:")
+        print(f"  reveal 'imports://{resource}?unused'    - Find unused imports")
+        print(f"  reveal 'imports://{resource}?circular'  - Detect circular deps")
+        print(f"  reveal 'imports://{resource}?violations' - Check layer violations")
+        print()
+
+    @staticmethod
+    def render_structure(result: dict, format: str = 'text', verbose: bool = False, resource: str = '.') -> None:
+        """Render import analysis results.
+
+        Args:
+            result: Structure dict from ImportsAdapter.get_structure()
+            format: Output format ('text', 'json')
+            verbose: Show detailed results
+            resource: Resource path for display
+        """
+        if format == 'json':
+            from ..main import safe_json_dumps
+            print(safe_json_dumps(result))
+            return
+
+        # Text format with progressive disclosure
+        if 'type' in result:
+            result_type = result['type']
+            if result_type == 'unused_imports':
+                ImportsRenderer._render_unused_imports(result, verbose)
+            elif result_type == 'circular_dependencies':
+                ImportsRenderer._render_circular_dependencies(result, verbose)
+            elif result_type == 'layer_violations':
+                ImportsRenderer._render_layer_violations(result, verbose)
+            else:
+                ImportsRenderer._render_import_summary(result, resource)
+        else:
+            from ..main import safe_json_dumps
+            print(safe_json_dumps(result))
+
+    @staticmethod
+    def render_element(result: dict, format: str = 'text') -> None:
+        """Render file-specific imports.
+
+        Args:
+            result: Element dict from ImportsAdapter.get_element()
+            format: Output format ('text', 'json')
+        """
+        if format == 'json':
+            from ..main import safe_json_dumps
+            print(safe_json_dumps(result))
+            return
+
+        # Text format - file imports
+        print(f"Imports for: {result.get('file', 'unknown')}")
+        imports = result.get('imports', [])
+        if imports:
+            for imp in imports:
+                print(f"  • {imp['module']} (line {imp['line']})")
+        else:
+            print("  No imports found")
+
+    @staticmethod
+    def render_error(error: Exception) -> None:
+        """Render user-friendly errors."""
+        print(f"Error analyzing imports: {error}", file=sys.stderr)
+
+
 from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
 
 
 @register_adapter('imports')
+@register_renderer(ImportsRenderer)
 class ImportsAdapter(ResourceAdapter):
     """Analyze import relationships in codebases."""
 

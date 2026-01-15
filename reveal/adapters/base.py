@@ -93,12 +93,26 @@ def register_adapter(scheme: str):
         class PostgresAdapter(ResourceAdapter):
             ...
 
+        # With renderer:
+        @register_adapter('postgres')
+        @register_renderer(PostgresRenderer)
+        class PostgresAdapter(ResourceAdapter):
+            ...
+
     Args:
         scheme: URI scheme to register (e.g., 'env', 'ast', 'postgres')
     """
     def decorator(cls):
         _ADAPTER_REGISTRY[scheme.lower()] = cls
         cls.scheme = scheme
+
+        # If a renderer was pending (from @register_renderer), register it now
+        if hasattr(cls, '_pending_renderer'):
+            renderer_class = cls._pending_renderer
+            _RENDERER_REGISTRY[scheme.lower()] = renderer_class
+            cls.renderer = renderer_class
+            delattr(cls, '_pending_renderer')  # Clean up
+
         return cls
     return decorator
 
@@ -122,3 +136,56 @@ def list_supported_schemes() -> list:
         List of registered scheme names
     """
     return sorted(_ADAPTER_REGISTRY.keys())
+
+
+# Registry for URI scheme renderers
+_RENDERER_REGISTRY: Dict[str, type] = {}
+
+
+def register_renderer(renderer_class):
+    """Decorator to register a renderer for an adapter.
+
+    Usage:
+        @register_adapter('mysql')
+        @register_renderer(MySQLRenderer)
+        class MySQLAdapter(ResourceAdapter):
+            ...
+
+    The renderer is automatically paired with the adapter's scheme.
+
+    Note: Decorators are applied bottom-up, so register_renderer runs BEFORE
+    register_adapter. We store the renderer on the class and let register_adapter
+    complete the registration.
+
+    Args:
+        renderer_class: Renderer class with render_structure() method
+
+    Returns:
+        Decorator function that registers the renderer
+    """
+    def decorator(adapter_class):
+        # Store renderer class on adapter (register_adapter will use this)
+        adapter_class._pending_renderer = renderer_class
+        return adapter_class
+    return decorator
+
+
+def get_renderer_class(scheme: str) -> Optional[type]:
+    """Get renderer class for a URI scheme.
+
+    Args:
+        scheme: URI scheme (e.g., 'mysql', 'sqlite')
+
+    Returns:
+        Renderer class or None if not found
+    """
+    return _RENDERER_REGISTRY.get(scheme.lower())
+
+
+def list_renderer_schemes() -> list:
+    """Get list of schemes with registered renderers.
+
+    Returns:
+        List of scheme names that have renderers
+    """
+    return sorted(_RENDERER_REGISTRY.keys())

@@ -2,13 +2,14 @@
 
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional
-from ..base import ResourceAdapter, register_adapter
+from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from .connection import MySQLConnection
 from .health import HealthMetrics
 from .performance import PerformanceAnalyzer
 from .replication import ReplicationMonitor
 from .storage import StorageAnalyzer
+from .renderer import MySQLRenderer
 
 
 @dataclass
@@ -24,6 +25,7 @@ class HealthCheckThresholds:
 
 
 @register_adapter('mysql')
+@register_renderer(MySQLRenderer)
 class MySQLAdapter(ResourceAdapter):
     """Adapter for inspecting MySQL databases via mysql:// URIs.
 

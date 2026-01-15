@@ -1,11 +1,44 @@
 """Help adapter (help://) - Meta-adapter for exploring reveal's capabilities."""
 
+import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from .base import ResourceAdapter, register_adapter, _ADAPTER_REGISTRY
+from .base import ResourceAdapter, register_adapter, register_renderer, _ADAPTER_REGISTRY
+
+
+class HelpRenderer:
+    """Renderer for help system results."""
+
+    @staticmethod
+    def render_structure(result: dict, format: str = 'text') -> None:
+        """Render help topic list.
+
+        Args:
+            result: Structure dict from HelpAdapter.get_structure()
+            format: Output format ('text', 'json', 'grep')
+        """
+        from ..rendering import render_help
+        render_help(result, format, list_mode=True)
+
+    @staticmethod
+    def render_element(result: dict, format: str = 'text') -> None:
+        """Render specific help topic.
+
+        Args:
+            result: Element dict from HelpAdapter.get_element()
+            format: Output format ('text', 'json', 'grep')
+        """
+        from ..rendering import render_help
+        render_help(result, format)
+
+    @staticmethod
+    def render_error(error: Exception) -> None:
+        """Render user-friendly errors."""
+        print(f"Error accessing help: {error}", file=sys.stderr)
 
 
 @register_adapter('help')
+@register_renderer(HelpRenderer)
 class HelpAdapter(ResourceAdapter):
     """Adapter for exploring reveal's help system via help:// URIs.
 

@@ -1,11 +1,65 @@
 """Reveal meta-adapter (reveal://) - Self-inspection and validation."""
 
+import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from .base import ResourceAdapter, register_adapter, _ADAPTER_REGISTRY
+from .base import ResourceAdapter, register_adapter, register_renderer, _ADAPTER_REGISTRY
+
+
+class RevealRenderer:
+    """Renderer for reveal self-inspection results."""
+
+    @staticmethod
+    def render_structure(result: dict, format: str = 'text') -> None:
+        """Render reveal structure overview.
+
+        Args:
+            result: Structure dict from RevealAdapter.get_structure()
+            format: Output format ('text', 'json', 'grep')
+        """
+        from ..rendering import render_reveal_structure
+        render_reveal_structure(result, format)
+
+    @staticmethod
+    def render_check(result: dict, format: str = 'text') -> None:
+        """Render validation check results.
+
+        Args:
+            result: Check result dict with detections
+            format: Output format ('text', 'json', 'grep')
+        """
+        from ..main import safe_json_dumps
+
+        detections = result.get('detections', [])
+        uri = result.get('file', 'reveal://')
+
+        if format == 'json':
+            print(safe_json_dumps(result))
+            return
+
+        if format == 'grep':
+            for d in detections:
+                print(f"{d.file_path}:{d.line}:{d.column}:{d.rule_code}:{d.message}")
+            return
+
+        # Text format
+        if not detections:
+            print(f"{uri}: ✅ No issues found")
+            return
+
+        print(f"{uri}: Found {len(detections)} issues\n")
+        for d in sorted(detections, key=lambda x: (x.line, x.column)):
+            print(d)
+            print()
+
+    @staticmethod
+    def render_error(error: Exception) -> None:
+        """Render user-friendly errors."""
+        print(f"Error inspecting reveal: {error}", file=sys.stderr)
 
 
 @register_adapter('reveal')
+@register_renderer(RevealRenderer)
 class RevealAdapter(ResourceAdapter):
     """Adapter for inspecting reveal's own codebase and configuration.
 
@@ -393,6 +447,27 @@ class RevealAdapter(ResourceAdapter):
                 '6. System config (/etc/reveal/config.yaml)',
                 '7. Built-in defaults'
             ]
+        }
+
+    def check(self, select: Optional[List[str]] = None, ignore: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Run validation rules on reveal itself.
+
+        Args:
+            select: Optional list of rule codes to run
+            ignore: Optional list of rule codes to ignore
+
+        Returns:
+            Dict with detections and metadata
+        """
+        from ..rules import RuleRegistry
+
+        # V-series rules inspect reveal source directly
+        detections = RuleRegistry.check_file("reveal://", None, "", select=select, ignore=ignore)
+
+        return {
+            'file': 'reveal://',
+            'detections': [d.to_dict() if hasattr(d, 'to_dict') else d for d in detections],
+            'total': len(detections)
         }
 
     def get_element(self, resource: str, element_name: str, args) -> Optional[bool]:

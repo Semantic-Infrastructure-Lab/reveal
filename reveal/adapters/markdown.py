@@ -2,14 +2,47 @@
 
 import os
 import re
+import sys
 import yaml
 import fnmatch
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
-from .base import ResourceAdapter, register_adapter
+from .base import ResourceAdapter, register_adapter, register_renderer
+
+
+class MarkdownRenderer:
+    """Renderer for markdown query results."""
+
+    @staticmethod
+    def render_structure(result: dict, format: str = 'text') -> None:
+        """Render markdown query results.
+
+        Args:
+            result: Structure dict from MarkdownQueryAdapter.get_structure()
+            format: Output format ('text', 'json', 'grep')
+        """
+        from ..rendering.adapters.markdown_query import render_markdown_query
+        render_markdown_query(result, format)
+
+    @staticmethod
+    def render_element(result: dict, format: str = 'text') -> None:
+        """Render specific markdown file frontmatter.
+
+        Args:
+            result: Element dict from MarkdownQueryAdapter.get_element()
+            format: Output format ('text', 'json', 'grep')
+        """
+        from ..rendering.adapters.markdown_query import render_markdown_query
+        render_markdown_query(result, format, single_file=True)
+
+    @staticmethod
+    def render_error(error: Exception) -> None:
+        """Render user-friendly errors."""
+        print(f"Error querying markdown: {error}", file=sys.stderr)
 
 
 @register_adapter('markdown')
+@register_renderer(MarkdownRenderer)
 class MarkdownQueryAdapter(ResourceAdapter):
     """Adapter for querying markdown files by frontmatter via markdown:// URIs.
 

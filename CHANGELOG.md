@@ -5,9 +5,28 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.36.0] - 2026-01-14
 
 ### Added
+- **Git repository inspection adapter (git://)** - Progressive disclosure for Git history
+  - Repository overview with branches, tags, and recent commits
+  - Branch/commit/tag exploration with full history
+  - File inspection at any ref (commit, branch, tag)
+  - File history tracking (commits that modified a file)
+  - File blame functionality (who/when/why for each line)
+  - Query parameters: `type=history|blame`, `since`, `until`, `author`, `limit`
+  - Optional dependency: `pip install reveal-cli[git]`
+  - Uses pygit2 (libgit2 bindings) for high performance
+  - Comprehensive help: `reveal help://git`
+  - Examples:
+    - `reveal git://.` - Repository overview
+    - `reveal git://.@main` - Branch history
+    - `reveal git://src/app.py@v1.0` - File at specific tag
+    - `reveal git://README.md?type=history` - File commit history
+    - `reveal git://src/app.py?type=blame` - File blame annotations
+  - 23 comprehensive tests with 82% code coverage
+  - Enables temporal code exploration and archaeology
+
 - **Introspection commands** - New commands for understanding how reveal analyzes files
   - `--explain-file` - Shows which analyzer will be used for a file, whether it's a fallback, and capabilities
   - `--show-ast` - Displays tree-sitter AST for files (tree-sitter analyzers only)
