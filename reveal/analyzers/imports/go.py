@@ -1,10 +1,14 @@
 """Go import extraction using tree-sitter.
 
-Extracts import declarations from Go source files.
-Uses tree-sitter for consistent parsing across all language analyzers.
+Previous implementation: 172 lines with tree-sitter + 2 regex patterns
+Current implementation: 178 lines using pure tree-sitter AST extraction
+
+Benefits:
+- Eliminates all regex patterns (package path, alias)
+- Uses tree-sitter node types (package_identifier, dot, blank_identifier)
+- More robust handling of Go import syntax variations
 """
 
-import re
 from pathlib import Path
 from typing import List, Set
 
@@ -15,7 +19,7 @@ from ...registry import get_analyzer
 
 @register_extractor
 class GoExtractor(LanguageExtractor):
-    """Go import extractor using tree-sitter parsing.
+    """Go import extractor using pure tree-sitter parsing.
 
     Supports:
     - Single imports: import "fmt"
@@ -27,10 +31,6 @@ class GoExtractor(LanguageExtractor):
 
     extensions = {'.go'}
     language_name = 'Go'
-
-    # Compile regex patterns once at class level for performance
-    PACKAGE_PATH_PATTERN = re.compile(r'"([^"]+)"')
-    ALIAS_PATTERN = re.compile(r'^\s*(\S+)\s+"')
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all import declarations from Go file using tree-sitter.
@@ -80,29 +80,36 @@ class GoExtractor(LanguageExtractor):
         return set()
 
     def _parse_import_spec(self, spec_node, file_path: Path, analyzer) -> ImportStatement:
-        """Parse a Go import_spec node.
+        """Parse a Go import_spec node using tree-sitter AST.
 
-        Handles:
-            "fmt"                           # Simple import
-            alias "github.com/user/pkg"     # Aliased import
-            . "fmt"                         # Dot import
-            _ "database/sql/driver"         # Blank import (side-effect)
+        Tree-sitter provides structured nodes:
+            "fmt"                           # interpreted_string_literal
+            alias "github.com/user/pkg"     # package_identifier + interpreted_string_literal
+            . "fmt"                         # dot + interpreted_string_literal
+            _ "database/sql/driver"         # blank_identifier + interpreted_string_literal
         """
-        spec_text = analyzer._get_node_text(spec_node)
         line_number = spec_node.start_point[0] + 1
 
-        # Extract package path from quotes
-        package_match = self.PACKAGE_PATH_PATTERN.search(spec_text)
-        if not package_match:
-            return None
-
-        package_path = package_match.group(1)
-
-        # Check for alias (word before the quoted path)
+        # Extract components from AST
+        package_path = None
         alias = None
-        alias_match = self.ALIAS_PATTERN.match(spec_text)
-        if alias_match:
-            alias = alias_match.group(1)
+
+        for child in spec_node.children:
+            if child.type == 'interpreted_string_literal':
+                # Extract package path (strip quotes)
+                package_path = analyzer._get_node_text(child).strip('"')
+            elif child.type == 'package_identifier':
+                # Aliased import: f "io"
+                alias = analyzer._get_node_text(child)
+            elif child.type == 'dot':
+                # Dot import: . "strings"
+                alias = '.'
+            elif child.type == 'blank_identifier':
+                # Blank import: _ "database/sql/driver"
+                alias = '_'
+
+        if not package_path:
+            return None
 
         return self._create_import(file_path, line_number, package_path, alias)
 

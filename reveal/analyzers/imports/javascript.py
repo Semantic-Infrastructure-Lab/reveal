@@ -1,10 +1,17 @@
 """JavaScript/TypeScript import extraction using tree-sitter.
 
+Previous implementation: Tree-sitter + 5 regex patterns for parsing
+Current implementation: Pure tree-sitter AST extraction
+
+Benefits:
+- Eliminates all regex patterns (module path, namespace alias, type keyword, named imports, default import)
+- Uses tree-sitter node types (import_clause, namespace_import, named_imports, import_specifier)
+- More robust handling of TypeScript and ES6 syntax variations
+
 Extracts import statements and require() calls from JavaScript and TypeScript files.
 Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
-import re
 from pathlib import Path
 from typing import List, Set, Optional
 
@@ -15,7 +22,7 @@ from ...registry import get_analyzer
 
 @register_extractor
 class JavaScriptExtractor(LanguageExtractor):
-    """JavaScript/TypeScript import extractor using tree-sitter parsing.
+    """JavaScript/TypeScript import extractor using pure tree-sitter parsing.
 
     Supports:
     - ES6 imports: import { foo } from 'module'
@@ -28,13 +35,6 @@ class JavaScriptExtractor(LanguageExtractor):
 
     extensions = {'.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'}
     language_name = 'JavaScript/TypeScript'
-
-    # Compile regex patterns once at class level for performance
-    MODULE_PATH_PATTERN = re.compile(r'''['"]([^'"]+)['"]''')
-    NAMESPACE_ALIAS_PATTERN = re.compile(r'\*\s+as\s+(\w+)')
-    TYPE_KEYWORD_PATTERN = re.compile(r'^type\s+')
-    NAMED_IMPORTS_PATTERN = re.compile(r'\{([^}]+)\}')
-    DEFAULT_IMPORT_PATTERN = re.compile(r'(\w+)\s*,')
 
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all import statements from JavaScript/TypeScript file using tree-sitter.
@@ -89,78 +89,70 @@ class JavaScriptExtractor(LanguageExtractor):
         return set()
 
     def _parse_import_statement(self, node, file_path: Path, analyzer) -> List[ImportStatement]:
-        """Parse ES6 import statement using tree-sitter.
+        """Parse ES6 import statement using tree-sitter AST.
 
-        Handles:
-            import foo from 'module'
-            import { foo, bar } from 'module'
-            import * as foo from 'module'
-            import foo, { bar } from 'module'
-            import 'module'  // side-effect only
+        Tree-sitter provides structured nodes:
+            import foo from 'module'                # import_clause with identifier
+            import { foo, bar } from 'module'       # import_clause with named_imports
+            import * as foo from 'module'           # import_clause with namespace_import
+            import foo, { bar } from 'module'       # import_clause with both
+            import 'module'                         # just string node (side-effect)
         """
-        import_text = analyzer._get_node_text(node)
-
-        # Extract module path (always in quotes at end)
-        # Pattern: from 'module' or from "module" or just 'module' for side-effects
-        module_match = self.MODULE_PATH_PATTERN.search(import_text)
-        if not module_match:
-            return []
-
-        module_path = module_match.group(1)
         line_number = node.start_point[0] + 1
+
+        # Extract module path from string node
+        module_path = None
+        for child in node.children:
+            if child.type == 'string':
+                # Get string content, strip quotes
+                module_path = analyzer._get_node_text(child).strip('"\'')
+                break
+
+        if not module_path:
+            return []
 
         # Determine import type and extract imported names
         imported_names = []
         import_type = 'es6_import'
         alias = None
 
-        # Side-effect only: import './styles.css'
-        if not ' from ' in import_text and not 'import(' in import_text:
+        # Find import_clause node
+        import_clause = None
+        for child in node.children:
+            if child.type == 'import_clause':
+                import_clause = child
+                break
+
+        # Side-effect import: no import_clause
+        if not import_clause:
             import_type = 'side_effect_import'
+        else:
+            # Parse import_clause children
+            for child in import_clause.children:
+                if child.type == 'namespace_import':
+                    # import * as foo from 'module'
+                    import_type = 'namespace_import'
+                    imported_names = ['*']
+                    # Extract alias (identifier after 'as')
+                    for subchild in child.children:
+                        if subchild.type == 'identifier':
+                            alias = analyzer._get_node_text(subchild)
 
-        # Namespace import: import * as foo from 'module'
-        elif '* as ' in import_text:
-            import_type = 'namespace_import'
-            alias_match = self.NAMESPACE_ALIAS_PATTERN.search(import_text)
-            if alias_match:
-                imported_names = ['*']
-                alias = alias_match.group(1)
+                elif child.type == 'named_imports':
+                    # import { foo, bar } from 'module'
+                    for subchild in child.children:
+                        if subchild.type == 'import_specifier':
+                            # Can be "foo" or "foo as bar"
+                            spec_children = list(subchild.children)
+                            if spec_children:
+                                # First identifier is the imported name
+                                imported_names.append(analyzer._get_node_text(spec_children[0]))
 
-        # Named or default imports
-        elif ' from ' in import_text:
-            # Extract the part between 'import' and 'from'
-            import_clause = import_text.split(' from ')[0]
-            import_clause = import_clause.replace('import', '').strip()
-
-            # Remove optional 'type' keyword (TypeScript)
-            import_clause = self.TYPE_KEYWORD_PATTERN.sub('', import_clause)
-
-            # Named imports: { foo, bar }
-            if '{' in import_clause:
-                # Extract content from braces
-                names_match = self.NAMED_IMPORTS_PATTERN.search(import_clause)
-                if names_match:
-                    names_str = names_match.group(1)
-                    for name in names_str.split(','):
-                        name = name.strip()
-                        if not name:
-                            continue
-                        # Handle 'foo as bar' - we want 'foo'
-                        if ' as ' in name:
-                            name = name.split(' as ')[0].strip()
-                        imported_names.append(name)
-
-                # Check for default import too: foo, { bar }
-                default_match = self.DEFAULT_IMPORT_PATTERN.match(import_clause)
-                if default_match:
-                    imported_names.insert(0, default_match.group(1))
-
-            # Default import only: import foo from 'module'
-            else:
-                default_name = import_clause.strip()
-                if default_name:
-                    imported_names = [default_name]
-                    import_type = 'default_import'
+                elif child.type == 'identifier':
+                    # Default import: import foo from 'module'
+                    imported_names.insert(0, analyzer._get_node_text(child))
+                    if import_type == 'es6_import':
+                        import_type = 'default_import'
 
         return [ImportStatement(
             file_path=file_path,

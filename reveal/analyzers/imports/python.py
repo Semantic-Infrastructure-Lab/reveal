@@ -1,12 +1,19 @@
 """Python import extraction using tree-sitter.
 
+Previous implementation: Tree-sitter + 2 regex patterns for parsing
+Current implementation: Pure tree-sitter AST extraction
+
+Benefits:
+- Eliminates regex patterns (from-import parsing, __all__ string extraction)
+- Uses tree-sitter node types (relative_import, import_prefix, string nodes)
+- More robust handling of edge cases
+
 Extracts import statements and symbol usage from Python source files.
 Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
 from pathlib import Path
 from typing import List, Set, Optional
-import re
 
 from . import ImportStatement
 from .base import LanguageExtractor, register_extractor
@@ -163,46 +170,55 @@ class PythonExtractor(LanguageExtractor):
         line_number = node.start_point[0] + 1
         source_line = source_lines[node.start_point[0]].rstrip() if node.start_point[0] < len(source_lines) else ""
 
-        import_text = analyzer._get_node_text(node)
+        # Parse using tree-sitter AST: from <module> import <names>
+        # Tree-sitter provides: relative_import (with import_prefix) or dotted_name
+        is_relative = False
+        module_name = ''
 
-        # Parse: from <module> import <names>
-        # Also handles: from . import x, from .. import y
-        match = re.match(r'from\s+(\.*)(\S*)\s+import\s+(.+)', import_text, re.DOTALL)
-        if not match:
-            return []
+        # Extract module name from AST
+        for child in node.children:
+            if child.type == 'relative_import':
+                # Relative import: from . import x, from ..parent import y
+                is_relative = True
+                # Count dots in import_prefix
+                for subchild in child.children:
+                    if subchild.type == 'dotted_name':
+                        module_name = analyzer._get_node_text(subchild)
+            elif child.type == 'dotted_name' and child.prev_sibling and analyzer._get_node_text(child.prev_sibling) == 'from':
+                # Absolute import: from pathlib import Path
+                module_name = analyzer._get_node_text(child)
+                break
 
-        dots, module_part, names_part = match.groups()
-
-        # Determine if relative
-        is_relative = len(dots) > 0
-        module_name = module_part.strip() if module_part else ''
-
-        # Parse imported names (handle aliases, wildcards)
+        # Parse imported names from AST (handle aliases, wildcards)
         imported_names = []
-        names_part = names_part.strip()
+        import_type = 'from_import'
+        seen_import_keyword = False
 
-        # Handle wildcard imports
-        if names_part == '*':
-            imported_names = ['*']
-            import_type = 'star_import'
-        else:
-            # Handle parenthesized imports: from x import (a, b, c)
-            names_part = names_part.strip('()')
+        for child in node.children:
+            # Wait until we see the 'import' keyword
+            if child.type == 'import':
+                seen_import_keyword = True
+                continue
 
-            # Split by comma, handle aliases
-            for name_part in names_part.split(','):
-                name_part = name_part.strip()
-                if not name_part:
-                    continue
+            if not seen_import_keyword:
+                continue
 
-                # Handle 'from X import Y as Z'
-                if ' as ' in name_part:
-                    name, alias_name = name_part.split(' as ', 1)
-                    imported_names.append(f"{name.strip()} as {alias_name.strip()}")
-                else:
-                    imported_names.append(name_part)
+            # Skip commas and parentheses
+            if child.type in [',', '(', ')']:
+                continue
 
-            import_type = 'from_import'
+            # Wildcard import: from x import *
+            if child.type == 'wildcard_import' or analyzer._get_node_text(child) == '*':
+                imported_names = ['*']
+                import_type = 'star_import'
+                break
+
+            # Regular imports: from x import Name or from x import Name as Alias
+            if child.type == 'dotted_name':
+                imported_names.append(analyzer._get_node_text(child))
+            elif child.type == 'aliased_import':
+                # Contains "Name as Alias"
+                imported_names.append(analyzer._get_node_text(child))
 
         return [ImportStatement(
             file_path=file_path,
@@ -356,12 +372,23 @@ class PythonExtractor(LanguageExtractor):
             if not assignment_text.strip().startswith('__all__'):
                 continue
 
-            # Extract string literals from the assignment
+            # Extract string literals from the assignment using tree-sitter
             # Handles: __all__ = ["a", "b"] and __all__ += ["c"]
-            # Use regex to extract quoted strings
-            pattern = r'["\']([^"\']+)["\']'
-            matches = re.findall(pattern, assignment_text)
-            exports.update(matches)
+            # Find all string nodes in the assignment
+            def extract_strings(node):
+                """Recursively extract string content from AST nodes."""
+                strings = []
+                if node.type == 'string':
+                    # Get string content, strip quotes
+                    text = analyzer._get_node_text(node)
+                    # Remove quotes (handles both " and ')
+                    text = text.strip('"\'')
+                    strings.append(text)
+                for child in node.children:
+                    strings.extend(extract_strings(child))
+                return strings
+
+            exports.update(extract_strings(node))
 
         return exports
 
