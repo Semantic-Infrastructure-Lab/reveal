@@ -15,6 +15,9 @@ from .parser import (
 from .handlers import (
     handle_list_supported,
     handle_languages,
+    handle_explain_file,
+    handle_show_ast,
+    handle_language_info,
     handle_agent_help,
     handle_agent_help_full,
     handle_rules_list,
@@ -39,6 +42,9 @@ __all__ = [
     # Handlers
     'handle_list_supported',
     'handle_languages',
+    'handle_explain_file',
+    'handle_show_ast',
+    'handle_language_info',
     'handle_agent_help',
     'handle_agent_help_full',
     'handle_rules_list',

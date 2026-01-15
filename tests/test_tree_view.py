@@ -11,6 +11,7 @@ from reveal.tree_view import (
     _get_file_info,
     _walk_directory
 )
+from reveal.display.filtering import PathFilter
 from pathlib import Path
 
 
@@ -173,7 +174,8 @@ class TestCountEntries(unittest.TestCase):
     def test_count_entries(self):
         """Test entry counting."""
         path = Path(self.temp_dir)
-        count = _count_entries(path, depth=3, show_hidden=False)
+        path_filter = PathFilter(root_path=path, respect_gitignore=False, include_defaults=False)
+        count = _count_entries(path, depth=3, show_hidden=False, path_filter=path_filter)
 
         # file1.txt + sub/ + nested.txt = 3
         self.assertEqual(count, 3)
@@ -181,7 +183,8 @@ class TestCountEntries(unittest.TestCase):
     def test_count_with_hidden(self):
         """Test counting includes hidden when requested."""
         path = Path(self.temp_dir)
-        count = _count_entries(path, depth=3, show_hidden=True)
+        path_filter = PathFilter(root_path=path, respect_gitignore=False, include_defaults=False)
+        count = _count_entries(path, depth=3, show_hidden=True, path_filter=path_filter)
 
         # file1.txt + .hidden + sub/ + nested.txt = 4
         self.assertEqual(count, 4)
@@ -189,7 +192,8 @@ class TestCountEntries(unittest.TestCase):
     def test_count_depth_zero(self):
         """Test depth=0 returns 0."""
         path = Path(self.temp_dir)
-        count = _count_entries(path, depth=0, show_hidden=False)
+        path_filter = PathFilter(root_path=path, respect_gitignore=False, include_defaults=False)
+        count = _count_entries(path, depth=0, show_hidden=False, path_filter=path_filter)
 
         self.assertEqual(count, 0)
 

@@ -33,6 +33,37 @@ def handle_languages():
     sys.exit(0)
 
 
+def handle_explain_file(path: str, verbose: bool = False):
+    """Handle --explain-file flag.
+
+    Shows how reveal will analyze a file, including analyzer type,
+    fallback status, and capabilities.
+    """
+    from .introspection import explain_file
+    print(explain_file(path, verbose=verbose))
+    sys.exit(0)
+
+
+def handle_show_ast(path: str, max_depth: int = 10):
+    """Handle --show-ast flag.
+
+    Displays the tree-sitter AST for a file.
+    """
+    from .introspection import show_ast
+    print(show_ast(path, max_depth=max_depth))
+    sys.exit(0)
+
+
+def handle_language_info(language: str):
+    """Handle --language-info flag.
+
+    Shows detailed information about a language's capabilities.
+    """
+    from .introspection import get_language_info_detailed
+    print(get_language_info_detailed(language))
+    sys.exit(0)
+
+
 def handle_agent_help():
     """Handle --agent-help flag."""
     agent_help_path = Path(__file__).parent.parent / 'AGENT_HELP.md'

@@ -5,6 +5,73 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Introspection commands** - New commands for understanding how reveal analyzes files
+  - `--explain-file` - Shows which analyzer will be used for a file, whether it's a fallback, and capabilities
+  - `--show-ast` - Displays tree-sitter AST for files (tree-sitter analyzers only)
+  - `--language-info <lang>` - Shows detailed information about a language's capabilities
+  - Examples:
+    - `reveal app.py --explain-file` - See which analyzer handles Python files
+    - `reveal code.swift --explain-file` - Check if Swift uses fallback mode
+    - `reveal app.py --show-ast` - View the tree-sitter AST structure
+    - `reveal --language-info python` - Get Python analyzer capabilities
+    - `reveal --language-info .rs` - Look up by extension
+
+- **Tree-sitter fallback transparency** - Better visibility into fallback analyzer usage
+  - Logging when fallback analyzers are created (INFO level with `--verbose`)
+  - Fallback quality metadata (`basic` - functions, classes, imports only)
+  - Metadata accessible via introspection API
+  - Clear distinction between explicit analyzers (full featured) and fallbacks (basic)
+
+- **Smart directory filtering** - Cleaner directory trees by default
+  - Automatic `.gitignore` pattern support (respects project conventions)
+  - 50+ default noise patterns (build artifacts, caches, dependencies)
+  - New flags: `--respect-gitignore` (default: on), `--no-gitignore`, `--exclude PATTERN`
+  - ~20-50% fewer entries shown in typical projects
+  - Examples:
+    - `reveal src/` - Automatically filters __pycache__, node_modules, etc.
+    - `reveal . --exclude "*.log"` - Custom exclusion patterns
+    - `reveal . --no-gitignore` - Disable gitignore filtering
+
+- **Code quality validation rules** - Three new rules to catch issues proactively
+  - **V016: Adapter help completeness** - Ensures all adapters provide `get_help()` documentation
+  - **V017: Tree-sitter node type coverage** - Verifies TreeSitterAnalyzer has node types for all languages
+  - **M104: Hardcoded configuration detection** - Detects large lists/dicts that should be externalized
+  - Examples:
+    - `reveal reveal/adapters/ --check --select V016` - Check adapter documentation
+    - `reveal reveal/treesitter.py --check --select V017` - Verify node type coverage
+    - `reveal app.py --check --select M104` - Find hardcoded config
+
+### Changed
+- **Centralized tree-sitter warning suppression** - DRY improvement
+  - Created `reveal/core/` package with `treesitter_compat.py` module
+  - Eliminated duplication across 3 files (registry.py, treesitter.py, ast.py)
+  - Single source of truth for tree-sitter compatibility handling
+  - Clear documentation of rationale and future migration path
+
+### Fixed
+- **Tree-sitter parsing completely broken** - `warnings` module not imported in `treesitter.py`
+  - Affected: All tree-sitter based analyzers (Python, JavaScript, Rust, etc.)
+  - Symptom: `--show-ast` failed silently, tree attribute always None
+  - Root cause: Phase 1 centralized warning suppression but left unused `warnings.catch_warnings()` context manager
+  - Fix: Removed redundant context manager (warnings already suppressed at module level)
+  - Impact: Restores AST parsing for 50+ tree-sitter analyzers
+- **Test failures in test_tree_view.py** - Updated tests to use new PathFilter parameter
+  - Affected: TestCountEntries test class (3 tests failing)
+  - Root cause: `_count_entries()` signature changed to require PathFilter but tests not updated
+  - Fix: Added PathFilter instantiation in all test methods
+  - Impact: All tree view tests now passing
+- **Documentation drift in README** - Rules count updated from 47 to 50
+  - Detected by V015 self-validation rule (working as designed)
+  - Added M104 (maintainability), V016-V017 (validation) to documentation
+
+### Technical Notes
+- All changes maintain backward compatibility
+- No breaking API changes
+- Test suite passes: 2,118 passing tests, 75% coverage
+
 ## [0.35.0] - 2026-01-13
 
 ### Added

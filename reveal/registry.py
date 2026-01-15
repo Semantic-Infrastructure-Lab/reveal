@@ -88,7 +88,10 @@ def get_analyzer(path: str, allow_fallback: bool = True) -> Optional[type]:
 
     # TreeSitter fallback for unknown extensions
     if allow_fallback and ext:
-        return _try_treesitter_fallback(ext)
+        fallback = _try_treesitter_fallback(ext)
+        if fallback:
+            logger.debug(f"Using tree-sitter fallback for {path}")
+        return fallback
 
     return None
 
@@ -215,13 +218,20 @@ def _try_treesitter_fallback(ext: str) -> Optional[type]:
                 'type_name': language.replace('_', ' ').title(),
                 'is_fallback': True,
                 'fallback_language': language,
+                'fallback_quality': 'basic',  # Tree-sitter basic analysis (functions, classes, imports)
             }
+        )
+
+        # Log fallback creation for transparency
+        logger.info(
+            f"Created tree-sitter fallback analyzer for {ext} (language: {language}, quality: basic)"
         )
 
         return dynamic_class
 
-    except Exception:
+    except Exception as e:
         # Parser not available or import failed
+        logger.debug(f"Tree-sitter fallback failed for {ext}: {e}")
         return None
 
 
@@ -230,7 +240,8 @@ def get_all_analyzers() -> Dict[str, Dict[str, Any]]:
 
     Returns:
         Dict mapping extension to analyzer metadata
-        e.g., {'.py': {'name': 'Python', 'icon': '', 'class': PythonAnalyzer}}
+        e.g., {'.py': {'name': 'Python', 'icon': '', 'class': PythonAnalyzer,
+                       'is_fallback': False}}
     """
     result = {}
     for ext, cls in _ANALYZER_REGISTRY.items():
@@ -239,6 +250,9 @@ def get_all_analyzers() -> Dict[str, Dict[str, Any]]:
             'name': getattr(cls, 'type_name', cls.__name__.replace('Analyzer', '')),
             'icon': getattr(cls, 'icon', ''),
             'class': cls,
+            'is_fallback': getattr(cls, 'is_fallback', False),
+            'fallback_quality': getattr(cls, 'fallback_quality', None),
+            'fallback_language': getattr(cls, 'fallback_language', None),
         }
     return result
 

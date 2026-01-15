@@ -40,12 +40,14 @@ class TreeSitterAnalyzer(FileAnalyzer):
             self._parse_tree()
 
     def _parse_tree(self):
-        """Parse file with tree-sitter."""
+        """Parse file with tree-sitter.
+
+        Note: Tree-sitter warnings are suppressed at module level via
+        suppress_treesitter_warnings() call at top of file.
+        """
         try:
-            with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
-                parser = get_parser(self.language)
-                self.tree = parser.parse(self.content.encode('utf-8'))
+            parser = get_parser(self.language)
+            self.tree = parser.parse(self.content.encode('utf-8'))
         except Exception:
             # Parsing failed - fall back to text analysis
             self.tree = None
