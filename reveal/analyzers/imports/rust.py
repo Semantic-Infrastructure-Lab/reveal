@@ -10,7 +10,7 @@ Benefits:
 """
 
 from pathlib import Path
-from typing import List, Set
+from typing import List, Set, Optional
 
 from . import ImportStatement
 from .base import LanguageExtractor, register_extractor
@@ -325,6 +325,127 @@ class RustExtractor(LanguageExtractor):
         # Should now be an identifier
         if current and current.type == 'identifier':
             return analyzer._get_node_text(current)
+
+        return None
+
+    def resolve_import(
+        self,
+        stmt: ImportStatement,
+        base_path: Path
+    ) -> Optional[Path]:
+        """Resolve Rust use statement to file path.
+
+        Args:
+            stmt: Import statement to resolve
+            base_path: Directory of the file containing the import
+
+        Returns:
+            Absolute path to the module file, or None if not resolvable
+
+        Rust module resolution:
+        - crate:: = project root (Cargo.toml location)
+        - super:: = parent module
+        - self:: = current module
+        - External crates: std, external dependencies (skip for cycles)
+        - Module file: either name.rs or name/mod.rs
+        """
+        use_path = stmt.module_name
+
+        # Skip external crates (don't start with crate/super/self)
+        if not use_path.startswith(('crate::', 'super::', 'self::')):
+            # External crate (std, serde, etc.) - skip
+            return None
+
+        # Find crate root (Cargo.toml location)
+        crate_root = self._find_cargo_root(base_path)
+        if not crate_root:
+            return None
+
+        # Determine src directory (usually src/, but could be custom)
+        src_dir = crate_root / 'src'
+        if not src_dir.exists():
+            return None
+
+        # Resolve based on prefix
+        if use_path.startswith('crate::'):
+            # Absolute from crate root
+            return self._resolve_from_root(use_path[7:], src_dir)  # Remove 'crate::'
+        elif use_path.startswith('super::'):
+            # Relative to parent module - complex, skip for now
+            return None
+        elif use_path.startswith('self::'):
+            # Relative to current module
+            return self._resolve_from_dir(use_path[6:], base_path)  # Remove 'self::'
+
+        return None
+
+    def _find_cargo_root(self, start_path: Path) -> Optional[Path]:
+        """Find Cargo.toml file by walking up directory tree.
+
+        Args:
+            start_path: Directory to start search from
+
+        Returns:
+            Directory containing Cargo.toml, or None if not found
+        """
+        current = start_path.resolve()
+
+        # Walk up until we find Cargo.toml or hit filesystem root
+        while current != current.parent:
+            cargo_toml = current / 'Cargo.toml'
+            if cargo_toml.exists():
+                return current
+            current = current.parent
+
+        return None
+
+    def _resolve_from_root(self, path: str, src_dir: Path) -> Optional[Path]:
+        """Resolve use path from crate root (src/).
+
+        Examples:
+            'utils' -> src/utils.rs or src/utils/mod.rs
+            'models::User' -> src/models.rs or src/models/mod.rs (User is item in file)
+        """
+        # Take first component (module name)
+        parts = path.split('::')
+        if not parts:
+            return None
+
+        module_name = parts[0]
+
+        # Try module_name.rs
+        module_file = src_dir / f"{module_name}.rs"
+        if module_file.exists():
+            return module_file.resolve()
+
+        # Try module_name/mod.rs
+        mod_file = src_dir / module_name / 'mod.rs'
+        if mod_file.exists():
+            return mod_file.resolve()
+
+        return None
+
+    def _resolve_from_dir(self, path: str, module_dir: Path) -> Optional[Path]:
+        """Resolve use path from current module directory.
+
+        Examples:
+            'config' -> ./config.rs or ./config/mod.rs
+        """
+        parts = path.split('::')
+        if not parts:
+            return None
+
+        module_name = parts[0]
+
+        # Try module_name.rs in current directory
+        module_file = module_dir / f"{module_name}.rs"
+        if module_file.exists():
+            return module_file.resolve()
+
+        # Try module_name/mod.rs
+        mod_file = module_dir / module_name / 'mod.rs'
+        if mod_file.exists():
+            return mod_file.resolve()
 
         return None
 

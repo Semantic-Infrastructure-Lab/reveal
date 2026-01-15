@@ -10,7 +10,7 @@ Benefits:
 """
 
 from pathlib import Path
-from typing import List, Set
+from typing import List, Set, Optional
 
 from . import ImportStatement
 from .base import LanguageExtractor, register_extractor
@@ -251,6 +251,100 @@ class GoExtractor(LanguageExtractor):
         # Should now be an identifier
         if current and current.type == 'identifier':
             return analyzer._get_node_text(current)
+
+        return None
+
+    def resolve_import(
+        self,
+        stmt: ImportStatement,
+        base_path: Path
+    ) -> Optional[Path]:
+        """Resolve Go import to file path.
+
+        Args:
+            stmt: Import statement to resolve
+            base_path: Directory of the file containing the import
+
+        Returns:
+            Absolute path to package directory, or None if not resolvable
+
+        Go module resolution:
+        - All imports are absolute package paths (no relative imports)
+        - Local packages: in same module (go.mod)
+        - External packages: stdlib + go.mod dependencies (skip for cycles)
+        - Package = directory (all .go files in dir are same package)
+        """
+        package_path = stmt.module_name
+
+        # Find module root (go.mod location)
+        module_root = self._find_go_module_root(base_path)
+        if not module_root:
+            # No go.mod found - can't resolve local packages
+            return None
+
+        # Get module name from go.mod
+        module_name = self._get_module_name(module_root)
+        if not module_name:
+            return None
+
+        # Check if this is a local package (starts with module name)
+        if not package_path.startswith(module_name):
+            # External package (stdlib or dependency) - skip
+            return None
+
+        # Map package path to directory
+        # Example: 'mymodule/internal/utils' -> module_root/internal/utils
+        relative_path = package_path[len(module_name):].lstrip('/')
+        package_dir = module_root / relative_path
+
+        if package_dir.exists() and package_dir.is_dir():
+            # Return directory (all .go files in it are the package)
+            return package_dir.resolve()
+
+        return None
+
+    def _find_go_module_root(self, start_path: Path) -> Optional[Path]:
+        """Find go.mod file by walking up directory tree.
+
+        Args:
+            start_path: Directory to start search from
+
+        Returns:
+            Directory containing go.mod, or None if not found
+        """
+        current = start_path.resolve()
+
+        # Walk up until we find go.mod or hit filesystem root
+        while current != current.parent:
+            go_mod = current / 'go.mod'
+            if go_mod.exists():
+                return current
+            current = current.parent
+
+        return None
+
+    def _get_module_name(self, module_root: Path) -> Optional[str]:
+        """Extract module name from go.mod file.
+
+        Args:
+            module_root: Directory containing go.mod
+
+        Returns:
+            Module name (e.g., 'github.com/user/repo'), or None if not found
+        """
+        go_mod = module_root / 'go.mod'
+        if not go_mod.exists():
+            return None
+
+        try:
+            content = go_mod.read_text()
+            # Parse "module name" from first line
+            for line in content.split('\n'):
+                line = line.strip()
+                if line.startswith('module '):
+                    return line.split()[1]
+        except Exception:
+            return None
 
         return None
 

@@ -359,6 +359,73 @@ class JavaScriptExtractor(LanguageExtractor):
 
         return None
 
+    def resolve_import(
+        self,
+        stmt: ImportStatement,
+        base_path: Path
+    ) -> Optional[Path]:
+        """Resolve JavaScript/TypeScript import to file path.
+
+        Args:
+            stmt: Import statement to resolve
+            base_path: Directory of the file containing the import
+
+        Returns:
+            Absolute path to the imported file, or None if not resolvable
+
+        JavaScript module resolution:
+        - Relative: './utils' -> ./utils.js, ./utils.ts, ./utils/index.js
+        - Absolute: 'react', '@angular/core' -> node_modules (skip for cycles)
+        - Extensions: .js, .jsx, .ts, .tsx, .mjs can be omitted
+        """
+        module_path = stmt.module_name
+
+        # Skip absolute imports (node_modules packages)
+        if not module_path.startswith('.'):
+            return None
+
+        # Resolve relative imports
+        return self._resolve_relative_js(module_path, base_path)
+
+    def _resolve_relative_js(self, module_path: str, base_path: Path) -> Optional[Path]:
+        """Resolve relative JavaScript import to file path.
+
+        Try in order:
+        1. Exact path (if includes extension)
+        2. With .js extension
+        3. With .ts extension
+        4. With .jsx extension
+        5. With .tsx extension
+        6. With .mjs extension
+        7. As directory with index.js
+        8. As directory with index.ts
+        """
+        # Clean up the path (remove leading ./)
+        clean_path = module_path.lstrip('./')
+
+        # Build target path
+        target = base_path / clean_path
+
+        # If path has extension, try exact match
+        if '.' in clean_path.split('/')[-1]:
+            if target.exists() and target.is_file():
+                return target.resolve()
+            return None
+
+        # Try with common JavaScript extensions
+        for ext in ['.js', '.ts', '.jsx', '.tsx', '.mjs']:
+            file_path = base_path / f"{clean_path}{ext}"
+            if file_path.exists() and file_path.is_file():
+                return file_path.resolve()
+
+        # Try as directory with index file
+        for index_file in ['index.js', 'index.ts', 'index.jsx', 'index.tsx']:
+            index_path = base_path / clean_path / index_file
+            if index_path.exists() and index_path.is_file():
+                return index_path.resolve()
+
+        return None
+
 
 # Backward compatibility: Keep old function-based API
 def extract_js_imports(file_path: Path) -> List[ImportStatement]:
