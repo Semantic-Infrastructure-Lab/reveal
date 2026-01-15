@@ -26,6 +26,7 @@ import inspect
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root
+from .adapter_utils import find_adapter_file, find_init_definition_line
 
 
 class V019(BaseRule):
@@ -66,7 +67,7 @@ class V019(BaseRule):
                 continue
 
             # Find adapter file for error reporting
-            adapter_file = self._find_adapter_file(reveal_root, scheme)
+            adapter_file = find_adapter_file(reveal_root, scheme)
             if not adapter_file:
                 continue
 
@@ -104,10 +105,9 @@ class V019(BaseRule):
             return None
         except ValueError as e:
             # VIOLATION: Should raise TypeError, not ValueError
-            return Detection(
+            return self.create_detection(
                 file_path=str(adapter_file),
-                line=self._find_init_line(adapter_file),
-                rule_code=self.code,
+                line=find_init_definition_line(adapter_file),
                 message=f"Adapter '{scheme}' raises ValueError instead of TypeError on no-arg init",
                 suggestion=(
                     f"Change __init__ to raise TypeError for invalid initialization:\n"
@@ -118,17 +118,14 @@ class V019(BaseRule):
                     f"\n"
                     f"Current error: {str(e)}"
                 ),
-                context="No-arg initialization raises ValueError instead of TypeError",
-                severity=Severity.HIGH,
-                category=self.category
+                context="No-arg initialization raises ValueError instead of TypeError"
             )
         except Exception as e:
             # VIOLATION: Crashed with unexpected exception
             exception_type = type(e).__name__
-            return Detection(
+            return self.create_detection(
                 file_path=str(adapter_file),
-                line=self._find_init_line(adapter_file),
-                rule_code=self.code,
+                line=find_init_definition_line(adapter_file),
                 message=f"Adapter '{scheme}' crashes with {exception_type} on no-arg init",
                 suggestion=(
                     f"Fix __init__ to handle initialization gracefully:\n"
@@ -138,9 +135,7 @@ class V019(BaseRule):
                     f"\n"
                     f"Error: {str(e)}"
                 ),
-                context=f"No-arg initialization crashes with {exception_type}",
-                severity=Severity.HIGH,
-                category=self.category
+                context=f"No-arg initialization crashes with {exception_type}"
             )
 
     def _test_resource_init(self, scheme: str, adapter_class: type,
@@ -178,10 +173,10 @@ class V019(BaseRule):
                 return None
 
             # Unexpected ValueError
-            return Detection(
+            # Note: severity overridden to MEDIUM (less critical than no-arg issues)
+            detection = self.create_detection(
                 file_path=str(adapter_file),
-                line=self._find_init_line(adapter_file),
-                rule_code=self.code,
+                line=find_init_definition_line(adapter_file),
                 message=f"Adapter '{scheme}' raises unexpected ValueError on resource init",
                 suggestion=(
                     f"Review ValueError usage in __init__:\n"
@@ -191,20 +186,20 @@ class V019(BaseRule):
                     f"\n"
                     f"Current error: {str(e)}"
                 ),
-                context="Resource initialization raises ValueError",
-                severity=Severity.MEDIUM,
-                category=self.category
+                context="Resource initialization raises ValueError"
             )
+            # Override severity for this specific case
+            detection.severity = Severity.MEDIUM
+            return detection
         except Exception as e:
             # Check for common mistakes
             exception_type = type(e).__name__
 
             # AttributeError suggests adapter is accessing attributes that don't exist
             if isinstance(e, AttributeError):
-                return Detection(
+                return self.create_detection(
                     file_path=str(adapter_file),
-                    line=self._find_init_line(adapter_file),
-                    rule_code=self.code,
+                    line=find_init_definition_line(adapter_file),
                     message=f"Adapter '{scheme}' has AttributeError on resource init",
                     suggestion=(
                         f"Fix attribute access in __init__:\n"
@@ -214,68 +209,11 @@ class V019(BaseRule):
                         f"\n"
                         f"Error: {str(e)}"
                     ),
-                    context=f"Resource initialization crashes with AttributeError",
-                    severity=Severity.HIGH,
-                    category=self.category
+                    context=f"Resource initialization crashes with AttributeError"
                 )
 
             # Other exceptions might be OK (e.g., file not found, database connection)
             return None
-
-    def _find_init_line(self, adapter_file: Path) -> int:
-        """Find line number of __init__ method.
-
-        Args:
-            adapter_file: Path to adapter file
-
-        Returns:
-            Line number of __init__, or 1 if not found
-        """
-        try:
-            with open(adapter_file, 'r') as f:
-                for i, line in enumerate(f, start=1):
-                    if 'def __init__' in line:
-                        return i
-        except Exception:
-            pass
-        return 1
-
-    def _find_adapter_file(self, reveal_root: Path, scheme: str) -> Optional[Path]:
-        """Find the adapter file for a given scheme.
-
-        Args:
-            reveal_root: Path to reveal package root
-            scheme: URI scheme (e.g., 'env', 'ast', 'git')
-
-        Returns:
-            Path to adapter file, or None if not found
-        """
-        adapters_dir = reveal_root / 'adapters'
-        if not adapters_dir.exists():
-            return None
-
-        # Try common patterns:
-        # 1. adapters/<scheme>.py
-        scheme_file = adapters_dir / f"{scheme}.py"
-        if scheme_file.exists():
-            return scheme_file
-
-        # 2. adapters/<scheme>_adapter.py
-        adapter_file = adapters_dir / f"{scheme}_adapter.py"
-        if adapter_file.exists():
-            return adapter_file
-
-        # 3. adapters/<scheme>/adapter.py
-        dir_adapter = adapters_dir / scheme / "adapter.py"
-        if dir_adapter.exists():
-            return dir_adapter
-
-        # 4. adapters/<scheme>/__init__.py
-        dir_init = adapters_dir / scheme / "__init__.py"
-        if dir_init.exists():
-            return dir_init
-
-        return None
 
     def get_description(self) -> str:
         """Get detailed rule description."""

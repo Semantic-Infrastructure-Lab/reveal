@@ -35,7 +35,7 @@ class V016(BaseRule):
     """
 
     code = "V016"
-    prefix = RulePrefix.V
+    category = RulePrefix.V
     severity = Severity.MEDIUM
 
     def check(self,

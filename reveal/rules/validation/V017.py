@@ -42,7 +42,7 @@ class V017(BaseRule):
     """
 
     code = "V017"
-    prefix = RulePrefix.V
+    category = RulePrefix.V
     severity = Severity.HIGH
 
     def check(self,
