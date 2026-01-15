@@ -71,12 +71,42 @@ class RustExtractor(LanguageExtractor):
             file_path: Path to source file
 
         Returns:
-            Set of symbol names (currently empty - TODO: Phase 5.1)
+            Set of symbol names referenced in the file
 
-        TODO: Implement symbol extraction using tree-sitter or regex
+        Used for detecting unused imports by comparing imported names
+        with actually-used symbols.
         """
-        # TODO: Phase 5.1 - Implement Rust symbol extraction
-        return set()
+        try:
+            analyzer_class = get_analyzer(str(file_path))
+            if not analyzer_class:
+                return set()
+
+            analyzer = analyzer_class(str(file_path))
+            if not analyzer.tree:
+                return set()
+
+        except Exception:
+            return set()
+
+        symbols = set()
+
+        # Find identifier nodes
+        identifier_nodes = analyzer._find_nodes_by_type('identifier')
+
+        for node in identifier_nodes:
+            name = analyzer._get_node_text(node)
+
+            # Filter out definition contexts
+            if self._is_usage_context(node):
+                symbols.add(name)
+
+            # Handle field expressions (foo.bar -> track 'foo')
+            if node.parent and node.parent.type == 'field_expression':
+                root = self._get_root_identifier(node.parent, analyzer)
+                if root:
+                    symbols.add(root)
+
+        return symbols
 
     def _parse_use_declaration(self, node, file_path: Path, analyzer) -> List[ImportStatement]:
         """Parse a Rust use_declaration node using tree-sitter AST.
@@ -120,7 +150,7 @@ class RustExtractor(LanguageExtractor):
         use_list_node = None
 
         for child in node.children:
-            if child.type == 'identifier':
+            if child.type in ('identifier', 'scoped_identifier'):
                 base_path = analyzer._get_node_text(child)
             elif child.type == 'use_list':
                 use_list_node = child
@@ -161,7 +191,7 @@ class RustExtractor(LanguageExtractor):
         for child in node.children:
             if child.type == 'scoped_identifier':
                 use_path = analyzer._get_node_text(child)
-            elif child.type == 'identifier' and analyzer._get_node_text(child.previous_sibling or child) == 'as':
+            elif child.type == 'identifier' and analyzer._get_node_text(child.prev_sibling or child) == 'as':
                 alias = analyzer._get_node_text(child)
 
         if not use_path:
@@ -234,6 +264,64 @@ class RustExtractor(LanguageExtractor):
             import_type=import_type,
             alias=alias
         )
+
+    def _is_usage_context(self, node) -> bool:
+        """Check if identifier is in a usage context (not definition).
+
+        Filters out:
+        - Function/struct/enum/trait declarations
+        - Parameter names
+        - Field names in struct definitions
+        - Variable bindings (let statements)
+        - Use statement names
+        """
+        if not node.parent:
+            return True
+
+        # Walk up to check if inside use declaration
+        current = node
+        while current:
+            if current.type == 'use_declaration':
+                return False
+            current = current.parent
+
+        parent_type = node.parent.type
+
+        # Skip definition contexts
+        if parent_type in ('function_item', 'struct_item', 'enum_item', 'trait_item',
+                          'type_item', 'impl_item', 'mod_item',
+                          'function_signature_item', 'parameters', 'parameter',
+                          'field_declaration', 'field_identifier'):
+            return False
+
+        # For let bindings (let x = ...)
+        if parent_type == 'let_declaration':
+            # Pattern on left side of = is a definition
+            # This is simplified - Rust patterns can be complex
+            return False
+
+        return True
+
+    def _get_root_identifier(self, field_expr_node, analyzer):
+        """Extract root identifier from field expression chain.
+
+        Examples:
+            io::Result -> 'io'
+            std::collections::HashMap -> 'std'
+        """
+        # Walk up field expression chain to find root
+        current = field_expr_node
+        while current and current.type == 'field_expression':
+            if current.children:
+                current = current.children[0]  # Get value (left side)
+            else:
+                break
+
+        # Should now be an identifier
+        if current and current.type == 'identifier':
+            return analyzer._get_node_text(current)
+
+        return None
 
 
 # Backward compatibility: Keep old function-based API

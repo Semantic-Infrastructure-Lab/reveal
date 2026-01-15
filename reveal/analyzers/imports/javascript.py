@@ -81,12 +81,45 @@ class JavaScriptExtractor(LanguageExtractor):
             file_path: Path to source file
 
         Returns:
-            Set of symbol names (currently empty - TODO: Phase 5.1)
+            Set of symbol names referenced in the file
 
-        TODO: Implement symbol extraction using tree-sitter or regex
+        Used for detecting unused imports by comparing imported names
+        with actually-used symbols.
         """
-        # TODO: Phase 5.1 - Implement JS/TS symbol extraction
-        return set()
+        try:
+            analyzer_class = get_analyzer(str(file_path))
+            if not analyzer_class:
+                return set()
+
+            analyzer = analyzer_class(str(file_path))
+            if not analyzer.tree:
+                return set()
+
+        except Exception:
+            return set()
+
+        symbols = set()
+
+        # Find identifier nodes (tree-sitter node type for names)
+        identifier_nodes = analyzer._find_nodes_by_type('identifier')
+
+        for node in identifier_nodes:
+            # Extract the identifier text
+            name = analyzer._get_node_text(node)
+
+            # Filter out identifiers in assignment/definition contexts
+            # We want to track usage, not definitions
+            if self._is_usage_context(node):
+                symbols.add(name)
+
+            # Also handle member expression (foo.bar -> track 'foo')
+            if node.parent and node.parent.type == 'member_expression':
+                # Get root of member expression chain
+                root = self._get_root_identifier(node.parent, analyzer)
+                if root:
+                    symbols.add(root)
+
+        return symbols
 
     def _parse_import_statement(self, node, file_path: Path, analyzer) -> List[ImportStatement]:
         """Parse ES6 import statement using tree-sitter AST.
@@ -173,26 +206,39 @@ class JavaScriptExtractor(LanguageExtractor):
             require('module')  // side-effect only
             await import('./module')  // dynamic import
         """
-        call_text = analyzer._get_node_text(node)
+        # Check if this is require() or dynamic import() by looking at the call target
+        # For require: call_expression has identifier child with text 'require'
+        # For dynamic import: call_expression starts with 'import' keyword
+        func_name = None
+        for child in node.children:
+            if child.type == 'identifier':
+                text = analyzer._get_node_text(child)
+                if text == 'require':
+                    func_name = 'require'
+                    break
+            elif child.type == 'import':
+                func_name = 'import'
+                break
 
-        # Check if this is a require() call
-        is_require = call_text.startswith('require(')
-        # Also check for dynamic import()
-        is_dynamic_import = call_text.startswith('import(')
-
-        if not is_require and not is_dynamic_import:
+        if not func_name:
             return None
 
-        # Extract module path from quotes
-        module_match = self.MODULE_PATH_PATTERN.search(call_text)
-        if not module_match:
+        # Extract module path from arguments (should be a string node)
+        module_path = None
+        for child in node.children:
+            if child.type == 'arguments':
+                for arg in child.children:
+                    if arg.type == 'string':
+                        module_path = analyzer._get_node_text(arg).strip('"\'')
+                        break
+
+        if not module_path:
             return None
 
-        module_path = module_match.group(1)
         line_number = node.start_point[0] + 1
 
         # For dynamic imports
-        if is_dynamic_import:
+        if func_name == 'import':
             return ImportStatement(
                 file_path=file_path,
                 line_number=line_number,
@@ -243,6 +289,75 @@ class JavaScriptExtractor(LanguageExtractor):
             import_type=import_type,
             alias=None
         )
+
+    def _is_usage_context(self, node) -> bool:
+        """Check if identifier node is in a usage context (not definition).
+
+        Filters out:
+        - Function/class/variable declarations
+        - Parameter names
+        - Assignment targets (left side)
+        - Import names
+        - Object property keys
+        """
+        if not node.parent:
+            return True
+
+        # Walk up the tree to check if we're inside an import statement
+        current = node
+        while current:
+            if current.type == 'import_statement':
+                return False
+            current = current.parent
+
+        parent_type = node.parent.type
+
+        # Skip definition contexts
+        if parent_type in ('function_declaration', 'class_declaration', 'method_definition',
+                          'formal_parameters', 'required_parameter', 'optional_parameter',
+                          'rest_parameter'):
+            return False
+
+        # For variable declarations, check if this is the identifier being declared
+        if parent_type == 'variable_declarator':
+            # First child is the name being declared
+            if node.parent.children and node.parent.children[0] == node:
+                return False
+
+        # For member expressions like { key: value }, skip keys
+        if parent_type == 'pair':
+            # First child is the key
+            if node.parent.children and node.parent.children[0] == node:
+                return False
+
+        # For import specifiers like { foo as bar }, both names are part of import
+        if parent_type in ('import_specifier', 'namespace_import'):
+            return False
+
+        return True
+
+    def _get_root_identifier(self, member_expr_node, analyzer) -> Optional[str]:
+        """Extract root identifier from member expression chain.
+
+        Examples:
+            React.Component -> 'React'
+            console.log -> 'console'
+            foo.bar.baz -> 'foo'
+        """
+        # Walk up the member expression chain to find the root
+        current = member_expr_node
+        while current and current.type == 'member_expression':
+            # Member expression has structure: object.property
+            if current.children:
+                current = current.children[0]  # Get 'object' part
+            else:
+                break
+
+        # Current should now be an identifier
+        if current and current.type == 'identifier':
+            return analyzer._get_node_text(current)
+
+        return None
 
 
 # Backward compatibility: Keep old function-based API

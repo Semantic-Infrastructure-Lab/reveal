@@ -72,12 +72,42 @@ class GoExtractor(LanguageExtractor):
             file_path: Path to source file
 
         Returns:
-            Set of symbol names (currently empty - TODO: Phase 5.1)
+            Set of symbol names referenced in the file
 
-        TODO: Implement symbol extraction using tree-sitter or regex
+        Used for detecting unused imports by comparing imported package names
+        with actually-used symbols.
         """
-        # TODO: Phase 5.1 - Implement Go symbol extraction
-        return set()
+        try:
+            analyzer_class = get_analyzer(str(file_path))
+            if not analyzer_class:
+                return set()
+
+            analyzer = analyzer_class(str(file_path))
+            if not analyzer.tree:
+                return set()
+
+        except Exception:
+            return set()
+
+        symbols = set()
+
+        # Find identifier nodes
+        identifier_nodes = analyzer._find_nodes_by_type('identifier')
+
+        for node in identifier_nodes:
+            name = analyzer._get_node_text(node)
+
+            # Filter out identifiers in definition contexts
+            if self._is_usage_context(node):
+                symbols.add(name)
+
+            # Handle selector expressions (pkg.Function -> track 'pkg')
+            if node.parent and node.parent.type == 'selector_expression':
+                root = self._get_root_identifier(node.parent, analyzer)
+                if root:
+                    symbols.add(root)
+
+        return symbols
 
     def _parse_import_spec(self, spec_node, file_path: Path, analyzer) -> ImportStatement:
         """Parse a Go import_spec node using tree-sitter AST.
@@ -159,6 +189,70 @@ class GoExtractor(LanguageExtractor):
             import_type=import_type,
             alias=alias
         )
+
+    def _is_usage_context(self, node) -> bool:
+        """Check if identifier is in a usage context (not definition).
+
+        Filters out:
+        - Function/method/type declarations
+        - Parameter names
+        - Field names in struct definitions
+        - Variable declarations (left side of :=)
+        - Import names
+        """
+        if not node.parent:
+            return True
+
+        # Walk up to check if inside import
+        current = node
+        while current:
+            if current.type in ('import_declaration', 'import_spec'):
+                return False
+            current = current.parent
+
+        parent_type = node.parent.type
+
+        # Skip definition contexts
+        if parent_type in ('function_declaration', 'method_declaration',
+                          'type_declaration', 'type_spec',
+                          'parameter_declaration', 'parameter_list',
+                          'field_declaration', 'field_identifier'):
+            return False
+
+        # For short variable declarations (x := 5), check if left side
+        if parent_type == 'short_var_declaration':
+            # First child (or part of expression_list) is being declared
+            if node.parent.children and node.parent.children[0] == node:
+                return False
+
+        # For var declarations
+        if parent_type == 'var_spec':
+            # Name is first child
+            if node.parent.children and node.parent.children[0] == node:
+                return False
+
+        return True
+
+    def _get_root_identifier(self, selector_node, analyzer):
+        """Extract root identifier from selector expression chain.
+
+        Examples:
+            fmt.Println -> 'fmt'
+            os.File.Read -> 'os'
+        """
+        # Walk up selector expression chain to find root
+        current = selector_node
+        while current and current.type == 'selector_expression':
+            if current.children:
+                current = current.children[0]  # Get operand (left side)
+            else:
+                break
+
+        # Should now be an identifier
+        if current and current.type == 'identifier':
+            return analyzer._get_node_text(current)
+
+        return None
 
 
 # Backward compatibility: Keep old function-based API
