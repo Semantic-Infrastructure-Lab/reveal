@@ -7,7 +7,6 @@ import shutil
 import subprocess
 from pathlib import Path
 from reveal.adapters.diff import DiffAdapter
-from reveal.cli.scheme_handlers.diff import parse_diff_uris
 
 
 class TestDiffAdapter(unittest.TestCase):
@@ -357,38 +356,38 @@ class TestDiffURIParsing(unittest.TestCase):
 
     def test_simple_file_paths(self):
         """Test parsing simple file paths."""
-        left, right = parse_diff_uris("app.py:backup/app.py")
+        left, right = DiffAdapter._parse_diff_uris("app.py:backup/app.py")
         self.assertEqual(left, "app.py")
         self.assertEqual(right, "backup/app.py")
 
     def test_explicit_file_scheme(self):
         """Test parsing with explicit file:// scheme."""
-        left, right = parse_diff_uris("file://app.py:file://backup/app.py")
+        left, right = DiffAdapter._parse_diff_uris("file://app.py:file://backup/app.py")
         self.assertEqual(left, "file://app.py")
         self.assertEqual(right, "file://backup/app.py")
 
     def test_env_scheme(self):
         """Test parsing env:// URIs."""
-        left, right = parse_diff_uris("env://:env://production")
+        left, right = DiffAdapter._parse_diff_uris("env://:env://production")
         self.assertEqual(left, "env://")
         self.assertEqual(right, "env://production")
 
     def test_mixed_schemes(self):
         """Test parsing mixed schemes."""
-        left, right = parse_diff_uris("app.py:env://production")
+        left, right = DiffAdapter._parse_diff_uris("app.py:env://production")
         self.assertEqual(left, "app.py")
         self.assertEqual(right, "env://production")
 
     def test_mysql_scheme(self):
         """Test parsing mysql:// URIs."""
-        left, right = parse_diff_uris("mysql://localhost/db:mysql://staging/db")
+        left, right = DiffAdapter._parse_diff_uris("mysql://localhost/db:mysql://staging/db")
         self.assertEqual(left, "mysql://localhost/db")
         self.assertEqual(right, "mysql://staging/db")
 
     def test_invalid_format(self):
         """Test error handling for invalid format."""
         with self.assertRaises(ValueError):
-            parse_diff_uris("nocolon")
+            DiffAdapter._parse_diff_uris("nocolon")
 
 
 class TestDirectoryDiff(unittest.TestCase):
