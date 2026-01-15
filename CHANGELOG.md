@@ -36,6 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Session: desert-squall-0115 validation, cursed-wizard-0115 implementation
 
 ### Fixed
+- **SQLite adapter empty URI validation** - Raise ValueError instead of TypeError
+  - Fixes test_init_with_empty_uri test failure
+  - Now raises ValueError for empty connection string (correct for invalid value)
+  - Previously raised TypeError (incorrect - type was correct, value was not)
+  - Aligns with Python conventions (ValueError for invalid values)
+  - All 22 sqlite adapter tests passing
+  - Session: ancient-river-0115
 - **GitAdapter backward compatibility** - Accept both `resource=` and `path=` parameters
   - Fixes 22 failing git adapter tests (TypeError on path= usage)
   - Maintains full backward compatibility with both calling styles
