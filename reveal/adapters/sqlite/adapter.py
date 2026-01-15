@@ -36,7 +36,18 @@ class SQLiteAdapter(ResourceAdapter):
 
         Args:
             connection_string: sqlite:///path/to/db.db[/table]
+
+        Raises:
+            TypeError: When called with no arguments (wrong initialization pattern)
+            ValueError: When connection string format is invalid
         """
+        # No connection string provided - wrong initialization pattern
+        if not connection_string:
+            raise TypeError(
+                "SQLiteAdapter requires a connection string. "
+                "Use SQLiteAdapter('sqlite:///path/to/db.db')"
+            )
+
         self.connection_string = connection_string
         self.db_path = None
         self.table = None
@@ -133,7 +144,7 @@ class SQLiteAdapter(ResourceAdapter):
 
     def __del__(self):
         """Close SQLite connection."""
-        if self._connection:
+        if hasattr(self, '_connection') and self._connection:
             self._connection.close()
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:

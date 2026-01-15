@@ -34,7 +34,12 @@ class RevealRenderer:
         uri = result.get('file', 'reveal://')
 
         if format == 'json':
-            print(safe_json_dumps(result))
+            # Serialize Detection objects to dicts for JSON output
+            serialized_result = {
+                **result,
+                'detections': [d.to_dict() if hasattr(d, 'to_dict') else d for d in detections]
+            }
+            print(safe_json_dumps(serialized_result))
             return
 
         if format == 'grep':
@@ -466,7 +471,7 @@ class RevealAdapter(ResourceAdapter):
 
         return {
             'file': 'reveal://',
-            'detections': [d.to_dict() if hasattr(d, 'to_dict') else d for d in detections],
+            'detections': detections,  # Keep as Detection objects for render_check
             'total': len(detections)
         }
 

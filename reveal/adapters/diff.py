@@ -80,7 +80,18 @@ class DiffAdapter(ResourceAdapter):
         The adapter supports two initialization styles:
         1. DiffAdapter("left:right") - single combined string (new style, for generic handler)
         2. DiffAdapter("left", "right") - two separate URIs (old style, backward compatibility)
+
+        Raises:
+            TypeError: When called with no arguments (wrong initialization pattern)
+            ValueError: When resource format is invalid
         """
+        # No args provided - wrong initialization pattern
+        if resource is None and right_uri is None:
+            raise TypeError(
+                "DiffAdapter requires arguments. "
+                "Use DiffAdapter('left:right') or DiffAdapter('left', 'right')"
+            )
+
         if right_uri is not None:
             # Old style: two arguments
             self.left_uri = resource
@@ -89,9 +100,10 @@ class DiffAdapter(ResourceAdapter):
             # New style: parse combined resource string
             self.left_uri, self.right_uri = self._parse_diff_uris(resource)
         else:
+            # Resource provided but invalid format
             raise ValueError(
-                "DiffAdapter requires either 'left:right' resource string or "
-                "two separate URIs. Format: diff://left:right"
+                "DiffAdapter requires 'left:right' format. "
+                "Got: {!r}. Example: diff://app.py:backup/app.py".format(resource)
             )
         self.left_structure = None
         self.right_structure = None
