@@ -1,16 +1,62 @@
 """Diff adapter for comparing two reveal resources."""
 
 import inspect
+import json
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, Optional, List
-from .base import ResourceAdapter, register_adapter, get_adapter_class
+from typing import Dict, Any, Optional, List, Tuple
+from .base import ResourceAdapter, register_adapter, register_renderer, get_adapter_class
 from .help_data import load_help_data
 
 
+class DiffRenderer:
+    """Renderer for diff comparison results."""
+
+    @staticmethod
+    def render_structure(result: dict, format: str = 'text') -> None:
+        """Render diff structure comparison.
+
+        Args:
+            result: Diff result from adapter
+            format: Output format (text, json, grep)
+        """
+        from ..rendering.diff import render_diff
+        render_diff(result, format, is_element=False)
+
+    @staticmethod
+    def render_element(result: dict, format: str = 'text') -> None:
+        """Render element-specific diff.
+
+        Args:
+            result: Element diff result
+            format: Output format
+        """
+        from ..rendering.diff import render_diff
+        render_diff(result, format, is_element=True)
+
+    @staticmethod
+    def render_error(error: Exception) -> None:
+        """Render error message.
+
+        Args:
+            error: Exception to render
+        """
+        print(f"Error: {error}", file=sys.stderr)
+        if isinstance(error, ValueError):
+            print(file=sys.stderr)
+            print("Examples:", file=sys.stderr)
+            print("  reveal diff://app.py:backup/app.py", file=sys.stderr)
+            print("  reveal diff://env://:env://production", file=sys.stderr)
+            print("  reveal diff://mysql://prod/db:mysql://staging/db", file=sys.stderr)
+            print(file=sys.stderr)
+            print("Learn more: reveal help://diff", file=sys.stderr)
+
+
 @register_adapter('diff')
+@register_renderer(DiffRenderer)
 class DiffAdapter(ResourceAdapter):
     """Compare two reveal-compatible resources.
 
@@ -24,17 +70,104 @@ class DiffAdapter(ResourceAdapter):
         diff://app.py:old.py/handle_request       # Element-specific diff
     """
 
-    def __init__(self, left_uri: str, right_uri: str):
-        """Initialize with two URIs to compare.
+    def __init__(self, resource: Optional[str] = None, right_uri: Optional[str] = None):
+        """Initialize with either a combined resource string or two URIs.
 
         Args:
-            left_uri: Source URI (e.g., 'file:app.py', 'env://')
-            right_uri: Target URI (e.g., 'file:backup/app.py', 'env://prod')
+            resource: Either combined "left:right" string or left_uri
+            right_uri: Right URI (if resource is left_uri)
+
+        The adapter supports two initialization styles:
+        1. DiffAdapter("left:right") - single combined string (new style, for generic handler)
+        2. DiffAdapter("left", "right") - two separate URIs (old style, backward compatibility)
         """
-        self.left_uri = left_uri
-        self.right_uri = right_uri
+        if right_uri is not None:
+            # Old style: two arguments
+            self.left_uri = resource
+            self.right_uri = right_uri
+        elif resource and ':' in resource:
+            # New style: parse combined resource string
+            self.left_uri, self.right_uri = self._parse_diff_uris(resource)
+        else:
+            raise ValueError(
+                "DiffAdapter requires either 'left:right' resource string or "
+                "two separate URIs. Format: diff://left:right"
+            )
         self.left_structure = None
         self.right_structure = None
+
+    @staticmethod
+    def _parse_diff_uris(resource: str) -> Tuple[str, str]:
+        """Parse left:right from diff resource string.
+
+        Handles complex URIs that may contain colons:
+        - Simple: "app.py:backup/app.py" → ("app.py", "backup/app.py")
+        - Complex: "mysql://prod/db:mysql://staging/db" → ("mysql://prod/db", "mysql://staging/db")
+        - Nested: "env://:env://production" → ("env://", "env://production")
+
+        Args:
+            resource: The resource string to parse
+
+        Returns:
+            Tuple of (left_uri, right_uri)
+
+        Raises:
+            ValueError: If parsing fails
+        """
+        # Count :// occurrences to determine complexity
+        scheme_count = resource.count('://')
+
+        if scheme_count == 0:
+            # Simple case: "file1:file2"
+            if ':' not in resource:
+                raise ValueError("diff:// requires format: left:right")
+            left, right = resource.split(':', 1)
+            return left, right
+
+        elif scheme_count == 1:
+            # One scheme: "scheme://resource:file" or "file:scheme://resource"
+            parts = resource.split('://')
+            if ':' not in parts[0]:
+                # Format: "scheme://resource:file"
+                scheme = parts[0]
+                rest = parts[1]
+                if ':' not in rest:
+                    raise ValueError(f"Invalid diff format: {resource}")
+                resource_part, right = rest.rsplit(':', 1)
+                left = f"{scheme}://{resource_part}"
+                return left, right
+            else:
+                # Format: "file:scheme://resource"
+                left, rest = parts[0].split(':', 1)
+                right = f"{rest}://{parts[1]}"
+                return left, right
+
+        elif scheme_count == 2:
+            # Two schemes: "scheme1://resource1:scheme2://resource2"
+            parts = resource.split('://')
+            # parts = ['scheme1', 'resource1:scheme2', 'resource2']
+            if len(parts) != 3:
+                raise ValueError(f"Invalid diff format: {resource}")
+
+            scheme1 = parts[0]
+            middle = parts[1]  # "resource1:scheme2"
+            scheme2_resource = parts[2]
+
+            # Split middle on the last colon to separate resource1 and scheme2
+            if ':' not in middle:
+                raise ValueError(f"Invalid diff format: {resource}")
+
+            resource1, scheme2 = middle.rsplit(':', 1)
+            left = f"{scheme1}://{resource1}"
+            right = f"{scheme2}://{scheme2_resource}"
+            return left, right
+
+        else:
+            # Too complex
+            raise ValueError(
+                f"Too many schemes in URI (found {scheme_count}). "
+                "For complex URIs, use explicit format: diff://scheme1://res1:scheme2://res2"
+            )
 
     @staticmethod
     def get_help() -> Dict[str, Any]:

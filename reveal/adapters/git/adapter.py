@@ -3,11 +3,14 @@
 Progressive disclosure for Git repositories with token-efficient output.
 """
 
+import json
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from ..base import ResourceAdapter, register_adapter
+from urllib.parse import parse_qs, urlparse
+from ..base import ResourceAdapter, register_adapter, register_renderer
 
 
 # Check if pygit2 is available
@@ -19,7 +22,141 @@ except ImportError:
     pygit2 = None
 
 
+class GitRenderer:
+    """Renderer for git repository inspection results."""
+
+    @staticmethod
+    def render_structure(result: dict, format: str = 'text') -> None:
+        """Render git repository structure.
+
+        Args:
+            result: Git structure from adapter
+            format: Output format (text, json)
+        """
+        if format == 'json':
+            print(json.dumps(result, indent=2))
+            return
+
+        # Text rendering based on result type
+        result_type = result.get('type', 'unknown')
+
+        if result_type == 'repository':
+            GitRenderer._render_repository_overview(result)
+        elif result_type == 'ref':
+            GitRenderer._render_ref_structure(result)
+        elif result_type == 'file':
+            GitRenderer._render_file(result)
+        elif result_type == 'file_history':
+            GitRenderer._render_file_history(result)
+        elif result_type == 'file_blame':
+            GitRenderer._render_file_blame(result)
+        else:
+            print(json.dumps(result, indent=2))
+
+    @staticmethod
+    def _render_repository_overview(result: dict) -> None:
+        """Render repository overview."""
+        print(f"Repository: {result['path']}")
+        print()
+
+        head = result['head']
+        if head['branch']:
+            print(f"HEAD: {head['branch']} @ {head['commit']}")
+        elif head['detached']:
+            print(f"HEAD: (detached) @ {head['commit']}")
+        print()
+
+        print(f"Branches: {result['branches']['count']}")
+        for branch in result['branches']['recent']:
+            print(f"  • {branch['name']:<20} {branch['commit']} {branch['date']} {branch['message']}")
+        print()
+
+        print(f"Tags: {result['tags']['count']}")
+        for tag in result['tags']['recent']:
+            print(f"  • {tag['name']:<20} {tag['commit']} {tag['date']} {tag['message']}")
+        print()
+
+        print("Recent Commits:")
+        for commit in result['commits']['recent']:
+            print(f"  {commit['hash']} {commit['date']} {commit['author']}")
+            print(f"    {commit['message']}")
+
+    @staticmethod
+    def _render_ref_structure(result: dict) -> None:
+        """Render ref/commit history."""
+        print(f"Ref: {result['ref']}")
+        print()
+
+        commit = result['commit']
+        print(f"Commit: {commit['full_hash']}")
+        print(f"Author: {commit['author']} <{commit['email']}>")
+        print(f"Date:   {commit['date']}")
+        print()
+        print(commit['full_message'])
+        print()
+
+        print("History:")
+        for c in result['history']:
+            print(f"  {c['hash']} {c['date']} {c['author']}")
+            print(f"    {c['message']}")
+
+    @staticmethod
+    def _render_file(result: dict) -> None:
+        """Render file contents."""
+        print(f"File: {result['path']} @ {result['ref']}")
+        print(f"Commit: {result['commit']}")
+        print(f"Size: {result['size']} bytes, {result['lines']} lines")
+        print()
+        print(result['content'])
+
+    @staticmethod
+    def _render_file_history(result: dict) -> None:
+        """Render file history."""
+        print(f"File History: {result['path']} @ {result['ref']}")
+        print(f"Commits: {result['count']}")
+        print()
+
+        for commit in result['commits']:
+            print(f"  {commit['hash']} {commit['date']} {commit['author']}")
+            print(f"    {commit['message']}")
+
+    @staticmethod
+    def _render_file_blame(result: dict) -> None:
+        """Render file blame."""
+        print(f"File Blame: {result['path']} @ {result['ref']}")
+        print(f"Lines: {result['lines']}")
+        print()
+
+        for hunk in result['hunks']:
+            lines_info = hunk['lines']
+            commit_info = hunk['commit']
+            print(f"Lines {lines_info['start']}-{lines_info['start'] + lines_info['count'] - 1}:")
+            print(f"  {commit_info['hash']} {commit_info['date']} {commit_info['author']}")
+            print(f"  {commit_info['message']}")
+            print()
+
+    @staticmethod
+    def render_element(result: dict, format: str = 'text') -> None:
+        """Render specific git element (commit, file, etc.)."""
+        # Element rendering is the same as structure rendering for git
+        GitRenderer.render_structure(result, format)
+
+    @staticmethod
+    def render_error(error: Exception) -> None:
+        """Render error message."""
+        print(f"Error: {error}", file=sys.stderr)
+        if isinstance(error, ImportError):
+            # pygit2 not installed
+            print(file=sys.stderr)
+            print("The git:// adapter requires pygit2.", file=sys.stderr)
+            print("Install with: pip install reveal-cli[git]", file=sys.stderr)
+            print("Alternative: pip install pygit2>=1.14.0", file=sys.stderr)
+            print(file=sys.stderr)
+            print("For more info: reveal help://git", file=sys.stderr)
+
+
 @register_adapter('git')
+@register_renderer(GitRenderer)
 class GitAdapter(ResourceAdapter):
     """
     Git repository inspection adapter.
@@ -37,22 +174,84 @@ class GitAdapter(ResourceAdapter):
     Requires: pip install reveal-cli[git]
     """
 
-    def __init__(self, path: str = '.', ref: Optional[str] = None,
+    def __init__(self, resource: str = '.', ref: Optional[str] = None,
                  subpath: Optional[str] = None, query: Optional[Dict[str, str]] = None):
         """
         Initialize Git adapter.
 
+        Supports two initialization styles:
+        1. Single resource string (new style, for generic handler):
+           GitAdapter("path/file.py@ref?type=history")
+        2. Multiple arguments (old style, backward compatibility):
+           GitAdapter(path=".", ref="main", subpath="file.py", query={...})
+
         Args:
-            path: Repository path (default: current directory)
+            resource: Either resource URI string or repository path
             ref: Git reference (commit, branch, tag, HEAD~N)
             subpath: Path within repository (file or directory)
             query: Query parameters (type=history|blame, since, author, etc.)
         """
-        self.path = path
-        self.ref = ref or 'HEAD'
-        self.subpath = subpath
-        self.query = query or {}
+        # If only resource is provided and no other args, parse it as URI
+        if ref is None and subpath is None and query is None and resource:
+            # Parse resource string: path[@ref][/subpath][?query]
+            parsed = self._parse_resource_string(resource)
+            self.path = parsed['path']
+            self.ref = parsed['ref']
+            self.subpath = parsed['subpath']
+            self.query = parsed['query']
+        else:
+            # Old style: explicit arguments
+            self.path = resource
+            self.ref = ref or 'HEAD'
+            self.subpath = subpath
+            self.query = query or {}
+
         self.repo = None
+
+    @staticmethod
+    def _parse_resource_string(resource: str) -> Dict[str, Any]:
+        """Parse git resource string.
+
+        Handles various git:// URI formats:
+        - "." - current directory, default ref
+        - ".@main" - current dir, main branch
+        - "path/file.py@v1.0" - file at tag
+        - "path/file.py?type=history" - file history
+        - ".@HEAD~1/src/app.py?type=blame" - complex
+
+        Args:
+            resource: Resource string from URI
+
+        Returns:
+            Dict with path, ref, subpath, query
+        """
+        path = '.'
+        ref = 'HEAD'
+        subpath = None
+        query = {}
+
+        # Handle empty resource
+        if not resource or resource == '':
+            return {'path': path, 'ref': ref, 'subpath': subpath, 'query': query}
+
+        # Extract query parameters first (?key=value)
+        if '?' in resource:
+            resource, query_string = resource.rsplit('?', 1)
+            # Simple query parsing (key=value&key2=value2)
+            for param in query_string.split('&'):
+                if '=' in param:
+                    key, value = param.split('=', 1)
+                    query[key] = value
+
+        # Extract ref (@branch or @tag or @commit)
+        if '@' in resource:
+            resource, ref = resource.rsplit('@', 1)
+
+        # What's left is path or path/subpath
+        if resource:
+            path = resource if resource else '.'
+
+        return {'path': path, 'ref': ref, 'subpath': subpath, 'query': query}
 
     def _check_pygit2(self):
         """Check if pygit2 is available and provide helpful error."""

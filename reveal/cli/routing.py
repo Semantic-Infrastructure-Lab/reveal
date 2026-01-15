@@ -1,37 +1,24 @@
 """URI and file routing for reveal CLI.
 
 This module handles dispatching to the correct handler based on:
-- URI scheme (env://, ast://, help://, python://, json://, reveal://)
+- URI scheme (env://, ast://, help://, python://, json://, reveal://, etc.)
 - File type (determined by extension)
 - Directory handling
+
+All URI adapters now use the renderer-based system (Phase 4 complete).
 """
 
 import sys
 from pathlib import Path
-from typing import Optional, Callable, Dict, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from argparse import Namespace
 
 
 # ============================================================================
-# Scheme-specific handlers (extracted to cli/scheme_handlers/)
+# File checking functions
 # ============================================================================
-
-from .scheme_handlers import (
-    handle_env,
-    handle_ast,
-    handle_help,
-    handle_python,
-    handle_json,
-    handle_reveal,
-    handle_stats,
-    handle_mysql,
-    handle_sqlite,
-    handle_imports,
-    handle_diff,
-    handle_markdown,
-)
 
 from .file_checker import (
     load_gitignore_patterns,
@@ -40,56 +27,6 @@ from .file_checker import (
     check_and_report_file,
     handle_recursive_check,
 )
-
-
-# Legacy function names for backwards compatibility (to be removed later)
-_handle_env = handle_env
-_handle_ast = handle_ast
-_handle_help = handle_help
-_handle_python = handle_python
-_handle_json = handle_json
-_handle_reveal = handle_reveal
-_handle_stats = handle_stats
-_handle_mysql = handle_mysql
-_handle_sqlite = handle_sqlite
-_handle_imports = handle_imports
-_handle_diff = handle_diff
-_handle_markdown = handle_markdown
-
-# File checking functions (extracted to cli/file_checker.py)
-_load_gitignore_patterns = load_gitignore_patterns
-_should_skip_file = should_skip_file
-_collect_files_to_check = collect_files_to_check
-_check_and_report_file = check_and_report_file
-
-# Re-export for tests (from scheme_handlers/reveal.py)
-from .scheme_handlers.reveal import _format_check_detections  # noqa: E402
-
-
-# Dispatch table: scheme -> handler function
-# To add a new scheme: create a _handle_<scheme> function and register here
-# NOTE: Schemes migrated to renderer-based system don't need entries here
-SCHEME_HANDLERS: Dict[str, Callable] = {
-    # Simple adapters migrated to renderer-based system (Phase 3.1):
-    # 'ast': _handle_ast,        # Migrated to AstRenderer
-    # 'env': _handle_env,        # Migrated to EnvRenderer
-    # 'json': _handle_json,      # Migrated to JsonRenderer
-    # 'python': _handle_python,  # Migrated to PythonRenderer
-    # 'help': _handle_help,      # Migrated to HelpRenderer
-    # 'mysql': _handle_mysql,    # Migrated to MySQLRenderer (Phase 2)
-
-    # Medium adapters migrated (Phase 3.2):
-    # 'markdown': _handle_markdown,  # Migrated to MarkdownRenderer
-    # 'stats': _handle_stats,        # Migrated to StatsRenderer
-
-    # Complex adapters migrated (Phase 3.3):
-    # 'sqlite': _handle_sqlite,      # Migrated to SqliteRenderer
-
-    # Remaining adapters (to be migrated):
-    'reveal': _handle_reveal,  # Special handling for element extraction
-    'imports': _handle_imports,
-    'diff': _handle_diff,
-}
 
 
 # ============================================================================
@@ -277,8 +214,7 @@ def handle_adapter(adapter_class: type, scheme: str, resource: str,
                    element: Optional[str], args: 'Namespace') -> None:
     """Handle adapter-specific logic for different URI schemes.
 
-    Uses dispatch table for clean, extensible routing. Falls back to generic
-    handler if adapter has a registered renderer.
+    All adapters now use the renderer-based system with generic handler.
 
     Args:
         adapter_class: The adapter class to instantiate
@@ -287,22 +223,18 @@ def handle_adapter(adapter_class: type, scheme: str, resource: str,
         element: Optional element to extract
         args: CLI arguments
     """
-    # Try old-style scheme handler first (backward compatibility)
-    handler = SCHEME_HANDLERS.get(scheme)
-    if handler:
-        handler(adapter_class, resource, element, args)
-        return
-
-    # Try new-style renderer-based handler
+    # Get renderer for this adapter
     from ..adapters.base import get_renderer_class
     renderer_class = get_renderer_class(scheme)
-    if renderer_class:
-        generic_adapter_handler(adapter_class, renderer_class, scheme, resource, element, args)
-        return
 
-    # No handler found (shouldn't happen if registry is in sync)
-    print(f"Error: No handler for scheme '{scheme}'", file=sys.stderr)
-    sys.exit(1)
+    if not renderer_class:
+        # This shouldn't happen if adapter is properly registered
+        print(f"Error: No renderer registered for scheme '{scheme}'", file=sys.stderr)
+        print(f"This is a bug - adapter is registered but renderer is not.", file=sys.stderr)
+        sys.exit(1)
+
+    # Use generic handler for all adapters
+    generic_adapter_handler(adapter_class, renderer_class, scheme, resource, element, args)
 
 
 def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
