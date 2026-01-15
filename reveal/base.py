@@ -2,14 +2,15 @@
 
 import os
 import logging
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
 
-class FileAnalyzer:
-    """Base class for all file analyzers.
+class FileAnalyzer(ABC):
+    """Abstract base class for all file analyzers.
 
     Provides automatic functionality:
     - File reading with encoding detection
@@ -17,9 +18,14 @@ class FileAnalyzer:
     - Line number formatting
     - Source extraction helpers
 
-    Subclasses only need to implement:
-    - get_structure(): Return dict of file elements
-    - extract_element(type, name): Extract specific element (optional)
+    Subclasses MUST implement:
+    - get_structure(): Return dict of file elements (REQUIRED)
+
+    Subclasses MAY override:
+    - extract_element(type, name): Extract specific element (optional, has default)
+
+    This is an Abstract Base Class - attempting to instantiate FileAnalyzer directly
+    will raise TypeError. All concrete analyzer classes must implement get_structure().
     """
 
     def __init__(self, path: str):
@@ -62,6 +68,7 @@ class FileAnalyzer:
             'encoding': self._detect_encoding(),
         }
 
+    @abstractmethod
     def get_structure(self, head: int = None, tail: int = None,
                       range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Return file structure (imports, functions, classes, etc.).
@@ -72,13 +79,13 @@ class FileAnalyzer:
             range: Show semantic units in range (start, end) - 1-indexed
             **kwargs: Additional analyzer-specific parameters
 
-        Override in subclasses for custom extraction.
-        Default: Returns empty structure.
+        REQUIRED: Must be implemented by all analyzer subclasses.
+        This method defines the core contract for file analysis.
 
         Note: head/tail/range are mutually exclusive and apply to semantic units
         (records, functions, sections) not raw text lines.
         """
-        return {}
+        pass  # Abstract method - must be implemented by subclasses
 
     def _apply_semantic_slice(self, items: List[Dict[str, Any]],
                               head: int = None, tail: int = None,
