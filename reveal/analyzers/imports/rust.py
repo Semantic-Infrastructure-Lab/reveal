@@ -90,10 +90,13 @@ class RustExtractor(LanguageExtractor):
 
         symbols = set()
 
-        # Find identifier nodes
+        # Find identifier and type_identifier nodes
+        # Note: Rust tree-sitter uses 'type_identifier' for type names (Result, HashMap, etc.)
+        # and 'identifier' for variable/function names
         identifier_nodes = analyzer._find_nodes_by_type('identifier')
+        type_identifier_nodes = analyzer._find_nodes_by_type('type_identifier')
 
-        for node in identifier_nodes:
+        for node in identifier_nodes + type_identifier_nodes:
             name = analyzer._get_node_text(node)
 
             # Filter out definition contexts
@@ -288,9 +291,11 @@ class RustExtractor(LanguageExtractor):
         parent_type = node.parent.type
 
         # Skip definition contexts
+        # Note: 'function_signature_item' removed - it was filtering return types as definitions
+        # Parameter names are still filtered by 'parameters' and 'parameter'
         if parent_type in ('function_item', 'struct_item', 'enum_item', 'trait_item',
                           'type_item', 'impl_item', 'mod_item',
-                          'function_signature_item', 'parameters', 'parameter',
+                          'parameters', 'parameter',
                           'field_declaration', 'field_identifier'):
             return False
 

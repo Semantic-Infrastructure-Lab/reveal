@@ -8,45 +8,66 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ...analyzers.imports.python import PythonExtractor
+from ...analyzers.imports.base import get_extractor, get_all_extensions
 
 logger = logging.getLogger(__name__)
 
 
 class I001(BaseRule):
-    """Detect unused imports in Python code."""
+    """Detect unused imports in supported languages (Python, JavaScript, Go, Rust)."""
 
     code = "I001"
     message = "Unused import detected"
     category = RulePrefix.I
     severity = Severity.MEDIUM
-    file_patterns = ['.py']
-    version = "1.0.0"
+    file_patterns = None  # Dynamically populated from registered extractors
+    version = "2.0.0"
+
+    def __init__(self):
+        """Initialize I001 with dynamic file patterns from registered extractors."""
+        super().__init__()
+        # Get all supported extensions from registered extractors
+        if I001.file_patterns is None:
+            I001.file_patterns = list(get_all_extensions())
 
     def _has_noqa_comment(self, source_line: str) -> bool:
-        """Check if source line has a noqa comment.
+        """Check if source line has a suppression comment (language-specific).
 
         Detects patterns like:
-        - # noqa
-        - # noqa: F401
-        - # noqa: I001
-        - # noqa: F401, I001
+        - Python: # noqa, # noqa: F401, # noqa: I001
+        - JavaScript: // eslint-disable-line, // eslint-disable-next-line no-unused-vars
+        - Go: // nolint, // nolint:unused
+        - Rust: #[allow(unused_imports)], #[allow(unused)]
 
         Args:
             source_line: Full source line text
 
         Returns:
-            True if line has noqa comment (generic or specific to F401/I001)
+            True if line has suppression comment for unused imports
         """
         if not source_line:
             return False
 
-        comment_lower = source_line.lower()
-        if '# noqa' not in comment_lower:
-            return False
+        line_lower = source_line.lower()
 
-        # Generic noqa (no colon) or specific F401/I001
-        return ':' not in comment_lower or 'f401' in comment_lower or 'i001' in comment_lower
+        # Python: # noqa
+        if '# noqa' in line_lower:
+            # Generic noqa (no colon) or specific F401/I001
+            return ':' not in line_lower or 'f401' in line_lower or 'i001' in line_lower
+
+        # JavaScript: // eslint-disable
+        if '// eslint-disable' in line_lower and ('no-unused-vars' in line_lower or 'unused' in line_lower):
+            return True
+
+        # Go: // nolint
+        if '// nolint' in line_lower and ('unused' in line_lower or ':' not in line_lower):
+            return True
+
+        # Rust: #[allow(unused)]
+        if '#[allow' in line_lower and 'unused' in line_lower:
+            return True
+
+        return False
 
     def _should_skip_import(self, stmt) -> bool:
         """Check if import should be skipped from unused detection.
@@ -146,10 +167,10 @@ class I001(BaseRule):
              structure: Optional[Dict[str, Any]],
              content: str) -> List[Detection]:
         """
-        Check for unused imports.
+        Check for unused imports in supported languages.
 
         Args:
-            file_path: Path to Python file
+            file_path: Path to source file (Python, JavaScript, Go, Rust)
             structure: Parsed structure (not used)
             content: File content
 
@@ -159,12 +180,21 @@ class I001(BaseRule):
         detections = []
         path = Path(file_path)
 
+        # Get language-specific extractor
+        extractor = get_extractor(path)
+        if not extractor:
+            logger.debug(f"No extractor found for {file_path}")
+            return detections
+
         try:
-            # Extract imports, symbols used, and exports (__all__)
-            extractor = PythonExtractor()
+            # Extract imports and symbols used (common to all languages)
             imports = extractor.extract_imports(path)
             symbols_used = extractor.extract_symbols(path)
-            exports = extractor.extract_exports(path)
+
+            # Extract exports (__all__ for Python, not applicable to other languages yet)
+            exports = set()
+            if hasattr(extractor, 'extract_exports'):
+                exports = extractor.extract_exports(path)
         except Exception as e:
             logger.debug(f"Failed to analyze {file_path}: {e}")
             return detections
