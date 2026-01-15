@@ -38,12 +38,11 @@ class SQLiteAdapter(ResourceAdapter):
             connection_string: sqlite:///path/to/db.db[/table]
 
         Raises:
-            TypeError: When called with no arguments (wrong initialization pattern)
-            ValueError: When connection string format is invalid
+            ValueError: When connection string is empty or format is invalid
         """
-        # No connection string provided - wrong initialization pattern
+        # No connection string provided - invalid value
         if not connection_string:
-            raise TypeError(
+            raise ValueError(
                 "SQLiteAdapter requires a connection string. "
                 "Use SQLiteAdapter('sqlite:///path/to/db.db')"
             )
