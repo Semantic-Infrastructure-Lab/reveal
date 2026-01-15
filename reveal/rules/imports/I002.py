@@ -1,6 +1,7 @@
 """I002: Circular dependency detector.
 
-Detects circular import dependencies between Python modules.
+Detects circular import dependencies between modules.
+Supports Python, JavaScript, Go, and Rust.
 """
 
 import logging
@@ -9,20 +10,30 @@ from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...analyzers.imports import ImportGraph
-from ...analyzers.imports.python import extract_python_imports
+from ...analyzers.imports.base import get_extractor, get_all_extensions
 
 logger = logging.getLogger(__name__)
 
 
 class I002(BaseRule):
-    """Detect circular dependencies in Python imports."""
+    """Detect circular dependencies in imports.
+
+    Supports multiple languages through dynamic extractor selection.
+    Works with Python, JavaScript, Go, and Rust.
+    """
 
     code = "I002"
     message = "Circular dependency detected"
     category = RulePrefix.I
     severity = Severity.HIGH
-    file_patterns = ['.py']
-    version = "1.0.0"
+    file_patterns = None  # Populated from registry in __init__
+    version = "2.0.0"
+
+    def __init__(self):
+        """Initialize with file patterns from all registered extractors."""
+        super().__init__()
+        if I002.file_patterns is None:
+            I002.file_patterns = list(get_all_extensions())
 
     def check(self,
              file_path: str,
@@ -32,7 +43,7 @@ class I002(BaseRule):
         Check for circular dependencies involving this file.
 
         Args:
-            file_path: Path to Python file
+            file_path: Path to source file
             structure: Parsed structure (not used)
             content: File content
 
@@ -78,7 +89,9 @@ class I002(BaseRule):
         return detections
 
     def _build_import_graph(self, directory: Path) -> ImportGraph:
-        """Build import graph for all Python files in directory and subdirs.
+        """Build import graph for all source files in directory and subdirs.
+
+        Analyzes files in all supported languages (Python, JavaScript, Go, Rust).
 
         Args:
             directory: Directory to analyze
@@ -86,18 +99,28 @@ class I002(BaseRule):
         Returns:
             ImportGraph with all imports and resolved dependencies
         """
-        from ...analyzers.imports.resolver import resolve_python_import
-
         all_imports = []
+        supported_extensions = get_all_extensions()
 
-        # Recursively find all Python files
-        for py_file in directory.rglob("*.py"):
-            if py_file.is_file():
-                try:
-                    imports = extract_python_imports(py_file)
-                    all_imports.extend(imports)
-                except Exception as e:
-                    logger.debug(f"Failed to extract imports from {py_file}: {e}")
+        # Recursively find all files with supported extensions
+        for file_path in directory.rglob("*"):
+            if not file_path.is_file():
+                continue
+
+            # Check if file has a supported extension
+            if file_path.suffix not in supported_extensions:
+                continue
+
+            # Get extractor for this file type
+            extractor = get_extractor(file_path)
+            if not extractor:
+                continue
+
+            try:
+                imports = extractor.extract_imports(file_path)
+                all_imports.extend(imports)
+            except Exception as e:
+                logger.debug(f"Failed to extract imports from {file_path}: {e}")
 
         # Build graph from all imports
         graph = ImportGraph.from_imports(all_imports)
@@ -106,8 +129,13 @@ class I002(BaseRule):
         for file_path, imports in graph.files.items():
             base_path = file_path.parent
 
+            # Get extractor for this file type
+            extractor = get_extractor(file_path)
+            if not extractor:
+                continue
+
             for stmt in imports:
-                resolved = resolve_python_import(stmt, base_path)
+                resolved = extractor.resolve_import(stmt, base_path)
                 # Skip self-references (e.g., logging.py importing stdlib logging
                 # should not create logging.py → logging.py dependency)
                 if resolved and resolved != file_path:
