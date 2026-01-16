@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **git:// adapter polish** - Production-ready git repository inspection (Phase 1-3)
+  - **Phase 1**: Fixed CLI routing for git:// URIs (was broken - treated queries as element names)
+  - **Phase 2**: Progressive disclosure for blame (summary view by default, detail mode with `&detail=full`)
+    - Summary shows contributors, key hunks (94% token reduction: 216 hunks → ~15 lines)
+    - Detail mode shows line-by-line blame (original behavior)
+  - **Phase 3**: Semantic blame queries (KILLER FEATURE - unique to reveal)
+    - Query blame by function/class: `git://file.py?type=blame&element=main`
+    - Example: "Who wrote function X?" → direct answer without line number math
+    - Filters hunks to element's line range automatically
+    - Works with any language reveal analyzes (Python, JS, Rust, Go, etc.)
+  - Updated help://git with all new features and query parameters
+  - Token efficiency: <500 tokens for any git:// query (was 4800+ for blame)
+  - Session: spinning-wormhole-0115
+
 ### Changed
 - **README.md reverted to utility-first messaging** - Removed marketing fluff
   - Old title (from kiyuda-0115): "Trust and Legibility for AI-Assisted Development"

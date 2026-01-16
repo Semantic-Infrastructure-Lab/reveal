@@ -122,24 +122,79 @@ class GitRenderer:
 
     @staticmethod
     def _render_file_blame(result: dict) -> None:
-        """Render file blame."""
-        print(f"File Blame: {result['path']} @ {result['ref']}")
-        print(f"Lines: {result['lines']}")
-        print()
+        """Render file blame with progressive disclosure."""
+        # Check if detail mode is requested
+        detail_mode = result.get('detail', False)
 
-        for hunk in result['hunks']:
-            lines_info = hunk['lines']
-            commit_info = hunk['commit']
-            print(f"Lines {lines_info['start']}-{lines_info['start'] + lines_info['count'] - 1}:")
-            print(f"  {commit_info['hash']} {commit_info['date']} {commit_info['author']}")
-            print(f"  {commit_info['message']}")
+        if detail_mode:
+            # Detailed view: show all hunks (original behavior)
+            print(f"File Blame (Detailed): {result['path']} @ {result['ref']}")
+            print(f"Lines: {result['lines']}")
             print()
 
+            for hunk in result['hunks']:
+                lines_info = hunk['lines']
+                commit_info = hunk['commit']
+                print(f"Lines {lines_info['start']}-{lines_info['start'] + lines_info['count'] - 1}:")
+                print(f"  {commit_info['hash']} {commit_info['date']} {commit_info['author']}")
+                print(f"  {commit_info['message']}")
+                print()
+        else:
+            # Summary view: show contributors and key hunks
+            GitRenderer._render_file_blame_summary(result)
+
     @staticmethod
-    def render_element(result: dict, format: str = 'text') -> None:
-        """Render specific git element (commit, file, etc.)."""
-        # Element rendering is the same as structure rendering for git
-        GitRenderer.render_structure(result, format)
+    def _render_file_blame_summary(result: dict) -> None:
+        """Render blame summary (default view)."""
+        # Check if this is semantic blame (element-specific)
+        element = result.get('element')
+        if element:
+            print(f"Element Blame: {result['path']} → {element['name']}")
+            print(f"Lines {element['line_start']}-{element['line_end']} ({len(result['hunks'])} hunks)")
+        else:
+            print(f"File Blame Summary: {result['path']} ({result['lines']} lines, {len(result['hunks'])} hunks)")
+        print()
+
+        # Calculate contributor stats
+        contributors = {}
+        for hunk in result['hunks']:
+            author = hunk['commit']['author']
+            lines = hunk['lines']['count']
+            if author not in contributors:
+                contributors[author] = {'lines': 0, 'hunks': 0, 'latest_date': hunk['commit']['date']}
+            contributors[author]['lines'] += lines
+            contributors[author]['hunks'] += 1
+            # Track latest commit date
+            if hunk['commit']['date'] > contributors[author]['latest_date']:
+                contributors[author]['latest_date'] = hunk['commit']['date']
+
+        # Sort by lines contributed (descending)
+        sorted_contributors = sorted(contributors.items(), key=lambda x: x[1]['lines'], reverse=True)
+
+        print("Contributors (by lines owned):")
+        total_lines = result['lines']
+        for author, stats in sorted_contributors[:5]:  # Top 5 contributors
+            pct = (stats['lines'] / total_lines * 100) if total_lines > 0 else 0
+            print(f"  {author:30} {stats['lines']:4} lines ({pct:5.1f}%)  Last: {stats['latest_date']}")
+
+        if len(sorted_contributors) > 5:
+            print(f"  ... and {len(sorted_contributors) - 5} more contributors")
+        print()
+
+        # Find key hunks (largest continuous blocks)
+        key_hunks = sorted(result['hunks'], key=lambda h: h['lines']['count'], reverse=True)[:5]
+
+        print("Key hunks (largest continuous blocks):")
+        for hunk in key_hunks:
+            lines_info = hunk['lines']
+            commit_info = hunk['commit']
+            start = lines_info['start']
+            end = start + lines_info['count'] - 1
+            print(f"  Lines {start:3}-{end:3} ({lines_info['count']:3} lines)  {commit_info['hash']} {commit_info['date']} {commit_info['author'][:20]}")
+            print(f"    {commit_info['message'][:70]}")
+        print()
+
+        print(f"Use: reveal git://{result['path']}?type=blame&detail=full for line-by-line view")
 
     @staticmethod
     def render_error(error: Exception) -> None:
@@ -174,7 +229,7 @@ class GitAdapter(ResourceAdapter):
     Requires: pip install reveal-cli[git]
     """
 
-    def __init__(self, resource: Optional[str] = None, ref: Optional[str] = None,
+    def __init__(self, resource: str, ref: Optional[str] = None,
                  subpath: Optional[str] = None, query: Optional[Dict[str, str]] = None,
                  path: Optional[str] = None):
         """
@@ -187,7 +242,7 @@ class GitAdapter(ResourceAdapter):
            GitAdapter(path=".", ref="main", subpath="file.py", query={...})
 
         Args:
-            resource: Either resource URI string or repository path
+            resource: Either resource URI string or repository path (required)
             ref: Git reference (commit, branch, tag, HEAD~N)
             subpath: Path within repository (file or directory)
             query: Query parameters (type=history|blame, since, author, etc.)
@@ -197,20 +252,37 @@ class GitAdapter(ResourceAdapter):
         if path is not None:
             resource = path
 
-        # Default to current directory if no resource/path specified
-        if resource is None:
-            resource = '.'
+        # Handle routing.py passing query string as ref parameter
+        # (routing.py Try 2 does: adapter_class(path, query))
+        if ref is not None and '=' in ref and query is None:
+            # ref looks like a query string, move it to query
+            query_string = ref
+            ref = None
+            query = {}
+            for param in query_string.split('&'):
+                if '=' in param:
+                    key, value = param.split('=', 1)
+                    query[key] = value
 
-        # If only resource is provided and no other args, parse it as URI
-        if ref is None and subpath is None and query is None and resource:
-            # Parse resource string: path[@ref][/subpath][?query]
+        # Parse resource string if it looks like a URI (has @ or is a file path)
+        # This handles both "README.md@ref" and "README.md" (treated as subpath)
+        if subpath is None and resource:
+            # Parse resource string to extract path/subpath/ref
             parsed = self._parse_resource_string(resource)
             self.path = parsed['path']
-            self.ref = parsed['ref']
+            # Only override ref/query if not already set from routing workaround
+            if ref is None:
+                self.ref = parsed['ref']
+            else:
+                self.ref = ref
             self.subpath = parsed['subpath']
-            self.query = parsed['query']
+            # Merge parsed query with explicitly provided query
+            if query:
+                self.query = {**parsed['query'], **query}
+            else:
+                self.query = parsed['query']
         else:
-            # Old style: explicit arguments
+            # Old style: explicit arguments (all provided)
             self.path = resource
             self.ref = ref or 'HEAD'
             self.subpath = subpath
@@ -257,9 +329,17 @@ class GitAdapter(ResourceAdapter):
         if '@' in resource:
             resource, ref = resource.rsplit('@', 1)
 
-        # What's left is path or path/subpath
+        # What's left is path or subpath
+        # Logic: If resource starts with "." or "/", treat as repo path
+        # Otherwise, treat as subpath within current directory
         if resource:
-            path = resource if resource else '.'
+            if resource == '.' or resource.startswith('/') or resource.startswith('./'):
+                path = resource
+                subpath = None
+            else:
+                # Resource looks like a file path, not a repo path
+                path = '.'
+                subpath = resource
 
         return {'path': path, 'ref': ref, 'subpath': subpath, 'query': query}
 
@@ -357,16 +437,20 @@ class GitAdapter(ResourceAdapter):
                 {'uri': 'git://.@main', 'description': 'Branch/commit history'},
                 {'uri': 'git://.@abc1234', 'description': 'Specific commit details'},
                 {'uri': 'git://src/app.py@v1.0', 'description': 'File contents at tag'},
-                {'uri': 'git://src/app.py?type=history', 'description': 'File commit history'},
-                {'uri': 'git://src/app.py?type=blame', 'description': 'File blame (who/when/why)'},
+                {'uri': 'git://src/app.py?type=history', 'description': 'File commit history (50 commits)'},
+                {'uri': 'git://src/app.py?type=blame', 'description': 'File blame summary (contributors + key hunks)'},
+                {'uri': 'git://src/app.py?type=blame&detail=full', 'description': 'File blame detailed (line-by-line)'},
+                {'uri': 'git://src/app.py?type=blame&element=load_config', 'description': 'Semantic blame (who wrote this function)'},
                 {'uri': 'git://.?since=1w', 'description': 'Commits from last week'},
             ],
             'query_parameters': {
                 'type': 'Operation type: history (file history) or blame (line annotations)',
+                'detail': 'For blame: "full" shows line-by-line (default is summary)',
+                'element': 'For blame: function/class name for semantic blame',
                 'since': 'Show commits since date/time (e.g., 1w, 2026-01-01)',
                 'until': 'Show commits until date',
                 'author': 'Filter by author name/email',
-                'limit': 'Limit number of results (default: 10 for commits, 100 for blame)',
+                'limit': 'Limit number of results (default: 50 for history)',
             },
             'notes': [
                 'Requires pygit2: pip install reveal-cli[git]',
@@ -509,7 +593,7 @@ class GitAdapter(ResourceAdapter):
             raise ValueError(f"Failed to get file history: {self.subpath}") from e
 
     def _get_file_blame(self, repo: 'pygit2.Repository') -> Dict[str, Any]:
-        """Get blame information for a file."""
+        """Get blame information for a file or specific element."""
         try:
             # Resolve ref to commit
             obj = repo.revparse_single(self.ref)
@@ -545,7 +629,33 @@ class GitAdapter(ResourceAdapter):
                     },
                 })
 
-            return {
+            # Check if semantic blame (element-specific) is requested
+            element_name = self.query.get('element')
+            element_info = None
+            if element_name:
+                # Get line range for the element
+                element_range = self._get_element_line_range(element_name)
+                if element_range:
+                    element_info = {
+                        'name': element_name,
+                        'line_start': element_range['line'],
+                        'line_end': element_range['line_end'],
+                    }
+                    # Filter hunks to only those within the element's range
+                    filtered_hunks = []
+                    for hunk in hunks:
+                        hunk_start = hunk['lines']['start']
+                        hunk_end = hunk_start + hunk['lines']['count'] - 1
+                        # Check if hunk overlaps with element range
+                        if (hunk_start <= element_range['line_end'] and
+                            hunk_end >= element_range['line']):
+                            filtered_hunks.append(hunk)
+                    hunks = filtered_hunks
+
+            # Check if detail mode is requested
+            detail_mode = self.query.get('detail') == 'full'
+
+            result = {
                 'type': 'file_blame',
                 'path': self.subpath,
                 'ref': self.ref,
@@ -553,10 +663,55 @@ class GitAdapter(ResourceAdapter):
                 'lines': len(lines),
                 'hunks': hunks,
                 'file_content': lines,
+                'detail': detail_mode,
             }
+
+            if element_info:
+                result['element'] = element_info
+
+            return result
 
         except (KeyError, pygit2.GitError) as e:
             raise ValueError(f"Failed to get file blame: {self.subpath}") from e
+
+    def _get_element_line_range(self, element_name: str) -> Optional[Dict[str, int]]:
+        """Get line range for a specific element (function/class) in the file."""
+        try:
+            # Use reveal's registry to analyze the file
+            from reveal.registry import get_analyzer
+
+            # Build absolute path if needed
+            if self.path and self.path != '.':
+                file_path = os.path.join(self.path, self.subpath)
+            else:
+                file_path = self.subpath
+
+            # Make path absolute for analyzer
+            if not os.path.isabs(file_path):
+                file_path = os.path.abspath(file_path)
+
+            analyzer_class = get_analyzer(file_path)
+            if not analyzer_class:
+                return None
+
+            analyzer = analyzer_class(file_path)
+            structure = analyzer.get_structure()
+
+            # Search for the element in functions and classes
+            for func in structure.get('functions', []):
+                if func.get('name') == element_name:
+                    return {'line': func['line'], 'line_end': func.get('line_end', func['line'])}
+
+            for cls in structure.get('classes', []):
+                if cls.get('name') == element_name:
+                    return {'line': cls['line'], 'line_end': cls.get('line_end', cls['line'])}
+
+            return None
+
+        except Exception as e:
+            # Log error for debugging but don't fail the whole blame operation
+            print(f"Warning: Failed to get element range: {e}", file=sys.stderr)
+            return None
 
     def _commit_touches_file(self, repo: 'pygit2.Repository',
                             commit: 'pygit2.Commit', filepath: str) -> bool:
