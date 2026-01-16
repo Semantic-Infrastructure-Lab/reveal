@@ -93,7 +93,7 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
     # Try 1: No arguments (env, python)
     try:
         adapter = adapter_class()
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
         pass  # Not a no-arg adapter
     except ImportError as e:
         init_error = e  # Capture import errors for special handling
@@ -106,7 +106,7 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
             if not path:
                 path = '.'
             adapter = adapter_class(path, query)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
             pass  # Not a query-parsing adapter
         except ImportError as e:
             init_error = e
@@ -121,7 +121,7 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
                 path = resource.rstrip('/') if resource else '.'
                 query = None
             adapter = adapter_class(base_path=path, query=query)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
             pass  # Not a keyword-arg adapter
         except ImportError as e:
             init_error = e
@@ -135,14 +135,14 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
                 try:
                     # Try with query=None for query-parsing adapters
                     adapter = adapter_class(path, None)
-                except (TypeError, ValueError):
+                except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
                     # Try simple resource argument
                     adapter = adapter_class(resource)
                 except ImportError as e:
                     init_error = e
             else:
                 adapter = adapter_class(resource)
-        except (TypeError, ValueError) as e:
+        except (TypeError, ValueError, FileNotFoundError, IsADirectoryError) as e:
             init_error = e
         except ImportError as e:
             init_error = e
@@ -155,7 +155,7 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
             if element and '://' in full_uri:  # Only append element for URI-based adapters
                 full_uri = f"{full_uri}/{element}"
             adapter = adapter_class(full_uri)
-        except (TypeError, ValueError) as e:
+        except (TypeError, ValueError, FileNotFoundError, IsADirectoryError) as e:
             init_error = e
         except ImportError as e:
             init_error = e

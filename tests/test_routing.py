@@ -12,7 +12,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from reveal.cli.routing import generic_adapter_handler
+from reveal.cli.routing import generic_adapter_handler, handle_uri, handle_adapter
 
 
 class MockRenderer:
@@ -386,6 +386,230 @@ class TestGenericAdapterHandler(unittest.TestCase):
         final_uri = init_called[-1]  # Last attempt should be the successful one
         self.assertIn('sqlite://', final_uri, "Should include scheme")
         self.assertIn('table_name', final_uri, "Should append element to URI")
+
+
+class TestHandleUri(unittest.TestCase):
+    """Tests for handle_uri function."""
+
+    def test_invalid_uri_format(self):
+        """Verify error handling for URI without :// separator."""
+        mock_args = Namespace(format='text')
+
+        with patch('sys.stderr') as mock_stderr, \
+             patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
+            with self.assertRaises(SystemExit):
+                handle_uri('invalid_uri', None, mock_args)
+
+            mock_exit.assert_called_once_with(1)
+
+    def test_unsupported_uri_scheme(self):
+        """Verify error handling for unsupported URI scheme."""
+        mock_args = Namespace(format='text')
+
+        with patch('sys.stderr') as mock_stderr, \
+             patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
+            with self.assertRaises(SystemExit):
+                handle_uri('foobar://resource', None, mock_args)
+
+            mock_exit.assert_called_once_with(1)
+
+
+class TestHandleAdapter(unittest.TestCase):
+    """Tests for handle_adapter function."""
+
+    def test_renderer_not_found(self):
+        """Verify error handling when no renderer is registered for scheme."""
+
+        class TestAdapter:
+            def __init__(self):
+                pass
+
+            def get_structure(self):
+                return {'type': 'test'}
+
+        mock_args = Namespace(format='text', check=False)
+
+        with patch('reveal.adapters.base.get_renderer_class', return_value=None):
+            with patch('sys.stderr') as mock_stderr, \
+                 patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
+                with self.assertRaises(SystemExit):
+                    handle_adapter(TestAdapter, 'test', 'resource', None, mock_args)
+
+                mock_exit.assert_called_once_with(1)
+
+
+class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
+    """Additional tests for generic_adapter_handler edge cases."""
+
+    def test_check_flag_with_adapter_support(self):
+        """Verify --check flag is processed when adapter supports it."""
+
+        class CheckableAdapter:
+            def __init__(self, resource=None):
+                self.resource = resource
+
+            def check(self):
+                return {'status': 'ok', 'exit_code': 0}
+
+            def get_structure(self):
+                return {'type': 'test'}
+
+        class CheckRenderer:
+            @staticmethod
+            def render_check(result, format='text'):
+                pass
+
+            @staticmethod
+            def render_structure(result, format='text'):
+                pass
+
+            @staticmethod
+            def render_error(error):
+                pass
+
+        mock_args = Namespace(
+            format='text',
+            check=True,
+            select=None,
+            ignore=None
+        )
+
+        with patch('sys.stdout'), \
+             patch('sys.exit', side_effect=SystemExit(0)) as mock_exit:
+            with self.assertRaises(SystemExit):
+                generic_adapter_handler(
+                    CheckableAdapter,
+                    CheckRenderer,
+                    'test',
+                    'resource',
+                    None,
+                    mock_args
+                )
+
+            mock_exit.assert_called_once_with(0)
+
+    def test_element_not_found_error(self):
+        """Verify error handling when requested element doesn't exist."""
+
+        class ElementAdapter:
+            def __init__(self):
+                # No-arg init for env-like adapter
+                pass
+
+            def get_element(self, name):
+                # Simulate element not found
+                return None
+
+            def list_elements(self):
+                return ['elem1', 'elem2']
+
+            def get_structure(self):
+                return {'type': 'test'}
+
+        class ElementRenderer:
+            @staticmethod
+            def render_element(result, format='text'):
+                pass
+
+            @staticmethod
+            def render_structure(result, format='text'):
+                pass
+
+            @staticmethod
+            def render_error(error):
+                pass
+
+        mock_args = Namespace(
+            format='text',
+            check=False
+        )
+
+        with patch('sys.stderr'), \
+             patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
+            with self.assertRaises(SystemExit):
+                generic_adapter_handler(
+                    ElementAdapter,
+                    ElementRenderer,
+                    'env',  # Use 'env' scheme which is in ELEMENT_NAMESPACE_ADAPTERS
+                    'nonexistent_elem',  # This becomes the element when resource_is_element=True
+                    None,
+                    mock_args
+                )
+
+            mock_exit.assert_called_once_with(1)
+
+    def test_file_not_found_error_handling(self):
+        """Verify FileNotFoundError is caught gracefully in adapter init.
+
+        This tests the OSError family handling we just added.
+        """
+        attempts = []
+
+        class FileErrorAdapter:
+            def __init__(self, *args, **kwargs):
+                attempts.append(('init', args, kwargs))
+                # First few attempts raise FileNotFoundError
+                if len(attempts) < 3:
+                    raise FileNotFoundError("File not found")
+                # Final attempt succeeds with full URI pattern
+                if args and isinstance(args[0], str) and '://' in args[0]:
+                    self.uri = args[0]
+                else:
+                    raise ValueError("Need URI")
+
+            def get_structure(self):
+                return {'type': 'test'}
+
+        mock_renderer = MockRenderer
+        mock_args = Namespace(format='text', check=False)
+
+        with patch('sys.stdout'):
+            generic_adapter_handler(
+                FileErrorAdapter,
+                mock_renderer,
+                'test',
+                'resource',
+                None,
+                mock_args
+            )
+
+        # Should have tried multiple times before succeeding
+        self.assertGreaterEqual(len(attempts), 3, "Should try multiple patterns after FileNotFoundError")
+
+    def test_is_a_directory_error_handling(self):
+        """Verify IsADirectoryError is caught gracefully in adapter init."""
+        attempts = []
+
+        class DirErrorAdapter:
+            def __init__(self, *args, **kwargs):
+                attempts.append(('init', args, kwargs))
+                # First few attempts raise IsADirectoryError
+                if len(attempts) < 3:
+                    raise IsADirectoryError("Is a directory")
+                # Final attempt succeeds with full URI pattern
+                if args and isinstance(args[0], str) and '://' in args[0]:
+                    self.uri = args[0]
+                else:
+                    raise ValueError("Need URI")
+
+            def get_structure(self):
+                return {'type': 'test'}
+
+        mock_renderer = MockRenderer
+        mock_args = Namespace(format='text', check=False)
+
+        with patch('sys.stdout'):
+            generic_adapter_handler(
+                DirErrorAdapter,
+                mock_renderer,
+                'test',
+                'resource',
+                None,
+                mock_args
+            )
+
+        # Should have tried multiple times before succeeding
+        self.assertGreaterEqual(len(attempts), 3, "Should try multiple patterns after IsADirectoryError")
 
 
 class TestRoutingEdgeCases(unittest.TestCase):
