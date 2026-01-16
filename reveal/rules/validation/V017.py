@@ -42,8 +42,11 @@ class V017(BaseRule):
     """
 
     code = "V017"
+    message = "Tree-sitter node types missing for supported language"
     category = RulePrefix.V
     severity = Severity.HIGH
+    file_patterns = ['.py']
+    version = "1.0.0"
 
     def check(self,
               file_path: str,

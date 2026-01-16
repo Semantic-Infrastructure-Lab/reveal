@@ -45,8 +45,11 @@ class M104(BaseRule):
     """
 
     code = "M104"
-    prefix = RulePrefix.M
+    message = "Large hardcoded configuration should be externalized to config file"
+    category = RulePrefix.M
     severity = Severity.LOW
+    file_patterns = ['.py']
+    version = "1.0.0"
 
     # Default thresholds
     DEFAULT_LIST_THRESHOLD = 10

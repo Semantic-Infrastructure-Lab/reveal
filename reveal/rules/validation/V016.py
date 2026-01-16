@@ -35,8 +35,11 @@ class V016(BaseRule):
     """
 
     code = "V016"
+    message = "Adapter missing get_help() documentation for discoverability"
     category = RulePrefix.V
     severity = Severity.MEDIUM
+    file_patterns = ['.py']
+    version = "1.0.0"
 
     def check(self,
               file_path: str,
