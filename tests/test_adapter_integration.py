@@ -256,7 +256,6 @@ class TestGitAdapterIntegration(unittest.TestCase):
         )
         return result
 
-    @unittest.skip("git:// adapter requires CLI routing fix - adapter not receiving resource parameter")
     def test_git_adapter_shows_repo_info(self):
         """Test git:// adapter shows repository information."""
         # Run in the reveal repository itself
@@ -276,43 +275,60 @@ class TestGitAdapterIntegration(unittest.TestCase):
             f"Expected git information in output: {result.stdout}"
         )
 
-    @unittest.skip("git:// adapter requires CLI routing fix - adapter not receiving resource parameter")
-    def test_git_adapter_shows_status(self):
-        """Test git:// adapter shows status information."""
+    def test_git_adapter_shows_branch_info(self):
+        """Test git:// adapter shows branch information."""
         repo_dir = Path(__file__).parent.parent
 
-        result = self.run_reveal_command("git://status", cwd=repo_dir)
+        # Get current branch name first
+        import subprocess
+        branch_result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True
+        )
+        current_branch = branch_result.stdout.strip() or "master"
+
+        result = self.run_reveal_command(f"git://.@{current_branch}", cwd=repo_dir)
 
         self.assertEqual(
             result.returncode, 0,
-            f"git://status failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+            f"git://.@{current_branch} failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
 
-        # Should show status information
+        # Should show branch/commit information
         output = result.stdout.lower()
-        # Git status output varies, but should contain some git-related terms
         self.assertTrue(
-            len(result.stdout) > 0,
-            "Expected some output from git://status"
+            'commit' in output or 'author' in output,
+            f"Expected commit information in output: {result.stdout}"
         )
 
-    @unittest.skip("git:// adapter requires CLI routing fix - adapter not receiving resource parameter")
-    def test_git_adapter_shows_log(self):
-        """Test git:// adapter shows commit log."""
+    def test_git_adapter_shows_commit_history(self):
+        """Test git:// adapter shows commit history."""
         repo_dir = Path(__file__).parent.parent
 
-        result = self.run_reveal_command("git://log", cwd=repo_dir)
+        # Get current branch name first
+        import subprocess
+        branch_result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True
+        )
+        current_branch = branch_result.stdout.strip() or "master"
+
+        result = self.run_reveal_command(f"git://.@{current_branch}", cwd=repo_dir)
 
         self.assertEqual(
             result.returncode, 0,
-            f"git://log failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+            f"git://.@{current_branch} failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
 
-        # Should show commit log
+        # Should show commit history with author and date
         output = result.stdout.lower()
         self.assertTrue(
-            'commit' in output or len(result.stdout) > 0,
-            f"Expected commit log in output: {result.stdout}"
+            ('commit' in output and 'author' in output) or 'date' in output,
+            f"Expected commit history in output: {result.stdout}"
         )
 
     def test_git_adapter_outside_repo_fails_gracefully(self):
@@ -479,6 +495,140 @@ author: Another Author
                 'test1.md' in output or 'test2.md' in output or 'matched' in output.lower(),
                 f"Expected markdown file listing in output: {result.stdout}"
             )
+
+
+class TestPythonAdapterIntegration(unittest.TestCase):
+    """Integration tests for python:// adapter."""
+
+    def run_reveal_command(self, *args):
+        """Run reveal command and return result."""
+        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=30
+        )
+        return result
+
+    def test_python_adapter_shows_environment(self):
+        """Test python:// adapter shows Python environment information."""
+        result = self.run_reveal_command("python://")
+
+        self.assertEqual(
+            result.returncode, 0,
+            f"python:// failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+        # Should show Python environment information
+        output = result.stdout.lower()
+        self.assertTrue(
+            'python' in output and ('version' in output or 'executable' in output),
+            f"Expected Python environment info in output: {result.stdout}"
+        )
+
+    def test_python_adapter_shows_version(self):
+        """Test python:// adapter shows version details."""
+        result = self.run_reveal_command("python://version")
+
+        self.assertEqual(
+            result.returncode, 0,
+            f"python://version failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+        # Should show version details
+        output = result.stdout.lower()
+        self.assertTrue(
+            'version' in output and 'implementation' in output,
+            f"Expected version details in output: {result.stdout}"
+        )
+
+    def test_python_adapter_shows_packages(self):
+        """Test python:// adapter shows installed packages."""
+        result = self.run_reveal_command("python://packages")
+
+        self.assertEqual(
+            result.returncode, 0,
+            f"python://packages failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+        # Should show package list
+        output = result.stdout.lower()
+        self.assertTrue(
+            'packages' in output or 'installed' in output,
+            f"Expected package list in output: {result.stdout}"
+        )
+
+    def test_python_adapter_shows_venv(self):
+        """Test python:// adapter shows virtual environment status."""
+        result = self.run_reveal_command("python://venv")
+
+        self.assertEqual(
+            result.returncode, 0,
+            f"python://venv failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+        # Should show venv information (active or not)
+        self.assertTrue(
+            len(result.stdout) > 0,
+            f"Expected venv information in output: {result.stdout}"
+        )
+
+    def test_python_adapter_invalid_element(self):
+        """Test python:// adapter handles invalid element gracefully."""
+        result = self.run_reveal_command("python://invalid_element_xyz")
+
+        # Should either fail gracefully or show empty result
+        # Don't assert on return code as adapter may handle this differently
+        self.assertNotIn(
+            'Traceback',
+            result.stderr,
+            f"Should not crash on invalid element:\nstderr: {result.stderr}"
+        )
+
+
+class TestStatsAdapterIntegration(unittest.TestCase):
+    """Integration tests for stats:// adapter."""
+
+    def run_reveal_command(self, *args):
+        """Run reveal command and return result."""
+        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=30
+        )
+        return result
+
+    def test_stats_adapter_shows_codebase_metrics(self):
+        """Test stats:// adapter shows codebase statistics."""
+        # Use reveal's own codebase for testing
+        result = self.run_reveal_command("stats://reveal")
+
+        self.assertEqual(
+            result.returncode, 0,
+            f"stats://reveal failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+        # Should show statistics
+        output = result.stdout.lower()
+        self.assertTrue(
+            'files' in output or 'lines' in output or 'functions' in output,
+            f"Expected codebase statistics in output: {result.stdout}"
+        )
+
+    def test_stats_adapter_on_nonexistent_path_fails_gracefully(self):
+        """Test stats:// adapter handles nonexistent path gracefully."""
+        result = self.run_reveal_command("stats://nonexistent_path_xyz")
+
+        # Should fail with non-zero exit code or error message
+        self.assertTrue(
+            result.returncode != 0 or 'error' in result.stderr.lower() or 'not found' in result.stderr.lower(),
+            f"Expected error for nonexistent path:\nreturncode: {result.returncode}\nstderr: {result.stderr}"
+        )
 
 
 if __name__ == '__main__':

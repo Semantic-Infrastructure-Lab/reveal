@@ -10,7 +10,7 @@ This test suite validates that reveal's adapter system works correctly through t
 
 ## Test Coverage
 
-### ✅ Fully Tested Adapters (17 passing tests)
+### ✅ Fully Tested Adapters (27 passing tests, 0 skipped)
 
 #### help:// - Help System Adapter (4 tests)
 - ✅ Lists available help topics
@@ -31,6 +31,13 @@ This test suite validates that reveal's adapter system works correctly through t
 - ✅ Handles invalid Python gracefully
 - **Usage:** `reveal ast://./src`, `reveal ast://.?complexity>10`
 
+#### git:// - Git Repository Adapter (4 tests) ✨ NEW: Routing bug fixed!
+- ✅ Shows repository overview (branches, tags, commits)
+- ✅ Shows branch commit history
+- ✅ Shows detailed commit history for refs
+- ✅ Handles non-git directories gracefully
+- **Usage:** `reveal git://.`, `reveal git://.@master`
+
 #### json:// - JSON Adapter (4 tests)
 - ✅ Shows JSON file structure
 - ✅ Queries specific paths (e.g., `/user/name`)
@@ -42,18 +49,18 @@ This test suite validates that reveal's adapter system works correctly through t
 - ✅ Searches directories for markdown files
 - **Usage:** `reveal markdown://./docs`
 
-#### git:// - Git Repository Adapter (1 test)
-- ✅ Handles non-git directories gracefully
-- ⏭️ 3 tests skipped (requires CLI routing fix)
+#### python:// - Python Runtime Adapter (5 tests) ✨ NEW
+- ✅ Shows Python environment information
+- ✅ Shows version details
+- ✅ Lists installed packages
+- ✅ Shows virtual environment status
+- ✅ Handles invalid elements gracefully
+- **Usage:** `reveal python://`, `reveal python://version`, `reveal python://packages`
 
-### ⏭️ Skipped Tests (3 tests)
-
-#### git:// adapter tests requiring routing fix:
-- `test_git_adapter_shows_repo_info` - git://. syntax not receiving resource parameter
-- `test_git_adapter_shows_status` - CLI routing issue
-- `test_git_adapter_shows_log` - CLI routing issue
-
-**Issue:** The git:// adapter initialization expects `resource` or `path` parameter but isn't receiving it through CLI routing. Documented for future fix.
+#### stats:// - Codebase Statistics Adapter (2 tests) ✨ NEW
+- ✅ Shows codebase metrics (files, lines, functions, complexity)
+- ✅ Handles nonexistent paths gracefully
+- **Usage:** `reveal stats://./src`
 
 ## Test Structure
 

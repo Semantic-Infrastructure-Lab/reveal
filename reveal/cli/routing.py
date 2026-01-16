@@ -93,7 +93,7 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
     # Try 1: No arguments (env, python)
     try:
         adapter = adapter_class()
-    except TypeError:
+    except (TypeError, ValueError):
         pass  # Not a no-arg adapter
 
     # Try 2: Resource with query parsing (ast, json)
@@ -117,7 +117,7 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
                 path = resource.rstrip('/') if resource else '.'
                 query = None
             adapter = adapter_class(base_path=path, query=query)
-        except TypeError:
+        except (TypeError, ValueError):
             pass  # Not a keyword-arg adapter
 
     # Try 4: Resource argument (help, ast without query, json without query)
@@ -129,7 +129,7 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
                 try:
                     # Try with query=None for query-parsing adapters
                     adapter = adapter_class(path, None)
-                except TypeError:
+                except (TypeError, ValueError):
                     # Try simple resource argument
                     adapter = adapter_class(resource)
             else:
