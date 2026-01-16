@@ -12,7 +12,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from reveal.cli.routing import generic_adapter_handler, handle_uri, handle_adapter
+from reveal.cli.routing import generic_adapter_handler, handle_uri, handle_adapter, handle_file_or_directory
 
 
 class MockRenderer:
@@ -610,6 +610,125 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
 
         # Should have tried multiple times before succeeding
         self.assertGreaterEqual(len(attempts), 3, "Should try multiple patterns after IsADirectoryError")
+
+
+class TestHandleFileOrDirectory(unittest.TestCase):
+    """Tests for handle_file_or_directory function."""
+
+    def test_hotspots_flag_error(self):
+        """Verify --hotspots flag shows error with instructions."""
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            temp_path = f.name
+
+        try:
+            mock_args = Namespace(
+                hotspots=True,
+                format='text'
+            )
+
+            with patch('sys.stderr'), \
+                 patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
+                with self.assertRaises(SystemExit):
+                    handle_file_or_directory(temp_path, mock_args)
+
+                mock_exit.assert_called_once_with(1)
+        finally:
+            os.unlink(temp_path)
+
+    def test_path_not_found_error(self):
+        """Verify error when path doesn't exist."""
+        mock_args = Namespace(
+            hotspots=False,
+            format='text'
+        )
+
+        with patch('sys.stderr'), \
+             patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
+            with self.assertRaises(SystemExit):
+                handle_file_or_directory('/nonexistent/path', mock_args)
+
+            mock_exit.assert_called_once_with(1)
+
+    def test_directory_tree_view(self):
+        """Verify directory shows tree view."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            mock_args = Namespace(
+                hotspots=False,
+                recursive=False,
+                check=False,
+                depth=2,
+                max_entries=100,
+                fast=False,
+                respect_gitignore=True,
+                exclude=None
+            )
+
+            with patch('reveal.tree_view.show_directory_tree', return_value='tree output') as mock_tree:
+                with patch('sys.stdout'):
+                    handle_file_or_directory(temp_dir, mock_args)
+
+                # Verify show_directory_tree was called
+                mock_tree.assert_called_once()
+
+    def test_directory_recursive_check(self):
+        """Verify directory with --recursive --check triggers recursive check handler."""
+        import tempfile
+        from reveal.cli import routing
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            mock_args = Namespace(
+                hotspots=False,
+                recursive=True,
+                check=True,
+                format='text',
+                select=None,
+                ignore=None,
+                no_breadcrumbs=False
+            )
+
+            with patch.object(routing, 'handle_recursive_check') as mock_recursive:
+                handle_file_or_directory(temp_dir, mock_args)
+
+                # Verify handle_recursive_check was called
+                mock_recursive.assert_called_once()
+
+    def test_file_calls_handle_file(self):
+        """Verify file path calls handle_file."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.txt') as f:
+            temp_path = f.name
+            f.write(b"test content")
+
+        try:
+            mock_args = Namespace(
+                hotspots=False,
+                element=None,
+                meta=False,
+                format='text'
+            )
+
+            # Need to import handle_file in the module scope first
+            from reveal.cli import routing
+
+            with patch.object(routing, 'handle_file') as mock_handle:
+                handle_file_or_directory(temp_path, mock_args)
+
+                # Verify handle_file was called
+                mock_handle.assert_called_once_with(
+                    temp_path,
+                    None,  # element
+                    False,  # meta
+                    'text',  # format
+                    mock_args
+                )
+        finally:
+            os.unlink(temp_path)
 
 
 class TestRoutingEdgeCases(unittest.TestCase):
