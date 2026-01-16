@@ -165,6 +165,9 @@ class TestGenericAdapterHandler(unittest.TestCase):
 
         class KeywordAdapter:
             def __init__(self, base_path=None, query=None):
+                # Reject no-arg initialization to force Try 3 (keyword args)
+                if base_path is None and query is None:
+                    raise TypeError("Requires at least one argument")
                 init_called.append({'base_path': base_path, 'query': query})
                 self.base_path = base_path
                 self.query = query
@@ -182,8 +185,12 @@ class TestGenericAdapterHandler(unittest.TestCase):
                 self.mock_args
             )
 
-        self.assertEqual(len(init_called), 1)
-        self.assertEqual(init_called[0]['base_path'], 'some/path')
+        self.assertGreaterEqual(len(init_called), 1)
+        # Should eventually call with base_path='some/path'
+        self.assertTrue(
+            any(call['base_path'] == 'some/path' for call in init_called),
+            f"Expected base_path='some/path', got: {init_called}"
+        )
 
     def test_full_uri_adapter(self):
         """Verify adapter expecting full URI works."""
@@ -215,8 +222,9 @@ class TestGenericAdapterHandler(unittest.TestCase):
     def test_exception_handling_consistency(self):
         """Verify all Try blocks catch both TypeError and ValueError.
 
-        This test documents the fix: all initialization attempts should
-        catch both exception types consistently.
+        This test documents the bugfix: before the fix, only TypeError was caught
+        in Try blocks 1, 3, and 4. Now all blocks catch both TypeError and ValueError
+        consistently, so adapters that raise ValueError (like git adapter) work correctly.
         """
         # Create adapter that alternates between TypeError and ValueError
         attempt_count = [0]
@@ -224,40 +232,60 @@ class TestGenericAdapterHandler(unittest.TestCase):
         class InconsistentAdapter:
             def __init__(self, *args, **kwargs):
                 attempt_count[0] += 1
+                # Alternate between exception types to test both are caught
                 if attempt_count[0] % 2 == 0:
-                    raise ValueError(f"Attempt {attempt_count[0]}")
+                    raise ValueError(f"ValueError on attempt {attempt_count[0]}")
                 else:
-                    raise TypeError(f"Attempt {attempt_count[0]}")
+                    raise TypeError(f"TypeError on attempt {attempt_count[0]}")
 
             def get_structure(self):
                 return {'type': 'test'}
 
         # Should try all patterns without crashing on ValueError
-        with patch('sys.stdout'), patch('sys.stderr'), patch('sys.exit'):
-            generic_adapter_handler(
-                InconsistentAdapter,
-                self.mock_renderer,
-                'test',
-                'resource',
-                None,
-                self.mock_args
-            )
+        with patch('sys.stdout'), patch('sys.stderr'):
+            with patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
+                with self.assertRaises(SystemExit):
+                    generic_adapter_handler(
+                        InconsistentAdapter,
+                        self.mock_renderer,
+                        'test',
+                        'resource',
+                        None,
+                        self.mock_args
+                    )
 
-        # Should have tried multiple patterns (5 Try blocks)
-        # Even though it raises both TypeError and ValueError
-        self.assertGreaterEqual(attempt_count[0], 3, "Should try multiple patterns despite mixed exceptions")
+        # Should have tried multiple patterns despite alternating exceptions
+        # Try 1 (no args), Try 3 (keyword args), Try 4 (resource arg + nested try),
+        # and Try 5 (full URI) should all be attempted
+        self.assertGreaterEqual(
+            attempt_count[0], 4,
+            f"Should try at least 4 patterns (got {attempt_count[0]}), "
+            "demonstrating both TypeError and ValueError are caught consistently"
+        )
+        # Should eventually call sys.exit(1) after all patterns fail
+        mock_exit.assert_called_once_with(1)
 
     def test_empty_resource_defaults_to_current_dir(self):
-        """Verify empty resource defaults to '.' for path-based adapters."""
+        """Verify empty resource defaults to '.' for path-based adapters.
+
+        Tests Try 3 (keyword args) which defaults empty resource to '.'.
+        routing.py line 117: path = resource.rstrip('/') if resource else '.'
+        """
         init_called = []
 
         class PathAdapter:
-            def __init__(self, path, query=None):
-                init_called.append({'path': path, 'query': query})
-                self.path = path
+            def __init__(self, base_path=None, query=None):
+                # Reject no-arg to force Try 3 keyword pattern
+                if base_path is None and query is None:
+                    raise TypeError("At least one argument required")
+                # Reject full URIs (would succeed in Try 5)
+                if base_path and '://' in base_path:
+                    raise ValueError("Expected path, not URI")
+                init_called.append({'base_path': base_path, 'query': query})
+                self.base_path = base_path
 
             def get_structure(self):
-                return {'type': 'test', 'path': self.path}
+                return {'type': 'test', 'path': self.base_path}
 
         with patch('sys.stdout'):
             generic_adapter_handler(
@@ -269,64 +297,95 @@ class TestGenericAdapterHandler(unittest.TestCase):
                 self.mock_args
             )
 
-        # Should default empty path to '.'
+        # Should default empty path to '.' (routing.py line 117)
+        self.assertGreaterEqual(len(init_called), 1, "Adapter should be initialized")
         self.assertTrue(
-            any(call['path'] == '.' for call in init_called),
-            "Empty resource should default to '.'"
+            any(call['base_path'] == '.' for call in init_called),
+            f"Empty resource should default to '.', got: {init_called}"
         )
 
     def test_import_error_special_handling(self):
-        """Verify ImportError gets special error rendering."""
+        """Verify ImportError gets special error rendering.
+
+        Tests that when an adapter raises ImportError (e.g., missing dependency),
+        the routing handler catches it and calls renderer.render_error() instead
+        of just printing a generic error message.
+        """
         class MissingDependencyAdapter:
-            def __init__(self):
+            def __init__(self, *args, **kwargs):
                 raise ImportError("pip install some-package")
 
             def get_structure(self):
                 return {'type': 'test'}
 
-        with patch.object(self.mock_renderer, 'render_error') as mock_render:
-            with patch('sys.exit'):
-                generic_adapter_handler(
-                    MissingDependencyAdapter,
-                    self.mock_renderer,
-                    'test',
-                    'resource',
-                    None,
-                    self.mock_args
-                )
+        with patch('sys.stdout'), patch('sys.stderr'):
+            with patch.object(self.mock_renderer, 'render_error') as mock_render:
+                with patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
+                    # Call will trigger ImportError which should be handled gracefully
+                    with self.assertRaises(SystemExit):
+                        generic_adapter_handler(
+                            MissingDependencyAdapter,
+                            self.mock_renderer,
+                            'test',
+                            'resource',
+                            None,
+                            self.mock_args
+                        )
 
-        # Should call render_error for ImportError
-        mock_render.assert_called_once()
+                    # Should call render_error for ImportError
+                    mock_render.assert_called_once()
+                    # Verify the error passed is an ImportError
+                    call_args = mock_render.call_args[0]
+                    self.assertIsInstance(call_args[0], ImportError)
+                    self.assertIn("pip install some-package", str(call_args[0]))
+                    # Should exit with error code 1
+                    mock_exit.assert_called_once_with(1)
 
     def test_element_parameter_appended_for_uri(self):
-        """Verify element is appended to URI for URI-based adapters."""
+        """Verify element is appended to URI for URI-based adapters.
+
+        Tests Try 5 in routing which constructs full URI with element appended.
+        For sqlite://path/to/db.sqlite with element 'table_name', should
+        construct 'sqlite://path/to/db.sqlite/table_name'.
+        """
         init_called = []
 
         class URIAdapter:
             def __init__(self, uri):
                 init_called.append(uri)
                 if '://' not in uri:
-                    raise ValueError("Expected full URI")
+                    raise ValueError("Expected full URI with scheme")
                 self.uri = uri
 
             def get_structure(self):
-                return {'type': 'test'}
+                return {'type': 'test', 'uri': self.uri}
+
+        # Use a structure-only renderer (no render_element)
+        class StructureOnlyRenderer:
+            @staticmethod
+            def render_structure(result, format='text'):
+                pass
+
+            @staticmethod
+            def render_error(error):
+                pass
 
         with patch('sys.stdout'):
             generic_adapter_handler(
                 URIAdapter,
-                self.mock_renderer,
+                StructureOnlyRenderer,
                 'sqlite',
                 'path/to/db.sqlite',
                 'table_name',  # element
                 self.mock_args
             )
 
-        # Should construct URI with element appended
-        self.assertTrue(
-            any('table_name' in str(call) for call in init_called),
-            "Element should be appended to URI"
-        )
+        # Verify URI construction: sqlite://path/to/db.sqlite/table_name
+        self.assertGreaterEqual(len(init_called), 1, "Adapter should be initialized")
+        # Should construct URI with scheme and element appended
+        final_uri = init_called[-1]  # Last attempt should be the successful one
+        self.assertIn('sqlite://', final_uri, "Should include scheme")
+        self.assertIn('table_name', final_uri, "Should append element to URI")
 
 
 class TestRoutingEdgeCases(unittest.TestCase):

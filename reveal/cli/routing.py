@@ -95,6 +95,8 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
         adapter = adapter_class()
     except (TypeError, ValueError):
         pass  # Not a no-arg adapter
+    except ImportError as e:
+        init_error = e  # Capture import errors for special handling
 
     # Try 2: Resource with query parsing (ast, json)
     if adapter is None and '?' in resource:
@@ -106,6 +108,8 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
             adapter = adapter_class(path, query)
         except (TypeError, ValueError):
             pass  # Not a query-parsing adapter
+        except ImportError as e:
+            init_error = e
 
     # Try 3: Keyword args (markdown with base_path/query)
     if adapter is None:
@@ -119,6 +123,8 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
             adapter = adapter_class(base_path=path, query=query)
         except (TypeError, ValueError):
             pass  # Not a keyword-arg adapter
+        except ImportError as e:
+            init_error = e
 
     # Try 4: Resource argument (help, ast without query, json without query)
     if adapter is None and resource:
@@ -132,9 +138,13 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
                 except (TypeError, ValueError):
                     # Try simple resource argument
                     adapter = adapter_class(resource)
+                except ImportError as e:
+                    init_error = e
             else:
                 adapter = adapter_class(resource)
         except (TypeError, ValueError) as e:
+            init_error = e
+        except ImportError as e:
             init_error = e
 
     # Try 5: Full URI (mysql, sqlite with element)
@@ -146,6 +156,8 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
                 full_uri = f"{full_uri}/{element}"
             adapter = adapter_class(full_uri)
         except (TypeError, ValueError) as e:
+            init_error = e
+        except ImportError as e:
             init_error = e
 
     # Check if initialization failed
