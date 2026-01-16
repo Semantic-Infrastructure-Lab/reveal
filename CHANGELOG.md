@@ -7,7 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **stats:// adapter routing** - Fixed "Element not found" error when using stats://
+  - Issue: Routing logic treated resource path as element name for adapters with render_element
+  - Root cause: Line 193 in routing.py used `(element or resource)` check, causing stats://reveal to look for element 'reveal' instead of analyzing reveal/ directory
+  - Solution: Added ELEMENT_NAMESPACE_ADAPTERS whitelist (env, python, help) to distinguish adapters where resource IS the element name vs adapters where resource is the analysis target
+  - Impact: stats:// now works correctly for all path patterns (stats://., stats://dir, stats://?hotspots=true)
+  - Verified: env://, python://, help://, ast://, json://, stats:// all working correctly
+  - Session: wild-drought-0115
+
+- **git:// adapter help references** - Removed broken help:// links
+  - Removed: `help://git-guide` reference (doesn't exist, was Phase 5 from prior session)
+  - Removed: `diff://git:file@v1 vs git:file@v2` example (broken - diff uses different git format)
+  - Added: Valid cross-references to help://diff, help://ast, help://stats
+  - Impact: Users following git:// help won't hit dead ends
+  - Session: wild-drought-0115
+
+- **diff:// adapter documentation** - Clarified git URI format
+  - Updated features: Changed "Works with ANY adapter" to "Works with file paths, directories, and some adapters"
+  - Added note: "diff git:// format differs from git:// adapter (uses git CLI directly)"
+  - Clarification: diff:// uses `git://REF/path` format (e.g., git://HEAD/file.py) vs git:// adapter uses `git://path@REF` format
+  - Impact: Users understand diff's git support is separate from GitAdapter
+  - Session: wild-drought-0115
+
 ### Added
+- **Dogfooding report** - Comprehensive real-world usage testing (internal-docs/research/DOGFOODING_REPORT_2026-01-15.md)
+  - Tested: git:// semantic blame, structure exploration, help://, stats://, diff://, ast://, multiple adapters
+  - Found: 6 issues (2 high priority, 2 medium, 2 low) - all high priority issues fixed this session
+  - Validated: Core features work excellently, token efficiency proven (17-25x reduction in practice)
+  - Session: wild-drought-0115
+
 - **git:// adapter polish** - Production-ready git repository inspection (Phase 1-3)
   - **Phase 1**: Fixed CLI routing for git:// URIs (was broken - treated queries as element names)
   - **Phase 2**: Progressive disclosure for blame (summary view by default, detail mode with `&detail=full`)

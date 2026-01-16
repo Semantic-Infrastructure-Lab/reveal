@@ -460,9 +460,9 @@ class GitAdapter(ResourceAdapter):
                 'Use ? for query parameters: git://path?type=history',
             ],
             'see_also': [
-                'reveal help://git-guide - Comprehensive guide with examples',
-                'reveal help://diff - Compare Git references',
-                'reveal diff://git:file@v1 vs git:file@v2 - File comparison',
+                'reveal help://diff - Compare two files or directories',
+                'reveal help://ast - Query code structure by complexity/size',
+                'reveal help://stats - Analyze codebase metrics and hotspots',
             ]
         }
 

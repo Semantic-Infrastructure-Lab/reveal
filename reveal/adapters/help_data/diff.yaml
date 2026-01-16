@@ -25,9 +25,9 @@ examples:
 
 features:
   - 'Semantic diff - compares structure, not text'
-  - 'Works with ANY adapter (file, env, mysql, etc.)'
+  - 'Works with file paths, directories, and some adapters (env, mysql, etc.)'
   - 'Directory comparison - aggregates changes from all files'
-  - 'Git integration - compare commits, branches, working tree'
+  - 'Git integration - compare commits, branches, working tree (uses git CLI)'
   - 'Two-level output: summary (counts) + details (changes)'
   - 'Element-specific diff support'
   - 'Shows complexity and line count changes'
@@ -65,8 +65,9 @@ output_format:
 
 notes:
   - 'Complements git diff (semantic vs line-level)'
-  - 'Works with existing adapters via composition'
+  - 'Works with file paths and some adapters (env, mysql, sqlite)'
   - 'Git URI format: git://REF/path (e.g., git://HEAD~1/file.py, git://main/src/)'
+  - 'Note: diff git:// format differs from git:// adapter (uses git CLI directly)'
   - 'Directory diffs aggregate all analyzable files (skips .git, node_modules, etc.)'
   - 'For complex URIs with colons, use explicit scheme://'
 

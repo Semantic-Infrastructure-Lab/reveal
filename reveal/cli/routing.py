@@ -187,10 +187,17 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
 
     # Get element or structure based on adapter capabilities
     # Adapters with render_element (env, python, help) support element-based access
-    # Others (ast, json) always use get_structure()
+    # Others (ast, json, stats) always use get_structure() unless element explicitly provided
     supports_elements = hasattr(renderer_class, 'render_element')
 
-    if supports_elements and (element or resource):
+    # Adapters where resource is part of element namespace (not initialization path)
+    # For these, `scheme://RESOURCE` means "get element RESOURCE"
+    # For others, `scheme://RESOURCE` means "analyze path RESOURCE"
+    ELEMENT_NAMESPACE_ADAPTERS = {'env', 'python', 'help'}
+
+    resource_is_element = scheme in ELEMENT_NAMESPACE_ADAPTERS
+
+    if supports_elements and (element or (resource and resource_is_element)):
         # Element-based adapters: check element or resource
         element_name = element if element else resource
         result = adapter.get_element(element_name)
