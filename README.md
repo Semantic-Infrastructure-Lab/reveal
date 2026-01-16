@@ -446,14 +446,16 @@ reveal/
 ├── cli/          # Argument parsing, routing, handlers
 ├── display/      # Terminal output formatting
 ├── rendering/    # Adapter-specific renderers
-├── rules/        # 41 quality rules (B, C, D, E, F, I, L, M, N, R, S, U, V)
-├── analyzers/    # 26 file types (Python, Rust, HTML, Markdown, etc.)
-├── adapters/     # URI support (help://, env://, ast://, python://)
+├── rules/        # 56 quality rules (B, C, D, E, F, I, L, M, N, R, S, U, V)
+├── analyzers/    # 53 file types (Python, Rust, HTML, Markdown, etc.)
+├── adapters/     # URI support (13 adapters: help://, env://, ast://, stats://, etc.)
 ├── schemas/      # Type definitions (renamed from types/ in v0.23.0)
 └── treesitter.py # Universal language support (50+ langs)
 ```
 
 **Clean architecture:** Most analyzers < 50 lines. Modular packages since v0.22.0.
+
+**Quality metrics:** 2,230+ tests, 74% coverage, continuous integration on every commit.
 
 **Documentation:** [reveal/docs/](reveal/docs/) - Comprehensive guides for users, developers, and AI agents
 **Power users:** [COOL_TRICKS.md](reveal/docs/COOL_TRICKS.md) - Hidden features and advanced workflows
