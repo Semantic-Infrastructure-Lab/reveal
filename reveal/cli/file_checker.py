@@ -151,6 +151,46 @@ def check_and_report_file(
         return 0
 
 
+def check_and_collect_file(
+    file_path: Path,
+    directory: Path,
+    select: Optional[list[str]],
+    ignore: Optional[list[str]]
+) -> tuple[int, list]:
+    """Check a single file and return structured results.
+
+    Args:
+        file_path: Path to file to check
+        directory: Base directory for relative paths
+        select: Rule codes to select (None = all)
+        ignore: Rule codes to ignore
+
+    Returns:
+        Tuple of (issue_count, detections_list)
+    """
+    from ..registry import get_analyzer
+    from ..rules import RuleRegistry
+
+    try:
+        analyzer_class = get_analyzer(str(file_path), allow_fallback=False)
+        if not analyzer_class:
+            return 0, []
+
+        analyzer = analyzer_class(str(file_path))
+        structure = analyzer.get_structure()
+        content = analyzer.content
+
+        detections = RuleRegistry.check_file(
+            str(file_path), structure, content, select=select, ignore=ignore
+        )
+
+        return len(detections), detections
+
+    except Exception:
+        # Skip files that can't be read or processed
+        return 0, []
+
+
 def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     """Handle recursive quality checking of a directory.
 
@@ -158,6 +198,8 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         directory: Directory to check recursively
         args: Parsed arguments
     """
+    import json
+
     # Build CLI overrides for config system
     cli_overrides = {}
     if args.select or args.ignore:
@@ -177,41 +219,93 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     files_to_check = collect_files_to_check(directory, gitignore_patterns)
 
     if not files_to_check:
-        print(f"No supported files found in {directory}")
+        if getattr(args, 'format', 'text') == 'json':
+            print(json.dumps({
+                "files": [],
+                "summary": {
+                    "files_checked": 0,
+                    "files_with_issues": 0,
+                    "total_issues": 0,
+                    "exit_code": 0
+                }
+            }, indent=2))
+        else:
+            print(f"No supported files found in {directory}")
         return
 
     # Parse select/ignore options for backwards compatibility with RuleRegistry
     select = args.select.split(',') if args.select else None
     ignore = args.ignore.split(',') if args.ignore else None
 
+    # Determine output format
+    output_format = getattr(args, 'format', 'text')
+
     # Check all files and collect results
     total_issues = 0
     files_with_issues = 0
+    file_results = []  # For JSON output
 
     for file_path in sorted(files_to_check):
-        issue_count = check_and_report_file(file_path, directory, select, ignore)
-        if issue_count > 0:
-            total_issues += issue_count
-            files_with_issues += 1
+        if output_format == 'json':
+            # Collect structured results for JSON output
+            issue_count, detections = check_and_collect_file(file_path, directory, select, ignore)
+            if issue_count > 0:
+                total_issues += issue_count
+                files_with_issues += 1
+                file_results.append({
+                    "file": str(file_path.relative_to(directory)),
+                    "issues": issue_count,
+                    "detections": [
+                        {
+                            "line": d.line,
+                            "column": d.column,
+                            "rule_code": d.rule_code,
+                            "message": d.message,
+                            "severity": d.severity.value,
+                            "suggestion": d.suggestion,
+                            "context": d.context
+                        }
+                        for d in detections
+                    ]
+                })
+        else:
+            # Text output (original behavior)
+            issue_count = check_and_report_file(file_path, directory, select, ignore)
+            if issue_count > 0:
+                total_issues += issue_count
+                files_with_issues += 1
 
-    # Print summary
-    print(f"\n{'='*60}")
-    print(f"Checked {len(files_to_check)} files")
-    if total_issues > 0:
-        print(f"Found {total_issues} issue{'s' if total_issues != 1 else ''} in {files_with_issues} file{'s' if files_with_issues != 1 else ''}")
+    # Output results based on format
+    if output_format == 'json':
+        result = {
+            "files": file_results,
+            "summary": {
+                "files_checked": len(files_to_check),
+                "files_with_issues": files_with_issues,
+                "total_issues": total_issues,
+                "exit_code": 1 if total_issues > 0 else 0
+            }
+        }
+        print(json.dumps(result, indent=2))
     else:
-        print(f"✅ No issues found")
+        # Print text summary
+        print(f"\n{'='*60}")
+        print(f"Checked {len(files_to_check)} files")
+        if total_issues > 0:
+            print(f"Found {total_issues} issue{'s' if total_issues != 1 else ''} in {files_with_issues} file{'s' if files_with_issues != 1 else ''}")
+        else:
+            print(f"✅ No issues found")
 
-    # Print workflow breadcrumbs
-    from ..utils.breadcrumbs import print_breadcrumbs
-    print_breadcrumbs(
-        'directory-check',
-        str(directory),
-        config=config,
-        total_issues=total_issues,
-        files_with_issues=files_with_issues,
-        files_checked=len(files_to_check)
-    )
+        # Print workflow breadcrumbs
+        from ..utils.breadcrumbs import print_breadcrumbs
+        print_breadcrumbs(
+            'directory-check',
+            str(directory),
+            config=config,
+            total_issues=total_issues,
+            files_with_issues=files_with_issues,
+            files_checked=len(files_to_check)
+        )
 
     # Exit with appropriate code
     sys.exit(1 if total_issues > 0 else 0)

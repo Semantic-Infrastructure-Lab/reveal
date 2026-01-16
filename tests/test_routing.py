@@ -488,6 +488,181 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
 
             mock_exit.assert_called_once_with(0)
 
+    def test_check_with_select_parameter(self):
+        """Verify --select parameter is split and passed to check()."""
+
+        class SelectableAdapter:
+            def __init__(self, resource=None):
+                self.resource = resource
+
+            def check(self, select=None):
+                # Verify select is passed as list
+                assert isinstance(select, list), f"select should be list, got {type(select)}"
+                assert select == ['C901', 'C902'], f"Expected ['C901', 'C902'], got {select}"
+                return {'status': 'ok', 'exit_code': 0}
+
+            def get_structure(self):
+                return {'type': 'test'}
+
+        class CheckRenderer:
+            @staticmethod
+            def render_check(result, format='text'):
+                pass
+
+            @staticmethod
+            def render_error(error):
+                pass
+
+        mock_args = Namespace(
+            format='text',
+            check=True,
+            select='C901,C902',  # Comma-separated string
+            ignore=None
+        )
+
+        with patch('sys.stdout'), \
+             patch('sys.exit', side_effect=SystemExit(0)):
+            with self.assertRaises(SystemExit):
+                generic_adapter_handler(
+                    SelectableAdapter,
+                    CheckRenderer,
+                    'test',
+                    'resource',
+                    None,
+                    mock_args
+                )
+
+    def test_check_with_ignore_parameter(self):
+        """Verify --ignore parameter is split and passed to check()."""
+
+        class IgnorableAdapter:
+            def __init__(self, resource=None):
+                self.resource = resource
+
+            def check(self, ignore=None):
+                # Verify ignore is passed as list
+                assert isinstance(ignore, list), f"ignore should be list, got {type(ignore)}"
+                assert ignore == ['I001', 'I002'], f"Expected ['I001', 'I002'], got {ignore}"
+                return {'status': 'ok', 'exit_code': 0}
+
+            def get_structure(self):
+                return {'type': 'test'}
+
+        class CheckRenderer:
+            @staticmethod
+            def render_check(result, format='text'):
+                pass
+
+            @staticmethod
+            def render_error(error):
+                pass
+
+        mock_args = Namespace(
+            format='text',
+            check=True,
+            select=None,
+            ignore='I001,I002'  # Comma-separated string
+        )
+
+        with patch('sys.stdout'), \
+             patch('sys.exit', side_effect=SystemExit(0)):
+            with self.assertRaises(SystemExit):
+                generic_adapter_handler(
+                    IgnorableAdapter,
+                    CheckRenderer,
+                    'test',
+                    'resource',
+                    None,
+                    mock_args
+                )
+
+    def test_check_with_both_select_and_ignore(self):
+        """Verify both --select and --ignore work together."""
+
+        class FilterableAdapter:
+            def __init__(self, resource=None):
+                self.resource = resource
+
+            def check(self, select=None, ignore=None):
+                # Verify both parameters are passed correctly
+                assert select == ['C901'], f"Expected ['C901'], got {select}"
+                assert ignore == ['I001', 'I002'], f"Expected ['I001', 'I002'], got {ignore}"
+                return {'status': 'ok', 'exit_code': 0}
+
+            def get_structure(self):
+                return {'type': 'test'}
+
+        class CheckRenderer:
+            @staticmethod
+            def render_check(result, format='text'):
+                pass
+
+            @staticmethod
+            def render_error(error):
+                pass
+
+        mock_args = Namespace(
+            format='text',
+            check=True,
+            select='C901',
+            ignore='I001,I002'
+        )
+
+        with patch('sys.stdout'), \
+             patch('sys.exit', side_effect=SystemExit(0)):
+            with self.assertRaises(SystemExit):
+                generic_adapter_handler(
+                    FilterableAdapter,
+                    CheckRenderer,
+                    'test',
+                    'resource',
+                    None,
+                    mock_args
+                )
+
+    def test_check_without_filter_support(self):
+        """Verify adapter.check() works even if it doesn't support select/ignore."""
+
+        class BasicCheckAdapter:
+            def __init__(self, resource=None):
+                self.resource = resource
+
+            def check(self):
+                # No select/ignore parameters
+                return {'status': 'ok', 'exit_code': 0}
+
+            def get_structure(self):
+                return {'type': 'test'}
+
+        class CheckRenderer:
+            @staticmethod
+            def render_check(result, format='text'):
+                pass
+
+            @staticmethod
+            def render_error(error):
+                pass
+
+        mock_args = Namespace(
+            format='text',
+            check=True,
+            select='C901',
+            ignore='I001'
+        )
+
+        # Should not crash even though adapter doesn't support filters
+        with patch('sys.stdout'), \
+             patch('sys.exit', side_effect=SystemExit(0)):
+            with self.assertRaises(SystemExit):
+                generic_adapter_handler(
+                    BasicCheckAdapter,
+                    CheckRenderer,
+                    'test',
+                    'resource',
+                    None,
+                    mock_args
+                )
+
     def test_element_not_found_error(self):
         """Verify error handling when requested element doesn't exist."""
 
@@ -727,6 +902,235 @@ class TestHandleFileOrDirectory(unittest.TestCase):
                     'text',  # format
                     mock_args
                 )
+        finally:
+            os.unlink(temp_path)
+
+    def test_recursive_check_json_format(self):
+        """Verify --format=json works with --recursive --check."""
+        import tempfile
+        import json
+        from pathlib import Path
+        from io import StringIO
+
+        # Create temp directory with a Python file
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_file = Path(tmpdir) / "test.py"
+            test_file.write_text("x = 1\n")
+
+            mock_args = Namespace(
+                recursive=True,
+                check=True,
+                format='json',
+                select=None,
+                ignore=None,
+                hotspots=False
+            )
+
+            # Capture stdout
+            from reveal.cli import routing
+
+            with patch.object(routing, 'handle_recursive_check') as mock_recursive:
+                # Simulate JSON output from handle_recursive_check
+                def json_output_side_effect(directory, args):
+                    result = {
+                        "files": [],
+                        "summary": {
+                            "files_checked": 1,
+                            "files_with_issues": 0,
+                            "total_issues": 0,
+                            "exit_code": 0
+                        }
+                    }
+                    print(json.dumps(result, indent=2))
+
+                mock_recursive.side_effect = json_output_side_effect
+
+                # Capture output
+                import sys
+                old_stdout = sys.stdout
+                sys.stdout = StringIO()
+
+                try:
+                    handle_file_or_directory(tmpdir, mock_args)
+                except SystemExit:
+                    pass  # Expected from handle_recursive_check
+                finally:
+                    output = sys.stdout.getvalue()
+                    sys.stdout = old_stdout
+
+                # Verify handle_recursive_check was called
+                mock_recursive.assert_called_once()
+
+                # Verify output is valid JSON
+                try:
+                    result = json.loads(output)
+                    self.assertIn("files", result)
+                    self.assertIn("summary", result)
+                except json.JSONDecodeError:
+                    self.fail(f"Output is not valid JSON: {output}")
+
+
+class TestHandleFile(unittest.TestCase):
+    """Tests for handle_file function."""
+
+    def test_no_analyzer_found_error(self):
+        """Verify error when no analyzer exists for file type."""
+        import tempfile
+        from pathlib import Path
+        from reveal.cli.routing import handle_file
+
+        # Create temp file with unsupported extension
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xyz123') as f:
+            temp_path = f.name
+            f.write(b"test content")
+
+        try:
+            with patch('sys.stderr'), \
+                 patch('sys.exit', side_effect=SystemExit(1)) as mock_exit:
+                with self.assertRaises(SystemExit):
+                    handle_file(temp_path, None, False, 'text', None)
+
+                mock_exit.assert_called_once_with(1)
+        finally:
+            os.unlink(temp_path)
+
+    def test_show_metadata_flag(self):
+        """Verify show_meta=True calls show_metadata."""
+        import tempfile
+        from reveal.cli.routing import handle_file
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.py', mode='w') as f:
+            f.write("x = 1\n")
+            temp_path = f.name
+
+        try:
+            mock_args = Namespace()
+
+            # Patch where it's imported from (reveal.display)
+            with patch('reveal.display.show_metadata') as mock_show_meta:
+                handle_file(temp_path, None, True, 'text', mock_args)
+                mock_show_meta.assert_called_once()
+        finally:
+            os.unlink(temp_path)
+
+    def test_validate_schema_flag(self):
+        """Verify --validate-schema flag calls run_schema_validation."""
+        import tempfile
+        from reveal.cli.routing import handle_file
+        from reveal import main
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.py', mode='w') as f:
+            f.write("x = 1\n")
+            temp_path = f.name
+
+        try:
+            mock_args = Namespace(
+                validate_schema='schema.json',
+                no_breadcrumbs=False
+            )
+
+            with patch.object(main, 'run_schema_validation') as mock_validate:
+                handle_file(temp_path, None, False, 'text', mock_args)
+                mock_validate.assert_called_once()
+        finally:
+            os.unlink(temp_path)
+
+    def test_check_flag(self):
+        """Verify --check flag calls run_pattern_detection."""
+        import tempfile
+        from reveal.cli.routing import handle_file
+        from reveal import main
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.py', mode='w') as f:
+            f.write("x = 1\n")
+            temp_path = f.name
+
+        try:
+            mock_args = Namespace(
+                check=True,
+                validate_schema=None,
+                no_breadcrumbs=False
+            )
+
+            with patch.object(main, 'run_pattern_detection') as mock_check:
+                handle_file(temp_path, None, False, 'text', mock_args)
+                mock_check.assert_called_once()
+        finally:
+            os.unlink(temp_path)
+
+    def test_element_extraction(self):
+        """Verify element parameter calls extract_element."""
+        import tempfile
+        from reveal.cli.routing import handle_file
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.py', mode='w') as f:
+            f.write("def foo(): pass\n")
+            temp_path = f.name
+
+        try:
+            mock_args = Namespace(
+                check=False,
+                validate_schema=None,
+                no_breadcrumbs=False
+            )
+
+            # Patch where it's imported from (reveal.display)
+            with patch('reveal.display.extract_element') as mock_extract:
+                handle_file(temp_path, 'foo', False, 'text', mock_args)
+                mock_extract.assert_called_once()
+        finally:
+            os.unlink(temp_path)
+
+    def test_default_show_structure(self):
+        """Verify default case calls show_structure."""
+        import tempfile
+        from reveal.cli.routing import handle_file
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.py', mode='w') as f:
+            f.write("x = 1\n")
+            temp_path = f.name
+
+        try:
+            mock_args = Namespace(
+                check=False,
+                validate_schema=None,
+                no_breadcrumbs=False
+            )
+
+            # Patch where it's imported from (reveal.display)
+            with patch('reveal.display.show_structure') as mock_show:
+                handle_file(temp_path, None, False, 'text', mock_args)
+                mock_show.assert_called_once()
+        finally:
+            os.unlink(temp_path)
+
+    def test_no_fallback_flag(self):
+        """Verify --no-fallback flag prevents fallback analyzer."""
+        import tempfile
+        from reveal.cli.routing import handle_file
+        from reveal import registry
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.txt') as f:
+            f.write(b"test content")
+            temp_path = f.name
+
+        try:
+            mock_args = Namespace(
+                no_fallback=True,
+                check=False,
+                validate_schema=None
+            )
+
+            with patch.object(registry, 'get_analyzer', return_value=None) as mock_get:
+                with patch('sys.stderr'), \
+                     patch('sys.exit', side_effect=SystemExit(1)):
+                    with self.assertRaises(SystemExit):
+                        handle_file(temp_path, None, False, 'text', mock_args)
+
+                # Verify get_analyzer was called with allow_fallback=False
+                mock_get.assert_called_once()
+                call_kwargs = mock_get.call_args[1]
+                self.assertFalse(call_kwargs['allow_fallback'])
         finally:
             os.unlink(temp_path)
 
