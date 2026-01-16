@@ -159,7 +159,7 @@ reveal README.md --validate-schema session --select F003,F004
 - `0` - Validation passed
 - `1` - Validation failed (use in CI/CD)
 
-**See also:** [Schema Validation Guide](../docs/SCHEMA_VALIDATION_GUIDE.md)
+**See also:** [Schema Validation Help](SCHEMA_VALIDATION_HELP.md)
 
 ---
 
@@ -773,3 +773,12 @@ This is a redesigned AI agent reference (Dec 2025). Changes:
 - **Real-world examples** - Actual scenarios you'll encounter
 
 The old version told you to "explore with help://" - this version gives you the patterns directly.
+
+---
+
+## See Also
+
+- [AGENT_HELP_FULL.md](AGENT_HELP_FULL.md) - Comprehensive AI agent reference (41KB)
+- [COOL_TRICKS.md](COOL_TRICKS.md) - Practical workflows and token-efficient patterns
+- [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Core Reveal functionality and examples
+- [README.md](README.md) - Documentation hub and navigation

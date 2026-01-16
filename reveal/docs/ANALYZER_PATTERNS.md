@@ -808,3 +808,10 @@ links = [self._parse_link_node(node) for node in link_nodes]
 3. Prefer stdlib over regex
 4. Compile patterns at class level
 5. Don't duplicate parsing logic
+
+## See Also
+
+- [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Create custom adapters
+- [PYTHON_ADAPTER_GUIDE.md](PYTHON_ADAPTER_GUIDE.md) - Python analysis examples
+- [DUPLICATE_DETECTION_GUIDE.md](DUPLICATE_DETECTION_GUIDE.md) - Duplicate detection patterns
+- [README.md](README.md) - Documentation hub

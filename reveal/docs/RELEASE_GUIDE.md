@@ -207,3 +207,9 @@ git push origin :refs/tags/v0.24.1
 4. **Users get update** → Via `pip install --upgrade reveal-cli`
 
 **Key insight:** The GitHub Release is not just documentation—it's the trigger for the entire publish pipeline.
+
+## See Also
+
+- [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Guide for contributors
+- [ANTI_PATTERNS.md](ANTI_PATTERNS.md) - Quality standards
+- [README.md](README.md) - Documentation hub

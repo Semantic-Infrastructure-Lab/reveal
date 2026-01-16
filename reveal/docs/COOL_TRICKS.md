@@ -832,10 +832,12 @@ reveal 'ast://./src?lines>50&complexity<3'       # Long but simple (inline?)
 
 ## See Also
 
-- `reveal --agent-help` - Quick reference for AI agents
-- `reveal help://anti-patterns` - What NOT to do
-- `reveal help://python-guide` - Deep dive on Python adapter
-- [ROADMAP.md](../ROADMAP.md) - Future features
+- [AGENT_HELP.md](AGENT_HELP.md) - Quick reference for AI agents
+- [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Core functionality guide
+- [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Customize behavior
+- [ANTI_PATTERNS.md](ANTI_PATTERNS.md) - What NOT to do
+- [README.md](README.md) - Documentation hub
+- [GitHub Issues](https://github.com/semantic-infrastructure-lab/reveal/issues) - Feature requests and roadmap
 
 ---
 

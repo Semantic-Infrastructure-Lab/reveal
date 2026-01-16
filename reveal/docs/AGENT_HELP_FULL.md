@@ -1690,3 +1690,12 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Performance data** - Benchmarks and optimization tips
 
 The old version organized by "Use Cases" and "Workflows" - this version organizes by tasks with progressive complexity.
+
+---
+
+## See Also
+
+- [AGENT_HELP.md](AGENT_HELP.md) - Concise quick reference (19KB, start here)
+- [COOL_TRICKS.md](COOL_TRICKS.md) - Practical workflows and patterns
+- [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Core functionality reference
+- [README.md](README.md) - Documentation hub

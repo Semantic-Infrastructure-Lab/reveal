@@ -627,7 +627,7 @@ reveal example.md --links
 
 Visit our [website](https://example.com) for details.
 
-See the [API guide](./docs/api.md) for usage.
+See the [configuration guide](CONFIGURATION_GUIDE.md) for usage.
 
 Contact us at [support@example.com](mailto:support@example.com).
 ```
@@ -643,7 +643,7 @@ Links (3):
              → example.com
 
   Internal (1):
-    Line 5    [API guide](./docs/api.md)
+    Line 5    [configuration guide](CONFIGURATION_GUIDE.md)
 
   Email (1):
     Line 7    [support@example.com](mailto:support@example.com)

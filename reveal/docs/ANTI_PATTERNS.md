@@ -366,3 +366,12 @@ Need to search text?
 **Progressive Discovery**: Directory → File → Element (each step reveals what's possible)
 
 **Breadcrumbs Are Your Friend**: reveal tells you what to do next - listen!
+
+---
+
+## See Also
+
+- [COOL_TRICKS.md](COOL_TRICKS.md) - Correct patterns and best practices
+- [AGENT_HELP.md](AGENT_HELP.md) - Task-oriented patterns for AI agents
+- [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Proper configuration
+- [README.md](README.md) - Documentation hub

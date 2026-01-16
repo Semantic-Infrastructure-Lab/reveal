@@ -485,4 +485,11 @@ Want to help implement these features? See:
 - 🚧 Configuration system - Designed, not implemented
 - 🚧 Self-reflection - Designed, not implemented
 
+## See Also
+
+- [ANALYZER_PATTERNS.md](ANALYZER_PATTERNS.md) - Code analysis patterns
+- [ANTI_PATTERNS.md](ANTI_PATTERNS.md) - What NOT to do
+- [PYTHON_ADAPTER_GUIDE.md](PYTHON_ADAPTER_GUIDE.md) - Python-specific analysis
+- [README.md](README.md) - Documentation hub
+
 Last updated: 2026-01-03 | Version: 0.30.0

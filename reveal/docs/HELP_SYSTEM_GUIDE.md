@@ -387,6 +387,13 @@ A: Update estimates in `_render_help_list_mode()` token_estimate dictionaries
 - **Content Files:** `reveal/*.md` (static guides)
 - **Agent Guide:** `reveal/docs/AGENT_HELP.md` (AI agent reference)
 
+## See Also
+
+- [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Create help-enabled adapters
+- [AGENT_HELP.md](AGENT_HELP.md) - AI agent reference guide
+- [COOL_TRICKS.md](COOL_TRICKS.md) - Using the help system effectively
+- [README.md](README.md) - Documentation hub
+
 ---
 
 **Last updated:** 2025-12-16
