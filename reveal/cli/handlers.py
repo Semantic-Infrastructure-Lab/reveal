@@ -121,8 +121,13 @@ def handle_rules_list(version: str):
             status = "✓" if rule['enabled'] else "✗"
             severity_icon = {"low": "ℹ️", "medium": "⚠️", "high": "❌", "critical": "🚨"}.get(rule['severity'], "")
             print(f"  {status} {rule['code']:8s} {severity_icon} {rule['message']}")
-            if rule['file_patterns'] != ['*']:
-                print(f"             Files: {', '.join(rule['file_patterns'])}")
+            # Show file patterns if not universal
+            patterns = rule.get('file_patterns', ['*'])
+            if patterns and patterns != ['*']:
+                # Handle both list and string patterns
+                if isinstance(patterns, str):
+                    patterns = [patterns]
+                print(f"             Files: {', '.join(patterns)}")
         print()
 
     print(f"Total: {len(rules)} rules")
