@@ -229,7 +229,7 @@ class GitAdapter(ResourceAdapter):
     Requires: pip install reveal-cli[git]
     """
 
-    def __init__(self, resource: str, ref: Optional[str] = None,
+    def __init__(self, resource: Optional[str] = None, ref: Optional[str] = None,
                  subpath: Optional[str] = None, query: Optional[Dict[str, str]] = None,
                  path: Optional[str] = None):
         """
@@ -242,7 +242,7 @@ class GitAdapter(ResourceAdapter):
            GitAdapter(path=".", ref="main", subpath="file.py", query={...})
 
         Args:
-            resource: Either resource URI string or repository path (required)
+            resource: Either resource URI string or repository path (optional if path provided)
             ref: Git reference (commit, branch, tag, HEAD~N)
             subpath: Path within repository (file or directory)
             query: Query parameters (type=history|blame, since, author, etc.)
@@ -251,6 +251,9 @@ class GitAdapter(ResourceAdapter):
         # Handle backward compatibility: path= parameter takes precedence
         if path is not None:
             resource = path
+
+        if resource is None:
+            raise ValueError("Either 'resource' or 'path' parameter must be provided")
 
         # Handle routing.py passing query string as ref parameter
         # (routing.py Try 2 does: adapter_class(path, query))

@@ -340,6 +340,14 @@ class DiffAdapter(ResourceAdapter):
                 "Note: diff:// also supports git CLI format: git://REF/path"
             )
 
+        # Validate git URI format - should have path@REF or .@REF format
+        # Simple check: if no @ and no / in resource, it's likely just a ref without path
+        if '@' not in resource and '/' not in resource and resource:
+            raise ValueError(
+                f"Git URI must be in format 'path@REF' or '.@REF'. "
+                f"Got: '{resource}'. Example: 'main.py@HEAD' or '.@main'"
+            )
+
         try:
             # GitAdapter will parse the resource (handles path@REF format)
             adapter = GitAdapter(resource=resource)
