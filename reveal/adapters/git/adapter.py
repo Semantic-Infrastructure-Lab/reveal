@@ -441,16 +441,12 @@ class GitAdapter(ResourceAdapter):
                 {'uri': 'git://src/app.py?type=blame', 'description': 'File blame summary (contributors + key hunks)'},
                 {'uri': 'git://src/app.py?type=blame&detail=full', 'description': 'File blame detailed (line-by-line)'},
                 {'uri': 'git://src/app.py?type=blame&element=load_config', 'description': 'Semantic blame (who wrote this function)'},
-                {'uri': 'git://.?since=1w', 'description': 'Commits from last week'},
             ],
             'query_parameters': {
                 'type': 'Operation type: history (file history) or blame (line annotations)',
                 'detail': 'For blame: "full" shows line-by-line (default is summary)',
                 'element': 'For blame: function/class name for semantic blame',
-                'since': 'Show commits since date/time (e.g., 1w, 2026-01-01)',
-                'until': 'Show commits until date',
-                'author': 'Filter by author name/email',
-                'limit': 'Limit number of results (default: 50 for history)',
+                'limit': 'Limit number of results (default: 50 for history, 20 for refs)',
             },
             'notes': [
                 'Requires pygit2: pip install reveal-cli[git]',

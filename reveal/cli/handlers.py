@@ -66,7 +66,7 @@ def handle_language_info(language: str):
 
 def handle_agent_help():
     """Handle --agent-help flag."""
-    agent_help_path = Path(__file__).parent.parent / 'AGENT_HELP.md'
+    agent_help_path = Path(__file__).parent.parent / 'docs' / 'AGENT_HELP.md'
     try:
         with open(agent_help_path, 'r', encoding='utf-8') as f:
             print(f.read())
@@ -79,7 +79,7 @@ def handle_agent_help():
 
 def handle_agent_help_full():
     """Handle --agent-help-full flag."""
-    agent_help_full_path = Path(__file__).parent.parent / 'AGENT_HELP_FULL.md'
+    agent_help_full_path = Path(__file__).parent.parent / 'docs' / 'AGENT_HELP_FULL.md'
     try:
         with open(agent_help_full_path, 'r', encoding='utf-8') as f:
             print(f.read())

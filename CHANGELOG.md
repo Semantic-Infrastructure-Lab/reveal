@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.1] - 2026-01-16
+
+### Fixed
+- **CLI --agent-help flags** - Fixed file path lookup for agent help documentation
+  - Issue: `reveal --agent-help` and `reveal --agent-help-full` failed with "file not found"
+  - Root cause: CLI handlers looked for AGENT_HELP*.md in wrong directory (reveal/ instead of reveal/docs/)
+  - Solution: Updated path construction to include docs/ subdirectory
+  - Impact: Agent help flags now work correctly
+  - Files: reveal/cli/handlers.py (lines 69, 82)
+  - Session: wise-helm-0116
+
+- **git:// adapter help documentation** - Removed unimplemented query parameters
+  - Issue: Help text documented 3 parameters that don't exist in code (since, until, author)
+  - Impact: Users would try features that don't work, breaking trust
+  - Solution: Removed broken example and unimplemented parameters from help text
+  - Documentation accuracy: 57% → 100%
+  - Files: reveal/adapters/git/adapter.py
+  - Session: obsidian-canvas-0116
+
+- **Package manifest** - Updated MANIFEST.in for docs/ subdirectory
+  - Issue: MANIFEST.in referenced old paths (reveal/AGENT_HELP*.md)
+  - Impact: Built packages would exclude help docs, breaking --agent-help flags
+  - Solution: Changed to recursive-include reveal/docs *.md
+  - Verified: Built wheel includes all docs/ files correctly
+  - Files: MANIFEST.in
+  - Session: wise-helm-0116
+
+## [0.36.0] - 2026-01-15
+
 ### Fixed
 - **stats:// adapter routing** - Fixed "Element not found" error when using stats://
   - Issue: Routing logic treated resource path as element name for adapters with render_element
