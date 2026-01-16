@@ -651,6 +651,9 @@ class GitAdapter(ResourceAdapter):
                             hunk_end >= element_range['line']):
                             filtered_hunks.append(hunk)
                     hunks = filtered_hunks
+                else:
+                    # Element was requested but not found - inform user
+                    print(f"Note: Element '{element_name}' not found in {self.subpath}, showing full file blame", file=sys.stderr)
 
             # Check if detail mode is requested
             detail_mode = self.query.get('detail') == 'full'

@@ -317,6 +317,68 @@ class DiffAdapter(ResourceAdapter):
         else:
             return self._resolve_git_file(git_ref, path)
 
+    def _resolve_git_adapter(self, resource: str) -> Dict[str, Any]:
+        """Resolve git:// adapter URI to structure.
+
+        Supports git:// adapter format: git://path@REF or git://.@REF
+
+        Args:
+            resource: Resource part of git:// URI (e.g., "reveal/main.py@HEAD" or ".@main")
+
+        Returns:
+            Structure dict from the git version (analyzed code structure, not file metadata)
+
+        Raises:
+            ImportError: If GitAdapter is not available (pygit2 not installed)
+            ValueError: If URI format is invalid or resolution fails
+        """
+        try:
+            from .git.adapter import GitAdapter
+        except ImportError:
+            raise ImportError(
+                "GitAdapter not available. Install with: pip install reveal-cli[git]\n"
+                "Note: diff:// also supports git CLI format: git://REF/path"
+            )
+
+        try:
+            # GitAdapter will parse the resource (handles path@REF format)
+            adapter = GitAdapter(resource=resource)
+            git_result = adapter.get_structure()
+
+            # If it's a file, we need to analyze its content to get code structure
+            # GitAdapter returns file content/metadata, not analyzed code structure
+            if git_result.get('type') in ['file', 'file_at_ref']:
+                # Get the file content
+                content = git_result.get('content', '')
+                # Use the path for analyzer selection
+                file_path = git_result.get('path', resource.split('@')[0])
+
+                # Analyze the content to get code structure
+                from ..registry import get_analyzer
+                analyzer_class = get_analyzer(file_path, allow_fallback=True)
+                if not analyzer_class:
+                    raise ValueError(f"No analyzer found for file: {file_path}")
+
+                # Create temporary file or use in-memory analysis
+                # Most analyzers can work with content directly
+                import tempfile
+                import os
+                with tempfile.NamedTemporaryFile(mode='w', suffix=os.path.splitext(file_path)[1], delete=False) as f:
+                    f.write(content)
+                    temp_path = f.name
+
+                try:
+                    analyzer = analyzer_class(temp_path)
+                    return analyzer.get_structure()
+                finally:
+                    os.unlink(temp_path)
+
+            # For repository/ref views, return as-is
+            return git_result
+
+        except Exception as e:
+            raise ValueError(f"Failed to resolve git:// adapter URI: {e}")
+
     def _resolve_git_file(self, git_ref: str, path: str) -> Dict[str, Any]:
         """Get structure from a file in git.
 
@@ -525,13 +587,23 @@ class DiffAdapter(ResourceAdapter):
 
         scheme, resource = uri.split('://', 1)
 
-        # Handle git scheme: git://REF/path
+        # Handle git scheme: supports two formats
+        # 1. git:// adapter format: git://path@REF (uses GitAdapter with pygit2)
+        # 2. diff legacy format: git://REF/path (uses git CLI directly)
         if scheme == 'git':
-            # Parse git://REF/path format (e.g., git://HEAD~1/file.py, git://main/src/)
-            if '/' not in resource:
-                raise ValueError("Git URI must be in format git://REF/path (e.g., git://HEAD~1/file.py)")
-            git_ref, path = resource.split('/', 1)
-            return self._resolve_git_ref(git_ref, path)
+            # Check if it's git:// adapter format (path@REF)
+            if '@' in resource:
+                # git:// adapter format: git://path@REF
+                # Delegate to GitAdapter
+                return self._resolve_git_adapter(resource)
+            elif '/' in resource:
+                # diff legacy format: git://REF/path
+                # Parse git://REF/path format (e.g., git://HEAD~1/file.py, git://main/src/)
+                git_ref, path = resource.split('/', 1)
+                return self._resolve_git_ref(git_ref, path)
+            else:
+                # Repository overview
+                return self._resolve_git_adapter(resource)
 
         # For file scheme, handle differently (no adapter class, uses get_analyzer)
         if scheme == 'file':

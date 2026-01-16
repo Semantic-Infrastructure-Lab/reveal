@@ -30,7 +30,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Impact: Users understand diff's git support is separate from GitAdapter
   - Session: wild-drought-0115
 
+- **markdown:// query parameters routing** - Fixed by stats:// routing fix
+  - Issue: Query parameters like `markdown://path?field=value` treated entire string as element name
+  - Root cause: Same routing bug as stats:// (ELEMENT_NAMESPACE_ADAPTERS whitelist)
+  - Solution: markdown not in whitelist, so resource goes to get_structure() not get_element()
+  - Impact: Query filtering now works (e.g., `markdown://.?status=completed`)
+  - Session: wild-drought-0115
+
+- **Semantic blame element-not-found feedback** - Added user-visible note
+  - Issue: When element not found in semantic blame query, silently fell back to full file blame
+  - Solution: Added stderr note: "Element 'X' not found in path, showing full file blame"
+  - Impact: Users get explicit feedback when element lookup fails
+  - Verified: Warning shows for nonexistent elements, doesn't show for valid elements
+  - Session: wild-drought-0115
+
 ### Added
+- **diff:// git:// adapter integration** - Full support for git:// adapter URIs
+  - **NEW**: diff:// now supports git:// adapter format: `diff://git://file@REF:git://file@REF`
+  - Uses GitAdapter (pygit2) for semantic diffs between git refs
+  - Backwards compatible: Legacy format `git://REF/path` still works (uses git CLI)
+  - Auto-detects format: `@` symbol → adapter format, `/` symbol → CLI format
+  - Example: `reveal diff://git://main.py@HEAD~5:git://main.py@HEAD`
+  - Impact: Unified git:// syntax across adapters, semantic diff between any git refs
+  - Session: wild-drought-0115
+
+
 - **Dogfooding report** - Comprehensive real-world usage testing (internal-docs/research/DOGFOODING_REPORT_2026-01-15.md)
   - Tested: git:// semantic blame, structure exploration, help://, stats://, diff://, ast://, multiple adapters
   - Found: 6 issues (2 high priority, 2 medium, 2 low) - all high priority issues fixed this session
