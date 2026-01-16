@@ -13,6 +13,16 @@ from ...analyzers.imports.base import get_extractor, get_all_extensions
 logger = logging.getLogger(__name__)
 
 
+# Initialize file patterns from all registered extractors at module load time
+def _initialize_file_patterns():
+    """Get all supported file extensions from registered extractors."""
+    try:
+        return list(get_all_extensions())
+    except Exception:
+        # Fallback to common extensions if registry not yet initialized
+        return ['.py', '.js', '.go', '.rs']
+
+
 class I001(BaseRule):
     """Detect unused imports in supported languages (Python, JavaScript, Go, Rust)."""
 
@@ -20,15 +30,8 @@ class I001(BaseRule):
     message = "Unused import detected"
     category = RulePrefix.I
     severity = Severity.MEDIUM
-    file_patterns = None  # Dynamically populated from registered extractors
+    file_patterns = _initialize_file_patterns()  # Populated at module load time
     version = "2.0.0"
-
-    def __init__(self):
-        """Initialize I001 with dynamic file patterns from registered extractors."""
-        super().__init__()
-        # Get all supported extensions from registered extractors
-        if I001.file_patterns is None:
-            I001.file_patterns = list(get_all_extensions())
 
     def _has_noqa_comment(self, source_line: str) -> bool:
         """Check if source line has a suppression comment (language-specific).

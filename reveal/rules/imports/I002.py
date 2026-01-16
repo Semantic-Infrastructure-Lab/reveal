@@ -15,6 +15,16 @@ from ...analyzers.imports.base import get_extractor, get_all_extensions
 logger = logging.getLogger(__name__)
 
 
+# Initialize file patterns from all registered extractors at module load time
+def _initialize_file_patterns():
+    """Get all supported file extensions from registered extractors."""
+    try:
+        return list(get_all_extensions())
+    except Exception:
+        # Fallback to common extensions if registry not yet initialized
+        return ['.py', '.js', '.go', '.rs']
+
+
 class I002(BaseRule):
     """Detect circular dependencies in imports.
 
@@ -26,14 +36,8 @@ class I002(BaseRule):
     message = "Circular dependency detected"
     category = RulePrefix.I
     severity = Severity.HIGH
-    file_patterns = None  # Populated from registry in __init__
+    file_patterns = _initialize_file_patterns()  # Populated at module load time
     version = "2.0.0"
-
-    def __init__(self):
-        """Initialize with file patterns from all registered extractors."""
-        super().__init__()
-        if I002.file_patterns is None:
-            I002.file_patterns = list(get_all_extensions())
 
     def check(self,
              file_path: str,
