@@ -1,6 +1,6 @@
-# reveal - Semantic Code Explorer
+# reveal - Trust and Legibility for AI-Assisted Development
 
-**Progressive file disclosure for AI agents and developers**
+**Restore confidence in AI outputs by understanding code structurally, not textually**
 
 ```bash
 pip install reveal-cli
@@ -13,26 +13,53 @@ Zero config. 38 languages built-in. 165+ via tree-sitter.
 
 ---
 
-## 🤖 For AI Agents
+## Why Reveal?
 
-**This README is structured for both humans and AI agents.** Progressive disclosure starts at the top with quick examples.
+**The problem with AI-assisted development isn't the code - it's the trust gap.**
 
-**Using reveal CLI?** Get usage patterns and optimization techniques:
+When AI tools modify your codebase, you face questions that line diffs can't answer:
+- **"Did this actually do what I asked?"** - Line changes show edits, not intent
+- **"What meaningfully changed?"** - 200 lines modified, but which functions matter?
+- **"Can I trust this output?"** - AI says it's done, but how do you verify?
+- **"Did complexity increase?"** - New code works, but is it maintainable?
+
+**Reveal solves this by treating code as navigable structure, not text.** Progressive disclosure enforces understanding at every level: directory → file → function. In the AI era, this becomes your verification layer.
+
+---
+
+## 🛡️ AI Safety Net - Verify Before You Trust
+
+**Before merging AI changes, verify them structurally:**
+
 ```bash
-reveal --agent-help          # Quick start + discovery patterns (~720 lines)
-reveal --agent-help-full     # Complete reference (~1680 lines)
+# What functions actually changed?
+reveal diff://git://HEAD/src/:src/
+
+# Compare specific files
+reveal diff://app.py:ai_modified.py
+
+# Compare across commits
+reveal diff://git://HEAD~1/app.py:git://HEAD/app.py
+
+# Check branches before merge
+reveal diff://git://main/.:git://feature/.
 ```
 
-**Token efficiency:** Structure view = 50 tokens vs 7,500 for reading full file. Validated 7-150x reduction in production.
+**Why semantic diff matters:**
+- Git diff shows **lines changed** - you see text
+- Reveal shows **functions changed** - you understand impact
+- Complexity changes visible immediately
+- New dependencies and imports highlighted
 
-**Documentation:** [Installation](INSTALL.md) • [Contributing](CONTRIBUTING.md) • [Changelog](CHANGELOG.md) • [Production Guide](docs/PRODUCTION_TESTING_GUIDE.md)
-
-**Quick Install:**
+**Real workflow:**
 ```bash
-pip install reveal-cli              # Full-featured by default (38 languages, 13 adapters)
-pip install reveal-cli[database]    # Add MySQL database inspection
+# AI just modified your code
+reveal diff://git://HEAD/src/:src/          # What changed structurally?
+reveal src/ --check                          # Any quality issues?
+git add . && git commit -m "AI: Add feature" # Commit with confidence
 ```
-See [INSTALL.md](INSTALL.md) for details on what's included.
+
+**Think of it as the seatbelt for AI edits.** You wouldn't drive without one.
 
 ---
 
@@ -80,21 +107,82 @@ app.py:15-27 | load_config
 
 **All output is `filename:line` format** - works with vim, git, grep.
 
+**Token efficiency:** Structure view = 50 tokens vs 7,500 for reading full file. Validated 7-150x reduction in production.
+
+---
+
+## When to Use Reveal
+
+### 1. Code Review & Security Audits
+**Pain:** "Understand change scope and risk in PRs"
+**Workflow:**
+```bash
+reveal diff://git://main/.:git://feature/.   # What's the surface area?
+reveal src/auth.py --check --select B,S      # Security issues?
+```
+
+### 2. Onboarding to a New Codebase
+**Pain:** "Get oriented quickly without reading everything"
+**Workflow:**
+```bash
+reveal .                                     # Map the repo
+reveal src/                                  # Find entry points
+reveal src/main.py                           # Understand structure
+reveal src/main.py handle_request            # Drill into specifics
+```
+
+### 3. Maintaining Code Quality
+**Pain:** "Keep the system coherent as it grows"
+**Workflow:**
+```bash
+reveal stats://./src --hotspots              # Find technical debt
+reveal src/ --check                          # Detect complexity growth
+reveal 'imports://src?circular'              # Find circular dependencies
+```
+
+### 4. Production Triage
+**Pain:** "Find the code path behind an incident"
+**Workflow:**
+```bash
+reveal env://                                # What's configured?
+reveal api/handlers.py error_handler         # Locate error boundaries
+reveal 'ast://src?complexity>10'             # Find complex paths
+```
+
+### 5. AI Agent Workflows
+**Pain:** "Provide accurate context without blowing tokens"
+**Workflow:**
+```bash
+reveal src/                                  # Orient (50 tokens)
+reveal src/app.py                            # Navigate (200 tokens)
+reveal src/app.py Database                   # Focus (100 tokens)
+# Total: 350 tokens vs 7,500 for raw files
+```
+
+---
+
+## 🤖 For AI Agents
+
+**This README is structured for both humans and AI agents.** Progressive disclosure starts at the top with quick examples.
+
+**Using reveal CLI?** Get usage patterns and optimization techniques:
+```bash
+reveal --agent-help          # Quick start + discovery patterns (~720 lines)
+reveal --agent-help-full     # Complete reference (~1680 lines)
+```
+
+**Documentation:** [Installation](INSTALL.md) • [Contributing](CONTRIBUTING.md) • [Changelog](CHANGELOG.md) • [Production Guide](docs/PRODUCTION_TESTING_GUIDE.md)
+
+**Quick Install:**
+```bash
+pip install reveal-cli              # Full-featured by default (38 languages, 13 adapters)
+pip install reveal-cli[database]    # Add MySQL database inspection
+```
+See [INSTALL.md](INSTALL.md) for details on what's included.
+
 ---
 
 ## Key Features
-
-### 🤖 AI Agent Workflows
-
-```bash
-# Get comprehensive agent guide
-reveal --agent-help              # Decision trees, workflows, anti-patterns
-
-# Typical exploration pattern
-reveal src/                      # Orient: what exists?
-reveal src/app.py                # Navigate: see structure
-reveal src/app.py Database       # Focus: get implementation
-```
 
 ### 🔍 Code Quality Checks (v0.13.0+)
 
@@ -317,7 +405,7 @@ reveal 'imports://src?circular'             # Detect circular dependencies (I002
 reveal 'imports://src?violations'           # Check layer violations (I003 rule)
 reveal imports://src/app.py                 # Imports for specific file
 
-# Semantic diff - compare structures, not text (v0.30.0+) 🆕
+# Semantic diff (see AI Safety Net section above)
 reveal diff://app.py:backup/app.py          # Compare files (shows function/class changes)
 reveal diff://src/:backup/src/              # Compare directories (aggregates all changes)
 reveal diff://git://HEAD~1/app.py:git://HEAD/app.py    # Compare across commits
@@ -342,7 +430,7 @@ The `reveal://` adapter demonstrates that reveal can inspect **any resource**, n
 - `mysql://` - MySQL database inspection with DBA tuning ratios (requires `[database]` extra)
 - `sqlite://` - SQLite database exploration (zero dependencies, v0.35.0+) 🆕
 - `imports://` - Import graph analysis with unused/circular detection (v0.28.0+)
-- `diff://` - Semantic structural diff (files, directories, git refs) (v0.30.0+)
+- `diff://` - Semantic structural diff (files, directories, git refs) (v0.30.0+) 🆕
 - `markdown://` - Frontmatter queries for knowledge graphs (v0.32.0+)
 
 **Self-documenting:** Every adapter exposes help via `reveal help://<scheme>`

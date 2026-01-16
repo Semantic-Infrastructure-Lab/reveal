@@ -31,19 +31,20 @@ class SQLiteAdapter(ResourceAdapter):
         """
         return load_help_data('sqlite') or {}
 
-    def __init__(self, connection_string: str = ""):
+    def __init__(self, connection_string: str):
         """Initialize SQLite adapter with database path.
 
         Args:
             connection_string: sqlite:///path/to/db.db[/table]
 
         Raises:
-            ValueError: When connection string is empty or format is invalid
+            TypeError: When no connection string provided (Python default)
+            ValueError: When connection string format is invalid
         """
-        # No connection string provided - invalid value
+        # Validate connection string is not empty (after required check)
         if not connection_string:
             raise ValueError(
-                "SQLiteAdapter requires a connection string. "
+                "SQLiteAdapter requires a non-empty connection string. "
                 "Use SQLiteAdapter('sqlite:///path/to/db.db')"
             )
 
