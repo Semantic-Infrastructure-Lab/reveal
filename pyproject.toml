@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "reveal-cli"
 version = "0.36.0"
-description = "Trust and legibility for AI-assisted development - verify code changes structurally, not textually"
+description = "Progressive code exploration with semantic queries and structural diffs - understand code by navigating structure, not reading text"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Progressive Reveal Contributors", email = "scottsen@users.noreply.github.com"}
 ]
-keywords = ["cli", "ai", "verification", "trust", "code-analysis", "semantic-diff", "progressive-disclosure", "ai-safety"]
+keywords = ["cli", "code-analysis", "ast", "semantic-diff", "progressive-disclosure", "code-exploration", "python", "tree-sitter"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

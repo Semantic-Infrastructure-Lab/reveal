@@ -1,6 +1,6 @@
-# reveal - Trust and Legibility for AI-Assisted Development
+# reveal - Progressive Code Exploration
 
-**Restore confidence in AI outputs by understanding code structurally, not textually**
+**Structure before content. Understand code by navigating it, not reading it.**
 
 ```bash
 pip install reveal-cli
@@ -11,55 +11,7 @@ reveal app.py load_config      # element → code
 
 Zero config. 38 languages built-in. 165+ via tree-sitter.
 
----
-
-## Why Reveal?
-
-**The problem with AI-assisted development isn't the code - it's the trust gap.**
-
-When AI tools modify your codebase, you face questions that line diffs can't answer:
-- **"Did this actually do what I asked?"** - Line changes show edits, not intent
-- **"What meaningfully changed?"** - 200 lines modified, but which functions matter?
-- **"Can I trust this output?"** - AI says it's done, but how do you verify?
-- **"Did complexity increase?"** - New code works, but is it maintainable?
-
-**Reveal solves this by treating code as navigable structure, not text.** Progressive disclosure enforces understanding at every level: directory → file → function. In the AI era, this becomes your verification layer.
-
----
-
-## 🛡️ AI Safety Net - Verify Before You Trust
-
-**Before merging AI changes, verify them structurally:**
-
-```bash
-# What functions actually changed?
-reveal diff://git://HEAD/src/:src/
-
-# Compare specific files
-reveal diff://app.py:ai_modified.py
-
-# Compare across commits
-reveal diff://git://HEAD~1/app.py:git://HEAD/app.py
-
-# Check branches before merge
-reveal diff://git://main/.:git://feature/.
-```
-
-**Why semantic diff matters:**
-- Git diff shows **lines changed** - you see text
-- Reveal shows **functions changed** - you understand impact
-- Complexity changes visible immediately
-- New dependencies and imports highlighted
-
-**Real workflow:**
-```bash
-# AI just modified your code
-reveal diff://git://HEAD/src/:src/          # What changed structurally?
-reveal src/ --check                          # Any quality issues?
-git add . && git commit -m "AI: Add feature" # Commit with confidence
-```
-
-**Think of it as the seatbelt for AI edits.** You wouldn't drive without one.
+**Token efficiency:** Structure view = 50 tokens vs 7,500 for full file. Measured 10-150x reduction in production use.
 
 ---
 
@@ -107,56 +59,33 @@ app.py:15-27 | load_config
 
 **All output is `filename:line` format** - works with vim, git, grep.
 
-**Token efficiency:** Structure view = 50 tokens vs 7,500 for reading full file. Validated 7-150x reduction in production.
-
 ---
 
-## When to Use Reveal
+## Common Workflows
 
-### 1. Code Review & Security Audits
-**Pain:** "Understand change scope and risk in PRs"
-**Workflow:**
+**Code review:**
 ```bash
-reveal diff://git://main/.:git://feature/.   # What's the surface area?
+reveal diff://git://main/.:git://feature/.   # What changed structurally?
 reveal src/auth.py --check --select B,S      # Security issues?
 ```
 
-### 2. Onboarding to a New Codebase
-**Pain:** "Get oriented quickly without reading everything"
-**Workflow:**
+**Onboarding:**
 ```bash
-reveal .                                     # Map the repo
-reveal src/                                  # Find entry points
-reveal src/main.py                           # Understand structure
-reveal src/main.py handle_request            # Drill into specifics
+reveal .                   # Map the repo
+reveal src/main.py          # Understand entry point
+reveal src/main.py handler  # Drill into specifics
 ```
 
-### 3. Maintaining Code Quality
-**Pain:** "Keep the system coherent as it grows"
-**Workflow:**
+**Finding hotspots:**
 ```bash
-reveal stats://./src --hotspots              # Find technical debt
-reveal src/ --check                          # Detect complexity growth
-reveal 'imports://src?circular'              # Find circular dependencies
+reveal 'ast://./src?complexity>10'    # Find complex functions
+reveal stats://./src --hotspots       # Technical debt map
 ```
 
-### 4. Production Triage
-**Pain:** "Find the code path behind an incident"
-**Workflow:**
+**Debugging:**
 ```bash
-reveal env://                                # What's configured?
-reveal api/handlers.py error_handler         # Locate error boundaries
-reveal 'ast://src?complexity>10'             # Find complex paths
-```
-
-### 5. AI Agent Workflows
-**Pain:** "Provide accurate context without blowing tokens"
-**Workflow:**
-```bash
-reveal src/                                  # Orient (50 tokens)
-reveal src/app.py                            # Navigate (200 tokens)
-reveal src/app.py Database                   # Focus (100 tokens)
-# Total: 350 tokens vs 7,500 for raw files
+reveal python://doctor           # Environment health check
+reveal python://module/requests  # Detect import shadowing
 ```
 
 ---
@@ -405,12 +334,12 @@ reveal 'imports://src?circular'             # Detect circular dependencies (I002
 reveal 'imports://src?violations'           # Check layer violations (I003 rule)
 reveal imports://src/app.py                 # Imports for specific file
 
-# Semantic diff (see AI Safety Net section above)
+# Structural diff (v0.30.0+)
 reveal diff://app.py:backup/app.py          # Compare files (shows function/class changes)
 reveal diff://src/:backup/src/              # Compare directories (aggregates all changes)
 reveal diff://git://HEAD~1/app.py:git://HEAD/app.py    # Compare across commits
 reveal diff://git://HEAD/src/:src/          # Compare git vs working tree (pre-commit check)
-reveal diff://git://main/.:git://feature/.:  # Compare branches
+reveal diff://git://main/.:git://feature/.  # Compare branches
 reveal diff://app.py:new.py/handle_request  # Element-specific diff
 reveal diff://env://:env://production        # Environment drift detection
 reveal help://diff                           # Complete diff guide

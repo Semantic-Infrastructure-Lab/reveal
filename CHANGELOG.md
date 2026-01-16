@@ -8,29 +8,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **README.md strategic repositioning** - Trust and legibility framing for AI era
-  - New title: "Trust and Legibility for AI-Assisted Development"
-  - New lead: "Restore confidence in AI outputs by understanding code structurally"
-  - Added "Why Reveal?" section with user pain points (trust gap, verification)
-  - Elevated diff:// to "🛡️ AI Safety Net" section (verification layer, not just feature)
-  - Added "When to Use Reveal" section with 5 personas and workflows
-  - Kept technical depth, reordered for trust-first framing
-  - **Impact**: External messaging now matches internal strategic positioning (POSITIONING_STRATEGY.md)
-  - Session: kiyuda-0115
-- **pyproject.toml package description** - Aligned with strategic positioning
-  - New description: "Trust and legibility for AI-assisted development - verify code changes structurally"
-  - Updated keywords: Added "verification", "trust", "semantic-diff", "ai-safety"
-  - **Impact**: PyPI listing matches trust/legibility framing
-  - Session: kiyuda-0115
-- **SQLite adapter initialization** - Enforce required connection string parameter
-  - Removed default value from `__init__(connection_string: str = "")` → `__init__(connection_string: str)`
-  - No-arg call now raises TypeError (correct initialization pattern per V019)
-  - Empty string still raises ValueError (invalid value, not invalid call)
-  - **Architectural alignment**: V019 guideline (TypeError for call pattern, ValueError for value)
-  - All tests passing, self-check clean
-  - Session: kiyuda-0115
+- **README.md reverted to utility-first messaging** - Removed marketing fluff
+  - Old title (from kiyuda-0115): "Trust and Legibility for AI-Assisted Development"
+  - New title: "Progressive Code Exploration"
+  - New lead: "Structure before content. Understand code by navigating it, not reading it."
+  - Removed "Why Reveal?" AI trust gap section (aspirational, not validated)
+  - Removed "🛡️ AI Safety Net" branding (overselling)
+  - Removed "When to Use Reveal" personas (unvalidated use cases)
+  - Added simple "Common Workflows" section with real, tested examples
+  - **Impact**: External docs now match actual usage patterns, not aspirational positioning
+  - **Rationale**: kiyuda-0115 leaked internal planning language (POSITIONING_STRATEGY.md) into external docs as if it were proven reality
+  - Session: pulsing-horizon-0115
+- **pyproject.toml description updated** - Utility-first language
+  - Old (from kiyuda-0115): "Trust and legibility for AI-assisted development - verify code changes structurally"
+  - New: "Progressive code exploration with semantic queries and structural diffs - understand code by navigating structure, not reading text"
+  - Keywords updated: Removed "verification", "trust", "ai-safety" → Added "code-exploration", "ast", "tree-sitter"
+  - **Impact**: PyPI listing focuses on actual capabilities, not aspirational use cases
+  - Session: pulsing-horizon-0115
+- **POSITIONING_STRATEGY.md marked as internal only** - Prevent future leakage
+  - Added warning header: "INTERNAL PLANNING DOCUMENT"
+  - Documented why warning exists (kiyuda-0115 leakage into external docs)
+  - Clear guidance: Use for strategic discussions, NOT for external documentation
+  - Session: pulsing-horizon-0115
 
 ### Added
+- **WORKFLOW_RECIPES.md** - Task-based practical documentation
+  - 8 workflows: code review, onboarding, debugging, refactoring, documentation, AI agents, databases, pipelines
+  - Consolidates proven patterns from COOL_TRICKS.md and AGENT_HELP.md
+  - Organized by task (what you want to do), not by feature (what reveal has)
+  - Real commands for real use cases
+  - No aspirational fluff, only tested workflows
+  - **Impact**: Contributors and users get practical, task-oriented guidance
+  - Session: pulsing-horizon-0115
+- **PRACTICAL_UTILITY_ANALYSIS.md** - Internal analysis document
+  - Comprehensive analysis separating real utility from marketing fluff
+  - Identified 9 production-grade features with evidence (tests, docs, real usage)
+  - Documented critical gaps (output schema, stability taxonomy, workflow recipes)
+  - 5-phase consolidation plan (Phase 1-2 completed in pulsing-horizon-0115)
+  - Session: pulsing-horizon-0115
 - **Multi-language circular dependency detection (I002)** - Extended to JavaScript, Rust
   - I002 now uses dynamic extractor selection instead of Python-specific functions
   - Automatically supports all languages with import resolution (Python, JS, Rust)
