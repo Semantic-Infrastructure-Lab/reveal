@@ -225,7 +225,45 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
         renderer_class.render_element(result, args.format)
     else:
         # Structure-based adapters: always use get_structure()
-        result = adapter.get_structure()
+        # Pass adapter-specific parameters if supported (similar to check() handling)
+        structure_kwargs = {}
+
+        # For stats adapter: pass hotspots, min_lines, etc. if get_structure() supports them
+        if hasattr(adapter, 'get_structure'):
+            import inspect
+            sig = inspect.signature(adapter.get_structure)
+
+            # Hotspots parameter
+            if 'hotspots' in sig.parameters and hasattr(args, 'hotspots'):
+                structure_kwargs['hotspots'] = args.hotspots
+
+            # Filter parameters for stats adapter (only pass if not None)
+            if 'min_lines' in sig.parameters:
+                min_lines = getattr(args, 'min_lines', None)
+                if min_lines is not None:
+                    structure_kwargs['min_lines'] = min_lines
+
+            if 'max_lines' in sig.parameters:
+                max_lines = getattr(args, 'max_lines', None)
+                if max_lines is not None:
+                    structure_kwargs['max_lines'] = max_lines
+
+            if 'min_complexity' in sig.parameters:
+                min_complexity = getattr(args, 'min_complexity', None)
+                if min_complexity is not None:
+                    structure_kwargs['min_complexity'] = min_complexity
+
+            if 'max_complexity' in sig.parameters:
+                max_complexity = getattr(args, 'max_complexity', None)
+                if max_complexity is not None:
+                    structure_kwargs['max_complexity'] = max_complexity
+
+            if 'min_functions' in sig.parameters:
+                min_functions = getattr(args, 'min_functions', None)
+                if min_functions is not None:
+                    structure_kwargs['min_functions'] = min_functions
+
+        result = adapter.get_structure(**structure_kwargs)
         renderer_class.render_structure(result, args.format)
 
 

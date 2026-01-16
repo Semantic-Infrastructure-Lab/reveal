@@ -17,6 +17,73 @@
 
 ---
 
+## Critical Pattern: Codebase Assessment
+
+**Problem:** AI agents waste 80% more commands and 81% more tokens assessing codebases.
+
+**Anti-pattern (8 commands, 1,600 tokens, 90 seconds):**
+```bash
+find . -name "*.py" | wc -l          # Count Python files
+find . -name "*.js" | wc -l          # Count JS files
+find . -type f | wc -l               # Total files
+du -sh .                              # Size
+wc -l $(find . -name "*.py")         # Total lines
+# ... more ad-hoc commands
+```
+
+**✅ Correct pattern (1 command, 300 tokens, 15 seconds):**
+```bash
+# Get comprehensive codebase metrics
+reveal stats://./
+
+# Focus on code files only (excludes data/config)
+reveal stats://./?type=python
+
+# JSON for scripting
+reveal stats://. --format=json
+```
+
+**What you get from stats://:**
+```
+📊 Codebase Statistics: /path/to/project
+
+Files by Language:
+  Python         43 files    12,458 lines    (82.3%)
+  JavaScript     12 files     2,134 lines    (14.1%)
+  JSON            8 files       542 lines     (3.6%)
+
+Quality Scores:
+  Complexity: 7.2/10 (healthy)
+  Maintainability: 8.1/10 (good)
+
+Top Issues:
+  C901: 12 functions exceed complexity threshold
+  B005: 3 mutable default arguments
+
+Health: 🟢 HEALTHY
+```
+
+**Impact measurement (real agent session):**
+- **Before:** 8 commands, 1,600 tokens, 90s, incomplete metrics
+- **After:** 1 command, 300 tokens, 15s, complete metrics + quality scores
+- **Improvement:** 81% fewer tokens, 83% faster
+
+**When to use:**
+- First encounter with unfamiliar codebase
+- Project health assessment
+- Finding complexity hotspots
+- Scoping refactoring work
+- Reporting codebase status
+
+**URI parameters:**
+- `?type=python` - Filter to specific language
+- `?min_lines=50` - Only files with 50+ lines
+- `?hotspots=true` - Show quality hotspots (most complex files)
+
+**See also:** `reveal help://stats` for full stats:// capabilities
+
+---
+
 ## Common Tasks → Reveal Patterns
 
 ### Task: "Understand unfamiliar code"

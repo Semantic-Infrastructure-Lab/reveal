@@ -1135,6 +1135,100 @@ class TestHandleFile(unittest.TestCase):
             os.unlink(temp_path)
 
 
+class TestAdapterParameters(unittest.TestCase):
+    """Test parameter passing to adapter methods."""
+
+    def test_hotspots_flag_passed_to_stats_adapter(self):
+        """Verify --hotspots flag is passed to stats adapter get_structure()."""
+        import inspect
+        from unittest.mock import create_autospec
+
+        # Create a mock get_structure method with proper signature
+        def mock_get_structure(hotspots=False, **kwargs):
+            return {'files': 5, 'hotspots': []}
+
+        # Create mock adapter
+        mock_adapter = Mock()
+        mock_adapter.get_structure = create_autospec(mock_get_structure, return_value={'files': 5, 'hotspots': []})
+
+        # Create args with hotspots=True
+        mock_args = Namespace(
+            format='text',
+            check=False,
+            hotspots=True,  # The flag we're testing
+            select=None,
+            ignore=None
+        )
+
+        # Mock renderer
+        mock_renderer = Mock()
+        mock_renderer.render_structure = Mock()
+        mock_renderer.render_element = Mock()
+
+        # Call generic_adapter_handler (simulating stats:// with --hotspots)
+        generic_adapter_handler(
+            adapter_class=Mock(return_value=mock_adapter),
+            renderer_class=mock_renderer,
+            scheme='stats',
+            resource='.',
+            element=None,
+            args=mock_args
+        )
+
+        # Verify get_structure() was called with hotspots=True
+        mock_adapter.get_structure.assert_called_once()
+        call_kwargs = mock_adapter.get_structure.call_args[1]
+        self.assertTrue(call_kwargs.get('hotspots', False),
+                       "hotspots parameter should be True when --hotspots flag is set")
+
+    def test_stats_filters_passed_to_adapter(self):
+        """Verify stats filter parameters (min_lines, etc.) are passed to adapter."""
+        from unittest.mock import create_autospec
+
+        # Create a mock get_structure method with filter parameters in signature
+        def mock_get_structure(hotspots=False, min_lines=None, max_lines=None,
+                             min_complexity=None, max_complexity=None,
+                             min_functions=None, **kwargs):
+            return {'files': 5}
+
+        # Create mock adapter
+        mock_adapter = Mock()
+        mock_adapter.get_structure = create_autospec(mock_get_structure, return_value={'files': 5})
+
+        # Create args with filter parameters
+        mock_args = Namespace(
+            format='text',
+            check=False,
+            hotspots=False,
+            min_lines=50,
+            max_lines=500,
+            min_complexity=5.0,
+            select=None,
+            ignore=None
+        )
+
+        # Mock renderer
+        mock_renderer = Mock()
+        mock_renderer.render_structure = Mock()
+
+        # Call generic_adapter_handler
+        generic_adapter_handler(
+            adapter_class=Mock(return_value=mock_adapter),
+            renderer_class=mock_renderer,
+            scheme='stats',
+            resource='.',
+            element=None,
+            args=mock_args
+        )
+
+        # Verify filter parameters were passed
+        mock_adapter.get_structure.assert_called_once()
+        call_kwargs = mock_adapter.get_structure.call_args[1]
+        self.assertEqual(call_kwargs.get('min_lines'), 50)
+        self.assertEqual(call_kwargs.get('max_lines'), 500)
+        self.assertEqual(call_kwargs.get('min_complexity'), 5.0)
+
+
 class TestRoutingEdgeCases(unittest.TestCase):
     """Test edge cases and error handling."""
 
