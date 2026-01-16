@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **README.md strategic repositioning** - Trust and legibility framing for AI era
+  - New title: "Trust and Legibility for AI-Assisted Development"
+  - New lead: "Restore confidence in AI outputs by understanding code structurally"
+  - Added "Why Reveal?" section with user pain points (trust gap, verification)
+  - Elevated diff:// to "🛡️ AI Safety Net" section (verification layer, not just feature)
+  - Added "When to Use Reveal" section with 5 personas and workflows
+  - Kept technical depth, reordered for trust-first framing
+  - **Impact**: External messaging now matches internal strategic positioning (POSITIONING_STRATEGY.md)
+  - Session: kiyuda-0115
+- **pyproject.toml package description** - Aligned with strategic positioning
+  - New description: "Trust and legibility for AI-assisted development - verify code changes structurally"
+  - Updated keywords: Added "verification", "trust", "semantic-diff", "ai-safety"
+  - **Impact**: PyPI listing matches trust/legibility framing
+  - Session: kiyuda-0115
+- **SQLite adapter initialization** - Enforce required connection string parameter
+  - Removed default value from `__init__(connection_string: str = "")` → `__init__(connection_string: str)`
+  - No-arg call now raises TypeError (correct initialization pattern per V019)
+  - Empty string still raises ValueError (invalid value, not invalid call)
+  - **Architectural alignment**: V019 guideline (TypeError for call pattern, ValueError for value)
+  - All tests passing, self-check clean
+  - Session: kiyuda-0115
+
 ### Added
 - **Multi-language circular dependency detection (I002)** - Extended to JavaScript, Rust
   - I002 now uses dynamic extractor selection instead of Python-specific functions
@@ -36,13 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Session: desert-squall-0115 validation, cursed-wizard-0115 implementation
 
 ### Fixed
-- **SQLite adapter empty URI validation** - Raise ValueError instead of TypeError
-  - Fixes test_init_with_empty_uri test failure
-  - Now raises ValueError for empty connection string (correct for invalid value)
-  - Previously raised TypeError (incorrect - type was correct, value was not)
-  - Aligns with Python conventions (ValueError for invalid values)
-  - All 22 sqlite adapter tests passing
-  - Session: ancient-river-0115
 - **GitAdapter backward compatibility** - Accept both `resource=` and `path=` parameters
   - Fixes 22 failing git adapter tests (TypeError on path= usage)
   - Maintains full backward compatibility with both calling styles
