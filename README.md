@@ -455,7 +455,8 @@ reveal/
 
 **Clean architecture:** Most analyzers < 50 lines. Modular packages since v0.22.0.
 
-**Power users:** [COOL_TRICKS.md](reveal/COOL_TRICKS.md) - Hidden features and advanced workflows
+**Documentation:** [reveal/docs/](reveal/docs/) - Comprehensive guides for users, developers, and AI agents
+**Power users:** [COOL_TRICKS.md](reveal/docs/COOL_TRICKS.md) - Hidden features and advanced workflows
 **Production workflows:** [PRODUCTION_TESTING_GUIDE.md](docs/PRODUCTION_TESTING_GUIDE.md) - Real-world testing, CI/CD integration, performance at scale
 
 ---
@@ -476,7 +477,7 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 ---
 
-**License:** MIT | [Roadmap](ROADMAP.md) | [Cool Tricks](reveal/COOL_TRICKS.md) | [Issues](https://github.com/Semantic-Infrastructure-Lab/reveal/issues)
+**License:** MIT | [Documentation](reveal/docs/) | [Cool Tricks](reveal/docs/COOL_TRICKS.md) | [Issues](https://github.com/Semantic-Infrastructure-Lab/reveal/issues)
 
 [![Stars](https://img.shields.io/github/stars/Semantic-Infrastructure-Lab/reveal?style=social)](https://github.com/Semantic-Infrastructure-Lab/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
