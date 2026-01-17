@@ -350,5 +350,237 @@ value: 123
             os.unlink(json_path)
 
 
+class TestYamlExtraction(unittest.TestCase):
+    """Test YAML element extraction."""
+
+    def test_extract_yaml_key(self):
+        """Should extract specific YAML key with content."""
+        code = '''name: MyApp
+version: 1.0.0
+database:
+  host: localhost
+  port: 5432
+services:
+  - web
+  - api
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = YamlAnalyzer(temp_path)
+
+            # Extract 'database' key
+            result = analyzer.extract_element('key', 'database')
+            self.assertIsNotNone(result)
+            self.assertEqual(result['name'], 'database')
+            self.assertEqual(result['line_start'], 3)
+            self.assertIn('host: localhost', result['source'])
+            self.assertIn('port: 5432', result['source'])
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_extract_yaml_simple_key(self):
+        """Should extract simple YAML key."""
+        code = '''name: MyApp
+version: 1.0.0
+description: A simple app
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = YamlAnalyzer(temp_path)
+
+            # Extract 'version' key
+            result = analyzer.extract_element('key', 'version')
+            self.assertIsNotNone(result)
+            self.assertEqual(result['name'], 'version')
+            self.assertEqual(result['line_start'], 2)
+            self.assertEqual(result['line_end'], 2)
+            self.assertIn('1.0.0', result['source'])
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_extract_yaml_nonexistent_key(self):
+        """Should return None for nonexistent key."""
+        code = '''name: MyApp
+version: 1.0.0
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = YamlAnalyzer(temp_path)
+            result = analyzer.extract_element('key', 'nonexistent')
+            # Should fall back to grep-based search which returns None if not found
+            self.assertIsNone(result)
+
+        finally:
+            os.unlink(temp_path)
+
+
+class TestJsonExtraction(unittest.TestCase):
+    """Test JSON element extraction."""
+
+    def test_extract_json_key(self):
+        """Should extract specific JSON key with content."""
+        code = '''{
+  "name": "MyApp",
+  "version": "1.0.0",
+  "database": {
+    "host": "localhost",
+    "port": 5432
+  },
+  "services": ["web", "api"]
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = JsonAnalyzer(temp_path)
+
+            # Extract 'database' key
+            result = analyzer.extract_element('key', 'database')
+            self.assertIsNotNone(result)
+            self.assertEqual(result['name'], 'database')
+            self.assertEqual(result['line_start'], 4)
+            self.assertIn('host', result['source'])
+            self.assertIn('localhost', result['source'])
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_extract_json_simple_key(self):
+        """Should extract simple JSON key."""
+        code = '''{
+  "name": "MyApp",
+  "version": "1.0.0",
+  "description": "A simple app"
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = JsonAnalyzer(temp_path)
+
+            # Extract 'version' key
+            result = analyzer.extract_element('key', 'version')
+            self.assertIsNotNone(result)
+            self.assertEqual(result['name'], 'version')
+            self.assertEqual(result['line_start'], 3)
+            self.assertIn('1.0.0', result['source'])
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_extract_json_nonexistent_key(self):
+        """Should return None for nonexistent key."""
+        code = '{"name": "MyApp", "version": "1.0.0"}'
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = JsonAnalyzer(temp_path)
+            result = analyzer.extract_element('key', 'nonexistent')
+            # Should fall back to grep-based search which returns None if not found
+            self.assertIsNone(result)
+
+        finally:
+            os.unlink(temp_path)
+
+
+class TestEdgeCases(unittest.TestCase):
+    """Test edge cases for YAML/JSON analyzers."""
+
+    def test_empty_yaml(self):
+        """Should handle empty YAML file."""
+        code = ''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = YamlAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            # Empty file returns empty dict or dict with empty keys
+            self.assertIsNotNone(structure)
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_empty_json(self):
+        """Should handle empty JSON object."""
+        code = '{}'
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = JsonAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            # Empty object returns empty dict or dict with empty keys
+            self.assertIsNotNone(structure)
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_json_array_at_root(self):
+        """Should handle JSON array at root level."""
+        code = '[{"name": "item1"}, {"name": "item2"}]'
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = JsonAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            # Array at root has no keys
+            self.assertIsNotNone(structure)
+            # Should return empty dict since there are no top-level keys
+            self.assertEqual(structure, {})
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_yaml_with_comments_only(self):
+        """Should handle YAML with only comments."""
+        code = '''# This is a comment
+# Another comment
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = YamlAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+            # Comments only returns empty structure
+            self.assertIsNotNone(structure)
+
+        finally:
+            os.unlink(temp_path)
+
+
 if __name__ == '__main__':
     unittest.main()

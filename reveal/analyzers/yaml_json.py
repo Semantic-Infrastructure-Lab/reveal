@@ -23,6 +23,41 @@ class YamlAnalyzer(TreeSitterAnalyzer):
 
     language = 'yaml'
 
+    def _find_yaml_pairs(self):
+        """Find top-level block_mapping_pair nodes in the document.
+
+        Returns:
+            List of top-level block_mapping_pair nodes
+        """
+        pairs = []
+        # Navigate to the top-level block_mapping
+        for node in self.tree.root_node.children:
+            if node.type == 'document':
+                for child in node.children:
+                    if child.type == 'block_node':
+                        for mapping_child in child.children:
+                            if mapping_child.type == 'block_mapping':
+                                # Get top-level pairs only
+                                for pair in mapping_child.children:
+                                    if pair.type == 'block_mapping_pair':
+                                        pairs.append(pair)
+        return pairs
+
+    def _extract_key_info(self, pair_node):
+        """Extract key name from a block_mapping_pair node.
+
+        Args:
+            pair_node: A block_mapping_pair tree-sitter node
+
+        Returns:
+            Tuple of (key_name, key_node) or (None, None) if no key found
+        """
+        key_node = pair_node.child_by_field_name('key')
+        if key_node:
+            key_name = self.content[key_node.start_byte:key_node.end_byte]
+            return key_name, key_node
+        return None, None
+
     def get_structure(self, head: int = None, tail: int = None,
                       range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract YAML top-level keys using tree-sitter."""
@@ -30,26 +65,15 @@ class YamlAnalyzer(TreeSitterAnalyzer):
             return {}
 
         keys = []
+        pairs = self._find_yaml_pairs()
 
-        # Find the document node
-        for node in self.tree.root_node.children:
-            if node.type == 'document':
-                # Look for block_mapping with top-level pairs
-                for child in node.children:
-                    if child.type == 'block_node':
-                        # Find block_mapping
-                        for mapping_child in child.children:
-                            if mapping_child.type == 'block_mapping':
-                                # Extract top-level keys
-                                for pair in mapping_child.children:
-                                    if pair.type == 'block_mapping_pair':
-                                        key_node = pair.child_by_field_name('key')
-                                        if key_node:
-                                            key_name = self.content[key_node.start_byte:key_node.end_byte]
-                                            keys.append({
-                                                'line': pair.start_point[0] + 1,
-                                                'name': key_name,
-                                            })
+        for pair in pairs:
+            key_name, _ = self._extract_key_info(pair)
+            if key_name:
+                keys.append({
+                    'line': pair.start_point[0] + 1,
+                    'name': key_name,
+                })
 
         return {'keys': keys} if keys else {}
 
@@ -66,29 +90,21 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         if not self.tree:
             return super().extract_element(element_type, name)
 
-        # Find the matching key
-        for node in self.tree.root_node.children:
-            if node.type == 'document':
-                for child in node.children:
-                    if child.type == 'block_node':
-                        for mapping_child in child.children:
-                            if mapping_child.type == 'block_mapping':
-                                for pair in mapping_child.children:
-                                    if pair.type == 'block_mapping_pair':
-                                        key_node = pair.child_by_field_name('key')
-                                        if key_node:
-                                            key_name = self.content[key_node.start_byte:key_node.end_byte]
-                                            if key_name == name:
-                                                start_line = pair.start_point[0] + 1
-                                                end_line = pair.end_point[0] + 1
-                                                source = '\n'.join(self.lines[start_line-1:end_line])
+        pairs = self._find_yaml_pairs()
 
-                                                return {
-                                                    'name': name,
-                                                    'line_start': start_line,
-                                                    'line_end': end_line,
-                                                    'source': source,
-                                                }
+        for pair in pairs:
+            key_name, _ = self._extract_key_info(pair)
+            if key_name == name:
+                start_line = pair.start_point[0] + 1
+                end_line = pair.end_point[0] + 1
+                source = '\n'.join(self.lines[start_line-1:end_line])
+
+                return {
+                    'name': name,
+                    'line_start': start_line,
+                    'line_end': end_line,
+                    'source': source,
+                }
 
         # Fall back to grep-based search
         return super().extract_element(element_type, name)
@@ -103,6 +119,37 @@ class JsonAnalyzer(TreeSitterAnalyzer):
 
     language = 'json'
 
+    def _find_json_pairs(self):
+        """Find top-level pair nodes in the root JSON object.
+
+        Returns:
+            List of top-level pair nodes (JSON key-value pairs)
+        """
+        pairs = []
+        # Only look for pairs that are direct children of the root object
+        for node in self.tree.root_node.children:
+            if node.type == 'object':
+                for child in node.children:
+                    if child.type == 'pair':
+                        pairs.append(child)
+        return pairs
+
+    def _extract_key_info(self, pair_node):
+        """Extract key name from a pair node.
+
+        Args:
+            pair_node: A pair tree-sitter node (JSON key-value pair)
+
+        Returns:
+            Tuple of (key_name, key_node) or (None, None) if no key found
+        """
+        key_node = pair_node.child_by_field_name('key')
+        if key_node:
+            key_text = self.content[key_node.start_byte:key_node.end_byte]
+            key_name = key_text.strip('"')
+            return key_name, key_node
+        return None, None
+
     def get_structure(self, head: int = None, tail: int = None,
                       range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract JSON top-level keys using tree-sitter."""
@@ -110,22 +157,15 @@ class JsonAnalyzer(TreeSitterAnalyzer):
             return {}
 
         keys = []
+        pairs = self._find_json_pairs()
 
-        # Find the root object
-        for node in self.tree.root_node.children:
-            if node.type == 'object':
-                # Extract all top-level pairs
-                for child in node.children:
-                    if child.type == 'pair':
-                        key_node = child.child_by_field_name('key')
-                        if key_node:
-                            # Get key text and strip quotes
-                            key_text = self.content[key_node.start_byte:key_node.end_byte]
-                            key_name = key_text.strip('"')
-                            keys.append({
-                                'line': child.start_point[0] + 1,
-                                'name': key_name,
-                            })
+        for pair in pairs:
+            key_name, _ = self._extract_key_info(pair)
+            if key_name:
+                keys.append({
+                    'line': pair.start_point[0] + 1,
+                    'name': key_name,
+                })
 
         return {'keys': keys} if keys else {}
 
@@ -142,26 +182,21 @@ class JsonAnalyzer(TreeSitterAnalyzer):
         if not self.tree:
             return super().extract_element(element_type, name)
 
-        # Find the root object and search for matching key
-        for node in self.tree.root_node.children:
-            if node.type == 'object':
-                for child in node.children:
-                    if child.type == 'pair':
-                        key_node = child.child_by_field_name('key')
-                        if key_node:
-                            key_text = self.content[key_node.start_byte:key_node.end_byte]
-                            key_name = key_text.strip('"')
-                            if key_name == name:
-                                start_line = child.start_point[0] + 1
-                                end_line = child.end_point[0] + 1
-                                source = '\n'.join(self.lines[start_line-1:end_line])
+        pairs = self._find_json_pairs()
 
-                                return {
-                                    'name': name,
-                                    'line_start': start_line,
-                                    'line_end': end_line,
-                                    'source': source,
-                                }
+        for pair in pairs:
+            key_name, _ = self._extract_key_info(pair)
+            if key_name == name:
+                start_line = pair.start_point[0] + 1
+                end_line = pair.end_point[0] + 1
+                source = '\n'.join(self.lines[start_line-1:end_line])
+
+                return {
+                    'name': name,
+                    'line_start': start_line,
+                    'line_end': end_line,
+                    'source': source,
+                }
 
         # Fall back to grep-based search
         return super().extract_element(element_type, name)
