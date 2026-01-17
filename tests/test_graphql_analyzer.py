@@ -40,6 +40,25 @@ type Post {
             # Should return valid structure (dict)
             self.assertIsInstance(structure, dict)
 
+            # Should extract types
+            self.assertIn('types', structure)
+            types = structure['types']
+            self.assertEqual(len(types), 2)
+
+            # Check User type
+            user_type = next((t for t in types if t['name'] == 'User'), None)
+            self.assertIsNotNone(user_type)
+            self.assertIn('id', user_type['fields'])
+            self.assertIn('name', user_type['fields'])
+            self.assertIn('email', user_type['fields'])
+            self.assertIn('posts', user_type['fields'])
+
+            # Check Post type
+            post_type = next((t for t in types if t['name'] == 'Post'), None)
+            self.assertIsNotNone(post_type)
+            self.assertIn('title', post_type['fields'])
+            self.assertIn('author', post_type['fields'])
+
         finally:
             os.unlink(temp_path)
 
@@ -70,6 +89,34 @@ type Mutation {
             structure = analyzer.get_structure()
 
             self.assertIsInstance(structure, dict)
+
+            # Should extract queries
+            self.assertIn('queries', structure)
+            queries = structure['queries']
+            self.assertEqual(len(queries), 4)
+            query_names = [q['name'] for q in queries]
+            self.assertIn('user', query_names)
+            self.assertIn('users', query_names)
+
+            # Check query signatures include arguments and return types
+            user_query = next((q for q in queries if q['name'] == 'user'), None)
+            self.assertIsNotNone(user_query)
+            self.assertIn('id: ID!', user_query['signature'])
+            self.assertIn(': User', user_query['signature'])
+
+            # Should extract mutations
+            self.assertIn('mutations', structure)
+            mutations = structure['mutations']
+            self.assertEqual(len(mutations), 4)
+            mutation_names = [m['name'] for m in mutations]
+            self.assertIn('createUser', mutation_names)
+            self.assertIn('deleteUser', mutation_names)
+
+            # Check mutation signatures
+            create_user = next((m for m in mutations if m['name'] == 'createUser'), None)
+            self.assertIsNotNone(create_user)
+            self.assertIn('name: String!', create_user['signature'])
+            self.assertIn('email: String!', create_user['signature'])
 
         finally:
             os.unlink(temp_path)
@@ -153,6 +200,21 @@ type Post {
             structure = analyzer.get_structure()
 
             self.assertIsInstance(structure, dict)
+
+            # Should extract enums
+            self.assertIn('enums', structure)
+            enums = structure['enums']
+            self.assertEqual(len(enums), 2)
+            enum_names = [e['name'] for e in enums]
+            self.assertIn('Role', enum_names)
+            self.assertIn('PostStatus', enum_names)
+
+            # Check enum values
+            role_enum = next((e for e in enums if e['name'] == 'Role'), None)
+            self.assertIsNotNone(role_enum)
+            self.assertIn('values', role_enum)
+            self.assertIn('ADMIN', role_enum['values'])
+            self.assertIn('USER', role_enum['values'])
 
         finally:
             os.unlink(temp_path)
