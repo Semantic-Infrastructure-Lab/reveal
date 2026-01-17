@@ -73,6 +73,19 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
     adapters = [a for a in data.get('adapters', []) if a.get('has_help')]
     static = data.get('static_guides', [])
 
+    # Stability classification for adapters
+    stable_adapters = {'help', 'env', 'ast', 'python', 'reveal'}
+    beta_adapters = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git'}
+
+    def get_stability_badge(scheme: str) -> str:
+        """Get stability badge for an adapter."""
+        if scheme in stable_adapters:
+            return "🟢"
+        elif scheme in beta_adapters:
+            return "🟡"
+        else:
+            return "🔴"
+
     # DYNAMIC CONTENT
     print("## 📦 DYNAMIC CONTENT (Runtime Discovery)")
     print()
@@ -81,12 +94,14 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
         print("### URI Adapters ({} registered)".format(len(adapters)))
         print("Source: Live adapter registry")
         print("Updates: Automatic when new adapters added")
+        print("Legend: 🟢 Stable | 🟡 Beta | 🔴 Experimental")
         print()
         for adapter in adapters:
             scheme = adapter['scheme']
             desc = adapter.get('description', 'No description')
-            print(f"  {scheme}://      - {desc}")
-            print(f"               Details: reveal help://{scheme}")
+            badge = get_stability_badge(scheme)
+            print(f"  {badge} {scheme}://      - {desc}")
+            print(f"                 Details: reveal help://{scheme}")
         print()
 
     # STATIC CONTENT
@@ -301,10 +316,17 @@ def _render_help_section(data: Dict[str, Any]) -> None:
 # Section renderers - each handles one aspect of help documentation
 def _render_help_header(scheme: str, data: Dict[str, Any]) -> None:
     """Render help header with scheme, description, and metadata."""
+    # Stability classification
+    stable_adapters = {'help', 'env', 'ast', 'python', 'reveal'}
+    beta_adapters = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git'}
+
+    stability = "Stable 🟢" if scheme in stable_adapters else "Beta 🟡" if scheme in beta_adapters else "Experimental 🔴"
+
     print(f"# {scheme}:// - {data.get('description', '')}")
     print()
     print(f"**Source:** {scheme}.py adapter (dynamic)")
     print(f"**Type:** URI Adapter")
+    print(f"**Stability:** {stability}")
     print(f"**Access:** reveal help://{scheme}")
     print()
 

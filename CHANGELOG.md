@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Stability Taxonomy** - Clear stability guarantees for adapters and features (Tier 1 priority)
+  - New STABILITY.md document with comprehensive policy and v1.0 roadmap
+  - Stability labels in README.md: 🟢 Stable, 🟡 Beta, 🔴 Experimental
+  - Stability badges in `reveal help://` output (legend shows at adapter list)
+  - Stability field in individual adapter help pages (`reveal help://<adapter>`)
+  - Classification: 5 stable adapters (help, env, ast, python, reveal), 8 beta adapters (diff, imports, sqlite, mysql, stats, json, markdown, git)
+  - Purpose: Users and AI agents know what's safe to depend on
+  - Breaking change policy defined: stable features won't break in minor versions
+  - Path to v1.0 documented: Q2 2026 after Output Contract Specification ships
+  - Session: mysterious-rocket-0117
+
 ## [0.36.1] - 2026-01-16
 
 ### Fixed

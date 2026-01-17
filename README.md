@@ -463,6 +463,34 @@ reveal/
 
 ---
 
+## Stability Guarantees
+
+**Current version:** v0.36.1 (Beta) - On path to v1.0 (Q2 2026)
+
+### 🟢 Stable (Safe to depend on)
+- **Core modes:** directory → file → element
+- **Basic adapters:** `help://`, `env://`, `ast://`, `python://`, `reveal://`
+- **Output format:** `filename:line` (compatible with vim, git, grep)
+- **Languages (Tier 1):** Python, JavaScript, TypeScript, Rust, Go, Java, C, C++
+
+### 🟡 Beta (Feature-complete, API may evolve)
+- **Advanced adapters:** `diff://`, `imports://`, `sqlite://`, `mysql://`, `stats://`, `json://`, `markdown://`, `git://`
+- **Quality rules:** 59 rules across 12 categories (may be refined)
+- **Languages (Tier 2):** 30+ additional languages (full support)
+- **JSON output:** Structure may change (use text format for production)
+
+### 🔴 Experimental (No guarantees)
+- **Tree-sitter languages:** 165+ languages (basic structure only)
+- **Undocumented features:** Use at your own risk
+
+**For AI agents:** Rely on text output (`filename:line` format) and stable adapters. JSON output is Beta until Output Contract ships.
+
+**For CI/CD:** Pin reveal version (`pip install reveal-cli==0.36.1`) and upgrade explicitly after testing.
+
+**Full policy:** See [STABILITY.md](STABILITY.md) for detailed guarantees, breaking change policy, and v1.0 roadmap.
+
+---
+
 ## Contributing
 
 Add new languages in 10-50 lines. See `analyzers/` for examples.
