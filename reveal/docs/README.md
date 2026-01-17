@@ -74,6 +74,13 @@
 | [HELP_SYSTEM_GUIDE.md](HELP_SYSTEM_GUIDE.md) | Help system architecture | Developers |
 | [RELEASE_GUIDE.md](RELEASE_GUIDE.md) | Release process | Maintainers |
 | [ANTI_PATTERNS.md](ANTI_PATTERNS.md) | Common mistakes to avoid | Developers |
+| [../../docs/BUG_PREVENTION.md](../../docs/BUG_PREVENTION.md) | Bug prevention patterns | Developers |
+
+### Workflow Guides
+
+| Guide | Purpose | Audience |
+|-------|---------|----------|
+| [../../docs/REVEAL_CODEBASE_REVIEW_GUIDE.md](../../docs/REVEAL_CODEBASE_REVIEW_GUIDE.md) | Using Reveal for codebase reviews | Users, Agents |
 
 ### AI Agent References
 
@@ -165,7 +172,7 @@ reveal help://cool-tricks        # Practical examples
 
 **Last updated:** 2026-01-16
 **Reveal version:** 0.36.1+
-**Total guides:** 15
+**Total guides:** 18 (15 in reveal/docs/, 2 in docs/, 1 README)
 
 ---
 
