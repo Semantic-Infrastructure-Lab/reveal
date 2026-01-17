@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-01-17
+
 ### Added
 - **Stability Taxonomy** - Clear stability guarantees for adapters and features (Tier 1 priority)
   - New STABILITY.md document with comprehensive policy and v1.0 roadmap
