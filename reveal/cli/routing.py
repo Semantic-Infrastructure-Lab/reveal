@@ -237,6 +237,10 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
             if 'hotspots' in sig.parameters and hasattr(args, 'hotspots'):
                 structure_kwargs['hotspots'] = args.hotspots
 
+            # Code-only parameter
+            if 'code_only' in sig.parameters and hasattr(args, 'code_only'):
+                structure_kwargs['code_only'] = args.code_only
+
             # Filter parameters for stats adapter (only pass if not None)
             if 'min_lines' in sig.parameters:
                 min_lines = getattr(args, 'min_lines', None)

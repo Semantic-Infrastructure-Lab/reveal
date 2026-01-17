@@ -1228,6 +1228,48 @@ class TestAdapterParameters(unittest.TestCase):
         self.assertEqual(call_kwargs.get('max_lines'), 500)
         self.assertEqual(call_kwargs.get('min_complexity'), 5.0)
 
+    def test_code_only_flag_passed_to_stats_adapter(self):
+        """Verify --code-only flag is passed to stats adapter."""
+        from unittest.mock import create_autospec
+
+        # Create a mock get_structure method with code_only in signature
+        def mock_get_structure(hotspots=False, code_only=False, **kwargs):
+            return {'files': 10, 'filtered_count': 5 if code_only else 0}
+
+        # Create mock adapter
+        mock_adapter = Mock()
+        mock_adapter.get_structure = create_autospec(mock_get_structure, return_value={'files': 5})
+
+        # Create args with code_only=True
+        mock_args = Namespace(
+            format='text',
+            check=False,
+            hotspots=False,
+            code_only=True,  # The flag we're testing
+            select=None,
+            ignore=None
+        )
+
+        # Mock renderer
+        mock_renderer = Mock()
+        mock_renderer.render_structure = Mock()
+
+        # Call generic_adapter_handler
+        generic_adapter_handler(
+            adapter_class=Mock(return_value=mock_adapter),
+            renderer_class=mock_renderer,
+            scheme='stats',
+            resource='.',
+            element=None,
+            args=mock_args
+        )
+
+        # Verify code_only parameter was passed
+        mock_adapter.get_structure.assert_called_once()
+        call_kwargs = mock_adapter.get_structure.call_args[1]
+        self.assertTrue(call_kwargs.get('code_only', False),
+                       "code_only parameter should be True when --code-only flag is set")
+
 
 class TestRoutingEdgeCases(unittest.TestCase):
     """Test edge cases and error handling."""

@@ -148,6 +148,7 @@ class StatsAdapter(ResourceAdapter):
 
     def get_structure(self,
                      hotspots: bool = False,
+                     code_only: bool = False,
                      min_lines: Optional[int] = None,
                      max_lines: Optional[int] = None,
                      min_complexity: Optional[float] = None,
@@ -158,6 +159,7 @@ class StatsAdapter(ResourceAdapter):
 
         Args:
             hotspots: If True, include hotspot analysis (flag - legacy)
+            code_only: If True, exclude data/config files from analysis
             min_lines: Filter files with at least this many lines
             max_lines: Filter files with at most this many lines
             min_complexity: Filter files with avg complexity >= this
@@ -169,6 +171,7 @@ class StatsAdapter(ResourceAdapter):
         """
         # Merge query params with flag params (query params take precedence)
         hotspots = self.query_params.get('hotspots', hotspots)
+        code_only = self.query_params.get('code_only', code_only)
         min_lines = self.query_params.get('min_lines', min_lines)
         max_lines = self.query_params.get('max_lines', max_lines)
         min_complexity = self.query_params.get('min_complexity', min_complexity)
@@ -179,7 +182,7 @@ class StatsAdapter(ResourceAdapter):
 
         # Directory analysis
         file_stats = []
-        for file_path in self._find_analyzable_files(self.path):
+        for file_path in self._find_analyzable_files(self.path, code_only=code_only):
             stats = self._analyze_file(file_path)
             if stats and self._matches_filters(
                 stats, min_lines, max_lines, min_complexity, max_complexity, min_functions
@@ -223,15 +226,20 @@ class StatsAdapter(ResourceAdapter):
             'exists': self.path.exists(),
         }
 
-    def _find_analyzable_files(self, directory: Path) -> List[Path]:
+    def _find_analyzable_files(self, directory: Path, code_only: bool = False) -> List[Path]:
         """Find all files that can be analyzed.
 
         Args:
             directory: Directory to search
+            code_only: If True, exclude data/config files
 
         Returns:
             List of analyzable file paths
         """
+        # Data/config extensions to exclude when code_only=True
+        DATA_EXTENSIONS = {'.xml', '.csv', '.sql'}
+        CONFIG_EXTENSIONS = {'.yaml', '.yml', '.toml'}
+
         analyzable = []
         for root, dirs, files in os.walk(directory):
             # Skip common ignore directories
@@ -242,9 +250,33 @@ class StatsAdapter(ResourceAdapter):
 
             for file in files:
                 file_path = Path(root) / file
+
                 # Check if reveal can analyze this file type
-                if get_analyzer(str(file_path)):
-                    analyzable.append(file_path)
+                if not get_analyzer(str(file_path)):
+                    continue
+
+                # Apply code_only filter
+                if code_only:
+                    suffix = file_path.suffix.lower()
+
+                    # Exclude data files
+                    if suffix in DATA_EXTENSIONS:
+                        continue
+
+                    # Exclude config files
+                    if suffix in CONFIG_EXTENSIONS:
+                        continue
+
+                    # Exclude large JSON files (>10KB, likely data not code)
+                    if suffix == '.json':
+                        try:
+                            if file_path.stat().st_size > 10240:  # 10KB
+                                continue
+                        except (OSError, PermissionError):
+                            # If we can't stat it, include it
+                            pass
+
+                analyzable.append(file_path)
 
         return analyzable
 
