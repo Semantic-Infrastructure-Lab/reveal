@@ -40,15 +40,15 @@ class GitRenderer:
         # Text rendering based on result type
         result_type = result.get('type', 'unknown')
 
-        if result_type == 'repository':
+        if result_type in ('repository', 'git_repository'):
             GitRenderer._render_repository_overview(result)
-        elif result_type == 'ref':
+        elif result_type in ('ref', 'git_ref'):
             GitRenderer._render_ref_structure(result)
-        elif result_type == 'file':
+        elif result_type in ('file', 'git_file'):
             GitRenderer._render_file(result)
-        elif result_type == 'file_history':
+        elif result_type in ('file_history', 'git_file_history'):
             GitRenderer._render_file_history(result)
-        elif result_type == 'file_blame':
+        elif result_type in ('file_blame', 'git_file_blame'):
             GitRenderer._render_file_blame(result)
         else:
             print(json.dumps(result, indent=2))
@@ -475,7 +475,10 @@ class GitAdapter(ResourceAdapter):
         recent_commits = self._get_recent_commits(repo, limit=10)
 
         return {
-            'type': 'repository',
+            'contract_version': '1.0',
+            'type': 'git_repository',
+            'source': repo.workdir or repo.path,
+            'source_type': 'directory',
             'path': repo.workdir or repo.path,
             'head': head_info,
             'branches': {
@@ -511,7 +514,10 @@ class GitAdapter(ResourceAdapter):
                 commits = self._get_commit_history(repo, obj, limit=limit)
 
                 return {
-                    'type': 'ref',
+                    'contract_version': '1.0',
+                    'type': 'git_ref',
+                    'source': f"{repo.workdir or repo.path}@{self.ref}",
+                    'source_type': 'directory',
                     'ref': self.ref,
                     'commit': self._format_commit(obj, detailed=True),
                     'history': commits,
@@ -544,7 +550,10 @@ class GitAdapter(ResourceAdapter):
                 content = blob.data.decode('utf-8', errors='replace')
 
                 return {
-                    'type': 'file',
+                    'contract_version': '1.0',
+                    'type': 'git_file',
+                    'source': f"{self.subpath}@{self.ref}",
+                    'source_type': 'file',
                     'path': self.subpath,
                     'ref': self.ref,
                     'commit': str(commit.id)[:7],
@@ -581,7 +590,10 @@ class GitAdapter(ResourceAdapter):
                         break
 
             return {
-                'type': 'file_history',
+                'contract_version': '1.0',
+                'type': 'git_file_history',
+                'source': f"{self.subpath}@{self.ref}",
+                'source_type': 'file',
                 'path': self.subpath,
                 'ref': self.ref,
                 'commits': commits,
@@ -658,7 +670,10 @@ class GitAdapter(ResourceAdapter):
             detail_mode = self.query.get('detail') == 'full'
 
             result = {
-                'type': 'file_blame',
+                'contract_version': '1.0',
+                'type': 'git_file_blame',
+                'source': f"{self.subpath}@{self.ref}",
+                'source_type': 'file',
                 'path': self.subpath,
                 'ref': self.ref,
                 'commit': str(commit.id)[:7],

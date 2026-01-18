@@ -164,7 +164,10 @@ class TestRepositoryOverview:
         adapter = GitAdapter(path=str(git_repo))
         structure = adapter.get_structure()
 
-        assert structure['type'] == 'repository'
+        assert structure['type'] == 'git_repository'
+        assert structure['contract_version'] == '1.0'
+        assert structure['source_type'] == 'directory'
+        assert 'source' in structure
         assert 'head' in structure
         assert 'branches' in structure
         assert 'tags' in structure
@@ -244,7 +247,9 @@ class TestRefExploration:
         adapter = GitAdapter(path=str(git_repo), ref=commit_hash)
         structure = adapter.get_structure()
 
-        assert structure['type'] == 'ref'
+        assert structure['type'] == 'git_ref'
+        assert structure['contract_version'] == '1.0'
+        assert structure['source_type'] == 'directory'
         assert structure['ref'] == commit_hash
         assert 'commit' in structure
         assert 'history' in structure
@@ -255,7 +260,9 @@ class TestRefExploration:
         adapter = GitAdapter(path=str(git_repo), ref='feature')
         structure = adapter.get_structure()
 
-        assert structure['type'] == 'ref'
+        assert structure['type'] == 'git_ref'
+        assert structure['contract_version'] == '1.0'
+        assert structure['source_type'] == 'directory'
         assert structure['ref'] == 'feature'
         assert 'commit' in structure
         assert 'history' in structure
@@ -266,7 +273,9 @@ class TestRefExploration:
         adapter = GitAdapter(path=str(git_repo), ref='v1.0.0')
         structure = adapter.get_structure()
 
-        assert structure['type'] == 'ref'
+        assert structure['type'] == 'git_ref'
+        assert structure['contract_version'] == '1.0'
+        assert structure['source_type'] == 'directory'
         assert structure['ref'] == 'v1.0.0'
         assert 'commit' in structure
 
@@ -289,7 +298,9 @@ class TestFileInspection:
         adapter = GitAdapter(path=str(git_repo), ref='HEAD', subpath='README.md')
         structure = adapter.get_structure()
 
-        assert structure['type'] == 'file'
+        assert structure['type'] == 'git_file'
+        assert structure['contract_version'] == '1.0'
+        assert structure['source_type'] == 'file'
         assert structure['path'] == 'README.md'
         assert 'content' in structure
         assert 'Updated content' in structure['content']
@@ -300,7 +311,9 @@ class TestFileInspection:
         adapter = GitAdapter(path=str(git_repo), ref='v1.0.0', subpath='README.md')
         structure = adapter.get_structure()
 
-        assert structure['type'] == 'file'
+        assert structure['type'] == 'git_file'
+        assert structure['contract_version'] == '1.0'
+        assert structure['source_type'] == 'file'
         assert structure['path'] == 'README.md'
         assert 'content' in structure
 
@@ -327,7 +340,9 @@ class TestFileHistory:
         )
         structure = adapter.get_structure()
 
-        assert structure['type'] == 'file_history'
+        assert structure['type'] == 'git_file_history'
+        assert structure['contract_version'] == '1.0'
+        assert structure['source_type'] == 'file'
         assert structure['path'] == 'README.md'
         assert 'commits' in structure
         assert len(structure['commits']) >= 2  # README was in 2 commits
@@ -358,7 +373,9 @@ class TestFileBlame:
         )
         structure = adapter.get_structure()
 
-        assert structure['type'] == 'file_blame'
+        assert structure['type'] == 'git_file_blame'
+        assert structure['contract_version'] == '1.0'
+        assert structure['source_type'] == 'file'
         assert structure['path'] == 'README.md'
         assert 'hunks' in structure
         assert len(structure['hunks']) > 0
@@ -397,7 +414,7 @@ class TestGetElement:
         element = adapter.get_element('README.md')
 
         assert element is not None
-        assert element['type'] == 'file'
+        assert element['type'] == 'git_file'
         assert element['path'] == 'README.md'
 
 
@@ -428,7 +445,8 @@ class TestEdgeCases:
         adapter = GitAdapter(path=str(repo_path))
         structure = adapter.get_structure()
 
-        assert structure['type'] == 'repository'
+        assert structure['type'] == 'git_repository'
+        assert structure['contract_version'] == '1.0'
         assert structure['stats']['is_empty']
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
@@ -441,5 +459,6 @@ class TestEdgeCases:
         adapter = GitAdapter(path=str(repo_path))
         structure = adapter.get_structure()
 
-        assert structure['type'] == 'repository'
+        assert structure['type'] == 'git_repository'
+        assert structure['contract_version'] == '1.0'
         assert structure['stats']['is_bare']
