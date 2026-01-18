@@ -58,7 +58,7 @@ def bar():
         result = adapter.get_structure()
 
         # Verify no changes
-        self.assertEqual(result['type'], 'diff')
+        self.assertEqual(result['type'], 'diff_comparison')
         self.assertEqual(result['summary']['functions']['added'], 0)
         self.assertEqual(result['summary']['functions']['removed'], 0)
         self.assertEqual(result['summary']['functions']['modified'], 0)
@@ -417,7 +417,7 @@ class TestDirectoryDiff(unittest.TestCase):
         adapter = DiffAdapter(str(left_dir), str(right_dir))
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'diff')
+        self.assertEqual(result['type'], 'diff_comparison')
         self.assertEqual(result['left']['type'], 'directory')
         self.assertEqual(result['right']['type'], 'directory')
 

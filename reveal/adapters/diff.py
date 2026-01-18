@@ -220,7 +220,10 @@ class DiffAdapter(ResourceAdapter):
         diff_result = compute_structure_diff(left_struct, right_struct)
 
         return {
-            'type': 'diff',
+            'contract_version': '1.0',
+            'type': 'diff_comparison',
+            'source': f"{self.left_uri} vs {self.right_uri}",
+            'source_type': 'runtime',
             'left': self._extract_metadata(left_struct, self.left_uri),
             'right': self._extract_metadata(right_struct, self.right_uri),
             'summary': diff_result['summary'],

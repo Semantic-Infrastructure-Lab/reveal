@@ -215,6 +215,8 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
                         help='Process directory recursively (with --check)')
     parser.add_argument('--rules', action='store_true',
                         help='List all available pattern detection rules')
+    parser.add_argument('--schema', action='store_true',
+                        help='Show Output Contract v1.0 specification for stable JSON output')
     parser.add_argument('--explain', type=str, metavar='CODE',
                         help='Explain a specific rule (e.g., "B001")')
 

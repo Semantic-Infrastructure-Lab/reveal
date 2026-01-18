@@ -229,7 +229,10 @@ class SQLiteAdapter(ResourceAdapter):
                 fk_count += len(fks)
 
         return {
+            'contract_version': '1.0',
             'type': 'sqlite_database',
+            'source': self.db_path,
+            'source_type': 'database',
             'path': self.db_path,
             'size': f"{db_size_mb:.2f} MB" if db_size_mb >= 1 else f"{db_size / 1024:.2f} KB",
             'sqlite_version': version_info['version'],

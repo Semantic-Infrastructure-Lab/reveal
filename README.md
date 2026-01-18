@@ -76,6 +76,12 @@ reveal src/main.py          # Understand entry point
 reveal src/main.py handler  # Drill into specifics
 ```
 
+**Filtering noise:**
+```bash
+reveal . --exclude "node_modules" --exclude "*.pyc"  # Skip build artifacts
+reveal . --exclude "__pycache__" --exclude "dist"    # Multiple patterns
+```
+
 **Finding hotspots:**
 ```bash
 reveal 'ast://./src?complexity>10'    # Find complex functions

@@ -126,7 +126,7 @@ class TestAstAdapter(unittest.TestCase):
         adapter = AstAdapter(str(self.test_file.parent), None)
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'ast-query')
+        self.assertEqual(result['type'], 'ast_query')
         self.assertIn('total_files', result)
         self.assertIn('total_results', result)
         self.assertIn('results', result)

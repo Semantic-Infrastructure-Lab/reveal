@@ -328,7 +328,10 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 results.append(result)
 
         return {
+            'contract_version': '1.0',
             'type': 'markdown_query',
+            'source': str(self.base_path),
+            'source_type': 'directory' if self.base_path.is_dir() else 'file',
             'base_path': str(self.base_path),
             'query': self.query,
             'filters': [

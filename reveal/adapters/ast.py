@@ -227,7 +227,10 @@ class AstAdapter(ResourceAdapter):
         filtered = self._apply_filters(structures)
 
         return {
-            'type': 'ast-query',
+            'contract_version': '1.0',
+            'type': 'ast_query',
+            'source': self.path,
+            'source_type': 'directory' if Path(self.path).is_dir() else 'file',
             'path': self.path,
             'query': self._format_query(self.query),
             'total_files': len(structures),

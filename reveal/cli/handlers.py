@@ -90,6 +90,87 @@ def handle_agent_help_full():
     sys.exit(0)
 
 
+def handle_schema(version: str = None):
+    """Handle --schema flag to show Output Contract specification.
+
+    Displays the v1.0 Output Contract schema that all adapters/analyzers
+    should conform to for stable JSON output.
+
+    Args:
+        version: Contract version to display (defaults to '1.0')
+    """
+    if version is None or version == '1.0':
+        print(_get_schema_v1())
+    else:
+        print(f"Error: Unknown contract version '{version}'", file=sys.stderr)
+        print("Available versions: 1.0", file=sys.stderr)
+        sys.exit(1)
+    sys.exit(0)
+
+
+def _get_schema_v1() -> str:
+    """Get Output Contract v1.0 specification."""
+    return """Output Contract v1.0
+======================
+
+All adapter/analyzer outputs MUST include these 4 required fields:
+
+Required Fields:
+  contract_version: '1.0'          # Contract version (semver)
+  type:             str            # Output type (snake_case)
+  source:           str            # Data source identifier
+  source_type:      str            # Source category
+
+Valid source_type values:
+  - 'file'        # Single file path
+  - 'directory'   # Directory path
+  - 'database'    # Database connection
+  - 'runtime'     # Runtime/environment state
+  - 'network'     # Remote resource
+
+Type Field Rules:
+  - Must use snake_case (lowercase with underscores)
+  - Pattern: ^[a-z][a-z0-9_]*$
+  - Examples: 'ast_query', 'mysql_server', 'environment'
+  - ✗ Invalid: 'ast-query' (hyphens), 'AstQuery' (camelCase)
+
+Recommended Optional Fields:
+  metadata:     dict     # Generic counts, timestamps, metrics
+  query:        dict     # Applied filters or search parameters
+  next_steps:   list     # Progressive disclosure suggestions
+  status:       dict     # Health assessment
+  issues:       list     # Problems/warnings found
+
+Line Number Fields:
+  Use 'line_start' and 'line_end' (not 'line'):
+    line_start: int      # First line (1-indexed)
+    line_end:   int      # Last line (1-indexed, inclusive)
+
+Example Compliant Output:
+  {
+    'contract_version': '1.0',
+    'type': 'ast_query',
+    'source': 'src/main.py',
+    'source_type': 'file',
+    'metadata': {
+      'total_results': 42,
+      'timestamp': '2026-01-17T14:30:00Z'
+    },
+    'results': [...]
+  }
+
+Validation:
+  Run V023 validation rule to check compliance:
+    reveal --check reveal/adapters/myadapter.py --select V023
+
+Documentation:
+  Full specification: docs/OUTPUT_CONTRACT.md
+  Design rationale:   internal-docs/research/OUTPUT_CONTRACT_ANALYSIS.md
+
+Status: Beta 🟡 (v1.0 in development)
+"""
+
+
 def handle_rules_list(version: str):
     """Handle --rules flag to list all pattern detection rules.
 

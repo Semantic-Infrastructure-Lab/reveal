@@ -187,7 +187,10 @@ class EnvAdapter(ResourceAdapter):
         categorized = {k: v for k, v in categorized.items() if v}
 
         return {
+            'contract_version': '1.0',
             'type': 'environment',
+            'source': 'system',
+            'source_type': 'runtime',
             'total_count': len(self.variables),
             'categories': categorized
         }

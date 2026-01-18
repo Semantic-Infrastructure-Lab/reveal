@@ -55,7 +55,7 @@ class TestJsonAdapter(unittest.TestCase):
         adapter = JsonAdapter(str(self.simple_json), None)
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json-value')
+        self.assertEqual(result['type'], 'json_value')
         self.assertEqual(result['path'], '(root)')
         self.assertEqual(result['value']['name'], 'test')
 
@@ -64,7 +64,7 @@ class TestJsonAdapter(unittest.TestCase):
         adapter = JsonAdapter(f'{self.simple_json}/name', None)
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json-value')
+        self.assertEqual(result['type'], 'json_value')
         self.assertEqual(result['value'], 'test')
         self.assertEqual(result['value_type'], 'str')
 
@@ -110,7 +110,7 @@ class TestJsonAdapter(unittest.TestCase):
         adapter = JsonAdapter(str(self.simple_json), 'schema')
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json-schema')
+        self.assertEqual(result['type'], 'json_schema')
         self.assertIn('schema', result)
         self.assertEqual(result['schema']['name'], 'str')
         self.assertEqual(result['schema']['count'], 'int')
@@ -121,7 +121,7 @@ class TestJsonAdapter(unittest.TestCase):
         adapter = JsonAdapter(f'{self.simple_json}/tags', 'flatten')
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json-flatten')
+        self.assertEqual(result['type'], 'json_flatten')
         self.assertIn('lines', result)
         # Should have lines like: json[0] = "a"
         self.assertTrue(any('json[0]' in line for line in result['lines']))
@@ -131,14 +131,14 @@ class TestJsonAdapter(unittest.TestCase):
         adapter = JsonAdapter(f'{self.simple_json}/tags', 'gron')
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json-flatten')  # Same type as flatten
+        self.assertEqual(result['type'], 'json_flatten')  # Same type as flatten
 
     def test_query_type(self):
         """Should return type info for ?type query."""
         adapter = JsonAdapter(f'{self.nested_json}/users', 'type')
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json-type')
+        self.assertEqual(result['type'], 'json_type')
         self.assertIn('Array', result['value_type'])
         self.assertEqual(result['length'], 3)
 
@@ -147,7 +147,7 @@ class TestJsonAdapter(unittest.TestCase):
         adapter = JsonAdapter(f'{self.simple_json}', 'keys')
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json-keys')
+        self.assertEqual(result['type'], 'json_keys')
         self.assertIn('keys', result)
         self.assertIn('name', result['keys'])
         self.assertIn('version', result['keys'])
@@ -157,7 +157,7 @@ class TestJsonAdapter(unittest.TestCase):
         adapter = JsonAdapter(f'{self.nested_json}/users', 'keys')
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json-keys')
+        self.assertEqual(result['type'], 'json_keys')
         self.assertIn('indices', result)
         self.assertEqual(result['count'], 3)
 
@@ -166,7 +166,7 @@ class TestJsonAdapter(unittest.TestCase):
         adapter = JsonAdapter(f'{self.nested_json}/users', 'length')
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json-length')
+        self.assertEqual(result['type'], 'json_length')
         self.assertEqual(result['length'], 3)
 
     def test_query_invalid(self):
@@ -174,7 +174,7 @@ class TestJsonAdapter(unittest.TestCase):
         adapter = JsonAdapter(str(self.simple_json), 'invalid')
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json-error')
+        self.assertEqual(result['type'], 'json_error')
         self.assertIn('valid_queries', result)
 
     def test_path_not_found(self):
@@ -182,7 +182,7 @@ class TestJsonAdapter(unittest.TestCase):
         adapter = JsonAdapter(f'{self.simple_json}/nonexistent', None)
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'json-error')
+        self.assertEqual(result['type'], 'json_error')
         self.assertIn('not found', result['error'].lower())
 
     def test_file_not_found(self):

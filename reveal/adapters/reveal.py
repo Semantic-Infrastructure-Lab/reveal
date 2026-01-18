@@ -249,6 +249,10 @@ class RevealAdapter(ResourceAdapter):
             if component == 'analyzers':
                 analyzers = self._get_analyzers()
                 return {
+                    'contract_version': '1.0',
+                    'type': 'reveal_structure',
+                    'source': str(self.reveal_root),
+                    'source_type': 'directory',
                     'analyzers': analyzers,
                     'metadata': {
                         'root': str(self.reveal_root),
@@ -258,6 +262,10 @@ class RevealAdapter(ResourceAdapter):
             elif component == 'adapters':
                 adapters = self._get_adapters()
                 return {
+                    'contract_version': '1.0',
+                    'type': 'reveal_structure',
+                    'source': str(self.reveal_root),
+                    'source_type': 'directory',
                     'adapters': adapters,
                     'metadata': {
                         'root': str(self.reveal_root),
@@ -267,6 +275,10 @@ class RevealAdapter(ResourceAdapter):
             elif component == 'rules':
                 rules = self._get_rules()
                 return {
+                    'contract_version': '1.0',
+                    'type': 'reveal_structure',
+                    'source': str(self.reveal_root),
+                    'source_type': 'directory',
                     'rules': rules,
                     'metadata': {
                         'root': str(self.reveal_root),
@@ -274,10 +286,21 @@ class RevealAdapter(ResourceAdapter):
                     }
                 }
             elif component == 'config':
-                return self._get_config()
+                config_data = self._get_config()
+                return {
+                    'contract_version': '1.0',
+                    'type': 'reveal_structure',
+                    'source': str(self.reveal_root),
+                    'source_type': 'directory',
+                    **config_data
+                }
 
         # Default: show everything
         structure = {
+            'contract_version': '1.0',
+            'type': 'reveal_structure',
+            'source': str(self.reveal_root),
+            'source_type': 'directory',
             'analyzers': self._get_analyzers(),
             'adapters': self._get_adapters(),
             'rules': self._get_rules(),

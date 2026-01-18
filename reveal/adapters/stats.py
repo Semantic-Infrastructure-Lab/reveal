@@ -519,6 +519,10 @@ class StatsAdapter(ResourceAdapter):
         """
         if not file_stats:
             return {
+                'contract_version': '1.0',
+                'type': 'stats_summary',
+                'source': str(self.path),
+                'source_type': 'directory' if self.path.is_dir() else 'file',
                 'summary': {
                     'total_files': 0,
                     'total_lines': 0,
@@ -543,6 +547,10 @@ class StatsAdapter(ResourceAdapter):
         avg_quality = sum(s['quality']['score'] for s in file_stats) / len(file_stats)
 
         return {
+            'contract_version': '1.0',
+            'type': 'stats_summary',
+            'source': str(self.path),
+            'source_type': 'directory' if self.path.is_dir() else 'file',
             'summary': {
                 'total_files': len(file_stats),
                 'total_lines': total_lines,

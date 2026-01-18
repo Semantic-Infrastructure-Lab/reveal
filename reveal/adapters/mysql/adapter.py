@@ -168,7 +168,10 @@ class MySQLAdapter(ResourceAdapter):
         )
 
         return {
+            'contract_version': '1.0',
             'type': 'mysql_server',
+            'source': f"{self.host}:{self.port}",
+            'source_type': 'database',
             'server': f"{self.host}:{self.port}",
             'version': version_info['version'],
             'uptime': f"{uptime_days}d {uptime_hours}h {uptime_mins}m",

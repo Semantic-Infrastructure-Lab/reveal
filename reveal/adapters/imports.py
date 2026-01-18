@@ -179,6 +179,7 @@ class ImportsAdapter(ResourceAdapter):
         """Initialize imports adapter."""
         self._graph: Optional[ImportGraph] = None
         self._symbols_by_file: Dict[Path, set] = {}
+        self._target_path: Optional[Path] = None
 
     def get_structure(self, uri: str = '', **kwargs) -> Dict[str, Any]:
         """Analyze imports in directory or file.
@@ -227,6 +228,7 @@ class ImportsAdapter(ResourceAdapter):
             }
 
         # Extract imports and build graph
+        self._target_path = target_path
         self._build_graph(target_path)
 
         # Handle query parameters
@@ -373,7 +375,10 @@ class ImportsAdapter(ResourceAdapter):
             ]
 
         return {
+            'contract_version': '1.0',
             'type': 'imports',
+            'source': str(self._target_path),
+            'source_type': 'directory' if self._target_path.is_dir() else 'file',
             'files': imports_by_file,
             'metadata': self.get_metadata()
         }
@@ -386,7 +391,10 @@ class ImportsAdapter(ResourceAdapter):
         unused = self._graph.find_unused_imports(self._symbols_by_file)
 
         return {
+            'contract_version': '1.0',
             'type': 'unused_imports',
+            'source': str(self._target_path),
+            'source_type': 'directory' if self._target_path.is_dir() else 'file',
             'unused': [self._format_import(stmt) for stmt in unused],
             'count': len(unused),
             'metadata': self.get_metadata()
@@ -400,7 +408,10 @@ class ImportsAdapter(ResourceAdapter):
         cycles = self._graph.find_cycles()
 
         return {
+            'contract_version': '1.0',
             'type': 'circular_dependencies',
+            'source': str(self._target_path),
+            'source_type': 'directory' if self._target_path.is_dir() else 'file',
             'cycles': [
                 [str(path) for path in cycle]
                 for cycle in cycles
@@ -416,7 +427,10 @@ class ImportsAdapter(ResourceAdapter):
         For now, return placeholder.
         """
         return {
+            'contract_version': '1.0',
             'type': 'layer_violations',
+            'source': str(self._target_path),
+            'source_type': 'directory' if self._target_path.is_dir() else 'file',
             'violations': [],
             'count': 0,
             'note': 'Layer violation detection requires .reveal.yaml configuration (coming in Phase 4)',

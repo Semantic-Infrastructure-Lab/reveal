@@ -32,6 +32,10 @@ class PythonAdapter(ResourceAdapter):
         """
         venv_info = self._detect_venv()
         return {
+            "contract_version": "1.0",
+            "type": "python_runtime",
+            "source": sys.executable,
+            "source_type": "runtime",
             "version": platform.python_version(),
             "implementation": platform.python_implementation(),
             "executable": sys.executable,

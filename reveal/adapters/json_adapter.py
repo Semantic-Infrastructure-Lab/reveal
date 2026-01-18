@@ -292,7 +292,10 @@ class JsonAdapter(ResourceAdapter):
             value = self._navigate_to_path()
         except (KeyError, IndexError, TypeError) as e:
             return {
-                'type': 'json-error',
+                'contract_version': '1.0',
+                'type': 'json_error',
+                'source': str(self.file_path),
+                'source_type': 'file',
                 'file': str(self.file_path),
                 'path': '/'.join(str(p) for p in self.json_path),
                 'error': str(e)
@@ -304,7 +307,10 @@ class JsonAdapter(ResourceAdapter):
 
         # Default: return the value
         return {
-            'type': 'json-value',
+            'contract_version': '1.0',
+            'type': 'json_value',
+            'source': str(self.file_path),
+            'source_type': 'file',
             'file': str(self.file_path),
             'path': '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)',
             'value_type': self._get_type_str(value),
@@ -327,7 +333,7 @@ class JsonAdapter(ResourceAdapter):
             return self._get_length(value)
         else:
             return {
-                'type': 'json-error',
+                'type': 'json_error',
                 'error': f"Unknown query: {query}",
                 'valid_queries': ['schema', 'flatten', 'gron', 'type', 'keys', 'length']
             }
@@ -360,7 +366,10 @@ class JsonAdapter(ResourceAdapter):
         """Generate schema/type structure for value."""
         schema = self._infer_schema(value, max_depth)
         return {
-            'type': 'json-schema',
+            'contract_version': '1.0',
+            'type': 'json_schema',
+            'source': str(self.file_path),
+            'source_type': 'file',
             'file': str(self.file_path),
             'path': '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)',
             'schema': schema
@@ -400,7 +409,10 @@ class JsonAdapter(ResourceAdapter):
         lines = []
         self._flatten_recursive(value, 'json', lines)
         return {
-            'type': 'json-flatten',
+            'contract_version': '1.0',
+            'type': 'json_flatten',
+            'source': str(self.file_path),
+            'source_type': 'file',
             'file': str(self.file_path),
             'path': '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)',
             'lines': lines,
@@ -436,7 +448,10 @@ class JsonAdapter(ResourceAdapter):
     def _get_type_info(self, value: Any) -> Dict[str, Any]:
         """Get type information for value at path."""
         return {
-            'type': 'json-type',
+            'contract_version': '1.0',
+            'type': 'json_type',
+            'source': str(self.file_path),
+            'source_type': 'file',
             'file': str(self.file_path),
             'path': '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)',
             'value_type': self._get_type_str(value),
@@ -448,7 +463,10 @@ class JsonAdapter(ResourceAdapter):
         """Get keys for object or indices for array."""
         if isinstance(value, dict):
             return {
-                'type': 'json-keys',
+                'contract_version': '1.0',
+                'type': 'json_keys',
+                'source': str(self.file_path),
+                'source_type': 'file',
                 'file': str(self.file_path),
                 'path': '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)',
                 'keys': list(value.keys()),
@@ -456,7 +474,10 @@ class JsonAdapter(ResourceAdapter):
             }
         elif isinstance(value, list):
             return {
-                'type': 'json-keys',
+                'contract_version': '1.0',
+                'type': 'json_keys',
+                'source': str(self.file_path),
+                'source_type': 'file',
                 'file': str(self.file_path),
                 'path': '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)',
                 'indices': list(range(len(value))),
@@ -464,7 +485,10 @@ class JsonAdapter(ResourceAdapter):
             }
         else:
             return {
-                'type': 'json-error',
+                'contract_version': '1.0',
+                'type': 'json_error',
+                'source': str(self.file_path),
+                'source_type': 'file',
                 'error': f'Cannot get keys from {type(value).__name__}'
             }
 
@@ -472,7 +496,10 @@ class JsonAdapter(ResourceAdapter):
         """Get length of array, object, or string."""
         if isinstance(value, (dict, list, str)):
             return {
-                'type': 'json-length',
+                'contract_version': '1.0',
+                'type': 'json_length',
+                'source': str(self.file_path),
+                'source_type': 'file',
                 'file': str(self.file_path),
                 'path': '/'.join(str(p) for p in self.json_path) if self.json_path else '(root)',
                 'length': len(value),
@@ -480,7 +507,10 @@ class JsonAdapter(ResourceAdapter):
             }
         else:
             return {
-                'type': 'json-error',
+                'contract_version': '1.0',
+                'type': 'json_error',
+                'source': str(self.file_path),
+                'source_type': 'file',
                 'error': f'Cannot get length of {type(value).__name__}'
             }
 
