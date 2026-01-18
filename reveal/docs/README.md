@@ -171,7 +171,7 @@ reveal help://cool-tricks        # Practical examples
 ## Document Metadata
 
 **Last updated:** 2026-01-16
-**Reveal version:** 0.36.1+
+**Reveal version:** 0.37.0+
 **Total guides:** 18 (15 in reveal/docs/, 2 in docs/, 1 README)
 
 ---

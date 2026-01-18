@@ -106,7 +106,7 @@ reveal --agent-help          # Quick start + discovery patterns (~720 lines)
 reveal --agent-help-full     # Complete reference (~1680 lines)
 ```
 
-**Documentation:** [Installation](INSTALL.md) • [Contributing](CONTRIBUTING.md) • [Changelog](CHANGELOG.md) • [Production Guide](docs/PRODUCTION_TESTING_GUIDE.md)
+**Documentation:** [Installation](INSTALL.md) • [Contributing](CONTRIBUTING.md) • [Changelog](CHANGELOG.md) • [Guides](reveal/docs/README.md)
 
 **Quick Install:**
 ```bash
@@ -150,7 +150,7 @@ reveal README.md --validate-schema session --format json
 
 **Built-in schemas:** session (workflow READMEs), hugo (static sites), jekyll (GitHub Pages), mkdocs (Python docs), obsidian (knowledge bases)
 **Validation rules (F-series):** F001 (missing front matter), F002 (empty), F003 (required fields), F004 (type mismatches), F005 (custom validation)
-**Docs:** [Schema Validation Guide](docs/SCHEMA_VALIDATION_GUIDE.md)
+**Docs:** [Schema Validation Guide](reveal/docs/SCHEMA_VALIDATION_HELP.md)
 
 ### ⚙️ Configuration System (v0.28.0+)
 
@@ -237,7 +237,6 @@ reveal docs/ --check --select L003            # Only framework routing mismatche
 - **L003:** Framework routing mismatches (FastHTML, Jekyll, Hugo auto-detection)
 
 **Performance:** L001+L003 are fast (~50ms/file), L002 is slow (network I/O). Run L002 pre-commit or weekly.
-**Guide:** See [LINK_VALIDATION_GUIDE.md](docs/LINK_VALIDATION_GUIDE.md) for batch validation, CI/CD integration, and examples.
 
 ### 🌲 Outline Mode (v0.9.0+)
 
@@ -385,7 +384,7 @@ reveal app.py --meta             # metadata only
 
 ### Supported Languages
 
-**Built-in (38):** Python, Rust, Go, **C, C++**, **C#, Scala**, Java, PHP, **Ruby, Lua**, JavaScript, TypeScript, **Kotlin, Swift, Dart**, **HCL/Terraform, GraphQL, Protobuf, Zig**, GDScript, Bash, **SQL**, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, Word/Excel/PowerPoint (.docx/.xlsx/.pptx), LibreOffice (.odt/.ods/.odp)
+**Built-in (38 analyzers):** Python, Rust, Go, **C, C++**, **C#, Scala**, Java, PHP, **Ruby, Lua**, JavaScript, TypeScript, **Kotlin, Swift, Dart**, **HCL/Terraform, GraphQL, Protobuf, Zig**, GDScript, Bash, **SQL**, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, **Office formats** (Excel, Word, PowerPoint, Calc, Writer, Impress)
 
 **Via tree-sitter (165+):** Perl, R, Haskell, Elixir, Zig, and more. Add new languages in 3 lines of code.
 
@@ -463,15 +462,14 @@ reveal/
 
 **Quality metrics:** 2,230+ tests, 74% coverage, continuous integration on every commit.
 
-**Documentation:** [reveal/docs/](reveal/docs/) - Comprehensive guides for users, developers, and AI agents
+**Documentation:** [reveal/docs/README.md](reveal/docs/README.md) - Comprehensive guides for users, developers, and AI agents
 **Power users:** [COOL_TRICKS.md](reveal/docs/COOL_TRICKS.md) - Hidden features and advanced workflows
-**Production workflows:** [PRODUCTION_TESTING_GUIDE.md](docs/PRODUCTION_TESTING_GUIDE.md) - Real-world testing, CI/CD integration, performance at scale
 
 ---
 
 ## Stability Guarantees
 
-**Current version:** v0.36.1 (Beta) - On path to v1.0 (Q2 2026)
+**Current version:** v0.37.0 (Beta) - On path to v1.0 (Q2-Q3 2026)
 
 ### 🟢 Stable (Safe to depend on)
 - **Core modes:** directory → file → element
@@ -482,16 +480,16 @@ reveal/
 ### 🟡 Beta (Feature-complete, API may evolve)
 - **Advanced adapters:** `diff://`, `imports://`, `sqlite://`, `mysql://`, `stats://`, `json://`, `markdown://`, `git://`
 - **Quality rules:** 59 rules across 12 categories (may be refined)
-- **Languages (Tier 2):** 30+ additional languages (full support)
-- **JSON output:** Structure may change (use text format for production)
+- **Languages (Tier 2):** 23 additional languages (C#, Scala, PHP, Ruby, Lua, GDScript, Bash, SQL, Kotlin, Swift, Dart, Zig, HCL/Terraform, GraphQL, Protobuf, + config formats)
+- **JSON output:** Output Contract v1.0 shipped (2026-01-17) - all adapters have predictable schemas
 
 ### 🔴 Experimental (No guarantees)
 - **Tree-sitter languages:** 165+ languages (basic structure only)
 - **Undocumented features:** Use at your own risk
 
-**For AI agents:** Rely on text output (`filename:line` format) and stable adapters. JSON output is Beta until Output Contract ships.
+**For AI agents:** Text output (`filename:line` format) and JSON output (`--format json`) are both production-ready. All 13 adapters follow Output Contract v1.0.
 
-**For CI/CD:** Pin reveal version (`pip install reveal-cli==0.36.1`) and upgrade explicitly after testing.
+**For CI/CD:** Pin reveal version (`pip install reveal-cli==0.37.0`) and upgrade explicitly after testing.
 
 **Full policy:** See [STABILITY.md](STABILITY.md) for detailed guarantees, breaking change policy, and v1.0 roadmap.
 
@@ -513,7 +511,7 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 ---
 
-**License:** MIT | [Documentation](reveal/docs/) | [Cool Tricks](reveal/docs/COOL_TRICKS.md) | [Issues](https://github.com/Semantic-Infrastructure-Lab/reveal/issues)
+**License:** MIT | [Documentation](reveal/docs/README.md) | [Cool Tricks](reveal/docs/COOL_TRICKS.md) | [Issues](https://github.com/Semantic-Infrastructure-Lab/reveal/issues)
 
 [![Stars](https://img.shields.io/github/stars/Semantic-Infrastructure-Lab/reveal?style=social)](https://github.com/Semantic-Infrastructure-Lab/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
