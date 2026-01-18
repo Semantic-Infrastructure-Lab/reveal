@@ -269,7 +269,8 @@ class GitAdapter(ResourceAdapter):
 
         # Parse resource string if it looks like a URI (has @ or is a file path)
         # This handles both "README.md@ref" and "README.md" (treated as subpath)
-        if subpath is None and resource:
+        # Also handles empty string from bare URIs like "git://"
+        if subpath is None and resource is not None:
             # Parse resource string to extract path/subpath/ref
             parsed = self._parse_resource_string(resource)
             self.path = parsed['path']

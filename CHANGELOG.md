@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **git:// adapter** - Complete git repository inspection (Tier 1 priority)
+  - Repository overview: branches, tags, recent commits (`reveal git://.`)
+  - Ref exploration: commit history for branches/tags (`reveal git://.@main`)
+  - Time-travel: file at any commit (`reveal git://file.py@HEAD~5`, `reveal git://file.py@v1.0.0`)
+  - File history: commits that touched a file (`reveal git://file.py?type=history`)
+  - File blame: progressive disclosure (summary/detailed/semantic) (`reveal git://file.py?type=blame`)
+  - Output Contract v1.0 compliant (5 output types)
+  - 904 lines implementation, 446 lines tests, 23 tests passing
+  - Sessions: hyper-asteroid-0117 (Output Contract compliance)
+
+- **Output Contract Specification v1.0** - Standardized adapter output schemas (Tier 1 priority)
+  - New OUTPUT_CONTRACT.md document (523 lines, v1.0 specification)
+  - All 13 adapters migrated to v1.0 contract (100% coverage)
+  - Required fields: contract_version, type (snake_case), source, source_type
+  - Enables predictable JSON parsing for AI agents and tool builders
+  - Unblocks plugin ecosystem (contributors have clear contract)
+  - Versioning strategy for backwards compatibility
+  - Session: astral-pulsar-0117 (11 adapters), hyper-asteroid-0117 (git adapter)
+
+### Changed
+- **Language count standardization** - Corrected built-in language count
+  - Updated documentation: 38 languages built-in (was incorrectly listed as "31 analyzers")
+  - Accurate count includes Office formats (Excel, Word, PowerPoint, Calc, Writer, Impress)
+  - Tree-sitter fallback: 165+ additional languages (structure-only extraction)
+  - Impact: Clear, verifiable language support claims matching registry reality
+
 ## [0.37.0] - 2026-01-17
 
 ### Added
@@ -573,7 +600,7 @@ For developers extending Reveal: if you use tree-sitter directly, update imports
   - **Usage**: `reveal README.md --validate-schema session`
   - **Implementation**: 5 phases complete across 4 sessions (garnet-ember-0102, amber-rainbow-0102, dark-constellation-0102, pearl-spark-0102)
   - **Test coverage**: 103 comprehensive tests (27 loader + 44 rules + 33 CLI + 43 schemas), 100% passing, 75% coverage overall
-  - **Documentation**: 800+ line [Schema Validation Guide](docs/SCHEMA_VALIDATION_GUIDE.md)
+  - **Documentation**: 800+ line [Schema Validation Guide](reveal/docs/SCHEMA_VALIDATION_HELP.md)
 
 - **Session Schema (`session.yaml`)** - Workflow/session README validation (renamed from `beth` in v0.32.0)
   - Required fields: `session_id`, `topics` (min 1 topic)
@@ -984,10 +1011,6 @@ This release completes the link validation feature with anchor support, fixes do
 
 
 ---
-
-## Older Releases
-
-For changelog entries prior to v0.25.0, see [CHANGELOG.archive.md](CHANGELOG.archive.md).
 
 ## Links
 
