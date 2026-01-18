@@ -79,14 +79,34 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
         element: Optional element to extract
         args: CLI arguments
     """
-    import json
+    # Initialize adapter using multiple fallback strategies
+    adapter = _try_initialize_adapter(adapter_class, scheme, resource, element, renderer_class)
 
-    # Try to instantiate adapter with different initialization patterns
-    # Different adapters have different conventions:
-    # - No-arg: env, python (take no resource in __init__)
-    # - Resource-arg: help (take resource string)
-    # - Query-parsing: ast, json (parse resource to extract path/query)
-    # - URI: mysql (expect full URI like mysql://host:port)
+    # Handle --check mode if requested
+    if getattr(args, 'check', False) and hasattr(adapter, 'check'):
+        _handle_check_mode(adapter, renderer_class, args)
+        return  # check mode exits directly
+
+    # Render element or structure based on adapter type
+    _handle_rendering(adapter, renderer_class, scheme, resource, element, args)
+
+
+def _try_initialize_adapter(adapter_class: type, scheme: str, resource: str,
+                            element: Optional[str], renderer_class: type):
+    """Try multiple initialization patterns to instantiate adapter.
+
+    Different adapters have different conventions:
+    - No-arg: env, python (take no resource in __init__)
+    - Resource-arg: help (take resource string)
+    - Query-parsing: ast, json (parse resource to extract path/query)
+    - URI: mysql (expect full URI like mysql://host:port)
+
+    Returns:
+        Initialized adapter instance
+
+    Raises:
+        SystemExit: If initialization fails
+    """
     adapter = None
     init_error = None
 
@@ -127,7 +147,8 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
             init_error = e
 
     # Try 4: Resource argument (help, ast without query, json without query)
-    if adapter is None and resource:
+    # Handle empty resource from bare URIs like "git://"
+    if adapter is None and resource is not None:
         try:
             # For ast/json, if no query, just pass path
             if '?' not in resource:
@@ -169,34 +190,58 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
             print(f"Error initializing {scheme}:// adapter: {init_error}", file=sys.stderr)
         sys.exit(1)
 
-    # Handle --check flag if adapter supports it
-    if getattr(args, 'check', False) and hasattr(adapter, 'check'):
-        # Pass select/ignore args if adapter's check() method supports them
-        import inspect
-        sig = inspect.signature(adapter.check)
-        check_kwargs = {}
+    return adapter
 
-        if 'select' in sig.parameters and hasattr(args, 'select') and args.select:
-            check_kwargs['select'] = args.select.split(',') if isinstance(args.select, str) else args.select
-        if 'ignore' in sig.parameters and hasattr(args, 'ignore') and args.ignore:
-            check_kwargs['ignore'] = args.ignore.split(',') if isinstance(args.ignore, str) else args.ignore
 
-        result = adapter.check(**check_kwargs)
+def _handle_check_mode(adapter, renderer_class: type, args: 'Namespace') -> None:
+    """Execute check mode and exit.
 
-        # Render check results
-        if hasattr(renderer_class, 'render_check'):
-            renderer_class.render_check(result, args.format)
+    Args:
+        adapter: Initialized adapter with check() method
+        renderer_class: Renderer for check results
+        args: CLI arguments with check flags
+    """
+    import json
+    import inspect
+
+    # Pass select/ignore args if adapter's check() method supports them
+    sig = inspect.signature(adapter.check)
+    check_kwargs = {}
+
+    if 'select' in sig.parameters and hasattr(args, 'select') and args.select:
+        check_kwargs['select'] = args.select.split(',') if isinstance(args.select, str) else args.select
+    if 'ignore' in sig.parameters and hasattr(args, 'ignore') and args.ignore:
+        check_kwargs['ignore'] = args.ignore.split(',') if isinstance(args.ignore, str) else args.ignore
+
+    result = adapter.check(**check_kwargs)
+
+    # Render check results
+    if hasattr(renderer_class, 'render_check'):
+        renderer_class.render_check(result, args.format)
+    else:
+        # Fallback to generic JSON rendering
+        if args.format == 'json':
+            print(json.dumps(result, indent=2))
         else:
-            # Fallback to generic JSON rendering
-            if args.format == 'json':
-                print(json.dumps(result, indent=2))
-            else:
-                print(result)
+            print(result)
 
-        # Exit with appropriate code if provided
-        exit_code = result.get('exit_code', 0) if isinstance(result, dict) else 0
-        sys.exit(exit_code)
+    # Exit with appropriate code if provided
+    exit_code = result.get('exit_code', 0) if isinstance(result, dict) else 0
+    sys.exit(exit_code)
 
+
+def _handle_rendering(adapter, renderer_class: type, scheme: str,
+                      resource: str, element: Optional[str], args: 'Namespace') -> None:
+    """Render element or structure based on adapter capabilities.
+
+    Args:
+        adapter: Initialized adapter
+        renderer_class: Renderer class for output
+        scheme: URI scheme
+        resource: Resource part of URI
+        element: Optional element to extract
+        args: CLI arguments
+    """
     # Get element or structure based on adapter capabilities
     # Adapters with render_element (env, python, help) support element-based access
     # Others (ast, json, stats) always use get_structure() unless element explicitly provided
@@ -210,65 +255,90 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
     resource_is_element = scheme in ELEMENT_NAMESPACE_ADAPTERS
 
     if supports_elements and (element or (resource and resource_is_element)):
-        # Element-based adapters: check element or resource
-        element_name = element if element else resource
-        result = adapter.get_element(element_name)
-
-        if result is None:
-            print(f"Error: Element '{element_name}' not found", file=sys.stderr)
-            # Try to show available elements if adapter provides them
-            if hasattr(adapter, 'list_elements'):
-                elements = adapter.list_elements()
-                print(f"Available elements: {', '.join(elements)}", file=sys.stderr)
-            sys.exit(1)
-
-        renderer_class.render_element(result, args.format)
+        _render_element(adapter, renderer_class, element, resource, args)
     else:
-        # Structure-based adapters: always use get_structure()
-        # Pass adapter-specific parameters if supported (similar to check() handling)
-        structure_kwargs = {}
+        _render_structure(adapter, renderer_class, args)
 
-        # For stats adapter: pass hotspots, min_lines, etc. if get_structure() supports them
-        if hasattr(adapter, 'get_structure'):
-            import inspect
-            sig = inspect.signature(adapter.get_structure)
 
-            # Hotspots parameter
-            if 'hotspots' in sig.parameters and hasattr(args, 'hotspots'):
-                structure_kwargs['hotspots'] = args.hotspots
+def _render_element(adapter, renderer_class: type, element: Optional[str],
+                    resource: str, args: 'Namespace') -> None:
+    """Render a specific element from adapter.
 
-            # Code-only parameter
-            if 'code_only' in sig.parameters and hasattr(args, 'code_only'):
-                structure_kwargs['code_only'] = args.code_only
+    Args:
+        adapter: Adapter with get_element() method
+        renderer_class: Renderer for element output
+        element: Element name (or None to use resource)
+        resource: Fallback element name if element is None
+        args: CLI arguments
+    """
+    element_name = element if element else resource
+    result = adapter.get_element(element_name)
 
-            # Filter parameters for stats adapter (only pass if not None)
-            if 'min_lines' in sig.parameters:
-                min_lines = getattr(args, 'min_lines', None)
-                if min_lines is not None:
-                    structure_kwargs['min_lines'] = min_lines
+    if result is None:
+        print(f"Error: Element '{element_name}' not found", file=sys.stderr)
+        # Try to show available elements if adapter provides them
+        if hasattr(adapter, 'list_elements'):
+            elements = adapter.list_elements()
+            print(f"Available elements: {', '.join(elements)}", file=sys.stderr)
+        sys.exit(1)
 
-            if 'max_lines' in sig.parameters:
-                max_lines = getattr(args, 'max_lines', None)
-                if max_lines is not None:
-                    structure_kwargs['max_lines'] = max_lines
+    renderer_class.render_element(result, args.format)
 
-            if 'min_complexity' in sig.parameters:
-                min_complexity = getattr(args, 'min_complexity', None)
-                if min_complexity is not None:
-                    structure_kwargs['min_complexity'] = min_complexity
 
-            if 'max_complexity' in sig.parameters:
-                max_complexity = getattr(args, 'max_complexity', None)
-                if max_complexity is not None:
-                    structure_kwargs['max_complexity'] = max_complexity
+def _render_structure(adapter, renderer_class: type, args: 'Namespace') -> None:
+    """Render full structure from adapter.
 
-            if 'min_functions' in sig.parameters:
-                min_functions = getattr(args, 'min_functions', None)
-                if min_functions is not None:
-                    structure_kwargs['min_functions'] = min_functions
+    Args:
+        adapter: Adapter with get_structure() method
+        renderer_class: Renderer for structure output
+        args: CLI arguments with optional filter parameters
+    """
+    import inspect
 
-        result = adapter.get_structure(**structure_kwargs)
-        renderer_class.render_structure(result, args.format)
+    # Structure-based adapters: always use get_structure()
+    # Pass adapter-specific parameters if supported (similar to check() handling)
+    structure_kwargs = {}
+
+    # For stats adapter: pass hotspots, min_lines, etc. if get_structure() supports them
+    if hasattr(adapter, 'get_structure'):
+        sig = inspect.signature(adapter.get_structure)
+
+        # Hotspots parameter
+        if 'hotspots' in sig.parameters and hasattr(args, 'hotspots'):
+            structure_kwargs['hotspots'] = args.hotspots
+
+        # Code-only parameter
+        if 'code_only' in sig.parameters and hasattr(args, 'code_only'):
+            structure_kwargs['code_only'] = args.code_only
+
+        # Filter parameters for stats adapter (only pass if not None)
+        if 'min_lines' in sig.parameters:
+            min_lines = getattr(args, 'min_lines', None)
+            if min_lines is not None:
+                structure_kwargs['min_lines'] = min_lines
+
+        if 'max_lines' in sig.parameters:
+            max_lines = getattr(args, 'max_lines', None)
+            if max_lines is not None:
+                structure_kwargs['max_lines'] = max_lines
+
+        if 'min_complexity' in sig.parameters:
+            min_complexity = getattr(args, 'min_complexity', None)
+            if min_complexity is not None:
+                structure_kwargs['min_complexity'] = min_complexity
+
+        if 'max_complexity' in sig.parameters:
+            max_complexity = getattr(args, 'max_complexity', None)
+            if max_complexity is not None:
+                structure_kwargs['max_complexity'] = max_complexity
+
+        if 'min_functions' in sig.parameters:
+            min_functions = getattr(args, 'min_functions', None)
+            if min_functions is not None:
+                structure_kwargs['min_functions'] = min_functions
+
+    result = adapter.get_structure(**structure_kwargs)
+    renderer_class.render_structure(result, args.format)
 
 
 def handle_adapter(adapter_class: type, scheme: str, resource: str,
