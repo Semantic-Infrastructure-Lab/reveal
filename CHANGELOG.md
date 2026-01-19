@@ -15,6 +15,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CSV/TSV analyzer** - Tabular data file analysis
+  - Schema inference (column types: integer, float, boolean, list, string)
+  - Data quality metrics (missing values, unique counts, sample values)
+  - Row filtering (head, tail, range)
+  - Delimiter detection (comma/tab)
+  - Examples:
+    - `reveal data.csv` - Show schema and sample rows
+    - `reveal data.csv --head 10` - First 10 rows
+    - `reveal data.csv:42` - Get row 42
+  - Tests: 16 tests, 92% coverage
+  - Fills major gap: CSV is universal data format (data pipelines, ML, exports)
+
+- **INI/Properties analyzer** - Configuration file analysis
+  - Supports Windows INI, Java properties, Python configs
+  - Section and key extraction
+  - Type inference (integer, float, boolean, list, string)
+  - Section filtering (head, tail, range)
+  - Examples:
+    - `reveal config.ini` - Show all sections and keys
+    - `reveal app.properties` - Java properties (no sections)
+    - `reveal config.ini:database` - Get database section
+    - `reveal config.ini:database.host` - Get specific key
+  - Tests: 18 tests, 94% coverage
+  - Fills major gap: INI/Properties files common in Windows, Java, Python ecosystems
+
 - **B006: Silent broad exception handler detector** - Detects `except Exception: pass` with no comment/logging
   - Catches broad exception handlers that silently swallow errors
   - Prevents bugs from being hidden (like the tree-sitter parsing failure in v0.38.0)
@@ -23,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Examples:
     - `reveal src/ --check --select B006` - Find silent exception handlers
     - Suggests: use specific exceptions, add logging, add comments, or re-raise
+
+### Fixed
+- **B006 comment detection** - Fixed false positives for comments between except and pass lines
+  - Previously only checked except line and pass line for comments
+  - Now checks all lines in exception handler body
+  - Impact: Eliminated all 41 false positives in reveal codebase (100% were intentional patterns with comments)
+  - Test added: `test_allow_exception_with_comment_between_except_and_pass`
 
 ### Removed
 - **M104: Hardcoded configuration detection** - Removed due to high false positive rate

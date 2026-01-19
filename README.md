@@ -16,7 +16,7 @@ reveal app.py                  # file → structure
 reveal app.py load_config      # element → code
 ```
 
-Zero config. 38 languages built-in. 165+ via tree-sitter.
+Zero config. 39 languages built-in. 165+ via tree-sitter.
 
 **Token efficiency:** Structure view = 50 tokens vs 7,500 for full file. Measured 10-150x reduction in production use.
 

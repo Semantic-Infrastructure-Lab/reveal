@@ -38,6 +38,8 @@ from .hcl import HCLAnalyzer
 from .graphql import GraphQLAnalyzer
 from .protobuf import ProtobufAnalyzer
 from .zig import ZigAnalyzer
+from .csv_analyzer import CsvAnalyzer
+from .ini_analyzer import IniAnalyzer
 
 # Office document analyzers (ZIP+XML based)
 from .office import (
@@ -82,6 +84,8 @@ __all__ = [
     'GraphQLAnalyzer',
     'ProtobufAnalyzer',
     'ZigAnalyzer',
+    'CsvAnalyzer',
+    'IniAnalyzer',
     # Office documents
     'DocxAnalyzer',
     'XlsxAnalyzer',
