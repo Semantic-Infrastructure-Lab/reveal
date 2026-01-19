@@ -15,6 +15,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **QUICK_START.md** - New 5-minute quick start guide for new users
+  - Progressive disclosure workflow examples (directory → file → element)
+  - Real-world tasks: code review, onboarding, finding complexity
+  - Token efficiency demonstrations (10-150x reduction)
+  - Comparison with traditional tools (grep, find, cat)
+  - Clear navigation to other documentation
+  - Target: New users, onboarding
+
+### Changed
+- **Claude adapter refactoring** - Reduced complexity of `_calculate_tool_success_rate`
+  - Extracted 4 helper methods for single responsibility
+  - Complexity: 37 → 1 (97% reduction)
+  - Lines: 65 → 20 (69% reduction)
+  - Improved readability and maintainability
+  - All tests passing (50/50)
+
+### Documentation
 - **CSV/TSV analyzer** - Tabular data file analysis
   - Schema inference (column types: integer, float, boolean, list, string)
   - Data quality metrics (missing values, unique counts, sample values)

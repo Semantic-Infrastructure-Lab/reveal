@@ -568,11 +568,26 @@ class ClaudeAdapter(ResourceAdapter):
         """
         from collections import defaultdict
 
-        # Map tool_use_id to tool name
-        tool_use_map = {}
-        tool_stats = defaultdict(lambda: {'success': 0, 'failure': 0, 'total': 0})
+        # Build mapping of tool_use_id to tool name
+        tool_use_map = self._collect_tool_use_ids(messages)
 
-        # First pass: collect tool_use ids and names
+        # Track success/failure per tool
+        tool_stats = defaultdict(lambda: {'success': 0, 'failure': 0, 'total': 0})
+        self._track_tool_results(messages, tool_use_map, tool_stats)
+
+        # Calculate final success rates
+        return self._build_success_rate_report(tool_stats)
+
+    def _collect_tool_use_ids(self, messages: List[Dict]) -> Dict[str, str]:
+        """Extract mapping of tool_use_id to tool name from messages.
+
+        Args:
+            messages: List of message dictionaries
+
+        Returns:
+            Dictionary mapping tool_use_id to tool name
+        """
+        tool_use_map = {}
         for msg in messages:
             if msg.get('type') == 'assistant':
                 for content in msg.get('message', {}).get('content', []):
@@ -581,8 +596,17 @@ class ClaudeAdapter(ResourceAdapter):
                         tool_name = content.get('name')
                         if tool_id and tool_name:
                             tool_use_map[tool_id] = tool_name
+        return tool_use_map
 
-        # Second pass: match tool_result to tool_use and track success/failure
+    def _track_tool_results(self, messages: List[Dict], tool_use_map: Dict[str, str],
+                           tool_stats: Dict[str, Dict[str, int]]) -> None:
+        """Track success/failure for each tool based on results.
+
+        Args:
+            messages: List of message dictionaries
+            tool_use_map: Mapping of tool_use_id to tool name
+            tool_stats: Dictionary to update with success/failure counts
+        """
         for msg in messages:
             if msg.get('type') != 'assistant':
                 continue
@@ -598,18 +622,35 @@ class ClaudeAdapter(ResourceAdapter):
                 tool_name = tool_use_map[tool_id]
                 tool_stats[tool_name]['total'] += 1
 
-                # Check if error
-                is_error = content.get('is_error', False)
-                result_content = str(content.get('content', ''))
-                has_error_text = ('error' in result_content.lower() or
-                                  'failed' in result_content.lower())
-
-                if is_error or has_error_text:
+                if self._is_tool_error(content):
                     tool_stats[tool_name]['failure'] += 1
                 else:
                     tool_stats[tool_name]['success'] += 1
 
-        # Calculate success rates
+    def _is_tool_error(self, content: Dict) -> bool:
+        """Check if a tool result indicates an error.
+
+        Args:
+            content: Tool result content dictionary
+
+        Returns:
+            True if the result indicates an error
+        """
+        is_error = content.get('is_error', False)
+        result_content = str(content.get('content', ''))
+        has_error_text = ('error' in result_content.lower() or
+                          'failed' in result_content.lower())
+        return is_error or has_error_text
+
+    def _build_success_rate_report(self, tool_stats: Dict[str, Dict[str, int]]) -> Dict[str, Dict[str, Any]]:
+        """Build final success rate report from stats.
+
+        Args:
+            tool_stats: Dictionary of tool statistics
+
+        Returns:
+            Dictionary mapping tool names to success rate reports
+        """
         result = {}
         for tool_name, stats in tool_stats.items():
             if stats['total'] > 0:
@@ -620,7 +661,6 @@ class ClaudeAdapter(ResourceAdapter):
                     'total': stats['total'],
                     'success_rate': round(success_rate, 1)
                 }
-
         return result
 
     def _analyze_message_sizes(self, messages: List[Dict]) -> Dict[str, Any]:

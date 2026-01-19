@@ -7,9 +7,10 @@
 ### 👤 New Users
 
 **Start here:**
-1. [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Core functionality and basic usage
-2. [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Customize Reveal's behavior
-3. [COOL_TRICKS.md](COOL_TRICKS.md) - Practical examples and workflows
+1. [QUICK_START.md](QUICK_START.md) - 5-minute quick start guide (NEW!)
+2. [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Core functionality and basic usage
+3. [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Customize Reveal's behavior
+4. [COOL_TRICKS.md](COOL_TRICKS.md) - Practical examples and workflows
 
 **Then explore:**
 - [HTML_GUIDE.md](HTML_GUIDE.md) - Working with HTML files
@@ -51,6 +52,7 @@
 
 | Guide | Purpose | Audience |
 |-------|---------|----------|
+| [QUICK_START.md](QUICK_START.md) | 5-minute quick start guide | New Users |
 | [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) | Core Reveal functionality, markdown analysis | Users, Agents |
 | [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) | Configuration options, customization | Users, Developers |
 | [SCHEMA_VALIDATION_HELP.md](SCHEMA_VALIDATION_HELP.md) | Front matter schema validation | Users, Agents |
@@ -132,10 +134,11 @@
 ## Recommended Reading Paths
 
 ### Path 1: User → Power User
-1. [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Basics
-2. [COOL_TRICKS.md](COOL_TRICKS.md) - Advanced usage
-3. [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Customization
-4. [SCHEMA_VALIDATION_HELP.md](SCHEMA_VALIDATION_HELP.md) - Validation
+1. [QUICK_START.md](QUICK_START.md) - 5-minute intro
+2. [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Complete basics
+3. [COOL_TRICKS.md](COOL_TRICKS.md) - Advanced usage
+4. [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Customization
+5. [SCHEMA_VALIDATION_HELP.md](SCHEMA_VALIDATION_HELP.md) - Validation
 
 ### Path 2: Developer → Contributor
 1. [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Extensibility
@@ -159,7 +162,8 @@ reveal help://cool-tricks        # Practical examples
 ```
 
 **Documentation:**
-- Start with [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) for basics
+- Start with [QUICK_START.md](QUICK_START.md) for a 5-minute introduction
+- Read [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) for complete basics
 - See [COOL_TRICKS.md](COOL_TRICKS.md) for practical examples
 - Check [ANTI_PATTERNS.md](ANTI_PATTERNS.md) if something's not working
 
@@ -170,9 +174,9 @@ reveal help://cool-tricks        # Practical examples
 
 ## Document Metadata
 
-**Last updated:** 2026-01-16
-**Reveal version:** 0.37.0+
-**Total guides:** 18 (15 in reveal/docs/, 2 in docs/, 1 README)
+**Last updated:** 2026-01-19
+**Reveal version:** 0.38.0+
+**Total guides:** 19 (16 in reveal/docs/, 2 in docs/, 1 README)
 
 ---
 
