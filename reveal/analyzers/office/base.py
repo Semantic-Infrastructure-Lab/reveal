@@ -15,6 +15,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from ...base import FileAnalyzer
+from ...utils import format_size
 
 
 class ZipXMLAnalyzer(FileAnalyzer):
@@ -155,7 +156,7 @@ class ZipXMLAnalyzer(FileAnalyzer):
             'path': str(self.path),
             'name': self.path.name,
             'size': stat.st_size,
-            'size_human': self._format_size(stat.st_size),
+            'size_human': format_size(stat.st_size),
             'parts_count': len(self.parts),
         }
 
@@ -174,14 +175,6 @@ class ZipXMLAnalyzer(FileAnalyzer):
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a specific element by name. Override in subclass for semantic extraction."""
         return None
-
-    def _format_size(self, size: int) -> str:
-        """Format file size in human-readable form."""
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if size < 1024.0:
-                return f"{size:.1f} {unit}"
-            size /= 1024.0
-        return f"{size:.1f} TB"
 
     def __del__(self):
         """Clean up ZIP archive handle."""

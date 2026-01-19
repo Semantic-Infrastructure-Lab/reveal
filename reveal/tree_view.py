@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 from .registry import get_analyzer
 from .display.filtering import PathFilter
+from .utils import format_size
 
 
 def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
@@ -170,7 +171,7 @@ def _get_file_info(path: Path, fast: bool = False) -> str:
         if fast:
             # Fast mode: just show file size, no analyzer
             stat = os.stat(path)
-            size = _format_size(stat.st_size)
+            size = format_size(stat.st_size)
             return f"{path.name} ({size})"
 
         # Normal mode: Try to get analyzer for this file
@@ -186,18 +187,9 @@ def _get_file_info(path: Path, fast: bool = False) -> str:
         else:
             # No analyzer - just show basic info
             stat = os.stat(path)
-            size = _format_size(stat.st_size)
+            size = format_size(stat.st_size)
             return f"{path.name} ({size})"
 
     except Exception:
         # If anything fails, just show filename
         return path.name
-
-
-def _format_size(size: int) -> str:
-    """Format file size in human-readable form."""
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if size < 1024.0:
-            return f"{size:.1f} {unit}"
-        size /= 1024.0
-    return f"{size:.1f} TB"

@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
+from reveal.utils import format_size
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,7 +65,7 @@ class FileAnalyzer(ABC):
             'path': str(self.path),
             'name': self.path.name,
             'size': stat.st_size,
-            'size_human': self._format_size(stat.st_size),
+            'size_human': format_size(stat.st_size),
             'lines': len(self.lines),
             'encoding': self._detect_encoding(),
         }
@@ -168,14 +170,6 @@ class FileAnalyzer(ABC):
             result.append(f"   {line_num:4d}  {line}")
 
         return '\n'.join(result)
-
-    def _format_size(self, size: int) -> str:
-        """Format file size in human-readable form."""
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if size < 1024.0:
-                return f"{size:.1f} {unit}"
-            size /= 1024.0
-        return f"{size:.1f} TB"
 
     def _detect_encoding(self) -> str:
         """Detect file encoding."""

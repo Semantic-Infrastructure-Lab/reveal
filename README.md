@@ -135,7 +135,7 @@ reveal --rules                   # List all rules
 reveal --explain B001            # Explain specific rule
 ```
 
-**59 built-in rules** across 12 categories: bugs (B001-B006), complexity (C901-C905), duplicates (D001-D002), style (E501), frontmatter (F001-F005), imports (I001-I004), links (L001-L005), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V022). New in v0.25.0: link validation (L001-L003). New in v0.36.1: documentation quality validation (L004-L005). New in v0.28.0: import analysis (I001-I003) for unused imports, circular dependencies, and layer violations. New in v0.29.0: schema validation (F001-F005) for markdown front matter. New in v0.32.1: stdlib shadowing (I004). New in v0.35.0: validation rules (V012-V014). Unreleased: Multi-language import analysis (I001-I002) for Python, JavaScript, and Rust; V016-V021 (adapter documentation completeness, tree-sitter coverage, adapter/renderer sync, adapter initialization patterns, element/structure contract, regex vs tree-sitter usage), B006 (silent broad exception handlers).
+**57 built-in rules** across 12 categories: bugs (B001-B006), complexity (C901-C905), duplicates (D001-D002), style (E501), frontmatter (F001-F005), imports (I001-I004), links (L001-L005), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V023). New in v0.39.0: B006 (silent broad exception handlers). New in v0.36.1: documentation quality validation (L004-L005). New in v0.35.0: validation rules (V012-V014). New in v0.32.1: stdlib shadowing (I004). New in v0.29.0: schema validation (F001-F005). New in v0.28.0: import analysis (I001-I004). New in v0.25.0: link validation (L001-L003).
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
 
 ### 📝 Schema Validation (v0.29.0+)
@@ -492,7 +492,7 @@ reveal/
 
 ## Stability Guarantees
 
-**Current version:** v0.37.0 (Beta) - On path to v1.0 (Q2-Q3 2026)
+**Current version:** v0.39.0 (Beta) - On path to v1.0 (Q2-Q3 2026)
 
 ### 🟢 Stable (Safe to depend on)
 - **Core modes:** directory → file → element
@@ -502,7 +502,7 @@ reveal/
 
 ### 🟡 Beta (Feature-complete, API may evolve)
 - **Advanced adapters:** `diff://`, `imports://`, `sqlite://`, `mysql://`, `stats://`, `json://`, `markdown://`, `git://`
-- **Quality rules:** 59 rules across 12 categories (may be refined)
+- **Quality rules:** 57 rules across 12 categories (may be refined)
 - **Languages (Tier 2):** 23 additional languages (C#, Scala, PHP, Ruby, Lua, GDScript, Bash, SQL, Kotlin, Swift, Dart, Zig, HCL/Terraform, GraphQL, Protobuf, + config formats)
 - **JSON output:** Output Contract v1.0 shipped (2026-01-17) - all adapters have predictable schemas
 
@@ -512,7 +512,7 @@ reveal/
 
 **For AI agents:** Text output (`filename:line` format) and JSON output (`--format json`) are both production-ready. All 14 adapters follow Output Contract v1.0.
 
-**For CI/CD:** Pin reveal version (`pip install reveal-cli==0.37.0`) and upgrade explicitly after testing.
+**For CI/CD:** Pin reveal version (`pip install reveal-cli==0.39.0`) and upgrade explicitly after testing.
 
 **Full policy:** See [STABILITY.md](STABILITY.md) for detailed guarantees, breaking change policy, and v1.0 roadmap.
 

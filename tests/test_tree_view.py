@@ -7,10 +7,10 @@ import shutil
 from reveal.tree_view import (
     show_directory_tree,
     _count_entries,
-    _format_size,
     _get_file_info,
     _walk_directory
 )
+from reveal.utils import format_size
 from reveal.display.filtering import PathFilter
 from pathlib import Path
 
@@ -203,27 +203,27 @@ class TestFormatSize(unittest.TestCase):
 
     def test_bytes(self):
         """Test byte-range sizes."""
-        self.assertEqual(_format_size(0), '0.0 B')
-        self.assertEqual(_format_size(100), '100.0 B')
-        self.assertEqual(_format_size(1023), '1023.0 B')
+        self.assertEqual(format_size(0), '0.0 B')
+        self.assertEqual(format_size(100), '100.0 B')
+        self.assertEqual(format_size(1023), '1023.0 B')
 
     def test_kilobytes(self):
         """Test KB range sizes."""
-        self.assertEqual(_format_size(1024), '1.0 KB')
-        self.assertEqual(_format_size(2048), '2.0 KB')
+        self.assertEqual(format_size(1024), '1.0 KB')
+        self.assertEqual(format_size(2048), '2.0 KB')
 
     def test_megabytes(self):
         """Test MB range sizes."""
-        self.assertEqual(_format_size(1024 * 1024), '1.0 MB')
-        self.assertEqual(_format_size(5 * 1024 * 1024), '5.0 MB')
+        self.assertEqual(format_size(1024 * 1024), '1.0 MB')
+        self.assertEqual(format_size(5 * 1024 * 1024), '5.0 MB')
 
     def test_gigabytes(self):
         """Test GB range sizes."""
-        self.assertEqual(_format_size(1024 * 1024 * 1024), '1.0 GB')
+        self.assertEqual(format_size(1024 * 1024 * 1024), '1.0 GB')
 
     def test_terabytes(self):
         """Test TB range sizes."""
-        result = _format_size(1024 * 1024 * 1024 * 1024)
+        result = format_size(1024 * 1024 * 1024 * 1024)
         self.assertIn('TB', result)
 
 

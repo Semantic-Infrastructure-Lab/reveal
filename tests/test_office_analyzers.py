@@ -557,12 +557,12 @@ class TestZipXMLAnalyzer:
         assert any('jpg' in m['name'].lower() for m in media)
 
     def test_format_size(self, minimal_docx):
-        """Test file size formatting."""
-        analyzer = DocxAnalyzer(str(minimal_docx))
+        """Test file size formatting utility (now in reveal.utils)."""
+        from reveal.utils import format_size
 
-        assert analyzer._format_size(500) == '500.0 B'
-        assert analyzer._format_size(1024) == '1.0 KB'
-        assert analyzer._format_size(1024 * 1024) == '1.0 MB'
+        assert format_size(500) == '500.0 B'
+        assert format_size(1024) == '1.0 KB'
+        assert format_size(1024 * 1024) == '1.0 MB'
 
     def test_get_metadata(self, minimal_docx):
         """Test base metadata retrieval."""

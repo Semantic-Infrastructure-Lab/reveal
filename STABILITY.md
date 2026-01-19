@@ -7,8 +7,8 @@ date: 2026-01-17
 
 # Stability Policy
 
-**Last updated:** 2026-01-17
-**Version:** v0.37.0
+**Last updated:** 2026-01-19
+**Version:** v0.39.0
 
 ---
 
@@ -83,7 +83,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
 
 ## Version Policy
 
-### Current Version: v0.37.0 (Beta)
+### Current Version: v0.39.0 (Beta)
 
 **Semver interpretation for pre-v1.0:**
 - **Patch (v0.36.0 → v0.36.1):** Bug fixes only, no breaking changes
@@ -95,7 +95,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
 **Blockers for v1.0:**
 1. ✅ Output contract specification (structured return values) - **COMPLETE** (2026-01-17)
 2. ✅ JSON schema versioning - **COMPLETE** (2026-01-17, via Output Contract v1.0)
-3. 🟡 Comprehensive integration test suite - **IN PROGRESS** (2239 tests passing, expanding coverage)
+3. 🟡 Comprehensive integration test suite - **IN PROGRESS** (2456 tests passing, expanding coverage)
 4. 🟡 Documentation completeness (all adapters have help:// guides) - **IN PROGRESS** (most adapters documented)
 5. ⏳ 6 months without breaking changes to Stable features - **STARTED** (2026-01-17, target: 2026-07-17)
 

@@ -147,6 +147,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - No functional changes - only improved messaging and positioning
   - Session: mumuxi-0119
 
+- **Code quality cleanup** - Consolidated duplicate utilities
+  - Created `reveal/utils/formatting.py` with shared `format_size()` function
+  - Removed 3 duplicate implementations from `base.py`, `tree_view.py`, `analyzers/office/base.py`
+  - Updated documentation version references (v0.37.0 → v0.39.0)
+  - Fixed rule count in README (59 → 57 to match actual count)
+  - Updated test count in STABILITY.md (2239 → 2456)
+  - Session: garnet-fire-0119
+
 ### Fixed
 - **B006 comment detection** - Fixed false positives for comments between except and pass lines
   - Previously only checked except line and pass line for comments
@@ -158,7 +166,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **M104: Hardcoded configuration detection** - Removed due to high false positive rate
   - Rationale: Rule could not reliably distinguish between code structure (workflow definitions, output contracts, package metadata) and actual configuration
   - Impact: Eliminates 300+ false positives across typical Python codebases
-  - Rule count: 59 → 58, then 58 → 59 with B006 addition (net: 59 total rules)
+  - Rule count: 58 → 57 (M104 removed, B006 added: net -1)
   - Dogfooding revealed that even with context awareness improvements, semantic analysis was insufficient
   - Conclusion: Better to have fewer, more accurate rules than noisy ones that obscure real issues
 
