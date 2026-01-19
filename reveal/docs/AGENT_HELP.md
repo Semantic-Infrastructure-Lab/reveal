@@ -1,5 +1,5 @@
 # Reveal - AI Agent Reference
-**Version:** 0.38.0
+**Version:** 0.39.0
 **Purpose:** Practical patterns for AI code assistants
 **Token Cost:** ~2,400 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
