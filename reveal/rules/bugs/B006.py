@@ -131,7 +131,7 @@ class B006(BaseRule):
 
         Looks for comments on:
         - The except line itself (inline comment)
-        - The pass line (inline comment)
+        - Any line in the handler body (between except and last statement)
 
         Args:
             node: AST ExceptHandler node
@@ -149,11 +149,14 @@ class B006(BaseRule):
             if self.COMMENT_PATTERN.search(lines[except_line_idx]):
                 return True
 
-        # Check pass line (should be next line in most cases)
-        if node.body and hasattr(node.body[0], 'lineno'):
-            pass_line_idx = node.body[0].lineno - 1
-            if pass_line_idx < len(lines):
-                if self.COMMENT_PATTERN.search(lines[pass_line_idx]):
+        # Check all lines in the handler body
+        if node.body and hasattr(node.body[-1], 'lineno'):
+            # Check from line after except to the last statement (inclusive)
+            start_line_idx = except_line_idx + 1
+            end_line_idx = node.body[-1].lineno  # This is 1-indexed, but we'll use it correctly
+
+            for line_idx in range(start_line_idx, min(end_line_idx, len(lines))):
+                if self.COMMENT_PATTERN.search(lines[line_idx]):
                     return True
 
         return False

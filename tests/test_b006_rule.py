@@ -212,6 +212,20 @@ def foo():
         detections = self.rule.check(path, None, content)
         self.assertEqual(len(detections), 0)
 
+    def test_allow_exception_with_comment_between_except_and_pass(self):
+        """Test that exception with comment between except and pass is allowed."""
+        content = """
+def foo():
+    try:
+        risky_operation()
+    except Exception:
+        # If operation fails, return empty
+        pass
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
     def test_allow_exception_with_multiline_body(self):
         """Test that exception with multiple statements is allowed."""
         content = """
