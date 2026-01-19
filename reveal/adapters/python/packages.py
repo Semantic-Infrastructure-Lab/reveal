@@ -1,6 +1,6 @@
 """Package management utilities for Python adapter."""
 
-from typing import Dict, Any, Optional, Iterator
+from typing import Dict, Any, Iterator
 
 
 def get_packages() -> Iterator:

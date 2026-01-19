@@ -1,7 +1,6 @@
 """Diff adapter for comparing two reveal resources."""
 
 import inspect
-import json
 import os
 import subprocess
 import sys
