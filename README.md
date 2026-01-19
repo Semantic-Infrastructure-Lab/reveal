@@ -135,7 +135,7 @@ reveal --rules                   # List all rules
 reveal --explain B001            # Explain specific rule
 ```
 
-**57 built-in rules** across 12 categories: bugs (B001-B006), complexity (C901-C905), duplicates (D001-D002), style (E501), frontmatter (F001-F005), imports (I001-I004), links (L001-L005), maintainability (M101-M103), nginx (N001-N003), refactoring (R913), security (S701), URLs (U501-U502), validation (V001-V023). New in v0.39.0: B006 (silent broad exception handlers). New in v0.36.1: documentation quality validation (L004-L005). New in v0.35.0: validation rules (V012-V014). New in v0.32.1: stdlib shadowing (I004). New in v0.29.0: schema validation (F001-F005). New in v0.28.0: import analysis (I001-I004). New in v0.25.0: link validation (L001-L003).
+**50+ built-in rules** across 12 categories: bugs (B), complexity (C), duplicates (D), style (E), frontmatter (F), imports (I), links (L), maintainability (M), nginx (N), refactoring (R), security (S), URLs (U), validation (V). See CHANGELOG.md for recent additions.
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
 
 ### 📝 Schema Validation (v0.29.0+)
@@ -474,7 +474,7 @@ reveal/
 ├── cli/          # Argument parsing, routing, handlers
 ├── display/      # Terminal output formatting
 ├── rendering/    # Adapter-specific renderers
-├── rules/        # 56 quality rules (B, C, D, E, F, I, L, M, N, R, S, U, V)
+├── rules/        # 50+ quality rules (B, C, D, E, F, I, L, M, N, R, S, U, V)
 ├── analyzers/    # 53 file types (Python, Rust, HTML, Markdown, etc.)
 ├── adapters/     # URI support (14 adapters: help://, env://, ast://, stats://, etc.)
 ├── schemas/      # Type definitions (renamed from types/ in v0.23.0)
@@ -483,7 +483,7 @@ reveal/
 
 **Clean architecture:** Most analyzers < 50 lines. Modular packages since v0.22.0.
 
-**Quality metrics:** 2,456 tests, 76% coverage, continuous integration on every commit.
+**Quality metrics:** 2,400+ tests, continuous integration on every commit.
 
 **Documentation:** [reveal/docs/README.md](reveal/docs/README.md) - Comprehensive guides for users, developers, and AI agents
 **Power users:** [COOL_TRICKS.md](reveal/docs/COOL_TRICKS.md) - Hidden features and advanced workflows
@@ -502,7 +502,7 @@ reveal/
 
 ### 🟡 Beta (Feature-complete, API may evolve)
 - **Advanced adapters:** `diff://`, `imports://`, `sqlite://`, `mysql://`, `stats://`, `json://`, `markdown://`, `git://`
-- **Quality rules:** 57 rules across 12 categories (may be refined)
+- **Quality rules:** 50+ rules across 12 categories (may be refined)
 - **Languages (Tier 2):** 23 additional languages (C#, Scala, PHP, Ruby, Lua, GDScript, Bash, SQL, Kotlin, Swift, Dart, Zig, HCL/Terraform, GraphQL, Protobuf, + config formats)
 - **JSON output:** Output Contract v1.0 shipped (2026-01-17) - all adapters have predictable schemas
 

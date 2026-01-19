@@ -1,18 +1,15 @@
 """V015: Rules count accuracy in documentation.
 
-Validates that README.md rules count matches actual registered rules.
-Prevents documentation drift when new rules are added.
+Validates that README.md rules count claims are accurate.
+Supports both exact ("57 built-in rules") and minimum ("50+ built-in rules") claims.
 
-Example violation:
-    - README.md claims: "41 built-in rules"
-    - Actual registered: 47 rules
-    - Result: Documentation out of sync
+Example violations:
+    - README.md claims: "50+ built-in rules", actual: 48
+    - README.md claims: "57 built-in rules", actual: 52
 
 How it counts:
-    - Counts all rules from reveal.registry.get_all_rules()
-    - Excludes non-rule entries (utils, __init__)
-    - Example: B001-B005, C901-C905, D001-D002, E501, F001-F005, I001-I004,
-               L001-L003, M101-M103, N001-N003, R913, S701, U501-U502, V001-V015
+    - Counts rule files in reveal/rules/ directory tree
+    - Excludes non-rule entries (utils, __init__, *_utils)
 """
 
 import re
@@ -62,16 +59,28 @@ class V015(BaseRule):
         # Extract ALL claimed counts from README
         claims = self._extract_rules_count_from_readme(readme_file)
 
-        # Flag ALL incorrect claims
-        for line_num, claimed in claims:
-            if claimed != actual_count:
-                detections.append(self.create_detection(
-                    file_path="README.md",
-                    line=line_num,
-                    message=f"Rules count mismatch: claims {claimed}, actual {actual_count}",
-                    suggestion=f"Update README.md line {line_num} to: '{actual_count} built-in rules'",
-                    context=f"Claimed: {claimed}, Actual: {actual_count} registered rules"
-                ))
+        # Flag incorrect claims
+        for line_num, claimed, is_minimum in claims:
+            if is_minimum:
+                # "50+ rules" means actual must be >= 50
+                if actual_count < claimed:
+                    detections.append(self.create_detection(
+                        file_path="README.md",
+                        line=line_num,
+                        message=f"Rules count below minimum: claims {claimed}+, actual {actual_count}",
+                        suggestion=f"Update README.md line {line_num} to: '{actual_count}+ built-in rules'",
+                        context=f"Claimed minimum: {claimed}, Actual: {actual_count} registered rules"
+                    ))
+            else:
+                # Exact count must match
+                if claimed != actual_count:
+                    detections.append(self.create_detection(
+                        file_path="README.md",
+                        line=line_num,
+                        message=f"Rules count mismatch: claims {claimed}, actual {actual_count}",
+                        suggestion=f"Update to '{actual_count}+ built-in rules' (use + to avoid future drift)",
+                        context=f"Claimed: {claimed}, Actual: {actual_count} registered rules"
+                    ))
 
         return detections
 
@@ -100,8 +109,8 @@ class V015(BaseRule):
                     # Skip utils and __init__
                     if rule_file.stem in ('utils', '__init__'):
                         continue
-                    # Skip files starting with _
-                    if rule_file.stem.startswith('_'):
+                    # Skip files starting with _ or ending with _utils
+                    if rule_file.stem.startswith('_') or rule_file.stem.endswith('_utils'):
                         continue
 
                     count += 1
@@ -110,15 +119,14 @@ class V015(BaseRule):
         except Exception:
             return None
 
-    def _extract_rules_count_from_readme(self, readme_file: Path) -> List[Tuple[int, int]]:
+    def _extract_rules_count_from_readme(self, readme_file: Path) -> List[Tuple[int, int, bool]]:
         """Extract ALL rules count claims from README.
 
-        Returns: List of (line_number, count) tuples
+        Returns: List of (line_number, count, is_minimum) tuples
 
         Looks for patterns like:
-        - "41 built-in rules"
-        - "**41 built-in rules**"
-        - "41 built-in rule" (singular)
+        - "50+ built-in rules" (minimum claim)
+        - "57 built-in rules" (exact claim)
         """
         try:
             content = readme_file.read_text()
@@ -126,10 +134,12 @@ class V015(BaseRule):
 
             claims = []
             for i, line in enumerate(lines, 1):
-                # Pattern: "N built-in rules" (with optional bold)
-                matches = re.finditer(r'(\d+)\s+built-in\s+rules?', line, re.IGNORECASE)
+                # Pattern: "N+ built-in rules" (minimum) or "N built-in rules" (exact)
+                matches = re.finditer(r'(\d+)(\+)?\s+built-in\s+rules?', line, re.IGNORECASE)
                 for match in matches:
-                    claims.append((i, int(match.group(1))))
+                    count = int(match.group(1))
+                    is_minimum = match.group(2) == '+'
+                    claims.append((i, count, is_minimum))
 
             return claims
         except Exception:
