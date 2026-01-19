@@ -40,6 +40,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Tests: 18 tests, 94% coverage
   - Fills major gap: INI/Properties files common in Windows, Java, Python ecosystems
 
+- **XML analyzer** - XML document analysis
+  - Supports Maven pom.xml, Spring configs, Android manifests, SOAP APIs, SVG
+  - Document statistics (element count, max depth, namespace detection)
+  - Element tree structure with attributes and text content
+  - Type inference for text content (integer, float, boolean, string)
+  - Child element filtering (head, tail, range)
+  - Element extraction by tag name (finds all matches with paths)
+  - Examples:
+    - `reveal pom.xml` - Show Maven project structure
+    - `reveal config.xml --head 5` - First 5 child elements
+    - `reveal manifest.xml:application` - Find all application elements
+    - `reveal spring-config.xml:bean` - Find all bean definitions
+  - Tests: 20 tests, 92% coverage
+  - Fills major gap: XML is enterprise-standard (Maven, Gradle, Spring, Android)
+
 - **B006: Silent broad exception handler detector** - Detects `except Exception: pass` with no comment/logging
   - Catches broad exception handlers that silently swallow errors
   - Prevents bugs from being hidden (like the tree-sitter parsing failure in v0.38.0)
