@@ -252,8 +252,10 @@ class GitAdapter(ResourceAdapter):
         if path is not None:
             resource = path
 
+        # No-arg initialization should raise TypeError, not ValueError
+        # This lets the generic handler try the next pattern
         if resource is None:
-            raise ValueError("Either 'resource' or 'path' parameter must be provided")
+            raise TypeError("GitAdapter requires a resource path")
 
         # Handle routing.py passing query string as ref parameter
         # (routing.py Try 2 does: adapter_class(path, query))

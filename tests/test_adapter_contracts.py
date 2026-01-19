@@ -219,14 +219,14 @@ class TestAdapterContracts(unittest.TestCase):
 class TestAdapterErrorConsistency(unittest.TestCase):
     """Test that adapters handle errors consistently."""
 
-    def test_git_adapter_raises_value_error_on_missing_resource(self):
-        """Regression test: git adapter should raise ValueError, not crash routing.
+    def test_git_adapter_raises_type_error_on_missing_resource(self):
+        """Adapters should raise TypeError for no-arg init so routing can try next pattern.
 
-        This was the original bug that prompted adding ValueError catching to routing.py.
+        TypeError lets routing.py distinguish "wrong args" from "valid args, bad value".
         """
         from reveal.adapters.git.adapter import GitAdapter
 
-        with self.assertRaises(ValueError) as cm:
+        with self.assertRaises(TypeError) as cm:
             # Missing required 'resource' parameter
             GitAdapter()
 
