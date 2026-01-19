@@ -1,3 +1,10 @@
+---
+title: Reveal Installation Guide
+type: documentation
+category: installation
+date: 2026-01-04
+---
+
 # Installation Guide
 
 ## Quick Install (Recommended)

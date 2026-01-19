@@ -1,3 +1,10 @@
+---
+title: Reveal Security Policy
+type: documentation
+category: security
+date: 2025-12-01
+---
+
 # Security Policy
 
 ## Reporting Security Issues

@@ -1,3 +1,10 @@
+---
+title: Reveal Changelog
+type: documentation
+category: changelog
+date: 2026-01-18
+---
+
 # Changelog
 
 All notable changes to reveal will be documented in this file.

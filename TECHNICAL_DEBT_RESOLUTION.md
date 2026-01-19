@@ -1,3 +1,11 @@
+---
+title: Technical Debt Resolution - Reveal Architecture Audit Response
+type: documentation
+category: technical-debt
+date: 2026-01-13
+sessions: [floating-singularity-0113, amethyst-dye-0113]
+---
+
 # Technical Debt Resolution - Reveal Architecture Audit Response
 
 **Date**: 2026-01-13

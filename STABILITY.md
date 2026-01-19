@@ -1,3 +1,10 @@
+---
+title: Reveal Stability Policy
+type: documentation
+category: policy
+date: 2026-01-17
+---
+
 # Stability Policy
 
 **Last updated:** 2026-01-17

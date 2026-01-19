@@ -1,3 +1,10 @@
+---
+title: Contributing to Reveal
+type: documentation
+category: contributing
+date: 2026-01-13
+---
+
 # Contributing to reveal
 
 Add new file types in 10-50 lines. Use reveal to explore reveal.

@@ -1,3 +1,10 @@
+---
+title: Reveal Release Process
+type: documentation
+category: maintainer
+date: 2025-12-14
+---
+
 # Reveal Release Process
 
 **Automated release script that handles everything!**

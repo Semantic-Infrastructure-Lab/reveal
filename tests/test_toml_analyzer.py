@@ -17,7 +17,7 @@ class TestTomlAnalyzer(unittest.TestCase):
             with os.fdopen(fd, 'w') as f:
                 f.write(content)
             return path
-        except:
+        except (OSError, IOError) as e:
             os.close(fd)
             raise
 

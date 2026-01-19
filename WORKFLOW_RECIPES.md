@@ -1,3 +1,10 @@
+---
+title: Reveal Workflow Recipes
+type: documentation
+category: workflows
+date: 2026-01-15
+---
+
 # Reveal Workflow Recipes
 
 **Task-based patterns for getting work done**

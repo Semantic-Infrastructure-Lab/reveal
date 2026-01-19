@@ -1,3 +1,10 @@
+---
+title: Reveal - Progressive Code Exploration
+type: documentation
+category: main
+date: 2026-01-18
+---
+
 # reveal - Progressive Code Exploration
 
 **Structure before content. Understand code by navigating it, not reading it.**
