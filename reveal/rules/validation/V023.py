@@ -237,8 +237,7 @@ class V023(BaseRule):
                         "  'line_start': start_line,  # 1-indexed\n"
                         "  'line_end': end_line,      # 1-indexed, inclusive\n"
                         "See docs/OUTPUT_CONTRACT.md section 'Line Number Fields'"
-                    ),
-                    severity=Severity.MEDIUM
+                    )
                 ))
 
         # Check for hyphenated type values (e.g., 'ast-query' should be 'ast_query')
@@ -252,8 +251,7 @@ class V023(BaseRule):
                         f"Change type to snake_case: '{type_val.replace('-', '_')}'\n"
                         f"Type field must match pattern: ^[a-z][a-z0-9_]*$\n"
                         f"Examples: 'ast_query', 'mysql_server', 'environment'"
-                    ),
-                    severity=Severity.MEDIUM
+                    )
                 ))
 
         return detections
