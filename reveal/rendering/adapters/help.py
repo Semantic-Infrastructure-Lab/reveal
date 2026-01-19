@@ -112,6 +112,7 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
 
     if static:
         # Organize static guides by category
+        getting_started = ['quick-start']
         ai_guides = ['agent', 'agent-full']
         feature_guides = ['python-guide', 'markdown', 'reveal-guide', 'html', 'configuration', 'schemas', 'duplicates']
         best_practices = ['anti-patterns', 'tricks']
@@ -120,6 +121,18 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
         # Map topics to their files for source attribution
         from reveal.adapters.help import HelpAdapter
         static_help_map = HelpAdapter.STATIC_HELP
+
+        # Getting Started
+        if any(t in static for t in getting_started):
+            print("### Getting Started")
+            for topic in [t for t in getting_started if t in static]:
+                file = static_help_map.get(topic, 'unknown')
+                token_estimate = '~2,000'
+                print(f"  {topic:16} - {_get_guide_description(topic)}")
+                print(f"                     File: {file}")
+                print(f"                     Token cost: {token_estimate}")
+                print(f"                     Recommended: Start here if you're new to reveal!")
+            print()
 
         # AI Agent Guides
         print("### For AI Agents")
@@ -201,6 +214,9 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
     print("**Start here:**")
     print("  reveal help://              # This index")
     print()
+    print("**New users:**")
+    print("  reveal help://quick-start   # 5-minute introduction")
+    print()
     print("**Bootstrap (AI agents):**")
     print("  reveal --agent-help         # Task-based patterns (~2,200 tokens)")
     print()
@@ -219,6 +235,7 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
 def _get_guide_description(topic: str) -> str:
     """Get human-friendly description for a guide topic."""
     descriptions = {
+        'quick-start': '5-minute introduction to reveal',
         'agent': 'Quick reference (task-based patterns)',
         'agent-full': 'Comprehensive guide',
         'python': 'Python adapter with examples (duplicate of python-guide)',

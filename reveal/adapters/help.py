@@ -62,6 +62,7 @@ class HelpAdapter(ResourceAdapter):
 
     # Static help files (markdown documentation in reveal/docs/)
     STATIC_HELP = {
+        'quick-start': 'QUICK_START.md',  # 5-minute quick start guide
         'agent': 'AGENT_HELP.md',
         'agent-full': 'AGENT_HELP_FULL.md',
         'python': 'PYTHON_ADAPTER_GUIDE.md',  # Alias for python-guide

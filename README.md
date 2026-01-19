@@ -16,7 +16,7 @@ reveal app.py                  # file → structure
 reveal app.py load_config      # element → code
 ```
 
-Zero config. 41 languages built-in. 165+ via tree-sitter.
+Zero config. 42 languages built-in. 165+ via tree-sitter.
 
 **Token efficiency:** Structure view = 50 tokens vs 7,500 for full file. Measured 10-150x reduction in production use.
 
@@ -117,7 +117,7 @@ reveal --agent-help-full     # Complete reference (~1680 lines)
 
 **Quick Install:**
 ```bash
-pip install reveal-cli              # Full-featured by default (38 languages, 14 adapters)
+pip install reveal-cli              # Full-featured by default (42 languages, 14 adapters)
 pip install reveal-cli[database]    # Add MySQL database inspection
 ```
 See [INSTALL.md](INSTALL.md) for details on what's included.
@@ -360,7 +360,7 @@ reveal help://diff                           # Complete diff guide
 **Extensibility Example:**
 The `reveal://` adapter demonstrates that reveal can inspect **any resource**, not just files. Use it as a reference for creating custom adapters for your own projects (APIs, databases, containers, etc.). See `reveal help://reveal` for the complete guide.
 
-**15 Built-in Adapters:**
+**14 Built-in Adapters:**
 - `help://` - Self-documenting help system (discover all adapters)
 - `env://` - Environment variables (cross-language)
 - `ast://` - Static code analysis & queries (cross-language)
@@ -393,7 +393,7 @@ reveal app.py --meta             # metadata only
 
 ### Supported Languages
 
-**Built-in (38 analyzers):** Python, Rust, Go, **C, C++**, **C#, Scala**, Java, PHP, **Ruby, Lua**, JavaScript, TypeScript, **Kotlin, Swift, Dart**, **HCL/Terraform, GraphQL, Protobuf, Zig**, GDScript, Bash, **SQL**, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, Nginx, Dockerfile, **Office formats** (Excel, Word, PowerPoint, Calc, Writer, Impress)
+**Built-in (42 analyzers):** Python, Rust, Go, **C, C++**, **C#, Scala**, Java, PHP, **Ruby, Lua**, JavaScript, TypeScript, **Kotlin, Swift, Dart**, **HCL/Terraform, GraphQL, Protobuf, Zig**, GDScript, Bash, **SQL**, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, **CSV, INI, XML, PowerShell**, Nginx, Dockerfile, **Office formats** (Excel, Word, PowerPoint, Calc, Writer, Impress)
 
 **Via tree-sitter (165+):** Perl, R, Haskell, Elixir, Zig, and more. Add new languages in 3 lines of code.
 
@@ -469,7 +469,7 @@ reveal/
 
 **Clean architecture:** Most analyzers < 50 lines. Modular packages since v0.22.0.
 
-**Quality metrics:** 2,230+ tests, 74% coverage, continuous integration on every commit.
+**Quality metrics:** 2,456 tests, 76% coverage, continuous integration on every commit.
 
 **Documentation:** [reveal/docs/README.md](reveal/docs/README.md) - Comprehensive guides for users, developers, and AI agents
 **Power users:** [COOL_TRICKS.md](reveal/docs/COOL_TRICKS.md) - Hidden features and advanced workflows
