@@ -5,11 +5,64 @@ from typing import Dict, List, Any, Optional
 from collections import defaultdict
 from datetime import datetime
 import json
+import sys
 
-from ..base import ResourceAdapter, register_adapter
+from ..base import ResourceAdapter, register_adapter, register_renderer
+from ...utils.json_utils import safe_json_dumps
+
+
+class ClaudeRenderer:
+    """Renderer for Claude adapter results."""
+
+    @staticmethod
+    def render_structure(result: dict, format: str = 'text') -> None:
+        """Render Claude conversation structure."""
+        if format == 'json':
+            print(safe_json_dumps(result))
+            return
+
+        # Text format - overview
+        if 'messages' in result:
+            print(f"Claude Session: {result.get('session', 'unknown')}")
+            print(f"Messages: {result.get('message_count', len(result['messages']))}")
+            if 'duration' in result:
+                print(f"Duration: {result['duration']}")
+            print()
+            for msg in result.get('messages', [])[:10]:
+                role = msg.get('role', 'unknown')
+                preview = str(msg.get('content', ''))[:80]
+                print(f"  [{role}] {preview}...")
+            if len(result.get('messages', [])) > 10:
+                print(f"  ... and {len(result['messages']) - 10} more messages")
+        else:
+            # Fallback: just dump structure
+            for key, value in result.items():
+                if key not in ('adapter', 'uri', 'timestamp'):
+                    print(f"{key}: {value}")
+
+    @staticmethod
+    def render_element(result: dict, format: str = 'text') -> None:
+        """Render specific Claude element (message, tool call, etc.)."""
+        if format == 'json':
+            print(safe_json_dumps(result))
+            return
+
+        # Text format
+        if 'content' in result:
+            print(result['content'])
+        else:
+            for key, value in result.items():
+                if key not in ('adapter', 'uri', 'timestamp'):
+                    print(f"{key}: {value}")
+
+    @staticmethod
+    def render_error(error: Exception) -> None:
+        """Render user-friendly errors."""
+        print(f"Error: {error}", file=sys.stderr)
 
 
 @register_adapter('claude')
+@register_renderer(ClaudeRenderer)
 class ClaudeAdapter(ResourceAdapter):
     """Adapter for Claude Code conversation analysis.
 
