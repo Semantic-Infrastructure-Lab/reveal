@@ -21,17 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Token efficiency demonstrations (10-150x reduction)
   - Comparison with traditional tools (grep, find, cat)
   - Clear navigation to other documentation
+  - Integrated into help system: `reveal help://quick-start`
   - Target: New users, onboarding
+  - Session: blazing-hail-0119
 
-### Changed
-- **Claude adapter refactoring** - Reduced complexity of `_calculate_tool_success_rate`
-  - Extracted 4 helper methods for single responsibility
-  - Complexity: 37 → 1 (97% reduction)
-  - Lines: 65 → 20 (69% reduction)
-  - Improved readability and maintainability
-  - All tests passing (50/50)
-
-### Documentation
 - **CSV/TSV analyzer** - Tabular data file analysis
   - Schema inference (column types: integer, float, boolean, list, string)
   - Data quality metrics (missing values, unique counts, sample values)
@@ -43,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `reveal data.csv:42` - Get row 42
   - Tests: 16 tests, 92% coverage
   - Fills major gap: CSV is universal data format (data pipelines, ML, exports)
+  - Session: aqua-sunset-0118
 
 - **INI/Properties analyzer** - Configuration file analysis
   - Supports Windows INI, Java properties, Python configs
@@ -56,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `reveal config.ini:database.host` - Get specific key
   - Tests: 18 tests, 94% coverage
   - Fills major gap: INI/Properties files common in Windows, Java, Python ecosystems
+  - Session: aqua-sunset-0118
 
 - **XML analyzer** - XML document analysis
   - Supports Maven pom.xml, Spring configs, Android manifests, SOAP APIs, SVG
@@ -71,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `reveal spring-config.xml:bean` - Find all bean definitions
   - Tests: 20 tests, 92% coverage
   - Fills major gap: XML is enterprise-standard (Maven, Gradle, Spring, Android)
+  - Session: sapphire-rainbow-0119
 
 - **PowerShell analyzer** - PowerShell script analysis (.ps1, .psm1, .psd1)
   - Function extraction (function, filter, workflow statements)
@@ -83,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `reveal script.ps1 --head 5` - First 5 functions
   - Tests: 14 tests, 93% coverage
   - Fills major gap: Modern Windows automation (Azure DevOps, cloud infrastructure)
+  - Session: sapphire-rainbow-0119
 
 - **B006: Silent broad exception handler detector** - Detects `except Exception: pass` with no comment/logging
   - Catches broad exception handlers that silently swallow errors
@@ -92,6 +89,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Examples:
     - `reveal src/ --check --select B006` - Find silent exception handlers
     - Suggests: use specific exceptions, add logging, add comments, or re-raise
+  - Session: aqua-sunset-0118
+
+### Changed
+- **Claude adapter refactoring** - Reduced complexity of `_calculate_tool_success_rate`
+  - Extracted 4 helper methods for single responsibility
+  - Complexity: 37 → 1 (97% reduction)
+  - Lines: 65 → 20 (69% reduction)
+  - Improved readability and maintainability
+  - All tests passing (50/50)
+  - Session: blazing-hail-0119
+
+- **Help system** - Added quick-start to help:// index
+  - New "Getting Started" section (appears first in help listing)
+  - Navigation tip: `reveal help://quick-start` for new users
+  - Integrated with existing static guides system
+  - Session: blazing-hail-0119
+
+- **README accuracy** - Updated language and test counts
+  - Language count: 41 → 42 built-in analyzers (CSV, INI, XML, PowerShell added)
+  - Test count: 2,230+ → 2,456 tests (measured)
+  - Coverage: 74% → 76% (measured)
+  - All counts verifiable via `--list-supported` and test suite
+  - Session: blazing-hail-0119
 
 ### Fixed
 - **B006 comment detection** - Fixed false positives for comments between except and pass lines
