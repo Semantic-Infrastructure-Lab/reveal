@@ -33,7 +33,6 @@ This document defines what users and AI agents can safely depend on in reveal. I
   - `env://` - Environment variable inspection
   - `ast://` - Code queries and structure analysis
   - `python://` - Python runtime inspection
-  - `reveal://` - Self-inspection
 - **Quality rules (core):** B001-B005 (bugs), S701 (security), C901 (complexity), E501 (line length)
 - **Languages (full support):** Python, JavaScript, TypeScript, Rust, Go, Java, C, C++
 
@@ -156,7 +155,7 @@ v0.37.0: Feature X removed (documented in CHANGELOG)
 
 ## Adapter-Specific Stability
 
-### Stable Adapters
+### Stable Adapters (Universal Tools)
 
 | Adapter | Stability | Notes |
 |---------|-----------|-------|
@@ -164,20 +163,37 @@ v0.37.0: Feature X removed (documented in CHANGELOG)
 | `env://` | 🟢 Stable | Environment variable inspection, cross-platform |
 | `ast://` | 🟢 Stable | Query syntax stable, new filters may be added |
 | `python://` | 🟢 Stable | Core commands stable, new diagnostics may be added |
-| `reveal://` | 🟢 Stable | Self-inspection format stable |
 
-### Beta Adapters
+### Beta Adapters (Development & Domain Tools)
 
 | Adapter | Stability | Maturity | Notes |
 |---------|-----------|----------|-------|
 | `diff://` | 🟡 Beta | High | Output format may change, git:// integration stable |
 | `imports://` | 🟡 Beta | High | Query syntax stable, multi-language support growing |
+| `stats://` | 🟡 Beta | Medium | Metrics may be added/renamed |
+| `git://` | 🟡 Beta | High | Core features stable (blame, history, diff), new query params may be added |
 | `sqlite://` | 🟡 Beta | Medium | Recently added (v0.35.0), format stabilizing |
 | `mysql://` | 🟡 Beta | Medium | Requires `[database]` extra, tuning ratios may change |
-| `stats://` | 🟡 Beta | Medium | Metrics may be added/renamed |
 | `json://` | 🟡 Beta | High | Path syntax stable, query features may expand |
 | `markdown://` | 🟡 Beta | Medium | Frontmatter queries stable, may add new filters |
-| `git://` | 🟡 Beta | High | Core features stable (blame, history, diff), new query params may be added |
+
+### Project Adapters (Extensibility Examples)
+
+**What these are:** Production-quality adapters built for specific projects/tools. They demonstrate how to extend reveal to inspect YOUR project's unique resources.
+
+| Adapter | Purpose | Domain | Status |
+|---------|---------|--------|--------|
+| `reveal://` | Self-inspection (dogfooding) | Reveal codebase validation | ✅ Production-ready |
+| `claude://` | AI conversation analysis | Claude Code session logs | ✅ Production-ready |
+
+**Stability commitment:**
+- ✅ Production-ready code (tested, documented, works for intended use case)
+- ✅ Stable within their domain (reveal devs rely on `reveal://`, Claude users rely on `claude://`)
+- ⚠️ No cross-project API guarantees (these are examples - adapt patterns to your needs)
+- 💡 Study these to build adapters for YOUR project (k8s://, logs://, config://, etc.)
+
+**Why this category?**
+These adapters are **teaching implementations** that solve real problems for specific projects. They're production-quality code you can study and adapt, but they exist primarily to show extensibility patterns rather than serve universal needs.
 
 ---
 

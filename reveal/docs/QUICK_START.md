@@ -117,6 +117,12 @@ app.py:15-27 | load_config
 
 **Token cost:** ~50 tokens (vs 7,500 for full file)
 
+**Same pattern for markdown:**
+```bash
+reveal README.md "Installation"      # Extract section by heading
+reveal README.md --section "Usage"   # Same thing, explicit flag
+```
+
 ---
 
 ## Filtering: See Less

@@ -257,6 +257,8 @@ def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
                         help='Output related docs as flat path list (grep-friendly)')
     parser.add_argument('--related-limit', type=int, default=100,
                         help='Max files to traverse for --related (default: 100)')
+    parser.add_argument('--section', type=str, metavar='NAME',
+                        help='Extract section by heading name (e.g., --section "Installation")')
 
 
 def _add_html_options(parser: argparse.ArgumentParser) -> None:

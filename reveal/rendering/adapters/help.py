@@ -74,8 +74,9 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
     static = data.get('static_guides', [])
 
     # Stability classification for adapters
-    stable_adapters = {'help', 'env', 'ast', 'python', 'reveal'}
+    stable_adapters = {'help', 'env', 'ast', 'python'}
     beta_adapters = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git'}
+    project_adapters = {'reveal', 'claude'}
 
     def get_stability_badge(scheme: str) -> str:
         """Get stability badge for an adapter."""
@@ -83,6 +84,8 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
             return "🟢"
         elif scheme in beta_adapters:
             return "🟡"
+        elif scheme in project_adapters:
+            return "🎓"
         else:
             return "🔴"
 
@@ -94,7 +97,7 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
         print("### URI Adapters ({} registered)".format(len(adapters)))
         print("Source: Live adapter registry")
         print("Updates: Automatic when new adapters added")
-        print("Legend: 🟢 Stable | 🟡 Beta | 🔴 Experimental")
+        print("Legend: 🟢 Stable | 🟡 Beta | 🎓 Project Adapters | 🔴 Experimental")
         print()
         for adapter in adapters:
             scheme = adapter['scheme']
@@ -230,6 +233,11 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
     print("**Best practices:**")
     print("  reveal help://anti-patterns # Common mistakes to avoid")
     print("  reveal help://tricks        # Power user workflows")
+    print()
+    print("**Build your own adapters:**")
+    print("  🎓 Project Adapters = Production-ready examples for specific projects")
+    print("  reveal:// and claude:// show how to adapt reveal to YOUR project")
+    print("  -> reveal help://adapter-authoring  # Learn how to build adapters")
 
 
 def _get_guide_description(topic: str) -> str:

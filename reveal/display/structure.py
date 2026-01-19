@@ -259,6 +259,77 @@ def _render_typed_structure_output(
     print_breadcrumbs("typed", file_path, file_type=file_type, config=config)
 
 
+def _build_extractable_meta(structure: Dict[str, List[Dict[str, Any]]], file_path: str) -> Dict[str, Any]:
+    """Build meta.extractable info for agent discoverability.
+
+    Maps structure categories to extractable element types and names.
+    Agents can use this to know what they can extract from the file.
+
+    Args:
+        structure: The file structure dict with categories like 'functions', 'classes', etc.
+        file_path: Path to the file (for generating example commands)
+
+    Returns:
+        Dict with 'types' (available element types) and 'elements' (extractable by type)
+    """
+    # Map structure categories to extraction element types
+    category_to_type = {
+        'functions': 'function',
+        'classes': 'class',
+        'structs': 'struct',
+        'headings': 'section',
+        'sections': 'section',
+        'servers': 'server',
+        'locations': 'location',
+        'upstreams': 'upstream',
+        'keys': 'key',
+        'tables': 'section',  # TOML tables
+    }
+
+    extractable = {}
+    types_available = []
+
+    for category, items in structure.items():
+        if not items or not isinstance(items, list):
+            continue
+
+        element_type = category_to_type.get(category)
+        if not element_type:
+            continue
+
+        # Get element names from the items
+        names = []
+        for item in items:
+            # Try common name fields
+            name = item.get('name') or item.get('text') or item.get('title')
+            if name:
+                names.append(name)
+
+        if names:
+            if element_type not in types_available:
+                types_available.append(element_type)
+            extractable[element_type] = names
+
+    # Build example commands for agents
+    examples = []
+    if extractable:
+        # Pick first available element for example
+        for etype, names in extractable.items():
+            if names:
+                name = names[0]
+                # Quote names with spaces or special characters
+                if ' ' in name or '"' in name or "'" in name:
+                    name = f'"{name}"'
+                examples.append(f"reveal {file_path} {name}")
+                break
+
+    return {
+        'types': types_available,
+        'elements': extractable,
+        'examples': examples,
+    }
+
+
 def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]]) -> None:
     """Render structure as JSON output (standard format)."""
     is_fallback = getattr(analyzer, 'is_fallback', False)
@@ -286,6 +357,9 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
             enriched_items.append(enriched_item)
         enriched_structure[category] = enriched_items
 
+    # Build extractable meta for agent discoverability
+    extractable_meta = _build_extractable_meta(structure, file_path)
+
     result = {
         'file': file_path,
         'type': analyzer.__class__.__name__.replace('Analyzer', '').lower(),
@@ -294,6 +368,9 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
             'language': fallback_lang if is_fallback else None,
             'explicit': not is_fallback,
             'name': analyzer.__class__.__name__
+        },
+        'meta': {
+            'extractable': extractable_meta,
         },
         'structure': enriched_structure
     }

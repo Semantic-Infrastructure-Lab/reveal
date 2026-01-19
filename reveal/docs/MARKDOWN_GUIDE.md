@@ -34,7 +34,7 @@ reveal README.md --links --format json
 |---------|---------|----------|
 | Document Structure | `reveal doc.md` | See all headings |
 | Hierarchical Outline | `reveal doc.md --outline` | **Tree view of document** |
-| Section Extraction | `reveal doc.md "Section Name"` | Extract specific content |
+| Section Extraction | `reveal doc.md "Section"` or `--section` | Extract specific content |
 | Link Extraction | `reveal doc.md --links` | Find all hyperlinks |
 | Link Filtering | `reveal doc.md --links --link-type external` | External links only |
 | Domain Filtering | `reveal doc.md --links --domain github.com` | Links to specific domain |
@@ -125,7 +125,11 @@ Project Title (README.md:1)
 Extract specific sections by heading name:
 
 ```bash
+# Positional argument (same pattern as extracting code elements)
 $ reveal README.md "Installation"
+
+# Explicit flag (clearer for scripts/automation)
+$ reveal README.md --section "Installation"
 
 # Installation
 

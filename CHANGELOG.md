@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.39.0] - 2026-01-19
 
 ### Added
 - **QUICK_START.md** - New 5-minute quick start guide for new users
@@ -91,6 +91,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Suggests: use specific exceptions, add logging, add comments, or re-raise
   - Session: aqua-sunset-0118
 
+- **`--section` flag for markdown** - Extract sections by heading name with explicit flag
+  - Alternative to positional syntax: `reveal doc.md --section "Installation"` same as `reveal doc.md "Installation"`
+  - Clearer for scripts and automation
+  - Error message guides users when used on non-markdown files
+  - Session: legendary-sea-0119
+
+- **`meta.extractable` in JSON output** - Agent discoverability for element extraction
+  - JSON output now includes `meta.extractable` with available element types and names
+  - Enables agents to discover what can be extracted without trial-and-error
+  - Fields: `types` (available element types), `elements` (names by type), `examples` (ready-to-use commands)
+  - Maps structure categories to extraction types: functions→function, classes→class, headings→section, etc.
+  - Example output:
+    ```json
+    "meta": {
+      "extractable": {
+        "types": ["function", "class"],
+        "elements": {"function": ["foo", "bar"], "class": ["MyClass"]},
+        "examples": ["reveal file.py foo"]
+      }
+    }
+    ```
+  - Design principle: Every JSON response should tell agents what they can do next
+  - Session: heroic-giant-0119
+
 ### Changed
 - **Claude adapter refactoring** - Reduced complexity of `_calculate_tool_success_rate`
   - Extracted 4 helper methods for single responsibility
@@ -107,11 +131,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Session: blazing-hail-0119
 
 - **README accuracy** - Updated language and test counts
-  - Language count: 41 → 42 built-in analyzers (CSV, INI, XML, PowerShell added)
+  - Language count: Corrected to 41 built-in analyzers (CSV, INI, XML, PowerShell added in v0.39.0)
   - Test count: 2,230+ → 2,456 tests (measured)
   - Coverage: 74% → 76% (measured)
   - All counts verifiable via `--list-supported` and test suite
-  - Session: blazing-hail-0119
+  - Session: blazing-hail-0119, mumuxi-0119
+
+- **Adapter categorization** - Reclassified `reveal://` and `claude://` as "Project Adapters"
+  - New category: 🎓 Project Adapters (production-quality extensibility examples)
+  - `reveal://` moved from 🟢 Stable to 🎓 Project Adapters
+  - `claude://` moved from 🔴 Experimental to 🎓 Project Adapters
+  - Rationale: Both are production-ready for their domains (reveal devs, Claude users) but exist primarily to demonstrate how to build project-specific adapters
+  - Impact: Clarifies that reveal is an extensibility framework, not just a file analyzer
+  - Updated: STABILITY.md, help system, README with categorized adapter listing
+  - No functional changes - only improved messaging and positioning
+  - Session: mumuxi-0119
 
 ### Fixed
 - **B006 comment detection** - Fixed false positives for comments between except and pass lines

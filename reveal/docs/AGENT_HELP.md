@@ -285,12 +285,23 @@ reveal app.py process_request
 # Extract class
 reveal app.py DatabaseHandler
 
+# Extract markdown section
+reveal README.md "Installation"
+reveal README.md --section "Installation"  # Explicit flag
+
 # Extract specific lines
 reveal app.py --range 42-80
 
 # Get first/last functions (bugs cluster at end!)
 reveal app.py --head 5
 reveal app.py --tail 5
+```
+
+**Discover what's extractable (v0.39.0+):**
+```bash
+# JSON output includes meta.extractable
+reveal app.py --format=json | jq '.meta.extractable'
+# Returns: {"types": ["function", "class"], "elements": {...}, "examples": [...]}
 ```
 
 **Why tail is useful:** Bugs and technical debt often cluster at the end of files. `--tail 5` shows the last 5 functions added.
@@ -507,6 +518,43 @@ reveal app.py --format=json | jq '.structure.functions[] | select(.line_count > 
 
 # List all classes
 reveal app.py --format=json | jq '.structure.classes[].name'
+```
+
+**JSON schema for agents (v0.39.0+):**
+
+JSON output includes `meta.extractable` to help agents discover what can be extracted:
+
+```bash
+reveal file.py --format=json | jq '.meta.extractable'
+```
+
+```json
+{
+  "types": ["function", "class"],
+  "elements": {
+    "function": ["main", "process", "helper"],
+    "class": ["Config", "Handler"]
+  },
+  "examples": ["reveal file.py main"]
+}
+```
+
+**Use this to:**
+- Know what element types are available (function, class, section, etc.)
+- Get list of extractable element names
+- Get ready-to-use example commands
+
+**Agent workflow:**
+```bash
+# 1. Get structure with extractable info
+result=$(reveal app.py --format=json)
+
+# 2. Check what's extractable
+echo "$result" | jq '.meta.extractable.types'
+# ["function", "class"]
+
+# 3. Extract specific element
+reveal app.py main
 ```
 
 ---
@@ -816,14 +864,15 @@ rg -l "authenticate" src/ | reveal --stdin --outline
 
 1. **Structure before content** - Always `reveal` before `Read`
 2. **Progressive disclosure** - Start broad, drill down as needed
-3. **Use AST queries** - Don't grep when you can query
-4. **Quality checks built-in** - Use `--check` proactively
-5. **Pipeline friendly** - Combine with git, find, grep via `--stdin`
+3. **Self-describing output** - JSON includes `meta.extractable` telling you what's available
+4. **Use AST queries** - Don't grep when you can query
+5. **Quality checks built-in** - Use `--check` proactively
+6. **Pipeline friendly** - Combine with git, find, grep via `--stdin`
 
 ---
 
-**Version:** 0.38.0
-**Last updated:** 2026-01-18
+**Version:** 0.39.0
+**Last updated:** 2026-01-19
 **Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
 **PyPI:** https://pypi.org/project/reveal-cli/
 

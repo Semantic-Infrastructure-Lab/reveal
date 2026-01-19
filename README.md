@@ -16,7 +16,7 @@ reveal app.py                  # file → structure
 reveal app.py load_config      # element → code
 ```
 
-Zero config. 42 languages built-in. 165+ via tree-sitter.
+Zero config. 41 languages built-in. 165+ via tree-sitter.
 
 **Token efficiency:** Structure view = 50 tokens vs 7,500 for full file. Measured 10-150x reduction in production use.
 
@@ -117,7 +117,7 @@ reveal --agent-help-full     # Complete reference (~1680 lines)
 
 **Quick Install:**
 ```bash
-pip install reveal-cli              # Full-featured by default (42 languages, 14 adapters)
+pip install reveal-cli              # Full-featured by default (41 languages, 14 adapters)
 pip install reveal-cli[database]    # Add MySQL database inspection
 ```
 See [INSTALL.md](INSTALL.md) for details on what's included.
@@ -357,24 +357,38 @@ reveal diff://env://:env://production        # Environment drift detection
 reveal help://diff                           # Complete diff guide
 ```
 
-**Extensibility Example:**
-The `reveal://` adapter demonstrates that reveal can inspect **any resource**, not just files. Use it as a reference for creating custom adapters for your own projects (APIs, databases, containers, etc.). See `reveal help://reveal` for the complete guide.
+**14 Built-in Adapters (Organized by Purpose):**
 
-**14 Built-in Adapters:**
-- `help://` - Self-documenting help system (discover all adapters)
-- `env://` - Environment variables (cross-language)
-- `ast://` - Static code analysis & queries (cross-language)
-- `json://` - JSON navigation with path access & schema (v0.20.0+)
-- `python://` - Python runtime inspection & diagnostics (v0.17.0+)
-- `reveal://` - Self-inspection & validation (v0.22.0+)
-- `stats://` - Code quality metrics & hotspot detection
-- `mysql://` - MySQL database inspection with DBA tuning ratios (requires `[database]` extra)
-- `sqlite://` - SQLite database exploration (zero dependencies, v0.35.0+) 🆕
-- `imports://` - Import graph analysis with unused/circular detection (v0.28.0+)
-- `diff://` - Semantic structural diff (files, directories, git refs) (v0.30.0+) 🆕
-- `markdown://` - Frontmatter queries for knowledge graphs (v0.32.0+)
-- `git://` - Git repository inspection with time-travel (v0.38.0+) 🆕
-- `claude://` - Claude Code conversation analysis (Phase 1 + 2, v0.38.0+) 🆕
+🟢 **Universal Tools** (core functionality, everyone benefits):
+- `help://` - Self-documenting help system (discover all features)
+- `env://` - Environment variable inspection (cross-platform debugging)
+- `ast://` - Code structure queries (find functions by complexity, size, type)
+- `python://` - Python runtime diagnostics (venv, packages, conflicts)
+
+🟡 **Development Workflows** (code review, refactoring, quality analysis):
+- `diff://` - Semantic structural comparison (files, directories, git refs)
+- `stats://` - Codebase metrics and hotspot detection (technical debt)
+- `imports://` - Import graph analysis (unused, circular, layer violations)
+- `git://` - Repository archaeology (blame, history, time-travel)
+
+🟡 **Domain Tools** (technology-specific inspection):
+- `mysql://` - MySQL database inspection (requires `[database]` extra)
+- `sqlite://` - SQLite database exploration (zero dependencies)
+- `json://` - JSON navigation with path access and schema
+- `markdown://` - Frontmatter queries for knowledge graphs
+
+🎓 **Project Adapters** (extensibility examples - adapt to YOUR project):
+- `reveal://` - **Dogfooding example** - reveal inspects itself
+- `claude://` - **AI tool integration** - inspect Claude Code session logs
+
+**Build Your Own Adapters:**
+Reveal adapts to YOUR project's unique resources. Study `reveal://` (self-inspection) and `claude://` (session analysis) to learn patterns, then build adapters for:
+- `k8s://` - Inspect your Kubernetes clusters
+- `terraform://` - Validate your infrastructure
+- `logs://` - Navigate your application logs
+- `YOUR-PROJECT://` - Inspect YOUR unique resources
+
+**Learn more:** `reveal help://adapter-authoring` - Complete guide with examples
 
 **Self-documenting:** Every adapter exposes help via `reveal help://<scheme>`
 
@@ -393,7 +407,7 @@ reveal app.py --meta             # metadata only
 
 ### Supported Languages
 
-**Built-in (42 analyzers):** Python, Rust, Go, **C, C++**, **C#, Scala**, Java, PHP, **Ruby, Lua**, JavaScript, TypeScript, **Kotlin, Swift, Dart**, **HCL/Terraform, GraphQL, Protobuf, Zig**, GDScript, Bash, **SQL**, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, **CSV, INI, XML, PowerShell**, Nginx, Dockerfile, **Office formats** (Excel, Word, PowerPoint, Calc, Writer, Impress)
+**Built-in (41 analyzers):** Python, Rust, Go, **C, C++**, **C#, Scala**, Java, PHP, **Ruby, Lua**, JavaScript, TypeScript, **Kotlin, Swift, Dart**, **HCL/Terraform, GraphQL, Protobuf, Zig**, GDScript, Bash, **SQL**, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, **CSV, INI, XML, PowerShell**, Dockerfile, **Office formats** (Excel, Word, PowerPoint, Calc, Writer, Impress)
 
 **Via tree-sitter (165+):** Perl, R, Haskell, Elixir, Zig, and more. Add new languages in 3 lines of code.
 

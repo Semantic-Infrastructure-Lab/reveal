@@ -404,7 +404,16 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
                                          exclude_patterns=args.exclude)
             print(output)
     elif path.is_file():
-        handle_file(str(path), args.element, args.meta, args.format, args)
+        # --section is an alias for element extraction on markdown files
+        element = args.element
+        if not element and getattr(args, 'section', None):
+            if path.suffix.lower() in ('.md', '.markdown'):
+                element = args.section
+            else:
+                print(f"Error: --section only works with markdown files (.md, .markdown)", file=sys.stderr)
+                print(f"For other files, use: reveal {path_str} \"element_name\"", file=sys.stderr)
+                sys.exit(1)
+        handle_file(str(path), element, args.meta, args.format, args)
     else:
         print(f"Error: {path_str} is neither file nor directory", file=sys.stderr)
         sys.exit(1)

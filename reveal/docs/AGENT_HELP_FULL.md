@@ -1,5 +1,5 @@
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.37.0
+**Version:** 0.39.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -661,27 +661,58 @@ reveal file.py process_request --copy
 
 ### JSON Format Details
 
-**Standard JSON output:**
+**Standard JSON output (v0.39.0+):**
 ```json
 {
-  "file_path": "src/main.py",
-  "file_size": 12456,
-  "line_count": 342,
-  "language": "Python",
+  "file": "src/main.py",
+  "type": "python",
+  "analyzer": {
+    "type": "explicit",
+    "name": "PythonAnalyzer"
+  },
+  "meta": {
+    "extractable": {
+      "types": ["function", "class"],
+      "elements": {
+        "function": ["load_config", "process_data", "main"],
+        "class": ["Config", "DataProcessor"]
+      },
+      "examples": ["reveal src/main.py load_config"]
+    }
+  },
   "structure": {
-    "imports": ["os", "sys", "pathlib.Path"],
+    "imports": [{"line": 1, "name": "os"}, {"line": 2, "name": "sys"}],
     "functions": [
       {
         "name": "load_config",
-        "line_number": 45,
+        "line": 45,
+        "line_end": 56,
         "line_count": 12,
         "depth": 1,
-        "type": "function"
+        "complexity": 3
       }
     ],
     "classes": []
   }
 }
+```
+
+**Key fields for agents:**
+- `meta.extractable.types` - What element types can be extracted (function, class, section, etc.)
+- `meta.extractable.elements` - Map of type → list of extractable names
+- `meta.extractable.examples` - Ready-to-use extraction commands
+
+**Using meta.extractable:**
+```bash
+# Discover what's extractable
+reveal app.py --format=json | jq '.meta.extractable'
+
+# Get list of functions
+reveal app.py --format=json | jq '.meta.extractable.elements.function'
+
+# Get example command
+reveal app.py --format=json | jq -r '.meta.extractable.examples[0]'
+```
 ```
 
 **Typed JSON output** (--format=typed):
@@ -1670,8 +1701,8 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 
 ---
 
-**Version:** 0.37.0
-**Last updated:** 2026-01-17
+**Version:** 0.39.0
+**Last updated:** 2026-01-19
 **Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
 **PyPI:** https://pypi.org/project/reveal-cli/
 
