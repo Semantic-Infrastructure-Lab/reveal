@@ -55,6 +55,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Tests: 20 tests, 92% coverage
   - Fills major gap: XML is enterprise-standard (Maven, Gradle, Spring, Android)
 
+- **PowerShell analyzer** - PowerShell script analysis (.ps1, .psm1, .psd1)
+  - Function extraction (function, filter, workflow statements)
+  - Parameter block detection (CmdletBinding, advanced functions)
+  - Cross-platform PowerShell Core support
+  - Head/tail/range filtering for large scripts
+  - Examples:
+    - `reveal deploy.ps1` - Show Azure deployment script structure
+    - `reveal module.psm1` - Show PowerShell module functions
+    - `reveal script.ps1 --head 5` - First 5 functions
+  - Tests: 14 tests, 93% coverage
+  - Fills major gap: Modern Windows automation (Azure DevOps, cloud infrastructure)
+
 - **B006: Silent broad exception handler detector** - Detects `except Exception: pass` with no comment/logging
   - Catches broad exception handlers that silently swallow errors
   - Prevents bugs from being hidden (like the tree-sitter parsing failure in v0.38.0)
