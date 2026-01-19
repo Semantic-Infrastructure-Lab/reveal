@@ -110,7 +110,7 @@ reveal --agent-help-full     # Complete reference (~1680 lines)
 
 **Quick Install:**
 ```bash
-pip install reveal-cli              # Full-featured by default (38 languages, 13 adapters)
+pip install reveal-cli              # Full-featured by default (38 languages, 14 adapters)
 pip install reveal-cli[database]    # Add MySQL database inspection
 ```
 See [INSTALL.md](INSTALL.md) for details on what's included.
@@ -353,7 +353,7 @@ reveal help://diff                           # Complete diff guide
 **Extensibility Example:**
 The `reveal://` adapter demonstrates that reveal can inspect **any resource**, not just files. Use it as a reference for creating custom adapters for your own projects (APIs, databases, containers, etc.). See `reveal help://reveal` for the complete guide.
 
-**13 Built-in Adapters:**
+**15 Built-in Adapters:**
 - `help://` - Self-documenting help system (discover all adapters)
 - `env://` - Environment variables (cross-language)
 - `ast://` - Static code analysis & queries (cross-language)
@@ -366,6 +366,8 @@ The `reveal://` adapter demonstrates that reveal can inspect **any resource**, n
 - `imports://` - Import graph analysis with unused/circular detection (v0.28.0+)
 - `diff://` - Semantic structural diff (files, directories, git refs) (v0.30.0+) 🆕
 - `markdown://` - Frontmatter queries for knowledge graphs (v0.32.0+)
+- `git://` - Git repository inspection with time-travel (v0.38.0+) 🆕
+- `claude://` - Claude Code conversation analysis (Phase 1 + 2, v0.38.0+) 🆕
 
 **Self-documenting:** Every adapter exposes help via `reveal help://<scheme>`
 
@@ -453,7 +455,7 @@ reveal/
 ├── rendering/    # Adapter-specific renderers
 ├── rules/        # 56 quality rules (B, C, D, E, F, I, L, M, N, R, S, U, V)
 ├── analyzers/    # 53 file types (Python, Rust, HTML, Markdown, etc.)
-├── adapters/     # URI support (13 adapters: help://, env://, ast://, stats://, etc.)
+├── adapters/     # URI support (14 adapters: help://, env://, ast://, stats://, etc.)
 ├── schemas/      # Type definitions (renamed from types/ in v0.23.0)
 └── treesitter.py # Universal language support (50+ langs)
 ```
@@ -487,7 +489,7 @@ reveal/
 - **Tree-sitter languages:** 165+ languages (basic structure only)
 - **Undocumented features:** Use at your own risk
 
-**For AI agents:** Text output (`filename:line` format) and JSON output (`--format json`) are both production-ready. All 13 adapters follow Output Contract v1.0.
+**For AI agents:** Text output (`filename:line` format) and JSON output (`--format json`) are both production-ready. All 14 adapters follow Output Contract v1.0.
 
 **For CI/CD:** Pin reveal version (`pip install reveal-cli==0.37.0`) and upgrade explicitly after testing.
 

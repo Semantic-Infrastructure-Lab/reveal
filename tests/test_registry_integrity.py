@@ -78,7 +78,7 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
         # This is the expected count based on current adapters
         # Update this when you add new adapters
         expected_adapters = {
-            'ast', 'diff', 'env', 'git', 'help', 'imports', 'json',
+            'ast', 'claude', 'diff', 'env', 'git', 'help', 'imports', 'json',
             'markdown', 'mysql', 'python', 'reveal', 'sqlite', 'stats'
         }
 

@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-01-18
+
 ### Added
+- **claude:// adapter** - Claude Code conversation analysis (Tier 2 priority, Phase 1 + Phase 2)
+  - Session overview: message counts, tool usage, duration (`reveal claude://session/name`)
+  - Progressive disclosure: overview → analytics → filtered → specific messages
+  - Tool usage analytics and filtering (`reveal claude://session/name/tools`, `reveal claude://session/name?tools=Bash`)
+  - Tool success rate calculation: tracks success/failure per tool type (`reveal claude://session/name?summary`)
+  - Timeline view: chronological event flow with 5 event types (user_message, assistant_message, tool_call, tool_result, thinking) (`reveal claude://session/name?timeline`)
+  - Error detection with context (`reveal claude://session/name?errors`)
+  - Thinking block extraction and token estimates (`reveal claude://session/name/thinking`)
+  - File operation tracking (Read, Write, Edit operations)
+  - Message filtering by role (`reveal claude://session/name/user`, `reveal claude://session/name/assistant`)
+  - Output Contract v1.0 compliant (10 output types: added claude_analytics, claude_timeline)
+  - 267 lines implementation (+67 from Phase 1), 795 lines tests (+345 from Phase 1), 50 tests passing (+17), 100% coverage
+  - Session discovery from `~/.claude/projects/` directories
+  - Help documentation with workflows and examples (`reveal help://claude`)
+  - Sessions: infernal-earth-0118 (design), blazing-cyclone-0118 (integration), fluorescent-prism-0118 (doc updates), infernal-grove-0118 (Phase 1 implementation), drizzling-lightning-0118 (Phase 2 implementation)
+
 - **git:// adapter** - Complete git repository inspection (Tier 1 priority)
   - Repository overview: branches, tags, recent commits (`reveal git://.`)
   - Ref exploration: commit history for branches/tags (`reveal git://.@main`)

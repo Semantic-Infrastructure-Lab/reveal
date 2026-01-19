@@ -12,6 +12,7 @@ from .base import (
 
 from .env import EnvAdapter
 from .ast import AstAdapter
+from .claude import ClaudeAdapter
 from .diff import DiffAdapter
 from .help import HelpAdapter
 from .imports import ImportsAdapter
@@ -43,6 +44,7 @@ __all__ = [
     # Adapter classes
     'EnvAdapter',
     'AstAdapter',
+    'ClaudeAdapter',
     'DiffAdapter',
     'HelpAdapter',
     'ImportsAdapter',
