@@ -74,7 +74,17 @@ class M104(BaseRule):
             return []
 
         # Skip test files (they often have large test data)
-        if '/test' in file_path or file_path.endswith('_test.py'):
+        # Check for test directories (/tests/, /test/) or test file patterns
+        path_lower = file_path.lower()
+        filename = Path(file_path).name.lower()
+        is_test_file = (
+            '/tests/' in path_lower or
+            '/test/' in path_lower or
+            path_lower.endswith('_test.py') or
+            path_lower.endswith('/test.py') or
+            filename.startswith('test_')
+        )
+        if is_test_file:
             return []
 
         # Get thresholds from config
