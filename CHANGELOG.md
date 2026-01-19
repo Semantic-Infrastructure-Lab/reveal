@@ -14,11 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **B006: Silent broad exception handler detector** - Detects `except Exception: pass` with no comment/logging
+  - Catches broad exception handlers that silently swallow errors
+  - Prevents bugs from being hidden (like the tree-sitter parsing failure in v0.38.0)
+  - Allows intentional cases with explanatory comments
+  - Medium severity (can hide serious bugs)
+  - Examples:
+    - `reveal src/ --check --select B006` - Find silent exception handlers
+    - Suggests: use specific exceptions, add logging, add comments, or re-raise
+
 ### Removed
 - **M104: Hardcoded configuration detection** - Removed due to high false positive rate
   - Rationale: Rule could not reliably distinguish between code structure (workflow definitions, output contracts, package metadata) and actual configuration
   - Impact: Eliminates 300+ false positives across typical Python codebases
-  - Rule count: 59 → 58 built-in rules
+  - Rule count: 59 → 58, then 58 → 59 with B006 addition (net: 59 total rules)
   - Dogfooding revealed that even with context awareness improvements, semantic analysis was insufficient
   - Conclusion: Better to have fewer, more accurate rules than noisy ones that obscure real issues
 
