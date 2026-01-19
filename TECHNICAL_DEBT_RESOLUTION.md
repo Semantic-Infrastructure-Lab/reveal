@@ -431,41 +431,6 @@ $ reveal reveal/treesitter.py --check --select V017
 
 ---
 
-### M104: Hardcoded Configuration Detection ✅
-
-**Purpose**: Detect large lists/dicts that should be externalized to config files (YAML/JSON/TOML).
-
-**File Created**:
-- `reveal/rules/maintainability/M104.py` (191 lines)
-
-**Detection**:
-- Lists with >10 string literals (likely config)
-- Dictionaries with >5 key-value pairs (likely config)
-- Configuration assigned to UPPERCASE constant names
-
-**Thresholds** (configurable via .reveal.toml):
-- `list_size_threshold`: 10 (default)
-- `dict_size_threshold`: 5 (default)
-
-**Severity**: LOW
-**Category**: Maintainability (GENERIC - applies to any Python codebase)
-
-**Example**:
-```bash
-$ reveal app.py --check --select M104
-⚠️ M104: Hardcoded configuration detected (line 42)
-   DEFAULT_COUNTRIES = ['US', 'UK', 'CA', ...15 more]
-   Consider: Move to config.yaml
-```
-
-**Impact**:
-- Improves code maintainability
-- Enables non-developers to modify configuration
-- Follows 12-factor app principles
-- Universal rule - provides value beyond reveal itself
-
----
-
 ## Deferred Work
 
 ### Phase 2.1: Full Module Reorganization 🔄
@@ -542,15 +507,13 @@ $ reveal app.py --check --select M104
 **Decision Matrix**:
 - **V016** (Adapter Help) → V-rule (reveal-specific concept)
 - **V017** (Tree-sitter Coverage) → V-rule (reveal-specific implementation)
-- **M104** (Hardcoded Config) → M-rule (universal maintainability pattern)
 
 **Rationale**:
 - V-rules validate reveal's own architecture and conventions
 - Generic rules (M-series) apply to any codebase
 - Clear separation improves rule discoverability
-- M104 provides value beyond reveal itself
 
-**Outcome**: Clear categorization, M104 is immediately useful for other projects
+**Outcome**: Clear categorization, specific rules for reveal vs universal patterns
 
 ---
 

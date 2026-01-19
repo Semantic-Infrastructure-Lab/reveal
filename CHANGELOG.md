@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **M104: Hardcoded configuration detection** - Removed due to high false positive rate
+  - Rationale: Rule could not reliably distinguish between code structure (workflow definitions, output contracts, package metadata) and actual configuration
+  - Impact: Eliminates 300+ false positives across typical Python codebases
+  - Rule count: 59 → 58 built-in rules
+  - Dogfooding revealed that even with context awareness improvements, semantic analysis was insufficient
+  - Conclusion: Better to have fewer, more accurate rules than noisy ones that obscure real issues
+
 ## [0.38.0] - 2026-01-18
 
 ### Added
@@ -295,14 +303,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `reveal . --exclude "*.log"` - Custom exclusion patterns
     - `reveal . --no-gitignore` - Disable gitignore filtering
 
-- **Code quality validation rules** - Three new rules to catch issues proactively
+- **Code quality validation rules** - Two new rules to catch issues proactively
   - **V016: Adapter help completeness** - Ensures all adapters provide `get_help()` documentation
   - **V017: Tree-sitter node type coverage** - Verifies TreeSitterAnalyzer has node types for all languages
-  - **M104: Hardcoded configuration detection** - Detects large lists/dicts that should be externalized
   - Examples:
     - `reveal reveal/adapters/ --check --select V016` - Check adapter documentation
     - `reveal reveal/treesitter.py --check --select V017` - Verify node type coverage
-    - `reveal app.py --check --select M104` - Find hardcoded config
 
 ### Changed
 - **Centralized tree-sitter warning suppression** - DRY improvement
@@ -323,9 +329,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Root cause: `_count_entries()` signature changed to require PathFilter but tests not updated
   - Fix: Added PathFilter instantiation in all test methods
   - Impact: All tree view tests now passing
-- **Documentation drift in README** - Rules count updated from 47 to 50
+- **Documentation drift in README** - Rules count updated from 47 to 49
   - Detected by V015 self-validation rule (working as designed)
-  - Added M104 (maintainability), V016-V017 (validation) to documentation
+  - Added V016-V017 (validation) to documentation
 
 ### Technical Notes
 - All changes maintain backward compatibility

@@ -55,7 +55,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
   - `json://` - JSON navigation
   - `markdown://` - Frontmatter queries
   - `git://` - Git repository inspection
-- **Quality rules (extended):** D001-D002 (duplicates), I001-I004 (imports), L001-L005 (links), M101-M104 (maintainability), N001-N003 (nginx), R913 (refactoring), U501-U502 (URLs), F001-F005 (frontmatter), V001-V022 (validation)
+- **Quality rules (extended):** D001-D002 (duplicates), I001-I004 (imports), L001-L005 (links), M101-M103 (maintainability), N001-N003 (nginx), R913 (refactoring), U501-U502 (URLs), F001-F005 (frontmatter), V001-V022 (validation)
 - **Languages (full support):** C#, Scala, PHP, Ruby, Lua, Kotlin, Swift, Dart, HCL/Terraform, GraphQL, Protobuf, Zig, GDScript, Bash, SQL
 - **Features:**
   - Schema validation (`--validate-schema`)
