@@ -44,6 +44,19 @@ def handle_explain_file(path: str, verbose: bool = False):
     sys.exit(0)
 
 
+def handle_capabilities(path: str):
+    """Handle --capabilities flag.
+
+    Shows file capabilities as JSON for agent consumption.
+    Pre-analysis introspection: what can be extracted, what rules apply.
+    """
+    import json
+    from .introspection import get_capabilities
+    result = get_capabilities(path)
+    print(json.dumps(result, indent=2))
+    sys.exit(0)
+
+
 def handle_show_ast(path: str, max_depth: int = 10):
     """Handle --show-ast flag.
 

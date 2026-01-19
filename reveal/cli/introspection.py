@@ -296,3 +296,207 @@ def get_language_info_detailed(language: str) -> str:
     lines.append(f"   reveal file{ext} --explain    # Show how it's analyzed")
 
     return "\n".join(lines)
+
+
+def get_capabilities(path: str) -> Dict[str, Any]:
+    """Get file capabilities as JSON for agent consumption.
+
+    Pre-analysis introspection: tells agents what can be done with a file
+    BEFORE actually analyzing it.
+
+    Args:
+        path: File path to check
+
+    Returns:
+        Dict with capabilities:
+        {
+            "file": "path/to/file.py",
+            "analyzer": {"name": "python", "type": "explicit"},
+            "extractable": {
+                "types": ["function", "class", "method"],
+                "description": "Python code elements"
+            },
+            "quality": {
+                "available": true,
+                "rule_categories": ["B", "C", "I", "M", "R", "S"]
+            },
+            "flags": {
+                "supported": ["--check", "--outline", "--head", "--tail"],
+                "examples": ["reveal file.py main", "reveal file.py --check"]
+            }
+        }
+    """
+    file_path = Path(path)
+    result: Dict[str, Any] = {
+        "file": str(path),
+        "exists": file_path.exists(),
+    }
+
+    if not file_path.exists():
+        result["error"] = f"File not found: {path}"
+        return result
+
+    # Get analyzer info
+    analyzer_cls = get_analyzer(path, allow_fallback=True)
+
+    if not analyzer_cls:
+        result["analyzer"] = None
+        result["error"] = f"No analyzer available for: {path}"
+        return result
+
+    # Analyzer info
+    analyzer_name = getattr(analyzer_cls, 'type_name', analyzer_cls.__name__.replace('Analyzer', '').lower())
+    is_fallback = getattr(analyzer_cls, 'is_fallback', False)
+
+    result["analyzer"] = {
+        "name": analyzer_name,
+        "class": analyzer_cls.__name__,
+        "type": "fallback" if is_fallback else "explicit",
+    }
+
+    if is_fallback:
+        result["analyzer"]["fallback_language"] = getattr(analyzer_cls, 'fallback_language', 'unknown')
+        result["analyzer"]["fallback_quality"] = getattr(analyzer_cls, 'fallback_quality', 'unknown')
+
+    # Determine extractable element types based on file extension
+    ext = file_path.suffix.lower()
+    extractable_types = _get_extractable_types(ext, is_fallback)
+
+    result["extractable"] = {
+        "types": extractable_types,
+        "syntax": "reveal <file> <element_name>",
+        "examples": _get_extraction_examples(path, extractable_types),
+    }
+
+    # Quality rules available
+    rule_categories = _get_applicable_rule_categories(ext)
+    result["quality"] = {
+        "available": len(rule_categories) > 0,
+        "rule_categories": rule_categories,
+        "usage": "reveal <file> --check" if rule_categories else None,
+    }
+
+    # Supported flags
+    flags = ["--outline", "--head", "--tail", "--format json"]
+    if rule_categories:
+        flags.append("--check")
+    if ext in ['.md', '.markdown']:
+        flags.append("--links")
+        flags.append("--section")
+
+    result["flags"] = {
+        "supported": flags,
+        "examples": [
+            f"reveal {path}",
+            f"reveal {path} --format json",
+        ]
+    }
+
+    if extractable_types:
+        result["flags"]["examples"].append(
+            f"reveal {path} <{extractable_types[0]}_name>"
+        )
+
+    return result
+
+
+def _get_extractable_types(ext: str, is_fallback: bool) -> list:
+    """Determine extractable element types based on file extension."""
+    # Code files (tree-sitter based)
+    code_extensions = {
+        '.py': ['function', 'class', 'method'],
+        '.pyi': ['function', 'class', 'method'],
+        '.js': ['function', 'class', 'method'],
+        '.jsx': ['function', 'class', 'method'],
+        '.ts': ['function', 'class', 'method', 'interface', 'type'],
+        '.tsx': ['function', 'class', 'method', 'interface', 'type'],
+        '.java': ['class', 'method', 'interface'],
+        '.go': ['function', 'struct', 'interface', 'method'],
+        '.rs': ['function', 'struct', 'impl', 'trait'],
+        '.rb': ['class', 'method', 'module'],
+        '.c': ['function', 'struct'],
+        '.cpp': ['function', 'class', 'struct', 'method'],
+        '.cs': ['class', 'method', 'interface'],
+        '.swift': ['function', 'class', 'struct', 'protocol'],
+        '.kt': ['function', 'class', 'interface'],
+        '.scala': ['class', 'object', 'trait', 'def'],
+        '.php': ['function', 'class', 'method'],
+        '.lua': ['function'],
+        '.gd': ['function', 'class'],  # GDScript
+        '.sh': ['function'],
+        '.bash': ['function'],
+        '.ps1': ['function'],  # PowerShell
+    }
+
+    # Data/config files
+    data_extensions = {
+        '.md': ['section', 'heading', 'code_block'],
+        '.markdown': ['section', 'heading', 'code_block'],
+        '.json': ['key', 'path'],
+        '.yaml': ['key', 'section'],
+        '.yml': ['key', 'section'],
+        '.toml': ['key', 'section'],
+        '.csv': ['row', 'column'],
+        '.tsv': ['row', 'column'],
+        '.ini': ['section', 'key'],
+        '.properties': ['key'],
+        '.xml': ['element', 'tag'],
+    }
+
+    if ext in code_extensions:
+        return code_extensions[ext]
+    elif ext in data_extensions:
+        return data_extensions[ext]
+    elif is_fallback:
+        # Generic fallback for tree-sitter supported languages
+        return ['function', 'class']
+    else:
+        return []
+
+
+def _get_extraction_examples(path: str, element_types: list) -> list:
+    """Generate extraction examples based on element types."""
+    examples = []
+    file_name = Path(path).name
+
+    if "function" in element_types:
+        examples.append(f"reveal {file_name} main")
+    if "class" in element_types:
+        examples.append(f"reveal {file_name} MyClass")
+    if "method" in element_types:
+        examples.append(f"reveal {file_name} MyClass.method")
+    if "section" in element_types:
+        examples.append(f'reveal {file_name} "Installation"')
+    if "key" in element_types:
+        examples.append(f"reveal {file_name} database.host")
+    if "struct" in element_types:
+        examples.append(f"reveal {file_name} Config")
+
+    return examples[:3]  # Return top 3
+
+
+def _get_applicable_rule_categories(ext: str) -> list:
+    """Determine which rule categories apply to a file type."""
+    categories = []
+
+    # Python-specific rules
+    if ext in ['.py', '.pyi']:
+        categories.extend(['B', 'C', 'I', 'M', 'R', 'S'])  # Bugs, Complexity, Imports, Maintainability, Refactoring, Security
+
+    # Markdown rules
+    if ext in ['.md', '.markdown']:
+        categories.extend(['L', 'F'])  # Links, Frontmatter
+
+    # Config file rules
+    if ext in ['.yaml', '.yml', '.json', '.toml']:
+        categories.extend(['F'])  # Frontmatter/schema validation
+
+    # All files can have URL checks
+    if ext in ['.md', '.markdown', '.py', '.js', '.ts']:
+        categories.append('U')  # URLs
+
+    # Nginx-specific
+    if ext in ['.conf'] or 'nginx' in ext:
+        categories.append('N')  # Nginx
+
+    return sorted(set(categories))

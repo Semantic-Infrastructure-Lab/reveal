@@ -141,6 +141,8 @@ def _add_basic_arguments(parser: argparse.ArgumentParser, version: str) -> None:
                         help='List all supported languages with explicit vs fallback analyzers')
     parser.add_argument('--explain-file', action='store_true',
                         help='Explain how reveal will analyze a file (shows analyzer, fallback status, capabilities)')
+    parser.add_argument('--capabilities', action='store_true',
+                        help='Show file capabilities as JSON (for agents: what can be extracted, what rules apply)')
     parser.add_argument('--show-ast', action='store_true',
                         help='Show tree-sitter AST for a file (for tree-sitter based analyzers)')
     parser.add_argument('--language-info', type=str, metavar='LANG',
