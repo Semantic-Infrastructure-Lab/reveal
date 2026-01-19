@@ -11,7 +11,7 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
 
     Args:
         analyzer: File analyzer
-        element: Element name to extract
+        element: Element name to extract (supports "Class.method" hierarchy)
         output_format: Output format
         config: Optional RevealConfig instance
     """
@@ -21,7 +21,12 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
     from ..treesitter import TreeSitterAnalyzer
 
     result = None
-    if isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
+
+    # Check for hierarchical extraction (Class.method syntax)
+    if '.' in element and isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
+        result = _extract_hierarchical_element(analyzer, element)
+
+    if not result and isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
         # Try common element types with tree-sitter only (no grep fallback)
         for element_type in ['class', 'function', 'struct', 'section', 'server', 'location', 'upstream']:
             # Try tree-sitter types for this element
@@ -58,8 +63,13 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
                 break
 
     if not result:
-        # Not found
-        print(f"Error: Element '{element}' not found in {analyzer.path}", file=sys.stderr)
+        # Not found - provide helpful message for hierarchical requests
+        if '.' in element:
+            parent, child = element.rsplit('.', 1)
+            print(f"Error: Element '{element}' not found in {analyzer.path}", file=sys.stderr)
+            print(f"Hint: Looking for '{child}' within '{parent}'", file=sys.stderr)
+        else:
+            print(f"Error: Element '{element}' not found in {analyzer.path}", file=sys.stderr)
         sys.exit(1)
 
     # Format output
@@ -92,3 +102,78 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
         line_count = line_end - line_start + 1
         print_breadcrumbs('element', path, file_type=file_type, config=config,
                          element_name=name, line_count=line_count, line_start=line_start)
+
+
+def _extract_hierarchical_element(analyzer, element: str):
+    """Extract an element using hierarchical syntax (Class.method).
+
+    Args:
+        analyzer: TreeSitterAnalyzer instance
+        element: Hierarchical element name like "MyClass.my_method"
+
+    Returns:
+        Element dict with name, line_start, line_end, source
+        or None if not found
+    """
+    parts = element.split('.')
+    if len(parts) != 2:
+        # Only support single-level hierarchy for now (Class.method)
+        return None
+
+    parent_name, child_name = parts
+
+    # Parent node types (classes, structs, interfaces, etc.)
+    parent_types = [
+        'class_definition', 'class_declaration',
+        'struct_item', 'struct_specifier', 'struct_declaration',
+        'impl_item',  # Rust impl blocks
+        'interface_declaration',
+        'module',  # Ruby module
+    ]
+
+    # Child node types (methods, functions within parent)
+    child_types = [
+        'function_definition', 'function_declaration',
+        'method_declaration', 'method_definition',
+        'function_item',  # Rust
+    ]
+
+    # Find the parent node
+    parent_node = None
+    for node_type in parent_types:
+        nodes = analyzer._find_nodes_by_type(node_type)
+        for node in nodes:
+            if analyzer._get_node_name(node) == parent_name:
+                parent_node = node
+                break
+        if parent_node:
+            break
+
+    if not parent_node:
+        return None
+
+    # Search for child within parent's subtree
+    def find_child_in_subtree(node, target_name):
+        """Recursively search for child node within subtree."""
+        for child in node.children:
+            if child.type in child_types:
+                name = analyzer._get_node_name(child)
+                if name == target_name:
+                    return child
+            # Recurse into child nodes (for nested blocks)
+            result = find_child_in_subtree(child, target_name)
+            if result:
+                return result
+        return None
+
+    child_node = find_child_in_subtree(parent_node, child_name)
+
+    if not child_node:
+        return None
+
+    return {
+        'name': element,
+        'line_start': child_node.start_point[0] + 1,
+        'line_end': child_node.end_point[0] + 1,
+        'source': analyzer._get_node_text(child_node),
+    }
