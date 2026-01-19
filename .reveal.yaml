@@ -61,7 +61,17 @@ ignore:
   - "*.bak"
   - "*~"
 
-# File-specific overrides (optional)
+# File-specific overrides
+overrides:
+  # Adapters build Output Contract responses (dynamic data), not static config
+  # M104 false positive rate: 100% (136 detections, all FPs)
+  # Analysis: /tmp/m104_analysis.md (coral-dawn-0118 session)
+  - files: "reveal/adapters/**"
+    rules:
+      disable:
+        - M104
+
+# File-specific overrides (optional - old examples)
 # files:
 #   "tests/**/*.py":
 #     rules:

@@ -100,6 +100,8 @@ class M104(BaseRule):
                 list_threshold,
                 dict_threshold
             )
+            # Build parent map for context awareness
+            detector.build_parent_map(tree)
             detector.visit(tree)
             detections.extend(detector.detections)
         except SyntaxError:
@@ -141,6 +143,28 @@ class _HardcodedConfigDetector(ast.NodeVisitor):
         self.list_threshold = list_threshold
         self.dict_threshold = dict_threshold
         self.detections = []
+        self.parent_map = {}  # Map node to parent node
+
+    def build_parent_map(self, tree):
+        """Build a map of child nodes to parent nodes.
+
+        Args:
+            tree: AST tree to analyze
+        """
+        for parent in ast.walk(tree):
+            for child in ast.iter_child_nodes(parent):
+                self.parent_map[child] = parent
+
+    def _get_parent(self, node):
+        """Get parent node.
+
+        Args:
+            node: Child node
+
+        Returns:
+            Parent node or None
+        """
+        return self.parent_map.get(node)
 
     def visit_List(self, node: ast.List):
         """Visit list literal."""
@@ -166,6 +190,37 @@ class _HardcodedConfigDetector(ast.NodeVisitor):
                     )
                 })
 
+    def _is_dynamic_context(self, node: ast.Dict) -> bool:
+        """Check if dict is in a dynamic context (not static config).
+
+        Args:
+            node: Dict node to check
+
+        Returns:
+            True if dict is in dynamic context (return, method call, computed values)
+        """
+        # Check if dict is in a return statement
+        parent = self._get_parent(node)
+        if isinstance(parent, ast.Return):
+            return True
+
+        # Check if dict is passed to .update(), .append(), .extend(), etc.
+        if isinstance(parent, ast.Call):
+            if isinstance(parent.func, ast.Attribute):
+                method_name = parent.func.attr
+                if method_name in ['update', 'append', 'extend', 'add', 'insert']:
+                    return True
+
+        # Check if dict has computed values (function calls, variables)
+        for value in node.values:
+            if isinstance(value, (ast.Call, ast.Name)):
+                return True
+            # Check for binary operations, attributes, subscripts (also dynamic)
+            if isinstance(value, (ast.BinOp, ast.Attribute, ast.Subscript)):
+                return True
+
+        return False
+
     def visit_Dict(self, node: ast.Dict):
         """Visit dict literal."""
         self.generic_visit(node)
@@ -174,6 +229,10 @@ class _HardcodedConfigDetector(ast.NodeVisitor):
         size = len(node.keys)
 
         if size >= self.dict_threshold:
+            # Skip if in dynamic context (not static config)
+            if self._is_dynamic_context(node):
+                return
+
             # Large dict - likely configuration
             self.detections.append({
                 'line': node.lineno,
