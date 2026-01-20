@@ -338,20 +338,30 @@ class TestDocumentationAccuracy(unittest.TestCase):
 
         readme_content = readme_file.read_text()
 
-        # Look for "N languages" claim
-        match = re.search(r'(\d+)\s+languages?\s+built-in', readme_content, re.IGNORECASE)
+        # Look for "N languages" or "N+ languages" claim
+        match = re.search(r'(\d+)(\+)?\s+languages?\s+built-in', readme_content, re.IGNORECASE)
         if not match:
             self.skipTest("README doesn't claim language count")
 
         claimed_count = int(match.group(1))
+        is_minimum = match.group(2) == '+'  # "40+" means "at least 40"
 
-        self.assertEqual(
-            actual_count, claimed_count,
-            f"README language count is wrong!\n"
-            f"  README claims: {claimed_count} languages\n"
-            f"  Actually registered: {actual_count} languages\n"
-            f"  Please update README.md"
-        )
+        if is_minimum:
+            self.assertGreaterEqual(
+                actual_count, claimed_count,
+                f"README language count is wrong!\n"
+                f"  README claims: {claimed_count}+ languages\n"
+                f"  Actually registered: {actual_count} languages\n"
+                f"  Please update README.md"
+            )
+        else:
+            self.assertEqual(
+                actual_count, claimed_count,
+                f"README language count is wrong!\n"
+                f"  README claims: {claimed_count} languages\n"
+                f"  Actually registered: {actual_count} languages\n"
+                f"  Please update README.md"
+            )
 
 
 if __name__ == '__main__':
