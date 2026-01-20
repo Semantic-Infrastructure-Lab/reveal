@@ -22,6 +22,7 @@ from .mysql import MySQLAdapter
 from .python import PythonAdapter
 from .reveal import RevealAdapter
 from .sqlite import SQLiteAdapter
+from .ssl import SSLAdapter
 from .stats import StatsAdapter
 
 # Optional adapters (require extra dependencies)
@@ -54,6 +55,7 @@ __all__ = [
     'PythonAdapter',
     'RevealAdapter',
     'SQLiteAdapter',
+    'SSLAdapter',
     'StatsAdapter',
 ]
 if _git_available:

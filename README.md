@@ -339,6 +339,14 @@ reveal sqlite:///path/to/app.db/users       # Table structure with columns, inde
 reveal sqlite://./relative.db               # Relative paths supported
 reveal sqlite:///data/prod.db --format=json # JSON output for scripting
 
+# SSL certificate inspection 🆕
+# No dependencies - uses Python's built-in ssl module
+reveal ssl://example.com                    # Certificate overview & health status
+reveal ssl://example.com:8443               # Non-standard port
+reveal ssl://example.com/san                # Subject Alternative Names (all domains)
+reveal ssl://example.com/chain              # Certificate chain details
+reveal ssl://example.com --check            # Health checks (expiry, chain, hostname)
+
 # Import graph analysis (v0.28.0+) 🆕
 reveal imports://src                        # List all imports in directory
 reveal 'imports://src?unused'               # Find unused imports (I001 rule)
@@ -357,7 +365,7 @@ reveal diff://env://:env://production        # Environment drift detection
 reveal help://diff                           # Complete diff guide
 ```
 
-**14 Built-in Adapters (Organized by Purpose):**
+**15 Built-in Adapters (Organized by Purpose):**
 
 🟢 **Universal Tools** (core functionality, everyone benefits):
 - `help://` - Self-documenting help system (discover all features)
@@ -374,6 +382,7 @@ reveal help://diff                           # Complete diff guide
 🟡 **Domain Tools** (technology-specific inspection):
 - `mysql://` - MySQL database inspection (requires `[database]` extra)
 - `sqlite://` - SQLite database exploration (zero dependencies)
+- `ssl://` - SSL certificate inspection (zero dependencies)
 - `json://` - JSON navigation with path access and schema
 - `markdown://` - Frontmatter queries for knowledge graphs
 

@@ -510,6 +510,39 @@ reveal diff://mysql://localhost/users:mysql://staging/users
 reveal diff://sqlite://./dev.db:sqlite://./prod.db
 ```
 
+### SSL certificate inspection
+
+```bash
+# Certificate overview
+reveal ssl://example.com
+
+# Non-standard port
+reveal ssl://example.com:8443
+
+# View all domains covered by certificate (SANs)
+reveal ssl://example.com/san
+
+# Certificate chain details
+reveal ssl://example.com/chain
+
+# Health check (expiry, chain verification, hostname match)
+reveal ssl://example.com --check
+
+# JSON output for CI/CD
+reveal ssl://example.com --check --format=json
+```
+
+### SSL expiry monitoring
+
+```bash
+# Check if certificate expires within 30 days
+reveal ssl://example.com --check
+# Exit code 0 = healthy, 1 = warning (<30 days), 2 = critical (<7 days)
+
+# Combine with nginx config analysis
+reveal /etc/nginx/nginx.conf --check  # N004 detects ACME path issues
+```
+
 ---
 
 ## Pipeline Integration

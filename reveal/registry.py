@@ -51,6 +51,36 @@ def register(*extensions, name: str = '', icon: str = ''):
     return decorator
 
 
+def _is_nginx_content(path: str) -> bool:
+    """Detect nginx config by content patterns.
+
+    Args:
+        path: File path to check
+
+    Returns:
+        True if file contains nginx config patterns
+    """
+    try:
+        with open(path, 'r', errors='ignore') as f:
+            # Read first 4KB for detection
+            content = f.read(4096)
+
+        # Nginx-specific patterns (unlikely in INI files)
+        nginx_patterns = [
+            'server {',       # Server block
+            'server{',        # Compact style
+            'location /',     # Location block
+            'upstream ',      # Upstream block
+            'listen ',        # Listen directive
+            'proxy_pass ',    # Proxy directive
+            'ssl_certificate',  # SSL config
+        ]
+
+        return any(pattern in content for pattern in nginx_patterns)
+    except (IOError, OSError):
+        return False
+
+
 def get_analyzer(path: str, allow_fallback: bool = True) -> Optional[type]:
     """Get analyzer class for a file path.
 
@@ -63,6 +93,18 @@ def get_analyzer(path: str, allow_fallback: bool = True) -> Optional[type]:
     """
     file_path = Path(path)
     ext = file_path.suffix.lower()
+
+    # Content-based detection for ambiguous extensions (.conf can be nginx or INI)
+    if ext == '.conf':
+        # Check path first (faster)
+        path_str = str(file_path.resolve())
+        if '/nginx/' in path_str or '/etc/nginx/' in path_str:
+            from .analyzers.nginx import NginxAnalyzer
+            return NginxAnalyzer
+        # Content-based detection
+        if _is_nginx_content(path):
+            from .analyzers.nginx import NginxAnalyzer
+            return NginxAnalyzer
 
     # If we have an extension, use it
     if ext and ext in _ANALYZER_REGISTRY:

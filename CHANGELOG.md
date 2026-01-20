@@ -12,6 +12,33 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`ssl://` adapter** - SSL/TLS certificate inspection (zero dependencies)
+  - Certificate overview: `reveal ssl://example.com`
+  - Non-standard ports: `reveal ssl://example.com:8443`
+  - Subject Alternative Names: `reveal ssl://example.com/san`
+  - Certificate chain: `reveal ssl://example.com/chain`
+  - Health checks: `reveal ssl://example.com --check`
+  - Checks: expiry (30/7 day thresholds), chain verification, hostname match
+  - Batch mode: `batch_check_from_nginx()` for checking all SSL domains in nginx config
+
+- **N004: ACME challenge path inconsistency** - Nginx quality rule
+  - Detects when server blocks have different root paths for `/.well-known/acme-challenge/`
+  - Identifies the pattern that caused the 209-cert sociamonials outage
+  - HIGH severity - path inconsistencies cause cert renewal failures
+  - Example: `reveal /etc/nginx/nginx.conf --check --select N004`
+
+- **Content-based nginx detection** - Improved `.conf` file handling
+  - Files with nginx patterns (`server {`, `location /`, etc.) now use NginxAnalyzer
+  - Works regardless of file path (not just `/etc/nginx/`)
+  - Detects nginx content in first 4KB of file
+
+- **Enhanced nginx display** - Better structure output
+  - Server blocks show ports: `social.weffix.com [443 (SSL)]`
+  - Location blocks show targets: `/.well-known/acme-challenge/ -> static: /path`
+
 ## [0.40.0] - 2026-01-20
 
 ### Added

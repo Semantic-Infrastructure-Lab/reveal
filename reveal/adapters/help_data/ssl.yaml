@@ -1,0 +1,79 @@
+# SSL Adapter Help Data
+# SSL certificate inspection - progressive disclosure of cert health, chain, SANs
+
+name: ssl
+description: 'SSL certificate inspection - progressive disclosure of cert health, chain, and domains'
+syntax: 'ssl://host[:port][/element]'
+
+examples:
+  - uri: 'ssl://example.com'
+    description: 'Certificate overview (issuer, expiry, health status)'
+  - uri: 'ssl://example.com:8443'
+    description: 'Non-standard port'
+  - uri: 'ssl://example.com/san'
+    description: 'Subject Alternative Names (all domains covered)'
+  - uri: 'ssl://example.com/chain'
+    description: 'Certificate chain details'
+  - uri: 'ssl://example.com/issuer'
+    description: 'Issuer organization details'
+  - uri: 'ssl://example.com --check'
+    description: 'Run health checks (expiry, chain, hostname)'
+
+elements:
+  san: 'Subject Alternative Names (all domains covered by cert)'
+  chain: 'Certificate chain information'
+  issuer: 'Certificate issuer details'
+  subject: 'Certificate subject details'
+  dates: 'Certificate validity dates'
+  full: 'Full certificate details (JSON)'
+
+features:
+  - 'Zero dependencies (uses Python ssl module)'
+  - 'Progressive disclosure (overview → element → detail)'
+  - 'Health checks with exit codes (0=pass, 1=warning, 2=critical)'
+  - 'Expiry thresholds: warning at 30 days, critical at 7 days'
+  - 'Chain verification against system trust store'
+  - 'Hostname match validation'
+  - 'Token-efficient for AI agent consumption'
+
+try_now:
+  - "reveal ssl://google.com"
+  - "reveal ssl://google.com/san"
+  - "reveal ssl://google.com --check"
+
+workflows:
+  - name: 'Certificate Health Check'
+    scenario: 'Need to quickly verify SSL certificate status'
+    steps:
+      - "reveal ssl://example.com            # Overview"
+      - "reveal ssl://example.com --check    # Full health check"
+      - "reveal ssl://example.com/san        # If checking domain coverage"
+  - name: 'Debug SSL Issues'
+    scenario: 'Certificate warnings in browser or app'
+    steps:
+      - "reveal ssl://example.com --check    # Identify the issue"
+      - "reveal ssl://example.com/chain      # Check chain validity"
+      - "reveal ssl://example.com/issuer     # Verify issuer"
+
+anti_patterns:
+  - bad: "openssl s_client -connect example.com:443 | openssl x509 -text"
+    good: "reveal ssl://example.com"
+    why: "10x fewer tokens, structured output, health status at a glance"
+  - bad: "curl -vvv https://example.com 2>&1 | grep -i ssl"
+    good: "reveal ssl://example.com --check"
+    why: "Clear pass/fail status, actionable exit codes for scripts"
+
+notes:
+  - 'Uses Python ssl module (no external dependencies)'
+  - 'Connects with verification disabled for diagnostics, then verifies separately'
+  - 'Chain information limited without PyOpenSSL (leaf cert only)'
+  - 'Default connection timeout is 10 seconds'
+  - 'Exit codes: 0=healthy, 1=warning (<30 days), 2=critical (<7 days or error)'
+
+output_formats:
+  - text
+  - json
+
+see_also:
+  - 'reveal help://mysql - Database inspection'
+  - 'reveal /etc/nginx/nginx.conf --check - N004 ACME path rule'

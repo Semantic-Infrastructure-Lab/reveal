@@ -306,7 +306,32 @@ reveal sqlite:///path/to/app.db --format=json | jq '.tables'
 
 ---
 
-### 12. **reveal://** - Meta-Review (Dogfooding)
+### 12. **ssl://** - SSL Certificate Inspector
+Zero-dependency SSL/TLS certificate inspection: expiry, chain, SANs, health checks.
+
+**Codebase Review Usage:**
+```bash
+# Certificate overview
+reveal ssl://example.com
+
+# Check certificate health (expiry, chain, hostname)
+reveal ssl://example.com --check
+
+# View all domains covered by certificate
+reveal ssl://example.com/san
+
+# Certificate chain details
+reveal ssl://example.com/chain
+
+# Non-standard port
+reveal ssl://example.com:8443
+```
+
+**Review Insight**: `ssl://` reveals **certificate health** - expiry warnings, chain verification failures, hostname mismatches. Combine with nginx analysis for full SSL debugging.
+
+---
+
+### 13. **reveal://** - Meta-Review (Dogfooding)
 Use reveal to inspect reveal's own codebase - validate config, check completeness, extract implementations.
 
 **Codebase Review Usage:**

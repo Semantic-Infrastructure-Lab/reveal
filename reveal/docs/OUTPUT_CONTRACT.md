@@ -442,6 +442,7 @@ reveal --check reveal/adapters/myadapter.py --select V016
 | diff:// | ⚠️ In Progress | Missing `contract_version` |
 | imports:// | ⚠️ In Progress | Missing `contract_version` |
 | sqlite:// | ⚠️ In Progress | Missing `contract_version` |
+| ssl:// | ⚠️ In Progress | Missing `contract_version` |
 | mysql:// | ⚠️ In Progress | Missing `contract_version` |
 | stats:// | ❌ Non-Compliant | Missing `type` field entirely |
 | json:// | ⚠️ In Progress | Uses `json-value` (should be `json_value`) |

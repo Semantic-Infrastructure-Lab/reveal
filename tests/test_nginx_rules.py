@@ -420,10 +420,119 @@ class TestNginxRulesIntegration(unittest.TestCase):
         rules = RuleRegistry.get_rules(select=['N'])
         rule_codes = [r.code for r in rules]
 
-        self.assertEqual(len(rules), 3)
+        self.assertEqual(len(rules), 4)
         self.assertIn('N001', rule_codes)
         self.assertIn('N002', rule_codes)
         self.assertIn('N003', rule_codes)
+        self.assertIn('N004', rule_codes)
+
+
+class TestN004ACMEPathInconsistency(unittest.TestCase):
+    """Tests for N004: ACME challenge path inconsistency detection."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        from reveal.rules.infrastructure.N004 import N004
+        self.rule = N004()
+
+    def test_detects_inconsistent_acme_paths(self):
+        """Should detect when server blocks have different ACME challenge roots."""
+        content = '''
+server {
+    server_name domain-a.com;
+    location /.well-known/acme-challenge/ {
+        root /home/user1/public_html;
+    }
+}
+server {
+    server_name domain-b.com;
+    location /.well-known/acme-challenge/ {
+        root /home/user2/public_html;
+    }
+}
+'''
+        detections = self.rule.check('test.conf', None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertEqual(detections[0].rule_code, 'N004')
+        self.assertIn('user2', detections[0].message)
+        self.assertIn('user1', detections[0].message)
+
+    def test_no_false_positive_consistent_paths(self):
+        """Should not flag when all ACME paths are the same."""
+        content = '''
+server {
+    server_name domain-a.com;
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+}
+server {
+    server_name domain-b.com;
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+}
+'''
+        detections = self.rule.check('test.conf', None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_handles_multiple_divergent_paths(self):
+        """Should detect multiple divergent paths."""
+        content = '''
+server {
+    server_name a.com;
+    location /.well-known/acme-challenge/ {
+        root /path/common;
+    }
+}
+server {
+    server_name b.com;
+    location /.well-known/acme-challenge/ {
+        root /path/common;
+    }
+}
+server {
+    server_name c.com;
+    location /.well-known/acme-challenge/ {
+        root /path/divergent1;
+    }
+}
+server {
+    server_name d.com;
+    location /.well-known/acme-challenge/ {
+        root /path/divergent2;
+    }
+}
+'''
+        detections = self.rule.check('test.conf', None, content)
+        # Should flag both divergent paths
+        self.assertEqual(len(detections), 2)
+        messages = [d.message for d in detections]
+        self.assertTrue(any('divergent1' in m for m in messages))
+        self.assertTrue(any('divergent2' in m for m in messages))
+
+    def test_handles_no_acme_locations(self):
+        """Should handle configs with no ACME locations gracefully."""
+        content = '''
+server {
+    server_name example.com;
+    location / {
+        proxy_pass http://backend;
+    }
+}
+'''
+        detections = self.rule.check('test.conf', None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_high_severity(self):
+        """Should have HIGH severity."""
+        from reveal.rules.base import Severity
+        self.assertEqual(self.rule.severity, Severity.HIGH)
+
+    def test_matches_nginx_file_patterns(self):
+        """Should match nginx file patterns."""
+        from reveal.rules.infrastructure import NGINX_FILE_PATTERNS
+        self.assertEqual(self.rule.file_patterns, NGINX_FILE_PATTERNS)
 
 
 if __name__ == '__main__':

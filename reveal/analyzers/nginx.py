@@ -34,6 +34,8 @@ class NginxAnalyzer(FileAnalyzer):
                     server_info['port'] = self._format_port(port)
             if next_line == '}' and j > line_num:
                 break
+        # Add signature for display (shows port after name)
+        server_info['signature'] = f" [{server_info['port']}]"
         return server_info
 
     def _format_port(self, port: str) -> str:

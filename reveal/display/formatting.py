@@ -461,6 +461,7 @@ def _format_standard_items(
         name = item.get('name', '')
         signature = item.get('signature', '')
         content = item.get('content', '')
+        target = item.get('target', '')  # For nginx locations (proxy_pass or root)
 
         # Build metrics display (if available)
         metrics = ''
@@ -473,6 +474,9 @@ def _format_standard_items(
             if parts:
                 metrics = f" [{', '.join(parts)}]"
 
+        # Build target suffix (for nginx locations)
+        target_suffix = f" → {target}" if target else ""
+
         # Format based on what's available
         # Note: path is already shown in file header, so text format omits it
         if signature and name:
@@ -482,9 +486,9 @@ def _format_standard_items(
                 print(f"  :{line:<6} {name}{signature}{metrics}")
         elif name:
             if output_format == 'grep':
-                print(f"{path}:{line}:{name}")
+                print(f"{path}:{line}:{name}{target_suffix.replace(' → ', ':')}")
             else:
-                print(f"  :{line:<6} {name}{metrics}")
+                print(f"  :{line:<6} {name}{target_suffix}{metrics}")
         elif content:
             if output_format == 'grep':
                 print(f"{path}:{line}:{content}")

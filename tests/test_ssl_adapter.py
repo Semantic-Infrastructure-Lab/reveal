@@ -1,0 +1,538 @@
+"""Tests for SSL adapter (ssl://)."""
+
+import unittest
+from unittest.mock import patch, MagicMock
+from datetime import datetime, timezone, timedelta
+import socket
+import ssl
+
+import sys
+from pathlib import Path
+
+# Add reveal to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from reveal.adapters.ssl import SSLAdapter, SSLFetcher, CertificateInfo
+from reveal.adapters.ssl.certificate import check_ssl_health
+from reveal.adapters.ssl.renderer import SSLRenderer
+
+
+class TestSSLAdapterInit(unittest.TestCase):
+    """Test SSLAdapter initialization and URI parsing."""
+
+    def test_init_with_empty_uri(self):
+        """Empty URI should raise ValueError."""
+        with self.assertRaises(ValueError) as ctx:
+            SSLAdapter("")
+        self.assertIn("requires a connection string", str(ctx.exception))
+
+    def test_init_with_minimal_uri(self):
+        """Minimal URI (just ssl://) should raise ValueError."""
+        with self.assertRaises(ValueError) as ctx:
+            SSLAdapter("ssl://")
+        self.assertIn("requires hostname", str(ctx.exception))
+
+    def test_init_with_hostname(self):
+        """Basic hostname should parse correctly."""
+        adapter = SSLAdapter("ssl://example.com")
+        self.assertEqual(adapter.host, "example.com")
+        self.assertEqual(adapter.port, 443)
+        self.assertIsNone(adapter.element)
+
+    def test_init_with_port(self):
+        """Hostname with port should parse correctly."""
+        adapter = SSLAdapter("ssl://example.com:8443")
+        self.assertEqual(adapter.host, "example.com")
+        self.assertEqual(adapter.port, 8443)
+
+    def test_init_with_element(self):
+        """URI with element should parse correctly."""
+        adapter = SSLAdapter("ssl://example.com/san")
+        self.assertEqual(adapter.host, "example.com")
+        self.assertEqual(adapter.port, 443)
+        self.assertEqual(adapter.element, "san")
+
+    def test_init_with_port_and_element(self):
+        """URI with port and element should parse correctly."""
+        adapter = SSLAdapter("ssl://example.com:8443/chain")
+        self.assertEqual(adapter.host, "example.com")
+        self.assertEqual(adapter.port, 8443)
+        self.assertEqual(adapter.element, "chain")
+
+    def test_init_with_invalid_port(self):
+        """Invalid port should raise ValueError."""
+        with self.assertRaises(ValueError) as ctx:
+            SSLAdapter("ssl://example.com:notaport")
+        self.assertIn("Invalid port", str(ctx.exception))
+
+
+class TestCertificateInfo(unittest.TestCase):
+    """Test CertificateInfo dataclass."""
+
+    def setUp(self):
+        """Create a sample certificate."""
+        self.now = datetime.now(timezone.utc)
+        self.cert = CertificateInfo(
+            subject={'commonName': 'example.com', 'organizationName': 'Example Inc'},
+            issuer={'commonName': 'Test CA', 'organizationName': 'Test Authority'},
+            not_before=self.now - timedelta(days=30),
+            not_after=self.now + timedelta(days=60),
+            serial_number='123456789',
+            version=3,
+            san=['example.com', 'www.example.com', '*.example.com'],
+        )
+
+    def test_days_until_expiry(self):
+        """days_until_expiry should return correct value."""
+        # Allow for 1 day variance due to time-of-day in test execution
+        self.assertIn(self.cert.days_until_expiry, [59, 60])
+
+    def test_is_expired_false(self):
+        """is_expired should return False for valid cert."""
+        self.assertFalse(self.cert.is_expired)
+
+    def test_is_expired_true(self):
+        """is_expired should return True for expired cert."""
+        expired_cert = CertificateInfo(
+            subject={},
+            issuer={},
+            not_before=self.now - timedelta(days=90),
+            not_after=self.now - timedelta(days=30),
+            serial_number='123',
+            version=3,
+            san=[],
+        )
+        self.assertTrue(expired_cert.is_expired)
+
+    def test_common_name(self):
+        """common_name should return subject CN."""
+        self.assertEqual(self.cert.common_name, 'example.com')
+
+    def test_issuer_name(self):
+        """issuer_name should return organization name."""
+        self.assertEqual(self.cert.issuer_name, 'Test Authority')
+
+    def test_to_dict(self):
+        """to_dict should serialize all fields."""
+        d = self.cert.to_dict()
+        self.assertEqual(d['common_name'], 'example.com')
+        self.assertEqual(d['issuer_name'], 'Test Authority')
+        self.assertIn(d['days_until_expiry'], [59, 60])  # Allow variance
+        self.assertEqual(len(d['san']), 3)
+
+
+class TestSSLFetcher(unittest.TestCase):
+    """Test SSLFetcher certificate fetching."""
+
+    def _mock_cert_dict(self, days_valid=60):
+        """Create a mock certificate dict as returned by getpeercert()."""
+        now = datetime.now(timezone.utc)
+        not_before = now - timedelta(days=30)
+        not_after = now + timedelta(days=days_valid)
+
+        return {
+            'subject': (
+                (('commonName', 'example.com'),),
+                (('organizationName', 'Example Inc'),),
+            ),
+            'issuer': (
+                (('commonName', 'Test CA'),),
+                (('organizationName', 'Test Authority'),),
+            ),
+            'notBefore': not_before.strftime('%b %d %H:%M:%S %Y GMT'),
+            'notAfter': not_after.strftime('%b %d %H:%M:%S %Y GMT'),
+            'serialNumber': '123456789ABCDEF',
+            'version': 3,
+            'subjectAltName': (
+                ('DNS', 'example.com'),
+                ('DNS', 'www.example.com'),
+            ),
+        }
+
+    @patch('socket.create_connection')
+    def test_fetch_certificate(self, mock_socket):
+        """fetch_certificate should return parsed certificate."""
+        # Setup mock
+        mock_ssock = MagicMock()
+        mock_ssock.getpeercert.return_value = self._mock_cert_dict()
+        mock_sock = MagicMock()
+        mock_socket.return_value.__enter__.return_value = mock_sock
+
+        with patch('ssl.create_default_context') as mock_ctx:
+            mock_context = MagicMock()
+            mock_ctx.return_value = mock_context
+            mock_context.wrap_socket.return_value.__enter__.return_value = mock_ssock
+
+            fetcher = SSLFetcher()
+            cert, chain = fetcher.fetch_certificate('example.com', 443)
+
+            self.assertEqual(cert.common_name, 'example.com')
+            self.assertEqual(len(cert.san), 2)
+
+    @patch('socket.create_connection')
+    def test_fetch_certificate_with_verification(self, mock_socket):
+        """fetch_certificate_with_verification should return verification status."""
+        mock_ssock = MagicMock()
+        mock_ssock.getpeercert.return_value = self._mock_cert_dict()
+        mock_sock = MagicMock()
+        mock_socket.return_value.__enter__.return_value = mock_sock
+
+        with patch('ssl.create_default_context') as mock_ctx:
+            mock_context = MagicMock()
+            mock_ctx.return_value = mock_context
+            mock_context.wrap_socket.return_value.__enter__.return_value = mock_ssock
+
+            fetcher = SSLFetcher()
+            cert, chain, verification = fetcher.fetch_certificate_with_verification(
+                'example.com', 443
+            )
+
+            self.assertEqual(cert.common_name, 'example.com')
+            self.assertTrue(verification['verified'])
+
+
+class TestSSLAdapterStructure(unittest.TestCase):
+    """Test SSLAdapter.get_structure()."""
+
+    def setUp(self):
+        """Create adapter with mocked fetcher."""
+        self.adapter = SSLAdapter("ssl://example.com")
+        self.now = datetime.now(timezone.utc)
+
+        # Mock the certificate
+        self.mock_cert = CertificateInfo(
+            subject={'commonName': 'example.com'},
+            issuer={'organizationName': 'Test CA'},
+            not_before=self.now - timedelta(days=30),
+            not_after=self.now + timedelta(days=60),
+            serial_number='123',
+            version=3,
+            san=['example.com', 'www.example.com'],
+        )
+
+        self.mock_verification = {
+            'verified': True,
+            'hostname_match': True,
+            'error': None,
+        }
+
+    def test_get_structure_healthy(self):
+        """get_structure should return healthy status for valid cert."""
+        self.adapter._certificate = self.mock_cert
+        self.adapter._verification = self.mock_verification
+
+        result = self.adapter.get_structure()
+
+        self.assertEqual(result['type'], 'ssl_certificate')
+        self.assertEqual(result['host'], 'example.com')
+        self.assertEqual(result['health_status'], 'HEALTHY')
+        self.assertIn(result['days_until_expiry'], [59, 60])  # Allow variance
+
+    def test_get_structure_warning(self):
+        """get_structure should return warning for soon-to-expire cert."""
+        self.mock_cert = CertificateInfo(
+            subject={'commonName': 'example.com'},
+            issuer={'organizationName': 'Test CA'},
+            not_before=self.now - timedelta(days=330),
+            not_after=self.now + timedelta(days=15),  # 15 days left
+            serial_number='123',
+            version=3,
+            san=[],
+        )
+        self.adapter._certificate = self.mock_cert
+        self.adapter._verification = self.mock_verification
+
+        result = self.adapter.get_structure()
+        self.assertEqual(result['health_status'], 'WARNING')
+
+    def test_get_structure_critical(self):
+        """get_structure should return critical for cert expiring soon."""
+        self.mock_cert = CertificateInfo(
+            subject={'commonName': 'example.com'},
+            issuer={'organizationName': 'Test CA'},
+            not_before=self.now - timedelta(days=358),
+            not_after=self.now + timedelta(days=3),  # 3 days left
+            serial_number='123',
+            version=3,
+            san=[],
+        )
+        self.adapter._certificate = self.mock_cert
+        self.adapter._verification = self.mock_verification
+
+        result = self.adapter.get_structure()
+        self.assertEqual(result['health_status'], 'CRITICAL')
+
+    def test_get_structure_expired(self):
+        """get_structure should return expired for expired cert."""
+        self.mock_cert = CertificateInfo(
+            subject={'commonName': 'example.com'},
+            issuer={'organizationName': 'Test CA'},
+            not_before=self.now - timedelta(days=395),
+            not_after=self.now - timedelta(days=30),  # Expired 30 days ago
+            serial_number='123',
+            version=3,
+            san=[],
+        )
+        self.adapter._certificate = self.mock_cert
+        self.adapter._verification = self.mock_verification
+
+        result = self.adapter.get_structure()
+        self.assertEqual(result['health_status'], 'EXPIRED')
+
+
+class TestSSLAdapterElements(unittest.TestCase):
+    """Test SSLAdapter.get_element()."""
+
+    def setUp(self):
+        """Create adapter with mocked certificate."""
+        self.adapter = SSLAdapter("ssl://example.com")
+        self.now = datetime.now(timezone.utc)
+
+        self.adapter._certificate = CertificateInfo(
+            subject={'commonName': 'example.com', 'organizationName': 'Example Inc'},
+            issuer={'commonName': 'Test CA', 'organizationName': 'Test Authority'},
+            not_before=self.now - timedelta(days=30),
+            not_after=self.now + timedelta(days=60),
+            serial_number='123456789',
+            version=3,
+            san=['example.com', 'www.example.com', '*.api.example.com'],
+        )
+        self.adapter._chain = []
+        self.adapter._verification = {'verified': True, 'hostname_match': True, 'error': None}
+
+    def test_get_element_san(self):
+        """get_element('san') should return SANs."""
+        result = self.adapter.get_element('san')
+
+        self.assertEqual(result['type'], 'ssl_san')
+        self.assertEqual(len(result['san']), 3)
+        self.assertEqual(result['wildcard_entries'], ['*.api.example.com'])
+
+    def test_get_element_issuer(self):
+        """get_element('issuer') should return issuer details."""
+        result = self.adapter.get_element('issuer')
+
+        self.assertEqual(result['type'], 'ssl_issuer')
+        self.assertEqual(result['issuer']['organizationName'], 'Test Authority')
+
+    def test_get_element_subject(self):
+        """get_element('subject') should return subject details."""
+        result = self.adapter.get_element('subject')
+
+        self.assertEqual(result['type'], 'ssl_subject')
+        self.assertEqual(result['subject']['commonName'], 'example.com')
+
+    def test_get_element_dates(self):
+        """get_element('dates') should return validity dates."""
+        result = self.adapter.get_element('dates')
+
+        self.assertEqual(result['type'], 'ssl_dates')
+        self.assertIn(result['days_until_expiry'], [59, 60])  # Allow variance
+        self.assertFalse(result['is_expired'])
+
+    def test_get_element_chain(self):
+        """get_element('chain') should return chain info."""
+        result = self.adapter.get_element('chain')
+
+        self.assertEqual(result['type'], 'ssl_chain')
+        self.assertEqual(result['chain_length'], 1)  # Just the leaf
+
+    def test_get_element_unknown(self):
+        """get_element with unknown element should return None."""
+        result = self.adapter.get_element('unknown_element')
+        self.assertIsNone(result)
+
+
+class TestSSLHealthCheck(unittest.TestCase):
+    """Test SSL health check functionality."""
+
+    def _create_mock_fetcher(self, days_valid=60, verified=True):
+        """Create a mock for SSLFetcher.fetch_certificate_with_verification."""
+        now = datetime.now(timezone.utc)
+        cert = CertificateInfo(
+            subject={'commonName': 'example.com'},
+            issuer={'organizationName': 'Test CA'},
+            not_before=now - timedelta(days=30),
+            not_after=now + timedelta(days=days_valid),
+            serial_number='123',
+            version=3,
+            san=['example.com', 'www.example.com'],
+        )
+        verification = {
+            'verified': verified,
+            'hostname_match': verified,
+            'error': None if verified else 'Certificate verification failed',
+        }
+        return cert, [], verification
+
+    @patch.object(SSLFetcher, 'fetch_certificate_with_verification')
+    def test_check_healthy(self, mock_fetch):
+        """Health check should pass for healthy cert."""
+        mock_fetch.return_value = self._create_mock_fetcher(days_valid=60)
+
+        result = check_ssl_health('example.com', 443)
+
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['summary']['passed'], 3)
+        self.assertEqual(result['exit_code'], 0)
+
+    @patch.object(SSLFetcher, 'fetch_certificate_with_verification')
+    def test_check_warning_expiry(self, mock_fetch):
+        """Health check should warn for cert expiring soon."""
+        mock_fetch.return_value = self._create_mock_fetcher(days_valid=20)
+
+        result = check_ssl_health('example.com', 443, warn_days=30)
+
+        self.assertEqual(result['status'], 'warning')
+        expiry_check = next(c for c in result['checks'] if c['name'] == 'certificate_expiry')
+        self.assertEqual(expiry_check['status'], 'warning')
+
+    @patch.object(SSLFetcher, 'fetch_certificate_with_verification')
+    def test_check_critical_expiry(self, mock_fetch):
+        """Health check should fail for cert expiring very soon."""
+        mock_fetch.return_value = self._create_mock_fetcher(days_valid=3)
+
+        result = check_ssl_health('example.com', 443, critical_days=7)
+
+        self.assertEqual(result['status'], 'failure')
+        expiry_check = next(c for c in result['checks'] if c['name'] == 'certificate_expiry')
+        self.assertEqual(expiry_check['status'], 'failure')
+
+    @patch.object(SSLFetcher, 'fetch_certificate_with_verification')
+    def test_check_expired(self, mock_fetch):
+        """Health check should fail for expired cert."""
+        mock_fetch.return_value = self._create_mock_fetcher(days_valid=-10)
+
+        result = check_ssl_health('example.com', 443)
+
+        self.assertEqual(result['status'], 'failure')
+        self.assertEqual(result['exit_code'], 2)
+
+    @patch.object(SSLFetcher, 'fetch_certificate_with_verification')
+    def test_check_verification_failure(self, mock_fetch):
+        """Health check should warn on verification failure."""
+        mock_fetch.return_value = self._create_mock_fetcher(days_valid=60, verified=False)
+
+        result = check_ssl_health('example.com', 443)
+
+        chain_check = next(c for c in result['checks'] if c['name'] == 'chain_verification')
+        self.assertEqual(chain_check['status'], 'warning')
+
+    @patch.object(SSLFetcher, 'fetch_certificate_with_verification')
+    def test_check_connection_error(self, mock_fetch):
+        """Health check should handle connection errors."""
+        mock_fetch.side_effect = socket.error("Connection refused")
+
+        result = check_ssl_health('example.com', 443)
+
+        self.assertEqual(result['status'], 'failure')
+        self.assertIn('error', result)
+        self.assertEqual(result['exit_code'], 2)
+
+
+class TestSSLRenderer(unittest.TestCase):
+    """Test SSLRenderer output."""
+
+    def test_render_structure_json(self):
+        """render_structure with json format should output JSON."""
+        result = {
+            'type': 'ssl_certificate',
+            'host': 'example.com',
+            'port': 443,
+            'common_name': 'example.com',
+            'issuer': 'Test CA',
+            'valid_from': '2024-01-01',
+            'valid_until': '2024-12-31',
+            'days_until_expiry': 60,
+            'health_status': 'HEALTHY',
+            'health_icon': '\u2705',
+            'san_count': 3,
+            'verification': {'chain_valid': True, 'hostname_match': True, 'error': None},
+            'next_steps': [],
+        }
+
+        import io
+        from contextlib import redirect_stdout
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer.render_structure(result, format='json')
+
+        output = f.getvalue()
+        import json
+        parsed = json.loads(output)
+        self.assertEqual(parsed['host'], 'example.com')
+
+    def test_render_structure_text(self):
+        """render_structure with text format should output readable text."""
+        result = {
+            'type': 'ssl_certificate',
+            'host': 'example.com',
+            'port': 443,
+            'common_name': 'example.com',
+            'issuer': 'Test CA',
+            'valid_from': '2024-01-01',
+            'valid_until': '2024-12-31',
+            'days_until_expiry': 60,
+            'health_status': 'HEALTHY',
+            'health_icon': '\u2705',
+            'san_count': 3,
+            'verification': {'chain_valid': True, 'hostname_match': True, 'error': None},
+            'next_steps': ['reveal ssl://example.com/san'],
+        }
+
+        import io
+        from contextlib import redirect_stdout
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer.render_structure(result, format='text')
+
+        output = f.getvalue()
+        self.assertIn('example.com', output)
+        self.assertIn('HEALTHY', output)
+        self.assertIn('60 days', output)
+
+    def test_render_check_pass(self):
+        """render_check should format passing checks correctly."""
+        result = {
+            'type': 'ssl_check',
+            'host': 'example.com',
+            'port': 443,
+            'status': 'pass',
+            'certificate': {'common_name': 'example.com', 'days_until_expiry': 60, 'not_after': '2024-12-31'},
+            'checks': [
+                {'name': 'certificate_expiry', 'status': 'pass', 'message': 'Valid for 60 days'},
+            ],
+            'summary': {'total': 1, 'passed': 1, 'warnings': 0, 'failures': 0},
+            'exit_code': 0,
+        }
+
+        import io
+        from contextlib import redirect_stdout
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer.render_check(result, format='text')
+
+        output = f.getvalue()
+        self.assertIn('PASS', output)
+        self.assertIn('Exit code: 0', output)
+
+
+class TestSSLAdapterHelp(unittest.TestCase):
+    """Test SSLAdapter help system."""
+
+    def test_get_help(self):
+        """get_help should return help dict."""
+        help_data = SSLAdapter.get_help()
+
+        self.assertIsInstance(help_data, dict)
+        self.assertIn('name', help_data)
+        self.assertEqual(help_data['name'], 'ssl')
+        self.assertIn('elements', help_data)
+        self.assertIn('san', help_data['elements'])
+
+
+if __name__ == '__main__':
+    unittest.main()
