@@ -1,7 +1,7 @@
 # Reveal Roadmap
 
 > **Last updated**: 2026-01-20
-> **Current version**: v0.35.x
+> **Current version**: v0.39.0
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

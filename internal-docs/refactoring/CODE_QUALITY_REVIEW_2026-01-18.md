@@ -1202,7 +1202,7 @@ reveal/adapters/base_renderer.py      (NEW) - Renderer protocol/base class
 - **Prior Session**: universal-comet-0118 (v0.38.0 validation, technical debt refactoring)
 - **Quality Baseline**: 98.5/100 (post-refactoring)
 - **Test Suite**: 2240 tests passing
-- **Project Roadmap**: `internal-docs/planning/PRIORITIES.md`
+- **Project Roadmap**: `ROADMAP.md`
 
 ---
 

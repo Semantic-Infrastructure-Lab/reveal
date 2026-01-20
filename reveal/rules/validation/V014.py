@@ -1,18 +1,15 @@
-"""V014: PRIORITIES.md version consistency.
+"""V014: ROADMAP.md version consistency.
 
-Validates that PRIORITIES.md current version matches canonical version (pyproject.toml).
-PRIORITIES.md replaced ROADMAP.md as the authoritative roadmap document.
+Validates that ROADMAP.md current version matches canonical version (pyproject.toml).
 
 Example violation:
-    - pyproject.toml: version = "0.35.0"
-    - PRIORITIES.md: **Current Version:** v0.34.0
-    - Result: Stale version in planning doc
+    - pyproject.toml: version = "0.39.0"
+    - ROADMAP.md: **Current version**: v0.35.x
+    - Result: Stale version in roadmap doc
 
 Checks:
-    - internal-docs/planning/PRIORITIES.md (if exists)
-    - Looks for pattern: **Current Version:** vX.Y.Z
-
-Note: This is separate from V007 (which checks ROADMAP.md for backward compat).
+    - ROADMAP.md (if exists)
+    - Looks for pattern: **Current version**: vX.Y.Z
 """
 
 import re
@@ -24,10 +21,10 @@ from .utils import find_reveal_root
 
 
 class V014(BaseRule):
-    """Validate PRIORITIES.md current version matches pyproject.toml."""
+    """Validate ROADMAP.md current version matches pyproject.toml."""
 
     code = "V014"
-    message = "PRIORITIES.md version mismatch"
+    message = "ROADMAP.md version mismatch"
     category = RulePrefix.V
     severity = Severity.MEDIUM  # Important for releases
     file_patterns = ['*']
@@ -36,7 +33,7 @@ class V014(BaseRule):
               file_path: str,
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
-        """Check PRIORITIES.md version consistency."""
+        """Check ROADMAP.md version consistency."""
         detections = []
 
         # Only run for reveal:// URIs
@@ -55,17 +52,12 @@ class V014(BaseRule):
         if not canonical_version:
             return detections
 
-        # Check PRIORITIES.md (may be in internal-docs/planning/)
-        priorities_files = [
-            project_root / 'PRIORITIES.md',
-            project_root / 'internal-docs' / 'planning' / 'PRIORITIES.md',
-        ]
-
-        for priorities_file in priorities_files:
-            if priorities_file.exists():
-                self._check_priorities_version(
-                    priorities_file, canonical_version, project_root, detections
-                )
+        # Check ROADMAP.md
+        roadmap_file = project_root / 'ROADMAP.md'
+        if roadmap_file.exists():
+            self._check_roadmap_version(
+                roadmap_file, canonical_version, project_root, detections
+            )
 
         return detections
 
@@ -87,42 +79,42 @@ class V014(BaseRule):
 
         return None
 
-    def _check_priorities_version(
+    def _check_roadmap_version(
         self,
-        priorities_file: Path,
+        roadmap_file: Path,
         canonical: str,
         project_root: Path,
         detections: List[Detection]
     ) -> None:
-        """Check PRIORITIES.md current version matches canonical."""
-        priorities_version = self._extract_priorities_version(priorities_file)
+        """Check ROADMAP.md current version matches canonical."""
+        roadmap_version = self._extract_roadmap_version(roadmap_file)
 
-        if priorities_version and priorities_version != canonical:
+        if roadmap_version and roadmap_version != canonical:
             # Get relative path for cleaner error messages
             try:
-                rel_path = priorities_file.relative_to(project_root)
+                rel_path = roadmap_file.relative_to(project_root)
             except ValueError:
-                rel_path = priorities_file
+                rel_path = roadmap_file
 
             detections.append(self.create_detection(
                 file_path=str(rel_path),
                 line=1,
-                message=f"PRIORITIES.md version mismatch: "
-                       f"v{priorities_version} != v{canonical}",
-                suggestion=f"Update '**Current Version:** v{priorities_version}' "
-                          f"to '**Current Version:** v{canonical}'",
-                context=f"Found: v{priorities_version}, Expected: v{canonical}"
+                message=f"ROADMAP.md version mismatch: "
+                       f"v{roadmap_version} != v{canonical}",
+                suggestion=f"Update '**Current version**: v{roadmap_version}' "
+                          f"to '**Current version**: v{canonical}'",
+                context=f"Found: v{roadmap_version}, Expected: v{canonical}"
             ))
 
-    def _extract_priorities_version(self, priorities_file: Path) -> Optional[str]:
-        """Extract version from PRIORITIES.md.
+    def _extract_roadmap_version(self, roadmap_file: Path) -> Optional[str]:
+        """Extract version from ROADMAP.md.
 
-        Looks for pattern: **Current Version:** vX.Y.Z
+        Looks for pattern: **Current version**: vX.Y.Z
         """
         try:
-            content = priorities_file.read_text()
-            # Match: **Current Version:** v0.35.0 or **Current Version:** 0.35.0
-            pattern = r'\*\*Current [Vv]ersion:\*\*\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
+            content = roadmap_file.read_text()
+            # Match: **Current version**: v0.39.0
+            pattern = r'\*\*Current [Vv]ersion\*\*:\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
             match = re.search(pattern, content)
             if match:
                 return match.group(1)

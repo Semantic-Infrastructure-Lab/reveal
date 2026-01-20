@@ -1,30 +1,15 @@
 """V013: Adapter count accuracy in documentation.
 
-Validates that README.md and PRIORITIES.md adapter counts match actual registered URI adapters.
+Validates that README.md adapter counts match actual registered URI adapters.
 Prevents documentation drift when new adapters are added.
 
 Example violation:
     - README.md claims: "10 adapters"
-    - Actual registered: 12 adapters (ast, diff, env, help, imports, json, markdown, mysql, python, reveal, sqlite, stats)
+    - Actual registered: 14 adapters
     - Result: Documentation out of sync
 
 Checks:
     - README.md: ALL numeric claims about adapters
-    - PRIORITIES.md: "Implemented (N)" section and adapter table
-
-Registered adapters:
-    - ast:// - AST query adapter
-    - diff:// - Structural diff adapter
-    - env:// - Environment variables
-    - help:// - Help system
-    - imports:// - Import analysis
-    - json:// - JSON navigation
-    - markdown:// - Markdown query
-    - mysql:// - MySQL database
-    - python:// - Python runtime
-    - reveal:// - Self-introspection
-    - sqlite:// - SQLite database
-    - stats:// - Code statistics
 """
 
 import re
@@ -72,11 +57,6 @@ class V013(BaseRule):
         if readme_file.exists():
             detections.extend(self._check_readme_adapter_count(readme_file, actual_count, project_root))
 
-        # Check PRIORITIES.md claims
-        priorities_file = project_root / 'internal-docs' / 'planning' / 'PRIORITIES.md'
-        if priorities_file.exists():
-            detections.extend(self._check_priorities_adapter_count(priorities_file, actual_count, project_root))
-
         return detections
 
     def _count_registered_adapters(self) -> Optional[int]:
@@ -105,49 +85,6 @@ class V013(BaseRule):
                     suggestion=f"Update README.md line {line_num} to: '{actual_count} adapters'",
                     context=f"Claimed: {claimed}, Actual: {actual_count} registered URI adapters"
                 ))
-
-        return detections
-
-    def _check_priorities_adapter_count(self, priorities_file: Path, actual_count: int, project_root: Path) -> List[Detection]:
-        """Check adapter count claims in PRIORITIES.md."""
-        detections = []
-
-        try:
-            content = priorities_file.read_text()
-            lines = content.split('\n')
-            rel_path = str(priorities_file.relative_to(project_root))
-
-            # Check "### Implemented (N)" heading
-            for i, line in enumerate(lines, 1):
-                match = re.search(r'###\s+Implemented\s+\((\d+)\)', line)
-                if match:
-                    claimed = int(match.group(1))
-                    if claimed != actual_count:
-                        detections.append(self.create_detection(
-                            file_path=rel_path,
-                            line=i,
-                            message=f"Adapter count mismatch in header: claims {claimed}, actual {actual_count}",
-                            suggestion=f"Update line {i} to: '### Implemented ({actual_count})'",
-                            context=f"Claimed: {claimed}, Actual: {actual_count} registered adapters"
-                        ))
-
-            # Check adapter table (count | `scheme://` | entries)
-            table_adapters = re.findall(r'\|\s*`([a-z]+)://`\s*\|', content)
-            if table_adapters and len(table_adapters) != actual_count:
-                # Find the table header line
-                for i, line in enumerate(lines, 1):
-                    if '| Adapter | Purpose |' in line:
-                        detections.append(self.create_detection(
-                            file_path=rel_path,
-                            line=i,
-                            message=f"Adapter table incomplete: {len(table_adapters)} entries, actual {actual_count}",
-                            suggestion=f"Add missing adapters to table (found {len(table_adapters)}, need {actual_count})",
-                            context=f"Table has: {', '.join(table_adapters)}"
-                        ))
-                        break
-
-        except Exception:
-            pass
 
         return detections
 
