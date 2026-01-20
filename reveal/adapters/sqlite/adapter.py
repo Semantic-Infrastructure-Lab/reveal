@@ -160,6 +160,9 @@ class SQLiteAdapter(ResourceAdapter):
                 return element_data
             raise ValueError(f"Table not found: {self.table}")
 
+        # Validate connection first (checks file existence)
+        self._get_connection()
+
         # Get database file info
         db_size = os.path.getsize(self.db_path)
         db_size_mb = db_size / (1024 * 1024)

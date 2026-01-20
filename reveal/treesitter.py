@@ -10,6 +10,88 @@ suppress_treesitter_warnings()
 from tree_sitter_language_pack import get_parser
 
 
+# =============================================================================
+# TREE-SITTER NODE TYPE CONSTANTS
+# =============================================================================
+# Single source of truth for tree-sitter node types across languages.
+# Used by treesitter.py and display/element.py for consistent extraction.
+#
+# MAINTENANCE: When adding new language support, update these lists.
+# Run `reveal file.ext --show-ast` to discover node types for new languages.
+# =============================================================================
+
+# Node types for function extraction
+FUNCTION_NODE_TYPES = (
+    'function_definition',   # Python
+    'function_declaration',  # Go, C, JavaScript, Kotlin, Swift
+    'function_item',         # Rust
+    'function_signature',    # Dart
+    'method_declaration',    # Java, C#
+    'method_definition',     # Ruby
+    'function',              # Generic
+    'method',                # Ruby
+    'function_definition_statement',       # Lua (global functions)
+    'local_function_definition_statement', # Lua (local functions)
+)
+
+# Node types for class extraction
+CLASS_NODE_TYPES = (
+    'class_definition',      # Python
+    'class_declaration',     # Java, C#, JavaScript
+    'class_specifier',       # C++
+    'struct_item',           # Rust (treated as class)
+    'class',                 # Ruby
+)
+
+# Node types for struct extraction
+STRUCT_NODE_TYPES = (
+    'struct_item',           # Rust
+    'struct_specifier',      # C/C++
+    'struct_declaration',    # Go
+)
+
+# Node types for import extraction
+IMPORT_NODE_TYPES = (
+    'import_statement',      # Python, JavaScript
+    'import_declaration',    # Go, Java
+    'use_declaration',       # Rust
+    'using_directive',       # C#
+    'import_from_statement', # Python
+    'preproc_include',       # C/C++
+)
+
+# Mapping from element type to node types (for element extraction)
+ELEMENT_TYPE_MAP = {
+    'function': FUNCTION_NODE_TYPES[:4],  # Most common function types
+    'class': CLASS_NODE_TYPES[:2],        # Most common class types
+    'struct': STRUCT_NODE_TYPES,
+}
+
+# Parent node types for hierarchical extraction (Class.method)
+PARENT_NODE_TYPES = (
+    'class_definition', 'class_declaration',
+    'struct_item', 'struct_specifier', 'struct_declaration',
+    'impl_item',              # Rust impl blocks
+    'interface_declaration',
+    'module',                 # Ruby module
+)
+
+# Child node types for hierarchical extraction (methods within classes)
+CHILD_NODE_TYPES = (
+    'function_definition', 'function_declaration',
+    'method_declaration', 'method_definition',
+    'function_item',         # Rust
+)
+
+# All element types for line-based extraction
+ALL_ELEMENT_NODE_TYPES = (
+    'function_definition', 'function_declaration', 'function_item',
+    'method_declaration', 'method_definition',
+    'class_definition', 'class_declaration',
+    'struct_item', 'struct_specifier', 'struct_declaration',
+)
+
+
 class TreeSitterAnalyzer(FileAnalyzer):
     """Base class for tree-sitter based analyzers.
 
@@ -93,17 +175,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Extract import statements."""
         imports = []
 
-        # Common import node types across languages
-        import_types = [
-            'import_statement',      # Python, JavaScript
-            'import_declaration',    # Go, Java
-            'use_declaration',       # Rust
-            'using_directive',       # C#
-            'import_from_statement', # Python
-            'preproc_include',       # C/C++
-        ]
-
-        for import_type in import_types:
+        for import_type in IMPORT_NODE_TYPES:
             nodes = self._find_nodes_by_type(import_type)
             for node in nodes:
                 imports.append({
@@ -136,17 +208,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
     def _get_function_node_types(self) -> List[str]:
         """Get common function node types across languages."""
-        return [
-            'function_definition',   # Python
-            'function_declaration',  # Go, C, JavaScript, Kotlin, Swift
-            'function_item',         # Rust
-            'function_signature',    # Dart
-            'method_declaration',    # Java, C#
-            'function',              # Generic
-            'method',                # Ruby
-            'function_definition_statement',  # Lua (global functions)
-            'local_function_definition_statement',  # Lua (local functions)
-        ]
+        return list(FUNCTION_NODE_TYPES)
 
     def _extract_decorated_functions(self, function_types: List[str]):
         """Extract decorated functions (Python-specific).
@@ -258,13 +320,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
     def _get_class_node_types(self) -> List[str]:
         """Get common class node types across languages."""
-        return [
-            'class_definition',      # Python
-            'class_declaration',     # Java, C#, JavaScript
-            'class_specifier',       # C++
-            'struct_item',           # Rust (treated as class)
-            'class',                 # Ruby
-        ]
+        return list(CLASS_NODE_TYPES)
 
     def _extract_decorated_classes(self, class_types: List[str]):
         """Extract decorated classes (Python-specific).
@@ -353,13 +409,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Extract struct definitions (for languages that have them)."""
         structs = []
 
-        struct_types = [
-            'struct_item',           # Rust
-            'struct_specifier',      # C/C++
-            'struct_declaration',    # Go
-        ]
-
-        for struct_type in struct_types:
+        for struct_type in STRUCT_NODE_TYPES:
             nodes = self._find_nodes_by_type(struct_type)
             for node in nodes:
                 name = self._get_node_name(node)
@@ -387,14 +437,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if not self.tree:
             return super().extract_element(element_type, name)
 
-        # Map element type to node types
-        type_map = {
-            'function': ['function_definition', 'function_declaration', 'function_item', 'method_declaration'],
-            'class': ['class_definition', 'class_declaration'],
-            'struct': ['struct_item', 'struct_specifier', 'struct_declaration'],
-        }
-
-        node_types = type_map.get(element_type, [element_type])
+        node_types = ELEMENT_TYPE_MAP.get(element_type, [element_type])
 
         # Find matching node
         for node_type in node_types:

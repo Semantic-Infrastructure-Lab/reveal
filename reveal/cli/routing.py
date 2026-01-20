@@ -258,7 +258,7 @@ def _handle_rendering(adapter, renderer_class: type, scheme: str,
     if supports_elements and (element or (resource and resource_is_element)):
         _render_element(adapter, renderer_class, element, resource, args)
     else:
-        _render_structure(adapter, renderer_class, args)
+        _render_structure(adapter, renderer_class, args, scheme=scheme, resource=resource)
 
 
 def _render_element(adapter, renderer_class: type, element: Optional[str],
@@ -286,13 +286,16 @@ def _render_element(adapter, renderer_class: type, element: Optional[str],
     renderer_class.render_element(result, args.format)
 
 
-def _render_structure(adapter, renderer_class: type, args: 'Namespace') -> None:
+def _render_structure(adapter, renderer_class: type, args: 'Namespace',
+                      scheme: str = None, resource: str = None) -> None:
     """Render full structure from adapter.
 
     Args:
         adapter: Adapter with get_structure() method
         renderer_class: Renderer for structure output
         args: CLI arguments with optional filter parameters
+        scheme: Optional URI scheme (for adapters that need full URI)
+        resource: Optional resource string (for adapters that need full URI)
     """
     import inspect
 
@@ -303,6 +306,10 @@ def _render_structure(adapter, renderer_class: type, args: 'Namespace') -> None:
     # For stats adapter: pass hotspots, min_lines, etc. if get_structure() supports them
     if hasattr(adapter, 'get_structure'):
         sig = inspect.signature(adapter.get_structure)
+
+        # URI parameter - reconstruct full URI for adapters that need it (e.g., imports)
+        if 'uri' in sig.parameters and scheme and resource is not None:
+            structure_kwargs['uri'] = f"{scheme}://{resource}"
 
         # Hotspots parameter
         if 'hotspots' in sig.parameters and hasattr(args, 'hotspots'):
@@ -338,7 +345,19 @@ def _render_structure(adapter, renderer_class: type, args: 'Namespace') -> None:
             if min_functions is not None:
                 structure_kwargs['min_functions'] = min_functions
 
-    result = adapter.get_structure(**structure_kwargs)
+    try:
+        result = adapter.get_structure(**structure_kwargs)
+    except Exception as e:
+        # Handle adapter errors cleanly (e.g., MySQL connection failures)
+        error_msg = str(e)
+        # If error message already has structure (multi-line), use it as-is
+        if '\n' in error_msg:
+            print(f"Error: {error_msg}", file=sys.stderr)
+        else:
+            scheme_hint = f" ({scheme}://)" if scheme else ""
+            print(f"Error{scheme_hint}: {error_msg}", file=sys.stderr)
+        sys.exit(1)
+
     renderer_class.render_structure(result, args.format)
 
 

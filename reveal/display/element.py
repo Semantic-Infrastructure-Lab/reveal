@@ -3,6 +3,9 @@
 import sys
 
 from reveal.base import FileAnalyzer
+from reveal.treesitter import (
+    ELEMENT_TYPE_MAP, PARENT_NODE_TYPES, CHILD_NODE_TYPES, ALL_ELEMENT_NODE_TYPES
+)
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 
 
@@ -73,13 +76,7 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
     if not result and isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
         # Try common element types with tree-sitter only (no grep fallback)
         for element_type in ['class', 'function', 'struct', 'section', 'server', 'location', 'upstream']:
-            # Try tree-sitter types for this element
-            type_map = {
-                'function': ['function_definition', 'function_declaration', 'function_item', 'method_declaration'],
-                'class': ['class_definition', 'class_declaration'],
-                'struct': ['struct_item', 'struct_specifier', 'struct_declaration'],
-            }
-            node_types = type_map.get(element_type, [element_type])
+            node_types = ELEMENT_TYPE_MAP.get(element_type, [element_type])
 
             for node_type in node_types:
                 nodes = analyzer._find_nodes_by_type(node_type)
@@ -166,25 +163,9 @@ def _extract_hierarchical_element(analyzer, element: str):
 
     parent_name, child_name = parts
 
-    # Parent node types (classes, structs, interfaces, etc.)
-    parent_types = [
-        'class_definition', 'class_declaration',
-        'struct_item', 'struct_specifier', 'struct_declaration',
-        'impl_item',  # Rust impl blocks
-        'interface_declaration',
-        'module',  # Ruby module
-    ]
-
-    # Child node types (methods, functions within parent)
-    child_types = [
-        'function_definition', 'function_declaration',
-        'method_declaration', 'method_definition',
-        'function_item',  # Rust
-    ]
-
     # Find the parent node
     parent_node = None
-    for node_type in parent_types:
+    for node_type in PARENT_NODE_TYPES:
         nodes = analyzer._find_nodes_by_type(node_type)
         for node in nodes:
             if analyzer._get_node_name(node) == parent_name:
@@ -200,7 +181,7 @@ def _extract_hierarchical_element(analyzer, element: str):
     def find_child_in_subtree(node, target_name):
         """Recursively search for child node within subtree."""
         for child in node.children:
-            if child.type in child_types:
+            if child.type in CHILD_NODE_TYPES:
                 name = analyzer._get_node_name(child)
                 if name == target_name:
                     return child
@@ -247,18 +228,10 @@ def _extract_element_at_line(analyzer, target_line: int):
     if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
         return None
 
-    # Node types to search for elements
-    element_types = [
-        'function_definition', 'function_declaration', 'function_item',
-        'method_declaration', 'method_definition',
-        'class_definition', 'class_declaration',
-        'struct_item', 'struct_specifier', 'struct_declaration',
-    ]
-
     best_match = None
     smallest_span = float('inf')
 
-    for node_type in element_types:
+    for node_type in ALL_ELEMENT_NODE_TYPES:
         nodes = analyzer._find_nodes_by_type(node_type)
         for node in nodes:
             start = node.start_point[0] + 1  # 1-indexed
@@ -507,15 +480,7 @@ def _extract_ordinal_element(analyzer, ordinal: int, element_type: str = None):
 
 def _get_source_for_item(analyzer, item, line_start, line_end):
     """Get source code for a structure item using tree-sitter if available."""
-    # Try to find node at this location
-    element_types = [
-        'function_definition', 'function_declaration', 'function_item',
-        'method_declaration', 'method_definition',
-        'class_definition', 'class_declaration',
-        'struct_item', 'struct_specifier', 'struct_declaration',
-    ]
-
-    for node_type in element_types:
+    for node_type in ALL_ELEMENT_NODE_TYPES:
         nodes = analyzer._find_nodes_by_type(node_type)
         for node in nodes:
             start = node.start_point[0] + 1

@@ -14,6 +14,7 @@ import re
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from . import NGINX_FILE_PATTERNS
 
 
 class N002(BaseRule):
@@ -23,7 +24,7 @@ class N002(BaseRule):
     message = "SSL server block missing certificate configuration"
     category = RulePrefix.N
     severity = Severity.CRITICAL
-    file_patterns = ['.conf', '.nginx', 'nginx.conf']
+    file_patterns = NGINX_FILE_PATTERNS
 
     # Match server blocks
     SERVER_BLOCK_PATTERN = re.compile(

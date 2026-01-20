@@ -14,6 +14,7 @@ import re
 from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from . import NGINX_FILE_PATTERNS
 
 
 class N003(BaseRule):
@@ -23,7 +24,7 @@ class N003(BaseRule):
     message = "Proxy location missing recommended headers"
     category = RulePrefix.N
     severity = Severity.MEDIUM
-    file_patterns = ['.conf', '.nginx', 'nginx.conf']
+    file_patterns = NGINX_FILE_PATTERNS
 
     # Important headers for proxying
     RECOMMENDED_HEADERS = {

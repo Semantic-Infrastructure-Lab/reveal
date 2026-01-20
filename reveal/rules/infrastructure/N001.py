@@ -17,6 +17,7 @@ from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from . import NGINX_FILE_PATTERNS
 
 
 class N001(BaseRule):
@@ -26,7 +27,7 @@ class N001(BaseRule):
     message = "Multiple upstreams point to the same backend server"
     category = RulePrefix.N
     severity = Severity.HIGH
-    file_patterns = ['.conf', '.nginx', 'nginx.conf']
+    file_patterns = NGINX_FILE_PATTERNS
 
     # Regex to match upstream blocks and their servers
     UPSTREAM_PATTERN = re.compile(
