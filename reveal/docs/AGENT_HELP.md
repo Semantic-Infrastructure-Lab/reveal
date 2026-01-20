@@ -1294,9 +1294,19 @@ reveal deep_dir/
 
 3. **Limit entries shown**
    ```bash
-   # Show max 100 entries
+   # Global limit: stop after 100 total entries
    reveal huge_dir/ --max-entries 100
+
+   # Per-directory limit: 50 per dir, then snip (default)
+   reveal project/ --dir-limit 50
+
+   # Unlimited per-directory (but global limit still applies)
+   reveal project/ --dir-limit 0
    ```
+
+   **When to use which:**
+   - `--max-entries` - Hard cap on total output (token budget)
+   - `--dir-limit` - Control per-directory verbosity (stops node_modules from consuming budget)
 
 4. **Use AST queries instead**
    ```bash

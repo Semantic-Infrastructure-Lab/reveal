@@ -781,8 +781,11 @@ reveal python://doctor                   # Python health check
 # Fast mode (skip line counting, ~6x faster)
 reveal src/ --fast
 
-# Limit directory entries
-reveal node_modules/ --max-entries 50
+# Per-directory limit (stops node_modules from dominating)
+reveal project/ --dir-limit 20
+
+# Global entry limit (hard cap on total output)
+reveal huge_dir/ --max-entries 100
 
 # Control tree depth
 reveal . --depth 2
