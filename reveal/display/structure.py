@@ -273,17 +273,45 @@ def _build_extractable_meta(structure: Dict[str, List[Dict[str, Any]]], file_pat
         Dict with 'types' (available element types) and 'elements' (extractable by type)
     """
     # Map structure categories to extraction element types
+    # Comprehensive mapping for all analyzers (GraphQL, HCL, Protobuf, etc.)
     category_to_type = {
+        # Core code elements
         'functions': 'function',
         'classes': 'class',
         'structs': 'struct',
+        'imports': 'import',
+        'tests': 'test',
+        # Markdown/docs
         'headings': 'section',
         'sections': 'section',
+        # Nginx
         'servers': 'server',
         'locations': 'location',
         'upstreams': 'upstream',
+        # Config files
         'keys': 'key',
         'tables': 'section',  # TOML tables
+        # GraphQL
+        'queries': 'query',
+        'mutations': 'mutation',
+        'types': 'type',
+        'interfaces': 'interface',
+        'enums': 'enum',
+        # Protobuf/gRPC
+        'messages': 'message',
+        'services': 'service',
+        'rpcs': 'rpc',
+        # Terraform/HCL
+        'resources': 'resource',
+        'variables': 'variable',
+        'outputs': 'output',
+        'modules': 'module',
+        # Zig/Rust
+        'unions': 'union',
+        # Jupyter
+        'cells': 'cell',
+        # JSONL
+        'records': 'record',
     }
 
     extractable = {}
@@ -339,12 +367,12 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
     # Add 'file' field to each element in structure for --stdin compatibility
     enriched_structure = {}
     for category, items in structure.items():
-        # Special handling for frontmatter (single dict, not a list)
-        if category == 'frontmatter':
+        # Special handling for frontmatter and stats (single dict, not a list)
+        if category in ('frontmatter', 'stats'):
             if isinstance(items, dict):
-                enriched_fm = items.copy()
-                enriched_fm['file'] = file_path
-                enriched_structure[category] = enriched_fm
+                enriched_item = items.copy()
+                enriched_item['file'] = file_path
+                enriched_structure[category] = enriched_item
             else:
                 enriched_structure[category] = items
             continue

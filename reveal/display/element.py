@@ -11,16 +11,60 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
 
     Args:
         analyzer: File analyzer
-        element: Element name to extract (supports "Class.method" hierarchy)
+        element: Element name to extract (supports "Class.method" hierarchy, ":LINE" syntax)
         output_format: Output format
         config: Optional RevealConfig instance
     """
+    import re
+
     # For tree-sitter analyzers, try all types with tree-sitter first
     # before falling back to grep. This prevents matching type variables
     # or other non-semantic matches when a proper definition exists.
     from ..treesitter import TreeSitterAnalyzer
 
     result = None
+
+    # Check for @N ordinal extraction syntax (e.g., "@3" or "function:3")
+    ordinal_match = re.match(r'^@(\d+)$', element)
+    typed_ordinal_match = re.match(r'^(\w+):(\d+)$', element)
+    if ordinal_match or typed_ordinal_match:
+        if ordinal_match:
+            ordinal = int(ordinal_match.group(1))
+            element_type = None  # Will use dominant category
+        else:
+            element_type = typed_ordinal_match.group(1)
+            ordinal = int(typed_ordinal_match.group(2))
+
+        result = _extract_ordinal_element(analyzer, ordinal, element_type)
+        if result:
+            _output_result(analyzer, result, element, output_format, config)
+            return
+        else:
+            if element_type:
+                print(f"Error: No {element_type} #{ordinal} found in {analyzer.path}", file=sys.stderr)
+            else:
+                print(f"Error: No element #{ordinal} found in {analyzer.path}", file=sys.stderr)
+            sys.exit(1)
+
+    # Check for :LINE extraction syntax (e.g., ":73" or ":73-91")
+    line_match = re.match(r'^:(\d+)(?:-(\d+))?$', element)
+    if line_match:
+        target_line = int(line_match.group(1))
+        end_line = int(line_match.group(2)) if line_match.group(2) else None
+
+        if end_line:
+            # Explicit range: extract lines directly
+            result = _extract_line_range(analyzer, target_line, end_line)
+        else:
+            # Single line: find element containing this line
+            result = _extract_element_at_line(analyzer, target_line)
+
+        if result:
+            _output_result(analyzer, result, element, output_format, config)
+            return
+        else:
+            print(f"Error: No element found at line {target_line} in {analyzer.path}", file=sys.stderr)
+            sys.exit(1)
 
     # Check for hierarchical extraction (Class.method syntax)
     if '.' in element and isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
@@ -177,3 +221,290 @@ def _extract_hierarchical_element(analyzer, element: str):
         'line_end': child_node.end_point[0] + 1,
         'source': analyzer._get_node_text(child_node),
     }
+
+
+def _extract_element_at_line(analyzer, target_line: int):
+    """Find the element containing the target line.
+
+    Searches through the file structure to find an element (function, class, etc.)
+    that contains the specified line number.
+
+    Args:
+        analyzer: File analyzer instance
+        target_line: Line number to find element for (1-indexed)
+
+    Returns:
+        Element dict with name, line_start, line_end, source, or None
+    """
+    from ..treesitter import TreeSitterAnalyzer
+
+    if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
+        return None
+
+    # Node types to search for elements
+    element_types = [
+        'function_definition', 'function_declaration', 'function_item',
+        'method_declaration', 'method_definition',
+        'class_definition', 'class_declaration',
+        'struct_item', 'struct_specifier', 'struct_declaration',
+    ]
+
+    best_match = None
+    smallest_span = float('inf')
+
+    for node_type in element_types:
+        nodes = analyzer._find_nodes_by_type(node_type)
+        for node in nodes:
+            start = node.start_point[0] + 1  # 1-indexed
+            end = node.end_point[0] + 1
+
+            # Check if target line is within this element
+            if start <= target_line <= end:
+                span = end - start
+                # Prefer smallest containing element (most specific)
+                if span < smallest_span:
+                    smallest_span = span
+                    best_match = node
+
+    if not best_match:
+        return None
+
+    name = analyzer._get_node_name(best_match) or f"element@{target_line}"
+    return {
+        'name': name,
+        'line_start': best_match.start_point[0] + 1,
+        'line_end': best_match.end_point[0] + 1,
+        'source': analyzer._get_node_text(best_match),
+    }
+
+
+def _extract_line_range(analyzer, start_line: int, end_line: int):
+    """Extract a specific line range from the file.
+
+    Args:
+        analyzer: File analyzer instance
+        start_line: Start line (1-indexed, inclusive)
+        end_line: End line (1-indexed, inclusive)
+
+    Returns:
+        Element dict with name, line_start, line_end, source
+    """
+    try:
+        with open(analyzer.path, 'r') as f:
+            lines = f.readlines()
+
+        # Validate range
+        if start_line < 1 or end_line > len(lines) or start_line > end_line:
+            return None
+
+        # Extract lines (convert to 0-indexed)
+        extracted = lines[start_line - 1:end_line]
+        source = ''.join(extracted).rstrip('\n')
+
+        return {
+            'name': f'lines:{start_line}-{end_line}',
+            'line_start': start_line,
+            'line_end': end_line,
+            'source': source,
+        }
+    except Exception:
+        return None
+
+
+def _extract_ordinal_element(analyzer, ordinal: int, element_type: str = None):
+    """Extract the Nth element of a given type (or dominant category).
+
+    Args:
+        analyzer: File analyzer instance
+        ordinal: 1-indexed position (e.g., 3 for "3rd function")
+        element_type: Optional element type (e.g., "function", "class").
+                      If None, uses the file's dominant category.
+
+    Returns:
+        Element dict with name, line_start, line_end, source, or None
+    """
+    from ..treesitter import TreeSitterAnalyzer
+
+    if ordinal < 1:
+        return None
+
+    # Get structure from analyzer
+    try:
+        structure = analyzer.get_structure()
+    except Exception:
+        return None
+
+    if not structure:
+        return None
+
+    # Dominant category priority by file type
+    # Code files: functions > classes > structs
+    # Markdown: headings > sections
+    # Config: keys > tables
+    dominant_priority = [
+        'functions', 'classes', 'structs',  # Code
+        'headings', 'sections',              # Markdown
+        'queries', 'mutations', 'types',     # GraphQL
+        'messages', 'services',              # Protobuf
+        'resources', 'variables',            # Terraform
+        'keys', 'tables',                    # Config
+        'cells',                             # Jupyter
+    ]
+
+    # Map element_type to category name (reverse of category_to_type)
+    type_to_category = {
+        'function': 'functions',
+        'class': 'classes',
+        'struct': 'structs',
+        'section': 'headings',
+        'heading': 'headings',
+        'query': 'queries',
+        'mutation': 'mutations',
+        'type': 'types',
+        'interface': 'interfaces',
+        'enum': 'enums',
+        'message': 'messages',
+        'service': 'services',
+        'rpc': 'rpcs',
+        'resource': 'resources',
+        'variable': 'variables',
+        'output': 'outputs',
+        'module': 'modules',
+        'import': 'imports',
+        'test': 'tests',
+        'union': 'unions',
+        'cell': 'cells',
+        'key': 'keys',
+        'table': 'tables',
+        'server': 'servers',
+        'location': 'locations',
+        'upstream': 'upstreams',
+    }
+
+    # Determine which category to use
+    if element_type:
+        # User specified type explicitly (e.g., "function:3")
+        category = type_to_category.get(element_type)
+        if not category:
+            # Try using element_type directly as category (e.g., "functions:3")
+            category = element_type if element_type in structure else None
+        if not category or category not in structure:
+            return None
+        target_categories = [category]
+    else:
+        # Find dominant category (first non-empty category in priority order)
+        target_categories = [cat for cat in dominant_priority if cat in structure and structure[cat]]
+        if not target_categories:
+            # Fallback: use any category with items
+            target_categories = [cat for cat in structure if isinstance(structure[cat], list) and structure[cat]]
+
+    if not target_categories:
+        return None
+
+    # Get elements from first matching category
+    category = target_categories[0]
+    items = structure.get(category, [])
+
+    if not items or not isinstance(items, list):
+        return None
+
+    # Sort by line number to ensure consistent ordering
+    items = sorted(items, key=lambda x: x.get('line', x.get('line_start', 0)))
+
+    # Check if ordinal is valid (1-indexed)
+    if ordinal > len(items):
+        return None
+
+    item = items[ordinal - 1]
+
+    # Extract the element
+    name = item.get('name') or item.get('text') or item.get('title') or f'{category}@{ordinal}'
+    line_start = item.get('line', item.get('line_start', 1))
+    line_end = item.get('line_end', line_start)
+
+    # Get source code
+    if isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
+        # Try to find the actual node for better source extraction
+        source = _get_source_for_item(analyzer, item, line_start, line_end)
+    else:
+        # Fallback: read lines directly
+        source = _read_lines(analyzer.path, line_start, line_end)
+
+    return {
+        'name': name,
+        'line_start': line_start,
+        'line_end': line_end,
+        'source': source or '',
+    }
+
+
+def _get_source_for_item(analyzer, item, line_start, line_end):
+    """Get source code for a structure item using tree-sitter if available."""
+    # Try to find node at this location
+    element_types = [
+        'function_definition', 'function_declaration', 'function_item',
+        'method_declaration', 'method_definition',
+        'class_definition', 'class_declaration',
+        'struct_item', 'struct_specifier', 'struct_declaration',
+    ]
+
+    for node_type in element_types:
+        nodes = analyzer._find_nodes_by_type(node_type)
+        for node in nodes:
+            start = node.start_point[0] + 1
+            if start == line_start:
+                return analyzer._get_node_text(node)
+
+    # Fallback to reading lines
+    return _read_lines(analyzer.path, line_start, line_end)
+
+
+def _read_lines(path, start_line, end_line):
+    """Read lines from a file."""
+    try:
+        with open(path, 'r') as f:
+            lines = f.readlines()
+        if start_line < 1 or end_line > len(lines):
+            return None
+        return ''.join(lines[start_line - 1:end_line]).rstrip('\n')
+    except Exception:
+        return None
+
+
+def _output_result(analyzer, result, element: str, output_format: str, config=None):
+    """Output extraction result in the requested format.
+
+    Args:
+        analyzer: File analyzer instance
+        result: Extraction result dict
+        element: Original element query string
+        output_format: Output format (json, grep, or human)
+        config: Optional RevealConfig instance
+    """
+    if output_format == 'json':
+        print(safe_json_dumps(result))
+        return
+
+    path = analyzer.path
+    line_start = result.get('line_start', 1)
+    line_end = result.get('line_end', line_start)
+    source = result.get('source', '')
+    name = result.get('name', element)
+
+    # Header
+    print(f"{path}:{line_start}-{line_end} | {name}\n")
+
+    # Source with line numbers
+    if output_format == 'grep':
+        for i, line in enumerate(source.split('\n')):
+            line_num = line_start + i
+            print(f"{path}:{line_num}:{line}")
+    else:
+        formatted = analyzer.format_with_lines(source, line_start)
+        print(formatted)
+
+        # Navigation hints
+        file_type = get_file_type_from_analyzer(analyzer)
+        line_count = line_end - line_start + 1
+        print_breadcrumbs('element', path, file_type=file_type, config=config,
+                         element_name=name, line_count=line_count, line_start=line_start)

@@ -9,6 +9,29 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
 from ..registry import get_analyzer
 
+# Quality scoring defaults - configurable via .reveal/stats-quality.yaml
+QUALITY_DEFAULTS = {
+    'thresholds': {
+        'complexity_target': 10,       # Functions above this get penalized
+        'function_length_target': 50,  # Lines; functions above this penalized
+        'deep_nesting_depth': 4,       # Nesting beyond this penalized
+    },
+    'penalties': {
+        'complexity': {
+            'multiplier': 3,           # Points lost per unit above target
+            'max': 30,                 # Maximum penalty
+        },
+        'length': {
+            'divisor': 2,              # Points lost = (excess / divisor)
+            'max': 20,
+        },
+        'ratios': {
+            'multiplier': 50,          # For long_func_ratio, deep_nesting_ratio
+            'max': 25,
+        },
+    }
+}
+
 
 class StatsRenderer:
     """Renderer for statistics adapter results."""
@@ -111,6 +134,52 @@ class StatsAdapter(ResourceAdapter):
 
         # Parse query string
         self.query_params = self._parse_query(query_string) if query_string else {}
+
+        # Load quality scoring config (with defaults)
+        self._quality_config = self._get_quality_config()
+
+    def _get_quality_config(self) -> Dict[str, Any]:
+        """Load quality scoring configuration.
+
+        Config search order:
+        1. ./.reveal/stats-quality.yaml (project)
+        2. ~/.config/reveal/stats-quality.yaml (user)
+        3. Hardcoded QUALITY_DEFAULTS (fallback)
+
+        Returns:
+            Quality config dict with thresholds and penalties
+        """
+        import copy
+        config = copy.deepcopy(QUALITY_DEFAULTS)
+
+        config_paths = [
+            self.path / '.reveal' / 'stats-quality.yaml' if self.path.is_dir() else self.path.parent / '.reveal' / 'stats-quality.yaml',
+            Path.home() / '.config' / 'reveal' / 'stats-quality.yaml',
+        ]
+
+        try:
+            import yaml
+            for path in config_paths:
+                if path.exists():
+                    with open(path) as f:
+                        loaded = yaml.safe_load(f)
+                        if loaded:
+                            # Deep merge loaded config into defaults
+                            for key in ['thresholds', 'penalties']:
+                                if key in loaded:
+                                    if key == 'penalties':
+                                        for subkey in loaded[key]:
+                                            if subkey in config[key]:
+                                                config[key][subkey].update(loaded[key][subkey])
+                                    else:
+                                        config[key].update(loaded[key])
+                            break
+        except ImportError:
+            pass  # yaml not available, use defaults
+        except Exception:
+            pass  # Any config error, use defaults
+
+        return config
 
     def _parse_query(self, query_string: str) -> Dict[str, Any]:
         """Parse query string into parameters.
@@ -443,6 +512,8 @@ class StatsAdapter(ResourceAdapter):
                                  total_functions: int) -> float:
         """Calculate quality score (0-100, higher is better).
 
+        Uses configurable thresholds from .reveal/stats-quality.yaml or defaults.
+
         Args:
             avg_complexity: Average cyclomatic complexity
             avg_func_length: Average function length in lines
@@ -453,25 +524,44 @@ class StatsAdapter(ResourceAdapter):
         Returns:
             Quality score 0-100
         """
+        # Get config values (with defaults)
+        thresholds = self._quality_config.get('thresholds', {})
+        penalties = self._quality_config.get('penalties', {})
+
+        complexity_target = thresholds.get('complexity_target', 10)
+        length_target = thresholds.get('function_length_target', 50)
+
+        complexity_pen = penalties.get('complexity', {})
+        length_pen = penalties.get('length', {})
+        ratio_pen = penalties.get('ratios', {})
+
         score = 100.0
 
-        # Penalize high complexity (target: <10)
-        if avg_complexity > 10:
-            score -= min(30, (avg_complexity - 10) * 3)
+        # Penalize high complexity
+        if avg_complexity > complexity_target:
+            multiplier = complexity_pen.get('multiplier', 3)
+            max_penalty = complexity_pen.get('max', 30)
+            score -= min(max_penalty, (avg_complexity - complexity_target) * multiplier)
 
-        # Penalize long functions (target: <50 lines avg)
-        if avg_func_length > 50:
-            score -= min(20, (avg_func_length - 50) / 2)
+        # Penalize long functions
+        if avg_func_length > length_target:
+            divisor = length_pen.get('divisor', 2)
+            max_penalty = length_pen.get('max', 20)
+            score -= min(max_penalty, (avg_func_length - length_target) / divisor)
 
         # Penalize files with many long functions
         if total_functions > 0:
             long_func_ratio = long_func_count / total_functions
-            score -= min(25, long_func_ratio * 50)
+            multiplier = ratio_pen.get('multiplier', 50)
+            max_penalty = ratio_pen.get('max', 25)
+            score -= min(max_penalty, long_func_ratio * multiplier)
 
         # Penalize deep nesting
         if total_functions > 0:
             deep_nesting_ratio = deep_nesting_count / total_functions
-            score -= min(25, deep_nesting_ratio * 50)
+            multiplier = ratio_pen.get('multiplier', 50)
+            max_penalty = ratio_pen.get('max', 25)
+            score -= min(max_penalty, deep_nesting_ratio * multiplier)
 
         return max(0, score)
 

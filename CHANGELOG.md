@@ -15,6 +15,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.39.0] - 2026-01-19
 
 ### Added
+- **Windows Batch analyzer** - Windows automation script analysis (.bat, .cmd)
+  - Label extraction (subroutines/jump targets as functions)
+  - Variable assignments (SET commands)
+  - Internal calls (CALL :label) and external calls (CALL script.bat)
+  - Script statistics (echo off, setlocal, code lines)
+  - Element extraction by label name
+  - Head/tail/range filtering
+  - Examples:
+    - `reveal build.bat` - Show script structure
+    - `reveal deploy.cmd setup` - Extract :setup subroutine
+    - `reveal script.bat --head 3` - First 3 labels
+  - Tests: 14 tests, 95% coverage
+  - Fills Windows platform gap (CI/CD, build automation, enterprise scripts)
+  - Session: shimmering-spark-0119
+
 - **QUICK_START.md** - New 5-minute quick start guide for new users
   - Progressive disclosure workflow examples (directory → file → element)
   - Real-world tasks: code review, onboarding, finding complexity
@@ -115,6 +130,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Design principle: Every JSON response should tell agents what they can do next
   - Session: heroic-giant-0119
 
+- **`--capabilities` endpoint** - Pre-analysis introspection for agents
+  - Shows what reveal CAN do with a file before analyzing it
+  - Returns JSON with analyzer info, extractable types, quality rules, supported flags
+  - Enables agents to plan their approach without trial-and-error
+  - Example: `reveal --capabilities app.py`
+    ```json
+    {
+      "analyzer": {"name": "Python", "type": "explicit"},
+      "extractable": {"types": ["function", "class", "method"]},
+      "quality": {"available": true, "rule_categories": ["B", "C", "I", "M", "R", "S"]},
+      "flags": {"supported": ["--check", "--outline", "--head", "--tail"]}
+    }
+    ```
+  - Complements `meta.extractable` (post-analysis): capabilities = before, meta = after
+  - Session: eternal-god-0119
+
+- **Hierarchical element extraction** - Extract methods within classes using `Class.method` syntax
+  - New syntax: `reveal file.py MyClass.my_method` extracts method within class
+  - Works for: Python classes, Rust impl blocks, Ruby modules, Go structs
+  - Falls back gracefully if parent or child not found
+  - Example: `reveal app.py DatabaseHandler.connect` extracts just the connect method
+  - Session: eternal-god-0119
+
+- **claude:// composite queries** - Filter tool results with multiple criteria
+  - Syntax: `?tools=X&errors&contains=Y` combines filters
+  - Examples:
+    - `reveal claude://session/name?tools=Bash&errors` - Bash commands that failed
+    - `reveal claude://session/name?tools=Read&contains=config` - Read calls with 'config'
+    - `reveal claude://session/name?errors&contains=traceback` - Errors with tracebacks
+  - Session: kabawose-0119
+
+- **claude:// error context** - Show what led to each error
+  - Each error now includes context: `tool_name`, `tool_input_preview`, `thinking_preview`
+  - Helps debug why errors occurred without manual investigation
+  - Example output: `context: {tool_name: 'Bash', tool_input_preview: 'cd /path && reveal ...'}`
+  - Session: kabawose-0119
+
+- **claude:// session listing** - Bare `reveal claude://` now lists sessions
+  - Shows 20 most recent sessions with metadata (modified date, size)
+  - Includes usage examples for all query types
+  - 3600+ sessions indexed automatically
+  - Session: kabawose-0119
+
+- **`:LINE` extraction syntax** - Extract element at/containing line number
+  - New syntax: `reveal file.py :73` extracts function/class containing line 73
+  - Range syntax: `reveal file.py :73-91` extracts exact line range
+  - Complements existing extraction methods (by name, hierarchical)
+  - Matches output format where `:73` is shown as line prefix
+  - Session: glowing-gleam-0119
+
+- **`@N` ordinal extraction syntax** - Extract Nth element by position
+  - New syntax: `reveal file.py @3` extracts 3rd function (dominant category)
+  - Typed syntax: `reveal file.py function:2` extracts 2nd function explicitly
+  - Typed syntax: `reveal file.py class:1` extracts 1st class
+  - 1-indexed to match JSONL and markdown `--section` behavior
+  - Dominant category auto-detection: functions for code, headings for markdown
+  - Supports all element types: function, class, section, query, message, etc.
+  - 20 new tests in `test_ordinal_extraction.py`
+  - Session: yevaxi-0119
+
+- **Expanded `meta.extractable` mappings** - 25+ new category mappings
+  - GraphQL: queries, mutations, types, interfaces, enums
+  - Protobuf/gRPC: messages, services, rpcs
+  - Terraform/HCL: resources, variables, outputs, modules
+  - Zig/Rust: tests, unions
+  - Jupyter: cells
+  - JSONL: records
+  - Core: imports, tests
+  - Session: glowing-gleam-0119
+
+- **Configurable `stats://` quality thresholds** - Follow mysql adapter config pattern
+  - Quality score thresholds now configurable via `.reveal/stats-quality.yaml`
+  - Config search: project → user → defaults
+  - Configurable: complexity_target, function_length_target, penalty multipliers
+  - Allows per-project quality standards (enterprise vs startup codebases)
+  - Session: glowing-gleam-0119
+
+- **`imports://` adapter breadcrumbs** - Complete 100% breadcrumb coverage
+  - Added `see_also` to imports.py adapter (was the only adapter missing it)
+  - Links to: ast, stats, configuration, --check flag
+  - Session: glowing-gleam-0119
+
+- **`git://` adapter documentation** - Clarified limit behavior
+  - Added notes: "Overview shows 10 most recent items per category"
+  - Added notes: "Use ?limit=N on history/element queries for more results"
+  - Session: glowing-gleam-0119
+
 ### Changed
 - **Claude adapter refactoring** - Reduced complexity of `_calculate_tool_success_rate`
   - Extracted 4 helper methods for single responsibility
@@ -131,11 +233,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Session: blazing-hail-0119
 
 - **README accuracy** - Updated language and test counts
-  - Language count: Corrected to 41 built-in analyzers (CSV, INI, XML, PowerShell added in v0.39.0)
-  - Test count: 2,230+ → 2,456 tests (measured)
+  - Language count: Corrected to 42 built-in analyzers (CSV, INI, XML, PowerShell, Batch added in v0.39.0)
+  - Test count: 2,230+ → 2,475 tests (measured)
   - Coverage: 74% → 76% (measured)
   - All counts verifiable via `--list-supported` and test suite
-  - Session: blazing-hail-0119, mumuxi-0119
+  - Session: blazing-hail-0119, mumuxi-0119, shimmering-spark-0119
+
+- **`--capabilities` accuracy** - Fixed claims to match actual extraction support
+  - Removed `method` from extractable types (use `Class.method` hierarchical syntax instead)
+  - Removed `heading` from markdown (redundant with `section`)
+  - Removed `code_block` from markdown (requires `--code` flag)
+  - Added missing types: Terraform, GraphQL, Protobuf, JSONL, Jupyter
+  - Added examples for new types (resource, query, message, row, element, record)
+  - Improved docstring explaining extraction methods: by name, by ordinal, hierarchical
+  - Session: shimmering-spark-0119
 
 - **Adapter categorization** - Reclassified `reveal://` and `claude://` as "Project Adapters"
   - New category: 🎓 Project Adapters (production-quality extensibility examples)
@@ -156,6 +267,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Session: garnet-fire-0119
 
 ### Fixed
+- **claude:// error detection** - Fixed broken `?errors` query that returned 0 errors
+  - Root cause: `_get_errors()` checked `type == 'assistant'` but tool results are in `type == 'user'` messages
+  - Also fixed `_track_tool_results()` and `_is_tool_error()` which had the same bug
+  - Enhanced detection now uses: `is_error` flag, exit codes > 0, traceback/exception patterns
+  - Previously: 0 errors detected. Now: proper error detection with categorization
+  - Session: kabawose-0119
+
+- **claude:// test fixtures** - Fixed incorrect message format in test data
+  - Test fixtures had tool_results in `type: "assistant"` messages
+  - Real Claude Code conversations have tool_results in `type: "user"` messages
+  - Updated `_get_timeline()` to also extract tool_results from user messages
+  - 50/50 tests now passing (was 45/50)
+  - Session: glowing-gleam-0119
+
 - **B006 comment detection** - Fixed false positives for comments between except and pass lines
   - Previously only checked except line and pass line for comments
   - Now checks all lines in exception handler body

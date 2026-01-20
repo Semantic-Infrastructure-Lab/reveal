@@ -16,7 +16,7 @@ reveal app.py                  # file → structure
 reveal app.py load_config      # element → code
 ```
 
-Zero config. 41 languages built-in. 165+ via tree-sitter.
+Zero config. 40+ languages built-in. 165+ via tree-sitter.
 
 **Token efficiency:** Structure view = 50 tokens vs 7,500 for full file. Measured 10-150x reduction in production use.
 
@@ -117,7 +117,7 @@ reveal --agent-help-full     # Complete reference (~1680 lines)
 
 **Quick Install:**
 ```bash
-pip install reveal-cli              # Full-featured by default (41 languages, 14 adapters)
+pip install reveal-cli              # Full-featured by default (40+ languages, 14 adapters)
 pip install reveal-cli[database]    # Add MySQL database inspection
 ```
 See [INSTALL.md](INSTALL.md) for details on what's included.
@@ -407,7 +407,7 @@ reveal app.py --meta             # metadata only
 
 ### Supported Languages
 
-**Built-in (41 analyzers):** Python, Rust, Go, **C, C++**, **C#, Scala**, Java, PHP, **Ruby, Lua**, JavaScript, TypeScript, **Kotlin, Swift, Dart**, **HCL/Terraform, GraphQL, Protobuf, Zig**, GDScript, Bash, **SQL**, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, **CSV, INI, XML, PowerShell**, Dockerfile, **Office formats** (Excel, Word, PowerPoint, Calc, Writer, Impress)
+**Built-in (40+ analyzers):** Python, Rust, Go, **C, C++**, **C#, Scala**, Java, PHP, **Ruby, Lua**, JavaScript, TypeScript, **Kotlin, Swift, Dart**, **HCL/Terraform, GraphQL, Protobuf, Zig**, GDScript, Bash, **SQL**, Jupyter, HTML, Markdown, JSON, JSONL, YAML, TOML, **CSV, INI, XML, PowerShell, Windows Batch**, Dockerfile, **Office formats** (Excel, Word, PowerPoint, Calc, Writer, Impress)
 
 **Via tree-sitter (165+):** Perl, R, Haskell, Elixir, Zig, and more. Add new languages in 3 lines of code.
 
@@ -522,7 +522,7 @@ reveal/
 
 Add new languages in 10-50 lines. See `analyzers/` for examples.
 
-**Most wanted:** TypeScript, Java, Swift, better extraction logic, bug reports.
+**Most wanted:** Better extraction logic, bug reports, documentation improvements.
 
 ---
 

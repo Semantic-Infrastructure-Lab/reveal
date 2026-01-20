@@ -460,6 +460,8 @@ class GitAdapter(ResourceAdapter):
                 'Supports all Git references: commit hash, branch, tag, HEAD~N, etc.',
                 'Use @ for ref specification: git://path@ref',
                 'Use ? for query parameters: git://path?type=history',
+                'Overview (git://.) shows 10 most recent items per category',
+                'Use ?limit=N on history/element queries for more results',
             ],
             'see_also': [
                 'reveal help://diff - Compare two files or directories',

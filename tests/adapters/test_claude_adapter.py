@@ -126,8 +126,8 @@ class TestOverviewGeneration:
         overview = adapter.get_structure()
 
         assert overview['message_count'] == 13
-        assert overview['user_messages'] == 3
-        assert overview['assistant_messages'] == 10  # Includes tool results
+        assert overview['user_messages'] == 7  # 3 actual user + 4 tool_results
+        assert overview['assistant_messages'] == 6
 
     @patch.object(ClaudeAdapter, '_find_conversation')
     def test_overview_tool_counts(self, mock_find):
@@ -302,7 +302,7 @@ class TestMessageFiltering:
 
         assert result['type'] == 'claude_user_messages'
         assert result['role'] == 'user'
-        assert result['message_count'] == 3
+        assert result['message_count'] == 7  # 3 actual user + 4 tool_results
 
     @patch.object(ClaudeAdapter, '_find_conversation')
     def test_filter_assistant_messages(self, mock_find):
@@ -314,7 +314,7 @@ class TestMessageFiltering:
 
         assert result['type'] == 'claude_assistant_messages'
         assert result['role'] == 'assistant'
-        assert result['message_count'] == 10
+        assert result['message_count'] == 6
 
 
 class TestSpecificMessageRetrieval:
@@ -731,10 +731,11 @@ class TestToolSuccessRate:
     def test_tool_success_rate_all_failures(self, mock_find):
         """Test tool success rate with all failures."""
         # Create conversation with only failures
+        # Note: tool_results are in 'user' type messages (returned from tool execution)
         fail_conv = FIXTURES_DIR / 'all-failures.jsonl'
         fail_conv.write_text(
             '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Read","id":"t1","input":{"file_path":"missing.txt"}}]},"timestamp":"2026-01-18T10:00:00.000Z"}\n'
-            '{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_result","tool_use_id":"t1","content":"Error: File not found","is_error":true}]},"timestamp":"2026-01-18T10:00:01.000Z"}\n'
+            '{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"Error: File not found","is_error":true}]},"timestamp":"2026-01-18T10:00:01.000Z"}\n'
         )
 
         try:

@@ -4,7 +4,9 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
 from datetime import datetime
+from urllib.parse import parse_qs
 import json
+import re
 import sys
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -82,12 +84,49 @@ class ClaudeAdapter(ResourceAdapter):
         Args:
             resource: Resource path (e.g., 'session/infernal-earth-0118')
             query: Optional query string (e.g., 'summary', 'errors', 'tools=Bash')
+
+        Supports composite queries:
+            - ?tools=Bash&errors - Bash tool calls that resulted in errors
+            - ?tools=Bash&contains=reveal - Bash calls containing 'reveal'
+            - ?errors&contains=traceback - Errors containing 'traceback'
         """
         self.resource = resource
         self.query = query
+        self.query_params = self._parse_query(query)
         self.session_name = self._parse_session_name(resource)
         self.conversation_path = self._find_conversation()
         self.messages = None  # Lazy load
+
+    def _parse_query(self, query: str) -> Dict[str, Any]:
+        """Parse query string into structured parameters.
+
+        Supports:
+            - 'errors' -> {'errors': True}
+            - 'tools=Bash' -> {'tools': 'Bash'}
+            - 'tools=Bash&errors' -> {'tools': 'Bash', 'errors': True}
+            - 'contains=reveal' -> {'contains': 'reveal'}
+
+        Args:
+            query: Raw query string
+
+        Returns:
+            Dictionary of parsed parameters
+        """
+        if not query:
+            return {}
+
+        params = {}
+
+        # Handle simple keywords and key=value pairs
+        for part in query.split('&'):
+            if '=' in part:
+                key, value = part.split('=', 1)
+                params[key] = value
+            else:
+                # Keywords like 'errors', 'summary', 'timeline'
+                params[part] = True
+
+        return params
 
     def _get_contract_base(self) -> Dict[str, Any]:
         """Get Output Contract v1.0 base fields.
@@ -185,6 +224,7 @@ class ClaudeAdapter(ResourceAdapter):
         """Return session structure based on query.
 
         Routes to appropriate handler based on resource path and query.
+        Supports composite queries for filtering (e.g., ?tools=Bash&errors&contains=reveal).
 
         Args:
             **kwargs: Additional parameters (unused)
@@ -197,9 +237,17 @@ class ClaudeAdapter(ResourceAdapter):
                 'source': conversation file path
                 'source_type': 'file'
         """
+        # Handle bare claude:// - list available sessions
+        if not self.resource or self.resource in ('.', ''):
+            return self._list_sessions()
+
         messages = self._load_messages()
 
-        # Route based on resource path and query
+        # Check for composite query (multiple filters)
+        if self._is_composite_query():
+            return self._handle_composite_query(messages)
+
+        # Route based on resource path and query (legacy single-query behavior)
         if self.query == 'summary':
             return self._get_summary(messages)
         elif self.query == 'timeline':
@@ -222,6 +270,106 @@ class ClaudeAdapter(ResourceAdapter):
             return self._get_message(messages, msg_id)
         else:
             return self._get_overview(messages)
+
+    def _is_composite_query(self) -> bool:
+        """Check if query has multiple filter parameters.
+
+        Returns:
+            True if query combines multiple filters (e.g., tools + errors + contains)
+        """
+        if not self.query_params:
+            return False
+
+        # Composite if we have multiple filter-type params
+        filter_params = {'tools', 'errors', 'contains'}
+        active_filters = filter_params & set(self.query_params.keys())
+        return len(active_filters) > 1
+
+    def _handle_composite_query(self, messages: List[Dict]) -> Dict[str, Any]:
+        """Handle composite queries with multiple filters.
+
+        Supports combinations like:
+            - ?tools=Bash&errors - Bash calls that errored
+            - ?tools=Read&contains=config - Read calls containing 'config'
+            - ?errors&contains=traceback - Errors with tracebacks
+
+        Args:
+            messages: List of message dictionaries
+
+        Returns:
+            Filtered results matching all criteria
+        """
+        base = self._get_contract_base()
+        base['type'] = 'claude_filtered_results'
+
+        # Start with all tool results
+        results = self._extract_all_tool_results(messages)
+
+        # Apply filters progressively
+        if 'tools' in self.query_params:
+            tool_name = self.query_params['tools']
+            results = [r for r in results if r.get('tool_name') == tool_name]
+
+        if 'errors' in self.query_params:
+            results = [r for r in results if r.get('is_error')]
+
+        if 'contains' in self.query_params:
+            pattern = self.query_params['contains'].lower()
+            results = [r for r in results if pattern in r.get('content', '').lower()]
+
+        base.update({
+            'session': self.session_name,
+            'query': self.query,
+            'filters_applied': list(self.query_params.keys()),
+            'result_count': len(results),
+            'results': results
+        })
+
+        return base
+
+    def _extract_all_tool_results(self, messages: List[Dict]) -> List[Dict]:
+        """Extract all tool results with metadata for filtering.
+
+        Args:
+            messages: List of message dictionaries
+
+        Returns:
+            List of tool result dictionaries with:
+            - message_index, tool_use_id, tool_name, content, is_error, timestamp
+        """
+        # First pass: collect tool_use_id -> tool_name mapping from assistant messages
+        tool_use_map = {}
+        for msg in messages:
+            if msg.get('type') == 'assistant':
+                for content in msg.get('message', {}).get('content', []):
+                    if isinstance(content, dict) and content.get('type') == 'tool_use':
+                        tool_id = content.get('id')
+                        tool_name = content.get('name')
+                        if tool_id and tool_name:
+                            tool_use_map[tool_id] = tool_name
+
+        # Second pass: extract tool results from user messages
+        results = []
+        for i, msg in enumerate(messages):
+            if msg.get('type') == 'user':
+                for content in msg.get('message', {}).get('content', []):
+                    if not isinstance(content, dict):
+                        continue
+                    if content.get('type') == 'tool_result':
+                        tool_id = content.get('tool_use_id')
+                        tool_name = tool_use_map.get(tool_id, 'unknown')
+                        result_content = str(content.get('content', ''))
+
+                        results.append({
+                            'message_index': i,
+                            'tool_use_id': tool_id,
+                            'tool_name': tool_name,
+                            'content': result_content[:500],  # Truncate for display
+                            'is_error': self._is_tool_error(content),
+                            'timestamp': msg.get('timestamp')
+                        })
+
+        return results
 
     def _get_overview(self, messages: List[Dict]) -> Dict[str, Any]:
         """Generate session overview with key metrics.
@@ -336,10 +484,12 @@ class ClaudeAdapter(ResourceAdapter):
             msg_type = msg.get('type')
 
             if msg_type == 'user':
-                # Extract user message text
+                # Extract user message text and tool results
                 content_blocks = msg.get('message', {}).get('content', [])
+
+                # User text messages
                 text_parts = [c.get('text', '') for c in content_blocks
-                              if c.get('type') == 'text']
+                              if isinstance(c, dict) and c.get('type') == 'text']
                 text = ' '.join(text_parts)
                 if text:
                     timeline.append({
@@ -348,6 +498,22 @@ class ClaudeAdapter(ResourceAdapter):
                         'event_type': 'user_message',
                         'content_preview': text[:100]
                     })
+
+                # Tool results (returned from tool execution)
+                for content in content_blocks:
+                    if isinstance(content, dict) and content.get('type') == 'tool_result':
+                        is_error = content.get('is_error', False)
+                        result_content = str(content.get('content', ''))
+                        has_error = is_error or 'error' in result_content.lower()
+
+                        timeline.append({
+                            'index': i,
+                            'timestamp': timestamp,
+                            'event_type': 'tool_result',
+                            'tool_id': content.get('tool_use_id'),
+                            'status': 'error' if has_error else 'success',
+                            'content_preview': result_content[:100]
+                        })
 
             elif msg_type == 'assistant':
                 for content in msg.get('message', {}).get('content', []):
@@ -407,29 +573,76 @@ class ClaudeAdapter(ResourceAdapter):
     def _get_errors(self, messages: List[Dict]) -> Dict[str, Any]:
         """Extract all errors with context.
 
+        Detects errors through multiple signals (in priority order):
+        1. is_error: true in tool_result (definitive)
+        2. Exit codes > 0 in Bash output (definitive)
+        3. Traceback/Exception at start of line (strong signal)
+        4. Common error patterns at start of content (moderate signal)
+
+        Avoids false positives by NOT matching error keywords mid-content
+        (e.g., documentation mentioning "error handling").
+
         Args:
             messages: List of message dictionaries
 
         Returns:
             Dictionary with error count and list of errors
         """
+        import re
         base = self._get_contract_base()
         base['type'] = 'claude_errors'
 
         errors = []
 
+        # Patterns that indicate errors when at start of line/content
+        # Using MULTILINE so ^ matches start of any line
+        strong_patterns = re.compile(
+            r'^\s*(?:traceback|exception|error:|fatal:|panic:)',
+            re.IGNORECASE | re.MULTILINE
+        )
+
+        # Exit code pattern - matches "Exit code N" where N > 0
+        exit_code_pattern = re.compile(r'exit code (\d+)', re.IGNORECASE)
+
         for i, msg in enumerate(messages):
-            # Check tool results for errors
-            if msg.get('type') == 'assistant':
+            # Tool results are in 'user' type messages (results returned to assistant)
+            if msg.get('type') == 'user':
                 for content in msg.get('message', {}).get('content', []):
+                    # Skip non-dict content (plain text messages)
+                    if not isinstance(content, dict):
+                        continue
                     if content.get('type') == 'tool_result':
-                        result_content = content.get('content', '')
-                        if 'error' in result_content.lower() or 'failed' in result_content.lower():
+                        result_content = str(content.get('content', ''))
+
+                        # Priority 1: Explicit is_error flag (definitive)
+                        is_error = content.get('is_error', False)
+
+                        # Priority 2: Exit code > 0 (definitive for Bash)
+                        exit_match = exit_code_pattern.search(result_content)
+                        has_exit_error = exit_match and int(exit_match.group(1)) > 0
+
+                        # Priority 3: Strong error patterns at line start
+                        has_strong_pattern = bool(strong_patterns.search(result_content))
+
+                        error_type = None
+                        if is_error:
+                            error_type = 'is_error_flag'
+                        elif has_exit_error:
+                            error_type = 'exit_code'
+                        elif has_strong_pattern:
+                            error_type = 'pattern_match'
+
+                        if error_type:
+                            tool_use_id = content.get('tool_use_id')
+                            context = self._get_error_context(messages, i, tool_use_id)
+
                             errors.append({
                                 'message_index': i,
-                                'tool_use_id': content.get('tool_use_id'),
-                                'content_preview': result_content[:200],
-                                'timestamp': msg.get('timestamp')
+                                'tool_use_id': tool_use_id,
+                                'error_type': error_type,
+                                'content_preview': result_content[:300],
+                                'timestamp': msg.get('timestamp'),
+                                'context': context
                             })
 
         base.update({
@@ -439,6 +652,73 @@ class ClaudeAdapter(ResourceAdapter):
         })
 
         return base
+
+    def _get_error_context(self, messages: List[Dict], error_msg_index: int,
+                           tool_use_id: str) -> Dict[str, Any]:
+        """Get context around an error for debugging.
+
+        Looks backwards from the error to find:
+        - The tool_use call that triggered the error
+        - Any thinking before the tool call
+        - The tool name and input
+
+        Args:
+            messages: List of message dictionaries
+            error_msg_index: Index of the message containing the error
+            tool_use_id: The tool_use_id that resulted in the error
+
+        Returns:
+            Context dictionary with tool_call, thinking, and prior_action
+        """
+        context = {
+            'tool_name': None,
+            'tool_input_preview': None,
+            'thinking_preview': None,
+            'prior_action': None
+        }
+
+        # Look backwards from the error message to find the tool_use
+        for i in range(error_msg_index - 1, max(0, error_msg_index - 10), -1):
+            msg = messages[i]
+            if msg.get('type') != 'assistant':
+                continue
+
+            contents = msg.get('message', {}).get('content', [])
+            for content in contents:
+                if not isinstance(content, dict):
+                    continue
+
+                # Found the tool_use that led to this error
+                if content.get('type') == 'tool_use' and content.get('id') == tool_use_id:
+                    context['tool_name'] = content.get('name')
+                    tool_input = content.get('input', {})
+                    if isinstance(tool_input, dict):
+                        # For Bash, show the command
+                        if 'command' in tool_input:
+                            context['tool_input_preview'] = tool_input['command'][:200]
+                        # For Read/Edit, show the file path
+                        elif 'file_path' in tool_input:
+                            context['tool_input_preview'] = tool_input['file_path']
+                        else:
+                            # Generic: show first key-value
+                            for k, v in tool_input.items():
+                                context['tool_input_preview'] = f"{k}: {str(v)[:150]}"
+                                break
+
+                # Look for thinking in the same message
+                if content.get('type') == 'thinking':
+                    thinking = content.get('thinking', '')
+                    # Get the last ~200 chars which is usually the decision
+                    if len(thinking) > 200:
+                        context['thinking_preview'] = '...' + thinking[-200:]
+                    else:
+                        context['thinking_preview'] = thinking
+
+            # If we found the tool_use, we're done
+            if context['tool_name']:
+                break
+
+        return context
 
     def _get_tool_calls(self, messages: List[Dict], tool_name: str) -> Dict[str, Any]:
         """Extract all calls to specific tool.
@@ -610,6 +890,67 @@ class ClaudeAdapter(ResourceAdapter):
 
         return base
 
+    def _list_sessions(self) -> Dict[str, Any]:
+        """List available Claude Code sessions.
+
+        Scans the Claude projects directory for sessions and returns
+        recent ones with basic metadata.
+
+        Returns:
+            Dictionary with session list and usage help
+        """
+        base = {
+            'contract_version': '1.0',
+            'type': 'claude_session_list',
+            'source': str(self.CONVERSATION_BASE),
+            'source_type': 'directory'
+        }
+
+        sessions = []
+        try:
+            for project_dir in self.CONVERSATION_BASE.iterdir():
+                if not project_dir.is_dir():
+                    continue
+
+                # Find JSONL files in project dir
+                for jsonl_file in project_dir.glob('*.jsonl'):
+                    # Try to extract session name from path
+                    # TIA sessions: -home-scottsen-src-tia-sessions-SESSION_NAME
+                    dir_name = project_dir.name
+                    if '-sessions-' in dir_name:
+                        session_name = dir_name.split('-sessions-')[-1]
+                    else:
+                        session_name = dir_name
+
+                    stat = jsonl_file.stat()
+                    sessions.append({
+                        'session': session_name,
+                        'path': str(jsonl_file),
+                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        'size_kb': stat.st_size // 1024
+                    })
+
+            # Sort by modified time, most recent first
+            sessions.sort(key=lambda x: x['modified'], reverse=True)
+
+        except Exception as e:
+            base['error'] = str(e)
+
+        base.update({
+            'session_count': len(sessions),
+            'recent_sessions': sessions[:20],  # Show 20 most recent
+            'usage': {
+                'overview': 'reveal claude://session/<name>',
+                'errors': 'reveal claude://session/<name>?errors',
+                'tools': 'reveal claude://session/<name>?tools=Bash',
+                'composite': 'reveal claude://session/<name>?tools=Bash&errors&contains=reveal',
+                'thinking': 'reveal claude://session/<name>/thinking',
+                'message': 'reveal claude://session/<name>/message/42'
+            }
+        })
+
+        return base
+
     def _calculate_tool_success_rate(self, messages: List[Dict]) -> Dict[str, Dict[str, Any]]:
         """Calculate success rate per tool.
 
@@ -661,10 +1002,13 @@ class ClaudeAdapter(ResourceAdapter):
             tool_stats: Dictionary to update with success/failure counts
         """
         for msg in messages:
-            if msg.get('type') != 'assistant':
+            # Tool results are in 'user' type messages (results returned to assistant)
+            if msg.get('type') != 'user':
                 continue
 
             for content in msg.get('message', {}).get('content', []):
+                if not isinstance(content, dict):
+                    continue
                 if content.get('type') != 'tool_result':
                     continue
 
@@ -683,17 +1027,39 @@ class ClaudeAdapter(ResourceAdapter):
     def _is_tool_error(self, content: Dict) -> bool:
         """Check if a tool result indicates an error.
 
+        Uses multiple signals:
+        - is_error flag (definitive)
+        - Exit code > 0 (definitive for Bash)
+        - Error patterns at line start (strong signal)
+
         Args:
             content: Tool result content dictionary
 
         Returns:
             True if the result indicates an error
         """
-        is_error = content.get('is_error', False)
+        import re
+
+        # Check explicit is_error flag first (definitive)
+        if content.get('is_error', False):
+            return True
+
         result_content = str(content.get('content', ''))
-        has_error_text = ('error' in result_content.lower() or
-                          'failed' in result_content.lower())
-        return is_error or has_error_text
+
+        # Check for exit code > 0 (definitive for Bash)
+        exit_match = re.search(r'exit code (\d+)', result_content, re.IGNORECASE)
+        if exit_match and int(exit_match.group(1)) > 0:
+            return True
+
+        # Check for strong error patterns at line start
+        strong_patterns = re.compile(
+            r'^\s*(?:traceback|exception|error:|fatal:|panic:)',
+            re.IGNORECASE | re.MULTILINE
+        )
+        if strong_patterns.search(result_content):
+            return True
+
+        return False
 
     def _build_success_rate_report(self, tool_stats: Dict[str, Dict[str, int]]) -> Dict[str, Dict[str, Any]]:
         """Build final success rate report from stats.

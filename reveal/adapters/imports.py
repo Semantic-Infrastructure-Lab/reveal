@@ -309,7 +309,13 @@ class ImportsAdapter(ResourceAdapter):
                 'violations': 'Check layer violations (requires .reveal.yaml)'
             },
             'supported_languages': get_supported_languages(),
-            'status': 'beta'
+            'status': 'beta',
+            'see_also': [
+                'reveal help://ast - Query code structure by complexity',
+                'reveal help://stats - Codebase metrics and hotspots',
+                'reveal help://configuration - Layer violation config (.reveal.yaml)',
+                'reveal file.py --check - Import quality rules (I001-I004)'
+            ]
         }
 
     def _build_graph(self, target_path: Path) -> None:

@@ -401,46 +401,69 @@ def get_capabilities(path: str) -> Dict[str, Any]:
 
 
 def _get_extractable_types(ext: str, is_fallback: bool) -> list:
-    """Determine extractable element types based on file extension."""
+    """Determine extractable element types based on file extension.
+
+    Returns types that work with the extraction system:
+    - By name: reveal file.py my_function
+    - By ordinal: reveal file.py @3 or reveal file.py function:2
+    - Hierarchical: reveal file.py MyClass.method (for methods within classes)
+
+    Note: 'method' is NOT a standalone type. Use Class.method syntax instead.
+    Only types that map to category_to_type in structure.py are listed.
+    """
     # Code files (tree-sitter based)
+    # Note: methods extracted via hierarchical syntax (Class.method), not as separate type
     code_extensions = {
-        '.py': ['function', 'class', 'method'],
-        '.pyi': ['function', 'class', 'method'],
-        '.js': ['function', 'class', 'method'],
-        '.jsx': ['function', 'class', 'method'],
-        '.ts': ['function', 'class', 'method', 'interface', 'type'],
-        '.tsx': ['function', 'class', 'method', 'interface', 'type'],
-        '.java': ['class', 'method', 'interface'],
-        '.go': ['function', 'struct', 'interface', 'method'],
-        '.rs': ['function', 'struct', 'impl', 'trait'],
-        '.rb': ['class', 'method', 'module'],
+        '.py': ['function', 'class', 'import'],
+        '.pyi': ['function', 'class', 'import'],
+        '.js': ['function', 'class'],
+        '.jsx': ['function', 'class'],
+        '.ts': ['function', 'class', 'interface', 'type'],
+        '.tsx': ['function', 'class', 'interface', 'type'],
+        '.java': ['function', 'class', 'interface'],
+        '.go': ['function', 'struct', 'interface'],
+        '.rs': ['function', 'class', 'struct'],
+        '.rb': ['function', 'class', 'module'],
         '.c': ['function', 'struct'],
-        '.cpp': ['function', 'class', 'struct', 'method'],
-        '.cs': ['class', 'method', 'interface'],
-        '.swift': ['function', 'class', 'struct', 'protocol'],
+        '.cpp': ['function', 'class', 'struct'],
+        '.cs': ['function', 'class', 'interface'],
+        '.swift': ['function', 'class', 'struct'],
         '.kt': ['function', 'class', 'interface'],
-        '.scala': ['class', 'object', 'trait', 'def'],
-        '.php': ['function', 'class', 'method'],
+        '.scala': ['function', 'class'],
+        '.php': ['function', 'class'],
         '.lua': ['function'],
         '.gd': ['function', 'class'],  # GDScript
         '.sh': ['function'],
         '.bash': ['function'],
         '.ps1': ['function'],  # PowerShell
+        '.bat': ['function'],  # Windows Batch (labels)
+        '.cmd': ['function'],  # Windows Command
+        '.zig': ['function', 'struct', 'test', 'union'],
+        # Infrastructure languages
+        '.tf': ['resource', 'variable', 'output', 'module'],
+        '.tfvars': ['variable'],
+        '.hcl': ['resource', 'variable', 'output', 'module'],
+        # API definition languages
+        '.graphql': ['query', 'mutation', 'type', 'interface', 'enum'],
+        '.gql': ['query', 'mutation', 'type', 'interface', 'enum'],
+        '.proto': ['message', 'service', 'rpc', 'enum'],
     }
 
     # Data/config files
     data_extensions = {
-        '.md': ['section', 'heading', 'code_block'],
-        '.markdown': ['section', 'heading', 'code_block'],
-        '.json': ['key', 'path'],
-        '.yaml': ['key', 'section'],
-        '.yml': ['key', 'section'],
-        '.toml': ['key', 'section'],
-        '.csv': ['row', 'column'],
-        '.tsv': ['row', 'column'],
+        '.md': ['section'],  # headings map to section; code_block requires --code flag
+        '.markdown': ['section'],
+        '.json': ['key'],
+        '.yaml': ['key'],
+        '.yml': ['key'],
+        '.toml': ['section', 'key'],  # TOML tables map to section
+        '.csv': ['row'],  # row number extraction (e.g., reveal data.csv 5)
+        '.tsv': ['row'],
         '.ini': ['section', 'key'],
         '.properties': ['key'],
-        '.xml': ['element', 'tag'],
+        '.xml': ['element'],  # element by tag name
+        '.jsonl': ['record'],
+        '.ipynb': ['cell'],
     }
 
     if ext in code_extensions:
@@ -463,7 +486,7 @@ def _get_extraction_examples(path: str, element_types: list) -> list:
         examples.append(f"reveal {file_name} main")
     if "class" in element_types:
         examples.append(f"reveal {file_name} MyClass")
-    if "method" in element_types:
+        # Hierarchical extraction for methods within classes
         examples.append(f"reveal {file_name} MyClass.method")
     if "section" in element_types:
         examples.append(f'reveal {file_name} "Installation"')
@@ -471,6 +494,18 @@ def _get_extraction_examples(path: str, element_types: list) -> list:
         examples.append(f"reveal {file_name} database.host")
     if "struct" in element_types:
         examples.append(f"reveal {file_name} Config")
+    if "resource" in element_types:
+        examples.append(f"reveal {file_name} aws_instance.main")
+    if "query" in element_types:
+        examples.append(f"reveal {file_name} GetUser")
+    if "message" in element_types:
+        examples.append(f"reveal {file_name} UserRequest")
+    if "row" in element_types:
+        examples.append(f"reveal {file_name} 5")  # Row number
+    if "element" in element_types:
+        examples.append(f"reveal {file_name} bean")  # XML tag name
+    if "record" in element_types:
+        examples.append(f"reveal {file_name} 1")  # JSONL record number
 
     return examples[:3]  # Return top 3
 

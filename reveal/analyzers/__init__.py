@@ -42,6 +42,7 @@ from .csv_analyzer import CsvAnalyzer
 from .ini_analyzer import IniAnalyzer
 from .xml_analyzer import XmlAnalyzer
 from .powershell import PowerShellAnalyzer
+from .batch import BatchAnalyzer
 
 # Office document analyzers (ZIP+XML based)
 from .office import (
@@ -90,6 +91,7 @@ __all__ = [
     'IniAnalyzer',
     'XmlAnalyzer',
     'PowerShellAnalyzer',
+    'BatchAnalyzer',
     # Office documents
     'DocxAnalyzer',
     'XlsxAnalyzer',
