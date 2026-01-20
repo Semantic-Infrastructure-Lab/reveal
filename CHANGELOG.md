@@ -39,6 +39,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Server blocks show ports: `social.weffix.com [443 (SSL)]`
   - Location blocks show targets: `/.well-known/acme-challenge/ -> static: /path`
 
+### Changed
+- **Centralized defaults** - New `reveal/defaults.py` consolidates threshold constants
+  - `RuleDefaults`: Complexity, file quality, code smell thresholds
+  - `AdapterDefaults`: SSL expiry thresholds, scan limits
+  - `DisplayDefaults`: Tree view limits
+  - Supports future environment variable overrides
+
+- **Centralized patterns** - New `reveal/utils/patterns.py` consolidates regex patterns
+  - Error detection patterns (was duplicated in claude adapter)
+  - Nginx patterns (server blocks, SSL listen, ACME locations)
+  - Code patterns (Python class/function, semver)
+  - Includes `compile_pattern()` with LRU caching for dynamic patterns
+
+- **Internal documentation** - Consolidated refactoring action plan
+  - Created `REFACTORING_ACTION_PLAN.md` combining two review documents
+  - Updated `internal-docs/README.md` with new documents
+
 ## [0.40.0] - 2026-01-20
 
 ### Added

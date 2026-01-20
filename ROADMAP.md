@@ -8,6 +8,12 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.41.0 (Unreleased)
+- ✅ **`ssl://` adapter** — SSL/TLS certificate inspection (zero dependencies)
+- ✅ **N004 rule** — ACME challenge path inconsistency detection
+- ✅ **Content-based nginx detection** — `.conf` files detected by content, not path
+- ✅ **Enhanced nginx display** — Server ports `[443 (SSL)]`, location targets
+
 ### v0.40.0
 - ✅ **`--dir-limit` flag** — Per-directory entry limit (solves node_modules problem)
 - ✅ **`--adapters` flag** — List all URI adapters with descriptions
@@ -135,10 +141,11 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 
 ## Adapter Status
 
-### Implemented (14)
+### Implemented (15)
 | Adapter | Description |
 |---------|-------------|
 | `ast://` | Query code as database (complexity, size, type filters) |
+| `claude://` | Claude conversation analysis |
 | `diff://` | Compare files or git revisions |
 | `env://` | Environment variable inspection |
 | `git://` | Repository history, blame, commits |
@@ -149,13 +156,12 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 | `python://` | Python runtime inspection |
 | `reveal://` | Reveal's own codebase |
 | `sqlite://` | SQLite database inspection |
+| `ssl://` | SSL/TLS certificate inspection |
 | `stats://` | Codebase statistics |
 
 ### Planned
 | Adapter | Notes |
 |---------|-------|
-| `claude://` | Claude conversation analysis (Tier 2) |
-| `ssl://` | SSL certificate inspection (Tier 2) |
 | `nginx://` | Nginx config structured querying (Tier 3) |
 | `calls://` | Call graph analysis (post-v1.0) |
 

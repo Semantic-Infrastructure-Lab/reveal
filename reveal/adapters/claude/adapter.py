@@ -11,6 +11,7 @@ import sys
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.json_utils import safe_json_dumps
+from ...utils.patterns import Patterns
 
 
 class ClaudeRenderer:
@@ -596,15 +597,9 @@ class ClaudeAdapter(ResourceAdapter):
 
         errors = []
 
-        # Patterns that indicate errors when at start of line/content
-        # Using MULTILINE so ^ matches start of any line
-        strong_patterns = re.compile(
-            r'^\s*(?:traceback|exception|error:|fatal:|panic:)',
-            re.IGNORECASE | re.MULTILINE
-        )
-
-        # Exit code pattern - matches "Exit code N" where N > 0
-        exit_code_pattern = re.compile(r'exit code (\d+)', re.IGNORECASE)
+        # Use centralized patterns from utils.patterns
+        strong_patterns = Patterns.ERROR_LINE_START
+        exit_code_pattern = Patterns.EXIT_CODE
 
         for i, msg in enumerate(messages):
             # Tool results are in 'user' type messages (results returned to assistant)
@@ -1049,16 +1044,12 @@ class ClaudeAdapter(ResourceAdapter):
         result_content = str(content.get('content', ''))
 
         # Check for exit code > 0 (definitive for Bash)
-        exit_match = re.search(r'exit code (\d+)', result_content, re.IGNORECASE)
+        exit_match = Patterns.EXIT_CODE.search(result_content)
         if exit_match and int(exit_match.group(1)) > 0:
             return True
 
         # Check for strong error patterns at line start
-        strong_patterns = re.compile(
-            r'^\s*(?:traceback|exception|error:|fatal:|panic:)',
-            re.IGNORECASE | re.MULTILINE
-        )
-        if strong_patterns.search(result_content):
+        if Patterns.ERROR_LINE_START.search(result_content):
             return True
 
         return False

@@ -35,13 +35,16 @@ internal-docs/
 
 | Document | Description | Date |
 |----------|-------------|------|
-| [CODE_QUALITY_REVIEW_2026-01-18.md](refactoring/CODE_QUALITY_REVIEW_2026-01-18.md) | Comprehensive duplication analysis | 2026-01-18 |
+| [REFACTORING_ACTION_PLAN.md](refactoring/REFACTORING_ACTION_PLAN.md) | **Active** - Consolidated action plan (start here) | 2026-01-20 |
+| [CODE_QUALITY_REVIEW_2026-01-18.md](refactoring/CODE_QUALITY_REVIEW_2026-01-18.md) | Micro-level duplication analysis (~200-300 lines) | 2026-01-18 |
+| [ARCHITECTURE_IMPROVEMENTS_2026-01-20.md](refactoring/ARCHITECTURE_IMPROVEMENTS_2026-01-20.md) | Meta-level refactoring (monolithic files, renderer consolidation, ~4000 lines) | 2026-01-20 |
 
 ### Research
 
 | Document | Description | Date |
 |----------|-------------|------|
 | [DOGFOODING_REPORT_2026-01-19.md](research/DOGFOODING_REPORT_2026-01-19.md) | Adapter validation via dogfooding | 2026-01-19 |
+| [UX_ISSUES_2026-01-20.md](research/UX_ISSUES_2026-01-20.md) | UX issues identified during dogfooding | 2026-01-20 |
 
 ## Related Documentation
 

@@ -8,6 +8,7 @@ from .breadcrumbs import (
     get_file_type_from_analyzer,
     print_breadcrumbs,
 )
+from .patterns import Patterns, compile_pattern
 from .updates import check_for_updates
 
 __all__ = [
@@ -18,5 +19,7 @@ __all__ = [
     'get_element_placeholder',
     'get_file_type_from_analyzer',
     'print_breadcrumbs',
+    'Patterns',
+    'compile_pattern',
     'check_for_updates',
 ]
