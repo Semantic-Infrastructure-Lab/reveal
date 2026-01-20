@@ -2,9 +2,15 @@
 import re
 
 # File type groupings for consistent suggestions
-_CODE_TYPES = frozenset(['python', 'javascript', 'typescript', 'rust', 'go', 'bash', 'gdscript'])
-_CONFIG_TYPES = frozenset(['yaml', 'json', 'toml', 'jsonl'])
-_INFRA_TYPES = frozenset(['dockerfile', 'nginx'])
+_CODE_TYPES = frozenset([
+    'python', 'javascript', 'typescript', 'rust', 'go', 'bash', 'gdscript',
+    'java', 'kotlin', 'swift', 'dart', 'scala', 'csharp', 'cpp', 'c',
+    'ruby', 'php', 'lua', 'zig', 'powershell', 'batch',
+])
+_CONFIG_TYPES = frozenset(['yaml', 'json', 'toml', 'jsonl', 'ini', 'properties'])
+_INFRA_TYPES = frozenset(['dockerfile', 'nginx', 'terraform', 'hcl'])
+_DATA_TYPES = frozenset(['csv', 'tsv', 'xml'])
+_API_TYPES = frozenset(['graphql', 'protobuf'])
 
 
 def get_element_placeholder(file_type):
@@ -17,6 +23,7 @@ def get_element_placeholder(file_type):
         String placeholder like '<function>', '<key>', etc.
     """
     mapping = {
+        # Code types
         'python': '<function>',
         'javascript': '<function>',
         'typescript': '<function>',
@@ -24,15 +31,43 @@ def get_element_placeholder(file_type):
         'go': '<function>',
         'bash': '<function>',
         'gdscript': '<function>',
+        'java': '<function>',
+        'kotlin': '<function>',
+        'swift': '<function>',
+        'dart': '<function>',
+        'scala': '<function>',
+        'csharp': '<function>',
+        'cpp': '<function>',
+        'c': '<function>',
+        'ruby': '<function>',
+        'php': '<function>',
+        'lua': '<function>',
+        'zig': '<function>',
+        'powershell': '<function>',
+        'batch': '<label>',
+        # Config types
         'yaml': '<key>',
         'json': '<key>',
         'jsonl': '<entry>',
         'toml': '<key>',
-        'markdown': '<heading>',
+        'ini': '<section>',
+        'properties': '<key>',
+        # Data types
+        'csv': '<row>',
+        'tsv': '<row>',
+        'xml': '<element>',
+        # Document types
+        'markdown': '<section>',
         'html': '<element>',
+        'jupyter': '<cell>',
+        # Infrastructure types
         'dockerfile': '<instruction>',
         'nginx': '<directive>',
-        'jupyter': '<cell>',
+        'terraform': '<resource>',
+        'hcl': '<resource>',
+        # API types
+        'graphql': '<type>',
+        'protobuf': '<message>',
     }
     return mapping.get(file_type, '<element>')
 
@@ -48,23 +83,50 @@ def get_file_type_from_analyzer(analyzer):
     """
     class_name = type(analyzer).__name__
     mapping = {
+        # Code analyzers
         'PythonAnalyzer': 'python',
         'JavaScriptAnalyzer': 'javascript',
         'TypeScriptAnalyzer': 'typescript',
         'RustAnalyzer': 'rust',
         'GoAnalyzer': 'go',
         'BashAnalyzer': 'bash',
-        'MarkdownAnalyzer': 'markdown',
+        'GDScriptAnalyzer': 'gdscript',
+        'JavaAnalyzer': 'java',
+        'KotlinAnalyzer': 'kotlin',
+        'SwiftAnalyzer': 'swift',
+        'DartAnalyzer': 'dart',
+        'ScalaAnalyzer': 'scala',
+        'CSharpAnalyzer': 'csharp',
+        'CppAnalyzer': 'cpp',
+        'CAnalyzer': 'c',
+        'RubyAnalyzer': 'ruby',
+        'PhpAnalyzer': 'php',
+        'LuaAnalyzer': 'lua',
+        'ZigAnalyzer': 'zig',
+        'PowerShellAnalyzer': 'powershell',
+        'BatchAnalyzer': 'batch',
+        # Config analyzers
         'YamlAnalyzer': 'yaml',
         'JsonAnalyzer': 'json',
         'JsonlAnalyzer': 'jsonl',
         'TomlAnalyzer': 'toml',
+        'IniAnalyzer': 'ini',
+        # Data analyzers
+        'CsvAnalyzer': 'csv',
+        'XmlAnalyzer': 'xml',
+        # Document analyzers
+        'MarkdownAnalyzer': 'markdown',
+        'HtmlAnalyzer': 'html',
+        'JupyterAnalyzer': 'jupyter',
+        # Infrastructure analyzers
         'DockerfileAnalyzer': 'dockerfile',
         'NginxAnalyzer': 'nginx',
-        'GDScriptAnalyzer': 'gdscript',
-        'JupyterAnalyzer': 'jupyter',
-        'HtmlAnalyzer': 'html',
-        'TreeSitterAnalyzer': None,  # Generic fallback
+        'HclAnalyzer': 'terraform',
+        # API analyzers
+        'GraphqlAnalyzer': 'graphql',
+        'ProtobufAnalyzer': 'protobuf',
+        # Fallback
+        'TreeSitterAnalyzer': None,
     }
     return mapping.get(class_name, None)
 
@@ -85,9 +147,9 @@ def _print_type_specific_hints(path, file_type):
         print(f"      reveal {path} --check      # Check code quality")
         print(f"      reveal {path} --outline    # Nested structure")
     elif file_type == 'markdown':
+        print(f"      reveal {path} --section 'Name'  # Extract section by heading")
         print(f"      reveal {path} --links      # Extract links")
         print(f"      reveal {path} --code       # Extract code blocks")
-        print(f"      reveal {path} --frontmatter # Extract YAML front matter")
     elif file_type == 'html':
         print(f"      reveal {path} --check      # Validate HTML")
         print(f"      reveal {path} --links      # Extract all links")
@@ -95,6 +157,10 @@ def _print_type_specific_hints(path, file_type):
         print(f"      reveal {path} --check      # Validate syntax")
     elif file_type in _INFRA_TYPES:
         print(f"      reveal {path} --check      # Validate configuration")
+    elif file_type in _DATA_TYPES:
+        print(f"      reveal {path} --head 10    # First 10 rows/elements")
+    elif file_type in _API_TYPES:
+        print(f"      reveal {path} --outline    # Type hierarchy")
 
 
 def _print_typed_hints(path, file_type):
@@ -102,6 +168,7 @@ def _print_typed_hints(path, file_type):
     if file_type in _CODE_TYPES:
         print(f"      reveal {path} --check      # Check code quality")
     elif file_type == 'markdown':
+        print(f"      reveal {path} --section 'Name'  # Extract section by heading")
         print(f"      reveal {path} --links      # Extract links")
     elif file_type == 'html':
         print(f"      reveal {path} --check      # Validate HTML")
@@ -110,6 +177,8 @@ def _print_typed_hints(path, file_type):
         print(f"      reveal {path} --check      # Validate syntax")
     elif file_type in _INFRA_TYPES:
         print(f"      reveal {path} --check      # Validate configuration")
+    elif file_type in _DATA_TYPES:
+        print(f"      reveal {path} --head 10    # First 10 rows/elements")
 
 
 # --- Context handlers ---
@@ -126,6 +195,23 @@ def _handle_structure(path, file_type, **kwargs):
     print(f"Next: reveal {path} {element_placeholder}   # Extract specific element")
 
     structure = kwargs.get('structure', {})
+
+    # Suggest hierarchical extraction for classes with methods
+    if structure and file_type in _CODE_TYPES:
+        classes = structure.get('classes', [])
+        if classes:
+            # Find first class with methods for example
+            for cls in classes:
+                cls_name = cls.get('name', '') if isinstance(cls, dict) else str(cls)
+                if cls_name:
+                    print(f"      reveal {path} {cls_name}.method  # Extract method within class")
+                    break
+
+    # Suggest ordinal extraction for files with many elements
+    if structure:
+        total = sum(len(v) for v in structure.values() if isinstance(v, list))
+        if total > 5:
+            print(f"      reveal {path} @3           # Extract 3rd element (ordinal)")
 
     # Suggest imports:// for files with many imports
     if structure and 'imports' in structure:

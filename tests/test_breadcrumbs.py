@@ -64,8 +64,8 @@ class TestGetElementPlaceholder:
         assert get_element_placeholder('toml') == '<key>'
 
     def test_markdown_placeholder(self):
-        """Markdown files use <heading> placeholder."""
-        assert get_element_placeholder('markdown') == '<heading>'
+        """Markdown files use <section> placeholder (aligns with --section flag)."""
+        assert get_element_placeholder('markdown') == '<section>'
 
     def test_dockerfile_placeholder(self):
         """Dockerfile uses <instruction> placeholder."""
@@ -325,14 +325,14 @@ class TestPrintBreadcrumbsStructure:
         assert '--outline' in output
 
     def test_structure_markdown_shows_links_and_code(self):
-        """Markdown structure suggests --links and --code."""
+        """Markdown structure suggests --section, --links, and --code."""
         mock_config = Mock()
         mock_config.is_breadcrumbs_enabled.return_value = True
 
         output = capture_breadcrumbs('structure', 'README.md', 'markdown', config=mock_config)
+        assert '--section' in output
         assert '--links' in output
         assert '--code' in output
-        assert '--frontmatter' in output
 
     def test_structure_html_shows_check_and_links(self):
         """HTML structure suggests --check and --links."""
@@ -467,6 +467,131 @@ class TestPrintBreadcrumbsLargeFile:
         )
         assert "ast://" not in output
         assert '--links' in output  # Standard markdown suggestion
+
+
+# ==============================================================================
+# print_breadcrumbs Tests - Hierarchical and Ordinal Extraction
+# ==============================================================================
+
+class TestPrintBreadcrumbsHierarchical:
+    """Tests for hierarchical and ordinal extraction breadcrumbs."""
+
+    def test_classes_suggest_hierarchical_extraction(self):
+        """Files with classes suggest Class.method extraction syntax."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        structure = {
+            'classes': [{'name': 'MyClass'}, {'name': 'OtherClass'}],
+            'functions': [{'name': 'helper'}],
+        }
+
+        output = capture_breadcrumbs(
+            'structure', 'test.py', 'python',
+            config=mock_config, structure=structure
+        )
+        assert "MyClass.method" in output
+        assert "# Extract method within class" in output
+
+    def test_no_classes_no_hierarchical_hint(self):
+        """Files without classes don't show hierarchical hint."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        structure = {
+            'functions': [{'name': 'foo'}, {'name': 'bar'}],
+        }
+
+        output = capture_breadcrumbs(
+            'structure', 'test.py', 'python',
+            config=mock_config, structure=structure
+        )
+        assert ".method" not in output
+
+    def test_many_elements_suggest_ordinal_extraction(self):
+        """Files with >5 elements suggest ordinal (@N) extraction."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        structure = {
+            'functions': [{'name': f'func_{i}'} for i in range(8)],
+        }
+
+        output = capture_breadcrumbs(
+            'structure', 'test.py', 'python',
+            config=mock_config, structure=structure
+        )
+        assert "@3" in output
+        assert "# Extract 3rd element (ordinal)" in output
+
+    def test_few_elements_no_ordinal_hint(self):
+        """Files with <=5 elements don't show ordinal hint."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        structure = {
+            'functions': [{'name': 'foo'}, {'name': 'bar'}],
+        }
+
+        output = capture_breadcrumbs(
+            'structure', 'test.py', 'python',
+            config=mock_config, structure=structure
+        )
+        assert "@3" not in output
+
+
+# ==============================================================================
+# print_breadcrumbs Tests - New File Types
+# ==============================================================================
+
+class TestPrintBreadcrumbsNewFileTypes:
+    """Tests for new file type breadcrumbs (CSV, XML, INI, PowerShell, etc.)."""
+
+    def test_csv_shows_head_hint(self):
+        """CSV files suggest --head for row filtering."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs('structure', 'data.csv', 'csv', config=mock_config)
+        assert '--head 10' in output
+        assert '<row>' in output
+
+    def test_xml_shows_head_hint(self):
+        """XML files suggest --head for element filtering."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs('structure', 'config.xml', 'xml', config=mock_config)
+        assert '--head 10' in output
+        assert '<element>' in output
+
+    def test_ini_shows_section_placeholder(self):
+        """INI files use <section> placeholder."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs('structure', 'config.ini', 'ini', config=mock_config)
+        assert '<section>' in output
+        assert '--check' in output
+
+    def test_powershell_shows_code_hints(self):
+        """PowerShell files show code-type hints."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs('structure', 'deploy.ps1', 'powershell', config=mock_config)
+        assert '<function>' in output
+        assert '--check' in output
+        assert '--outline' in output
+
+    def test_terraform_shows_resource_placeholder(self):
+        """Terraform files use <resource> placeholder."""
+        mock_config = Mock()
+        mock_config.is_breadcrumbs_enabled.return_value = True
+
+        output = capture_breadcrumbs('structure', 'main.tf', 'terraform', config=mock_config)
+        assert '<resource>' in output
+        assert '--check' in output
 
 
 # ==============================================================================
