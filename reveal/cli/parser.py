@@ -185,8 +185,8 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--depth', type=int, default=3, help='Directory tree depth (default: 3)')
     parser.add_argument('--max-entries', type=int, default=200,
                         help='Maximum entries to show in directory tree (default: 200, 0=unlimited)')
-    parser.add_argument('--dir-limit', type=int, default=0,
-                        help='Maximum entries per directory before snipping (default: 0=no per-dir limit). '
+    parser.add_argument('--dir-limit', type=int, default=50,
+                        help='Maximum entries per directory before snipping (default: 50, 0=unlimited). '
                              'When a directory exceeds this limit, shows first entries then "[snipped N more]" '
                              'and continues with sibling directories.')
     parser.add_argument('--fast', action='store_true',

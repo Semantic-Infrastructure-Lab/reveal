@@ -15,10 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.40.0] - 2026-01-20
 
 ### Added
-- **`--dir-limit` flag** - Per-directory entry limit for tree view
+- **`--dir-limit` flag** - Per-directory entry limit for tree view (default: 50)
   - Caps entries shown per directory, then shows `[snipped N more entries]`
   - Continues with sibling directories (unlike global `--max-entries` which stops)
-  - Example: `reveal myproject/ --dir-limit 10 --fast` - shows 10 entries per dir
+  - Breadcrumb hint: `(--dir-limit 0 to show all)` when snipping
+  - Example: `reveal myproject/ --dir-limit 10` - shows 10 entries per dir
   - Solves: `node_modules/` consuming entire entry budget, hiding other directories
 
 - **`--adapters` flag** - List all available URI adapters with descriptions

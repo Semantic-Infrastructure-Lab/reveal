@@ -12,7 +12,7 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
                         max_entries: int = 200, fast: bool = False,
                         respect_gitignore: bool = True,
                         exclude_patterns: Optional[List[str]] = None,
-                        dir_limit: int = 0) -> str:
+                        dir_limit: int = 50) -> str:
     """Show directory tree with file info.
 
     Args:
@@ -23,7 +23,7 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
         fast: Skip expensive line counting for performance
         respect_gitignore: Whether to respect .gitignore rules (default: True)
         exclude_patterns: Additional patterns to exclude (e.g., ['*.log', 'tmp/'])
-        dir_limit: Maximum entries per directory before snipping (0=no limit).
+        dir_limit: Maximum entries per directory before snipping (default: 50, 0=unlimited).
                    When exceeded, shows "[snipped N more]" and continues with siblings.
 
     Returns:
@@ -141,8 +141,8 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
         # Check if we've hit the per-directory limit
         if dir_limit > 0 and dir_entry_count >= dir_limit:
             snipped_count = len(entries) - i
-            # Use appropriate connector for snip message
-            lines.append(f"{prefix}└── [snipped {snipped_count} more entries]")
+            # Use appropriate connector for snip message with breadcrumb hint
+            lines.append(f"{prefix}└── [snipped {snipped_count} more entries] (--dir-limit 0 to show all)")
             # Don't count snip message toward global limit, but do track for truncation stats
             context['truncated'] += snipped_count
             return  # Exit this directory, continue with parent's siblings
