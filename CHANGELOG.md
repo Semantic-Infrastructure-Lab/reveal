@@ -74,6 +74,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Code patterns (Python class/function, semver)
   - Includes `compile_pattern()` with LRU caching for dynamic patterns
 
+### Fixed
+- **SSLAdapter TypeError** - No-arg initialization now raises `TypeError` (was `ValueError`)
+  - Consistent with git adapter behavior
+  - Allows generic handler to try next initialization pattern
+
 ## [0.40.0] - 2026-01-20
 
 ### Added

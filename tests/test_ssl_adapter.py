@@ -21,8 +21,8 @@ class TestSSLAdapterInit(unittest.TestCase):
     """Test SSLAdapter initialization and URI parsing."""
 
     def test_init_with_empty_uri(self):
-        """Empty URI should raise ValueError."""
-        with self.assertRaises(ValueError) as ctx:
+        """Empty URI should raise TypeError (allows generic handler to try next pattern)."""
+        with self.assertRaises(TypeError) as ctx:
             SSLAdapter("")
         self.assertIn("requires a connection string", str(ctx.exception))
 

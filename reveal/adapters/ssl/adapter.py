@@ -42,13 +42,13 @@ class SSLAdapter(ResourceAdapter):
             connection_string: ssl://host[:port][/element]
 
         Raises:
+            TypeError: If no connection string provided (allows generic handler to try next pattern)
             ValueError: If connection string is invalid
         """
+        # No-arg initialization should raise TypeError, not ValueError
+        # This lets the generic handler try the next pattern
         if not connection_string:
-            raise ValueError(
-                "SSLAdapter requires a connection string. "
-                "Use SSLAdapter('ssl://example.com')"
-            )
+            raise TypeError("SSLAdapter requires a connection string")
 
         self.connection_string = connection_string
         self.host = None
