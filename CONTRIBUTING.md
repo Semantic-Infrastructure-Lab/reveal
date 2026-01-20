@@ -269,17 +269,31 @@ def test_lua_structure():
 
 ## Priority Areas
 
-**Most wanted analyzers:**
-- CSV/Excel (.csv, .xlsx)
-- SQL (.sql)
-- Terraform (.tf)
-- Protocol Buffers (.proto)
-- GraphQL (.graphql)
+> **Current roadmap**: See [ROADMAP.md](ROADMAP.md) for detailed status and priorities.
 
-**Most wanted features:**
-- Call graph analysis
-- Dependency visualization
-- More pattern detection rules
+**Recently shipped analyzers (v0.33-v0.35):**
+- ✅ CSV/Excel (.csv, .xlsx)
+- ✅ SQL (.sql)
+- ✅ Terraform/HCL (.tf)
+- ✅ Protocol Buffers (.proto)
+- ✅ GraphQL (.graphql)
+- ✅ Kotlin, Swift, Dart
+- ✅ sqlite:// adapter
+
+**Most wanted analyzers (still needed):**
+- Excel binary formats (.xls)
+- OpenAPI/Swagger (.yaml with detection)
+- Makefiles
+
+**Most wanted features (post-v1.0):**
+- Call graph analysis — *"who calls this function?"*
+- Dependency visualization — *beyond imports://, show data flow*
+- Intent-based commands — *`reveal hotspots`, `reveal entrypoints`*
+
+**Good first contributions:**
+- More pattern detection rules (see `reveal/rules/`)
+- Language analyzer improvements (see `reveal/analyzers/`)
+- Documentation fixes and examples
 
 ---
 
