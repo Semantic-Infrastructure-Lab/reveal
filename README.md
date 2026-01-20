@@ -135,7 +135,7 @@ reveal --rules                   # List all rules
 reveal --explain B001            # Explain specific rule
 ```
 
-**50+ built-in rules** across 12 categories: bugs (B), complexity (C), duplicates (D), style (E), frontmatter (F), imports (I), links (L), maintainability (M), nginx (N), refactoring (R), security (S), URLs (U), validation (V). See CHANGELOG.md for recent additions.
+**57 built-in rules** across 12 categories: bugs (B), complexity (C), duplicates (D), style (E), frontmatter (F), imports (I), links (L), maintainability (M), nginx (N), refactoring (R), security (S), URLs (U), validation (V). See CHANGELOG.md for recent additions.
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
 
 ### 📝 Schema Validation (v0.29.0+)
@@ -474,7 +474,7 @@ reveal/
 ├── cli/          # Argument parsing, routing, handlers
 ├── display/      # Terminal output formatting
 ├── rendering/    # Adapter-specific renderers
-├── rules/        # 50+ quality rules (B, C, D, E, F, I, L, M, N, R, S, U, V)
+├── rules/        # 57 quality rules (B, C, D, E, F, I, L, M, N, R, S, U, V)
 ├── analyzers/    # 53 file types (Python, Rust, HTML, Markdown, etc.)
 ├── adapters/     # URI support (14 adapters: help://, env://, ast://, stats://, etc.)
 ├── schemas/      # Type definitions (renamed from types/ in v0.23.0)
@@ -483,10 +483,10 @@ reveal/
 
 **Clean architecture:** Most analyzers < 50 lines. Modular packages since v0.22.0.
 
-**Quality metrics:** 2,400+ tests, continuous integration on every commit.
+**Quality metrics:** 2,500+ tests, continuous integration on every commit.
 
 **Documentation:** [reveal/docs/README.md](reveal/docs/README.md) - Comprehensive guides for users, developers, and AI agents
-**Power users:** [COOL_TRICKS.md](reveal/docs/COOL_TRICKS.md) - Hidden features and advanced workflows
+**Power users:** [COOL_TRICKS.md](reveal/docs/RECIPES.md) - Hidden features and advanced workflows
 
 ---
 
@@ -534,7 +534,7 @@ Add new languages in 10-50 lines. See `analyzers/` for examples.
 
 ---
 
-**License:** MIT | [Documentation](reveal/docs/README.md) | [Cool Tricks](reveal/docs/COOL_TRICKS.md) | [Issues](https://github.com/Semantic-Infrastructure-Lab/reveal/issues)
+**License:** MIT | [Documentation](reveal/docs/README.md) | [Recipes](reveal/docs/RECIPES.md) | [Issues](https://github.com/Semantic-Infrastructure-Lab/reveal/issues)
 
 [![Stars](https://img.shields.io/github/stars/Semantic-Infrastructure-Lab/reveal?style=social)](https://github.com/Semantic-Infrastructure-Lab/reveal)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

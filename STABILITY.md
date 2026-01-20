@@ -95,7 +95,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
 **Blockers for v1.0:**
 1. ✅ Output contract specification (structured return values) - **COMPLETE** (2026-01-17)
 2. ✅ JSON schema versioning - **COMPLETE** (2026-01-17, via Output Contract v1.0)
-3. 🟡 Comprehensive integration test suite - **IN PROGRESS** (2,400+ tests passing, expanding coverage)
+3. 🟡 Comprehensive integration test suite - **IN PROGRESS** (2,500+ tests passing, expanding coverage)
 4. 🟡 Documentation completeness (all adapters have help:// guides) - **IN PROGRESS** (most adapters documented)
 5. ⏳ 6 months without breaking changes to Stable features - **STARTED** (2026-01-17, target: 2026-07-17)
 
@@ -238,21 +238,19 @@ Tree-sitter extraction only, basic structure, no custom analyzers:
 
 ## JSON Output Stability
 
-**Current status:** 🟡 Beta
+**Current status:** 🟢 Stable (Output Contract v1.0)
 
-**Why Beta:**
-- No formal JSON schema
-- Output structure varies by analyzer
-- No versioning on JSON responses
+**What shipped (2026-01-17):**
+- Output Contract v1.0 defines consistent JSON structure across all adapters
+- All 14 adapters follow predictable schemas
+- `meta.extractable` field for agent discoverability
+- Versioned output format
 
-**Path to Stable:**
-1. Define JSON schema v1.0 (Output Contract Specification - Tier 1 priority)
-2. Add version field to all JSON output
-3. Validate all analyzers against schema
-4. Document schema in STABILITY.md
-5. Freeze schema for v1.0
-
-**ETA:** Q1 2026 (after Output Contract ships)
+**Guarantees:**
+- Core JSON structure is stable (`file`, `type`, `analyzer`, `meta` fields)
+- `meta.extractable` includes `types`, `elements`, `examples`
+- All adapters return consistent error formats
+- Breaking changes require major version bump
 
 ---
 
@@ -285,26 +283,25 @@ Tree-sitter extraction only, basic structure, no custom analyzers:
 - `reveal <path>` → structure output format (filename:line)
 - `reveal help://` → adapter discovery
 - `reveal --agent-help` → usage patterns
+- `reveal --format json` → JSON output (Output Contract v1.0)
 
 **Beta:**
-- JSON output structure (use at your own risk, may change)
 - Adapter query parameters (may evolve)
 
-**Recommendation:** Rely on text output (`filename:line` format) for production. JSON output is Beta until Output Contract ships.
+**Recommendation:** Both text output (`filename:line` format) and JSON output (`--format json`) are production-ready. Output Contract v1.0 shipped 2026-01-17.
 
 ### For CI/CD Pipelines
 
 **Stable:**
 - `reveal --check` exit codes (0 = pass, 1 = violations found)
 - `--format=grep` output format
+- `--format=json` schema (Output Contract v1.0)
 - Rule selection (`--select B,S`)
 
 **Beta:**
 - Specific rule IDs (may be renamed/renumbered)
-- JSON output structure
-- `--format=json` schema
 
-**Recommendation:** Pin reveal version in CI (`pip install reveal-cli==0.36.1`) and upgrade explicitly after testing.
+**Recommendation:** Pin reveal version in CI (`pip install reveal-cli==0.39.0`) and upgrade explicitly after testing.
 
 ### For Human Users
 
@@ -348,5 +345,5 @@ reveal reveal://schema  # (Coming in Output Contract Specification)
 
 ---
 
-**Next review:** After Output Contract Specification ships (Q1 2026)
+**Next review:** Q2 2026 (before v1.0 release)
 **Owner:** Scott (with TIA)

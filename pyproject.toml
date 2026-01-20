@@ -107,7 +107,13 @@ addopts = "-v --cov=reveal --cov-report=term-missing -p no:postgresql -p no:redi
 
 [tool.coverage.run]
 source = ["reveal"]
-omit = ["*/tests/*", "*/test_*.py"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    # Database adapters require external connections for meaningful testing
+    "reveal/adapters/mysql/*",
+    "reveal/adapters/sqlite/*",
+]
 
 [tool.coverage.report]
 exclude_lines = [

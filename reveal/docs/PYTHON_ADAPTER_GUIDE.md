@@ -450,7 +450,7 @@ Found a bug or have a feature request? See the main Reveal repository.
 
 - [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Create custom adapters
 - [ANALYZER_PATTERNS.md](ANALYZER_PATTERNS.md) - Code analysis patterns
-- [COOL_TRICKS.md](COOL_TRICKS.md) - Practical Python examples
+- [RECIPES.md](RECIPES.md) - Practical Python examples
 - [README.md](README.md) - Documentation hub
 
 ## License

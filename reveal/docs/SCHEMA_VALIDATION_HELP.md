@@ -615,6 +615,6 @@
 ## See Also
 
 - [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Schema configuration options
-- [COOL_TRICKS.md](COOL_TRICKS.md) - Validation workflow examples
+- [RECIPES.md](RECIPES.md) - Validation workflow examples
 - [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Front matter basics
 - [README.md](README.md) - Documentation hub

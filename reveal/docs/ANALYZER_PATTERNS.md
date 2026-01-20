@@ -797,7 +797,7 @@ links = [self._parse_link_node(node) for node in link_nodes]
 ## Related Documents
 
 - `REGEX_AST_AUDIT.md` - Full audit results and recommendations
-- `ANTI_PATTERNS.md` - General Reveal anti-patterns
+- `AGENT_HELP.md` - General Reveal anti-patterns
 - `README.md` - Reveal overview
 
 ---

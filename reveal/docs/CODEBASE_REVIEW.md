@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-Reveal is a **semantic code exploration tool** that enables comprehensive codebase review through **progressive disclosure**. Unlike traditional tools that force you to read entire files or run expensive static analysis, reveal provides 13 specialized adapters that let you navigate code as a queryable database.
+Reveal is a **semantic code exploration tool** that enables comprehensive codebase review through **progressive disclosure**. Unlike traditional tools that force you to read entire files or run expensive static analysis, reveal provides 14 specialized adapters that let you navigate code as a queryable database.
 
 **Key Insight**: A complete codebase review using reveal is 25-150x more token-efficient than reading files directly, making it ideal for AI-assisted reviews, onboarding, refactoring, and quality assessment.
 
@@ -17,7 +17,7 @@ Reveal is a **semantic code exploration tool** that enables comprehensive codeba
 
 ## Table of Contents
 
-1. [The 13 Adapters: Your Review Toolkit](#the-13-adapters-your-review-toolkit)
+1. [The 14 Adapters: Your Review Toolkit](#the-13-adapters-your-review-toolkit)
 2. [Core Review Workflows](#core-review-workflows)
 3. [The Complete Codebase Review Process](#the-complete-codebase-review-process)
 4. [Advanced Multi-Adapter Patterns](#advanced-multi-adapter-patterns)
@@ -28,9 +28,9 @@ Reveal is a **semantic code exploration tool** that enables comprehensive codeba
 
 ---
 
-## The 13 Adapters: Your Review Toolkit
+## The 14 Adapters: Your Review Toolkit
 
-Reveal provides 13 URI adapters, each specialized for different aspects of codebase analysis. Think of them as **semantic lenses** into your code.
+Reveal provides 14 URI adapters, each specialized for different aspects of codebase analysis. Think of them as **semantic lenses** into your code.
 
 ### 1. **ast://** - Code Structure Query Engine
 Query code as a database using filters for complexity, size, type, name patterns, and decorators.

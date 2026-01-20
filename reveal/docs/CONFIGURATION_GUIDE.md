@@ -646,9 +646,9 @@ Legacy paths still supported with deprecation warning:
 
 ## See Also
 
-- [COOL_TRICKS.md](COOL_TRICKS.md) - Practical examples using configuration
+- [RECIPES.md](RECIPES.md) - Practical examples using configuration
 - [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Core functionality reference
-- [ANTI_PATTERNS.md](ANTI_PATTERNS.md) - Configuration mistakes to avoid
+- [AGENT_HELP.md](AGENT_HELP.md) - Configuration mistakes to avoid
 - [README.md](README.md) - Documentation hub
 - `reveal help://` - List all help topics
 - `reveal --check --help` - CLI usage

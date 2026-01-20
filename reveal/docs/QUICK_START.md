@@ -304,13 +304,12 @@ reveal help://anti-patterns      # What NOT to do
 ## Next Steps
 
 **New users:**
-1. [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Complete feature reference
-2. [COOL_TRICKS.md](COOL_TRICKS.md) - Power user workflows
-3. [ANTI_PATTERNS.md](ANTI_PATTERNS.md) - What NOT to do
+1. [RECIPES.md](RECIPES.md) - Task-based workflows
+2. [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Complete feature reference
+3. [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Customize behavior
 
 **AI agents:**
-1. [AGENT_HELP.md](AGENT_HELP.md) - Quick reference for AI
-2. [AGENT_HELP_FULL.md](AGENT_HELP_FULL.md) - Comprehensive guide
+→ [AGENT_HELP.md](AGENT_HELP.md) - Complete AI reference
 
 **Developers:**
 1. [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Extend reveal
@@ -318,20 +317,10 @@ reveal help://anti-patterns      # What NOT to do
 
 ---
 
-**Got 5 more minutes?** Read [COOL_TRICKS.md](COOL_TRICKS.md) for practical workflows.
+**Got 5 more minutes?** Read [RECIPES.md](RECIPES.md) for practical workflows.
 
-**Still confused?** Check [ANTI_PATTERNS.md](ANTI_PATTERNS.md) for common mistakes.
-
-**Ready to go deep?** Read [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) for complete reference.
+**Ready to go deep?** Read [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) for complete review patterns.
 
 ---
 
-**Document metadata:**
-- **Last updated:** 2026-01-19
-- **Reveal version:** 0.38.0+
-- **Reading time:** 5 minutes
-- **Target audience:** New users, onboarding
-
----
-
-**Navigation:** [← Documentation Index](README.md) | [Full Guide →](MARKDOWN_GUIDE.md) | [Power Tricks →](COOL_TRICKS.md)
+**Navigation:** [← Documentation Index](README.md) | [Full Guide →](MARKDOWN_GUIDE.md) | [Recipes →](RECIPES.md)

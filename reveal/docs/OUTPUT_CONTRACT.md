@@ -1,9 +1,9 @@
 # Output Contract Specification v1.0
 
 **Version**: 1.0.0
-**Status**: Draft
+**Status**: Released
 **Date**: 2026-01-17
-**Stability**: Beta 🟡
+**Stability**: Stable 🟢
 
 ---
 

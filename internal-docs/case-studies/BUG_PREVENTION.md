@@ -195,7 +195,7 @@ class B006(BaseRule):
 1. Create `tests/test_adapter_contracts.py`
 2. Test that all adapters handle missing/invalid parameters consistently
 3. Test that error messages are helpful
-4. Run against all 13 adapters
+4. Run against all 14 adapters
 
 **Benefits:**
 - Ensures new adapters follow conventions
@@ -285,7 +285,7 @@ class ResourceAdapter(ABC):
 - Routing.py becomes much simpler
 
 **Drawbacks:**
-- Requires refactoring all 13 adapters
+- Requires refactoring all 14 adapters
 - Breaking change
 - More complex base class
 

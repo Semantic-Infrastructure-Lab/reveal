@@ -1,59 +1,70 @@
 # Reveal Internal Documentation
 
-Internal development documentation for the reveal project. These docs capture architectural decisions, research findings, and development planning that aren't appropriate for user-facing documentation.
+Internal development documentation for the reveal project. These docs capture architectural decisions, research findings, historical records, and development planning that aren't appropriate for user-facing documentation.
 
 ## Directory Structure
 
 ```
 internal-docs/
-├── README.md                    # This file - inventory and navigation
-├── case-studies/                # Real-world usage analysis
-├── planning/                    # Feature planning and design docs
-├── refactoring/                 # Code quality reviews and refactoring plans
+├── README.md                    # This file
+├── case-studies/                # Bug analysis, real-world usage
+│   └── BUG_PREVENTION.md        # git:// routing bug analysis
+├── planning/                    # Feature planning and design
+│   └── TECHNICAL_DEBT_RESOLUTION.md  # Tech debt audit response
+├── refactoring/                 # Code quality reviews
 │   └── CODE_QUALITY_REVIEW_2026-01-18.md
-└── research/                    # Dogfooding, experiments, findings
+└── research/                    # Dogfooding, experiments
     └── DOGFOODING_REPORT_2026-01-19.md
 ```
 
 ## Document Inventory
 
+### Case Studies
+
+| Document | Description | Date |
+|----------|-------------|------|
+| [BUG_PREVENTION.md](case-studies/BUG_PREVENTION.md) | git:// routing bug analysis and prevention strategies | 2026-01-16 |
+
+### Planning
+
+| Document | Description | Date |
+|----------|-------------|------|
+| [TECHNICAL_DEBT_RESOLUTION.md](planning/TECHNICAL_DEBT_RESOLUTION.md) | TreeSitter architecture audit response (~90% complete) | 2026-01-13 |
+
 ### Refactoring
 
-| Document | Description | Status |
-|----------|-------------|--------|
-| [CODE_QUALITY_REVIEW_2026-01-18.md](refactoring/CODE_QUALITY_REVIEW_2026-01-18.md) | Comprehensive duplication analysis and refactoring opportunities | Active |
+| Document | Description | Date |
+|----------|-------------|------|
+| [CODE_QUALITY_REVIEW_2026-01-18.md](refactoring/CODE_QUALITY_REVIEW_2026-01-18.md) | Comprehensive duplication analysis | 2026-01-18 |
 
 ### Research
 
-| Document | Description | Status |
-|----------|-------------|--------|
-| [DOGFOODING_REPORT_2026-01-19.md](research/DOGFOODING_REPORT_2026-01-19.md) | Adapter validation via dogfooding starting from `reveal://help` | Complete |
+| Document | Description | Date |
+|----------|-------------|------|
+| [DOGFOODING_REPORT_2026-01-19.md](research/DOGFOODING_REPORT_2026-01-19.md) | Adapter validation via dogfooding | 2026-01-19 |
 
 ## Related Documentation
 
 ### User-Facing Docs (`reveal/docs/`)
-- **AGENT_HELP.md** - Quick reference for AI agents
+- **AGENT_HELP.md** - Complete AI agent reference
+- **RECIPES.md** - Task-based workflows
 - **QUICK_START.md** - Getting started guide
-- **CONFIGURATION_GUIDE.md** - Config file reference
-- 14 additional guides covering adapters, analyzers, and features
-
-### Developer Docs (`docs/`)
-- **OUTPUT_CONTRACT.md** - Stable output format specification
-- **BUG_PREVENTION.md** - Quality rules and their rationale
-- **REVEAL_CODEBASE_REVIEW_GUIDE.md** - How to review reveal's own code
+- **CODEBASE_REVIEW.md** - Complete review workflows
+- 10 additional guides covering adapters, analyzers, and features
 
 ### Root-Level Docs
-- **CHANGELOG.md** - Version history and release notes
+- **CHANGELOG.md** - Version history
 - **CONTRIBUTING.md** - Contribution guidelines
-- **RELEASING.md** - Release process documentation
+- **RELEASING.md** - Release process
 - **STABILITY.md** - API stability guarantees
-- **TECHNICAL_DEBT_RESOLUTION.md** - Debt tracking and resolution
 
 ## Adding New Documents
 
-1. **Research/experiments** → `research/`
-2. **Code quality/refactoring** → `refactoring/`
-3. **Feature design/planning** → `planning/`
-4. **Real-world usage analysis** → `case-studies/`
+| Type | Location |
+|------|----------|
+| Bug analysis | `case-studies/` |
+| Feature design | `planning/` |
+| Code quality | `refactoring/` |
+| Experiments | `research/` |
 
-Use the naming convention: `TOPIC_YYYY-MM-DD.md` for dated documents.
+**Naming convention:** `TOPIC_YYYY-MM-DD.md` for dated documents.

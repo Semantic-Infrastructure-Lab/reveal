@@ -131,20 +131,14 @@ reveal --agent-help              # Get task-based patterns
 
 ### Directory Structure
 ```
-reveal/
-├── AGENT_HELP.md                    # --agent-help content
-├── AGENT_HELP_FULL.md               # --agent-help-full content
-├── ANTI_PATTERNS.md                 # help://anti-patterns
-├── COOL_TRICKS.md                   # help://tricks
+reveal/docs/
+├── AGENT_HELP.md                    # --agent-help content (complete reference)
+├── RECIPES.md                       # help://recipes (task-based workflows)
 ├── MARKDOWN_GUIDE.md                # help://markdown
 ├── REVEAL_ADAPTER_GUIDE.md          # help://reveal-guide
-├── adapters/
-│   ├── help.py                      # help:// adapter implementation
-│   ├── PYTHON_ADAPTER_GUIDE.md      # help://python-guide
-│   └── ADAPTER_AUTHORING_GUIDE.md   # help://adapter-authoring
-└── rendering/
-    └── adapters/
-        └── help.py                  # help:// rendering logic
+├── PYTHON_ADAPTER_GUIDE.md          # help://python-guide
+├── ADAPTER_AUTHORING_GUIDE.md       # help://adapter-authoring
+└── ...
 ```
 
 ### Content Sources
@@ -391,10 +385,10 @@ A: Update estimates in `_render_help_list_mode()` token_estimate dictionaries
 
 - [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Create help-enabled adapters
 - [AGENT_HELP.md](AGENT_HELP.md) - AI agent reference guide
-- [COOL_TRICKS.md](COOL_TRICKS.md) - Using the help system effectively
+- [RECIPES.md](RECIPES.md) - Task-based workflows
 - [README.md](README.md) - Documentation hub
 
 ---
 
-**Last updated:** 2025-12-16
-**Version:** 0.30.0
+**Last updated:** 2026-01-19
+**Version:** 0.39.0

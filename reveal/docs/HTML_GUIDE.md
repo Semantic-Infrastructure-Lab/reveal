@@ -390,7 +390,7 @@ Both are included in reveal's default dependencies.
 
 - [MARKDOWN_GUIDE.md](./MARKDOWN_GUIDE.md) - Similar progressive disclosure for Markdown
 - [AGENT_HELP.md](./AGENT_HELP.md) - Full reveal agent guide
-- [COOL_TRICKS.md](./COOL_TRICKS.md) - Advanced reveal patterns
+- [RECIPES.md](./RECIPES.md) - Advanced reveal patterns
 
 ---
 
