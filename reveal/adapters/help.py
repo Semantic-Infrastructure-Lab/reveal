@@ -64,19 +64,21 @@ class HelpAdapter(ResourceAdapter):
     STATIC_HELP = {
         'quick-start': 'QUICK_START.md',  # 5-minute quick start guide
         'agent': 'AGENT_HELP.md',
-        'agent-full': 'AGENT_HELP_FULL.md',
+        'agent-full': 'AGENT_HELP.md',  # Alias (full version merged into AGENT_HELP.md)
         'python': 'PYTHON_ADAPTER_GUIDE.md',  # Alias for python-guide
         'python-guide': 'PYTHON_ADAPTER_GUIDE.md',
         'reveal-guide': 'REVEAL_ADAPTER_GUIDE.md',  # Reference implementation
         'markdown': 'MARKDOWN_GUIDE.md',
         'html': 'HTML_GUIDE.md',  # HTML features guide
-        'anti-patterns': 'ANTI_PATTERNS.md',
+        'anti-patterns': 'AGENT_HELP.md',  # Merged into AGENT_HELP.md
         'adapter-authoring': 'ADAPTER_AUTHORING_GUIDE.md',
-        'tricks': 'COOL_TRICKS.md',
+        'tricks': 'RECIPES.md',  # Merged into RECIPES.md (task-based workflows)
+        'recipes': 'RECIPES.md',  # Primary name for workflow recipes
         'help': 'HELP_SYSTEM_GUIDE.md',  # Meta-documentation about help system
         'configuration': 'CONFIGURATION_GUIDE.md',  # Configuration system guide
         'config': 'CONFIGURATION_GUIDE.md',  # Alias for configuration
-        'release': 'RELEASE_GUIDE.md',  # Release process for maintainers
+        'codebase-review': 'CODEBASE_REVIEW.md',  # Codebase review workflows
+        'output': 'OUTPUT_CONTRACT.md',  # Output format contract
         'schemas': 'SCHEMA_VALIDATION_HELP.md',  # Schema validation guide (v0.29.0+)
         'duplicates': 'DUPLICATE_DETECTION_GUIDE.md',  # Duplicate code detection guide
         'duplicate-detection': 'DUPLICATE_DETECTION_GUIDE.md'  # Alias for duplicates

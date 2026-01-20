@@ -45,29 +45,25 @@ class TestPackagingManifest(unittest.TestCase):
         shutil.rmtree(cls.temp_dir, ignore_errors=True)
 
     def test_agent_help_files_included(self):
-        """AGENT_HELP*.md files must be included in distribution.
-        
-        Regression test: These files were moved to reveal/docs/ but MANIFEST.in
-        still referenced reveal/AGENT_HELP*.md, causing them to be excluded.
+        """AGENT_HELP.md must be included in distribution.
+
+        Regression test: This file was moved to reveal/docs/ but MANIFEST.in
+        still referenced reveal/AGENT_HELP*.md, causing it to be excluded.
+        Note: AGENT_HELP_FULL.md was merged into AGENT_HELP.md in v0.39.0.
         """
         with tarfile.open(self.tarball, 'r:gz') as tar:
             names = tar.getnames()
-            
-            # Check for both agent help files
+
+            # Check for agent help file
             agent_help = [n for n in names if 'AGENT_HELP.md' in n]
-            agent_help_full = [n for n in names if 'AGENT_HELP_FULL.md' in n]
-            
+
             self.assertTrue(
                 len(agent_help) > 0,
                 "AGENT_HELP.md not found in package! Check MANIFEST.in"
             )
-            self.assertTrue(
-                len(agent_help_full) > 0,
-                "AGENT_HELP_FULL.md not found in package! Check MANIFEST.in"
-            )
-            
-            # Verify they're in the correct location
-            for name in agent_help + agent_help_full:
+
+            # Verify it's in the correct location
+            for name in agent_help:
                 self.assertIn(
                     '/reveal/docs/',
                     name,

@@ -17,11 +17,11 @@ Reveal is a **semantic code exploration tool** that enables comprehensive codeba
 
 ## Table of Contents
 
-1. [The 14 Adapters: Your Review Toolkit](#the-13-adapters-your-review-toolkit)
+1. [The 14 Adapters: Your Review Toolkit](#the-14-adapters-your-review-toolkit)
 2. [Core Review Workflows](#core-review-workflows)
 3. [The Complete Codebase Review Process](#the-complete-codebase-review-process)
 4. [Advanced Multi-Adapter Patterns](#advanced-multi-adapter-patterns)
-5. [Quality Gates & Metrics](#quality-gates--metrics)
+5. [Quality Gates & Metrics](#quality-gates-metrics)
 6. [Token-Efficient AI Review Strategies](#token-efficient-ai-review-strategies)
 7. [Real-World Review Scenarios](#real-world-review-scenarios)
 8. [Quick Reference](#quick-reference)

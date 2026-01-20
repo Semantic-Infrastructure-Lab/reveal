@@ -9,9 +9,9 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
 ## Table of Contents
 
 - [Code Review](#code-review)
-- [Onboarding & Exploration](#onboarding--exploration)
-- [Debugging & Troubleshooting](#debugging--troubleshooting)
-- [Refactoring & Quality](#refactoring--quality)
+- [Onboarding & Exploration](#onboarding-exploration)
+- [Debugging & Troubleshooting](#debugging-troubleshooting)
+- [Refactoring & Quality](#refactoring-quality)
 - [Documentation Maintenance](#documentation-maintenance)
 - [JSON Navigation](#json-navigation)
 - [Database Operations](#database-operations)

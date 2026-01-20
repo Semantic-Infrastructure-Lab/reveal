@@ -486,7 +486,7 @@ reveal/
 **Quality metrics:** 2,500+ tests, continuous integration on every commit.
 
 **Documentation:** [reveal/docs/README.md](reveal/docs/README.md) - Comprehensive guides for users, developers, and AI agents
-**Power users:** [COOL_TRICKS.md](reveal/docs/RECIPES.md) - Hidden features and advanced workflows
+**Power users:** [RECIPES.md](reveal/docs/RECIPES.md) - Task-based workflows and advanced patterns
 
 ---
 
