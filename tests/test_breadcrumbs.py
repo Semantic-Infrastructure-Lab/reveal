@@ -491,7 +491,7 @@ class TestPrintBreadcrumbsHierarchical:
             config=mock_config, structure=structure
         )
         assert "MyClass.method" in output
-        assert "# Extract method within class" in output
+        assert "# Hierarchical extraction" in output
 
     def test_no_classes_no_hierarchical_hint(self):
         """Files without classes don't show hierarchical hint."""
@@ -522,7 +522,7 @@ class TestPrintBreadcrumbsHierarchical:
             config=mock_config, structure=structure
         )
         assert "@3" in output
-        assert "# Extract 3rd element (ordinal)" in output
+        assert "# Extract 3rd element" in output
 
     def test_few_elements_no_ordinal_hint(self):
         """Files with <=5 elements don't show ordinal hint."""

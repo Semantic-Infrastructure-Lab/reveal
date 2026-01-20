@@ -227,26 +227,43 @@ git diff --name-only | reveal --stdin --check --select S
 
 ### Task: "Extract specific code element"
 
-**Pattern:**
+**Extraction syntaxes:**
 ```bash
-# Extract function
-reveal app.py process_request
+# By name
+reveal app.py process_request          # Extract function by name
+reveal app.py DatabaseHandler          # Extract class by name
 
-# Extract class
-reveal app.py DatabaseHandler
+# Hierarchical (nested elements)
+reveal app.py DatabaseHandler.connect  # Extract method within class
+reveal app.py Outer.Inner.method       # Multiple nesting levels
 
-# Extract method
-reveal app.py DatabaseHandler.connect
+# By line number (from grep, error messages, stack traces)
+reveal app.py :73                      # Element containing line 73
+reveal app.py :42-80                   # Exact line range
 
-# Extract specific lines
-reveal app.py --range 42-80
+# By position (ordinal)
+reveal app.py @1                       # First element (usually function)
+reveal app.py @3                       # Third element
 
-# Get first/last functions (bugs cluster at end!)
-reveal app.py --head 5
-reveal app.py --tail 5
+# By type + position
+reveal app.py function:2               # Second function
+reveal app.py class:1                  # First class
 ```
 
-**Why tail is useful:** Technical debt and bugs often cluster at the end of files. Functions added later tend to be rushed or less reviewed. Always check `--tail 5` when investigating issues.
+**When to use each:**
+- **Name** - You know what you're looking for
+- **Hierarchical** - You see `Class.method` in outline or structure
+- **Line number** - Error message says "line 73" or grep found `:73:`
+- **Ordinal** - You ran `reveal file.py` and want "the 3rd one"
+- **Type+position** - You want "2nd function" specifically
+
+**Head/tail for exploration:**
+```bash
+reveal app.py --head 5                 # First 5 functions
+reveal app.py --tail 5                 # Last 5 functions (where bugs cluster!)
+```
+
+**Why tail is useful:** Technical debt and bugs often cluster at the end of files. Functions added later tend to be rushed or less reviewed.
 
 **Advanced extraction:**
 ```bash
@@ -254,13 +271,10 @@ reveal app.py --tail 5
 reveal app.py --format=json | jq '.structure.functions[] | select(.name | test("^handle_"))'
 
 # Extract function with its decorators
-reveal app.py decorated_function  # Automatically includes @decorators
-
-# Extract with context (surrounding functions)
-reveal app.py target_function --range $((line-10))-$((line+10))
+reveal app.py decorated_function       # Automatically includes @decorators
 ```
 
-**Hierarchical extraction (--outline):**
+**Hierarchical view (--outline):**
 ```bash
 reveal models.py --outline
 
@@ -1660,8 +1674,11 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | See directory structure | `reveal src/` |
 | See file structure | `reveal file.py` |
 | Hierarchical view | `reveal file.py --outline` |
-| Extract function | `reveal file.py func_name` |
+| Extract by name | `reveal file.py func_name` |
 | Extract class method | `reveal file.py Class.method` |
+| Extract at line | `reveal file.py :73` |
+| Extract Nth element | `reveal file.py @3` |
+| Extract 2nd function | `reveal file.py function:2` |
 | Quality check | `reveal file.py --check` |
 | Security check only | `reveal file.py --check --select S` |
 | Find by name | `reveal 'ast://./src?name=*pattern*'` |
@@ -1677,7 +1694,6 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Extract links | `reveal doc.md --links` |
 | Extract code blocks | `reveal doc.md --code` |
 | First/last N functions | `reveal file.py --head 5` / `--tail 5` |
-| Specific line range | `reveal file.py --range 42-80` |
 | List all rules | `reveal --rules` |
 | Explain rule | `reveal --explain B001` |
 | Check file type | `reveal file.py --meta` |

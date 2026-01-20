@@ -192,9 +192,10 @@ def _handle_metadata(path, file_type, **kwargs):
 def _handle_structure(path, file_type, **kwargs):
     """Handle 'structure' context breadcrumbs."""
     element_placeholder = get_element_placeholder(file_type)
-    print(f"Next: reveal {path} {element_placeholder}   # Extract specific element")
+    print(f"Next: reveal {path} {element_placeholder}   # Extract by name")
 
     structure = kwargs.get('structure', {})
+    hints_shown = 0
 
     # Suggest hierarchical extraction for classes with methods
     if structure and file_type in _CODE_TYPES:
@@ -204,14 +205,27 @@ def _handle_structure(path, file_type, **kwargs):
             for cls in classes:
                 cls_name = cls.get('name', '') if isinstance(cls, dict) else str(cls)
                 if cls_name:
-                    print(f"      reveal {path} {cls_name}.method  # Extract method within class")
+                    print(f"      reveal {path} {cls_name}.method  # Hierarchical extraction")
+                    hints_shown += 1
                     break
+
+    # Suggest line-based extraction (from :LINE shown in structure output)
+    if structure and file_type in _CODE_TYPES:
+        functions = structure.get('functions', [])
+        if functions and hints_shown < 2:
+            # Get line number from first function for example
+            first_func = functions[0]
+            line = first_func.get('line', 0) if isinstance(first_func, dict) else 0
+            if line:
+                print(f"      reveal {path} :{line}       # Extract at line number")
+                hints_shown += 1
 
     # Suggest ordinal extraction for files with many elements
     if structure:
         total = sum(len(v) for v in structure.values() if isinstance(v, list))
-        if total > 5:
-            print(f"      reveal {path} @3           # Extract 3rd element (ordinal)")
+        if total > 5 and hints_shown < 2:
+            print(f"      reveal {path} @3           # Extract 3rd element")
+            hints_shown += 1
 
     # Suggest imports:// for files with many imports
     if structure and 'imports' in structure:
@@ -243,7 +257,8 @@ def _handle_typed(path, file_type, **kwargs):
 def _handle_element(path, file_type, **kwargs):
     """Handle 'element' context breadcrumbs."""
     element_name = kwargs.get('element_name', '')
-    line_count = kwargs.get('line_count', '')
+    line_count = kwargs.get('line_count', 0)
+    line_start = kwargs.get('line_start', 0)
 
     info = f"Extracted {element_name}"
     if line_count:
@@ -251,7 +266,12 @@ def _handle_element(path, file_type, **kwargs):
 
     print(info)
     print(f"  → Back: reveal {path}          # See full structure")
-    print(f"  → Check: reveal {path} --check # Quality analysis")
+
+    # Suggest line-based extraction for navigating to nearby elements
+    if line_start and file_type in _CODE_TYPES:
+        print(f"  → Nearby: reveal {path} :{line_start + line_count + 5}  # Next element")
+    else:
+        print(f"  → Check: reveal {path} --check # Quality analysis")
 
 
 def _handle_quality_check(path, file_type, **kwargs):
