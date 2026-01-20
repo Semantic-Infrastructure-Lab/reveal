@@ -8,7 +8,6 @@ date: 2026-01-17
 # Stability Policy
 
 **Last updated:** 2026-01-19
-**Version:** v0.40.0
 
 ---
 
@@ -83,7 +82,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
 
 ## Version Policy
 
-### Current Version: v0.40.0 (Beta)
+### Current Status: Beta (Pre-v1.0)
 
 **Semver interpretation for pre-v1.0:**
 - **Patch (v0.36.0 → v0.36.1):** Bug fixes only, no breaking changes
@@ -242,7 +241,7 @@ Tree-sitter extraction only, basic structure, no custom analyzers:
 
 **What shipped (2026-01-17):**
 - Output Contract v1.0 defines consistent JSON structure across all adapters
-- All 14 adapters follow predictable schemas
+- All adapters follow predictable schemas
 - `meta.extractable` field for agent discoverability
 - Versioned output format
 

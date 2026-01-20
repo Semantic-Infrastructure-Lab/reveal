@@ -435,12 +435,14 @@ Action: [What to do next]
 - **Safe**: Read-only, no filesystem modifications
 - **Cacheable**: Results can be cached for repeated checks
 
-## Future Enhancements
+## Related Adapters
 
-Coming in v0.18.0:
-- `python://imports/graph` - Import dependency visualization
-- `python://imports/circular` - Circular import detection
-- `python://debug/syntax` - Syntax error detection
+For advanced import analysis, use the dedicated **imports://** adapter:
+- `imports://path/to/file.py` - Import analysis with dependency tracking
+- `imports://path/to/file.py?circular` - Circular import detection
+- `imports://path/to/dir` - Multi-file import graph
+
+See [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) for the full adapter list.
 
 ## Contributing
 

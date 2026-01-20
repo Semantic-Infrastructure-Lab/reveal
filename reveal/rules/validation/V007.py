@@ -99,7 +99,6 @@ class V007(BaseRule):
     ) -> None:
         """Check all project files for version consistency."""
         self._check_changelog_version(project_root, canonical, detections)
-        self._check_roadmap_version(project_root, canonical, detections)
         self._check_readme_version(project_root, canonical, detections)
         self._check_agent_help_versions(reveal_root, canonical, detections)
 
@@ -119,26 +118,6 @@ class V007(BaseRule):
                 message=f"CHANGELOG.md missing section for v{canonical}",
                 suggestion=f"Add section: ## [{canonical}] - YYYY-MM-DD",
                 context=f"Expected version: {canonical}"
-            ))
-
-    def _check_roadmap_version(
-        self, project_root: Path, canonical: str, detections: List[Detection]
-    ) -> None:
-        """Check ROADMAP.md current version matches."""
-        roadmap_file = project_root / 'ROADMAP.md'
-        if not roadmap_file.exists():
-            return
-
-        roadmap_version = self._extract_roadmap_version(roadmap_file)
-        if roadmap_version and roadmap_version != canonical:
-            detections.append(self.create_detection(
-                file_path="ROADMAP.md",
-                line=1,
-                message=f"ROADMAP.md version mismatch: "
-                       f"v{roadmap_version} != v{canonical}",
-                suggestion=f"Update '**Current version:** v{roadmap_version}' "
-                          f"to '**Current version:** v{canonical}'",
-                context=f"Found: v{roadmap_version}, Expected: v{canonical}"
             ))
 
     def _check_readme_version(
@@ -220,29 +199,15 @@ class V007(BaseRule):
         return False
 
     def _extract_version_from_markdown(self, md_file: Path) -> Optional[str]:
-        """Extract version from markdown file (AGENT_HELP*.md)."""
-        try:
-            content = md_file.read_text()
-            # Match: **Version:** X.Y.Z or Version: X.Y.Z
-            match = re.search(r'\*\*Version:\*\*\s*([0-9]+\.[0-9]+\.[0-9]+)', content)
-            if not match:
-                match = re.search(r'Version:\s*([0-9]+\.[0-9]+\.[0-9]+)', content)
-            if match:
-                return match.group(1)
-        except Exception:
-            pass
-        return None
+        """Extract version from markdown file (AGENT_HELP*.md).
 
-    def _extract_roadmap_version(self, roadmap_file: Path) -> Optional[str]:
-        """Extract version from ROADMAP.md.
-
-        Looks for pattern: **Current version:** vX.Y.Z
+        Only matches **Version:** pattern (bold) to avoid matching
+        version numbers in code examples.
         """
         try:
-            content = roadmap_file.read_text()
-            # Match: **Current version:** v0.27.1 or **Current version:** 0.27.1
-            pattern = r'\*\*Current version:\*\*\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
-            match = re.search(pattern, content)
+            content = md_file.read_text()
+            # Match only: **Version:** X.Y.Z (bold format, not plain text)
+            match = re.search(r'\*\*Version:\*\*\s*([0-9]+\.[0-9]+\.[0-9]+)', content)
             if match:
                 return match.group(1)
         except Exception:

@@ -93,6 +93,6 @@ reveal help://ast                # Adapter-specific help
 
 ---
 
-**Last updated:** 2026-01-19 | **Version:** 0.40.0 | **Total guides:** 14
+**Last updated:** 2026-01-19
 
 [← Project README](../../README.md)

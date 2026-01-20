@@ -213,7 +213,6 @@ class TestDocumentationConsistency:
                 f"Consider if these should follow the convention."
             )
             # Don't fail, just log for information
-            # pytest.skip(info)
 
 
 class TestDocumentationCompleteness:

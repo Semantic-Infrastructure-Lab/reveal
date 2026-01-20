@@ -61,9 +61,6 @@ class V011(BaseRule):
         self._validate_roadmap_shipped(
             roadmap_file, canonical_version, detections
         )
-        self._validate_roadmap_version(
-            roadmap_file, canonical_version, detections
-        )
 
         return detections
 
@@ -118,30 +115,6 @@ class V011(BaseRule):
                     f"Add v{version} section to 'What We've Shipped'"
                 ),
                 context=f"Version: {version}"
-            ))
-
-    def _validate_roadmap_version(
-            self,
-            roadmap_file: Path,
-            version: str,
-            detections: List[Detection]) -> None:
-        """Validate ROADMAP.md current version is correct."""
-        if not roadmap_file.exists():
-            return
-
-        roadmap_version = self._extract_roadmap_version(roadmap_file)
-        if roadmap_version and roadmap_version != version:
-            detections.append(self.create_detection(
-                file_path="ROADMAP.md",
-                line=1,
-                message=(
-                    f"ROADMAP.md '**Current version:**' not updated "
-                    f"(v{roadmap_version} != v{version})"
-                ),
-                suggestion=f"Update to: **Current version:** v{version}",
-                context=(
-                    f"Found: v{roadmap_version}, Expected: v{version}"
-                )
             ))
 
     def _extract_version_from_pyproject(
@@ -236,22 +209,3 @@ class V011(BaseRule):
         except Exception:
             pass
         return False
-
-    def _extract_roadmap_version(
-            self, roadmap_file: Path) -> Optional[str]:
-        """Extract version from ROADMAP.md.
-
-        Looks for pattern: **Current version:** vX.Y.Z
-        """
-        try:
-            content = roadmap_file.read_text()
-            # Match: **Current version:** v0.27.1 or 0.27.1
-            pattern = (
-                r'\*\*Current version:\*\*\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
-            )
-            match = re.search(pattern, content)
-            if match:
-                return match.group(1)
-        except Exception:
-            pass
-        return None

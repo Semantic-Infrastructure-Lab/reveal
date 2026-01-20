@@ -135,7 +135,7 @@ reveal --rules                   # List all rules
 reveal --explain B001            # Explain specific rule
 ```
 
-**57 built-in rules** across 12 categories: bugs (B), complexity (C), duplicates (D), style (E), frontmatter (F), imports (I), links (L), maintainability (M), nginx (N), refactoring (R), security (S), URLs (U), validation (V). See CHANGELOG.md for recent additions.
+**55+ built-in rules** across 12 categories: bugs (B), complexity (C), duplicates (D), style (E), frontmatter (F), imports (I), links (L), maintainability (M), nginx (N), refactoring (R), security (S), URLs (U), validation (V). See CHANGELOG.md for recent additions.
 **Extensible:** Drop custom rules in `~/.reveal/rules/` - auto-discovered
 
 ### 📝 Schema Validation (v0.29.0+)
@@ -474,7 +474,7 @@ reveal/
 ├── cli/          # Argument parsing, routing, handlers
 ├── display/      # Terminal output formatting
 ├── rendering/    # Adapter-specific renderers
-├── rules/        # 57 quality rules (B, C, D, E, F, I, L, M, N, R, S, U, V)
+├── rules/        # 55+ quality rules (B, C, D, E, F, I, L, M, N, R, S, U, V)
 ├── analyzers/    # 53 file types (Python, Rust, HTML, Markdown, etc.)
 ├── adapters/     # URI support (14 adapters: help://, env://, ast://, stats://, etc.)
 ├── schemas/      # Type definitions (renamed from types/ in v0.23.0)
@@ -492,7 +492,7 @@ reveal/
 
 ## Stability Guarantees
 
-**Current version:** v0.40.0 (Beta) - On path to v1.0 (Q2-Q3 2026)
+**Status:** Beta - On path to v1.0 (see [ROADMAP.md](ROADMAP.md))
 
 ### 🟢 Stable (Safe to depend on)
 - **Core modes:** directory → file → element

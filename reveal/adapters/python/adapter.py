@@ -88,9 +88,9 @@ class PythonAdapter(ResourceAdapter):
             return {"error": "Specify module name: python://module/<name>"}
         elif base == "imports":
             if len(parts) > 1 and parts[1] == "graph":
-                return {"error": "Import graph analysis coming in v0.27 (use imports:// adapter)"}
+                return {"error": "Use imports:// adapter for import graph analysis"}
             elif len(parts) > 1 and parts[1] == "circular":
-                return {"error": "Circular import detection coming in v0.27 (use imports:// adapter)"}
+                return {"error": "Use imports:// adapter for circular import detection"}
             return self._get_imports(**kwargs)
         elif base == "syspath":
             return get_syspath_analysis()

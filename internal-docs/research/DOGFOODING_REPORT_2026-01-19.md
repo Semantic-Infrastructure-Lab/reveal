@@ -19,7 +19,7 @@ Dogfooding reveal's own help system revealed a **critical architectural bug**: n
 | Adapter | Test Command | Result |
 |---------|--------------|--------|
 | `help://` | `reveal help://` | ✅ Excellent organization |
-| `help://adapters` | `reveal help://adapters` | ✅ Lists all 14 adapters |
+| `help://adapters` | `reveal help://adapters` | ✅ Lists all adapters |
 | `help://workflows` | `reveal help://workflows` | ✅ Practical examples |
 | `ast://` | `reveal 'ast://./reveal?complexity>10'` | ✅ Powerful queries |
 | `env://` | `reveal env://` | ✅ Clean output |
@@ -116,7 +116,7 @@ def test_all_adapters_have_renderers(self):
 After fixes:
 - **2525 tests passed**, 2 skipped
 - **10 adapter contract tests pass** including new renderer registration test
-- All 14 adapters route correctly
+- All adapters route correctly
 
 ## Files Modified
 

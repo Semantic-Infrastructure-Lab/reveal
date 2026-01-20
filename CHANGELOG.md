@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **`--adapters` flag** - List all available URI adapters with descriptions
   - Shows scheme, name, stability tier, and purpose for each adapter
-  - Example: `reveal --adapters` lists all 14 URI adapters
+  - Example: `reveal --adapters` lists all URI adapters
   - Complements `--languages` for file type analyzers
 
 - **M104: Hardcoded list detection** - Quality rule for maintainability
@@ -57,8 +57,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Imports adapter query params** - `?circular`, `?unused`, `?violations` now work
   - Root cause: URI not passed to adapters that expected query params
 
-- **V013/V014 validation rules** - Removed dead PRIORITIES.md references
-  - V014 now validates ROADMAP.md version consistency instead
+- **Validation rule cleanup** - Removed dead code from validation rules
+  - Removed V014 (checked for "**Current version:**" pattern no longer used)
+  - Removed dead roadmap version checks from V007 and V011
+  - Removed unused version_utils.py
 
 - **Display fixes** - HTML metadata, CSV schema, XML children, PowerShell signatures
 
@@ -274,7 +276,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Session: burning-trajectory-0119
 
 - **AGENT_HELP.md adapter reference** - Complete adapter table for AI agents
-  - Added table with all 14 URI adapters (purpose + example)
+  - Added table with all URI adapters (purpose + example)
   - Highlights most useful for agents: ast://, stats://, python://, imports://
   - Session: burning-trajectory-0119
 

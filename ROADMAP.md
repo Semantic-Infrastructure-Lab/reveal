@@ -1,15 +1,22 @@
 # Reveal Roadmap
 
 > **Last updated**: 2026-01-20
-> **Current version**: v0.40.0
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-## Recently Shipped (v0.33 - v0.35)
+## What We've Shipped
 
-### Language Support
+### v0.40.0
+- ✅ **`--adapters` flag** — List all URI adapters with descriptions
+- ✅ **M104 rule** — Hardcoded list detection for maintainability
+- ✅ **ROADMAP.md** — Public roadmap for contributors
+- ✅ **Breadcrumb improvements** — Extraction hints for 25+ file types
+
+### v0.33 - v0.39
+
+#### Language Support
 - ✅ **Kotlin, Swift, Dart** — Mobile development platforms
 - ✅ **Zig** — Systems programming
 - ✅ **Terraform/HCL** — Infrastructure-as-code
@@ -17,12 +24,12 @@ This document outlines reveal's development priorities and future direction. For
 - ✅ **Protocol Buffers** — gRPC serialization
 - ✅ **CSV/Excel** — Tabular data analysis
 
-### Adapters
+#### Adapters
 - ✅ **sqlite://** — SQLite database inspection
 - ✅ **git://** — Repository history and blame analysis
 - ✅ **imports://** — Dependency analysis with circular detection
 
-### Quality & Developer Experience
+#### Quality & Developer Experience
 - ✅ **Output Contract** — Stable, documented output formats
 - ✅ **Stability Taxonomy** — Clear API stability guarantees
 - ✅ **Workflow Recipes** — Common usage patterns documented

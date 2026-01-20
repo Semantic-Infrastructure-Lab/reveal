@@ -60,6 +60,20 @@ The script handles:
 
 ## Release Workflow
 
+### Step 0: Pre-release Validation
+
+Run reveal's self-check to catch documentation drift:
+
+```bash
+reveal reveal:// --check --select V012,V013
+```
+
+This validates:
+- **V012**: Language count claims match registered analyzers
+- **V013**: Adapter count claims match registered adapters
+
+Fix any errors before proceeding. These rules prevent releasing with stale documentation.
+
 ### Step 1: Prepare CHANGELOG
 
 Update `CHANGELOG.md` before running the release script:
@@ -236,6 +250,7 @@ Follow [Semantic Versioning](https://semver.org/):
 ## Release Checklist
 
 **Before release:**
+- [ ] **Self-check passes**: `reveal reveal:// --check --select V012,V013` (no errors)
 - [ ] **Version check**: `git tag | grep vX.Y.Z` returns nothing (version doesn't exist)
 - [ ] All features merged to master
 - [ ] Tests passing

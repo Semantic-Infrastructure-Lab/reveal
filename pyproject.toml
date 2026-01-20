@@ -57,14 +57,6 @@ treesitter = []
 html = [
     "lxml>=4.9.0",  # Fast C-based XML/HTML parser (requires system libs: libxml2-dev, libxslt1-dev)
 ]
-# Future: xlsx support
-excel = [
-    "openpyxl>=3.0",
-]
-# Future: enhanced syntax highlighting
-syntax = [
-    "pygments>=2.0",
-]
 # Database adapter support (mysql://, postgres://, etc.)
 database = [
     "pymysql>=1.0.0",

@@ -524,20 +524,19 @@ class TestPythonAdapter(unittest.TestCase):
         result = adapter.get_element('unknown_element')
         self.assertIsNone(result)
 
-    def test_future_features(self):
-        """Should return error messages for unimplemented features."""
+    def test_import_feature_redirection(self):
+        """Should return error messages directing users to imports:// adapter."""
         adapter = PythonAdapter()
 
-        # Import graph - coming in v0.27 via imports:// adapter
+        # Import graph - use imports:// adapter
         result = adapter.get_element('imports/graph')
         self.assertIn('error', result)
-        self.assertIn('0.27', result['error'])
         self.assertIn('imports://', result['error'])
 
-        # Circular import detection - coming in v0.27 via imports:// adapter
+        # Circular import detection - use imports:// adapter
         result = adapter.get_element('imports/circular')
         self.assertIn('error', result)
-        self.assertIn('0.27', result['error'])
+        self.assertIn('imports://', result['error'])
 
         # Syntax checking - not supported
         result = adapter.get_element('debug/syntax')

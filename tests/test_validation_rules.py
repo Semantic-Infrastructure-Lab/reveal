@@ -752,32 +752,6 @@ class TestV011ReleaseReadiness(unittest.TestCase):
         finally:
             temp_path.unlink()
 
-    def test_extract_roadmap_version(self):
-        """Test extracting current version from ROADMAP.md."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-            f.write("# Roadmap\n\n")
-            f.write("**Current version:** v0.27.1\n")
-            temp_path = Path(f.name)
-
-        try:
-            version = self.rule._extract_roadmap_version(temp_path)
-            self.assertEqual(version, "0.27.1")
-        finally:
-            temp_path.unlink()
-
-    def test_extract_roadmap_version_no_v_prefix(self):
-        """Test extracting version without 'v' prefix."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-            f.write("**Current version:** 0.27.1\n")
-            temp_path = Path(f.name)
-
-        try:
-            version = self.rule._extract_roadmap_version(temp_path)
-            self.assertEqual(version, "0.27.1")
-        finally:
-            temp_path.unlink()
-
-
 class TestValidationRulesIntegration(unittest.TestCase):
     """Integration tests for all validation rules."""
 

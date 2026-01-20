@@ -284,7 +284,7 @@ class TestRevealAdapterOutputIntegrity(unittest.TestCase):
 class TestDocumentationAccuracy(unittest.TestCase):
     """Test that documentation counts match reality.
 
-    These tests complement the V012-V014 validation rules by running in CI.
+    These tests complement the V012-V013 validation rules by running in CI.
     """
 
     def test_adapter_count_in_readme_is_accurate(self):
