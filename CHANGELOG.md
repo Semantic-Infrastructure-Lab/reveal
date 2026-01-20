@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-01-20
+
 ### Added
 - **`ssl://` adapter** - SSL/TLS certificate inspection (zero dependencies)
   - Certificate overview: `reveal ssl://example.com`
@@ -39,7 +41,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Server blocks show ports: `social.weffix.com [443 (SSL)]`
   - Location blocks show targets: `/.well-known/acme-challenge/ -> static: /path`
 
+- **Path utilities** - New `reveal/utils/path_utils.py`
+  - `find_file_in_parents()`: Search up directory tree for config files
+  - `search_parents()`: Generic parent directory search with conditions
+  - `find_project_root()`: Locate project root by common markers
+
+- **Safe operation utilities** - New `reveal/utils/safe_operations.py`
+  - `safe_operation()`: Decorator for graceful failure with fallbacks
+  - `safe_read_file()`, `safe_json_loads()`, `safe_yaml_loads()`
+  - `SafeContext`: Context manager for safe operations
+
 ### Changed
+- **Rule infrastructure refactoring** - Technical debt reduction
+  - New `ASTParsingMixin` for consistent AST parsing across rules
+  - Extended `create_detection()` to support severity overrides
+  - Updated B001, B005, B006, R913, M104 to use mixin
+
+- **Renderer consolidation** - New `reveal/rendering/base.py`
+  - `RendererMixin`: Shared utilities (JSON rendering, status output)
+  - `TypeDispatchRenderer`: Auto-routes to `_render_{type}()` methods
+  - SSLRenderer migrated to use new base classes
+
 - **Centralized defaults** - New `reveal/defaults.py` consolidates threshold constants
   - `RuleDefaults`: Complexity, file quality, code smell thresholds
   - `AdapterDefaults`: SSL expiry thresholds, scan limits
@@ -51,10 +73,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Nginx patterns (server blocks, SSL listen, ACME locations)
   - Code patterns (Python class/function, semver)
   - Includes `compile_pattern()` with LRU caching for dynamic patterns
-
-- **Internal documentation** - Consolidated refactoring action plan
-  - Created `REFACTORING_ACTION_PLAN.md` combining two review documents
-  - Updated `internal-docs/README.md` with new documents
 
 ## [0.40.0] - 2026-01-20
 

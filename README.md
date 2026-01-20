@@ -117,7 +117,7 @@ reveal --agent-help-full     # Complete reference (~1680 lines)
 
 **Quick Install:**
 ```bash
-pip install reveal-cli              # Full-featured by default (40+ languages, 14 adapters)
+pip install reveal-cli              # Full-featured by default (40+ languages, 15 adapters)
 pip install reveal-cli[database]    # Add MySQL database inspection
 ```
 See [INSTALL.md](INSTALL.md) for details on what's included.
@@ -488,7 +488,7 @@ reveal/
 ├── rendering/    # Adapter-specific renderers
 ├── rules/        # 55+ quality rules (B, C, D, E, F, I, L, M, N, R, S, U, V)
 ├── analyzers/    # 53 file types (Python, Rust, HTML, Markdown, etc.)
-├── adapters/     # URI support (14 adapters: help://, env://, ast://, stats://, etc.)
+├── adapters/     # URI support (15 adapters: help://, env://, ast://, stats://, etc.)
 ├── schemas/      # Type definitions (renamed from types/ in v0.23.0)
 └── treesitter.py # Universal language support (50+ langs)
 ```
@@ -522,7 +522,7 @@ reveal/
 - **Tree-sitter languages:** 165+ languages (basic structure only)
 - **Undocumented features:** Use at your own risk
 
-**For AI agents:** Text output (`filename:line` format) and JSON output (`--format json`) are both production-ready. All 14 adapters follow Output Contract v1.0.
+**For AI agents:** Text output (`filename:line` format) and JSON output (`--format json`) are both production-ready. All 15 adapters follow Output Contract v1.0.
 
 **For CI/CD:** Pin reveal version (`pip install reveal-cli==0.40.0`) and upgrade explicitly after testing.
 

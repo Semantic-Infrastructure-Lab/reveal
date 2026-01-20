@@ -79,7 +79,7 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
         # Update this when you add new adapters
         expected_adapters = {
             'ast', 'claude', 'diff', 'env', 'git', 'help', 'imports', 'json',
-            'markdown', 'mysql', 'python', 'reveal', 'sqlite', 'stats'
+            'markdown', 'mysql', 'python', 'reveal', 'sqlite', 'ssl', 'stats'
         }
 
         actually_registered = set(list_supported_schemes())
