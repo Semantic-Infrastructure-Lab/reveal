@@ -440,7 +440,8 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
             output = show_directory_tree(str(path), depth=args.depth,
                                          max_entries=args.max_entries, fast=args.fast,
                                          respect_gitignore=args.respect_gitignore,
-                                         exclude_patterns=args.exclude)
+                                         exclude_patterns=args.exclude,
+                                         dir_limit=getattr(args, 'dir_limit', 0))
             print(output)
     elif path.is_file():
         # --section is an alias for element extraction on markdown files

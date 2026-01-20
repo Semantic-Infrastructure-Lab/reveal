@@ -149,6 +149,34 @@ class TestTreeView(unittest.TestCase):
         # Should indicate truncation
         self.assertIn('more entries', result)
 
+    def test_dir_limit_snips_per_directory(self):
+        """Test dir_limit snips directories individually while continuing with siblings."""
+        # Create structure with multiple directories
+        dir1 = os.path.join(self.temp_dir, 'dir1')
+        dir2 = os.path.join(self.temp_dir, 'dir2')
+        os.makedirs(dir1)
+        os.makedirs(dir2)
+
+        # Put many files in dir1
+        for i in range(20):
+            with open(os.path.join(dir1, f'file{i:02d}.txt'), 'w') as f:
+                f.write('x')
+
+        # Put few files in dir2
+        for i in range(3):
+            with open(os.path.join(dir2, f'other{i}.txt'), 'w') as f:
+                f.write('x')
+
+        result = show_directory_tree(self.temp_dir, dir_limit=5, fast=True)
+
+        # Should snip dir1 after 5 entries
+        self.assertIn('[snipped', result)
+        # dir2 should still be fully shown (has only 3 files)
+        self.assertIn('dir2/', result)
+        self.assertIn('other0.txt', result)
+        self.assertIn('other1.txt', result)
+        self.assertIn('other2.txt', result)
+
 
 class TestCountEntries(unittest.TestCase):
     """Test entry counting helper."""

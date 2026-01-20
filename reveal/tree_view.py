@@ -11,7 +11,8 @@ from .utils import format_size
 def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
                         max_entries: int = 200, fast: bool = False,
                         respect_gitignore: bool = True,
-                        exclude_patterns: Optional[List[str]] = None) -> str:
+                        exclude_patterns: Optional[List[str]] = None,
+                        dir_limit: int = 0) -> str:
     """Show directory tree with file info.
 
     Args:
@@ -22,6 +23,8 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
         fast: Skip expensive line counting for performance
         respect_gitignore: Whether to respect .gitignore rules (default: True)
         exclude_patterns: Additional patterns to exclude (e.g., ['*.log', 'tmp/'])
+        dir_limit: Maximum entries per directory before snipping (0=no limit).
+                   When exceeded, shows "[snipped N more]" and continues with siblings.
 
     Returns:
         Formatted tree string
@@ -52,7 +55,7 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
             lines.append("   Consider using --fast to skip line counting for better performance\n")
 
     # Track how many entries we've shown
-    context = {'count': 0, 'max_entries': max_entries, 'truncated': 0}
+    context = {'count': 0, 'max_entries': max_entries, 'truncated': 0, 'dir_limit': dir_limit}
     _walk_directory(path, lines, depth=depth, show_hidden=show_hidden,
                    fast=fast, context=context, path_filter=path_filter)
 
@@ -103,14 +106,14 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
         depth: Remaining depth
         show_hidden: Show hidden files
         fast: Skip expensive operations
-        context: Shared context dict with 'count', 'max_entries', 'truncated'
+        context: Shared context dict with 'count', 'max_entries', 'truncated', 'dir_limit'
         path_filter: PathFilter for smart filtering
     """
     if depth <= 0:
         return
 
     if context is None:
-        context = {'count': 0, 'max_entries': 0, 'truncated': 0}
+        context = {'count': 0, 'max_entries': 0, 'truncated': 0, 'dir_limit': 0}
 
     try:
         entries = sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name))
@@ -125,12 +128,24 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
     if path_filter:
         entries = [e for e in entries if not path_filter.should_filter(e)]
 
+    dir_limit = context.get('dir_limit', 0)
+    dir_entry_count = 0  # Track entries shown in THIS directory
+
     for i, entry in enumerate(entries):
-        # Check if we've hit the entry limit
+        # Check if we've hit the global entry limit
         if context['max_entries'] > 0 and context['count'] >= context['max_entries']:
             # Count remaining entries
             context['truncated'] += len(entries) - i
             return
+
+        # Check if we've hit the per-directory limit
+        if dir_limit > 0 and dir_entry_count >= dir_limit:
+            snipped_count = len(entries) - i
+            # Use appropriate connector for snip message
+            lines.append(f"{prefix}└── [snipped {snipped_count} more entries]")
+            # Don't count snip message toward global limit, but do track for truncation stats
+            context['truncated'] += snipped_count
+            return  # Exit this directory, continue with parent's siblings
 
         is_last = (i == len(entries) - 1)
 
@@ -147,11 +162,13 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
             file_info = _get_file_info(entry, fast=fast)
             lines.append(f"{prefix}{connector}{file_info}")
             context['count'] += 1
+            dir_entry_count += 1
 
         elif entry.is_dir():
             # Show directory
             lines.append(f"{prefix}{connector}{entry.name}/")
             context['count'] += 1
+            dir_entry_count += 1
             # Recurse into subdirectory
             _walk_directory(entry, lines, prefix + extension, depth - 1,
                           show_hidden, fast, context, path_filter)

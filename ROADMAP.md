@@ -9,6 +9,7 @@ This document outlines reveal's development priorities and future direction. For
 ## What We've Shipped
 
 ### v0.40.0
+- ✅ **`--dir-limit` flag** — Per-directory entry limit (solves node_modules problem)
 - ✅ **`--adapters` flag** — List all URI adapters with descriptions
 - ✅ **M104 rule** — Hardcoded list detection for maintainability
 - ✅ **ROADMAP.md** — Public roadmap for contributors
@@ -154,6 +155,8 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 | Adapter | Notes |
 |---------|-------|
 | `claude://` | Claude conversation analysis (Tier 2) |
+| `ssl://` | SSL certificate inspection (Tier 2) |
+| `nginx://` | Nginx config structured querying (Tier 3) |
 | `calls://` | Call graph analysis (post-v1.0) |
 
 ---
