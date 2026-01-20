@@ -391,4 +391,4 @@ A: Update estimates in `_render_help_list_mode()` token_estimate dictionaries
 ---
 
 **Last updated:** 2026-01-19
-**Version:** 0.39.0
+**Version:** 0.40.0

@@ -3,8 +3,8 @@
 Validates that ROADMAP.md current version matches canonical version (pyproject.toml).
 
 Example violation:
-    - pyproject.toml: version = "0.39.0"
-    - ROADMAP.md: **Current version**: v0.35.x
+    - pyproject.toml: version = "0.40.0"
+    - ROADMAP.md: **Current version**: v0.39.0
     - Result: Stale version in roadmap doc
 
 Checks:
@@ -113,7 +113,7 @@ class V014(BaseRule):
         """
         try:
             content = roadmap_file.read_text()
-            # Match: **Current version**: v0.39.0
+            # Match: **Current version**: v0.40.0
             pattern = r'\*\*Current [Vv]ersion\*\*:\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
             match = re.search(pattern, content)
             if match:

@@ -8,7 +8,7 @@ date: 2026-01-17
 # Stability Policy
 
 **Last updated:** 2026-01-19
-**Version:** v0.39.0
+**Version:** v0.40.0
 
 ---
 
@@ -83,7 +83,7 @@ This document defines what users and AI agents can safely depend on in reveal. I
 
 ## Version Policy
 
-### Current Version: v0.39.0 (Beta)
+### Current Version: v0.40.0 (Beta)
 
 **Semver interpretation for pre-v1.0:**
 - **Patch (v0.36.0 → v0.36.1):** Bug fixes only, no breaking changes

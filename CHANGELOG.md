@@ -2,7 +2,7 @@
 title: Reveal Changelog
 type: documentation
 category: changelog
-date: 2026-01-18
+date: 2026-01-20
 ---
 
 # Changelog
@@ -11,6 +11,56 @@ All notable changes to reveal will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.40.0] - 2026-01-20
+
+### Added
+- **`--adapters` flag** - List all available URI adapters with descriptions
+  - Shows scheme, name, stability tier, and purpose for each adapter
+  - Example: `reveal --adapters` lists all 14 URI adapters
+  - Complements `--languages` for file type analyzers
+
+- **M104: Hardcoded list detection** - Quality rule for maintainability
+  - Detects large lookup tables (dicts with 5+ list values)
+  - Flags high-risk patterns (file extensions, node types) that may become stale
+  - Example: `reveal src/ --check --select M104`
+
+- **ROADMAP.md** - Public-facing roadmap for contributors
+  - Shows shipped features, current focus, and post-v1.0 plans
+  - Linked from CONTRIBUTING.md for discoverability
+
+- **Breadcrumb improvements** - Expanded file type coverage
+  - Added extraction hints for 25+ file types
+  - Documents all extraction syntaxes (by name, ordinal, line, hierarchical)
+
+### Changed
+- **Tree-sitter constants consolidated** - Centralized node type definitions
+  - `FUNCTION_NODE_TYPES`, `CLASS_NODE_TYPES`, `STRUCT_NODE_TYPES` in treesitter.py
+  - Reduces duplication and staleness risk across codebase
+
+- **Nginx rules use shared constant** - `NGINX_FILE_PATTERNS` extracted
+  - N001, N002, N003 now share single source of truth
+
+- **Documentation restructured** - Consolidated and reorganized
+  - Clearer hierarchy between internal and public docs
+  - Fixed stale "most wanted" list in CONTRIBUTING.md (all shipped!)
+
+### Fixed
+- **SQLite adapter** - Clean error message instead of traceback for missing database
+  - Before: `FileNotFoundError: [Errno 2] No such file or directory`
+  - After: `Error (sqlite://): Database file not found: /path/to/file.db`
+
+- **MySQL adapter** - Clean connection error with hints
+  - Before: Long pymysql traceback
+  - After: `Error: Failed to connect to MySQL at localhost:3306` with config hints
+
+- **Imports adapter query params** - `?circular`, `?unused`, `?violations` now work
+  - Root cause: URI not passed to adapters that expected query params
+
+- **V013/V014 validation rules** - Removed dead PRIORITIES.md references
+  - V014 now validates ROADMAP.md version consistency instead
+
+- **Display fixes** - HTML metadata, CSV schema, XML children, PowerShell signatures
 
 ## [0.39.0] - 2026-01-19
 

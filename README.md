@@ -492,7 +492,7 @@ reveal/
 
 ## Stability Guarantees
 
-**Current version:** v0.39.0 (Beta) - On path to v1.0 (Q2-Q3 2026)
+**Current version:** v0.40.0 (Beta) - On path to v1.0 (Q2-Q3 2026)
 
 ### 🟢 Stable (Safe to depend on)
 - **Core modes:** directory → file → element
