@@ -1,46 +1,21 @@
 """SSL certificate result rendering for CLI output."""
 
-import json
 import sys
 from typing import Dict, Any
 
+from reveal.rendering import TypeDispatchRenderer
 
-class SSLRenderer:
-    """Renderer for SSL adapter results."""
 
-    @staticmethod
-    def render_structure(result: dict, format: str = 'text') -> None:
-        """Render SSL adapter structure results.
+class SSLRenderer(TypeDispatchRenderer):
+    """Renderer for SSL adapter results.
 
-        Args:
-            result: Result dictionary from SSLAdapter
-            format: Output format ('text' or 'json')
-        """
-        if format == 'json':
-            print(json.dumps(result, indent=2))
-            return
+    Uses TypeDispatchRenderer for automatic routing to _render_{type}() methods.
+    """
 
-        result_type = result.get('type', 'ssl_certificate')
-
-        if result_type == 'ssl_certificate':
-            SSLRenderer._render_certificate_overview(result)
-        elif result_type == 'ssl_san':
-            SSLRenderer._render_san(result)
-        elif result_type == 'ssl_chain':
-            SSLRenderer._render_chain(result)
-        elif result_type == 'ssl_issuer':
-            SSLRenderer._render_issuer(result)
-        elif result_type == 'ssl_subject':
-            SSLRenderer._render_subject(result)
-        elif result_type == 'ssl_dates':
-            SSLRenderer._render_dates(result)
-        elif result_type == 'ssl_full':
-            print(json.dumps(result, indent=2))
-        else:
-            print(json.dumps(result, indent=2))
+    # Type dispatch methods (called automatically based on result['type'])
 
     @staticmethod
-    def _render_certificate_overview(result: dict) -> None:
+    def _render_ssl_certificate(result: dict) -> None:
         """Render main certificate overview."""
         host = result['host']
         port = result['port']
@@ -81,7 +56,7 @@ class SSLRenderer:
                 print(f"  {step}")
 
     @staticmethod
-    def _render_san(result: dict) -> None:
+    def _render_ssl_san(result: dict) -> None:
         """Render Subject Alternative Names."""
         print(f"SSL SANs for {result['host']}")
         print(f"Common Name: {result['common_name']}")
@@ -104,7 +79,7 @@ class SSLRenderer:
                 print(f"  {san}")
 
     @staticmethod
-    def _render_chain(result: dict) -> None:
+    def _render_ssl_chain(result: dict) -> None:
         """Render certificate chain."""
         print(f"SSL Chain for {result['host']}")
         print(f"Chain Length: {result['chain_length']}")
@@ -129,7 +104,7 @@ class SSLRenderer:
             print(f"Error: {v['error']}")
 
     @staticmethod
-    def _render_issuer(result: dict) -> None:
+    def _render_ssl_issuer(result: dict) -> None:
         """Render issuer details."""
         print(f"SSL Issuer for {result['host']}")
         print()
@@ -144,7 +119,7 @@ class SSLRenderer:
             print(f"  {readable_key}: {value}")
 
     @staticmethod
-    def _render_subject(result: dict) -> None:
+    def _render_ssl_subject(result: dict) -> None:
         """Render subject details."""
         print(f"SSL Subject for {result['host']}")
         print()
@@ -158,7 +133,7 @@ class SSLRenderer:
             print(f"  {readable_key}: {value}")
 
     @staticmethod
-    def _render_dates(result: dict) -> None:
+    def _render_ssl_dates(result: dict) -> None:
         """Render validity dates."""
         print(f"SSL Validity for {result['host']}")
         print()
@@ -167,22 +142,22 @@ class SSLRenderer:
         print(f"Days Until Expiry: {result['days_until_expiry']}")
         print(f"Expired: {'Yes' if result['is_expired'] else 'No'}")
 
-    @staticmethod
-    def render_check(result: dict, format: str = 'text') -> None:
+    @classmethod
+    def render_check(cls, result: dict, format: str = 'text') -> None:
         """Render SSL health check results.
 
         Args:
             result: Check result dictionary from SSLAdapter.check()
             format: Output format ('text' or 'json')
         """
-        if format == 'json':
-            print(json.dumps(result, indent=2))
+        if cls.should_render_json(format):
+            cls.render_json(result)
             return
 
         result_type = result.get('type', 'ssl_check')
 
         if result_type == 'ssl_batch_check':
-            SSLRenderer._render_batch_check(result)
+            cls._render_ssl_batch_check(result)
             return
 
         # Single host check
@@ -236,7 +211,7 @@ class SSLRenderer:
         print(f"Exit code: {result['exit_code']}")
 
     @staticmethod
-    def _render_batch_check(result: dict) -> None:
+    def _render_ssl_batch_check(result: dict) -> None:
         """Render batch SSL check results."""
         status = result['status']
         source = result['source']
