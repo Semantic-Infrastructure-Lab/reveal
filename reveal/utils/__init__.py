@@ -9,6 +9,19 @@ from .breadcrumbs import (
     print_breadcrumbs,
 )
 from .patterns import Patterns, compile_pattern
+from .path_utils import (
+    find_file_in_parents,
+    search_parents,
+    find_project_root,
+    get_relative_to_root,
+)
+from .safe_operations import (
+    safe_operation,
+    safe_read_file,
+    safe_json_loads,
+    safe_yaml_loads,
+    SafeContext,
+)
 from .updates import check_for_updates
 
 __all__ = [
@@ -21,5 +34,14 @@ __all__ = [
     'print_breadcrumbs',
     'Patterns',
     'compile_pattern',
+    'find_file_in_parents',
+    'search_parents',
+    'find_project_root',
+    'get_relative_to_root',
+    'safe_operation',
+    'safe_read_file',
+    'safe_json_loads',
+    'safe_yaml_loads',
+    'SafeContext',
     'check_for_updates',
 ]
