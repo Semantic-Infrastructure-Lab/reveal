@@ -87,6 +87,14 @@ class IniAnalyzer(FileAnalyzer):
             # Parse INI file
             config.read_string(self.content)
 
+            # Pre-scan for section line numbers
+            section_lines = {}
+            import re
+            for i, line in enumerate(self.content.split('\n'), 1):
+                match = re.match(r'^\s*\[([^\]]+)\]\s*$', line)
+                if match:
+                    section_lines[match.group(1)] = i
+
             sections_data = []
             all_sections = list(config.sections())
 
@@ -120,6 +128,7 @@ class IniAnalyzer(FileAnalyzer):
 
                 sections_data.append({
                     'name': section,
+                    'line': section_lines.get(section),
                     'key_count': len(items),
                     'keys': keys_data
                 })

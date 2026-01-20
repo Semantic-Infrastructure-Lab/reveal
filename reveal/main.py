@@ -13,6 +13,7 @@ from .cli import (
     validate_navigation_args,
     handle_list_supported,
     handle_languages,
+    handle_adapters,
     handle_explain_file,
     handle_capabilities,
     handle_show_ast,
@@ -125,6 +126,7 @@ def _handle_special_modes(args):
     special_modes = [
         (args.list_supported, handle_list_supported, [list_supported_types]),
         (getattr(args, 'languages', False), handle_languages, []),
+        (getattr(args, 'adapters', False), handle_adapters, []),
         (getattr(args, 'language_info', None), handle_language_info, [args.language_info]),
         (getattr(args, 'explain_file', False), handle_explain_file, [args.path, args.verbose]),
         (getattr(args, 'capabilities', False), handle_capabilities, [args.path]),

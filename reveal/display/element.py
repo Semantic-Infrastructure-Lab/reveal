@@ -227,7 +227,8 @@ def _extract_element_at_line(analyzer, target_line: int):
     """Find the element containing the target line.
 
     Searches through the file structure to find an element (function, class, etc.)
-    that contains the specified line number.
+    that contains the specified line number. For markdown files, finds the section
+    containing the target line.
 
     Args:
         analyzer: File analyzer instance
@@ -237,6 +238,11 @@ def _extract_element_at_line(analyzer, target_line: int):
         Element dict with name, line_start, line_end, source, or None
     """
     from ..treesitter import TreeSitterAnalyzer
+
+    # Check for markdown files - find section containing line
+    from ..analyzers.markdown import MarkdownAnalyzer
+    if isinstance(analyzer, MarkdownAnalyzer):
+        return _extract_markdown_section_at_line(analyzer, target_line)
 
     if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
         return None
@@ -275,6 +281,67 @@ def _extract_element_at_line(analyzer, target_line: int):
         'line_start': best_match.start_point[0] + 1,
         'line_end': best_match.end_point[0] + 1,
         'source': analyzer._get_node_text(best_match),
+    }
+
+
+def _extract_markdown_section_at_line(analyzer, target_line: int):
+    """Find the markdown section containing the target line.
+
+    Searches through headings to find the section that contains the target line.
+
+    Args:
+        analyzer: MarkdownAnalyzer instance
+        target_line: Line number to find section for (1-indexed)
+
+    Returns:
+        Dict with name, line_start, line_end, source, or None
+    """
+    import re
+
+    # Find all headings with their line numbers and levels
+    headings = []
+    for i, line in enumerate(analyzer.lines, 1):
+        match = re.match(r'^(#{1,6})\s+(.+)$', line)
+        if match:
+            headings.append({
+                'line': i,
+                'level': len(match.group(1)),
+                'name': match.group(2).strip()
+            })
+
+    if not headings:
+        return None
+
+    # Find the heading that contains the target line
+    # (last heading whose line <= target_line)
+    containing_heading = None
+    for h in headings:
+        if h['line'] <= target_line:
+            containing_heading = h
+        else:
+            break
+
+    if not containing_heading:
+        return None
+
+    # Find the end of this section (next heading of same or higher level)
+    start_line = containing_heading['line']
+    heading_level = containing_heading['level']
+    end_line = len(analyzer.lines)
+
+    for h in headings:
+        if h['line'] > start_line and h['level'] <= heading_level:
+            end_line = h['line'] - 1
+            break
+
+    # Extract the section content
+    source = '\n'.join(analyzer.lines[start_line-1:end_line])
+
+    return {
+        'name': containing_heading['name'],
+        'line_start': start_line,
+        'line_end': end_line,
+        'source': source,
     }
 
 

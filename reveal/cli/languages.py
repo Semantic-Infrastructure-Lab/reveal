@@ -37,6 +37,14 @@ def list_supported_languages() -> str:
     # Get fallback languages (estimate from tree-sitter-language-pack)
     fallback_languages = _get_fallback_languages()
 
+    # Filter out fallback languages that have explicit analyzers
+    explicit_exts = set(explicit_extensions.keys())
+    fallback_filtered = [
+        (lang, exts) for lang, exts in fallback_languages
+        if not any(ext in explicit_exts for ext in exts)
+    ]
+    fallback_languages = fallback_filtered
+
     # Format output
     lines = []
     lines.append("Supported Languages\n")

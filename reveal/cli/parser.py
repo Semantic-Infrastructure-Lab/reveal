@@ -139,6 +139,8 @@ def _add_basic_arguments(parser: argparse.ArgumentParser, version: str) -> None:
                         help='List all supported file types')
     parser.add_argument('--languages', action='store_true',
                         help='List all supported languages with explicit vs fallback analyzers')
+    parser.add_argument('--adapters', action='store_true',
+                        help='List all URI adapters (env://, ast://, git://, etc.)')
     parser.add_argument('--explain-file', action='store_true',
                         help='Explain how reveal will analyze a file (shows analyzer, fallback status, capabilities)')
     parser.add_argument('--capabilities', action='store_true',

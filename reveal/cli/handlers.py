@@ -33,6 +33,53 @@ def handle_languages():
     sys.exit(0)
 
 
+def handle_adapters():
+    """Handle --adapters flag.
+
+    Shows all URI adapters with their syntax and purpose.
+    """
+    from ..adapters.base import _ADAPTER_REGISTRY
+
+    lines = ["URI Adapters\n", "=" * 70]
+    lines.append(f"\n📡 Registered Adapters ({len(_ADAPTER_REGISTRY)})")
+    lines.append("-" * 70)
+    lines.append("Query resources beyond files using URI schemes\n")
+
+    # Sort adapters by name
+    for scheme in sorted(_ADAPTER_REGISTRY.keys()):
+        adapter_class = _ADAPTER_REGISTRY[scheme]
+
+        # Try to get help data from adapter class
+        description = ''
+        example = ''
+        try:
+            help_data = adapter_class.get_help()
+            if help_data:
+                description = help_data.get('description', '')
+                syntax = help_data.get('syntax', f'{scheme}://<resource>')
+                examples = help_data.get('examples', [])
+                example = examples[0]['uri'] if examples else ''
+        except (AttributeError, TypeError):
+            pass
+
+        if not description:
+            description = 'No description available'
+
+        lines.append(f"  {scheme}://")
+        lines.append(f"    {description}")
+        if example:
+            lines.append(f"    Example: reveal {example}")
+        lines.append("")
+
+    lines.append("=" * 70)
+    lines.append(f"\n💡 Usage:")
+    lines.append(f"  reveal help://adapters          # Detailed adapter help")
+    lines.append(f"  reveal help://<adapter>         # Help for specific adapter")
+
+    print('\n'.join(lines))
+    sys.exit(0)
+
+
 def handle_explain_file(path: str, verbose: bool = False):
     """Handle --explain-file flag.
 
