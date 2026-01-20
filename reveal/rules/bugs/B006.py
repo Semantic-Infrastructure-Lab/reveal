@@ -6,15 +6,13 @@ and no explanatory comment, which can hide serious bugs.
 
 import ast
 import re
-import logging
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base_mixins import ASTParsingMixin
 
-logger = logging.getLogger(__name__)
 
-
-class B006(BaseRule):
+class B006(BaseRule, ASTParsingMixin):
     """Detect silent broad exception handlers that swallow errors."""
 
     code = "B006"
@@ -42,12 +40,8 @@ class B006(BaseRule):
         Returns:
             List of detections
         """
-        detections = []
-
-        try:
-            tree = ast.parse(content, filename=file_path)
-        except SyntaxError as e:
-            logger.debug(f"Syntax error in {file_path}, skipping B006 check: {e}")
+        tree, detections = self._parse_python_or_skip(content, file_path)
+        if tree is None:
             return detections
 
         # Split content into lines for comment checking

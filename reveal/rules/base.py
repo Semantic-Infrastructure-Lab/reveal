@@ -294,7 +294,8 @@ class BaseRule(ABC):
                         message: Optional[str] = None,
                         column: int = 1,
                         suggestion: Optional[str] = None,
-                        context: Optional[str] = None) -> Detection:
+                        context: Optional[str] = None,
+                        severity: Optional[Severity] = None) -> Detection:
         """
         Helper to create Detection with rule defaults.
 
@@ -307,6 +308,7 @@ class BaseRule(ABC):
             column: Column number (default: 1)
             suggestion: Fix suggestion
             context: Code snippet showing issue
+            severity: Override severity (defaults to self.severity)
 
         Returns:
             Detection instance with rule metadata auto-filled
@@ -342,7 +344,7 @@ class BaseRule(ABC):
             column=column,
             suggestion=suggestion,
             context=context,
-            severity=self.severity,
+            severity=severity or self.severity,
             category=self.category
         )
 

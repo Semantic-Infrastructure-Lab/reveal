@@ -18,16 +18,14 @@ This rule helps identify:
 """
 
 import ast
-import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base_mixins import ASTParsingMixin
 
-logger = logging.getLogger(__name__)
 
-
-class M104(BaseRule):
+class M104(BaseRule, ASTParsingMixin):
     """Detect hardcoded lists that may become stale."""
 
     code = "M104"
@@ -66,12 +64,9 @@ class M104(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for hardcoded lists in Python files."""
-        detections = []
-
-        try:
-            tree = ast.parse(content)
-        except SyntaxError:
-            return []
+        tree, detections = self._parse_python_or_skip(content, file_path)
+        if tree is None:
+            return detections
 
         # Find all list assignments
         for node in ast.walk(tree):
@@ -104,16 +99,13 @@ class M104(BaseRule):
                             if len(sample_keys) >= 3:
                                 break
 
-                    # Create detection manually to override severity
-                    detections.append(Detection(
+                    detections.append(self.create_detection(
                         file_path=file_path,
                         line=node.lineno,
-                        rule_code=self.code,
                         message=f"Large lookup table with {list_value_count} hardcoded list values",
                         suggestion="Consider deriving these mappings from registered components or a central config",
                         context=f"Keys include: {', '.join(sample_keys)}...",
-                        severity=Severity.MEDIUM,
-                        category=self.category
+                        severity=Severity.MEDIUM
                     ))
 
         return detections

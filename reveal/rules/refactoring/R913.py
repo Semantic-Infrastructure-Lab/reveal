@@ -4,15 +4,13 @@ Detects functions with excessive parameter counts that hurt readability and test
 """
 
 import ast
-import logging
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base_mixins import ASTParsingMixin
 
-logger = logging.getLogger(__name__)
 
-
-class R913(BaseRule):
+class R913(BaseRule, ASTParsingMixin):
     """Detect functions with too many arguments (>5 is a code smell)."""
 
     code = "R913"
@@ -40,12 +38,8 @@ class R913(BaseRule):
         Returns:
             List of detections
         """
-        detections = []
-
-        try:
-            tree = ast.parse(content, filename=file_path)
-        except SyntaxError as e:
-            logger.debug(f"Syntax error in {file_path}, skipping R913 check: {e}")
+        tree, detections = self._parse_python_or_skip(content, file_path)
+        if tree is None:
             return detections
 
         # Walk the AST looking for function definitions

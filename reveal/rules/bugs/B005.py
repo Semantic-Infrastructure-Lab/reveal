@@ -5,18 +5,16 @@ This catches orphaned imports left behind after refactoring.
 """
 
 import ast
-import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from importlib.util import find_spec
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base_mixins import ASTParsingMixin
 from ..imports import STDLIB_MODULES
 
-logger = logging.getLogger(__name__)
 
-
-class B005(BaseRule):
+class B005(BaseRule, ASTParsingMixin):
     """Detect imports referencing non-existent modules."""
 
     code = "B005"
@@ -114,15 +112,11 @@ class B005(BaseRule):
         Returns:
             List of detections for dead imports
         """
-        detections = []
-        file_dir = Path(file_path).parent
-
-        try:
-            tree = ast.parse(content, filename=file_path)
-        except SyntaxError as e:
-            logger.debug(f"Syntax error in {file_path}, skipping B005 check: {e}")
+        tree, detections = self._parse_python_or_skip(content, file_path)
+        if tree is None:
             return detections
 
+        file_dir = Path(file_path).parent
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 detections.extend(self._check_import_statement(node, file_path, file_dir))

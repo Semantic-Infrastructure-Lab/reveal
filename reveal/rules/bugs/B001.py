@@ -4,15 +4,13 @@ Detects bare except clauses in Python that catch all exceptions including System
 """
 
 import ast
-import logging
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base_mixins import ASTParsingMixin
 
-logger = logging.getLogger(__name__)
 
-
-class B001(BaseRule):
+class B001(BaseRule, ASTParsingMixin):
     """Detect bare except clauses in Python code."""
 
     code = "B001"
@@ -37,12 +35,8 @@ class B001(BaseRule):
         Returns:
             List of detections
         """
-        detections = []
-
-        try:
-            tree = ast.parse(content, filename=file_path)
-        except SyntaxError as e:
-            logger.debug(f"Syntax error in {file_path}, skipping B001 check: {e}")
+        tree, detections = self._parse_python_or_skip(content, file_path)
+        if tree is None:
             return detections
 
         # Walk the AST looking for bare except handlers
