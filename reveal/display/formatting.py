@@ -492,6 +492,64 @@ def _format_standard_items(
                 print(f"  :{line:<6} {content}")
 
 
+def _format_csv_schema(items: List[Dict[str, Any]]) -> None:
+    """Format CSV schema with column types and stats."""
+    for item in items:
+        name = item.get('name', '?')
+        dtype = item.get('type', 'unknown')
+        missing_pct = item.get('missing_pct', 0)
+        unique = item.get('unique_count', '?')
+
+        # Build info string
+        info_parts = [dtype]
+        if missing_pct > 0:
+            info_parts.append(f"{missing_pct}% missing")
+        info_parts.append(f"{unique} unique")
+
+        samples = item.get('sample_values', [])
+        sample_str = ''
+        if samples:
+            # Truncate long sample values
+            truncated = [s[:20] + '...' if len(str(s)) > 20 else str(s) for s in samples[:3]]
+            sample_str = f" → {', '.join(truncated)}"
+
+        print(f"  {name:<20} ({', '.join(info_parts)}){sample_str}")
+
+
+def _format_xml_children(items: List[Dict[str, Any]], indent: int = 1) -> None:
+    """Format XML children with nested structure."""
+    for item in items:
+        tag = item.get('tag', '?')
+        attrs = item.get('attributes', {})
+        text = item.get('text', '')
+        children = item.get('children', [])
+        child_count = item.get('child_count', 0)
+
+        # Build attribute string
+        attr_str = ''
+        if attrs:
+            attr_parts = [f'{k}="{v}"' for k, v in list(attrs.items())[:3]]
+            if len(attrs) > 3:
+                attr_parts.append('...')
+            attr_str = ' ' + ' '.join(attr_parts)
+
+        # Build content hint
+        content_hint = ''
+        if text:
+            # Show truncated text content
+            text_preview = text[:30] + '...' if len(text) > 30 else text
+            content_hint = f' → "{text_preview}"'
+        elif child_count > 0:
+            content_hint = f' ({child_count} children)'
+
+        prefix = '  ' * indent
+        print(f"{prefix}<{tag}{attr_str}>{content_hint}")
+
+        # Recursively show nested children (limit depth)
+        if children and indent < 3:
+            _format_xml_children(children, indent + 1)
+
+
 def _add_navigation_kwargs(kwargs: Dict[str, Any], args) -> None:
     """Add navigation/slicing arguments to kwargs.
 

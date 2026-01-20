@@ -69,6 +69,53 @@ class PowerShellAnalyzer(TreeSitterAnalyzer):
         # Fallback to parent implementation
         return super()._get_node_name(node)
 
+    def _get_signature(self, node) -> str:
+        """Get function signature for PowerShell.
+
+        PowerShell functions have several forms:
+        - function Name { ... }              -> no signature params
+        - function Name { param($x) ... }    -> params in body
+        - function Name($x, $y) { ... }      -> params after name
+
+        The base implementation returns the full first line when no parens found,
+        which causes name duplication. We handle the PowerShell-specific syntax.
+        """
+        # Look for script_block_expression or param_block in children
+        for child in node.children:
+            # Check for inline parameters: function Name($x, $y)
+            if child.type == 'script_block_expression':
+                text = self._get_node_text(child).strip()
+                if text.startswith('('):
+                    # Extract just the params part
+                    paren_end = text.find(')')
+                    if paren_end > 0:
+                        return text[:paren_end + 1]
+
+        # Look for param block inside script_block
+        for child in node.children:
+            if child.type == 'script_block':
+                block_text = self._get_node_text(child)
+                # Check for param(...) at start of block
+                if 'param(' in block_text.lower():
+                    # Find the param block
+                    param_start = block_text.lower().find('param(')
+                    if param_start >= 0:
+                        # Find matching closing paren
+                        depth = 0
+                        for i, c in enumerate(block_text[param_start:]):
+                            if c == '(':
+                                depth += 1
+                            elif c == ')':
+                                depth -= 1
+                                if depth == 0:
+                                    param_block = block_text[param_start:param_start + i + 1]
+                                    # Add leading space since formatter does name+signature
+                                    return ' ' + param_block
+                        break
+
+        # No parameters found - return empty (don't return name again)
+        return ''
+
     def _extract_structs(self) -> List[dict]:
         """Extract PowerShell classes (structs in PowerShell 5.0+).
 

@@ -8,6 +8,7 @@ This module handles dispatching to the correct handler based on:
 All URI adapters now use the renderer-based system (Phase 4 complete).
 """
 
+import re
 import sys
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
@@ -389,8 +390,27 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
         sys.exit(1)
 
     path = Path(path_str)
+    element_from_path = None
+
+    # Support file:line and file:line-line syntax (e.g., app.py:50, app.py:50-60)
+    # This matches common editor/grep output format
+    if not path.exists() and ':' in path_str:
+        match = re.match(r'^(.+?):(\d+(?:-\d+)?)$', path_str)
+        if match:
+            potential_path = Path(match.group(1))
+            if potential_path.exists():
+                path = potential_path
+                path_str = str(potential_path)
+                element_from_path = f":{match.group(2)}"  # Preserve line extraction format
+
     if not path.exists():
-        print(f"Error: {path_str} not found", file=sys.stderr)
+        # Provide helpful error for line extraction syntax
+        if ':' in path_str and re.search(r':\d+', path_str):
+            base_path = path_str.rsplit(':', 1)[0]
+            print(f"Error: {path_str} not found", file=sys.stderr)
+            print(f"Hint: If extracting lines, use: reveal {base_path} :{path_str.rsplit(':', 1)[1]}", file=sys.stderr)
+        else:
+            print(f"Error: {path_str} not found", file=sys.stderr)
         sys.exit(1)
 
     if path.is_dir():
@@ -405,7 +425,8 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
             print(output)
     elif path.is_file():
         # --section is an alias for element extraction on markdown files
-        element = args.element
+        # element_from_path takes priority (from file:line syntax)
+        element = element_from_path or args.element
         if not element and getattr(args, 'section', None):
             if path.suffix.lower() in ('.md', '.markdown'):
                 element = args.section

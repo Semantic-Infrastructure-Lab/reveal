@@ -16,6 +16,8 @@ from .formatting import (
     _format_html_metadata,
     _format_html_elements,
     _format_standard_items,
+    _format_csv_schema,
+    _format_xml_children,
     _build_analyzer_kwargs,
 )
 
@@ -377,6 +379,16 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
                 enriched_structure[category] = items
             continue
 
+        # Handle non-list items (scalar values like column_count, row_count, delimiter)
+        if not isinstance(items, list):
+            enriched_structure[category] = items
+            continue
+
+        # Handle list of scalars (like columns in CSV - list of strings)
+        if items and not isinstance(items[0], dict):
+            enriched_structure[category] = items
+            continue
+
         enriched_items = []
         for item in items:
             # Copy item and add file field
@@ -412,8 +424,23 @@ def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
         if not items:
             continue
 
-        # Skip HTML internal structure categories (not meant for default display)
-        if category in ['type', 'document', 'head', 'body', 'stats', 'template']:
+        # Skip internal/metadata categories (not meant for default display)
+        # HTML: type, document, head, body, stats, template
+        # CSV: columns (use schema instead), column_count, row_count, delimiter, sample_rows
+        if category in ['type', 'document', 'head', 'body', 'stats', 'template',
+                        'columns', 'column_count', 'row_count', 'delimiter', 'sample_rows']:
+            continue
+
+        # Handle dict-type categories that need special formatting
+        if category == 'metadata' and isinstance(items, dict):
+            # HTML metadata (title, meta tags, etc.)
+            print("Metadata:")
+            _format_html_metadata(items, path, output_format)
+            print()
+            continue
+
+        # Skip non-list items (metadata values like strings, ints)
+        if not isinstance(items, list):
             continue
 
         # Format category name (e.g., 'functions' -> 'Functions')
@@ -440,6 +467,11 @@ def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
             _format_html_metadata(items, path, output_format)
         elif category in ['scripts', 'styles', 'semantic']:
             _format_html_elements(items, path, output_format, category)
+        elif category == 'schema':
+            _format_csv_schema(items)
+        elif category == 'children':
+            # XML children elements
+            _format_xml_children(items)
         else:
             _format_standard_items(items, path, output_format)
 
