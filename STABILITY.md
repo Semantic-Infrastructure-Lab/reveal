@@ -2,12 +2,12 @@
 title: Reveal Stability Policy
 type: documentation
 category: policy
-date: 2026-01-17
+date: 2026-01-20
 ---
 
 # Stability Policy
 
-**Last updated:** 2026-01-19
+**Last updated:** 2026-01-20
 
 ---
 
@@ -300,7 +300,7 @@ Tree-sitter extraction only, basic structure, no custom analyzers:
 **Beta:**
 - Specific rule IDs (may be renamed/renumbered)
 
-**Recommendation:** Pin reveal version in CI (`pip install reveal-cli==0.39.0`) and upgrade explicitly after testing.
+**Recommendation:** Pin reveal version in CI (`pip install reveal-cli==0.40.0`) and upgrade explicitly after testing.
 
 ### For Human Users
 

@@ -2,7 +2,7 @@
 title: Contributing to Reveal
 type: documentation
 category: contributing
-date: 2026-01-13
+date: 2026-01-20
 ---
 
 # Contributing to reveal

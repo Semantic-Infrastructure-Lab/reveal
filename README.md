@@ -2,7 +2,7 @@
 title: Reveal - Progressive Code Exploration
 type: documentation
 category: main
-date: 2026-01-18
+date: 2026-01-20
 ---
 
 # reveal - Progressive Code Exploration
@@ -512,7 +512,7 @@ reveal/
 
 **For AI agents:** Text output (`filename:line` format) and JSON output (`--format json`) are both production-ready. All 14 adapters follow Output Contract v1.0.
 
-**For CI/CD:** Pin reveal version (`pip install reveal-cli==0.39.0`) and upgrade explicitly after testing.
+**For CI/CD:** Pin reveal version (`pip install reveal-cli==0.40.0`) and upgrade explicitly after testing.
 
 **Full policy:** See [STABILITY.md](STABILITY.md) for detailed guarantees, breaking change policy, and v1.0 roadmap.
 
