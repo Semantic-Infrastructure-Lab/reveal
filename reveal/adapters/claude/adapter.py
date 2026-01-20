@@ -90,6 +90,8 @@ class ClaudeAdapter(ResourceAdapter):
             - ?tools=Bash&contains=reveal - Bash calls containing 'reveal'
             - ?errors&contains=traceback - Errors containing 'traceback'
         """
+        if resource is None or not isinstance(resource, str):
+            raise TypeError(f"resource must be a string, got {type(resource).__name__}")
         self.resource = resource
         self.query = query
         self.query_params = self._parse_query(query)

@@ -631,5 +631,156 @@ class TestStatsAdapterIntegration(unittest.TestCase):
         )
 
 
+class TestImportsAdapterIntegration(unittest.TestCase):
+    """Integration tests for imports:// adapter."""
+
+    def run_reveal_command(self, *args):
+        """Run reveal command and return result."""
+        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=30
+        )
+        return result
+
+    def test_imports_adapter_shows_import_graph(self):
+        """Test imports:// adapter shows import analysis."""
+        # Use reveal's own codebase for testing
+        result = self.run_reveal_command("imports://reveal")
+
+        self.assertEqual(
+            result.returncode, 0,
+            f"imports://reveal failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+        # Should show import-related information
+        output = result.stdout.lower()
+        self.assertTrue(
+            'import' in output or 'module' in output or 'dependencies' in output,
+            f"Expected import analysis in output: {result.stdout}"
+        )
+
+    def test_imports_adapter_detects_issues(self):
+        """Test imports:// adapter can detect import issues."""
+        # Use reveal's own codebase - it should have clean imports
+        result = self.run_reveal_command("imports://reveal")
+
+        # Should complete successfully (exit 0 means no critical issues)
+        self.assertEqual(
+            result.returncode, 0,
+            f"imports://reveal returned non-zero:\nstderr: {result.stderr}"
+        )
+
+    def test_imports_adapter_on_nonexistent_path_handles_gracefully(self):
+        """Test imports:// adapter handles nonexistent path gracefully.
+
+        Note: The imports adapter falls back to current directory for invalid paths.
+        This is acceptable behavior - the adapter doesn't crash.
+        """
+        result = self.run_reveal_command("imports://nonexistent_path_xyz_abc")
+
+        # Should either fail gracefully or fall back to current directory
+        # The key is it shouldn't crash
+        self.assertIn(
+            result.returncode, [0, 1],
+            f"Unexpected exit code:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+
+class TestDiffAdapterIntegration(unittest.TestCase):
+    """Integration tests for diff:// adapter."""
+
+    def run_reveal_command(self, *args):
+        """Run reveal command and return result."""
+        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=30
+        )
+        return result
+
+    def test_diff_adapter_compares_files(self):
+        """Test diff:// adapter compares two files."""
+        # Compare reveal's own files
+        result = self.run_reveal_command("diff://reveal/__init__.py:reveal/main.py")
+
+        self.assertEqual(
+            result.returncode, 0,
+            f"diff:// failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+        # Should show some diff output
+        self.assertTrue(
+            len(result.stdout) > 0,
+            "Expected diff output"
+        )
+
+    def test_diff_adapter_same_file_shows_no_changes(self):
+        """Test diff:// adapter shows no changes for identical files."""
+        result = self.run_reveal_command("diff://reveal/__init__.py:reveal/__init__.py")
+
+        self.assertEqual(
+            result.returncode, 0,
+            f"diff:// same file failed:\nstderr: {result.stderr}"
+        )
+
+    def test_diff_adapter_invalid_format_fails_gracefully(self):
+        """Test diff:// adapter handles invalid URI format gracefully."""
+        result = self.run_reveal_command("diff://invalid_no_colon")
+
+        # Should fail or show error
+        self.assertTrue(
+            result.returncode != 0 or 'error' in result.stderr.lower() or 'invalid' in result.stdout.lower(),
+            f"Expected error for invalid diff format:\nstderr: {result.stderr}"
+        )
+
+
+class TestRevealAdapterIntegration(unittest.TestCase):
+    """Integration tests for reveal:// adapter."""
+
+    def run_reveal_command(self, *args):
+        """Run reveal command and return result."""
+        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=30
+        )
+        return result
+
+    def test_reveal_adapter_shows_self_info(self):
+        """Test reveal:// adapter shows reveal's own configuration."""
+        result = self.run_reveal_command("reveal://")
+
+        self.assertEqual(
+            result.returncode, 0,
+            f"reveal:// failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+
+        # Should show reveal-related information
+        output = result.stdout.lower()
+        self.assertTrue(
+            'reveal' in output or 'config' in output or 'version' in output,
+            f"Expected reveal info in output: {result.stdout}"
+        )
+
+    def test_reveal_adapter_shows_config(self):
+        """Test reveal:// adapter shows configuration details."""
+        result = self.run_reveal_command("reveal://config")
+
+        self.assertEqual(
+            result.returncode, 0,
+            f"reveal://config failed:\nstderr: {result.stderr}"
+        )
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -217,6 +217,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added notes: "Use ?limit=N on history/element queries for more results"
   - Session: glowing-gleam-0119
 
+- **Integration tests for imports://, diff://, reveal:// adapters** - CLI integration test coverage
+  - 8 new tests in `test_adapter_integration.py`
+  - Covers: import graph analysis, semantic diff, self-inspection
+  - Test count: 2525 → 2533 tests
+  - Session: burning-trajectory-0119
+
+- **AGENT_HELP.md adapter reference** - Complete adapter table for AI agents
+  - Added table with all 14 URI adapters (purpose + example)
+  - Highlights most useful for agents: ast://, stats://, python://, imports://
+  - Session: burning-trajectory-0119
+
+- **Internal documentation structure** - Created `internal-docs/` organization
+  - `internal-docs/README.md` - Document inventory and navigation
+  - `internal-docs/research/DOGFOODING_REPORT_2026-01-19.md` - Adapter validation findings
+  - Session: burning-trajectory-0119
+
 ### Changed
 - **Claude adapter refactoring** - Reduced complexity of `_calculate_tool_success_rate`
   - Extracted 4 helper methods for single responsibility
@@ -267,6 +283,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Session: garnet-fire-0119
 
 ### Fixed
+- **Adapter routing** - Fixed "No renderer registered" error for claude://, git://, stats:// adapters
+  - Root cause: `routing.py` had manual import list that fell out of sync with `adapters/__init__.py`
+  - Fix: Simplified to single source of truth (`from .. import adapters`)
+  - Added regression test `test_all_adapters_have_renderers` to prevent recurrence
+  - Added input validation to claude adapter (raises `TypeError` for invalid input)
+  - Session: psychic-shark-0119, burning-trajectory-0119
+
 - **claude:// error detection** - Fixed broken `?errors` query that returned 0 errors
   - Root cause: `_get_errors()` checked `type == 'assistant'` but tool results are in `type == 'user'` messages
   - Also fixed `_track_tool_results()` and `_is_tool_error()` which had the same bug

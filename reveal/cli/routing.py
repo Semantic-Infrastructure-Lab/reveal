@@ -49,8 +49,8 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
 
     # Look up adapter from registry
     from ..adapters.base import get_adapter_class, list_supported_schemes
-    # Import adapters to trigger registration
-    from ..adapters import env, ast, help, python, json_adapter, reveal, mysql, sqlite, imports, diff, markdown  # noqa: F401, E402
+    # Import adapters package to trigger all registrations (single source of truth)
+    from .. import adapters as _adapters  # noqa: F401
 
     adapter_class = get_adapter_class(scheme)
     if not adapter_class:

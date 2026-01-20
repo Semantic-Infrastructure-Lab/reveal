@@ -279,22 +279,26 @@ reveal 'markdown://docs/?status=draft' --format=json
 
 **Pattern:**
 ```bash
-# Extract function
-reveal app.py process_request
+# Extract by name
+reveal app.py process_request      # Extract function
+reveal app.py DatabaseHandler      # Extract class
+reveal app.py 'Database.connect'   # Hierarchical: method within class
 
-# Extract class
-reveal app.py DatabaseHandler
+# Extract by position (v0.39.0+)
+reveal app.py ':50'                # Element containing line 50
+reveal app.py ':50-60'             # Line range (raw lines)
+reveal app.py '@3'                 # 3rd element (ordinal)
+reveal app.py 'function:2'         # 2nd function specifically
+reveal app.py 'class:1'            # 1st class specifically
 
 # Extract markdown section
 reveal README.md "Installation"
 reveal README.md --section "Installation"  # Explicit flag
 
-# Extract specific lines
-reveal app.py --range 42-80
-
-# Get first/last functions (bugs cluster at end!)
-reveal app.py --head 5
-reveal app.py --tail 5
+# Navigate large files
+reveal app.py --range 42-80        # Show lines 42-80
+reveal app.py --head 5             # First 5 functions (bugs cluster at end!)
+reveal app.py --tail 5             # Last 5 functions
 ```
 
 **Discover what's extractable (v0.39.0+):**
@@ -781,6 +785,9 @@ reveal huge_dir/ --max-entries 100
 | See directory structure | `reveal src/` |
 | See file structure | `reveal file.py` |
 | Extract function | `reveal file.py func_name` |
+| Extract by line | `reveal file.py ':50'` |
+| Extract Nth element | `reveal file.py '@3'` |
+| Extract nested | `reveal file.py 'Class.method'` |
 | Quality check | `reveal file.py --check` |
 | Find complex code | `reveal 'ast://./src?complexity>10'` |
 | Debug Python env | `reveal python://debug/bytecode` |
@@ -875,6 +882,29 @@ rg -l "authenticate" src/ | reveal --stdin --outline
 **Last updated:** 2026-01-19
 **Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
 **PyPI:** https://pypi.org/project/reveal-cli/
+
+---
+
+## All URI Adapters (14 total)
+
+| Adapter | Purpose | Quick Example |
+|---------|---------|---------------|
+| `ast://` | Query code by complexity, size, type | `ast://./src?complexity>10` |
+| `claude://` | Explore Claude Code sessions | `claude://session/name` |
+| `diff://` | Semantic diff between files | `diff://old.py:new.py` |
+| `env://` | Environment variables | `env://PATH` |
+| `git://` | Git repository exploration | `git://.` |
+| `help://` | Reveal documentation | `help://adapters` |
+| `imports://` | Import graph analysis | `imports://src` |
+| `json://` | Navigate JSON files | `json://config.json/key` |
+| `markdown://` | Query by front matter | `markdown://?status=draft` |
+| `mysql://` | MySQL inspection | `mysql://localhost` |
+| `python://` | Python environment debug | `python://doctor` |
+| `reveal://` | Self-inspection | `reveal://config` |
+| `sqlite://` | SQLite exploration | `sqlite:///app.db` |
+| `stats://` | Codebase metrics | `stats://./src` |
+
+**Most useful for agents:** `ast://`, `stats://`, `python://`, `imports://`
 
 ---
 

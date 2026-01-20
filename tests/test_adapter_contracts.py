@@ -13,10 +13,10 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from reveal.adapters.base import get_adapter_class, list_supported_schemes
+from reveal.adapters.base import get_adapter_class, get_renderer_class, list_supported_schemes, list_renderer_schemes
 from reveal.adapters import (
     env, ast, help, python, json_adapter, git, mysql, sqlite,
-    imports, diff, reveal, stats, markdown
+    imports, diff, reveal, stats, markdown, claude
 )
 
 
@@ -27,10 +27,10 @@ class TestAdapterContracts(unittest.TestCase):
         """Set up test fixtures."""
         # Get all registered adapters
         self.all_schemes = list_supported_schemes()
-        # Expected adapters (13 total)
+        # Expected adapters (14 total)
         self.expected_schemes = {
             'env', 'ast', 'help', 'python', 'json', 'git', 'mysql', 'sqlite',
-            'imports', 'diff', 'reveal', 'stats', 'markdown'
+            'imports', 'diff', 'reveal', 'stats', 'markdown', 'claude'
         }
 
     def test_all_adapters_are_registered(self):
@@ -46,6 +46,22 @@ class TestAdapterContracts(unittest.TestCase):
         # Note: extra adapters are OK (might be experimental/new)
         if extra:
             print(f"Note: Found additional adapters: {extra}")
+
+    def test_all_adapters_have_renderers(self):
+        """Verify all registered adapters have corresponding renderers.
+
+        This prevents the 'No renderer registered for scheme' error that
+        occurred when claude:// was added without updating routing.py imports.
+        """
+        for scheme in self.all_schemes:
+            with self.subTest(scheme=scheme):
+                renderer_class = get_renderer_class(scheme)
+                self.assertIsNotNone(
+                    renderer_class,
+                    f"Adapter '{scheme}' has no renderer registered. "
+                    f"Either add @register_renderer(Renderer) decorator to the adapter class, "
+                    f"or ensure the adapter module is imported in adapters/__init__.py"
+                )
 
     def test_all_adapters_have_get_structure(self):
         """Verify all adapters have get_structure() method."""
