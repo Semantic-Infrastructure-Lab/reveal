@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.2] - 2026-01-21
+
+### Fixed
+- **SSL certificate parsing for TLS 1.3 connections** - Certificates were falsely reported as expired
+  - When Python's `getpeercert()` returns None (common with TLS 1.3 + CERT_NONE), the binary DER cert is now properly parsed using cryptography library
+  - Previously, empty dates caused fallback to `datetime.now()`, making valid certs appear to expire "today"
+  - Affects: batch SSL checks on servers with certain TLS configurations
+
+### Added
+- **cryptography** dependency for robust SSL certificate parsing
+
 ## [0.44.1] - 2026-01-21
 
 ### Fixed

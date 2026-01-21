@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+
 
 @dataclass
 class CertificateInfo:
@@ -101,7 +104,7 @@ class SSLFetcher:
             with context.wrap_socket(sock, server_hostname=host) as ssock:
                 # Get the peer certificate
                 cert = ssock.getpeercert(binary_form=False)
-                if cert is None:
+                if not cert:  # None or empty dict {} (happens with CERT_NONE)
                     # Binary form fallback for when verification is off
                     binary_cert = ssock.getpeercert(binary_form=True)
                     if binary_cert:
@@ -202,25 +205,67 @@ class SSLFetcher:
         """Parse binary certificate when getpeercert() returns None.
 
         This happens when verify_mode is CERT_NONE.
-        We use ssl module's limited parsing capability.
+        Uses cryptography library to properly parse DER-encoded certs.
 
         Args:
             binary_cert: DER-encoded certificate bytes
 
         Returns:
-            Certificate dict (limited info)
+            Certificate dict matching ssl.getpeercert() format
         """
-        # Python's ssl module can't fully parse binary certs without verification
-        # We return minimal info; full parsing would require cryptography or PyOpenSSL
-        return {
-            'subject': (),
-            'issuer': (),
-            'notBefore': '',
-            'notAfter': '',
-            'serialNumber': '',
-            'version': 0,
-            'subjectAltName': (),
-        }
+        try:
+            cert = x509.load_der_x509_certificate(binary_cert, default_backend())
+
+            # Extract subject components
+            subject = []
+            for attr in cert.subject:
+                oid_name = attr.oid._name
+                subject.append(((oid_name, attr.value),))
+
+            # Extract issuer components
+            issuer = []
+            for attr in cert.issuer:
+                oid_name = attr.oid._name
+                issuer.append(((oid_name, attr.value),))
+
+            # Extract SANs
+            san = []
+            try:
+                san_ext = cert.extensions.get_extension_for_oid(
+                    x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME
+                )
+                for name in san_ext.value:
+                    if isinstance(name, x509.DNSName):
+                        san.append(('DNS', name.value))
+                    elif isinstance(name, x509.IPAddress):
+                        san.append(('IP Address', str(name.value)))
+            except x509.ExtensionNotFound:
+                pass
+
+            # Format dates like ssl module does: 'Jan  5 12:00:00 2026 GMT'
+            not_before = cert.not_valid_before_utc.strftime('%b %d %H:%M:%S %Y GMT')
+            not_after = cert.not_valid_after_utc.strftime('%b %d %H:%M:%S %Y GMT')
+
+            return {
+                'subject': tuple(subject),
+                'issuer': tuple(issuer),
+                'notBefore': not_before,
+                'notAfter': not_after,
+                'serialNumber': format(cert.serial_number, 'X'),
+                'version': cert.version.value + 1,  # x509 version is 0-indexed
+                'subjectAltName': tuple(san),
+            }
+        except Exception:
+            # If parsing fails, return empty dict (will use fallback dates)
+            return {
+                'subject': (),
+                'issuer': (),
+                'notBefore': '',
+                'notAfter': '',
+                'serialNumber': '',
+                'version': 0,
+                'subjectAltName': (),
+            }
 
     def _parse_cert_date(self, date_str: str) -> datetime:
         """Parse certificate date string.

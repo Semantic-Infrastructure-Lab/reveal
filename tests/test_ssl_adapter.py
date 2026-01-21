@@ -193,6 +193,64 @@ class TestSSLFetcher(unittest.TestCase):
             self.assertEqual(cert.common_name, 'example.com')
             self.assertTrue(verification['verified'])
 
+    def test_parse_binary_cert_extracts_dates(self):
+        """Binary cert parsing should extract real dates, not default to now().
+
+        Regression test for bug where binary cert parsing returned empty dates,
+        causing _parse_cert_date to return datetime.now() and make valid certs
+        appear expired.
+        """
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives.serialization import Encoding
+        from cryptography.hazmat.backends import default_backend
+        from datetime import timedelta
+
+        # Generate a test certificate
+        private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+            backend=default_backend()
+        )
+
+        subject = issuer = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, "test.example.com"),
+        ])
+
+        # Cert valid for 365 days (NOT expiring today)
+        not_before = datetime.now(timezone.utc) - timedelta(days=30)
+        not_after = datetime.now(timezone.utc) + timedelta(days=335)
+
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(private_key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(not_before)
+            .not_valid_after(not_after)
+            .sign(private_key, hashes.SHA256(), default_backend())
+        )
+
+        # Get DER-encoded binary cert
+        binary_cert = cert.public_bytes(encoding=Encoding.DER)
+
+        # Parse it using our method
+        fetcher = SSLFetcher()
+        parsed = fetcher._parse_binary_cert(binary_cert)
+
+        # Verify dates are NOT empty (the bug was returning '')
+        self.assertNotEqual(parsed['notBefore'], '')
+        self.assertNotEqual(parsed['notAfter'], '')
+
+        # Verify the dates are reasonable (not today)
+        # Parse the dates back
+        cert_info = fetcher._parse_certificate(parsed)
+        self.assertGreater(cert_info.days_until_expiry, 300)  # Should be ~335 days
+        self.assertFalse(cert_info.is_expired)
+
 
 class TestSSLAdapterStructure(unittest.TestCase):
     """Test SSLAdapter.get_structure()."""
