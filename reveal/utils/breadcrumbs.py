@@ -155,6 +155,9 @@ def _print_type_specific_hints(path, file_type):
         print(f"      reveal {path} --links      # Extract all links")
     elif file_type in _CONFIG_TYPES:
         print(f"      reveal {path} --check      # Validate syntax")
+    elif file_type == 'nginx':
+        print(f"      reveal {path} --check      # Validate configuration")
+        print(f"      reveal {path} --extract domains | reveal --stdin --check  # SSL audit")
     elif file_type in _INFRA_TYPES:
         print(f"      reveal {path} --check      # Validate configuration")
     elif file_type in _DATA_TYPES:
@@ -175,6 +178,9 @@ def _print_typed_hints(path, file_type):
         print(f"      reveal {path} --links      # Extract all links")
     elif file_type in _CONFIG_TYPES:
         print(f"      reveal {path} --check      # Validate syntax")
+    elif file_type == 'nginx':
+        print(f"      reveal {path} --check      # Validate configuration")
+        print(f"      reveal {path} --extract domains | reveal --stdin --check  # SSL audit")
     elif file_type in _INFRA_TYPES:
         print(f"      reveal {path} --check      # Validate configuration")
     elif file_type in _DATA_TYPES:

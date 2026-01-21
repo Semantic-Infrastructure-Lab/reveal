@@ -509,6 +509,25 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         show_metadata(analyzer, output_format, config=config)
         return
 
+    # Handle --extract for composable pipelines
+    if args and getattr(args, 'extract', None):
+        extract_type = args.extract.lower()
+        if extract_type == 'domains':
+            # Check if analyzer supports domain extraction
+            if hasattr(analyzer, 'extract_ssl_domains'):
+                domains = analyzer.extract_ssl_domains()
+                for domain in domains:
+                    print(f"ssl://{domain}")
+                return
+            else:
+                print(f"Error: --extract domains not supported for {type(analyzer).__name__}", file=sys.stderr)
+                print("This option is available for nginx config files.", file=sys.stderr)
+                sys.exit(1)
+        else:
+            print(f"Error: Unknown extract type '{extract_type}'", file=sys.stderr)
+            print("Supported types: domains (for nginx configs)", file=sys.stderr)
+            sys.exit(1)
+
     if args and getattr(args, 'validate_schema', None):
         from ..main import run_schema_validation
         run_schema_validation(analyzer, path, args.validate_schema, output_format, args)

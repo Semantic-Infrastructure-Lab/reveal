@@ -2,7 +2,7 @@
 title: Reveal Changelog
 type: documentation
 category: changelog
-date: 2026-01-20
+date: 2026-01-21
 ---
 
 # Changelog
@@ -13,6 +13,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.44.0] - 2026-01-21
+
+### Added
+- **`--extract` flag for composable pipelines** - Extract structured data from files
+  - `reveal nginx.conf --extract domains` - outputs SSL domains as `ssl://` URIs
+  - Enables composable workflows: `reveal nginx.conf --extract domains | reveal --stdin --check`
+  - More flexible than `ssl://nginx:///` - can filter, transform, or redirect between steps
+
+### Deprecated
+- **`ssl://nginx:///` syntax** - Use composable pipeline instead
+  - Old: `reveal ssl://nginx:///etc/nginx/*.conf --check`
+  - New: `reveal nginx.conf --extract domains | reveal --stdin --check`
+  - The old syntax still works but emits a deprecation warning
+
+### Documentation
+- Updated AGENT_HELP.md, RECIPES.md, QUICK_START.md to use composable pipeline
+- Clarified deprecation status in ssl.yaml help data
 
 ## [0.43.0] - 2026-01-21
 

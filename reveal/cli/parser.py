@@ -302,6 +302,12 @@ def _add_ssl_options(parser: argparse.ArgumentParser) -> None:
                         help='Only show certificates expiring within N days (e.g., 7, 30)')
 
 
+def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
+    """Add extraction options for composable pipelines."""
+    parser.add_argument('--extract', type=str, metavar='TYPE',
+                        help='Extract specific data for piping (nginx: "domains" extracts SSL domains as ssl:// URIs)')
+
+
 def create_argument_parser(version: str) -> argparse.ArgumentParser:
     """Create and configure the command-line argument parser.
 
@@ -327,6 +333,7 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     _add_html_options(parser)
     _add_schema_validation_options(parser)
     _add_ssl_options(parser)
+    _add_extraction_options(parser)
 
     return parser
 

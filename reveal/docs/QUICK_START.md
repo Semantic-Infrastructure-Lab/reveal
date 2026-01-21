@@ -277,8 +277,8 @@ reveal 'markdown://?category=guide'
 # Read URIs/paths from a file
 reveal @domains.txt --check
 
-# Audit SSL certs from nginx config
-reveal ssl://nginx:///etc/nginx/*.conf --check --only-failures
+# Audit SSL certs from nginx config (composable pipeline)
+reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --only-failures
 ```
 
 **Learn more:**

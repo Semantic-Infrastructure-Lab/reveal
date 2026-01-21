@@ -607,22 +607,25 @@ reveal @domains.txt --check
 echo -e "ssl://a.com\nssl://b.com" | reveal --stdin --check
 ```
 
-**Nginx SSL integration:**
+**Nginx SSL audit (composable pipeline):**
 ```bash
-# List all SSL-enabled domains from nginx config
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf
+# See nginx config with SSL status indicators
+reveal /etc/nginx/nginx.conf
 
-# Check all SSL certs from nginx config
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check
+# Extract SSL domains as ssl:// URIs
+reveal /etc/nginx/nginx.conf --extract domains
+
+# Full SSL audit pipeline: extract → check
+reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check
 
 # Show only failures and warnings
-reveal ssl://nginx:///etc/nginx/*.conf --check --only-failures
+reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --only-failures
 
 # Quick summary (counts only)
-reveal ssl://nginx:///etc/nginx/*.conf --check --summary
+reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --summary
 
 # Filter to expiring soon
-reveal ssl://nginx:///etc/nginx/*.conf --check --expiring-within=30
+reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --expiring-within=30
 ```
 
 **SSL elements:**
@@ -645,14 +648,14 @@ reveal ssl://nginx:///etc/nginx/*.conf --check --expiring-within=30
 
 **Workflow: Nginx + SSL integration**
 ```bash
-# 1. Check nginx config for issues
+# 1. Check nginx config for issues (N004 detects ACME path problems)
 reveal /etc/nginx/nginx.conf --check --select N
 
 # 2. Check all SSL certificates from nginx
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures
+reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --only-failures
 
 # 3. Find certs expiring within 14 days
-reveal ssl://nginx:///etc/nginx/*.conf --check --expiring-within=14
+reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --expiring-within=14
 ```
 
 ---
@@ -1807,8 +1810,8 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Check SSL cert | `reveal ssl://example.com` |
 | SSL health check | `reveal ssl://example.com --check` |
 | Batch SSL from file | `reveal @domains.txt --check` |
-| Nginx SSL domains | `reveal ssl://nginx:///etc/nginx/*.conf` |
-| Nginx SSL check | `reveal ssl://nginx:///etc/nginx/*.conf --check` |
+| Nginx SSL domains | `reveal nginx.conf --extract domains` |
+| Nginx SSL check | `... --extract domains \| reveal --stdin --check` |
 | SSL failures only | `--check --only-failures` |
 | SSL expiring soon | `--check --expiring-within=30` |
 | Nginx config check | `reveal nginx.conf --check --select N` |

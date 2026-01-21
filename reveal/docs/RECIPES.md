@@ -546,20 +546,23 @@ reveal /etc/nginx/nginx.conf --check  # N004 detects ACME path issues
 ### Nginx SSL audit
 
 ```bash
-# Extract all SSL-enabled domains from nginx config
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf
+# See nginx config with SSL status indicators
+reveal /etc/nginx/nginx.conf
 
-# Check SSL certificates for all nginx domains
-reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check
+# Extract all SSL-enabled domains as ssl:// URIs
+reveal /etc/nginx/nginx.conf --extract domains
+
+# Check SSL certificates for all nginx domains (composable pipeline)
+reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check
 
 # Show only problems (failures and warnings)
-reveal ssl://nginx:///etc/nginx/*.conf --check --only-failures
+reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --only-failures
 
 # Quick summary (counts only)
-reveal ssl://nginx:///etc/nginx/*.conf --check --summary
+reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --summary
 
 # Find certs expiring within 30 days
-reveal ssl://nginx:///etc/nginx/*.conf --check --expiring-within=30
+reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --expiring-within=30
 ```
 
 ### Batch SSL checking with @file
