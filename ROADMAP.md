@@ -8,6 +8,12 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.43.0
+- ✅ **`@file` batch syntax** — Read targets from a file (`reveal @domains.txt --check`)
+- ✅ **`ssl://nginx:///` integration** — Extract and check SSL domains from nginx configs
+- ✅ **Batch SSL filters** — `--only-failures`, `--summary`, `--expiring-within N`
+- ✅ **Validation rule fixes** — V004/V007/V011 skip non-dev installs (no false positives)
+
 ### v0.42.0
 - ✅ **Universal `--stdin` URI support** — Batch processing works with any URI scheme (ssl://, claude://, env://)
 - ✅ **Query parsing utilities** — New `reveal/utils/query.py` for adapter authors

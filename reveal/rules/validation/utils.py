@@ -6,16 +6,20 @@ particularly for finding and working with reveal's installation directory.
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 
-def find_reveal_root() -> Optional[Path]:
+def find_reveal_root(dev_only: bool = False) -> Optional[Path]:
     """Find reveal's root directory.
 
     Priority:
     1. REVEAL_DEV_ROOT environment variable (explicit override)
     2. Git checkout in CWD or parent directories (prefer development)
-    3. Installed package location (fallback)
+    3. Installed package location (fallback, unless dev_only=True)
+
+    Args:
+        dev_only: If True, only return path for dev checkouts (not installed package).
+                  Useful for rules that only make sense during development.
 
     Returns:
         Path to reveal's root directory, or None if not found.
@@ -46,9 +50,27 @@ def find_reveal_root() -> Optional[Path]:
         if cwd == cwd.parent:  # Reached root
             break
 
-    # 3. Fallback to installed package location
-    installed = Path(__file__).parent.parent.parent
-    if (installed / 'analyzers').exists() and (installed / 'rules').exists():
-        return installed
+    # 3. Fallback to installed package location (unless dev_only)
+    if not dev_only:
+        installed = Path(__file__).parent.parent.parent
+        if (installed / 'analyzers').exists() and (installed / 'rules').exists():
+            return installed
 
     return None
+
+
+def is_dev_checkout(reveal_root: Optional[Path]) -> bool:
+    """Check if a reveal root path is a development checkout.
+
+    A dev checkout has pyproject.toml in the parent directory.
+
+    Args:
+        reveal_root: Path returned by find_reveal_root()
+
+    Returns:
+        True if this is a dev checkout, False otherwise.
+    """
+    if not reveal_root:
+        return False
+    project_root = reveal_root.parent
+    return (project_root / 'pyproject.toml').exists()

@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from .utils import find_reveal_root
+from .utils import find_reveal_root, is_dev_checkout
 
 
 class V007(BaseRule):
@@ -48,6 +48,11 @@ class V007(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
+            return detections
+
+        # Version checks only make sense for dev checkouts
+        # (installed packages don't have pyproject.toml, CHANGELOG.md, etc.)
+        if not is_dev_checkout(reveal_root):
             return detections
 
         project_root = reveal_root.parent

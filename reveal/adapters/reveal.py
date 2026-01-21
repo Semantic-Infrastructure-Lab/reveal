@@ -21,12 +21,13 @@ class RevealRenderer:
         render_reveal_structure(result, format)
 
     @staticmethod
-    def render_check(result: dict, format: str = 'text') -> None:
+    def render_check(result: dict, format: str = 'text', **kwargs) -> None:
         """Render validation check results.
 
         Args:
             result: Check result dict with detections
             format: Output format ('text', 'json', 'grep')
+            **kwargs: Ignored (for compatibility with other adapters' filter flags)
         """
         from ..main import safe_json_dumps
 

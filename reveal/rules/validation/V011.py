@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from .utils import find_reveal_root
+from .utils import find_reveal_root, is_dev_checkout
 
 
 class V011(BaseRule):
@@ -42,6 +42,10 @@ class V011(BaseRule):
         # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
+            return detections
+
+        # Release readiness checks only make sense for dev checkouts
+        if not is_dev_checkout(reveal_root):
             return detections
 
         project_root = reveal_root.parent
