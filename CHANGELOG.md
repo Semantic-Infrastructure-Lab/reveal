@@ -14,6 +14,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-01-21
+
+### Added
+- **`@file` syntax for batch URIs** - Read targets from a file
+  - `reveal @domains.txt --check` reads URIs/paths from file
+  - Supports comments (`#`) and blank lines
+  - Works with any URI scheme: `ssl://`, `env://`, file paths
+  - Example: `reveal @certs.txt --check --only-failures`
+
+- **`ssl://nginx:///` integration** - Extract and check SSL domains from nginx config
+  - `reveal ssl://nginx:///etc/nginx/conf.d/*.conf` - list SSL domains
+  - `reveal ssl://nginx:///etc/nginx/*.conf --check` - check all certs
+  - Automatically extracts domains from `server_name` in SSL-enabled blocks
+  - Filters out localhost, wildcards, IPs, and non-FQDNs
+
+- **Batch SSL filter flags** - Filter large certificate audits
+  - `--only-failures` - Show only failed/warning checks (hide healthy)
+  - `--summary` - Aggregated counts instead of full details
+  - `--expiring-within N` - Show certs expiring within N days
+  - Example: `reveal ssl://nginx:///etc/nginx/*.conf --check --only-failures --expiring-within=30`
+
+### Fixed
+- **Batch processing warnings** - `--stdin` and `@file` no longer print spurious "failed, skipping" warnings for successful operations
+
 ## [0.42.0] - 2026-01-20
 
 ### Added
