@@ -9,6 +9,8 @@ internal-docs/
 ├── README.md                    # This file
 ├── case-studies/                # Bug analysis, real-world usage
 │   └── BUG_PREVENTION.md        # git:// routing bug analysis
+├── marketing/                   # Marketing intelligence and voice development
+│   └── MARKETING_INTELLIGENCE_2026-01-20.md  # Comprehensive marketing meta
 ├── planning/                    # Feature planning and design
 │   └── TECHNICAL_DEBT_RESOLUTION.md  # Tech debt audit response
 ├── refactoring/                 # Code quality reviews
@@ -24,6 +26,12 @@ internal-docs/
 | Document | Description | Date |
 |----------|-------------|------|
 | [BUG_PREVENTION.md](case-studies/BUG_PREVENTION.md) | git:// routing bug analysis and prevention strategies | 2026-01-16 |
+
+### Marketing
+
+| Document | Description | Date |
+|----------|-------------|------|
+| [MARKETING_INTELLIGENCE_2026-01-20.md](marketing/MARKETING_INTELLIGENCE_2026-01-20.md) | Comprehensive audit: positioning, features, messaging angles, gaps, voice materials | 2026-01-20 |
 
 ### Planning
 
@@ -66,6 +74,7 @@ internal-docs/
 | Type | Location |
 |------|----------|
 | Bug analysis | `case-studies/` |
+| Marketing/voice | `marketing/` |
 | Feature design | `planning/` |
 | Code quality | `refactoring/` |
 | Experiments | `research/` |

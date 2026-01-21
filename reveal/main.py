@@ -182,8 +182,10 @@ def _handle_at_file(file_path: str, args):
         if '://' in target:
             try:
                 handle_uri(target, None, args)
-            except SystemExit:
-                print(f"Warning: {target} failed, skipping", file=sys.stderr)
+            except SystemExit as e:
+                # Only warn for actual failures (non-zero exit codes)
+                if e.code != 0:
+                    print(f"Warning: {target} failed, skipping", file=sys.stderr)
         else:
             # Handle as file path
             target_path = Path(target)

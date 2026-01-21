@@ -365,9 +365,10 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
         if '://' in target:
             try:
                 handle_uri(target, None, args)
-            except SystemExit:
-                # URI handler failed - warn and continue (match file behavior)
-                print(f"Warning: {target} failed, skipping", file=sys.stderr)
+            except SystemExit as e:
+                # Only warn for actual failures (non-zero exit codes)
+                if e.code != 0:
+                    print(f"Warning: {target} failed, skipping", file=sys.stderr)
             continue
 
         # Handle as file path
