@@ -142,22 +142,56 @@ class SSLRenderer(TypeDispatchRenderer):
         print(f"Days Until Expiry: {result['days_until_expiry']}")
         print(f"Expired: {'Yes' if result['is_expired'] else 'No'}")
 
+    @staticmethod
+    def _render_ssl_nginx_domains(result: dict) -> None:
+        """Render SSL domains extracted from nginx config."""
+        print(f"SSL Domains from Nginx Config")
+        print(f"Source: {result['source']}")
+        print(f"Files Processed: {result['files_processed']}")
+        print(f"Domains Found: {result['domain_count']}")
+        print()
+
+        if result['domains']:
+            print("Domains:")
+            for domain in result['domains']:
+                print(f"  {domain}")
+            print()
+            print("To check SSL certificates:")
+            print(f"  reveal ssl://nginx://{result['source']} --check")
+        else:
+            print("No SSL-enabled domains found in config.")
+
     @classmethod
-    def render_check(cls, result: dict, format: str = 'text') -> None:
+    def render_check(cls, result: dict, format: str = 'text',
+                     only_failures: bool = False, summary: bool = False,
+                     expiring_within: str = None) -> None:
         """Render SSL health check results.
 
         Args:
             result: Check result dictionary from SSLAdapter.check()
             format: Output format ('text' or 'json')
+            only_failures: Only show failed/warning results
+            summary: Show aggregated summary only
+            expiring_within: Filter to certs expiring within N days
         """
+        # Parse expiring_within if provided
+        expiring_days = None
+        if expiring_within:
+            try:
+                expiring_days = int(expiring_within.rstrip('d'))
+            except ValueError:
+                pass
+
+        # Apply filters to result for JSON output
         if cls.should_render_json(format):
-            cls.render_json(result)
+            filtered = cls._filter_results(result, only_failures, expiring_days)
+            cls.render_json(filtered)
             return
 
         result_type = result.get('type', 'ssl_check')
 
         if result_type == 'ssl_batch_check':
-            cls._render_ssl_batch_check(result)
+            cls._render_ssl_batch_check(result, only_failures, summary, expiring_days)
             return
 
         # Single host check
@@ -211,11 +245,86 @@ class SSLRenderer(TypeDispatchRenderer):
         print(f"Exit code: {result['exit_code']}")
 
     @staticmethod
-    def _render_ssl_batch_check(result: dict) -> None:
-        """Render batch SSL check results."""
-        status = result['status']
-        source = result['source']
+    def _filter_results(result: dict, only_failures: bool = False,
+                        expiring_days: int = None) -> dict:
+        """Filter check results based on criteria.
 
+        Args:
+            result: Original result dict
+            only_failures: Only include failed/warning results
+            expiring_days: Only include certs expiring within N days
+
+        Returns:
+            Filtered result dict (copy)
+        """
+        if result.get('type') != 'ssl_batch_check':
+            return result
+
+        filtered = result.copy()
+        results = result.get('results', [])
+
+        # Apply filters
+        if only_failures:
+            results = [r for r in results if r['status'] in ('failure', 'warning')]
+
+        if expiring_days is not None:
+            def within_days(r):
+                days = r.get('certificate', {}).get('days_until_expiry')
+                if days is None:
+                    return r['status'] == 'failure'  # Include errors
+                return days <= expiring_days
+            results = [r for r in results if within_days(r)]
+
+        filtered['results'] = results
+        return filtered
+
+    @staticmethod
+    def _render_ssl_batch_check(result: dict, only_failures: bool = False,
+                                 summary_only: bool = False,
+                                 expiring_days: int = None) -> None:
+        """Render batch SSL check results.
+
+        Args:
+            result: Batch check result dict
+            only_failures: Only show failed/warning results
+            summary_only: Show aggregated summary without details
+            expiring_days: Filter to certs expiring within N days
+        """
+        status = result['status']
+        source = result.get('source', 'stdin')
+
+        # Apply filters to results
+        all_results = result.get('results', [])
+
+        if expiring_days is not None:
+            def within_days(r):
+                days = r.get('certificate', {}).get('days_until_expiry')
+                if days is None:
+                    return r['status'] == 'failure'
+                return days <= expiring_days
+            all_results = [r for r in all_results if within_days(r)]
+
+        if only_failures:
+            all_results = [r for r in all_results if r['status'] in ('failure', 'warning')]
+
+        # Group by status
+        failures = [r for r in all_results if r['status'] == 'failure']
+        warnings = [r for r in all_results if r['status'] == 'warning']
+        passes = [r for r in all_results if r['status'] == 'pass']
+
+        # Summary mode - aggregated counts only
+        if summary_only:
+            original_summary = result.get('summary', {})
+            print(f"\nSSL Audit: {result.get('domains_checked', len(result.get('results', [])))} domains")
+            print(f"✅ Healthy (>30d): {original_summary.get('passed', len(passes))}")
+            print(f"⚠️  Warning (<30d): {original_summary.get('warnings', len(warnings))}")
+            print(f"❌ Failed/Expired: {original_summary.get('failures', len(failures))}")
+            if expiring_days:
+                print(f"\n(Filtered to ≤{expiring_days} days)")
+            print(f"\nExit code: {result.get('exit_code', 0)}")
+            return
+
+        # Full output
         status_icon = '\u2705' if status == 'pass' else '\u26a0\ufe0f' if status == 'warning' else '\u274c'
         print(f"\nSSL Batch Check: {source}")
         print(f"Status: {status_icon} {status.upper()}")
@@ -224,13 +333,12 @@ class SSLRenderer(TypeDispatchRenderer):
         print(f"\nDomains Checked: {result['domains_checked']}")
         print(f"Summary: {summary['passed']} passed, "
               f"{summary['warnings']} warnings, {summary['failures']} failures")
-        print()
 
-        # Group by status
-        results = result.get('results', [])
-        failures = [r for r in results if r['status'] == 'failure']
-        warnings = [r for r in results if r['status'] == 'warning']
-        passes = [r for r in results if r['status'] == 'pass']
+        if expiring_days:
+            print(f"Filter: showing certs expiring within {expiring_days} days")
+        if only_failures:
+            print("Filter: showing failures and warnings only")
+        print()
 
         if failures:
             print("\u274c Failed:")
@@ -253,7 +361,8 @@ class SSLRenderer(TypeDispatchRenderer):
                 print(f"  {host}: {days} days")
             print()
 
-        if passes:
+        # Only show passes if not filtering to failures
+        if passes and not only_failures:
             print("\u2705 Healthy:")
             for r in passes:
                 host = r['host']

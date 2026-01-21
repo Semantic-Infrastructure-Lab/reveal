@@ -5,6 +5,9 @@ from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone, timedelta
 import socket
 import ssl
+import io
+import json
+from contextlib import redirect_stdout
 
 import sys
 from pathlib import Path
@@ -532,6 +535,247 @@ class TestSSLAdapterHelp(unittest.TestCase):
         self.assertEqual(help_data['name'], 'ssl')
         self.assertIn('elements', help_data)
         self.assertIn('san', help_data['elements'])
+
+
+class TestSSLRendererFilters(unittest.TestCase):
+    """Test SSLRenderer filter options (Issue #16).
+
+    Tests --only-failures, --summary, and --expiring-within flags
+    for batch SSL certificate checks.
+    """
+
+    def _create_batch_result(self):
+        """Create a batch check result with mixed statuses."""
+        return {
+            'type': 'ssl_batch_check',
+            'source': 'test-batch',
+            'domains_checked': 4,
+            'status': 'warning',
+            'summary': {
+                'total': 4,
+                'passed': 2,
+                'warnings': 1,
+                'failures': 1,
+            },
+            'results': [
+                {
+                    'host': 'healthy1.example.com',
+                    'status': 'pass',
+                    'certificate': {'common_name': 'healthy1.example.com', 'days_until_expiry': 90},
+                },
+                {
+                    'host': 'healthy2.example.com',
+                    'status': 'pass',
+                    'certificate': {'common_name': 'healthy2.example.com', 'days_until_expiry': 60},
+                },
+                {
+                    'host': 'warning.example.com',
+                    'status': 'warning',
+                    'certificate': {'common_name': 'warning.example.com', 'days_until_expiry': 15},
+                },
+                {
+                    'host': 'failed.example.com',
+                    'status': 'failure',
+                    'error': 'Connection refused',
+                },
+            ],
+            'exit_code': 2,
+        }
+
+    def test_filter_results_only_failures(self):
+        """_filter_results with only_failures should exclude passes."""
+        result = self._create_batch_result()
+        filtered = SSLRenderer._filter_results(result, only_failures=True)
+
+        self.assertEqual(len(filtered['results']), 2)
+        statuses = [r['status'] for r in filtered['results']]
+        self.assertNotIn('pass', statuses)
+        self.assertIn('warning', statuses)
+        self.assertIn('failure', statuses)
+
+    def test_filter_results_expiring_within(self):
+        """_filter_results with expiring_days should filter by expiry."""
+        result = self._create_batch_result()
+        filtered = SSLRenderer._filter_results(result, expiring_days=30)
+
+        # Should include warning (15 days) and failure (no cert - included)
+        # Should exclude passes (90 and 60 days)
+        self.assertEqual(len(filtered['results']), 2)
+        hosts = [r['host'] for r in filtered['results']]
+        self.assertIn('warning.example.com', hosts)
+        self.assertIn('failed.example.com', hosts)
+
+    def test_filter_results_combined(self):
+        """_filter_results with both filters should apply both."""
+        result = self._create_batch_result()
+        # Add a pass that's expiring soon
+        result['results'].append({
+            'host': 'expiring-soon.example.com',
+            'status': 'pass',
+            'certificate': {'common_name': 'expiring-soon.example.com', 'days_until_expiry': 20},
+        })
+
+        # With only_failures, the expiring-soon pass should still be excluded
+        filtered = SSLRenderer._filter_results(result, only_failures=True, expiring_days=30)
+
+        hosts = [r['host'] for r in filtered['results']]
+        self.assertNotIn('expiring-soon.example.com', hosts)
+        self.assertIn('warning.example.com', hosts)
+
+    def test_filter_results_single_check(self):
+        """_filter_results should return unchanged for non-batch results."""
+        single_result = {
+            'type': 'ssl_check',
+            'host': 'example.com',
+            'status': 'pass',
+        }
+        filtered = SSLRenderer._filter_results(single_result, only_failures=True)
+        self.assertEqual(filtered, single_result)
+
+    def test_render_batch_check_summary_only(self):
+        """render_check with summary_only should show counts only."""
+        result = self._create_batch_result()
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer.render_check(result, format='text', summary=True)
+
+        output = f.getvalue()
+        # Summary should show counts
+        self.assertIn('4 domains', output)
+        self.assertIn('Healthy', output)
+        self.assertIn('Warning', output)
+        self.assertIn('Failed', output)
+        # Should NOT show individual host details
+        self.assertNotIn('healthy1.example.com', output)
+        self.assertNotIn('warning.example.com', output)
+
+    def test_render_batch_check_only_failures(self):
+        """render_check with only_failures should hide passes."""
+        result = self._create_batch_result()
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer.render_check(result, format='text', only_failures=True)
+
+        output = f.getvalue()
+        # Should show failures and warnings
+        self.assertIn('warning.example.com', output)
+        self.assertIn('failed.example.com', output)
+        # Healthy section should not appear
+        self.assertNotIn('healthy1.example.com', output)
+
+    def test_render_batch_check_expiring_within(self):
+        """render_check with expiring_within should filter by days."""
+        result = self._create_batch_result()
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer.render_check(result, format='text', expiring_within='30')
+
+        output = f.getvalue()
+        # Should show filter message
+        self.assertIn('30 days', output)
+        # Should show warning (15 days)
+        self.assertIn('warning.example.com', output)
+
+    def test_render_check_json_with_filters(self):
+        """render_check with JSON format should still filter."""
+        result = self._create_batch_result()
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer.render_check(result, format='json', only_failures=True)
+
+        output = f.getvalue()
+        parsed = json.loads(output)
+        self.assertEqual(len(parsed['results']), 2)
+
+
+class TestSSLAdapterNginxMode(unittest.TestCase):
+    """Test SSLAdapter nginx integration (Issue #18).
+
+    Tests ssl://nginx:///path syntax for extracting and checking
+    SSL domains from nginx configuration files.
+    """
+
+    def test_parse_nginx_uri(self):
+        """ssl://nginx:///path should set nginx mode."""
+        adapter = SSLAdapter('ssl://nginx:///etc/nginx/nginx.conf')
+        self.assertIsNone(adapter.host)  # Indicates batch mode
+        self.assertEqual(adapter._nginx_path, '/etc/nginx/nginx.conf')
+
+    def test_parse_nginx_uri_with_glob(self):
+        """ssl://nginx:///path/*.conf should handle globs."""
+        adapter = SSLAdapter('ssl://nginx:///etc/nginx/conf.d/*.conf')
+        self.assertEqual(adapter._nginx_path, '/etc/nginx/conf.d/*.conf')
+
+    def test_get_nginx_domains_structure(self):
+        """_get_nginx_domains should return proper structure."""
+        import tempfile
+        import os
+
+        # Create a test nginx config
+        config_content = '''
+server {
+    listen 443 ssl;
+    server_name secure.example.com api.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+
+server {
+    listen 80;
+    server_name www.example.com;
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config_content)
+            config_file = f.name
+
+        try:
+            adapter = SSLAdapter(f'ssl://nginx://{config_file}')
+            result = adapter.get_structure()
+
+            self.assertEqual(result['type'], 'ssl_nginx_domains')
+            self.assertEqual(result['files_processed'], 1)
+            # Should only include SSL-enabled domains
+            self.assertIn('secure.example.com', result['domains'])
+            self.assertIn('api.example.com', result['domains'])
+            # Should NOT include non-SSL domains
+            self.assertNotIn('www.example.com', result['domains'])
+        finally:
+            os.unlink(config_file)
+
+    def test_nginx_domains_filters_invalid(self):
+        """extract_ssl_domains should filter localhost, wildcards, IPs."""
+        import tempfile
+        import os
+
+        config_content = '''
+server {
+    listen 443 ssl;
+    server_name valid.example.com localhost _ *.wildcard.com 192.168.1.1 internal;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config_content)
+            config_file = f.name
+
+        try:
+            adapter = SSLAdapter(f'ssl://nginx://{config_file}')
+            result = adapter.get_structure()
+
+            # Should include valid domain
+            self.assertIn('valid.example.com', result['domains'])
+            # Should filter out invalid entries
+            self.assertNotIn('localhost', result['domains'])
+            self.assertNotIn('_', result['domains'])
+            self.assertNotIn('*.wildcard.com', result['domains'])
+            self.assertNotIn('192.168.1.1', result['domains'])
+            self.assertNotIn('internal', result['domains'])  # No dot = not FQDN
+        finally:
+            os.unlink(config_file)
 
 
 if __name__ == '__main__':

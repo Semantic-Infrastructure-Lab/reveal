@@ -18,20 +18,31 @@ class NginxAnalyzer(FileAnalyzer):
         server_info = {
             'line': line_num,
             'name': 'unknown',
-            'port': 'unknown'
+            'port': 'unknown',
+            'domains': [],  # All domains from server_name directive
+            'is_ssl': False,
         }
         # Look ahead for server_name and listen
-        for j in range(line_num, min(line_num + 20, len(self.lines) + 1)):
+        for j in range(line_num, min(line_num + 30, len(self.lines) + 1)):
             next_line = self.lines[j-1].strip()
             if next_line.startswith('server_name '):
                 match = re.match(r'server_name\s+(.*?);', next_line)
                 if match:
-                    server_info['name'] = match.group(1)
+                    # Parse all domains (space-separated)
+                    domains_str = match.group(1)
+                    domains = [d.strip() for d in domains_str.split() if d.strip()]
+                    server_info['domains'] = domains
+                    server_info['name'] = domains[0] if domains else 'unknown'
             elif next_line.startswith('listen '):
                 match = re.match(r'listen\s+(\S+)', next_line)
                 if match:
                     port = match.group(1).rstrip(';')
                     server_info['port'] = self._format_port(port)
+                    # Check if SSL
+                    if '443' in port or 'ssl' in next_line.lower():
+                        server_info['is_ssl'] = True
+            elif 'ssl_certificate' in next_line:
+                server_info['is_ssl'] = True
             if next_line == '}' and j > line_num:
                 break
         # Add signature for display (shows port after name)
@@ -121,6 +132,39 @@ class NginxAnalyzer(FileAnalyzer):
             'locations': locations,
             'upstreams': upstreams
         }
+
+    def extract_ssl_domains(self) -> List[str]:
+        """Extract all SSL-enabled domains from nginx config.
+
+        Returns:
+            List of unique domain names from SSL server blocks.
+            Filters out: localhost, _, wildcards (*.example.com),
+            IP addresses, and non-FQDN values.
+        """
+        structure = self.get_structure()
+        domains = set()
+
+        for server in structure.get('servers', []):
+            # Only process SSL-enabled server blocks
+            if not server.get('is_ssl'):
+                continue
+
+            for domain in server.get('domains', []):
+                # Skip non-domain values
+                if not domain or domain == '_' or domain == 'localhost':
+                    continue
+                # Skip wildcards (can't SSL check *.example.com)
+                if domain.startswith('*.'):
+                    continue
+                # Skip IP addresses
+                if re.match(r'^\d+\.\d+\.\d+\.\d+$', domain):
+                    continue
+                # Skip non-FQDN (no dot)
+                if '.' not in domain:
+                    continue
+                domains.add(domain)
+
+        return sorted(domains)
 
     def _find_server_line(self, name: str) -> Optional[int]:
         """Find line number of server block with given server_name."""

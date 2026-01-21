@@ -58,6 +58,7 @@ class SSLAdapter(ResourceAdapter):
         self._chain: List[CertificateInfo] = []
         self._verification: Optional[Dict[str, Any]] = None
         self._fetcher = SSLFetcher()
+        self._nginx_path: Optional[str] = None  # For ssl://nginx:///path mode
 
         self._parse_connection_string(connection_string)
 
@@ -65,7 +66,7 @@ class SSLAdapter(ResourceAdapter):
         """Parse ssl:// URI into components.
 
         Args:
-            uri: Connection URI (ssl://host[:port][/element])
+            uri: Connection URI (ssl://host[:port][/element] or ssl://nginx:///path)
         """
         if uri == "ssl://":
             raise ValueError("SSL URI requires hostname: ssl://example.com")
@@ -73,6 +74,12 @@ class SSLAdapter(ResourceAdapter):
         # Remove ssl:// prefix
         if uri.startswith("ssl://"):
             uri = uri[6:]
+
+        # Check for nginx:// special syntax (ssl://nginx:///path/to/config)
+        if uri.startswith("nginx://"):
+            self._nginx_path = uri[8:]  # Remove nginx://
+            self.host = None  # Indicates batch mode
+            return
 
         # Split host:port from element
         parts = uri.split('/', 1)
@@ -102,12 +109,49 @@ class SSLAdapter(ResourceAdapter):
                 self._verification,
             ) = self._fetcher.fetch_certificate_with_verification(self.host, self.port)
 
+    def _get_nginx_domains(self) -> Dict[str, Any]:
+        """Extract SSL domains from nginx config.
+
+        Returns:
+            Dict with domain list and metadata
+        """
+        import glob
+        from reveal.analyzers.nginx import NginxAnalyzer
+
+        all_domains = set()
+        files_processed = []
+
+        # Handle glob patterns
+        paths = glob.glob(self._nginx_path) if '*' in self._nginx_path else [self._nginx_path]
+
+        for path in paths:
+            try:
+                analyzer = NginxAnalyzer(path)
+                domains = analyzer.extract_ssl_domains()
+                all_domains.update(domains)
+                files_processed.append(path)
+            except Exception as e:
+                # Skip files that can't be parsed
+                pass
+
+        return {
+            'type': 'ssl_nginx_domains',
+            'source': self._nginx_path,
+            'files_processed': len(files_processed),
+            'domains': sorted(all_domains),
+            'domain_count': len(all_domains),
+        }
+
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get SSL certificate overview.
 
         Returns:
             Dict containing certificate summary (~150 tokens)
         """
+        # Handle nginx batch mode - return domain list
+        if self._nginx_path:
+            return self._get_nginx_domains()
+
         # If element was specified in URI, delegate to get_element
         if self.element:
             element_data = self.get_element(self.element)
@@ -269,11 +313,58 @@ class SSLAdapter(ResourceAdapter):
         warn_days = kwargs.get('warn_days', 30)
         critical_days = kwargs.get('critical_days', 7)
 
+        # Handle nginx batch mode
+        if self._nginx_path:
+            return self._check_nginx_domains(warn_days, critical_days)
+
         return check_ssl_health(
             self.host, self.port,
             warn_days=warn_days,
             critical_days=critical_days
         )
+
+    def _check_nginx_domains(self, warn_days: int = 30, critical_days: int = 7) -> Dict[str, Any]:
+        """Check SSL certificates for all domains in nginx config.
+
+        Args:
+            warn_days: Days until expiry to trigger warning
+            critical_days: Days until expiry to trigger critical
+
+        Returns:
+            Batch check results
+        """
+        # Get domains from nginx config
+        domain_info = self._get_nginx_domains()
+        domains = domain_info['domains']
+
+        # Check each domain
+        results = []
+        for domain in domains:
+            result = check_ssl_health(domain, 443, warn_days, critical_days)
+            results.append(result)
+
+        # Summary
+        total = len(results)
+        passed = sum(1 for r in results if r['status'] == 'pass')
+        warnings = sum(1 for r in results if r['status'] == 'warning')
+        failures = sum(1 for r in results if r['status'] == 'failure')
+
+        return {
+            'type': 'ssl_batch_check',
+            'source': self._nginx_path,
+            'domains_checked': total,
+            'status': 'pass' if failures == 0 and warnings == 0 else (
+                'warning' if failures == 0 else 'failure'
+            ),
+            'summary': {
+                'total': total,
+                'passed': passed,
+                'warnings': warnings,
+                'failures': failures,
+            },
+            'results': results,
+            'exit_code': 0 if failures == 0 else 2,
+        }
 
 
 def batch_check_from_nginx(

@@ -218,7 +218,13 @@ def _handle_check_mode(adapter, renderer_class: type, args: 'Namespace') -> None
 
     # Render check results
     if hasattr(renderer_class, 'render_check'):
-        renderer_class.render_check(result, args.format)
+        # Build render options from args
+        render_opts = {
+            'only_failures': getattr(args, 'only_failures', False),
+            'summary': getattr(args, 'summary', False),
+            'expiring_within': getattr(args, 'expiring_within', None),
+        }
+        renderer_class.render_check(result, args.format, **render_opts)
     else:
         # Fallback to generic JSON rendering
         if args.format == 'json':

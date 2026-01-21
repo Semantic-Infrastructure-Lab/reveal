@@ -264,15 +264,28 @@ reveal 'diff://file1.py:file2.py'
 # Get codebase statistics
 reveal 'stats://.'
 
+# SSL certificate inspection
+reveal ssl://example.com              # Overview
+reveal ssl://example.com --check      # Health check
+
 # Query markdown by front matter
 reveal 'markdown://?category=guide'
+```
+
+**Batch processing:**
+```bash
+# Read URIs/paths from a file
+reveal @domains.txt --check
+
+# Audit SSL certs from nginx config
+reveal ssl://nginx:///etc/nginx/*.conf --check --only-failures
 ```
 
 **Learn more:**
 ```bash
 reveal help://           # List all adapters
 reveal help://ast        # Learn about ast:// queries
-reveal help://git        # Learn about git:// adapter
+reveal help://ssl        # Learn about ssl:// adapter
 ```
 
 ---

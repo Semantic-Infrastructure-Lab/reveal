@@ -272,3 +272,309 @@ server {
                 assert '/api' in paths
             finally:
                 os.unlink(f.name)
+
+
+class TestNginxSSLDomainExtraction:
+    """Test extract_ssl_domains() method (Issue #18).
+
+    Tests extracting SSL-enabled domains from nginx configuration
+    for batch certificate checking.
+    """
+
+    def test_extract_ssl_domains_basic(self):
+        """Basic SSL domain extraction from server blocks."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name secure.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                assert 'secure.example.com' in domains
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_ssl_domains_multiple(self):
+        """Extract multiple domains from server_name directive."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name api.example.com www.example.com example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                assert len(domains) == 3
+                assert 'api.example.com' in domains
+                assert 'www.example.com' in domains
+                assert 'example.com' in domains
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_ssl_domains_excludes_non_ssl(self):
+        """Non-SSL server blocks should be excluded."""
+        config = """
+server {
+    listen 80;
+    server_name http-only.example.com;
+}
+
+server {
+    listen 443 ssl;
+    server_name secure.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                assert 'secure.example.com' in domains
+                assert 'http-only.example.com' not in domains
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_ssl_domains_filters_localhost(self):
+        """localhost should be filtered out."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name localhost valid.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                assert 'valid.example.com' in domains
+                assert 'localhost' not in domains
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_ssl_domains_filters_underscore(self):
+        """Catch-all _ server should be filtered out."""
+        config = """
+server {
+    listen 443 ssl default_server;
+    server_name _;
+    ssl_certificate /etc/ssl/certs/default.pem;
+}
+
+server {
+    listen 443 ssl;
+    server_name valid.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                assert 'valid.example.com' in domains
+                assert '_' not in domains
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_ssl_domains_filters_wildcards(self):
+        """Wildcard domains should be filtered out."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name *.example.com specific.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                assert 'specific.example.com' in domains
+                assert '*.example.com' not in domains
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_ssl_domains_filters_ips(self):
+        """IP addresses should be filtered out."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name 192.168.1.100 10.0.0.1 valid.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                assert 'valid.example.com' in domains
+                assert '192.168.1.100' not in domains
+                assert '10.0.0.1' not in domains
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_ssl_domains_filters_non_fqdn(self):
+        """Non-FQDN names (no dot) should be filtered out."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name intranet internal valid.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                assert 'valid.example.com' in domains
+                assert 'intranet' not in domains
+                assert 'internal' not in domains
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_ssl_domains_detects_ssl_keyword(self):
+        """SSL detection via 'ssl' keyword in listen directive."""
+        config = """
+server {
+    listen 8443 ssl;
+    server_name custom-port.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                assert 'custom-port.example.com' in domains
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_ssl_domains_detects_ssl_certificate(self):
+        """SSL detection via ssl_certificate directive."""
+        config = """
+server {
+    listen 443;
+    server_name cert-only.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+    ssl_certificate_key /etc/ssl/private/key.pem;
+}
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                assert 'cert-only.example.com' in domains
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_ssl_domains_unique(self):
+        """Duplicate domains across server blocks should be deduplicated."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name shared.example.com;
+    ssl_certificate /etc/ssl/certs/cert1.pem;
+}
+
+server {
+    listen 443 ssl;
+    server_name shared.example.com;
+    ssl_certificate /etc/ssl/certs/cert2.pem;
+}
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                # Should only appear once
+                assert domains.count('shared.example.com') == 1
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_ssl_domains_sorted(self):
+        """Extracted domains should be sorted."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name zebra.example.com alpha.example.com beta.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                assert domains == sorted(domains)
+            finally:
+                os.unlink(f.name)
+
+    def test_extract_ssl_domains_empty_config(self):
+        """Empty config should return empty list."""
+        config = "# Empty config\n"
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+
+            try:
+                analyzer = NginxAnalyzer(f.name)
+                domains = analyzer.extract_ssl_domains()
+
+                assert domains == []
+            finally:
+                os.unlink(f.name)

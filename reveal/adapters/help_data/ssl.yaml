@@ -3,9 +3,10 @@
 
 name: ssl
 description: 'SSL certificate inspection - progressive disclosure of cert health, chain, and domains'
-syntax: 'ssl://host[:port][/element]'
+syntax: 'ssl://host[:port][/element] or ssl://nginx:///path/to/config'
 
 examples:
+  # Single domain inspection
   - uri: 'ssl://example.com'
     description: 'Certificate overview (issuer, expiry, health status)'
   - uri: 'ssl://example.com:8443'
@@ -18,10 +19,26 @@ examples:
     description: 'Issuer organization details'
   - uri: 'ssl://example.com --check'
     description: 'Run health checks (expiry, chain, hostname)'
-  - uri: 'echo -e "ssl://a.com\nssl://b.com" | reveal --stdin'
-    description: 'Batch check multiple domains via stdin'
+
+  # Nginx integration
+  - uri: 'ssl://nginx:///etc/nginx/conf.d/*.conf'
+    description: 'Extract SSL domains from nginx config (list only)'
+  - uri: 'ssl://nginx:///etc/nginx/conf.d/*.conf --check'
+    description: 'Check all SSL certs in nginx config'
+
+  # Batch filtering (works with nginx or --stdin)
+  - uri: 'ssl://nginx:///etc/nginx/*.conf --check --only-failures'
+    description: 'Show only failing/warning certs'
+  - uri: 'ssl://nginx:///etc/nginx/*.conf --check --summary'
+    description: 'Aggregate summary (counts only)'
+  - uri: 'ssl://nginx:///etc/nginx/*.conf --check --expiring-within=30'
+    description: 'Show certs expiring within 30 days'
+
+  # @file syntax and stdin
+  - uri: 'reveal @domains.txt --check'
+    description: 'Read domains from file (one per line)'
   - uri: 'echo -e "ssl://a.com\nssl://b.com" | reveal --stdin --check'
-    description: 'Batch health check with exit codes'
+    description: 'Batch health check via stdin'
 
 elements:
   san: 'Subject Alternative Names (all domains covered by cert)'
@@ -31,6 +48,12 @@ elements:
   dates: 'Certificate validity dates'
   full: 'Full certificate details (JSON)'
 
+flags:
+  --check: 'Run health checks (expiry, chain validity, hostname match)'
+  --only-failures: 'Hide healthy certs, show only warnings and failures (batch mode)'
+  --summary: 'Show aggregated counts instead of per-domain details (batch mode)'
+  --expiring-within: 'Filter to certs expiring within N days (e.g., --expiring-within=30)'
+
 features:
   - 'Zero dependencies (uses Python ssl module)'
   - 'Progressive disclosure (overview → element → detail)'
@@ -39,8 +62,9 @@ features:
   - 'Chain verification against system trust store'
   - 'Hostname match validation'
   - 'Token-efficient for AI agent consumption'
-  - 'Batch processing via --stdin (check multiple domains at once)'
-  - 'Nginx integration (extract domains from config and check)'
+  - 'Batch processing via --stdin or @file (check multiple domains at once)'
+  - 'Nginx integration (ssl://nginx:/// - extract domains from config and check)'
+  - 'Filtering options for batch checks (--only-failures, --summary, --expiring-within)'
 
 try_now:
   - "reveal ssl://google.com"
@@ -60,12 +84,19 @@ workflows:
       - "reveal ssl://example.com --check    # Identify the issue"
       - "reveal ssl://example.com/chain      # Check chain validity"
       - "reveal ssl://example.com/issuer     # Verify issuer"
-  - name: 'Batch Certificate Audit'
-    scenario: 'Check multiple domains or all domains from nginx'
+  - name: 'Nginx SSL Audit'
+    scenario: 'Audit all SSL certificates from nginx configuration'
     steps:
-      - "echo -e 'ssl://a.com\\nssl://b.com' | reveal --stdin --check  # Multiple domains"
-      - "grep server_name /etc/nginx/*.conf | awk '{print $2}' | sed 's/;$//' | sed 's/^/ssl:\\/\\//' | reveal --stdin --check  # From nginx"
-      - "cat domains.txt | sed 's/^/ssl:\\/\\//' | reveal --stdin --format=json | jq 'select(.status.days_until_expiry < 30)'  # Find expiring"
+      - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf              # List domains"
+      - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check      # Check all certs"
+      - "reveal ssl://nginx:///etc/nginx/*.conf --check --only-failures  # Show problems only"
+      - "reveal ssl://nginx:///etc/nginx/*.conf --check --summary   # Quick summary"
+  - name: 'Batch Certificate Audit'
+    scenario: 'Check multiple domains from a file or stdin'
+    steps:
+      - "reveal @domains.txt --check                                 # Read from file"
+      - "echo -e 'ssl://a.com\\nssl://b.com' | reveal --stdin --check  # From stdin"
+      - "cat domains.txt | sed 's/^/ssl:\\/\\//' | reveal --stdin --check --expiring-within=30  # Expiring soon"
 
 anti_patterns:
   - bad: "openssl s_client -connect example.com:443 | openssl x509 -text"

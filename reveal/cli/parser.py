@@ -292,6 +292,16 @@ def _add_schema_validation_options(parser: argparse.ArgumentParser) -> None:
                         help='List all built-in schemas available for validation')
 
 
+def _add_ssl_options(parser: argparse.ArgumentParser) -> None:
+    """Add SSL-specific options for batch checks."""
+    parser.add_argument('--only-failures', action='store_true',
+                        help='Only show failed/warning SSL checks (hide healthy certificates)')
+    parser.add_argument('--summary', action='store_true',
+                        help='Show aggregated summary instead of full details')
+    parser.add_argument('--expiring-within', type=str, metavar='DAYS',
+                        help='Only show certificates expiring within N days (e.g., 7, 30)')
+
+
 def create_argument_parser(version: str) -> argparse.ArgumentParser:
     """Create and configure the command-line argument parser.
 
@@ -316,6 +326,7 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     _add_markdown_options(parser)
     _add_html_options(parser)
     _add_schema_validation_options(parser)
+    _add_ssl_options(parser)
 
     return parser
 

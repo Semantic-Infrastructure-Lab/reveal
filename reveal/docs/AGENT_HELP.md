@@ -600,13 +600,29 @@ reveal ssl://example.com/chain
 # Non-standard port
 reveal ssl://example.com:8443
 
-# Batch check multiple domains
-echo -e "ssl://a.com\nssl://b.com\nssl://c.com" | reveal --stdin --check
+# Batch check from file (one domain per line, supports comments with #)
+reveal @domains.txt --check
 
-# Check all domains from nginx config
-grep -h "server_name" /etc/nginx/sites-enabled/* | \
-  awk '{print $2}' | sed 's/;$//' | \
-  sed 's/^/ssl:\/\//' | reveal --stdin --check
+# Batch check via stdin
+echo -e "ssl://a.com\nssl://b.com" | reveal --stdin --check
+```
+
+**Nginx SSL integration:**
+```bash
+# List all SSL-enabled domains from nginx config
+reveal ssl://nginx:///etc/nginx/conf.d/*.conf
+
+# Check all SSL certs from nginx config
+reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check
+
+# Show only failures and warnings
+reveal ssl://nginx:///etc/nginx/*.conf --check --only-failures
+
+# Quick summary (counts only)
+reveal ssl://nginx:///etc/nginx/*.conf --check --summary
+
+# Filter to expiring soon
+reveal ssl://nginx:///etc/nginx/*.conf --check --expiring-within=30
 ```
 
 **SSL elements:**
@@ -616,6 +632,11 @@ grep -h "server_name" /etc/nginx/sites-enabled/* | \
 - `/subject` - Certificate subject details
 - `/dates` - Validity dates
 - `/full` - Full certificate as JSON
+
+**Batch filter flags:**
+- `--only-failures` - Hide healthy certs, show only warnings/failures
+- `--summary` - Show aggregated counts instead of per-domain details
+- `--expiring-within=N` - Filter to certs expiring within N days
 
 **Health check thresholds:**
 - Warning: <30 days until expiry (exit code 1)
@@ -627,14 +648,11 @@ grep -h "server_name" /etc/nginx/sites-enabled/* | \
 # 1. Check nginx config for issues
 reveal /etc/nginx/nginx.conf --check --select N
 
-# 2. Extract domains and check their certificates
-reveal /etc/nginx/nginx.conf --format=json | \
-  jq -r '.structure.servers[].server_name' | \
-  sed 's/^/ssl:\/\//' | reveal --stdin --check
+# 2. Check all SSL certificates from nginx
+reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures
 
-# 3. Find expiring certificates
-cat domains.txt | sed 's/^/ssl:\/\//' | reveal --stdin --format=json | \
-  jq 'select(.status.days_until_expiry < 30) | {domain: .source, days: .status.days_until_expiry}'
+# 3. Find certs expiring within 14 days
+reveal ssl://nginx:///etc/nginx/*.conf --check --expiring-within=14
 ```
 
 ---
@@ -1788,8 +1806,12 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Check changes | `git diff --name-only \| reveal --stdin --check` |
 | Check SSL cert | `reveal ssl://example.com` |
 | SSL health check | `reveal ssl://example.com --check` |
-| Batch SSL check | `echo -e "ssl://a.com\nssl://b.com" \| reveal --stdin` |
-| Nginx + SSL audit | `reveal nginx.conf --check --select N` |
+| Batch SSL from file | `reveal @domains.txt --check` |
+| Nginx SSL domains | `reveal ssl://nginx:///etc/nginx/*.conf` |
+| Nginx SSL check | `reveal ssl://nginx:///etc/nginx/*.conf --check` |
+| SSL failures only | `--check --only-failures` |
+| SSL expiring soon | `--check --expiring-within=30` |
+| Nginx config check | `reveal nginx.conf --check --select N` |
 | Get JSON output | `reveal file.py --format=json` |
 | Copy to clipboard | `reveal file.py --copy` |
 | Extract links | `reveal doc.md --links` |

@@ -456,7 +456,8 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
 
         class CheckRenderer:
             @staticmethod
-            def render_check(result, format='text'):
+            def render_check(result, format='text', **kwargs):
+                # Accept any kwargs for compatibility with SSL filter options
                 pass
 
             @staticmethod
@@ -471,7 +472,10 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
             format='text',
             check=True,
             select=None,
-            ignore=None
+            ignore=None,
+            only_failures=False,
+            summary=False,
+            expiring_within=None
         )
 
         with patch('sys.stdout'), \
@@ -506,7 +510,7 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
 
         class CheckRenderer:
             @staticmethod
-            def render_check(result, format='text'):
+            def render_check(result, format='text', **kwargs):
                 pass
 
             @staticmethod
@@ -517,7 +521,10 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
             format='text',
             check=True,
             select='C901,C902',  # Comma-separated string
-            ignore=None
+            ignore=None,
+            only_failures=False,
+            summary=False,
+            expiring_within=None
         )
 
         with patch('sys.stdout'), \
@@ -550,7 +557,7 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
 
         class CheckRenderer:
             @staticmethod
-            def render_check(result, format='text'):
+            def render_check(result, format='text', **kwargs):
                 pass
 
             @staticmethod
@@ -561,7 +568,10 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
             format='text',
             check=True,
             select=None,
-            ignore='I001,I002'  # Comma-separated string
+            ignore='I001,I002',  # Comma-separated string
+            only_failures=False,
+            summary=False,
+            expiring_within=None
         )
 
         with patch('sys.stdout'), \
@@ -594,7 +604,7 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
 
         class CheckRenderer:
             @staticmethod
-            def render_check(result, format='text'):
+            def render_check(result, format='text', **kwargs):
                 pass
 
             @staticmethod
@@ -605,7 +615,10 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
             format='text',
             check=True,
             select='C901',
-            ignore='I001,I002'
+            ignore='I001,I002',
+            only_failures=False,
+            summary=False,
+            expiring_within=None
         )
 
         with patch('sys.stdout'), \
@@ -636,7 +649,7 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
 
         class CheckRenderer:
             @staticmethod
-            def render_check(result, format='text'):
+            def render_check(result, format='text', **kwargs):
                 pass
 
             @staticmethod
@@ -647,7 +660,10 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
             format='text',
             check=True,
             select='C901',
-            ignore='I001'
+            ignore='I001',
+            only_failures=False,
+            summary=False,
+            expiring_within=None
         )
 
         # Should not crash even though adapter doesn't support filters

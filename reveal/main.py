@@ -150,6 +150,55 @@ def _handle_special_modes(args):
     return False
 
 
+def _handle_at_file(file_path: str, args):
+    """Handle @file syntax - read URIs/paths from a file.
+
+    Args:
+        file_path: Path to file containing URIs (one per line)
+        args: Parsed CLI arguments
+
+    Similar to --stdin but reads from a file instead of stdin.
+    """
+    from pathlib import Path
+
+    path = Path(file_path)
+    if not path.exists():
+        print(f"Error: File not found: {file_path}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            lines = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+    except Exception as e:
+        print(f"Error reading {file_path}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if not lines:
+        print(f"Error: No URIs found in {file_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # Process each URI/path
+    for target in lines:
+        if '://' in target:
+            try:
+                handle_uri(target, None, args)
+            except SystemExit:
+                print(f"Warning: {target} failed, skipping", file=sys.stderr)
+        else:
+            # Handle as file path
+            target_path = Path(target)
+            if not target_path.exists():
+                print(f"Warning: {target} not found, skipping", file=sys.stderr)
+                continue
+            if target_path.is_dir():
+                print(f"Warning: {target} is a directory, skipping", file=sys.stderr)
+                continue
+            if target_path.is_file():
+                handle_file(str(target_path), None, args.meta, args.format, args)
+
+    sys.exit(0)
+
+
 def _main_impl():
     """Main CLI implementation."""
     # Parse and validate arguments
@@ -168,6 +217,11 @@ def _main_impl():
     if not args.path:
         parser.print_help()
         sys.exit(1)
+
+    # Handle @file syntax - read URIs from file
+    if args.path.startswith('@'):
+        _handle_at_file(args.path[1:], args)
+        return
 
     # Dispatch based on path type
     if '://' in args.path:
