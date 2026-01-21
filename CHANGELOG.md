@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.44.1] - 2026-01-21
+
 ### Fixed
 - **Batch SSL filter flags with `--stdin --check`** (Issue #19)
   - `--summary`, `--only-failures`, `--expiring-within` now work with composable pipeline
