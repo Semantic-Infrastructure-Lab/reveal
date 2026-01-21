@@ -12,5 +12,6 @@ Analyzes JSONL conversation files from ~/.claude/projects/
 """
 
 from .adapter import ClaudeAdapter
+from .renderer import ClaudeRenderer
 
-__all__ = ['ClaudeAdapter']
+__all__ = ['ClaudeAdapter', 'ClaudeRenderer']
