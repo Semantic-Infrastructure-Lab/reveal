@@ -778,5 +778,107 @@ server {
             os.unlink(config_file)
 
 
+class TestStdinBatchSSLCheck(unittest.TestCase):
+    """Test stdin batch SSL check aggregation (Issue #19).
+
+    Tests that --stdin --check with SSL URIs properly aggregates results
+    and supports batch filter flags (--summary, --only-failures, --expiring-within).
+    """
+
+    def test_collect_ssl_check_result_success(self):
+        """_collect_ssl_check_result should return check result dict."""
+        from reveal.cli.handlers import _collect_ssl_check_result
+        from argparse import Namespace
+
+        args = Namespace(check=True)
+
+        with patch('reveal.adapters.ssl.adapter.SSLAdapter.check') as mock_check:
+            mock_check.return_value = {
+                'host': 'example.com',
+                'port': 443,
+                'status': 'pass',
+                'summary': {'total': 1, 'passed': 1, 'warnings': 0, 'failures': 0},
+                'exit_code': 0,
+            }
+
+            result = _collect_ssl_check_result('ssl://example.com', args)
+
+            self.assertIsNotNone(result)
+            self.assertEqual(result['host'], 'example.com')
+            self.assertEqual(result['status'], 'pass')
+
+    def test_collect_ssl_check_result_error(self):
+        """_collect_ssl_check_result should return failure result on error."""
+        from reveal.cli.handlers import _collect_ssl_check_result
+        from argparse import Namespace
+
+        args = Namespace(check=True)
+
+        with patch('reveal.adapters.ssl.adapter.SSLAdapter.check') as mock_check:
+            mock_check.side_effect = socket.error("Connection refused")
+
+            result = _collect_ssl_check_result('ssl://bad.example.com', args)
+
+            self.assertIsNotNone(result)
+            self.assertEqual(result['status'], 'failure')
+            self.assertIn('Connection refused', result.get('error', ''))
+
+    def test_render_ssl_batch_results_aggregation(self):
+        """_render_ssl_batch_results should build proper batch structure."""
+        from reveal.cli.handlers import _render_ssl_batch_results
+        from argparse import Namespace
+
+        args = Namespace(
+            format='text',
+            only_failures=False,
+            summary=True,
+            expiring_within=None,
+        )
+
+        results = [
+            {'host': 'a.com', 'status': 'pass', 'certificate': {'days_until_expiry': 60}},
+            {'host': 'b.com', 'status': 'warning', 'certificate': {'days_until_expiry': 15}},
+            {'host': 'c.com', 'status': 'failure', 'error': 'Connection refused'},
+        ]
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            _render_ssl_batch_results(results, args)
+
+        output = f.getvalue()
+        # Summary mode should show aggregated counts
+        self.assertIn('3 domains', output)
+        self.assertIn('Healthy', output)
+        self.assertIn('Warning', output)
+        self.assertIn('Failed', output)
+
+    def test_render_ssl_batch_results_only_failures(self):
+        """_render_ssl_batch_results should respect only_failures flag."""
+        from reveal.cli.handlers import _render_ssl_batch_results
+        from argparse import Namespace
+
+        args = Namespace(
+            format='text',
+            only_failures=True,
+            summary=False,
+            expiring_within=None,
+        )
+
+        results = [
+            {'host': 'healthy.com', 'status': 'pass', 'certificate': {'days_until_expiry': 60}},
+            {'host': 'failed.com', 'status': 'failure', 'error': 'Connection refused'},
+        ]
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            _render_ssl_batch_results(results, args)
+
+        output = f.getvalue()
+        # Should show failure
+        self.assertIn('failed.com', output)
+        # Should NOT show healthy (only_failures=True)
+        self.assertNotIn('healthy.com', output)
+
+
 if __name__ == '__main__':
     unittest.main()

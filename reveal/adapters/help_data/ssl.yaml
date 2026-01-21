@@ -20,27 +20,30 @@ examples:
   - uri: 'ssl://example.com --check'
     description: 'Run health checks (expiry, chain, hostname)'
 
-  # Nginx SSL audit (composable pipeline - preferred)
+  # Nginx SSL audit - two approaches (both fully supported)
+  # Approach 1: Direct nginx syntax (best for simple audits)
+  - uri: 'ssl://nginx:///etc/nginx/conf.d/*.conf --check'
+    description: 'Batch SSL audit from nginx configs'
+  - uri: 'ssl://nginx:///etc/nginx/conf.d/*.conf --check --summary'
+    description: 'Quick summary (counts only, no per-domain details)'
+  - uri: 'ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures'
+    description: 'Show only failing/warning certs'
+
+  # Approach 2: Composable pipeline (best when filtering between steps)
   - uri: 'reveal nginx.conf --extract domains'
     description: 'Extract SSL domains from nginx config as ssl:// URIs'
   - uri: 'reveal nginx.conf --extract domains | reveal --stdin --check'
     description: 'Full SSL audit pipeline: extract → check'
-  - uri: 'reveal nginx.conf --extract domains | reveal --stdin --check --only-failures'
-    description: 'Show only failing/warning certs'
-  - uri: 'reveal nginx.conf --extract domains | reveal --stdin --check --summary'
-    description: 'Aggregate summary (counts only)'
+  - uri: 'reveal nginx.conf --extract domains | grep prod | reveal --stdin --check'
+    description: 'Filter domains before checking (composable)'
 
-  # Batch filtering
+  # Batch filtering (works with both approaches)
   - uri: 'reveal @domains.txt --check'
     description: 'Read ssl:// URIs from file (one per line)'
-  - uri: 'echo -e "ssl://a.com\nssl://b.com" | reveal --stdin --check'
-    description: 'Batch health check via stdin'
+  - uri: 'echo -e "ssl://a.com\nssl://b.com" | reveal --stdin --check --summary'
+    description: 'Batch health check via stdin with summary'
   - uri: 'reveal --stdin --check --expiring-within=30'
     description: 'Filter to certs expiring within 30 days'
-
-  # Legacy nginx syntax (deprecated - prefer composable pipeline above)
-  - uri: 'ssl://nginx:///etc/nginx/*.conf --check'
-    description: 'DEPRECATED: Use composable pipeline instead (see examples above)'
 
 elements:
   san: 'Subject Alternative Names (all domains covered by cert)'
@@ -86,14 +89,18 @@ workflows:
       - "reveal ssl://example.com --check    # Identify the issue"
       - "reveal ssl://example.com/chain      # Check chain validity"
       - "reveal ssl://example.com/issuer     # Verify issuer"
-  - name: 'Nginx SSL Audit'
-    scenario: 'Audit all SSL certificates from nginx configuration'
+  - name: 'Nginx SSL Audit (Simple)'
+    scenario: 'Quick audit of SSL certificates from nginx configuration'
     steps:
-      - "reveal nginx.conf                   # See servers with SSL status"
-      - "reveal nginx.conf --extract domains # List SSL domains as URIs"
-      - "reveal nginx.conf --extract domains | reveal --stdin --check  # Full audit"
-      - "reveal nginx.conf --extract domains | reveal --stdin --check --only-failures  # Problems only"
-      - "reveal nginx.conf --extract domains | reveal --stdin --check --summary  # Quick summary"
+      - "reveal nginx.conf                                                      # See servers with SSL status"
+      - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --summary        # Quick summary"
+      - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures  # Problems only"
+  - name: 'Nginx SSL Audit (Composable)'
+    scenario: 'Audit with custom filtering between steps'
+    steps:
+      - "reveal nginx.conf --extract domains                                    # List domains as URIs"
+      - "reveal nginx.conf --extract domains | grep -v staging                  # Filter out staging"
+      - "reveal nginx.conf --extract domains | grep prod | reveal --stdin --check  # Check only prod"
   - name: 'Batch Certificate Audit'
     scenario: 'Check multiple domains from a file or stdin'
     steps:
@@ -108,9 +115,9 @@ anti_patterns:
   - bad: "curl -vvv https://example.com 2>&1 | grep -i ssl"
     good: "reveal ssl://example.com --check"
     why: "Clear pass/fail status, actionable exit codes for scripts"
-  - bad: "ssl://nginx:///etc/nginx/*.conf --check"
-    good: "reveal nginx.conf --extract domains | reveal --stdin --check"
-    why: "Composable pipeline - can filter, transform, or redirect between steps"
+  - bad: "for domain in $(cat domains.txt); do reveal ssl://$domain --check; done"
+    good: "reveal @domains.txt --check --summary"
+    why: "Batch processing with aggregation - one command, proper summary"
 
 notes:
   - 'Uses Python ssl module (no external dependencies)'

@@ -76,15 +76,8 @@ class SSLAdapter(ResourceAdapter):
             uri = uri[6:]
 
         # Check for nginx:// special syntax (ssl://nginx:///path/to/config)
-        # DEPRECATED: Prefer composable pipeline: reveal nginx.conf --extract domains | reveal --stdin --check
+        # This syntax is useful for batch audits with built-in aggregation
         if uri.startswith("nginx://"):
-            import warnings
-            warnings.warn(
-                "ssl://nginx:/// syntax is deprecated. "
-                "Use composable pipeline instead: reveal nginx.conf --extract domains | reveal --stdin --check",
-                DeprecationWarning,
-                stacklevel=3
-            )
             self._nginx_path = uri[8:]  # Remove nginx://
             self.host = None  # Indicates batch mode
             return

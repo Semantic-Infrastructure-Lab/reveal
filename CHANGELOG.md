@@ -14,6 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Batch SSL filter flags with `--stdin --check`** (Issue #19)
+  - `--summary`, `--only-failures`, `--expiring-within` now work with composable pipeline
+  - `reveal nginx.conf --extract domains | reveal --stdin --check --summary` now aggregates results
+  - Both `ssl://nginx:///` and composable `--stdin --check` pipeline support all batch flags
+
+### Changed
+- **Removed premature deprecation of `ssl://nginx:///` syntax**
+  - Both approaches are now first-class citizens with different strengths
+  - `ssl://nginx:///path --check --summary` - Best for simple batch audits
+  - `--extract domains | --stdin --check` - Best when filtering between steps
+
+### Documentation
+- Updated ssl.yaml help with clear guidance on when to use each approach
+- Added workflow examples for both simple and composable batch audits
+
 ## [0.44.0] - 2026-01-21
 
 ### Added
@@ -22,11 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enables composable workflows: `reveal nginx.conf --extract domains | reveal --stdin --check`
   - More flexible than `ssl://nginx:///` - can filter, transform, or redirect between steps
 
-### Deprecated
-- **`ssl://nginx:///` syntax** - Use composable pipeline instead
-  - Old: `reveal ssl://nginx:///etc/nginx/*.conf --check`
-  - New: `reveal nginx.conf --extract domains | reveal --stdin --check`
-  - The old syntax still works but emits a deprecation warning
+### Deprecated (REVERTED in 0.44.1)
+- ~~`ssl://nginx:///` syntax~~ - Deprecation removed; both syntaxes are now recommended for their specific use cases
 
 ### Documentation
 - Updated AGENT_HELP.md, RECIPES.md, QUICK_START.md to use composable pipeline

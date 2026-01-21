@@ -348,12 +348,21 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
 
     Supports both file paths and URIs (scheme://resource).
     URIs are routed to the appropriate adapter handler.
+
+    When --check is used with SSL URIs, results are aggregated and
+    batch flags (--summary, --only-failures, --expiring-within) are applied.
     """
     if args.element:
         print("Error: Cannot use element extraction with --stdin", file=sys.stderr)
         sys.exit(1)
 
     from .routing import handle_uri
+
+    # Check if we're doing batch SSL checks - need to aggregate results
+    is_ssl_batch_check = getattr(args, 'check', False)
+
+    # Collect SSL check results for batch aggregation
+    ssl_check_results = []
 
     # Read paths/URIs from stdin (one per line)
     for line in sys.stdin:
@@ -363,6 +372,14 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
 
         # Check if this is a URI (scheme://resource)
         if '://' in target:
+            # For SSL URIs with --check, collect results instead of rendering
+            if is_ssl_batch_check and target.startswith('ssl://'):
+                result = _collect_ssl_check_result(target, args)
+                if result:
+                    ssl_check_results.append(result)
+                continue
+
+            # Non-SSL URIs go through normal path
             try:
                 handle_uri(target, None, args)
             except SystemExit as e:
@@ -388,7 +405,91 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
         if path.is_file():
             handle_file_func(str(path), None, args.meta, args.format, args)
 
+    # Render aggregated SSL batch results if we collected any
+    if ssl_check_results:
+        _render_ssl_batch_results(ssl_check_results, args)
+
     sys.exit(0)
+
+
+def _collect_ssl_check_result(uri: str, args: 'Namespace') -> dict:
+    """Collect SSL check result without rendering.
+
+    Args:
+        uri: SSL URI (ssl://domain.com)
+        args: CLI arguments
+
+    Returns:
+        Check result dict or None on error
+    """
+    from ..adapters.base import get_adapter_class
+
+    try:
+        adapter_class = get_adapter_class('ssl')
+        if not adapter_class:
+            return None
+
+        adapter = adapter_class(uri)
+        result = adapter.check()
+        return result
+    except Exception as e:
+        # Return error result so it shows up in batch output
+        host = uri.replace('ssl://', '')
+        return {
+            'host': host,
+            'port': 443,
+            'status': 'failure',
+            'error': str(e),
+            'summary': {'total': 1, 'passed': 0, 'warnings': 0, 'failures': 1},
+            'exit_code': 2,
+        }
+
+
+def _render_ssl_batch_results(results: list, args: 'Namespace') -> None:
+    """Render collected SSL check results as a batch.
+
+    Args:
+        results: List of individual check results
+        args: CLI arguments with batch flags
+    """
+    import json
+    from ..adapters.ssl.renderer import SSLRenderer
+
+    # Build batch result structure
+    total = len(results)
+    passed = sum(1 for r in results if r.get('status') == 'pass')
+    warnings = sum(1 for r in results if r.get('status') == 'warning')
+    failures = sum(1 for r in results if r.get('status') == 'failure')
+
+    batch_result = {
+        'type': 'ssl_batch_check',
+        'source': 'stdin',
+        'domains_checked': total,
+        'status': 'pass' if failures == 0 and warnings == 0 else (
+            'warning' if failures == 0 else 'failure'
+        ),
+        'summary': {
+            'total': total,
+            'passed': passed,
+            'warnings': warnings,
+            'failures': failures,
+        },
+        'results': results,
+        'exit_code': 0 if failures == 0 else 2,
+    }
+
+    # Get batch flags from args
+    only_failures = getattr(args, 'only_failures', False)
+    summary = getattr(args, 'summary', False)
+    expiring_within = getattr(args, 'expiring_within', None)
+
+    # Render using SSLRenderer which handles all batch flags
+    SSLRenderer.render_check(
+        batch_result, args.format,
+        only_failures=only_failures,
+        summary=summary,
+        expiring_within=expiring_within
+    )
 
 
 def _extract_decorators_from_file(file_path: str):
