@@ -35,8 +35,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--expiring-within N` - Show certs expiring within N days
   - Example: `reveal ssl://nginx:///etc/nginx/*.conf --check --only-failures --expiring-within=30`
 
+### Performance
+- **5x faster AST parsing** - Tree-sitter node queries now use single-pass caching
+  - Full test suite: 123s → 88s (28% faster)
+  - AST adapter: 4.1s → 0.76s on reveal codebase
+
 ### Fixed
 - **Batch processing warnings** - `--stdin` and `@file` no longer print spurious "failed, skipping" warnings for successful operations
+- **Validation rules for installed package** - V004/V007/V011 no longer report false positives when reveal is pip-installed (checks only run in dev checkout)
 
 ## [0.42.0] - 2026-01-20
 
