@@ -11,6 +11,13 @@ import tempfile
 import os
 from pathlib import Path
 
+# Check if pygit2 is available for git:// adapter tests
+try:
+    import pygit2
+    PYGIT2_AVAILABLE = True
+except ImportError:
+    PYGIT2_AVAILABLE = False
+
 
 class TestHelpAdapterIntegration(unittest.TestCase):
     """Integration tests for help:// adapter."""
@@ -240,6 +247,7 @@ def goodbye():
             self.assertNotIn('Traceback (most recent call last)', result.stderr)
 
 
+@unittest.skipUnless(PYGIT2_AVAILABLE, "pygit2 not available")
 class TestGitAdapterIntegration(unittest.TestCase):
     """Integration tests for git:// adapter."""
 
