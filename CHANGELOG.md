@@ -14,6 +14,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-01-20
+
+### Added
+- **Universal `--stdin` URI support** - Batch processing now works with any URI scheme
+  - Process multiple SSL certs: `echo -e "ssl://a.com\nssl://b.com" | reveal --stdin`
+  - Mix files and URIs: `echo -e "config.py\nssl://example.com\nenv://PATH" | reveal --stdin`
+  - Graceful error handling: failed URIs warn and continue (match file behavior)
+
+- **Query parsing utilities** - New `reveal/utils/query.py` for adapter authors
+  - `parse_query_params(query)`: Simple key=value parsing
+  - `parse_query_filters(query)`: Operator-aware filters (>, <, >=, <=, !, ?)
+  - `QueryFilter` dataclass and `apply_filters()` for structured filtering
+  - `coerce_value()`: Smart type coercion (bool/int/float/str)
+
+### Changed
+- **Claude adapter** - Migrated to centralized `parse_query_params()`
+- **Stats adapter** - Migrated to centralized `parse_query_params(coerce=True)`
+- Internal code deduplication: 4 separate `_parse_query` implementations → 2 categories
+
 ## [0.41.0] - 2026-01-20
 
 ### Added

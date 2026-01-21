@@ -1,5 +1,5 @@
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.41.0
+**Version:** 0.42.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -175,7 +175,7 @@ reveal file.py --check --select C,E    # Complexity & errors only
 
 # Specific file types
 reveal Dockerfile --check              # Docker best practices (S701)
-reveal nginx.conf --check              # Nginx validation (N001-N003)
+reveal nginx.conf --check              # Nginx validation (N001-N004)
 ```
 
 **Available rule categories:**
@@ -184,7 +184,7 @@ reveal nginx.conf --check              # Nginx validation (N001-N003)
 - **C** (complexity) - Code complexity metrics (C001-C003)
 - **E** (errors) - Syntax errors and issues (E001)
 - **D** (duplicates) - Duplicate code detection (D001, D002)
-- **N** (nginx) - Nginx configuration issues (N001-N003)
+- **N** (nginx) - Nginx configuration issues (N001-N004)
 - **V** (validation) - General validation rules (V001-V006)
 - **R** (refactoring) - Refactoring opportunities (R001-R003)
 - **U** (urls) - URL and link issues (U001-U003)
@@ -529,10 +529,11 @@ done
 **Pattern:**
 ```bash
 # Nginx configuration
-reveal nginx.conf --check              # N001-N003 rules
+reveal nginx.conf --check              # N001-N004 rules
 # - N001: Duplicate backends (upstreams with same server:port)
 # - N002: Missing SSL certificates
 # - N003: Missing proxy headers
+# - N004: ACME challenge path inconsistency (cert renewal failures)
 
 # Dockerfile
 reveal Dockerfile --check              # S701 rule
@@ -559,6 +560,11 @@ N003: Missing proxy headers
     proxy_pass http://backend;
     # ❌ Missing: proxy_set_header Host $host;
   }
+
+N004: ACME challenge path inconsistency
+  server { server_name a.com; location /.well-known/acme-challenge/ { root /var/www/a; } }
+  server { server_name b.com; location /.well-known/acme-challenge/ { root /var/www/b; } }
+  # ❌ Inconsistent paths cause cert renewal failures (Let's Encrypt)
 ```
 
 **Docker security checks (S701):**
@@ -571,6 +577,64 @@ S701: Running as root
 
   # ✅ Should include:
   USER appuser
+```
+
+---
+
+### Task: "Check SSL certificates"
+
+**Pattern:**
+```bash
+# Certificate overview (~150 tokens)
+reveal ssl://example.com
+
+# Health check with exit codes (0=pass, 1=warning, 2=critical)
+reveal ssl://example.com --check
+
+# Subject Alternative Names (all domains covered)
+reveal ssl://example.com/san
+
+# Certificate chain
+reveal ssl://example.com/chain
+
+# Non-standard port
+reveal ssl://example.com:8443
+
+# Batch check multiple domains
+echo -e "ssl://a.com\nssl://b.com\nssl://c.com" | reveal --stdin --check
+
+# Check all domains from nginx config
+grep -h "server_name" /etc/nginx/sites-enabled/* | \
+  awk '{print $2}' | sed 's/;$//' | \
+  sed 's/^/ssl:\/\//' | reveal --stdin --check
+```
+
+**SSL elements:**
+- `/san` - Subject Alternative Names (all domains covered by cert)
+- `/chain` - Certificate chain information
+- `/issuer` - Certificate issuer details
+- `/subject` - Certificate subject details
+- `/dates` - Validity dates
+- `/full` - Full certificate as JSON
+
+**Health check thresholds:**
+- Warning: <30 days until expiry (exit code 1)
+- Critical: <7 days until expiry (exit code 2)
+- Also checks: chain validity, hostname match
+
+**Workflow: Nginx + SSL integration**
+```bash
+# 1. Check nginx config for issues
+reveal /etc/nginx/nginx.conf --check --select N
+
+# 2. Extract domains and check their certificates
+reveal /etc/nginx/nginx.conf --format=json | \
+  jq -r '.structure.servers[].server_name' | \
+  sed 's/^/ssl:\/\//' | reveal --stdin --check
+
+# 3. Find expiring certificates
+cat domains.txt | sed 's/^/ssl:\/\//' | reveal --stdin --format=json | \
+  jq 'select(.status.days_until_expiry < 30) | {domain: .source, days: .status.days_until_expiry}'
 ```
 
 ---
@@ -1521,6 +1585,29 @@ location / {
 }
 ```
 
+**N004: ACME challenge path inconsistency**
+```nginx
+# ❌ Bad - inconsistent paths cause Let's Encrypt renewal failures
+server {
+    server_name a.com;
+    location /.well-known/acme-challenge/ { root /var/www/a; }
+}
+server {
+    server_name b.com;
+    location /.well-known/acme-challenge/ { root /var/www/b; }  # Different path!
+}
+
+# ✅ Good - consistent paths across all servers
+server {
+    server_name a.com;
+    location /.well-known/acme-challenge/ { root /var/www/letsencrypt; }
+}
+server {
+    server_name b.com;
+    location /.well-known/acme-challenge/ { root /var/www/letsencrypt; }
+}
+```
+
 ---
 
 ### Validation (V)
@@ -1699,6 +1786,10 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Navigate JSON | `reveal json://file.json/path/to/key` |
 | JSONL records | `reveal file.jsonl --head 10` |
 | Check changes | `git diff --name-only \| reveal --stdin --check` |
+| Check SSL cert | `reveal ssl://example.com` |
+| SSL health check | `reveal ssl://example.com --check` |
+| Batch SSL check | `echo -e "ssl://a.com\nssl://b.com" \| reveal --stdin` |
+| Nginx + SSL audit | `reveal nginx.conf --check --select N` |
 | Get JSON output | `reveal file.py --format=json` |
 | Copy to clipboard | `reveal file.py --copy` |
 | Extract links | `reveal doc.md --links` |

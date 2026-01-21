@@ -23,6 +23,14 @@ from .safe_operations import (
     SafeContext,
 )
 from .updates import check_for_updates
+from .query import (
+    coerce_value,
+    parse_query_params,
+    parse_query_filters,
+    QueryFilter,
+    apply_filter,
+    apply_filters,
+)
 
 __all__ = [
     'copy_to_clipboard',
@@ -44,4 +52,10 @@ __all__ = [
     'safe_yaml_loads',
     'SafeContext',
     'check_for_updates',
+    'coerce_value',
+    'parse_query_params',
+    'parse_query_filters',
+    'QueryFilter',
+    'apply_filter',
+    'apply_filters',
 ]

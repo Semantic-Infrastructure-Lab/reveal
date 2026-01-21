@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, List
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
 from ..registry import get_analyzer
+from ..utils.query import parse_query_params
 
 # Quality scoring defaults - configurable via .reveal/stats-quality.yaml
 QUALITY_DEFAULTS = {
@@ -132,8 +133,8 @@ class StatsAdapter(ResourceAdapter):
         if not self.path.exists():
             raise FileNotFoundError(f"Path not found: {path}")
 
-        # Parse query string
-        self.query_params = self._parse_query(query_string) if query_string else {}
+        # Parse query string with type coercion
+        self.query_params = parse_query_params(query_string, coerce=True)
 
         # Load quality scoring config (with defaults)
         self._quality_config = self._get_quality_config()
@@ -180,40 +181,6 @@ class StatsAdapter(ResourceAdapter):
             pass  # Any config error, use defaults
 
         return config
-
-    def _parse_query(self, query_string: str) -> Dict[str, Any]:
-        """Parse query string into parameters.
-
-        Args:
-            query_string: URL query string (e.g., "hotspots=true&min_lines=50")
-
-        Returns:
-            Dict of parsed parameters
-        """
-        params = {}
-        if not query_string:
-            return params
-
-        for param in query_string.split('&'):
-            if '=' in param:
-                key, value = param.split('=', 1)
-                key = key.strip()
-                value = value.strip()
-
-                # Parse boolean values
-                if value.lower() in ('true', '1', 'yes'):
-                    params[key] = True
-                elif value.lower() in ('false', '0', 'no'):
-                    params[key] = False
-                # Parse numeric values
-                elif value.isdigit():
-                    params[key] = int(value)
-                elif value.replace('.', '', 1).isdigit():
-                    params[key] = float(value)
-                else:
-                    params[key] = value
-
-        return params
 
     def get_structure(self,
                      hotspots: bool = False,

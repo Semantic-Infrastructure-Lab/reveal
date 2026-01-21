@@ -158,7 +158,7 @@ def _add_basic_arguments(parser: argparse.ArgumentParser, version: str) -> None:
 def _add_input_output_options(parser: argparse.ArgumentParser) -> None:
     """Add input/output and formatting options."""
     parser.add_argument('--stdin', action='store_true',
-                        help='Read file paths from stdin (one per line) - enables Unix pipeline workflows')
+                        help='Read paths/URIs from stdin (one per line) - supports files and any URI scheme (ssl://, claude://, etc.)')
     parser.add_argument('--meta', action='store_true', help='Show metadata only')
     parser.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default='text',
                         help='Output format (text, json, typed [typed JSON with types/relationships], grep)')

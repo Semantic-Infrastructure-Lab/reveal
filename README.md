@@ -434,7 +434,7 @@ reveal app.py --meta             # metadata only
 | `--semantic TYPE` | Extract HTML semantic elements (navigation, content, forms, media) 🆕 |
 | `--scripts TYPE` | Extract script tags from HTML (inline, external, all) 🆕 |
 | `--styles TYPE` | Extract stylesheets from HTML (inline, external, all) 🆕 |
-| `--stdin` | Read file paths from stdin |
+| `--stdin` | Read paths/URIs from stdin (files and any URI scheme) |
 | `--depth N` | Directory tree depth |
 | `--max-entries N` | Limit total directory entries (default: 200, 0=unlimited) |
 | `--dir-limit N` | Limit entries per directory (default: 50, 0=unlimited) |

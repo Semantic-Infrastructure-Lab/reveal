@@ -340,32 +340,47 @@ def handle_list_schemas():
 
 
 def handle_stdin_mode(args: 'Namespace', handle_file_func):
-    """Handle --stdin mode to process files from stdin.
+    """Handle --stdin mode to process files/URIs from stdin.
 
     Args:
         args: Parsed arguments
         handle_file_func: Function to handle individual files
+
+    Supports both file paths and URIs (scheme://resource).
+    URIs are routed to the appropriate adapter handler.
     """
     if args.element:
         print("Error: Cannot use element extraction with --stdin", file=sys.stderr)
         sys.exit(1)
 
-    # Read file paths from stdin (one per line)
+    from .routing import handle_uri
+
+    # Read paths/URIs from stdin (one per line)
     for line in sys.stdin:
-        file_path = line.strip()
-        if not file_path:
+        target = line.strip()
+        if not target:
             continue  # Skip empty lines
 
-        path = Path(file_path)
+        # Check if this is a URI (scheme://resource)
+        if '://' in target:
+            try:
+                handle_uri(target, None, args)
+            except SystemExit:
+                # URI handler failed - warn and continue (match file behavior)
+                print(f"Warning: {target} failed, skipping", file=sys.stderr)
+            continue
+
+        # Handle as file path
+        path = Path(target)
 
         # Skip if path doesn't exist (graceful degradation)
         if not path.exists():
-            print(f"Warning: {file_path} not found, skipping", file=sys.stderr)
+            print(f"Warning: {target} not found, skipping", file=sys.stderr)
             continue
 
         # Skip directories (only process files)
         if path.is_dir():
-            print(f"Warning: {file_path} is a directory, skipping (use reveal {file_path}/ directly)", file=sys.stderr)
+            print(f"Warning: {target} is a directory, skipping (use reveal {target}/ directly)", file=sys.stderr)
             continue
 
         # Process the file

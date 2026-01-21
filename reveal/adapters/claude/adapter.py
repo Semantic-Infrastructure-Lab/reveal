@@ -7,6 +7,7 @@ import json
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import ClaudeRenderer
+from ...utils.query import parse_query_params
 from .analysis import (
     extract_all_tool_results,
     get_tool_calls,
@@ -53,41 +54,10 @@ class ClaudeAdapter(ResourceAdapter):
             raise TypeError(f"resource must be a string, got {type(resource).__name__}")
         self.resource = resource
         self.query = query
-        self.query_params = self._parse_query(query)
+        self.query_params = parse_query_params(query)
         self.session_name = self._parse_session_name(resource)
         self.conversation_path = self._find_conversation()
         self.messages = None  # Lazy load
-
-    def _parse_query(self, query: str) -> Dict[str, Any]:
-        """Parse query string into structured parameters.
-
-        Supports:
-            - 'errors' -> {'errors': True}
-            - 'tools=Bash' -> {'tools': 'Bash'}
-            - 'tools=Bash&errors' -> {'tools': 'Bash', 'errors': True}
-            - 'contains=reveal' -> {'contains': 'reveal'}
-
-        Args:
-            query: Raw query string
-
-        Returns:
-            Dictionary of parsed parameters
-        """
-        if not query:
-            return {}
-
-        params = {}
-
-        # Handle simple keywords and key=value pairs
-        for part in query.split('&'):
-            if '=' in part:
-                key, value = part.split('=', 1)
-                params[key] = value
-            else:
-                # Keywords like 'errors', 'summary', 'timeline'
-                params[part] = True
-
-        return params
 
     def _get_contract_base(self) -> Dict[str, Any]:
         """Get Output Contract v1.0 base fields.

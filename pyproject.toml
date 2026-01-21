@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reveal-cli"
-version = "0.41.0"
+version = "0.42.0"
 description = "Progressive code exploration with semantic queries and structural diffs - understand code by navigating structure, not reading text"
 readme = "README.md"
 requires-python = ">=3.10"

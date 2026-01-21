@@ -586,6 +586,24 @@ fd -e md | reveal --stdin --validate-schema hugo
 fd -e py | reveal --stdin --format=json > structure.json
 ```
 
+### URI batch processing
+
+```bash
+# Check multiple SSL certificates
+echo -e "ssl://example.com\nssl://api.example.com\nssl://staging.example.com" | reveal --stdin
+
+# Mix files and URIs in same batch
+echo -e "config.yaml\nssl://prod.example.com\nenv://PATH" | reveal --stdin
+
+# Scan all domains from nginx config
+grep -h "server_name" /etc/nginx/sites-enabled/* | awk '{print $2}' | \
+  sed 's/;$//' | sed 's/^/ssl:\/\//' | reveal --stdin --check
+
+# Batch SSL health checks with JSON output
+cat domains.txt | sed 's/^/ssl:\/\//' | reveal --stdin --format=json | \
+  jq 'select(.status.health != "healthy")'
+```
+
 ### Clipboard integration
 
 ```bash

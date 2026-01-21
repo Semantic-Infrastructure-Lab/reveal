@@ -8,7 +8,13 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
-### v0.41.0 (Unreleased)
+### v0.42.0
+- ✅ **Universal `--stdin` URI support** — Batch processing works with any URI scheme (ssl://, claude://, env://)
+- ✅ **Query parsing utilities** — New `reveal/utils/query.py` for adapter authors
+- ✅ **SSL batch workflows** — Check multiple certificates via stdin pipeline
+- ✅ **Nginx+SSL integration docs** — Comprehensive AGENT_HELP.md coverage
+
+### v0.41.0
 - ✅ **`ssl://` adapter** — SSL/TLS certificate inspection (zero dependencies)
 - ✅ **N004 rule** — ACME challenge path inconsistency detection
 - ✅ **Content-based nginx detection** — `.conf` files detected by content, not path
