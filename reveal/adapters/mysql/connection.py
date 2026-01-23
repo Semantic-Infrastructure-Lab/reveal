@@ -18,11 +18,12 @@ class MySQLConnection:
     (environment variables, ~/.my.cnf), and query execution.
     """
 
-    def __init__(self, connection_string: str = ""):
+    def __init__(self, connection_string: str):
         """Initialize connection with URI.
 
         Args:
             connection_string: mysql://[user:pass@]host[:port][/element]
+                              Can be empty string for bare mysql:// (uses .my.cnf)
 
         Raises:
             ImportError: If pymysql is not installed

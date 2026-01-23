@@ -47,14 +47,16 @@ class MySQLAdapter(ResourceAdapter):
         """
         return load_help_data('mysql') or {}
 
-    def __init__(self, connection_string: str = ""):
+    def __init__(self, connection_string: str):
         """Initialize MySQL adapter with connection details.
 
         Args:
             connection_string: mysql://[user:pass@]host[:port][/element]
+                              Required - routing layer passes full URI
 
         Raises:
             ImportError: If pymysql is not installed
+            TypeError: If connection_string not provided (enforces URI-based init)
         """
         # Create connection manager
         self.conn = MySQLConnection(connection_string)
