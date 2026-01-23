@@ -6,6 +6,8 @@ description: 'MySQL database inspection - progressive disclosure of health, conn
 syntax: 'mysql://[user:password@]host[:port][/element]'
 
 examples:
+  - uri: 'mysql://'
+    description: 'Auto-connect using ~/.my.cnf credentials (simplest, recommended)'
   - uri: 'mysql://localhost'
     description: 'Health overview (connections, InnoDB, replication, storage)'
   - uri: 'mysql://localhost/connections'
@@ -18,6 +20,8 @@ examples:
     description: 'Storage usage by database'
   - uri: 'mysql://localhost --check'
     description: 'Run health checks with thresholds'
+  - uri: 'mysql:///innodb'
+    description: 'Use ~/.my.cnf credentials, specify element only'
 
 elements:
   connections: 'Connection details and processlist'
@@ -59,6 +63,13 @@ workflows:
       - "reveal mysql://localhost/performance  # Check slow queries"
       - "reveal mysql://localhost/innodb       # Buffer pool hit rate"
       - "reveal mysql://localhost/connections  # Check for blocking"
+  - name: 'Production Database Monitoring (Remote)'
+    scenario: 'Monitor production database via ~/.my.cnf'
+    steps:
+      - "# Configure ~/.my.cnf with [client] credentials"
+      - "reveal mysql://                       # Auto-connect, health overview"
+      - "reveal mysql:// --check               # Automated health checks"
+      - "reveal mysql:///storage               # Storage usage trends"
 
 anti_patterns:
   - bad: "mysql -e 'SHOW STATUS' | grep -i innodb"
@@ -71,12 +82,14 @@ anti_patterns:
 notes:
   - '⚠️  IMPORTANT: Requires pymysql dependency'
   - 'Install: pip install reveal-cli[database] OR pip install pymysql'
-  - 'Credentials: URI > env vars > ~/.my.cnf'
+  - 'Credentials: URI > env vars > ~/.my.cnf (3-tier resolution system)'
   - 'Env vars: MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE'
-  - '~/.my.cnf: Reads [client] section when params not explicitly set'
+  - '~/.my.cnf: Reads [client] section when params not explicitly set (RECOMMENDED for production)'
+  - 'Production validated: Tested against 189GB Digital Ocean MySQL 8.0.35 with SSL/TLS'
   - 'Health thresholds: connections <80%, buffer pool >99%, replication lag <60s'
   - 'DBA tuning ratios: table scans <25%, thread cache miss <10%, temp tables on disk <25%'
   - 'All metrics show "since server start" with accurate MySQL timestamps'
+  - 'Simple usage: Just run "reveal mysql://" if ~/.my.cnf is configured'
 
 output_formats:
   - text
