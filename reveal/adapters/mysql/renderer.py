@@ -42,7 +42,9 @@ class MySQLRenderer(TypeDispatchRenderer):
         repl = result['replication']
         print(f"Replication: {repl['role']}")
         if 'lag' in repl:
-            print(f"  Lag: {repl['lag']}s")
+            lag = repl['lag']
+            lag_display = f"{lag}s" if isinstance(lag, (int, float)) else str(lag)
+            print(f"  Lag: {lag_display}")
         if 'slaves' in repl:
             print(f"  Slaves: {repl['slaves']}")
         print()
