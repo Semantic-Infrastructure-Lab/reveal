@@ -124,7 +124,7 @@ def get_tool_calls(messages: List[Dict], tool_name: str, session_name: str,
 
 def get_all_tools(messages: List[Dict], session_name: str,
                   contract_base: Dict[str, Any]) -> Dict[str, Any]:
-    """Get all tool calls across all types.
+    """Get all tool calls across all types with success rates.
 
     Args:
         messages: List of message dictionaries
@@ -132,13 +132,13 @@ def get_all_tools(messages: List[Dict], session_name: str,
         contract_base: Base contract fields
 
     Returns:
-        Dictionary with tool usage statistics
+        Dictionary with tool usage statistics including success rates
     """
     base = contract_base.copy()
     base['type'] = 'claude_tool_summary'
 
+    # Collect tool call details
     tools = defaultdict(list)
-
     for i, msg in enumerate(messages):
         if msg.get('type') == 'assistant':
             for content in msg.get('message', {}).get('content', []):
@@ -150,10 +150,23 @@ def get_all_tools(messages: List[Dict], session_name: str,
                         'timestamp': msg.get('timestamp')
                     })
 
+    # Calculate success rates
+    success_rates = calculate_tool_success_rate(messages)
+
+    # Build tool statistics with counts and success rates
+    tool_stats = {}
+    for name, calls in tools.items():
+        tool_stats[name] = {
+            'count': len(calls),
+            'success_rate': f"{success_rates.get(name, {}).get('success_rate', 0)}%",
+            'success': success_rates.get(name, {}).get('success', 0),
+            'failure': success_rates.get(name, {}).get('failure', 0),
+        }
+
     base.update({
         'session': session_name,
-        'tool_count': sum(len(calls) for calls in tools.values()),
-        'tools': {name: len(calls) for name, calls in tools.items()},
+        'total_calls': sum(len(calls) for calls in tools.values()),
+        'tools': tool_stats,
         'details': dict(tools)
     })
 
@@ -254,3 +267,116 @@ def calculate_tool_success_rate(messages: List[Dict]) -> Dict[str, Dict[str, Any
 
     # Calculate final success rates
     return _build_success_rate_report(tool_stats)
+
+
+def get_files_touched(messages: List[Dict], session_name: str,
+                      contract_base: Dict[str, Any]) -> Dict[str, Any]:
+    """Get all files that were Read, Written, or Edited.
+
+    Args:
+        messages: List of message dictionaries
+        session_name: Name of the session
+        contract_base: Base contract fields
+
+    Returns:
+        Dictionary with file operation statistics
+    """
+    base = contract_base.copy()
+    base['type'] = 'claude_files'
+
+    files_by_op = {
+        'Read': defaultdict(int),
+        'Write': defaultdict(int),
+        'Edit': defaultdict(int)
+    }
+
+    # Track all file operations in order
+    operations = []
+
+    for i, msg in enumerate(messages):
+        if msg.get('type') == 'assistant':
+            for content in msg.get('message', {}).get('content', []):
+                if content.get('type') == 'tool_use':
+                    tool_name = content.get('name')
+                    if tool_name in ('Read', 'Write', 'Edit'):
+                        inp = content.get('input', {})
+                        file_path = inp.get('file_path')
+                        if file_path:
+                            files_by_op[tool_name][file_path] += 1
+                            operations.append({
+                                'message_index': i,
+                                'operation': tool_name,
+                                'file_path': file_path,
+                                'timestamp': msg.get('timestamp')
+                            })
+
+    # Calculate unique files
+    all_files = set()
+    for op_files in files_by_op.values():
+        all_files.update(op_files.keys())
+
+    base.update({
+        'session': session_name,
+        'total_operations': len(operations),
+        'unique_files': len(all_files),
+        'by_operation': {
+            op: dict(files) for op, files in files_by_op.items()
+        },
+        'operations': operations
+    })
+
+    return base
+
+
+def get_workflow(messages: List[Dict], session_name: str,
+                 contract_base: Dict[str, Any]) -> Dict[str, Any]:
+    """Get chronological sequence of tool operations.
+
+    Args:
+        messages: List of message dictionaries
+        session_name: Name of the session
+        contract_base: Base contract fields
+
+    Returns:
+        Dictionary with workflow sequence
+    """
+    base = contract_base.copy()
+    base['type'] = 'claude_workflow'
+
+    workflow = []
+
+    for i, msg in enumerate(messages):
+        if msg.get('type') == 'assistant':
+            for content in msg.get('message', {}).get('content', []):
+                if content.get('type') == 'tool_use':
+                    tool_name = content.get('name')
+                    inp = content.get('input', {})
+
+                    # Extract key info based on tool type
+                    detail = None
+                    if tool_name == 'Bash':
+                        detail = inp.get('description') or inp.get('command', '')[:60]
+                    elif tool_name in ('Read', 'Write', 'Edit'):
+                        detail = inp.get('file_path', '')
+                    elif tool_name == 'Grep':
+                        detail = f"'{inp.get('pattern')}' in {inp.get('path', '.')}"
+                    elif tool_name == 'Glob':
+                        detail = inp.get('pattern')
+                    elif tool_name in ('TaskCreate', 'TaskUpdate'):
+                        detail = inp.get('subject') or inp.get('taskId')
+
+                    workflow.append({
+                        'step': len(workflow) + 1,
+                        'message_index': i,
+                        'tool': tool_name,
+                        'detail': detail,
+                        'timestamp': msg.get('timestamp')
+                    })
+
+    base.update({
+        'session': session_name,
+        'total_steps': len(workflow),
+        'workflow': workflow
+    })
+
+    return base

@@ -20,6 +20,9 @@ from .analysis import (
     get_message,
     get_thinking_blocks,
     calculate_tool_success_rate,
+    get_files_touched,
+    get_workflow,
+    get_context_changes,
 )
 
 
@@ -194,6 +197,12 @@ class ClaudeAdapter(ResourceAdapter):
             return get_thinking_blocks(messages, self.session_name, contract_base)
         elif '/tools' in self.resource:
             return get_all_tools(messages, self.session_name, contract_base)
+        elif '/files' in self.resource:
+            return get_files_touched(messages, self.session_name, contract_base)
+        elif '/workflow' in self.resource:
+            return get_workflow(messages, self.session_name, contract_base)
+        elif '/context' in self.resource:
+            return get_context_changes(messages, self.session_name, contract_base)
         elif '/user' in self.resource:
             return filter_by_role(messages, 'user', self.session_name, contract_base)
         elif '/assistant' in self.resource:
@@ -311,9 +320,13 @@ class ClaudeAdapter(ResourceAdapter):
             'recent_sessions': sessions[:20],  # Show 20 most recent
             'usage': {
                 'overview': 'reveal claude://session/<name>',
+                'workflow': 'reveal claude://session/<name>/workflow',
+                'files': 'reveal claude://session/<name>/files',
+                'tools': 'reveal claude://session/<name>/tools',
                 'errors': 'reveal claude://session/<name>?errors',
-                'tools': 'reveal claude://session/<name>?tools=Bash',
-                'composite': 'reveal claude://session/<name>?tools=Bash&errors&contains=reveal',
+                'context': 'reveal claude://session/<name>/context',
+                'specific_tool': 'reveal claude://session/<name>?tools=Bash',
+                'composite': 'reveal claude://session/<name>?tools=Bash&errors',
                 'thinking': 'reveal claude://session/<name>/thinking',
                 'message': 'reveal claude://session/<name>/message/42'
             }
@@ -353,29 +366,43 @@ class ClaudeAdapter(ResourceAdapter):
                     'description': 'Session overview (messages, tools, duration)'
                 },
                 {
+                    'uri': 'claude://session/infernal-earth-0118/workflow',
+                    'description': 'Chronological sequence of tool operations'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118/files',
+                    'description': 'All files read, written, or edited'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118/tools',
+                    'description': 'All tool usage with success rates'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118?errors',
+                    'description': 'Find errors with context'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118/context',
+                    'description': 'Track directory and branch changes'
+                },
+                {
                     'uri': 'claude://session/infernal-earth-0118/thinking',
                     'description': 'Extract all thinking blocks with token estimates'
                 },
                 {
                     'uri': 'claude://session/infernal-earth-0118?tools=Bash',
-                    'description': 'All Bash tool calls'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118?errors',
-                    'description': 'Find errors and tool failures'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/tools',
-                    'description': 'All tool usage statistics'
+                    'description': 'Filter to specific tool calls'
                 }
             ],
             'features': [
                 'Progressive disclosure (overview → details → specifics)',
-                'Tool usage analytics and filtering',
-                'Token usage estimates and optimization insights',
-                'Error detection with context',
+                'Tool usage analytics with success rates',
+                'File operation tracking (Read/Write/Edit)',
+                'Workflow visualization (chronological tool sequence)',
+                'Error detection with full context',
+                'Directory and branch change tracking',
                 'Thinking block extraction and analysis',
-                'File operation tracking'
+                'Token usage estimates and optimization insights'
             ],
             'workflows': [
                 {

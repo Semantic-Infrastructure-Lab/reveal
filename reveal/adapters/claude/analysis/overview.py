@@ -140,3 +140,57 @@ def get_summary(messages: List[Dict], session_name: str, conversation_path: str,
     })
 
     return overview
+
+
+def get_context_changes(messages: List[Dict], session_name: str,
+                        contract_base: Dict[str, Any]) -> Dict[str, Any]:
+    """Track working directory and git branch changes during session.
+
+    Args:
+        messages: List of message dictionaries
+        session_name: Name of the session
+        contract_base: Base contract fields
+
+    Returns:
+        Dictionary with directory and branch change history
+    """
+    base = contract_base.copy()
+    base['type'] = 'claude_context'
+
+    changes = []
+    prev_cwd = None
+    prev_branch = None
+
+    for i, msg in enumerate(messages):
+        cwd = msg.get('cwd')
+        branch = msg.get('gitBranch')
+
+        # Track directory changes
+        if cwd and cwd != prev_cwd:
+            changes.append({
+                'message_index': i,
+                'type': 'cwd',
+                'value': cwd,
+                'timestamp': msg.get('timestamp')
+            })
+            prev_cwd = cwd
+
+        # Track branch changes
+        if branch and branch != prev_branch:
+            changes.append({
+                'message_index': i,
+                'type': 'branch',
+                'value': branch,
+                'timestamp': msg.get('timestamp')
+            })
+            prev_branch = branch
+
+    base.update({
+        'session': session_name,
+        'total_changes': len(changes),
+        'final_cwd': prev_cwd,
+        'final_branch': prev_branch,
+        'changes': changes
+    })
+
+    return base

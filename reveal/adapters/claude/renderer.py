@@ -94,7 +94,7 @@ class ClaudeRenderer(TypeDispatchRenderer):
 
     @staticmethod
     def _render_claude_errors(result: dict) -> None:
-        """Render error summary."""
+        """Render error summary with context."""
         session = result.get('session', 'unknown')
         count = result.get('error_count', 0)
 
@@ -105,12 +105,154 @@ class ClaudeRenderer(TypeDispatchRenderer):
         errors = result.get('errors', [])
         for i, err in enumerate(errors[:20], 1):
             context = err.get('context', {})
-            tool = context.get('tool_name', err.get('tool_name', 'unknown'))
-            preview = err.get('content_preview', '')[:60]
-            print(f"[{i:3}] {tool}: {preview}")
+            tool = context.get('tool_name', 'unknown')
+            error_type = err.get('error_type', '?')
+            msg_idx = err.get('message_index', '?')
+
+            print(f"[{i:3}] Message {msg_idx} | {tool} | {error_type}")
+
+            # Show tool input if available
+            tool_input = context.get('tool_input_preview')
+            if tool_input:
+                # Truncate and show on separate line for readability
+                if len(tool_input) > 70:
+                    tool_input = tool_input[:67] + '...'
+                print(f"      Input: {tool_input}")
+
+            # Show error preview
+            preview = err.get('content_preview', '')
+            # Find first line with actual error content
+            lines = preview.split('\n')
+            for line in lines[:3]:
+                if line.strip():
+                    if len(line) > 70:
+                        line = line[:67] + '...'
+                    print(f"      Error: {line}")
+                    break
+            print()
 
         if len(errors) > 20:
             print(f"  ... and {len(errors) - 20} more errors")
+
+    @staticmethod
+    def _render_claude_files(result: dict) -> None:
+        """Render files touched summary."""
+        session = result.get('session', 'unknown')
+        total = result.get('total_operations', 0)
+        unique = result.get('unique_files', 0)
+
+        print(f"Files Touched: {session}")
+        print(f"Total Operations: {total}")
+        print(f"Unique Files: {unique}")
+        print()
+
+        by_operation = result.get('by_operation', {})
+        for op in ['Read', 'Write', 'Edit']:
+            files = by_operation.get(op, {})
+            if files:
+                print(f"{op}:")
+                for file_path, count in sorted(files.items(), key=lambda x: -x[1])[:15]:
+                    # Shorten long paths for display
+                    display_path = file_path
+                    if len(file_path) > 70:
+                        display_path = '...' + file_path[-67:]
+                    print(f"  {count:2}x {display_path}")
+                if len(files) > 15:
+                    print(f"  ... and {len(files) - 15} more files")
+                print()
+
+    @staticmethod
+    def _render_claude_workflow(result: dict) -> None:
+        """Render workflow sequence."""
+        session = result.get('session', 'unknown')
+        total = result.get('total_steps', 0)
+
+        print(f"Workflow: {session}")
+        print(f"Total Steps: {total}")
+        print()
+
+        workflow = result.get('workflow', [])
+        for step in workflow[:50]:
+            step_num = step.get('step', 0)
+            tool = step.get('tool', 'unknown')
+            detail = step.get('detail', '')
+
+            # Truncate long details
+            if detail and len(detail) > 60:
+                detail = detail[:57] + '...'
+
+            print(f"[{step_num:3}] {tool:12} {detail}")
+
+        if len(workflow) > 50:
+            print(f"  ... and {len(workflow) - 50} more steps")
+
+    @staticmethod
+    def _render_claude_context(result: dict) -> None:
+        """Render context changes (directory and branch)."""
+        session = result.get('session', 'unknown')
+        total = result.get('total_changes', 0)
+
+        print(f"Context Changes: {session}")
+        print(f"Total Changes: {total}")
+        print()
+
+        final_cwd = result.get('final_cwd')
+        final_branch = result.get('final_branch')
+        if final_cwd:
+            print(f"Final Directory: {final_cwd}")
+        if final_branch:
+            print(f"Final Branch: {final_branch}")
+        if final_cwd or final_branch:
+            print()
+
+        changes = result.get('changes', [])
+        for change in changes:
+            msg_idx = change.get('message_index', '?')
+            change_type = change.get('type', 'unknown')
+            value = change.get('value', '')
+
+            # Truncate long paths
+            if len(value) > 70:
+                value = '...' + value[-67:]
+
+            if change_type == 'cwd':
+                print(f"[{msg_idx:3}] Changed directory → {value}")
+            elif change_type == 'branch':
+                print(f"[{msg_idx:3}] Switched branch → {value}")
+
+    @staticmethod
+    def _render_claude_filtered_results(result: dict) -> None:
+        """Render filtered results (composite queries)."""
+        session = result.get('session', 'unknown')
+        query = result.get('query', '')
+        filters = result.get('filters_applied', [])
+        count = result.get('result_count', 0)
+
+        print(f"Filtered Results: {session}")
+        print(f"Query: {query}")
+        print(f"Filters: {', '.join(filters)}")
+        print(f"Matches: {count}")
+        print()
+
+        results = result.get('results', [])
+        for i, item in enumerate(results[:25], 1):
+            msg_idx = item.get('message_index', '?')
+            tool = item.get('tool_name', 'unknown')
+            is_error = item.get('is_error', False)
+            content = item.get('content', '')
+
+            # Show error indicator
+            status = '❌' if is_error else '✓'
+
+            # Show first line of content
+            first_line = content.split('\n')[0][:60]
+            print(f"[{i:3}] {status} Message {msg_idx} | {tool}")
+            if first_line:
+                print(f"      {first_line}")
+            print()
+
+        if len(results) > 25:
+            print(f"  ... and {len(results) - 25} more results")
 
     @classmethod
     def _render_text(cls, result: dict) -> None:
