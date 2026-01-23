@@ -255,7 +255,7 @@ class TestToolFiltering:
         assert result['type'] == 'claude_tool_summary'
         assert 'tools' in result
         assert 'details' in result
-        assert result['tool_count'] == 4  # 2 Read + 1 Bash + 1 Write
+        assert result['total_calls'] == 4  # 2 Read + 1 Bash + 1 Write
 
 
 class TestThinkingExtraction:

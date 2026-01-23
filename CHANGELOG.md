@@ -14,6 +14,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Claude adapter session analysis elements**
+  - `/workflow` - Chronological sequence of tool operations
+  - `/files` - All files read, written, or edited during session
+  - `/context` - Track directory and branch changes
+  - Updated usage examples and help documentation
+
+### Fixed
+- **MySQL adapter bugs** (3 issues fixed)
+  - `--check` no longer crashes with TypeError (only_failures kwarg)
+  - Progressive disclosure now returns correct element (not overview)
+  - Server display shows actual host/port when using ~/.my.cnf (was "None:None")
+  - Lag display no longer appends "s" to "Unknown" values
+
+### Documentation
+- **MySQL adapter production validation** - Updated help_data/mysql.yaml
+  - Added `mysql://` example (simplest form using ~/.my.cnf)
+  - Added "Production Database Monitoring" workflow
+  - Noted production validation against 189GB Digital Ocean MySQL 8.0.35
+
 ## [0.44.2] - 2026-01-21
 
 ### Fixed
