@@ -64,12 +64,15 @@ class MySQLRenderer(TypeDispatchRenderer):
             print(f"  {step}")
 
     @classmethod
-    def render_check(cls, result: dict, format: str = 'text') -> None:
+    def render_check(cls, result: dict, format: str = 'text',
+                     only_failures: bool = False, **kwargs) -> None:
         """Render MySQL health check results.
 
         Args:
             result: Check result dictionary from MySQLAdapter.check()
             format: Output format ('text' or 'json')
+            only_failures: Only show failed/warning results (not passing)
+            **kwargs: Additional render options (ignored for compatibility)
         """
         if cls.should_render_json(format):
             cls.render_json(result)
@@ -103,9 +106,9 @@ class MySQLRenderer(TypeDispatchRenderer):
                 print(f"  • {check['name']}: {check['value']} (threshold: {check['threshold']}, severity: {check['severity']})")
             print()
 
-        # Finally passes (if verbose or no issues)
-        if passes and (not failures and not warnings):
-            print("✅ All Checks Passed:")
+        # Finally passes (if not filtering to only failures, or no issues at all)
+        if passes and not only_failures:
+            print("✅ Passed:")
             for check in passes:
                 print(f"  • {check['name']}: {check['value']} (threshold: {check['threshold']})")
             print()

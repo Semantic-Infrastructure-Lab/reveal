@@ -81,6 +81,25 @@ class MySQLAdapter(ResourceAdapter):
         """Stub for backwards compatibility with tests. Actual resolution done by MySQLConnection."""
         pass
 
+    def _get_server_display(self) -> str:
+        """Get server hostname:port for display purposes.
+
+        Returns actual connection info after connection, or 'localhost:3306' as fallback.
+        """
+        # Try to get from connection object (most accurate after connected)
+        if self.conn._connection:
+            try:
+                conn = self.conn._connection
+                host = getattr(conn, 'host', None) or self.host or 'localhost'
+                port = getattr(conn, 'port', None) or self.port or 3306
+                return f"{host}:{port}"
+            except Exception:
+                pass
+        # Fallback to parsed values or defaults
+        host = self.host or 'localhost'
+        port = self.port or 3306
+        return f"{host}:{port}"
+
     def _execute_query(self, query: str) -> list:
         """Delegate to connection module."""
         return self.conn.execute_query(query)
@@ -141,9 +160,19 @@ class MySQLAdapter(ResourceAdapter):
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get MySQL health overview (DBA snapshot).
 
+        If an element was specified in the URI (e.g., mysql://host/connections),
+        returns that specific element instead of the overview.
+
         Returns:
-            Dict containing health signals (~100 tokens)
+            Dict containing health signals (~100 tokens) or element-specific data
         """
+        # If element specified in URI, delegate to get_element for progressive disclosure
+        if self.element:
+            result = self.get_element(self.element, **kwargs)
+            if result:
+                return result
+            # Fall through to overview if element not recognized
+
         # Get server version and status
         version_info = self._execute_single("SELECT VERSION() as version")
         status_vars = {row['Variable_name']: row['Value']
@@ -167,12 +196,17 @@ class MySQLAdapter(ResourceAdapter):
             conn_health, innodb_health, replication_info
         )
 
+        # Get server display string (handles None values from .my.cnf credentials)
+        server_display = self._get_server_display()
+        # Extract just hostname for next_steps (without port for cleaner URIs)
+        host_display = server_display.split(':')[0]
+
         return {
             'contract_version': '1.0',
             'type': 'mysql_server',
-            'source': f"{self.host}:{self.port}",
+            'source': server_display,
             'source_type': 'database',
-            'server': f"{self.host}:{self.port}",
+            'server': server_display,
             'version': version_info['version'],
             'uptime': f"{uptime_days}d {uptime_hours}h {uptime_mins}m",
             'server_start_time': server_start_time.isoformat(),
@@ -201,10 +235,10 @@ class MySQLAdapter(ResourceAdapter):
             'health_status': health_status,
             'health_issues': health_issues,
             'next_steps': [
-                f"reveal mysql://{self.host}/connections       # Connection details",
-                f"reveal mysql://{self.host}/performance       # Query performance",
-                f"reveal mysql://{self.host}/innodb            # InnoDB details",
-                f"reveal mysql://{self.host} --check           # Run health checks",
+                f"reveal mysql://{host_display}/connections       # Connection details",
+                f"reveal mysql://{host_display}/performance       # Query performance",
+                f"reveal mysql://{host_display}/innodb            # InnoDB details",
+                f"reveal mysql://{host_display} --check           # Run health checks",
             ]
         }
 
@@ -240,9 +274,11 @@ class MySQLAdapter(ResourceAdapter):
         try:
             slave_status = self._execute_single("SHOW SLAVE STATUS")
             if slave_status:
+                # Seconds_Behind_Master can be None even when key exists
+                lag = slave_status.get('Seconds_Behind_Master')
                 return {
                     'role': 'Slave',
-                    'lag': slave_status.get('Seconds_Behind_Master', 'Unknown'),
+                    'lag': lag if lag is not None else 'Unknown',
                     'io_running': slave_status.get('Slave_IO_Running', 'No') == 'Yes',
                     'sql_running': slave_status.get('Slave_SQL_Running', 'No') == 'Yes',
                 }
