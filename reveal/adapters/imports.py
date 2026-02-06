@@ -18,6 +18,7 @@ from typing import Dict, Any, Optional, List
 from urllib.parse import urlparse
 
 from .base import ResourceAdapter, register_adapter, register_renderer
+from .help_data import load_help_data
 from ..analyzers.imports import ImportGraph, ImportStatement
 
 
@@ -280,43 +281,16 @@ class ImportsAdapter(ResourceAdapter):
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
-        """Get help documentation for imports:// adapter."""
-        return {
-            'name': 'imports',
-            'description': 'Import graph analysis for detecting unused imports, circular dependencies, and layer violations',
-            'uri_scheme': 'imports://<path>',
-            'examples': [
-                {
-                    'uri': 'reveal imports://src',
-                    'description': 'List all imports in src directory'
-                },
-                {
-                    'uri': "reveal 'imports://src?unused'",
-                    'description': 'Find unused imports'
-                },
-                {
-                    'uri': "reveal 'imports://src?circular'",
-                    'description': 'Detect circular dependencies'
-                },
-                {
-                    'uri': 'reveal imports://src/main.py',
-                    'description': 'Show imports for single file'
-                }
-            ],
-            'query_parameters': {
-                'unused': 'Find imports that are never used',
-                'circular': 'Detect circular dependencies',
-                'violations': 'Check layer violations (requires .reveal.yaml)'
-            },
-            'supported_languages': get_supported_languages(),
-            'status': 'beta',
-            'see_also': [
-                'reveal help://ast - Query code structure by complexity',
-                'reveal help://stats - Codebase metrics and hotspots',
-                'reveal help://configuration - Layer violation config (.reveal.yaml)',
-                'reveal file.py --check - Import quality rules (I001-I004)'
-            ]
-        }
+        """Get help documentation for imports:// adapter.
+
+        Help data loaded from reveal/adapters/help_data/imports.yaml
+        to improve consistency and maintainability.
+        """
+        help_data = load_help_data('imports') or {}
+        # Add dynamic supported languages to help data
+        if help_data:
+            help_data['supported_languages'] = get_supported_languages()
+        return help_data
 
     def _build_graph(self, target_path: Path) -> None:
         """Build import graph from target path (multi-language).

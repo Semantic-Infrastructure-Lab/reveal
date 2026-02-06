@@ -1,0 +1,124 @@
+# Imports Adapter Help Data
+# Import graph analysis for detecting unused imports, circular dependencies, and layer violations
+
+name: imports
+description: 'Import graph analysis for detecting unused imports, circular dependencies, and layer violations'
+syntax: 'imports://<path>[?<query>]'
+
+examples:
+  # Basic import inspection
+  - uri: 'reveal imports://src'
+    description: 'List all imports in src directory with import graph'
+
+  - uri: 'reveal imports://src/main.py'
+    description: 'Show imports for single file'
+
+  # Quality checks
+  - uri: "reveal 'imports://src?unused'"
+    description: 'Find unused imports (imports that are never referenced in code)'
+
+  - uri: "reveal 'imports://src?circular'"
+    description: 'Detect circular dependencies (module A imports B, B imports A)'
+
+  - uri: "reveal 'imports://src?violations'"
+    description: 'Check layer violations based on .reveal.yaml architecture rules'
+
+  # Verbose output
+  - uri: "reveal imports://src --verbose"
+    description: 'Show detailed import information including file paths and line numbers'
+
+  # JSON output for tooling
+  - uri: "reveal imports://src?unused --format json"
+    description: 'Machine-readable output for CI/CD integration'
+
+elements:
+  unused: 'Imports that are never used in the code'
+  circular: 'Circular dependency chains between modules'
+  violations: 'Architecture layer violations (requires .reveal.yaml config)'
+
+query_parameters:
+  unused: 'Find imports that are declared but never referenced'
+  circular: 'Detect circular import dependencies'
+  violations: 'Check for layer violations per .reveal.yaml rules'
+
+flags:
+  --verbose: 'Show detailed import information (file paths, line numbers, full chains)'
+  --format: 'Output format (text, json, grep)'
+
+features:
+  - 'Import graph construction for Python, JavaScript, TypeScript, and more'
+  - 'Unused import detection (dead code cleanup)'
+  - 'Circular dependency detection (refactoring opportunity identification)'
+  - 'Layer violation checking for clean architecture enforcement'
+  - 'Multi-language support (Python, JS/TS, Go, Rust, Java, C++, etc.)'
+  - 'JSON output for CI/CD integration and tooling'
+  - 'Progressive disclosure (summary → detail → violations)'
+
+workflows:
+  - name: 'Clean Up Unused Imports'
+    scenario: 'Remove dead code and improve maintainability'
+    steps:
+      - 'reveal imports://src?unused'
+      - 'Review unused imports list'
+      - 'Remove unused imports from files'
+      - 'Verify with reveal imports://src?unused again'
+
+  - name: 'Detect Circular Dependencies'
+    scenario: 'Find and break circular import cycles'
+    steps:
+      - "reveal 'imports://src?circular'"
+      - 'Identify circular chains (A → B → A)'
+      - 'Refactor to break cycles (extract common interface, use dependency injection)'
+      - 'Verify with imports:// again'
+
+  - name: 'Enforce Architecture Layers'
+    scenario: 'Ensure clean architecture with layer boundaries'
+    steps:
+      - 'Create .reveal.yaml with layer rules'
+      - "reveal 'imports://src?violations'"
+      - 'Fix violations (move files or refactor dependencies)'
+      - 'Add to CI/CD: reveal imports://src?violations --format json'
+
+  - name: 'Codebase Health Check'
+    scenario: 'Comprehensive import analysis'
+    steps:
+      - 'reveal imports://src'
+      - "reveal 'imports://src?unused'"
+      - "reveal 'imports://src?circular'"
+      - 'Address issues found in each check'
+
+anti_patterns:
+  - bad: 'reveal imports:// src'
+    good: 'reveal imports://src'
+    why: 'Path must be part of URI scheme, not separate argument'
+
+  - bad: "reveal imports://src?unused | grep 'module_name'"
+    good: 'reveal imports://src/module_name.py?unused'
+    why: 'Filter at source for faster results and cleaner output'
+
+  - bad: 'Manually scanning for unused imports in large codebases'
+    good: "reveal imports://src?unused --format json | jq '.unused[] | .file'"
+    why: 'Automated detection is faster, more accurate, and scriptable'
+
+try_now:
+  - 'reveal imports://reveal'
+  - "reveal 'imports://reveal?unused'"
+  - "reveal 'imports://reveal?circular'"
+
+notes:
+  - 'Unused import detection requires parsing file content to check references'
+  - 'Circular dependency detection builds full import graph'
+  - 'Layer violations require .reveal.yaml configuration file'
+  - 'Supported languages: Python, JavaScript, TypeScript, Go, Rust, Java, C++, and more'
+  - 'Use --verbose for detailed import chains and file paths'
+
+see_also:
+  - 'reveal help://ast - Query code structure by complexity'
+  - 'reveal help://stats - Codebase metrics and hotspots'
+  - 'reveal help://configuration - Layer violation config (.reveal.yaml)'
+  - 'reveal file.py --check - Import quality rules (I001-I004)'
+
+output_formats:
+  - text
+  - json
+  - grep
