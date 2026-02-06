@@ -580,6 +580,46 @@ class TestSSLRenderer(unittest.TestCase):
         self.assertIn('PASS', output)
         self.assertIn('Exit code: 0', output)
 
+    def test_render_check_with_info_status(self):
+        """render_check should display info status checks in Additional Information section."""
+        result = {
+            'type': 'ssl_check_advanced',
+            'host': 'example.com',
+            'port': 443,
+            'status': 'pass',
+            'certificate': {
+                'common_name': 'example.com',
+                'days_until_expiry': 60,
+                'not_after': '2024-12-31'
+            },
+            'checks': [
+                {'name': 'certificate_expiry', 'status': 'pass', 'message': 'Valid for 60 days'},
+                {'name': 'tls_version', 'status': 'pass', 'message': 'Using TLSv1.3'},
+                {'name': 'certificate_type', 'status': 'info', 'message': 'Wildcard certificate'},
+                {'name': 'issuer_type', 'status': 'info', 'message': 'Issued by Test CA'},
+            ],
+            'summary': {'total': 4, 'passed': 2, 'warnings': 0, 'failures': 0},
+            'exit_code': 0,
+        }
+
+        import io
+        from contextlib import redirect_stdout
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer.render_check(result, format='text')
+
+        output = f.getvalue()
+        # Verify summary shows correct counts
+        self.assertIn('2/4 passed', output)
+        # Verify info section is present
+        self.assertIn('Additional Information', output)
+        # Verify info checks are displayed
+        self.assertIn('certificate_type', output)
+        self.assertIn('issuer_type', output)
+        self.assertIn('Wildcard certificate', output)
+        self.assertIn('Issued by Test CA', output)
+
 
 class TestSSLAdapterHelp(unittest.TestCase):
     """Test SSLAdapter help system."""

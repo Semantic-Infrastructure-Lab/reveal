@@ -291,6 +291,45 @@ class TestRenderAstStructure(unittest.TestCase):
         self.assertIn('big_function [75 lines, complexity: 15]', output)
         self.assertIn('another_function [60 lines]', output)
 
+    def test_text_format_with_imports(self):
+        """Should render imports with their content as names, not empty strings."""
+        data = {
+            'path': 'app.py',
+            'query': None,
+            'total_files': 1,
+            'total_results': 3,
+            'results': [
+                {
+                    'file': 'app.py',
+                    'line': 1,
+                    'name': 'import sys',
+                    'line_count': 0,
+                    'category': 'imports'
+                },
+                {
+                    'file': 'app.py',
+                    'line': 2,
+                    'name': 'from pathlib import Path',
+                    'line_count': 0,
+                    'category': 'imports'
+                },
+                {
+                    'file': 'app.py',
+                    'line': 10,
+                    'name': 'main',
+                    'line_count': 15,
+                    'complexity': 3,
+                    'category': 'functions'
+                }
+            ]
+        }
+        output = capture_stdout(render_ast_structure, data, 'text')
+        # Verify imports show their content, not "[0 lines]"
+        self.assertIn('import sys', output)
+        self.assertIn('from pathlib import Path', output)
+        # Verify functions still show normally
+        self.assertIn('main [15 lines, complexity: 3]', output)
+
     def test_text_format_query_none(self):
         """Should handle query='none' correctly."""
         data = {
