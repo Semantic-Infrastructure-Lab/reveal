@@ -54,6 +54,8 @@ internal-docs/
 |----------|-------------|------|
 | [DOGFOODING_REPORT_2026-01-19.md](research/DOGFOODING_REPORT_2026-01-19.md) | Adapter validation via dogfooding | 2026-01-19 |
 | [UX_ISSUES_2026-01-20.md](research/UX_ISSUES_2026-01-20.md) | UX issues identified during dogfooding | 2026-01-20 |
+| [VALIDATION_REPORT.md](research/VALIDATION_REPORT.md) | Claude adapter validation (all tests passed) | 2026-01-22 |
+| [MYSQL_VALIDATION_REPORT.md](research/MYSQL_VALIDATION_REPORT.md) | MySQL adapter production validation (56 tests + live db) | 2026-01-22 |
 
 ## Related Documentation
 
@@ -69,6 +71,17 @@ internal-docs/
 - **CONTRIBUTING.md** - Contribution guidelines
 - **RELEASING.md** - Release process
 - **STABILITY.md** - API stability guarantees
+
+## Document Lifecycle
+
+See [LIFECYCLE.md](LIFECYCLE.md) for the complete policy on when documents are active, archived, or removed.
+
+**Quick reference**:
+- **Active** - `internal-docs/{category}/` - Currently relevant
+- **Archived** - `internal-docs/archived/{category}/` - Completed work, kept for reference
+- **Removed** - Deleted from repo - Obsolete or incorrect
+
+**Archive trigger**: Planning (after shipped), Research (6 months or implemented), Refactoring (after completed)
 
 ## Adding New Documents
 

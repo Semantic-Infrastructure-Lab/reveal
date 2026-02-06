@@ -827,6 +827,20 @@ All future adapters should:
 
 ---
 
+## See Also
+
+**User-Facing Docs**:
+- [ADAPTER_CONSISTENCY.md](../../reveal/docs/ADAPTER_CONSISTENCY.md) - User guide for adapter consistency patterns
+- [ADAPTER_AUTHORING_GUIDE.md](../../reveal/docs/ADAPTER_AUTHORING_GUIDE.md) - How to create custom adapters
+
+**Related Planning**:
+- [TECHNICAL_DEBT_RESOLUTION.md](TECHNICAL_DEBT_RESOLUTION.md) - TreeSitter architecture improvements
+
+**Implementation**:
+- TIA sessions: jade-jewel-0205 (domain adapter), neon-undertaker-0206 (analysis), blessed-witch-0206 (CLI flags)
+
+---
+
 ## Next Actions
 
 ### Immediate (This Week)

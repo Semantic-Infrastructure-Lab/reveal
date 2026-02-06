@@ -94,6 +94,14 @@ reveal help://ast                # Adapter-specific help
 
 ---
 
-**Last updated:** 2026-01-20
+## For Contributors
+
+**Internal documentation** (planning, research, architecture):
+- [internal-docs/README.md](../../internal-docs/README.md) - Development planning and architectural decisions
+- [internal-docs/LIFECYCLE.md](../../internal-docs/LIFECYCLE.md) - Documentation lifecycle policy
+
+---
+
+**Last updated:** 2026-02-06
 
 [← Project README](../../README.md)

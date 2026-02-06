@@ -497,8 +497,10 @@ reveal/
 
 **Quality metrics:** 2,500+ tests, continuous integration on every commit.
 
-**Documentation:** [reveal/docs/README.md](reveal/docs/README.md) - Comprehensive guides for users, developers, and AI agents
-**Power users:** [RECIPES.md](reveal/docs/RECIPES.md) - Task-based workflows and advanced patterns
+**Documentation:**
+- **User guides:** [reveal/docs/README.md](reveal/docs/README.md) - Comprehensive guides for users, developers, and AI agents
+- **Power users:** [RECIPES.md](reveal/docs/RECIPES.md) - Task-based workflows and advanced patterns
+- **Contributors:** [internal-docs/README.md](internal-docs/README.md) - Planning, research, and architectural decisions
 
 ---
 
