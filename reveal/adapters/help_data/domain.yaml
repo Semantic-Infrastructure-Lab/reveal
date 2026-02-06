@@ -1,0 +1,120 @@
+# Domain Adapter Help Data
+# Domain registration, DNS records, and health status inspection
+
+name: domain
+description: 'Inspect domain registration, DNS records, and health status'
+syntax: 'domain://<domain>[/<element>] [--check]'
+
+examples:
+  # Basic domain inspection
+  - uri: 'domain://example.com'
+    description: 'Domain overview (DNS summary, SSL status, nameservers)'
+
+  - uri: 'domain://example.com/dns'
+    description: 'All DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)'
+
+  - uri: 'domain://example.com/whois'
+    description: 'WHOIS data (registrar, expiry, nameservers) - TODO: requires python-whois'
+
+  - uri: 'domain://example.com/ssl'
+    description: 'SSL certificate status (delegates to ssl:// adapter)'
+
+  - uri: 'domain://example.com/registrar'
+    description: 'Registrar and nameserver information'
+
+  # Health checks
+  - uri: 'domain://example.com --check'
+    description: 'Health check (DNS resolution, propagation, SSL certificate, expiry)'
+
+  # Batch operations via stdin
+  - uri: 'cat domains.txt | sed ''s/^/domain:\/\//'' | reveal --stdin --check'
+    description: 'Batch domain health checks from file via stdin'
+
+  - uri: 'echo -e "domain://example.com\ndomain://google.com" | reveal --stdin --check'
+    description: 'Batch checks from stdin with newline-separated URIs'
+
+elements:
+  dns: 'DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)'
+  whois: 'WHOIS registration data (TODO: requires python-whois)'
+  ssl: 'SSL certificate status (delegates to ssl:// adapter)'
+  registrar: 'Registrar and nameserver information'
+
+flags:
+  --check: 'Run health checks (DNS resolution, propagation, SSL certificate)'
+
+features:
+  - 'Progressive disclosure (overview → elements → health checks)'
+  - 'DNS record inspection with dnspython'
+  - 'DNS propagation validation across nameservers'
+  - 'Cross-adapter integration (delegates to ssl:// for certificates)'
+  - 'Health checks with actionable remediation steps'
+  - 'Zero external dependencies for basic functionality'
+
+workflows:
+  - name: 'Domain Health Check'
+    scenario: 'Validate domain is correctly configured and healthy'
+    steps:
+      - "reveal domain://example.com               # Overview"
+      - "reveal domain://example.com --check       # Deep health check"
+      - "reveal domain://example.com/dns           # DNS details"
+      - "reveal ssl://example.com --check          # SSL certificate details"
+
+  - name: 'DNS Troubleshooting'
+    scenario: 'Debug DNS propagation or resolution issues'
+    steps:
+      - "reveal domain://example.com --check       # Includes propagation check"
+      - "reveal domain://example.com/dns           # View all records"
+      - "reveal domain://example.com/dns --format json | jq '.records.a'  # Extract specific records"
+
+  - name: 'Domain Migration Validation'
+    scenario: 'Verify DNS changes have propagated correctly'
+    steps:
+      - "reveal domain://example.com/dns           # Check current DNS"
+      - "reveal domain://example.com --check       # Validate propagation"
+      - "reveal ssl://example.com --check          # Ensure SSL still valid"
+
+  - name: 'Domain + SSL Audit'
+    scenario: 'Comprehensive domain and SSL health check'
+    steps:
+      - "reveal domain://example.com --check         # Domain health"
+      - "reveal ssl://example.com --check --advanced # SSL deep check"
+      - "reveal domain://example.com/dns             # DNS records"
+
+try_now:
+  - "reveal domain://google.com"
+  - "reveal domain://google.com/dns"
+  - "reveal domain://google.com --check"
+
+anti_patterns:
+  - bad: "Using domain:// for SSL certificate inspection"
+    good: "Use ssl:// adapter for SSL-specific operations"
+    why: "domain:// provides overview, ssl:// provides deep SSL inspection"
+
+  - bad: "reveal domain:// --check example.com"
+    good: "reveal domain://example.com --check"
+    why: "Domain must be in URI, not as argument"
+
+  - bad: "dig example.com ANY"
+    good: "reveal domain://example.com/dns"
+    why: "Structured output, multiple record types, progressive disclosure"
+
+  - bad: "whois example.com | grep -i expire"
+    good: "reveal domain://example.com/whois"
+    why: "Structured WHOIS data with key fields extracted (when implemented)"
+
+notes:
+  - 'Requires dnspython for DNS operations: pip install dnspython'
+  - 'WHOIS data not yet implemented (requires python-whois)'
+  - 'DNS propagation checks require multiple nameserver queries (slower)'
+  - 'For SSL-specific work, prefer ssl:// adapter directly'
+  - 'domain:// focuses on DNS and registration; ssl:// focuses on certificates'
+  - 'Health checks validate DNS resolution, nameserver response, propagation, and SSL'
+
+output_formats:
+  - text
+  - json
+
+see_also:
+  - 'reveal help://ssl - SSL certificate inspection'
+  - 'reveal ssl://example.com --check - SSL certificate health'
+  - 'reveal help://nginx - Nginx configuration inspection'

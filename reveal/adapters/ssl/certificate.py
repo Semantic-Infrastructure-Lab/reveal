@@ -289,7 +289,8 @@ class SSLFetcher:
 
 
 def check_ssl_health(
-    host: str, port: int = 443, warn_days: int = 30, critical_days: int = 7
+    host: str, port: int = 443, warn_days: int = 30, critical_days: int = 7,
+    advanced: bool = False
 ) -> Dict[str, Any]:
     """Run SSL health checks on a host.
 
@@ -298,6 +299,7 @@ def check_ssl_health(
         port: Port number
         warn_days: Days until expiry to trigger warning
         critical_days: Days until expiry to trigger critical
+        advanced: Include advanced checks (TLS version, key strength, etc.)
 
     Returns:
         Health check result dict
@@ -397,13 +399,21 @@ def check_ssl_health(
                 })
                 overall_status = 'failure'
 
+        # Advanced checks (only if requested)
+        if advanced:
+            advanced_checks = _run_advanced_checks(host, port, leaf)
+            checks.extend(advanced_checks['checks'])
+            # Update overall status if advanced checks fail
+            if advanced_checks['has_failures'] and overall_status == 'pass':
+                overall_status = 'warning'
+
         # Summary
         passed = sum(1 for c in checks if c['status'] == 'pass')
         warnings = sum(1 for c in checks if c['status'] == 'warning')
         failures = sum(1 for c in checks if c['status'] == 'failure')
 
-        return {
-            'type': 'ssl_check',
+        result = {
+            'type': 'ssl_check_advanced' if advanced else 'ssl_check',
             'host': host,
             'port': port,
             'status': overall_status,
@@ -418,9 +428,15 @@ def check_ssl_health(
             'exit_code': 0 if overall_status == 'pass' else (1 if overall_status == 'warning' else 2),
         }
 
+        # Add next steps based on results
+        if advanced:
+            result['next_steps'] = _generate_remediation_steps(checks, host)
+
+        return result
+
     except Exception as e:
         return {
-            'type': 'ssl_check',
+            'type': 'ssl_check_advanced' if advanced else 'ssl_check',
             'host': host,
             'port': port,
             'status': 'failure',
@@ -441,3 +457,202 @@ def check_ssl_health(
             },
             'exit_code': 2,
         }
+
+
+def _run_advanced_checks(host: str, port: int, cert: CertificateInfo) -> Dict[str, Any]:
+    """Run advanced SSL health checks.
+
+    Args:
+        host: Hostname
+        port: Port number
+        cert: Certificate info
+
+    Returns:
+        Dict with checks list and has_failures flag
+    """
+    checks = []
+    has_failures = False
+
+    # Check 1: TLS protocol version
+    try:
+        context = ssl.create_default_context()
+        with socket.create_connection((host, port), timeout=10) as sock:
+            with context.wrap_socket(sock, server_hostname=host) as ssock:
+                tls_version = ssock.version()
+
+                # TLS 1.2+ is required, TLS 1.3 is ideal
+                if tls_version in ('TLSv1.3',):
+                    status = 'pass'
+                    message = f'Using {tls_version} (recommended)'
+                elif tls_version in ('TLSv1.2',):
+                    status = 'pass'
+                    message = f'Using {tls_version} (acceptable)'
+                else:
+                    status = 'warning'
+                    message = f'Using {tls_version} (outdated, upgrade to TLS 1.2+)'
+                    has_failures = True
+
+                checks.append({
+                    'name': 'tls_version',
+                    'status': status,
+                    'value': tls_version,
+                    'threshold': 'TLS 1.2+',
+                    'message': message,
+                    'severity': 'medium',
+                })
+    except Exception as e:
+        checks.append({
+            'name': 'tls_version',
+            'status': 'warning',
+            'value': 'Unknown',
+            'threshold': 'TLS 1.2+',
+            'message': f'Could not determine TLS version: {e}',
+            'severity': 'low',
+        })
+
+    # Check 2: Certificate type (wildcard, self-signed)
+    is_wildcard = any(san.startswith('*.') for san in cert.san)
+    is_self_signed = cert.subject.get('commonName') == cert.issuer.get('commonName')
+
+    if is_self_signed:
+        checks.append({
+            'name': 'self_signed',
+            'status': 'warning',
+            'value': 'Self-signed',
+            'threshold': 'CA-signed',
+            'message': 'Certificate is self-signed (not trusted by browsers)',
+            'severity': 'high',
+        })
+        has_failures = True
+    else:
+        checks.append({
+            'name': 'self_signed',
+            'status': 'pass',
+            'value': 'CA-signed',
+            'threshold': 'CA-signed',
+            'message': 'Certificate signed by trusted CA',
+            'severity': 'info',
+        })
+
+    # Check 3: Wildcard certificate detection
+    if is_wildcard:
+        checks.append({
+            'name': 'certificate_type',
+            'status': 'info',
+            'value': 'Wildcard',
+            'threshold': 'N/A',
+            'message': f'Wildcard certificate (covers *.{cert.common_name.lstrip("*.")})',
+            'severity': 'info',
+        })
+    else:
+        checks.append({
+            'name': 'certificate_type',
+            'status': 'info',
+            'value': 'Single domain',
+            'threshold': 'N/A',
+            'message': f'Single domain certificate ({len(cert.san)} SANs)',
+            'severity': 'info',
+        })
+
+    # Check 4: Issuer type (Let's Encrypt detection)
+    issuer_name = cert.issuer_name.lower()
+    if "let's encrypt" in issuer_name:
+        checks.append({
+            'name': 'issuer_type',
+            'status': 'info',
+            'value': "Let's Encrypt",
+            'threshold': 'N/A',
+            'message': "Let's Encrypt certificate (auto-renews every 90 days)",
+            'severity': 'info',
+        })
+    else:
+        checks.append({
+            'name': 'issuer_type',
+            'status': 'info',
+            'value': cert.issuer_name,
+            'threshold': 'N/A',
+            'message': f'Issued by {cert.issuer_name}',
+            'severity': 'info',
+        })
+
+    # Check 5: Key strength (requires connecting again to get key info)
+    # Note: Python's ssl module doesn't easily expose key size without PyOpenSSL
+    # We'll add a basic check based on signature algorithm
+    sig_algo = cert.signature_algorithm or ''
+    if 'sha256' in sig_algo.lower() or 'sha384' in sig_algo.lower() or 'sha512' in sig_algo.lower():
+        checks.append({
+            'name': 'signature_algorithm',
+            'status': 'pass',
+            'value': sig_algo,
+            'threshold': 'SHA-256+',
+            'message': f'Using secure signature algorithm ({sig_algo})',
+            'severity': 'medium',
+        })
+    elif 'sha1' in sig_algo.lower():
+        checks.append({
+            'name': 'signature_algorithm',
+            'status': 'warning',
+            'value': sig_algo,
+            'threshold': 'SHA-256+',
+            'message': f'Using weak signature algorithm ({sig_algo}), should upgrade to SHA-256+',
+            'severity': 'medium',
+        })
+        has_failures = True
+    else:
+        checks.append({
+            'name': 'signature_algorithm',
+            'status': 'info',
+            'value': sig_algo or 'Unknown',
+            'threshold': 'SHA-256+',
+            'message': f'Signature algorithm: {sig_algo or "Unknown"}',
+            'severity': 'low',
+        })
+
+    return {
+        'checks': checks,
+        'has_failures': has_failures,
+    }
+
+
+def _generate_remediation_steps(checks: List[Dict[str, Any]], host: str) -> List[str]:
+    """Generate remediation steps based on check results.
+
+    Args:
+        checks: List of check results
+        host: Hostname
+
+    Returns:
+        List of remediation steps
+    """
+    steps = []
+
+    # Check for specific issues
+    has_expiry_issue = any(c['name'] == 'certificate_expiry' and c['status'] in ('failure', 'warning') for c in checks)
+    has_chain_issue = any(c['name'] == 'chain_verification' and c['status'] != 'pass' for c in checks)
+    has_hostname_issue = any(c['name'] == 'hostname_match' and c['status'] == 'failure' for c in checks)
+    is_self_signed = any(c['name'] == 'self_signed' and c['value'] == 'Self-signed' for c in checks)
+    has_tls_issue = any(c['name'] == 'tls_version' and c['status'] == 'warning' for c in checks)
+
+    if has_expiry_issue:
+        steps.append("Renew certificate before expiry (use certbot for Let's Encrypt)")
+
+    if has_chain_issue:
+        steps.append("Verify certificate chain includes intermediate certificates")
+        steps.append("Check server configuration includes full certificate chain")
+
+    if has_hostname_issue:
+        steps.append(f"Verify certificate includes {host} in SANs")
+        steps.append("Consider obtaining a new certificate with correct hostname")
+
+    if is_self_signed:
+        steps.append("Replace self-signed certificate with CA-signed certificate (e.g., Let's Encrypt)")
+
+    if has_tls_issue:
+        steps.append("Upgrade server to support TLS 1.2+ (disable TLS 1.0/1.1)")
+
+    # Add general inspection steps
+    if steps:
+        steps.append(f"View full certificate: reveal ssl://{host}")
+        steps.append(f"Check certificate chain: reveal ssl://{host}/chain")
+
+    return steps

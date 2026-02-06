@@ -300,6 +300,10 @@ def _add_ssl_options(parser: argparse.ArgumentParser) -> None:
                         help='Show aggregated summary instead of full details')
     parser.add_argument('--expiring-within', type=str, metavar='DAYS',
                         help='Only show certificates expiring within N days (e.g., 7, 30)')
+    parser.add_argument('--advanced', action='store_true',
+                        help='Run advanced checks with --check (TLS version, self-signed detection, issuer type)')
+    parser.add_argument('--validate-nginx', action='store_true',
+                        help='Cross-validate SSL certificates against nginx configuration')
 
 
 def _add_extraction_options(parser: argparse.ArgumentParser) -> None:

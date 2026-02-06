@@ -19,6 +19,16 @@ examples:
     description: 'Issuer organization details'
   - uri: 'ssl://example.com --check'
     description: 'Run health checks (expiry, chain, hostname)'
+  - uri: 'ssl://example.com --check --advanced'
+    description: 'Advanced checks (TLS version, key strength, issuer type, self-signed detection)'
+
+  # Batch checks via stdin (Unix composable)
+  - uri: 'cat domains.txt | sed ''s/^/ssl:\/\//'' | reveal --stdin --check'
+    description: 'Batch check domains from file via stdin'
+  - uri: 'echo -e "ssl://ex1.com\nssl://ex2.com" | reveal --stdin --check'
+    description: 'Batch check from stdin with newline-separated URIs'
+  - uri: 'cat domains.txt | sed ''s/^/ssl:\/\//'' | reveal --stdin --check --only-failures'
+    description: 'Show only failing/warning certs from stdin'
 
   # Nginx SSL audit - two approaches (both fully supported)
   # Approach 1: Direct nginx syntax (best for simple audits)
@@ -28,6 +38,8 @@ examples:
     description: 'Quick summary (counts only, no per-domain details)'
   - uri: 'ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures'
     description: 'Show only failing/warning certs'
+  - uri: 'ssl://nginx:///etc/nginx/conf.d/*.conf --check --validate-nginx'
+    description: 'Cross-validate nginx SSL config matches actual certificates'
 
   # Approach 2: Composable pipeline (best when filtering between steps)
   - uri: 'reveal nginx.conf --extract domains'
@@ -55,9 +67,12 @@ elements:
 
 flags:
   --check: 'Run health checks (expiry, chain validity, hostname match)'
+  --advanced: 'Run advanced checks with --check (TLS version, key strength, issuer type, self-signed)'
   --only-failures: 'Hide healthy certs, show only warnings and failures (batch mode)'
   --summary: 'Show aggregated counts instead of per-domain details (batch mode)'
   --expiring-within: 'Filter to certs expiring within N days (e.g., --expiring-within=30)'
+  --validate-nginx: 'Cross-validate nginx SSL config against actual certificates (nginx mode only)'
+  --stdin: 'Read URIs from stdin for batch processing (one URI per line)'
 
 features:
   - 'Zero dependencies (uses Python ssl module)'
@@ -80,15 +95,39 @@ workflows:
   - name: 'Certificate Health Check'
     scenario: 'Need to quickly verify SSL certificate status'
     steps:
-      - "reveal ssl://example.com            # Overview"
-      - "reveal ssl://example.com --check    # Full health check"
-      - "reveal ssl://example.com/san        # If checking domain coverage"
+      - "reveal ssl://example.com                       # Overview"
+      - "reveal ssl://example.com --check               # Full health check"
+      - "reveal ssl://example.com --check --advanced    # Deep inspection (TLS version, key strength, etc.)"
+      - "reveal ssl://example.com/san                   # If checking domain coverage"
+
   - name: 'Debug SSL Issues'
     scenario: 'Certificate warnings in browser or app'
     steps:
-      - "reveal ssl://example.com --check    # Identify the issue"
-      - "reveal ssl://example.com/chain      # Check chain validity"
-      - "reveal ssl://example.com/issuer     # Verify issuer"
+      - "reveal ssl://example.com --check --advanced # Comprehensive diagnosis"
+      - "reveal ssl://example.com/chain              # Check chain validity"
+      - "reveal ssl://example.com/issuer             # Verify issuer"
+
+  - name: 'Bulk SSL Health Check'
+    scenario: 'Check SSL certificates for multiple domains from various sources'
+    steps:
+      - "cat domains.txt | sed 's/^/ssl:\/\//' | reveal --stdin --check  # From file via stdin"
+      - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check            # From nginx"
+      - "cat domains.txt | sed 's/^/ssl:\/\//' | reveal --stdin --check --only-failures  # Filter to problems"
+      - "reveal ssl://failed-domain.com --check --advanced                # Deep dive on failures"
+
+  - name: 'SSL Configuration Validation'
+    scenario: 'Validate nginx SSL config matches actual certificates (find mismatches)'
+    steps:
+      - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --validate-nginx  # Cross-validate"
+      - "reveal ssl://domain-with-issues.com --check --advanced                  # Inspect specific issue"
+      - "reveal nginx:///etc/nginx/conf.d/domain.conf                            # Check nginx config"
+
+  - name: 'Monitor Certificate Expiry'
+    scenario: 'Find certificates expiring soon across infrastructure'
+    steps:
+      - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --warn-days 60  # Check all"
+      - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures # Show problems"
+      - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --summary       # Quick counts"
   - name: 'Nginx SSL Audit (Simple)'
     scenario: 'Quick audit of SSL certificates from nginx configuration'
     steps:
@@ -112,12 +151,22 @@ anti_patterns:
   - bad: "openssl s_client -connect example.com:443 | openssl x509 -text"
     good: "reveal ssl://example.com"
     why: "10x fewer tokens, structured output, health status at a glance"
+
   - bad: "curl -vvv https://example.com 2>&1 | grep -i ssl"
-    good: "reveal ssl://example.com --check"
-    why: "Clear pass/fail status, actionable exit codes for scripts"
+    good: "reveal ssl://example.com --check --advanced"
+    why: "Clear pass/fail status, TLS version check, actionable exit codes"
+
+  - bad: "for domain in $(cat domains.txt); do openssl s_client ...; done"
+    good: "cat domains.txt | sed 's/^/ssl:\/\//' | reveal --stdin --check"
+    why: "Batch mode via stdin is 10x faster and provides aggregated summary"
+
   - bad: "for domain in $(cat domains.txt); do reveal ssl://$domain --check; done"
-    good: "reveal @domains.txt --check --summary"
+    good: "cat domains.txt | sed 's/^/ssl:\/\//' | reveal --stdin --check --summary"
     why: "Batch processing with aggregation - one command, proper summary"
+
+  - bad: "Manually comparing nginx cert paths with actual certificates"
+    good: "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --validate-nginx"
+    why: "Automatic cross-validation detects path mismatches and config issues"
 
 notes:
   - 'Uses Python ssl module (no external dependencies)'

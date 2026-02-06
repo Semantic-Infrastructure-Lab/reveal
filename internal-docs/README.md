@@ -37,6 +37,7 @@ internal-docs/
 
 | Document | Description | Date |
 |----------|-------------|------|
+| [ADAPTER_UX_CONSISTENCY_2026-02-06.md](planning/ADAPTER_UX_CONSISTENCY_2026-02-06.md) | **New** - Long-term roadmap for adapter consistency (3-tier model, 5 phases) | 2026-02-06 |
 | [TECHNICAL_DEBT_RESOLUTION.md](planning/TECHNICAL_DEBT_RESOLUTION.md) | TreeSitter architecture audit response (~90% complete) | 2026-01-13 |
 
 ### Refactoring

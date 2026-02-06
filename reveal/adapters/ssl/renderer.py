@@ -242,7 +242,13 @@ class SSLRenderer(TypeDispatchRenderer):
                 print(f"  \u2022 {check['name']}: {check['message']}")
             print()
 
-        print(f"Exit code: {result['exit_code']}")
+        # Show next steps if available
+        if result.get('next_steps'):
+            print("\nNext Steps:")
+            for step in result['next_steps']:
+                print(f"  • {step}")
+
+        print(f"\nExit code: {result['exit_code']}")
 
     @staticmethod
     def _filter_results(result: dict, only_failures: bool = False,
@@ -368,6 +374,60 @@ class SSLRenderer(TypeDispatchRenderer):
                 host = r['host']
                 days = r.get('certificate', {}).get('days_until_expiry', '?')
                 print(f"  {host}: {days} days")
+            print()
+
+        # Show next steps if available
+        if result.get('next_steps'):
+            print("Next Steps:")
+            for step in result['next_steps']:
+                print(f"  • {step}")
+            print()
+
+        print(f"Exit code: {result['exit_code']}")
+
+    @staticmethod
+    def _render_ssl_nginx_validation(result: dict) -> None:
+        """Render nginx SSL validation results."""
+        if 'error' in result:
+            print(f"\nError: {result['error']}")
+            return
+
+        source = result.get('source', 'unknown')
+        status = result['status']
+        status_icon = '\u2705' if status == 'pass' else '\u274c'
+
+        print(f"\nSSL/Nginx Configuration Validation: {source}")
+        print(f"Status: {status_icon} {status.upper()}")
+
+        summary = result['summary']
+        print(f"\nDomains Validated: {result['domains_validated']}")
+        print(f"Summary: {summary['passed']} passed, {summary['failed']} failed")
+        print()
+
+        # Show failures
+        failures = [r for r in result['results'] if r['status'] == 'failure']
+        if failures:
+            print("\u274c Failed Validations:")
+            for r in failures:
+                print(f"\n  Domain: {r['domain']}")
+                for issue in r['issues']:
+                    severity_icon = '\u274c' if issue['severity'] == 'critical' else '\u26a0\ufe0f'
+                    print(f"    {severity_icon} {issue['type']}: {issue['message']}")
+            print()
+
+        # Show passes if no failures
+        if not failures:
+            passes = [r for r in result['results'] if r['status'] == 'pass']
+            print("\u2705 All Validations Passed:")
+            for r in passes:
+                print(f"  • {r['domain']}")
+            print()
+
+        # Show next steps
+        if result.get('next_steps'):
+            print("Remediation Steps:")
+            for step in result['next_steps']:
+                print(f"  • {step}")
             print()
 
         print(f"Exit code: {result['exit_code']}")

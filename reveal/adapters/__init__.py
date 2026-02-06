@@ -14,6 +14,7 @@ from .env import EnvAdapter
 from .ast import AstAdapter
 from .claude import ClaudeAdapter
 from .diff import DiffAdapter
+from .domain import DomainAdapter
 from .help import HelpAdapter
 from .imports import ImportsAdapter
 from .json_adapter import JsonAdapter
@@ -47,6 +48,7 @@ __all__ = [
     'AstAdapter',
     'ClaudeAdapter',
     'DiffAdapter',
+    'DomainAdapter',
     'HelpAdapter',
     'ImportsAdapter',
     'JsonAdapter',

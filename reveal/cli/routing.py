@@ -214,16 +214,35 @@ def _handle_check_mode(adapter, renderer_class: type, args: 'Namespace') -> None
     if 'ignore' in sig.parameters and hasattr(args, 'ignore') and args.ignore:
         check_kwargs['ignore'] = args.ignore.split(',') if isinstance(args.ignore, str) else args.ignore
 
+    # Pass SSL-specific options (works with **kwargs adapters)
+    # Check signature only if not using **kwargs
+    has_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+
+    if has_kwargs or 'advanced' in sig.parameters:
+        if hasattr(args, 'advanced'):
+            check_kwargs['advanced'] = args.advanced
+
+    if has_kwargs or 'validate_nginx' in sig.parameters:
+        if hasattr(args, 'validate_nginx'):
+            check_kwargs['validate_nginx'] = args.validate_nginx
+
     result = adapter.check(**check_kwargs)
 
     # Render check results
     if hasattr(renderer_class, 'render_check'):
-        # Build render options from args
-        render_opts = {
-            'only_failures': getattr(args, 'only_failures', False),
-            'summary': getattr(args, 'summary', False),
-            'expiring_within': getattr(args, 'expiring_within', None),
-        }
+        # Build render options from args (only pass if renderer supports them)
+        import inspect
+        render_sig = inspect.signature(renderer_class.render_check)
+        render_opts = {}
+
+        # Check which SSL-specific options are supported
+        if 'only_failures' in render_sig.parameters and hasattr(args, 'only_failures'):
+            render_opts['only_failures'] = args.only_failures
+        if 'summary' in render_sig.parameters and hasattr(args, 'summary'):
+            render_opts['summary'] = args.summary
+        if 'expiring_within' in render_sig.parameters and hasattr(args, 'expiring_within'):
+            render_opts['expiring_within'] = args.expiring_within
+
         renderer_class.render_check(result, args.format, **render_opts)
     else:
         # Fallback to generic JSON rendering

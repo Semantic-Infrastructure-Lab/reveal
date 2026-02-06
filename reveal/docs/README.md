@@ -48,6 +48,7 @@ Comprehensive guides for users, developers, and AI agents.
 
 | Guide | Purpose |
 |-------|---------|
+| [ADAPTER_CONSISTENCY.md](ADAPTER_CONSISTENCY.md) | **New** - Adapter UX patterns and consistency |
 | [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) | Create custom adapters |
 | [ANALYZER_PATTERNS.md](ANALYZER_PATTERNS.md) | Analyzer development patterns |
 | [REVEAL_ADAPTER_GUIDE.md](REVEAL_ADAPTER_GUIDE.md) | Reference implementation |
