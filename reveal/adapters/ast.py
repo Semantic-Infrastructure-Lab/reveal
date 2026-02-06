@@ -381,10 +381,15 @@ class AstAdapter(ResourceAdapter):
         else:
             line_count = line_count or 0
 
+        # For imports, use 'content' as the name since they don't have a 'name' field
+        name = item.get('name', '')
+        if category == 'imports' and not name and 'content' in item:
+            name = item['content']
+
         element = {
             'file': file_path,
             'category': category,
-            'name': item.get('name', ''),
+            'name': name,
             'line': item.get('line', 0),
             'line_count': line_count,
             'signature': item.get('signature', ''),

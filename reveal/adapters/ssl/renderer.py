@@ -223,6 +223,7 @@ class SSLRenderer(TypeDispatchRenderer):
         failures = [c for c in checks if c['status'] == 'failure']
         warnings = [c for c in checks if c['status'] == 'warning']
         passes = [c for c in checks if c['status'] == 'pass']
+        infos = [c for c in checks if c['status'] == 'info']
 
         if failures:
             print("\u274c Failures:")
@@ -239,6 +240,12 @@ class SSLRenderer(TypeDispatchRenderer):
         if passes and not failures and not warnings:
             print("\u2705 All Checks Passed:")
             for check in passes:
+                print(f"  \u2022 {check['name']}: {check['message']}")
+            print()
+
+        if infos:
+            print("\u2139\ufe0f  Additional Information:")
+            for check in infos:
                 print(f"  \u2022 {check['name']}: {check['message']}")
             print()
 
