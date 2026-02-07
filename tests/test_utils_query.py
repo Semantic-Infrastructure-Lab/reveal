@@ -8,6 +8,9 @@ from reveal.utils.query import (
     QueryFilter,
     apply_filter,
     apply_filters,
+    parse_result_control,
+    apply_result_control,
+    ResultControl,
 )
 
 
@@ -267,3 +270,194 @@ class TestRealWorldScenarios:
         # Test with non-matching item (has draft)
         item_draft = {'draft': True, 'tags': ['docs'], 'category': 'user-guide'}
         assert not apply_filters(item_draft, filters)
+
+
+class TestNewOperators:
+    """Tests for new operators (!=, ~=, ..)."""
+
+    def test_not_equals_operator(self):
+        """Test != (not equals) operator."""
+        filters = parse_query_filters('decorator!=property')
+        assert len(filters) == 1
+        assert filters[0] == QueryFilter('decorator', '!=', 'property')
+
+        # Test matching (not equals)
+        item = {'decorator': 'cached'}
+        assert apply_filter(item, filters[0])
+
+        # Test non-matching (equals)
+        item_property = {'decorator': 'property'}
+        assert not apply_filter(item_property, filters[0])
+
+    def test_regex_operator(self):
+        """Test ~= (regex match) operator."""
+        filters = parse_query_filters('name~=^test_')
+        assert len(filters) == 1
+        assert filters[0] == QueryFilter('name', '~=', '^test_')
+
+        # Test matching
+        item = {'name': 'test_foo'}
+        assert apply_filter(item, filters[0])
+
+        # Test non-matching
+        item_no_match = {'name': 'foo_test'}
+        assert not apply_filter(item_no_match, filters[0])
+
+    def test_range_operator(self):
+        """Test .. (range) operator."""
+        filters = parse_query_filters('lines=50..200')
+        assert len(filters) == 1
+        assert filters[0] == QueryFilter('lines', '..', '50..200')
+
+        # Test within range
+        item = {'lines': 100}
+        assert apply_filter(item, filters[0])
+
+        # Test below range
+        item_below = {'lines': 30}
+        assert not apply_filter(item_below, filters[0])
+
+        # Test above range
+        item_above = {'lines': 300}
+        assert not apply_filter(item_above, filters[0])
+
+        # Test edge cases (inclusive)
+        item_min = {'lines': 50}
+        assert apply_filter(item_min, filters[0])
+
+        item_max = {'lines': 200}
+        assert apply_filter(item_max, filters[0])
+
+    def test_combined_new_operators(self):
+        """Test multiple new operators together."""
+        filters = parse_query_filters('decorator!=property&name~=^test_&lines=50..200')
+        assert len(filters) == 3
+
+        # Test matching item
+        item = {'decorator': 'cached', 'name': 'test_foo', 'lines': 100}
+        assert apply_filters(item, filters)
+
+        # Test non-matching (decorator)
+        item_fail = {'decorator': 'property', 'name': 'test_foo', 'lines': 100}
+        assert not apply_filters(item_fail, filters)
+
+
+class TestResultControl:
+    """Tests for result control (sort, limit, offset)."""
+
+    def test_parse_sort_ascending(self):
+        """Test parsing sort=field (ascending)."""
+        query, control = parse_result_control('lines>50&sort=complexity')
+        assert query == 'lines>50'
+        assert control.sort_field == 'complexity'
+        assert control.sort_descending is False
+
+    def test_parse_sort_descending(self):
+        """Test parsing sort=-field (descending)."""
+        query, control = parse_result_control('lines>50&sort=-complexity')
+        assert query == 'lines>50'
+        assert control.sort_field == 'complexity'
+        assert control.sort_descending is True
+
+    def test_parse_limit(self):
+        """Test parsing limit=N."""
+        query, control = parse_result_control('type=function&limit=20')
+        assert query == 'type=function'
+        assert control.limit == 20
+
+    def test_parse_offset(self):
+        """Test parsing offset=M."""
+        query, control = parse_result_control('type=function&offset=10')
+        assert query == 'type=function'
+        assert control.offset == 10
+
+    def test_parse_combined_control(self):
+        """Test parsing sort, limit, and offset together."""
+        query, control = parse_result_control('lines>50&sort=-complexity&limit=20&offset=5')
+        assert query == 'lines>50'
+        assert control.sort_field == 'complexity'
+        assert control.sort_descending is True
+        assert control.limit == 20
+        assert control.offset == 5
+
+    def test_apply_sort_ascending(self):
+        """Test applying ascending sort."""
+        items = [
+            {'name': 'a', 'value': 3},
+            {'name': 'b', 'value': 1},
+            {'name': 'c', 'value': 2}
+        ]
+        control = ResultControl(sort_field='value')
+        result = apply_result_control(items, control)
+
+        assert result[0]['value'] == 1
+        assert result[1]['value'] == 2
+        assert result[2]['value'] == 3
+
+    def test_apply_sort_descending(self):
+        """Test applying descending sort."""
+        items = [
+            {'name': 'a', 'value': 3},
+            {'name': 'b', 'value': 1},
+            {'name': 'c', 'value': 2}
+        ]
+        control = ResultControl(sort_field='value', sort_descending=True)
+        result = apply_result_control(items, control)
+
+        assert result[0]['value'] == 3
+        assert result[1]['value'] == 2
+        assert result[2]['value'] == 1
+
+    def test_apply_limit(self):
+        """Test applying limit."""
+        items = [{'id': i} for i in range(10)]
+        control = ResultControl(limit=3)
+        result = apply_result_control(items, control)
+
+        assert len(result) == 3
+        assert result[0]['id'] == 0
+        assert result[2]['id'] == 2
+
+    def test_apply_offset(self):
+        """Test applying offset."""
+        items = [{'id': i} for i in range(10)]
+        control = ResultControl(offset=5)
+        result = apply_result_control(items, control)
+
+        assert len(result) == 5
+        assert result[0]['id'] == 5
+        assert result[4]['id'] == 9
+
+    def test_apply_offset_and_limit(self):
+        """Test applying offset and limit together (pagination)."""
+        items = [{'id': i} for i in range(100)]
+        control = ResultControl(offset=10, limit=5)
+        result = apply_result_control(items, control)
+
+        assert len(result) == 5
+        assert result[0]['id'] == 10
+        assert result[4]['id'] == 14
+
+    def test_apply_sort_limit_offset(self):
+        """Test applying sort, limit, and offset together."""
+        items = [
+            {'name': 'item_a', 'score': 50},
+            {'name': 'item_b', 'score': 80},
+            {'name': 'item_c', 'score': 30},
+            {'name': 'item_d', 'score': 90},
+            {'name': 'item_e', 'score': 60}
+        ]
+        control = ResultControl(
+            sort_field='score',
+            sort_descending=True,
+            offset=1,
+            limit=2
+        )
+        result = apply_result_control(items, control)
+
+        # After sorting descending: 90, 80, 60, 50, 30
+        # After offset=1: 80, 60, 50, 30
+        # After limit=2: 80, 60
+        assert len(result) == 2
+        assert result[0]['score'] == 80
+        assert result[1]['score'] == 60
