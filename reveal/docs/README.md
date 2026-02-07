@@ -32,6 +32,7 @@ Comprehensive guides for users, developers, and AI agents.
 |-------|---------|
 | [QUICK_START.md](QUICK_START.md) | 5-minute introduction |
 | [RECIPES.md](RECIPES.md) | Task-based workflows and patterns |
+| [QUERY_PARAMETER_REFERENCE.md](QUERY_PARAMETER_REFERENCE.md) | **New** - Query parameters for all adapters |
 | [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) | Configuration options |
 | [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) | Complete codebase review workflows |
 
