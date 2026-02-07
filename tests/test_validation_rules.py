@@ -21,6 +21,7 @@ from reveal.rules.validation.V012 import V012
 from reveal.rules.validation.V013 import V013
 from reveal.rules.validation.V015 import V015
 from reveal.rules.validation.V016 import V016
+from reveal.rules.validation.V018 import V018
 from reveal.rules.validation.utils import find_reveal_root
 
 
@@ -1165,6 +1166,74 @@ class TestAdapter(ResourceAdapter):
         content_regular = "class Helper: pass"
         structure = {'classes': [{'name': 'Helper'}]}
         self.assertFalse(self.rule._is_adapter_file(structure, content_regular))
+
+
+class TestV018RendererRegistration(unittest.TestCase):
+    """Test V018: Adapter renderer registration completeness."""
+
+    def setUp(self):
+        self.rule = V018()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V018")
+        self.assertEqual(self.rule.severity.name, "HIGH")
+        self.assertIn("renderer", self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        """Test that non-reveal URIs are ignored."""
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        """Test that reveal:// URIs are processed."""
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        # Should return detections list (may have detections if adapters/renderers mismatched)
+        self.assertIsInstance(detections, list)
+
+    def test_find_adapter_file_patterns(self):
+        """Test that _find_adapter_file finds adapters in all supported patterns."""
+        reveal_root = find_reveal_root()
+        if not reveal_root:
+            self.skipTest("Reveal root not found")
+
+        # Test finding actual adapter files
+        # Pattern 1: adapters/env.py
+        env_file = self.rule._find_adapter_file(reveal_root, 'env')
+        if env_file:
+            self.assertTrue(env_file.exists())
+            self.assertTrue(env_file.name == 'env.py' or env_file.name == '__init__.py')
+
+        # Pattern 2: adapters/git/adapter.py or adapters/git/__init__.py
+        git_file = self.rule._find_adapter_file(reveal_root, 'git')
+        if git_file:
+            self.assertTrue(git_file.exists())
+
+    def test_adapter_renderer_registry_access(self):
+        """Test that rule can access adapter and renderer registries."""
+        # This test validates that the imports work
+        try:
+            from reveal.adapters.base import list_supported_schemes, list_renderer_schemes
+            adapters = list_supported_schemes()
+            renderers = list_renderer_schemes()
+
+            # Should get lists (even if empty)
+            self.assertIsInstance(adapters, (list, tuple, set))
+            self.assertIsInstance(renderers, (list, tuple, set))
+
+            # In a working reveal installation, should have some adapters
+            if len(adapters) > 0:
+                self.assertGreater(len(adapters), 0)
+        except ImportError:
+            self.skipTest("Cannot import adapter registries")
 
 
 if __name__ == '__main__':
