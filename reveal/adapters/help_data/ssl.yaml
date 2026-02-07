@@ -23,12 +23,12 @@ examples:
     description: 'Advanced checks (TLS version, key strength, issuer type, self-signed detection)'
 
   # Batch checks via stdin (Unix composable)
+  - uri: 'cat domains.txt | sed ''s/^/ssl:\/\//'' | reveal --stdin --batch --check'
+    description: 'Batch check with aggregated results (recommended)'
   - uri: 'cat domains.txt | sed ''s/^/ssl:\/\//'' | reveal --stdin --check'
-    description: 'Batch check domains from file via stdin'
-  - uri: 'echo -e "ssl://ex1.com\nssl://ex2.com" | reveal --stdin --check'
-    description: 'Batch check from stdin with newline-separated URIs'
-  - uri: 'cat domains.txt | sed ''s/^/ssl:\/\//'' | reveal --stdin --check --only-failures'
-    description: 'Show only failing/warning certs from stdin'
+    description: 'Legacy batch check (still supported)'
+  - uri: 'echo -e "ssl://ex1.com\nssl://ex2.com" | reveal --stdin --batch --check --only-failures'
+    description: 'Show only failing/warning certs in batch mode'
 
   # Nginx SSL audit - two approaches (both fully supported)
   # Approach 1: Direct nginx syntax (best for simple audits)
@@ -69,6 +69,7 @@ flags:
   --check: 'Run health checks (expiry, chain validity, hostname match)'
   --advanced: 'Run advanced checks with --check (TLS version, key strength, issuer type, self-signed) [Universal flag]'
   --only-failures: 'Hide healthy results, show only warnings and failures [Universal flag]'
+  --batch: 'Batch mode with aggregated results (works with --stdin) [Universal flag]'
   --summary: 'Show aggregated counts instead of per-domain details (batch mode)'
   --expiring-within: 'Filter to certs expiring within N days (e.g., --expiring-within=30)'
   --validate-nginx: 'Cross-validate nginx SSL config against actual certificates (nginx mode only)'

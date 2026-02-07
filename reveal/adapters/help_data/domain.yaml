@@ -33,11 +33,11 @@ examples:
     description: 'Show only problems (hide passed checks)'
 
   # Batch operations via stdin
-  - uri: 'cat domains.txt | sed ''s/^/domain:\/\//'' | reveal --stdin --check'
-    description: 'Batch domain health checks from file via stdin'
+  - uri: 'cat domains.txt | sed ''s/^/domain:\/\//'' | reveal --stdin --batch --check'
+    description: 'Batch domain health checks with aggregated results'
 
-  - uri: 'echo -e "domain://example.com\ndomain://google.com" | reveal --stdin --check'
-    description: 'Batch checks from stdin with newline-separated URIs'
+  - uri: 'echo -e "domain://example.com\ndomain://google.com" | reveal --stdin --batch --check --only-failures'
+    description: 'Batch checks showing only problems'
 
 elements:
   dns: 'DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)'
@@ -49,6 +49,7 @@ flags:
   --check: 'Run health checks (DNS resolution, propagation, SSL certificate)'
   --advanced: 'Run advanced checks with --check (enables deeper validation) [Universal flag]'
   --only-failures: 'Hide healthy results, show only warnings and failures [Universal flag]'
+  --batch: 'Batch mode with aggregated results (works with --stdin) [Universal flag]'
 
 features:
   - 'Progressive disclosure (overview → elements → health checks)'

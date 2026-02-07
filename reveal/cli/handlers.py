@@ -349,6 +349,7 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     Supports both file paths and URIs (scheme://resource).
     URIs are routed to the appropriate adapter handler.
 
+    When --batch is used, results are aggregated across all adapters.
     When --check is used with SSL URIs, results are aggregated and
     batch flags (--summary, --only-failures, --expiring-within) are applied.
     """
@@ -358,11 +359,13 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
 
     from .routing import handle_uri
 
-    # Check if we're doing batch SSL checks - need to aggregate results
-    is_ssl_batch_check = getattr(args, 'check', False)
+    # Check if we're in batch mode (explicit --batch or SSL batch checks)
+    is_batch_mode = getattr(args, 'batch', False)
+    is_ssl_batch_check = getattr(args, 'check', False) and not is_batch_mode
 
-    # Collect SSL check results for batch aggregation
+    # Collect results for batch aggregation
     ssl_check_results = []
+    batch_results = []
 
     # Read paths/URIs from stdin (one per line)
     for line in sys.stdin:
@@ -372,14 +375,20 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
 
         # Check if this is a URI (scheme://resource)
         if '://' in target:
-            # For SSL URIs with --check, collect results instead of rendering
+            # Generic batch mode - collect results from any adapter
+            if is_batch_mode:
+                result = _collect_batch_result(target, args)
+                batch_results.append(result)
+                continue
+
+            # Legacy SSL-specific batch mode for backward compatibility
             if is_ssl_batch_check and target.startswith('ssl://'):
                 result = _collect_ssl_check_result(target, args)
                 if result:
                     ssl_check_results.append(result)
                 continue
 
-            # Non-SSL URIs go through normal path
+            # Non-batch URIs go through normal path
             try:
                 handle_uri(target, None, args)
             except SystemExit as e:
@@ -405,7 +414,13 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
         if path.is_file():
             handle_file_func(str(path), None, args.meta, args.format, args)
 
-    # Render aggregated SSL batch results if we collected any
+    # Render aggregated batch results
+    if batch_results:
+        _render_batch_results(batch_results, args)
+        # _render_batch_results handles exit
+        return
+
+    # Render aggregated SSL batch results if we collected any (legacy path)
     if ssl_check_results:
         _render_ssl_batch_results(ssl_check_results, args)
 
@@ -490,6 +505,167 @@ def _render_ssl_batch_results(results: list, args: 'Namespace') -> None:
         summary=summary,
         expiring_within=expiring_within
     )
+
+
+def _collect_batch_result(uri: str, args: 'Namespace') -> dict:
+    """Collect check result from any adapter without rendering.
+
+    Args:
+        uri: URI to check (ssl://domain.com, domain://example.com, etc.)
+        args: CLI arguments
+
+    Returns:
+        Result dict with status and data, or error result
+    """
+    from ..adapters.base import get_adapter_class
+    from .routing import handle_uri
+    import io
+    import sys
+
+    try:
+        # Parse scheme from URI
+        if '://' not in uri:
+            return {
+                'uri': uri,
+                'status': 'error',
+                'error': 'Invalid URI format (missing scheme://)',
+            }
+
+        scheme = uri.split('://')[0]
+        adapter_class = get_adapter_class(scheme)
+
+        if not adapter_class:
+            return {
+                'uri': uri,
+                'status': 'error',
+                'error': f'No adapter found for scheme: {scheme}',
+            }
+
+        # Initialize adapter
+        adapter = adapter_class(uri)
+
+        # If --check flag and adapter has check method, use it
+        if getattr(args, 'check', False) and hasattr(adapter, 'check'):
+            result = adapter.check(
+                advanced=getattr(args, 'advanced', False),
+                only_failures=getattr(args, 'only_failures', False),
+            )
+            return {
+                'uri': uri,
+                'scheme': scheme,
+                'status': result.get('status', 'unknown'),
+                'data': result,
+            }
+
+        # Otherwise get structure
+        result = adapter.get_structure()
+        return {
+            'uri': uri,
+            'scheme': scheme,
+            'status': 'success',
+            'data': result,
+        }
+
+    except Exception as e:
+        return {
+            'uri': uri,
+            'scheme': scheme if '://' in uri else 'unknown',
+            'status': 'error',
+            'error': str(e),
+        }
+
+
+def _render_batch_results(results: list, args: 'Namespace') -> None:
+    """Render collected batch results with aggregation.
+
+    Args:
+        results: List of individual results from different adapters
+        args: CLI arguments with batch flags
+    """
+    import json
+
+    # Aggregate stats
+    total = len(results)
+    successful = sum(1 for r in results if r['status'] in ('success', 'pass'))
+    warnings = sum(1 for r in results if r['status'] == 'warning')
+    failures = sum(1 for r in results if r['status'] in ('failure', 'error'))
+
+    # Group by scheme for multi-adapter batches
+    by_scheme = {}
+    for result in results:
+        scheme = result.get('scheme', 'unknown')
+        if scheme not in by_scheme:
+            by_scheme[scheme] = []
+        by_scheme[scheme].append(result)
+
+    # Filter if only_failures requested
+    display_results = results
+    if getattr(args, 'only_failures', False):
+        display_results = [r for r in results if r['status'] in ('failure', 'error', 'warning')]
+
+    # Overall status
+    overall_status = 'pass' if failures == 0 and warnings == 0 else (
+        'warning' if failures == 0 else 'failure'
+    )
+
+    # Build batch output
+    batch_result = {
+        'type': 'batch_check',
+        'total': total,
+        'status': overall_status,
+        'summary': {
+            'successful': successful,
+            'warnings': warnings,
+            'failures': failures,
+        },
+        'adapters': list(by_scheme.keys()),
+        'results': display_results,
+    }
+
+    # Render based on format
+    if args.format == 'json':
+        print(json.dumps(batch_result, indent=2))
+    else:
+        # Text format
+        print(f"\n{'='*60}")
+        print(f"BATCH CHECK RESULTS")
+        print(f"{'='*60}")
+        print(f"Total URIs: {total}")
+        print(f"Successful: {successful} ✓")
+        if warnings > 0:
+            print(f"Warnings: {warnings} ⚠")
+        if failures > 0:
+            print(f"Failures: {failures} ✗")
+        print(f"Overall Status: {overall_status.upper()}")
+
+        if len(by_scheme) > 1:
+            print(f"\nAdapters used: {', '.join(by_scheme.keys())}")
+
+        print(f"{'='*60}\n")
+
+        # Show individual results if not summary-only
+        if display_results:
+            for result in display_results:
+                uri = result['uri']
+                status = result['status']
+
+                # Status indicator
+                if status in ('success', 'pass'):
+                    indicator = '✓'
+                elif status == 'warning':
+                    indicator = '⚠'
+                else:
+                    indicator = '✗'
+
+                print(f"{indicator} {uri}: {status.upper()}")
+
+                # Show error details
+                if 'error' in result:
+                    print(f"  Error: {result['error']}")
+
+    # Exit with appropriate code
+    exit_code = 0 if failures == 0 else (1 if warnings > 0 else 2)
+    sys.exit(exit_code)
 
 
 def _extract_decorators_from_file(file_path: str):

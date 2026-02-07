@@ -41,6 +41,7 @@ flags:
   --check: 'Run health checks with pass/warn/fail thresholds'
   --advanced: 'Run advanced checks with --check (reserved for future enhanced checks) [Universal flag]'
   --only-failures: 'Hide passed checks, show only warnings and failures [Universal flag]'
+  --batch: 'Batch mode with aggregated results (works with --stdin) [Universal flag]'
 
 features:
   - 'DBA health snapshot (~100 tokens vs 5000+ for raw SQL)'

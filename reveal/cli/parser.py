@@ -104,6 +104,11 @@ def _build_adapter_examples() -> str:
   reveal domain://example.com --check --advanced     # Domain + DNS validation
   reveal mysql://localhost --check --only-failures   # Show only MySQL problems
 
+  # Batch processing (works with any adapter)
+  cat domains.txt | reveal --stdin --batch --check   # Batch health checks
+  echo -e "ssl://a.com\\nssl://b.com" | reveal --stdin --batch --check --only-failures
+  cat mixed-uris.txt | reveal --stdin --batch --format=json  # Mix SSL, domain, mysql
+
 File-type specific features:
   • Markdown: --links, --code, --frontmatter (extract links/code/metadata)
   • HTML: --metadata, --semantic, --scripts, --styles (extract SEO/elements/scripts)
@@ -300,13 +305,15 @@ def _add_schema_validation_options(parser: argparse.ArgumentParser) -> None:
 def _add_universal_operation_flags(parser: argparse.ArgumentParser) -> None:
     """Add universal operation flags that work across all adapters.
 
-    These flags provide consistent behavior for health checks and filtering
-    across all adapters that support validation (--check).
+    These flags provide consistent behavior for health checks, filtering,
+    and batch processing across all adapters.
     """
     parser.add_argument('--advanced', action='store_true',
                         help='Run advanced checks with --check (enables deeper validation)')
     parser.add_argument('--only-failures', action='store_true',
                         help='Only show failed/warning checks (hide healthy results)')
+    parser.add_argument('--batch', action='store_true',
+                        help='Batch mode: process multiple URIs from stdin with aggregated results')
 
 
 def _add_ssl_options(parser: argparse.ArgumentParser) -> None:
