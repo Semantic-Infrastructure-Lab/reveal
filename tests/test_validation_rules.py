@@ -17,6 +17,10 @@ from reveal.rules.validation.V007 import V007
 from reveal.rules.validation.V008 import V008
 from reveal.rules.validation.V009 import V009
 from reveal.rules.validation.V011 import V011
+from reveal.rules.validation.V012 import V012
+from reveal.rules.validation.V013 import V013
+from reveal.rules.validation.V015 import V015
+from reveal.rules.validation.V016 import V016
 from reveal.rules.validation.utils import find_reveal_root
 
 
@@ -838,6 +842,329 @@ class TestValidationRulesIntegration(unittest.TestCase):
                                f"Rule {rule.code} missing file_patterns")
             self.assertIsInstance(rule.file_patterns, list,
                                 f"Rule {rule.code} file_patterns should be list")
+
+
+class TestV012LanguageCount(unittest.TestCase):
+    """Test V012: Language count accuracy in documentation."""
+
+    def setUp(self):
+        self.rule = V012()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V012")
+        self.assertEqual(self.rule.severity.name, "MEDIUM")
+        self.assertIn("language count", self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        """Test that non-reveal URIs are ignored."""
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        """Test that reveal:// URIs are processed."""
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        # Should return detections list (may have detections if counts mismatch)
+        self.assertIsInstance(detections, list)
+
+    def test_count_registered_languages(self):
+        """Test that _count_registered_languages returns valid count."""
+        count = self.rule._count_registered_languages()
+        # Should return a number or None
+        if count is not None:
+            self.assertIsInstance(count, int)
+            self.assertGreater(count, 0)
+
+    def test_extract_language_count_patterns(self):
+        """Test that all language count patterns are detected."""
+        # Create test README content
+        readme_content = """
+# Reveal
+
+Zero config. 38 languages built-in.
+
+## Features
+
+**Built-in (40):**
+- Python, JavaScript, Ruby...
+
+Supports 42 languages built-in for maximum compatibility.
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write(readme_content)
+            readme_path = Path(f.name)
+
+        try:
+            claims = self.rule._extract_language_count_from_readme(readme_path)
+            # Should find all 3 claims
+            self.assertGreaterEqual(len(claims), 3)
+            # Check that we found different counts
+            counts = [count for _, count in claims]
+            self.assertIn(38, counts)
+            self.assertIn(40, counts)
+            self.assertIn(42, counts)
+        finally:
+            readme_path.unlink()
+
+
+class TestV013AdapterCount(unittest.TestCase):
+    """Test V013: Adapter count accuracy in documentation."""
+
+    def setUp(self):
+        self.rule = V013()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V013")
+        self.assertEqual(self.rule.severity.name, "MEDIUM")
+        self.assertIn("adapter count", self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        """Test that non-reveal URIs are ignored."""
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        """Test that reveal:// URIs are processed."""
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        # Should return detections list
+        self.assertIsInstance(detections, list)
+
+    def test_count_registered_adapters(self):
+        """Test that _count_registered_adapters returns valid count."""
+        count = self.rule._count_registered_adapters()
+        # Should return a number or None
+        if count is not None:
+            self.assertIsInstance(count, int)
+            self.assertGreater(count, 0)
+
+    def test_extract_adapter_count_patterns(self):
+        """Test that adapter count patterns are detected."""
+        # Create test README content
+        readme_content = """
+# Reveal
+
+**10 Built-in Adapters:**
+
+Supports (38 languages, 12 adapters).
+
+Currently 14 adapters available.
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write(readme_content)
+            readme_path = Path(f.name)
+
+        try:
+            claims = self.rule._extract_adapter_count_from_readme(readme_path)
+            # Should find all adapter count claims
+            self.assertGreaterEqual(len(claims), 3)
+            # Check that we found different counts
+            counts = [count for _, count in claims]
+            self.assertIn(10, counts)
+            self.assertIn(12, counts)
+            self.assertIn(14, counts)
+        finally:
+            readme_path.unlink()
+
+
+class TestV015RulesCount(unittest.TestCase):
+    """Test V015: Rules count accuracy in documentation."""
+
+    def setUp(self):
+        self.rule = V015()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V015")
+        self.assertEqual(self.rule.severity.name, "MEDIUM")
+        self.assertIn("rules count", self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        """Test that non-reveal URIs are ignored."""
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        """Test that reveal:// URIs are processed."""
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        # Should return detections list
+        self.assertIsInstance(detections, list)
+
+    def test_count_registered_rules(self):
+        """Test that _count_registered_rules returns valid count."""
+        count = self.rule._count_registered_rules()
+        # Should return a number or None
+        if count is not None:
+            self.assertIsInstance(count, int)
+            self.assertGreater(count, 0)
+
+    def test_extract_rules_count_patterns(self):
+        """Test that rules count patterns (exact and minimum) are detected."""
+        # Create test README content
+        readme_content = """
+# Reveal
+
+Includes 57 built-in rules for quality checks.
+
+At least 50+ built-in rules available.
+
+Quality: 60 Built-In Rules
+"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write(readme_content)
+            readme_path = Path(f.name)
+
+        try:
+            claims = self.rule._extract_rules_count_from_readme(readme_path)
+            # Should find both exact and minimum claims
+            self.assertGreaterEqual(len(claims), 2)
+
+            # Check exact count claim
+            exact_claims = [(line, count) for line, count, is_min in claims if not is_min]
+            self.assertGreater(len(exact_claims), 0)
+
+            # Check minimum count claim
+            min_claims = [(line, count) for line, count, is_min in claims if is_min]
+            self.assertGreater(len(min_claims), 0)
+
+            # Verify 50+ is detected as minimum
+            min_counts = [count for _, count, is_min in claims if is_min]
+            self.assertIn(50, min_counts)
+        finally:
+            readme_path.unlink()
+
+
+class TestV016AdapterHelp(unittest.TestCase):
+    """Test V016: Adapter help completeness validation."""
+
+    def setUp(self):
+        self.rule = V016()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V016")
+        self.assertEqual(self.rule.severity.name, "MEDIUM")
+        self.assertIn("help", self.rule.message.lower())
+
+    def test_non_adapter_file_ignored(self):
+        """Test that non-adapter files are ignored."""
+        detections = self.rule.check(
+            file_path="/some/module.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_non_python_file_ignored(self):
+        """Test that non-Python files are ignored."""
+        detections = self.rule.check(
+            file_path="/adapters/file.txt",
+            structure={'classes': []},
+            content="text content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_init_and_base_skipped(self):
+        """Test that __init__.py and base.py are skipped."""
+        for filename in ['__init__.py', 'base.py']:
+            detections = self.rule.check(
+                file_path=f"/adapters/{filename}",
+                structure={'classes': [{'name': 'SomeAdapter'}]},
+                content="class SomeAdapter: pass"
+            )
+            self.assertEqual(len(detections), 0)
+
+    def test_adapter_with_get_help(self):
+        """Test that adapter with get_help() passes."""
+        content = """
+from reveal.adapters.base import ResourceAdapter
+
+class TestAdapter(ResourceAdapter):
+    @staticmethod
+    def get_help():
+        return {
+            'name': 'test',
+            'description': 'Test adapter',
+            'examples': []
+        }
+
+    def get_structure(self):
+        return {}
+"""
+        structure = {
+            'classes': [{'name': 'TestAdapter'}],
+            'functions': [{'name': 'get_help'}]
+        }
+
+        detections = self.rule.check(
+            file_path="/adapters/test.py",
+            structure=structure,
+            content=content
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_adapter_missing_get_help(self):
+        """Test that adapter without get_help() is detected."""
+        content = """
+from reveal.adapters.base import ResourceAdapter
+
+class TestAdapter(ResourceAdapter):
+    def get_structure(self):
+        return {}
+"""
+        structure = {
+            'classes': [{'name': 'TestAdapter'}],
+            'functions': []
+        }
+
+        detections = self.rule.check(
+            file_path="/adapters/test.py",
+            structure=structure,
+            content=content
+        )
+        self.assertEqual(len(detections), 1)
+        self.assertIn("get_help", detections[0].message)
+
+    def test_is_adapter_file_detection(self):
+        """Test that adapter files are correctly identified."""
+        # Test with Adapter in class name
+        content_with_adapter = "class JsonAdapter: pass"
+        structure = {'classes': [{'name': 'JsonAdapter'}]}
+        self.assertTrue(self.rule._is_adapter_file(structure, content_with_adapter))
+
+        # Test with ResourceAdapter inheritance
+        content_with_inheritance = "class Custom(ResourceAdapter): pass"
+        structure = {'classes': [{'name': 'Custom'}]}
+        self.assertTrue(self.rule._is_adapter_file(structure, content_with_inheritance))
+
+        # Test non-adapter
+        content_regular = "class Helper: pass"
+        structure = {'classes': [{'name': 'Helper'}]}
+        self.assertFalse(self.rule._is_adapter_file(structure, content_regular))
 
 
 if __name__ == '__main__':
