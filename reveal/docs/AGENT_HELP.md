@@ -20,14 +20,14 @@
 
 ---
 
-## Agent Introspection (v0.46.0+ → v0.47.0 Complete Coverage)
+## Agent Introspection (v0.47.0 - Complete Coverage)
 
 **NEW: Auto-discover capabilities programmatically**
 
 AI agents can now query reveal's capabilities via machine-readable schemas:
 
 ```bash
-# Discover adapter schemas (ALL 15 adapters now supported)
+# Discover adapter schemas (ALL 16 adapters now supported)
 reveal help://schemas/<adapter> --format=json
 
 # File & Analysis Adapters

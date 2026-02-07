@@ -50,6 +50,33 @@ class StatsRenderer:
             print(safe_json_dumps(result))
             return
 
+        # Text format - single file stats
+        if 'file' in result and 'summary' not in result:
+            file_name = result.get('file', 'file')
+            lines = result.get('lines', {})
+            elements = result.get('elements', {})
+            complexity = result.get('complexity', {})
+            quality = result.get('quality', {})
+
+            print(f"File Statistics: {file_name}\n")
+            print(f"Lines:      {lines.get('total', 0)} ({lines.get('code', 0)} code, {lines.get('comments', 0)} comments)")
+            print(f"Functions:  {elements.get('functions', 0)}")
+            print(f"Classes:    {elements.get('classes', 0)}")
+            print(f"Complexity: {complexity.get('average', 0):.2f} (avg), {complexity.get('max', 0)} (max)")
+            print(f"Quality:    {quality.get('score', 0):.1f}/100")
+
+            # Show issues if present
+            issues = result.get('issues', {})
+            long_funcs = issues.get('long_functions', [])
+            deep_nesting = issues.get('deep_nesting', [])
+            if long_funcs or deep_nesting:
+                print("\nIssues:")
+                if long_funcs:
+                    print(f"  Long functions: {len(long_funcs)}")
+                if deep_nesting:
+                    print(f"  Deep nesting: {len(deep_nesting)}")
+            return
+
         # Text format - directory stats
         if 'summary' in result:
             path = result.get('path', '.')
