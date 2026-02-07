@@ -15,9 +15,23 @@ examples:
   - uri: 'stats://./src/app.py'
     description: 'Get detailed statistics for a specific file'
   - uri: 'stats://./src?min_lines=50'
-    description: 'Filter files with 50+ lines'
+    description: 'Filter files with 50+ lines (legacy syntax)'
+  - uri: 'stats://./src?lines>50'
+    description: 'Filter files with 50+ lines (new syntax)'
   - uri: 'stats://./src?max_complexity=10'
-    description: 'Show files with average complexity <= 10'
+    description: 'Show files with average complexity <= 10 (legacy)'
+  - uri: 'stats://./src?complexity<10'
+    description: 'Show files with complexity < 10 (new syntax)'
+  - uri: 'stats://./src?lines=50..200'
+    description: 'Filter files with 50-200 lines (range)'
+  - uri: 'stats://./src?functions!=0'
+    description: 'Show only files with functions (not equals)'
+  - uri: 'stats://./src?complexity>10&sort=-lines'
+    description: 'Complex files sorted by size (descending)'
+  - uri: 'stats://./src?sort=complexity&limit=10'
+    description: 'Top 10 files by complexity (ascending)'
+  - uri: 'stats://./src?lines>100&sort=-complexity&limit=5'
+    description: 'Top 5 most complex large files'
   - uri: 'stats://./src --format=json'
     description: 'JSON output for CI/CD integration'
 
@@ -25,17 +39,44 @@ features:
   - 'Aggregate codebase metrics (lines, functions, classes, complexity)'
   - 'Hotspot identification (largest/most complex files)'
   - 'Per-file statistics with quality scoring'
-  - 'Filter by metrics (lines, complexity, function count)'
+  - 'Advanced filtering with operators (>, <, >=, <=, ==, !=, ~=, ..)'
+  - 'Result control (sort, limit, offset) for pagination'
   - 'Multi-language support (Python, JS, Go, Rust, etc.)'
   - 'CI/CD friendly JSON output'
 
+operators:
+  '>': 'Greater than (e.g., lines>50)'
+  '<': 'Less than (e.g., complexity<10)'
+  '>=': 'Greater than or equal (e.g., functions>=5)'
+  '<=': 'Less than or equal (e.g., complexity<=15)'
+  '==': 'Equals (e.g., classes==0)'
+  '!=': 'Not equals (e.g., functions!=0)'
+  '~=': 'Regex match (e.g., file~=test)'
+  '..': 'Range (e.g., lines=50..200, complexity=5..15)'
+
+fields:
+  lines: 'Total line count (maps to lines.total)'
+  code_lines: 'Code line count (maps to lines.code)'
+  comment_lines: 'Comment line count (maps to lines.comments)'
+  complexity: 'Average complexity (maps to complexity.average)'
+  max_complexity: 'Maximum complexity (maps to complexity.max)'
+  functions: 'Function count (maps to elements.functions)'
+  classes: 'Class count (maps to elements.classes)'
+  quality: 'Quality score (maps to quality.score)'
+
+result_control:
+  sort: 'Sort by field ascending (e.g., sort=lines)'
+  sort_descending: 'Sort by field descending (e.g., sort=-lines)'
+  limit: 'Limit number of results (e.g., limit=10)'
+  offset: 'Skip first N results (e.g., offset=5)'
+
 filters:
   hotspots: 'Show quality hotspots (e.g., ?hotspots=true)'
-  min_lines: 'Minimum line count (e.g., ?min_lines=50)'
-  max_lines: 'Maximum line count (e.g., ?max_lines=500)'
-  min_complexity: 'Minimum avg complexity (e.g., ?min_complexity=5)'
-  max_complexity: 'Maximum avg complexity (e.g., ?max_complexity=10)'
-  min_functions: 'Minimum function count (e.g., ?min_functions=10)'
+  min_lines: 'Minimum line count (legacy: ?min_lines=50 or new: ?lines>=50)'
+  max_lines: 'Maximum line count (legacy: ?max_lines=500 or new: ?lines<=500)'
+  min_complexity: 'Minimum avg complexity (legacy: ?min_complexity=5 or new: ?complexity>=5)'
+  max_complexity: 'Maximum avg complexity (legacy: ?max_complexity=10 or new: ?complexity<=10)'
+  min_functions: 'Minimum function count (legacy: ?min_functions=10 or new: ?functions>=10)'
   type: 'Filter by file type (e.g., ?type=python)'
 
 workflows:
@@ -74,6 +115,10 @@ notes:
   - 'Hotspots ranked by: long functions, deep nesting, high complexity'
   - 'Use --hotspots flag to see top 10 worst files'
   - 'Quality score: 0-100 (higher is better)'
+  - 'New unified query syntax supports operators: >, <, >=, <=, ==, !=, ~=, ..'
+  - 'Result control (sort, limit, offset) enables pagination and ordering'
+  - 'Legacy parameters (min_lines, max_lines, etc.) still supported for backward compatibility'
+  - 'Combine filters and result control: ?lines>100&sort=-complexity&limit=10'
 
 output_formats:
   - text

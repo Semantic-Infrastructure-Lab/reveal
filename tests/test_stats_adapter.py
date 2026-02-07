@@ -638,3 +638,157 @@ def complex_function(a, b, c):
         # Only properly formed params should be parsed
         assert 'min_lines' in adapter.query_params
         assert adapter.query_params['min_lines'] == 50
+
+
+class TestUnifiedQuerySyntax:
+    """Test new unified query syntax (operators and result control)."""
+
+    def test_greater_than_operator(self, tmp_path):
+        """Test lines>50 syntax."""
+        (tmp_path / "small.py").write_text("def f(): pass")
+        (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)
+
+        adapter = StatsAdapter(str(tmp_path), query_string="lines>50")
+        result = adapter.get_structure()
+
+        assert result['summary']['total_files'] == 1
+        assert any('large.py' in f['file'] for f in result['files'])
+
+    def test_less_than_operator(self, tmp_path):
+        """Test complexity<5 syntax."""
+        (tmp_path / "simple.py").write_text("def f(): pass")
+        (tmp_path / "complex.py").write_text("def g():\n    if x:\n        if y:\n            if z: pass")
+
+        adapter = StatsAdapter(str(tmp_path), query_string="complexity<5")
+        result = adapter.get_structure()
+
+        # Should include simple.py
+        assert any('simple.py' in f['file'] for f in result['files'])
+
+    def test_not_equals_operator(self, tmp_path):
+        """Test functions!=0 syntax."""
+        (tmp_path / "empty.py").write_text("# Just a comment")
+        (tmp_path / "with_func.py").write_text("def f(): pass")
+
+        adapter = StatsAdapter(str(tmp_path), query_string="functions!=0")
+        result = adapter.get_structure()
+
+        # Should only include with_func.py
+        assert result['summary']['total_files'] >= 1
+        assert all(f['elements']['functions'] != 0 for f in result['files'])
+
+    def test_range_operator(self, tmp_path):
+        """Test lines=10..50 syntax (range)."""
+        (tmp_path / "tiny.py").write_text("pass")
+        (tmp_path / "medium.py").write_text("def f():\n" + "    pass\n" * 25)
+        (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)
+
+        adapter = StatsAdapter(str(tmp_path), query_string="lines=10..50")
+        result = adapter.get_structure()
+
+        # Should only include medium.py
+        assert all(10 <= f['lines']['total'] <= 50 for f in result['files'])
+
+    def test_result_control_sort_ascending(self, tmp_path):
+        """Test sort=lines syntax (ascending)."""
+        (tmp_path / "medium.py").write_text("def f():\n" + "    pass\n" * 30)
+        (tmp_path / "small.py").write_text("def g(): pass")
+        (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)
+
+        adapter = StatsAdapter(str(tmp_path), query_string="sort=lines")
+        result = adapter.get_structure()
+
+        # Files should be sorted by lines ascending
+        files = result['files']
+        assert len(files) >= 3
+        for i in range(len(files) - 1):
+            assert files[i]['lines']['total'] <= files[i + 1]['lines']['total']
+
+    def test_result_control_sort_descending(self, tmp_path):
+        """Test sort=-lines syntax (descending)."""
+        (tmp_path / "medium.py").write_text("def f():\n" + "    pass\n" * 30)
+        (tmp_path / "small.py").write_text("def g(): pass")
+        (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)
+
+        adapter = StatsAdapter(str(tmp_path), query_string="sort=-lines")
+        result = adapter.get_structure()
+
+        # Files should be sorted by lines descending
+        files = result['files']
+        assert len(files) >= 3
+        for i in range(len(files) - 1):
+            assert files[i]['lines']['total'] >= files[i + 1]['lines']['total']
+
+    def test_result_control_limit(self, tmp_path):
+        """Test limit=2 syntax."""
+        for i in range(5):
+            (tmp_path / f"file{i}.py").write_text(f"def f{i}(): pass")
+
+        adapter = StatsAdapter(str(tmp_path), query_string="limit=2")
+        result = adapter.get_structure()
+
+        # Should only show 2 files
+        assert len(result['files']) == 2
+        assert result['displayed_results'] == 2
+        assert result['total_matches'] == 5
+
+    def test_result_control_offset(self, tmp_path):
+        """Test offset=2 syntax."""
+        for i in range(5):
+            (tmp_path / f"file{i}.py").write_text(f"def f{i}(): pass")
+
+        adapter = StatsAdapter(str(tmp_path), query_string="offset=2")
+        result = adapter.get_structure()
+
+        # Should skip first 2 files, show remaining 3
+        assert len(result['files']) == 3
+
+    def test_result_control_combined(self, tmp_path):
+        """Test sort=-lines&limit=2&offset=1 syntax."""
+        (tmp_path / "tiny.py").write_text("pass")
+        (tmp_path / "small.py").write_text("def f(): pass\n" * 5)
+        (tmp_path / "medium.py").write_text("def g():\n" + "    pass\n" * 30)
+        (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)
+
+        adapter = StatsAdapter(str(tmp_path), query_string="sort=-lines&limit=2&offset=1")
+        result = adapter.get_structure()
+
+        # Should skip largest (offset=1), show next 2 (limit=2)
+        files = result['files']
+        assert len(files) == 2
+        # Should be in descending order (largest to smallest)
+        for i in range(len(files) - 1):
+            assert files[i]['lines']['total'] >= files[i + 1]['lines']['total']
+
+    def test_filter_and_result_control_combined(self, tmp_path):
+        """Test lines>10&sort=-lines&limit=2 syntax."""
+        (tmp_path / "tiny.py").write_text("pass")
+        (tmp_path / "small.py").write_text("def f():\n" + "    pass\n" * 15)
+        (tmp_path / "medium.py").write_text("def g():\n" + "    pass\n" * 30)
+        (tmp_path / "large.py").write_text("def h():\n" + "    pass\n" * 60)
+
+        adapter = StatsAdapter(str(tmp_path), query_string="lines>10&sort=-lines&limit=2")
+        result = adapter.get_structure()
+
+        # Should filter (lines>10), sort descending, limit to 2
+        files = result['files']
+        assert len(files) == 2
+        # All should be > 10 lines
+        assert all(f['lines']['total'] > 10 for f in files)
+        # Should be in descending order
+        for i in range(len(files) - 1):
+            assert files[i]['lines']['total'] >= files[i + 1]['lines']['total']
+
+    def test_truncation_warning(self, tmp_path):
+        """Test that truncation warning is added when results are limited."""
+        for i in range(5):
+            (tmp_path / f"file{i}.py").write_text(f"def f{i}(): pass")
+
+        adapter = StatsAdapter(str(tmp_path), query_string="limit=2")
+        result = adapter.get_structure()
+
+        # Should have warning about truncation
+        assert 'warnings' in result
+        assert any(w['type'] == 'truncated' for w in result['warnings'])
+        assert result['displayed_results'] == 2
+        assert result['total_matches'] == 5

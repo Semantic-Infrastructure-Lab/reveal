@@ -8,7 +8,14 @@ from typing import Dict, Any, Optional, List
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
 from ..registry import get_analyzer
-from ..utils.query import parse_query_params
+from ..utils.query import (
+    parse_query_params,
+    parse_query_filters,
+    parse_result_control,
+    apply_result_control,
+    QueryFilter,
+    ResultControl,
+)
 
 # Quality scoring defaults - configurable via .reveal/stats-quality.yaml
 QUALITY_DEFAULTS = {
@@ -342,14 +349,28 @@ class StatsAdapter(ResourceAdapter):
 
         Args:
             path: File or directory path to analyze
-            query_string: Query parameters (e.g., "hotspots=true&min_lines=50")
+            query_string: Query parameters (e.g., "hotspots=true&min_lines=50" or "lines>50&complexity<10")
         """
         self.path = Path(path).resolve()
         if not self.path.exists():
             raise FileNotFoundError(f"Path not found: {path}")
 
-        # Parse query string with type coercion
+        # Parse query string with type coercion (for legacy params)
         self.query_params = parse_query_params(query_string, coerce=True)
+
+        # Parse result control (sort, limit, offset) - extract from query string
+        filter_query, self.result_control = parse_result_control(query_string or '')
+
+        # Parse query filters (new unified syntax: lines>50, complexity=5..15, etc.)
+        # Only parse if the query contains new-style operators (>, <, !=, ~=, ..)
+        # Legacy parameters (min_lines, max_lines, etc.) are handled via query_params
+        self.query_filters = []
+        if filter_query and any(op in filter_query for op in ['>', '<', '!=', '~=', '..']):
+            try:
+                self.query_filters = parse_query_filters(filter_query)
+            except Exception:
+                # If parsing fails, fall back to empty filters (legacy params will be used)
+                self.query_filters = []
 
         # Load quality scoring config (with defaults)
         self._quality_config = self._get_quality_config()
@@ -440,12 +461,43 @@ class StatsAdapter(ResourceAdapter):
             ):
                 file_stats.append(stats)
 
-        # Aggregate statistics
-        result = self._aggregate_stats(file_stats)
+        # Apply result control (sort, limit, offset) if specified
+        total_filtered = len(file_stats)
 
-        # Add hotspots if requested
+        # Apply sorting manually using _field_value() to handle nested fields
+        controlled_stats = list(file_stats)
+        if self.result_control.sort_field:
+            try:
+                controlled_stats.sort(
+                    key=lambda x: self._field_value(x, self.result_control.sort_field) or 0,
+                    reverse=self.result_control.sort_descending
+                )
+            except (TypeError, KeyError):
+                pass  # Skip sorting if field doesn't exist or isn't comparable
+
+        # Apply offset and limit
+        if self.result_control.offset and self.result_control.offset > 0:
+            controlled_stats = controlled_stats[self.result_control.offset:]
+        if self.result_control.limit and self.result_control.limit > 0:
+            controlled_stats = controlled_stats[:self.result_control.limit]
+
+        # Aggregate statistics (on controlled results)
+        result = self._aggregate_stats(controlled_stats)
+
+        # Add truncation metadata if results were limited
+        if len(controlled_stats) < total_filtered:
+            if 'warnings' not in result:
+                result['warnings'] = []
+            result['warnings'].append({
+                'type': 'truncated',
+                'message': f'Results truncated: showing {len(controlled_stats)} of {total_filtered} total matches'
+            })
+            result['displayed_results'] = len(controlled_stats)
+            result['total_matches'] = total_filtered
+
+        # Add hotspots if requested (use controlled stats for consistency)
         if hotspots:
-            result['hotspots'] = self._identify_hotspots(file_stats)
+            result['hotspots'] = self._identify_hotspots(controlled_stats)
 
         return result
 
@@ -747,6 +799,102 @@ class StatsAdapter(ResourceAdapter):
 
         return max(0, score)
 
+    def _field_value(self, stats: Dict[str, Any], field: str) -> Any:
+        """Extract field value from stats dict.
+
+        Supports nested fields like 'lines.total', 'complexity.average', etc.
+
+        Args:
+            stats: File statistics dict
+            field: Field name (may include dots for nesting)
+
+        Returns:
+            Field value or None if not found
+        """
+        # Map common field names to nested paths
+        field_map = {
+            'lines': 'lines.total',
+            'code_lines': 'lines.code',
+            'comment_lines': 'lines.comments',
+            'complexity': 'complexity.average',
+            'max_complexity': 'complexity.max',
+            'functions': 'elements.functions',
+            'classes': 'elements.classes',
+            'quality': 'quality.score',
+        }
+
+        # Use mapped field if available
+        field_path = field_map.get(field, field)
+
+        # Navigate nested structure
+        value = stats
+        for part in field_path.split('.'):
+            if isinstance(value, dict) and part in value:
+                value = value[part]
+            else:
+                return None
+
+        return value
+
+    def _compare(self, value: Any, op: str, target: Any) -> bool:
+        """Compare a value against a target using an operator.
+
+        Args:
+            value: The value to compare
+            op: Comparison operator (>, <, >=, <=, ==, =, !=, ~=, ..)
+            target: The target value
+
+        Returns:
+            True if comparison passes
+        """
+        import re
+
+        if value is None:
+            return False
+
+        # Handle range operator (..)
+        if op == '..':
+            if not isinstance(target, str) or '..' not in target:
+                return False
+            try:
+                min_val, max_val = target.split('..')
+                min_val = float(min_val) if min_val else float('-inf')
+                max_val = float(max_val) if max_val else float('inf')
+                return min_val <= float(value) <= max_val
+            except (ValueError, AttributeError):
+                return False
+
+        # Handle regex operator (~=)
+        if op == '~=':
+            try:
+                return bool(re.search(str(target), str(value)))
+            except re.error:
+                return False
+
+        # Handle equality/inequality
+        if op in ('==', '='):
+            return str(value) == str(target)
+        if op == '!=':
+            return str(value) != str(target)
+
+        # Handle numeric comparisons
+        try:
+            value_num = float(value)
+            target_num = float(target)
+
+            if op == '>':
+                return value_num > target_num
+            elif op == '<':
+                return value_num < target_num
+            elif op == '>=':
+                return value_num >= target_num
+            elif op == '<=':
+                return value_num <= target_num
+        except (ValueError, TypeError):
+            return False
+
+        return False
+
     def _matches_filters(self,
                         stats: Dict[str, Any],
                         min_lines: Optional[int],
@@ -756,17 +904,21 @@ class StatsAdapter(ResourceAdapter):
                         min_functions: Optional[int]) -> bool:
         """Check if file stats match filter criteria.
 
+        Supports both legacy parameters (min_lines, max_lines, etc.) and
+        new unified query filters (lines>50, complexity=5..15, etc.).
+
         Args:
             stats: File statistics
-            min_lines: Minimum line count
-            max_lines: Maximum line count
-            min_complexity: Minimum avg complexity
-            max_complexity: Maximum avg complexity
-            min_functions: Minimum function count
+            min_lines: Minimum line count (legacy)
+            max_lines: Maximum line count (legacy)
+            min_complexity: Minimum avg complexity (legacy)
+            max_complexity: Maximum avg complexity (legacy)
+            min_functions: Minimum function count (legacy)
 
         Returns:
             True if matches all filters
         """
+        # Check legacy parameters (backward compatibility)
         if min_lines is not None and stats['lines']['total'] < min_lines:
             return False
         if max_lines is not None and stats['lines']['total'] > max_lines:
@@ -777,6 +929,12 @@ class StatsAdapter(ResourceAdapter):
             return False
         if min_functions is not None and stats['elements']['functions'] < min_functions:
             return False
+
+        # Check new query filters (unified syntax)
+        for qf in self.query_filters:
+            value = self._field_value(stats, qf.field)
+            if not self._compare(value, qf.op, qf.value):
+                return False
 
         return True
 

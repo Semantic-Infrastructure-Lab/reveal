@@ -8,6 +8,13 @@ import fnmatch
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..utils.query import (
+    parse_query_filters,
+    parse_result_control,
+    apply_result_control,
+    QueryFilter,
+    ResultControl
+)
 
 
 class MarkdownRenderer:
@@ -55,11 +62,35 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
         Args:
             base_path: Directory to search for markdown files
-            query: Query string (e.g., 'topics=reveal', '!status')
+            query: Query string (e.g., 'topics=reveal', '!status', 'lines>100')
         """
         self.base_path = Path(base_path).resolve()
         self.query = query
-        self.filters = self._parse_query(query) if query else []
+
+        # Parse result control (sort, limit, offset) and get cleaned query
+        if query:
+            filter_query, self.result_control = parse_result_control(query)
+        else:
+            filter_query = ''
+            self.result_control = ResultControl()
+
+        # Parse query filters conditionally (only if new operators present)
+        # This prevents legacy parameters from being misinterpreted
+        self.query_filters = []
+        has_new_operators = filter_query and any(op in filter_query for op in ['>', '<', '!=', '~=', '..', '=='])
+
+        if has_new_operators:
+            try:
+                self.query_filters = parse_query_filters(filter_query)
+            except Exception:
+                # If parsing fails, fall back to empty filters
+                self.query_filters = []
+
+        # Keep legacy filter parsing for backward compatibility
+        # Only use legacy parsing if there are no new operators
+        self.filters = []
+        if filter_query and not has_new_operators:
+            self.filters = self._parse_query(filter_query)
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -223,6 +254,26 @@ class MarkdownQueryAdapter(ResourceAdapter):
                     'description': 'Wildcard matching (glob-style)'
                 },
                 {
+                    'uri': 'markdown://?priority>10',
+                    'description': 'Numeric comparison (greater than)'
+                },
+                {
+                    'uri': 'markdown://?priority=5..15',
+                    'description': 'Numeric range (5 to 15 inclusive)'
+                },
+                {
+                    'uri': 'markdown://?title~=^API',
+                    'description': 'Regex matching (titles starting with "API")'
+                },
+                {
+                    'uri': 'markdown://?sort=-priority',
+                    'description': 'Sort by priority descending'
+                },
+                {
+                    'uri': 'markdown://?priority>5&sort=-priority&limit=10',
+                    'description': 'Filter, sort, and limit results'
+                },
+                {
                     'uri': 'markdown://docs/?status=active --format=json',
                     'description': 'JSON output for scripting'
                 },
@@ -232,19 +283,39 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 'Exact match: field=value',
                 'Wildcard match: field=*pattern* (glob-style)',
                 'Missing field: !field',
+                'Numeric comparisons: field>value, field<value, field>=value, field<=value',
+                'Range queries: field=min..max',
+                'Regex matching: field~=pattern',
                 'List fields: matches if value in list',
                 'Multiple filters: field1=val1&field2=val2 (AND)',
+                'Result control: sort=field, sort=-field (descending)',
+                'Pagination: limit=N, offset=M',
                 'JSON output for tooling integration',
             ],
-            'filters': {
+            'operators': {
                 'field=value': 'Exact match (or substring for lists)',
-                'field=*pattern*': 'Glob-style wildcard matching',
-                '!field': 'File is missing this field',
+                'field>value': 'Greater than (numeric)',
+                'field<value': 'Less than (numeric)',
+                'field>=value': 'Greater than or equal (numeric)',
+                'field<=value': 'Less than or equal (numeric)',
+                'field!=value': 'Not equal',
+                'field~=pattern': 'Regex match',
+                'field=min..max': 'Range (inclusive)',
+                'field=*pattern*': 'Glob-style wildcard',
+                '!field': 'Field is missing',
+            },
+            'result_control': {
+                'sort=field': 'Sort results by field (ascending)',
+                'sort=-field': 'Sort results by field (descending)',
+                'limit=N': 'Limit to N results',
+                'offset=M': 'Skip first M results',
             },
             'notes': [
                 'Searches recursively in specified directory',
                 'Only processes files with valid YAML frontmatter',
                 'Field values in lists are matched if any item matches',
+                'Numeric comparisons work on numeric frontmatter fields',
+                'Use sort/limit/offset for pagination and result control',
                 'Combine with reveal --related for graph exploration',
             ],
             'try_now': [
@@ -314,6 +385,101 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 filters.append((part, '?', ''))
 
         return filters
+
+    def _compare(self, field_value: Any, operator: str, target_value: str) -> bool:
+        """Compare field value against target using operator.
+
+        Args:
+            field_value: Value from frontmatter field
+            operator: Comparison operator (>, <, >=, <=, ==, !=, ~=, ..)
+            target_value: Target value to compare against
+
+        Returns:
+            True if comparison matches
+        """
+        # Handle None values
+        if field_value is None:
+            return operator in ('!=', '!~')
+
+        # Handle list fields - check if any element matches
+        if isinstance(field_value, list):
+            return any(self._compare(item, operator, target_value) for item in field_value)
+
+        # Convert to comparable types
+        field_str = str(field_value)
+
+        # Handle range operator first (before trying numeric conversion)
+        if operator == '..':
+            if '..' in target_value:
+                try:
+                    min_val, max_val = target_value.split('..', 1)
+                    # Try numeric comparison first
+                    try:
+                        field_num = float(field_value) if not isinstance(field_value, (int, float)) else field_value
+                        return float(min_val) <= field_num <= float(max_val)
+                    except (ValueError, TypeError):
+                        # Fall back to string lexicographic comparison
+                        return min_val <= field_str <= max_val
+                except (ValueError, TypeError):
+                    return False
+            return False
+
+        # Try numeric comparison for other operators
+        try:
+            field_num = float(field_value) if not isinstance(field_value, (int, float)) else field_value
+            target_num = float(target_value)
+
+            if operator == '>':
+                return field_num > target_num
+            elif operator == '<':
+                return field_num < target_num
+            elif operator == '>=':
+                return field_num >= target_num
+            elif operator == '<=':
+                return field_num <= target_num
+            elif operator == '==':
+                return field_num == target_num
+            elif operator == '!=':
+                return field_num != target_num
+        except (ValueError, TypeError):
+            # Fall back to string comparison
+            pass
+
+        # String comparison
+        if operator == '==':
+            return field_str == target_value
+        elif operator == '!=':
+            return field_str != target_value
+        elif operator == '~=':
+            # Regex match
+            try:
+                return re.search(target_value, field_str) is not None
+            except re.error:
+                return False
+        elif operator == '!~':
+            # Negative regex match
+            try:
+                return re.search(target_value, field_str) is None
+            except re.error:
+                return True
+        elif operator == '..':
+            # Range for strings (lexicographic)
+            if '..' in target_value:
+                min_val, max_val = target_value.split('..', 1)
+                return min_val <= field_str <= max_val
+            return False
+
+        # For comparison operators on strings, compare lexicographically
+        if operator == '>':
+            return field_str > target_value
+        elif operator == '<':
+            return field_str < target_value
+        elif operator == '>=':
+            return field_str >= target_value
+        elif operator == '<=':
+            return field_str <= target_value
+
+        return False
 
     def _find_markdown_files(self) -> List[Path]:
         """Find all markdown files in base_path recursively.
@@ -419,13 +585,28 @@ class MarkdownQueryAdapter(ResourceAdapter):
         Returns:
             True if matches all filters
         """
-        if not self.filters:
-            return True  # No filters = match all
+        # Check legacy filters first (backward compatibility)
+        if self.filters:
+            if not all(
+                self._matches_filter(frontmatter, field, op, value)
+                for field, op, value in self.filters
+            ):
+                return False
 
-        return all(
-            self._matches_filter(frontmatter, field, op, value)
-            for field, op, value in self.filters
-        )
+        # Check new query filters (unified syntax)
+        if self.query_filters:
+            for qf in self.query_filters:
+                if frontmatter is None:
+                    return False
+
+                # Get field value from frontmatter
+                field_value = frontmatter.get(qf.field)
+
+                # Compare using operator
+                if not self._compare(field_value, qf.op, qf.value):
+                    return False
+
+        return True
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Query markdown files and return matching results.
@@ -456,7 +637,42 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
                 results.append(result)
 
-        return {
+        # Apply result control (sort, limit, offset)
+        total_matches = len(results)
+        controlled_results = results
+
+        # Sorting
+        if self.result_control.sort_field:
+            def get_sort_key(item):
+                # Check if field exists in the result dict (including frontmatter fields)
+                if self.result_control.sort_field in item:
+                    value = item[self.result_control.sort_field]
+                    # Handle None values (sort to end)
+                    if value is None:
+                        return (1, 0) if self.result_control.sort_descending else (0, 0)
+                    # Handle list values (use first element)
+                    if isinstance(value, list):
+                        return (0, str(value[0]) if value else '')
+                    return (0, value)
+                return (1, 0) if self.result_control.sort_descending else (0, 0)
+
+            try:
+                controlled_results.sort(
+                    key=get_sort_key,
+                    reverse=self.result_control.sort_descending
+                )
+            except Exception:
+                # If sorting fails, continue without sorting
+                pass
+
+        # Offset and limit
+        if self.result_control.offset:
+            controlled_results = controlled_results[self.result_control.offset:]
+        if self.result_control.limit is not None:
+            controlled_results = controlled_results[:self.result_control.limit]
+
+        # Build response with result control metadata
+        response = {
             'contract_version': '1.0',
             'type': 'markdown_query',
             'source': str(self.base_path),
@@ -468,9 +684,21 @@ class MarkdownQueryAdapter(ResourceAdapter):
                 for f, o, v in self.filters
             ],
             'total_files': len(files),
-            'matched_files': len(results),
-            'results': results,
+            'matched_files': total_matches,
+            'results': controlled_results,
         }
+
+        # Add truncation warning if results were limited
+        displayed = len(controlled_results)
+        if displayed < total_matches:
+            response['warnings'] = [{
+                'type': 'truncated',
+                'message': f'Results truncated: showing {displayed} of {total_matches} total matches'
+            }]
+            response['displayed_results'] = displayed
+            response['total_matches'] = total_matches
+
+        return response
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get frontmatter from a specific file.

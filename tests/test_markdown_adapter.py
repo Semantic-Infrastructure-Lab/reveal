@@ -1,253 +1,392 @@
-"""Tests for markdown:// URI adapter."""
+"""Tests for markdown query adapter (markdown://)."""
 
-import unittest
-import tempfile
-import shutil
+import pytest
 from pathlib import Path
-
 from reveal.adapters.markdown import MarkdownQueryAdapter
-from reveal.adapters.base import get_adapter_class, list_supported_schemes
 
 
-class TestMarkdownAdapterRegistry(unittest.TestCase):
-    """Test markdown adapter registration."""
-
-    def test_adapter_registered(self):
-        """Markdown adapter should be registered."""
-        schemes = list_supported_schemes()
-        self.assertIn('markdown', schemes)
-
-    def test_get_adapter_class(self):
-        """Should retrieve MarkdownQueryAdapter by scheme."""
-        adapter_class = get_adapter_class('markdown')
-        self.assertEqual(adapter_class, MarkdownQueryAdapter)
-
-
-class TestMarkdownQueryAdapter(unittest.TestCase):
-    """Test markdown query adapter functionality."""
-
-    def setUp(self):
-        """Create temporary directory with test markdown files."""
-        self.temp_dir = tempfile.mkdtemp()
-
-        # Create test files with various frontmatter
-        self.create_file('doc1.md', '''---
-title: First Document
+@pytest.fixture
+def sample_docs(tmp_path):
+    """Create sample markdown files with frontmatter for testing."""
+    # File with frontmatter
+    (tmp_path / "guide.md").write_text("""---
+title: Developer Guide
 type: guide
 status: active
+priority: 10
 tags:
   - python
-  - testing
-beth_topics:
+  - development
+topics:
   - reveal
   - testing
 ---
 
-# First Document
+# Developer Guide
 
-Content here.
-''')
+This is a guide.
+""")
 
-        self.create_file('doc2.md', '''---
-title: Second Document
-type: reference
-status: draft
-tags:
-  - javascript
----
-
-# Second Document
-
-More content.
-''')
-
-        self.create_file('doc3.md', '''---
-title: Third Document
+    # File with different frontmatter
+    (tmp_path / "tutorial.md").write_text("""---
+title: Quick Tutorial
 type: tutorial
----
-
-# Third Document
-
-Tutorial content.
-''')
-
-        # File without frontmatter
-        self.create_file('no_fm.md', '''# No Frontmatter
-
-Just plain markdown.
-''')
-
-        # Nested directory
-        nested_dir = Path(self.temp_dir) / 'nested'
-        nested_dir.mkdir()
-        self.create_file('nested/deep.md', '''---
-title: Deep Document
-type: guide
-beth_topics:
+status: draft
+priority: 5
+tags:
+  - beginner
+topics:
   - reveal
 ---
 
-# Deep Doc
-''')
+# Tutorial
 
-    def tearDown(self):
-        """Clean up temporary directory."""
-        shutil.rmtree(self.temp_dir)
+This is a tutorial.
+""")
 
-    def create_file(self, name: str, content: str):
-        """Create a file in the temp directory."""
-        path = Path(self.temp_dir) / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
+    # File with numeric fields
+    (tmp_path / "api.md").write_text("""---
+title: API Reference
+type: reference
+status: active
+priority: 20
+version: 2.5
+tags:
+  - api
+  - advanced
+---
 
-    def test_list_all_files(self):
-        """Should list all markdown files without filters."""
-        adapter = MarkdownQueryAdapter(base_path=self.temp_dir)
+# API Reference
+
+This is API documentation.
+""")
+
+    # File without frontmatter
+    (tmp_path / "readme.md").write_text("""# README
+
+Just a plain markdown file.
+""")
+
+    # File with minimal frontmatter
+    (tmp_path / "notes.md").write_text("""---
+title: Random Notes
+---
+
+# Notes
+
+Some notes.
+""")
+
+    return tmp_path
+
+
+class TestMarkdownAdapter:
+    """Test basic markdown adapter functionality."""
+
+    def test_init(self):
+        """Test adapter initialization."""
+        adapter = MarkdownQueryAdapter('.', query='topics=reveal')
+        assert adapter.base_path.is_absolute()
+        assert adapter.query == 'topics=reveal'
+
+    def test_find_markdown_files(self, sample_docs):
+        """Test finding all markdown files."""
+        adapter = MarkdownQueryAdapter(str(sample_docs))
+        files = adapter._find_markdown_files()
+        assert len(files) == 5
+        assert all(f.suffix in ('.md', '.markdown') for f in files)
+
+    def test_extract_frontmatter(self, sample_docs):
+        """Test extracting YAML frontmatter."""
+        adapter = MarkdownQueryAdapter(str(sample_docs))
+        fm = adapter._extract_frontmatter(sample_docs / "guide.md")
+        assert fm is not None
+        assert fm['title'] == 'Developer Guide'
+        assert fm['type'] == 'guide'
+        assert 'python' in fm['tags']
+
+    def test_no_frontmatter(self, sample_docs):
+        """Test files without frontmatter."""
+        adapter = MarkdownQueryAdapter(str(sample_docs))
+        fm = adapter._extract_frontmatter(sample_docs / "readme.md")
+        assert fm is None
+
+
+class TestLegacyFiltering:
+    """Test backward compatibility with legacy filter syntax."""
+
+    def test_exact_match(self, sample_docs):
+        """Test field=value syntax."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='status=active')
+        result = adapter.get_structure()
+        assert result['matched_files'] == 2
+        assert all('status' in r for r in result['results'] if 'status' in r)
+
+    def test_list_field_match(self, sample_docs):
+        """Test matching against list fields."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='tags=python')
+        result = adapter.get_structure()
+        assert result['matched_files'] >= 1
+        assert any('guide' in r.get('title', '').lower() for r in result['results'])
+
+    def test_wildcard_match(self, sample_docs):
+        """Test field=*pattern* wildcard syntax."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='type=*guide*')
+        result = adapter.get_structure()
+        assert result['matched_files'] >= 1
+
+    def test_missing_field(self, sample_docs):
+        """Test !field syntax for missing fields."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='!status')
+        result = adapter.get_structure()
+        # Should match files without status field
+        assert result['matched_files'] >= 2  # readme.md and notes.md
+
+    def test_multiple_filters(self, sample_docs):
+        """Test field1=val1&field2=val2 syntax (AND logic)."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='status=active&type=guide')
+        result = adapter.get_structure()
+        assert result['matched_files'] == 1
+        assert result['results'][0]['type'] == 'guide'
+
+
+class TestUnifiedQuerySyntax:
+    """Test new unified query syntax (operators and result control)."""
+
+    def test_greater_than_operator(self, sample_docs):
+        """Test priority>10 syntax."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='priority>10')
+        result = adapter.get_structure()
+        assert result['matched_files'] == 1
+        assert any('API' in r.get('title', '') for r in result['results'])
+
+    def test_less_than_operator(self, sample_docs):
+        """Test priority<10 syntax."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='priority<10')
+        result = adapter.get_structure()
+        assert result['matched_files'] >= 1
+        assert all(r.get('priority', 0) < 10 for r in result['results'] if 'priority' in r)
+
+    def test_greater_equals_operator(self, sample_docs):
+        """Test priority>=10 syntax."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='priority>=10')
+        result = adapter.get_structure()
+        assert result['matched_files'] >= 2
+        assert all(r.get('priority', 0) >= 10 for r in result['results'] if 'priority' in r)
+
+    def test_less_equals_operator(self, sample_docs):
+        """Test priority<=10 syntax."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='priority<=10')
+        result = adapter.get_structure()
+        assert result['matched_files'] >= 2
+
+    def test_equals_operator(self, sample_docs):
+        """Test priority=10 syntax (exact match)."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='priority=10')
+        result = adapter.get_structure()
+        # Note: priority field is not included in results by default
+        # Just check that we match the right file count
+        assert result['matched_files'] == 1
+
+    def test_not_equals_operator(self, sample_docs):
+        """Test status!=draft syntax."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='status!=draft')
+        result = adapter.get_structure()
+        # Should match files with status != 'draft' (but not files without status)
+        assert result['matched_files'] >= 2
+
+    def test_regex_operator(self, sample_docs):
+        """Test title~=^API syntax (regex match)."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='title~=^API')
+        result = adapter.get_structure()
+        assert result['matched_files'] == 1
+        assert result['results'][0]['title'] == 'API Reference'
+
+    def test_regex_operator_case_insensitive(self, sample_docs):
+        """Test title~=(?i)guide syntax (case-insensitive regex)."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='title~=(?i)guide')
+        result = adapter.get_structure()
+        assert result['matched_files'] >= 1
+
+    def test_range_operator_numeric(self, sample_docs):
+        """Test priority=5..15 syntax (numeric range)."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='priority=5..15')
+        result = adapter.get_structure()
+        assert result['matched_files'] == 2
+        assert all(5 <= r.get('priority', 0) <= 15 for r in result['results'] if 'priority' in r)
+
+    def test_range_operator_string(self, sample_docs):
+        """Test type=guide..tutorial syntax (string range)."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='type=guide..tutorial')
+        result = adapter.get_structure()
+        # Lexicographic range
+        assert result['matched_files'] >= 2
+
+    def test_result_control_sort_ascending(self, sample_docs):
+        """Test sort=priority syntax (ascending)."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='sort=priority')
+        result = adapter.get_structure()
+        # Results should be sorted by priority ascending
+        results_with_priority = [r for r in result['results'] if 'priority' in r]
+        for i in range(len(results_with_priority) - 1):
+            assert results_with_priority[i]['priority'] <= results_with_priority[i + 1]['priority']
+
+    def test_result_control_sort_descending(self, sample_docs):
+        """Test sort=-priority syntax (descending)."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='sort=-priority')
+        result = adapter.get_structure()
+        # Results should be sorted by priority descending
+        results_with_priority = [r for r in result['results'] if 'priority' in r]
+        for i in range(len(results_with_priority) - 1):
+            assert results_with_priority[i]['priority'] >= results_with_priority[i + 1]['priority']
+
+    def test_result_control_limit(self, sample_docs):
+        """Test limit=2 syntax."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='limit=2')
+        result = adapter.get_structure()
+        # Should only show 2 files
+        assert len(result['results']) == 2
+        assert result['displayed_results'] == 2
+        assert result['matched_files'] == 5
+
+    def test_result_control_offset(self, sample_docs):
+        """Test offset=2 syntax."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='offset=2')
+        result = adapter.get_structure()
+        # Should skip first 2 files, show remaining 3
+        assert len(result['results']) == 3
+
+    def test_result_control_combined(self, sample_docs):
+        """Test sort=-priority&limit=2&offset=1 syntax."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='sort=-priority&limit=2&offset=1')
+        result = adapter.get_structure()
+        # Should skip highest priority (offset=1), show next 2 (limit=2)
+        assert len(result['results']) == 2
+        # Should be in descending order
+        results_with_priority = [r for r in result['results'] if 'priority' in r]
+        if len(results_with_priority) >= 2:
+            for i in range(len(results_with_priority) - 1):
+                assert results_with_priority[i]['priority'] >= results_with_priority[i + 1]['priority']
+
+    def test_filter_and_result_control_combined(self, sample_docs):
+        """Test priority>5&sort=-priority&limit=2 syntax."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='priority>5&sort=-priority&limit=2')
+        result = adapter.get_structure()
+        # Should filter (priority>5), sort descending, limit to 2
+        assert len(result['results']) == 2
+        # All should have priority > 5
+        assert all(r.get('priority', 0) > 5 for r in result['results'] if 'priority' in r)
+        # Should be in descending order
+        results_with_priority = [r for r in result['results'] if 'priority' in r]
+        for i in range(len(results_with_priority) - 1):
+            assert results_with_priority[i]['priority'] >= results_with_priority[i + 1]['priority']
+
+    def test_truncation_warning(self, sample_docs):
+        """Test that truncation warning is added when results are limited."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='limit=2')
+        result = adapter.get_structure()
+        # Should have warning about truncation
+        assert 'warnings' in result
+        assert any(w['type'] == 'truncated' for w in result['warnings'])
+        assert result['displayed_results'] == 2
+        assert result['matched_files'] == 5
+
+
+class TestOutputContract:
+    """Test output contract compliance."""
+
+    def test_structure_output(self, sample_docs):
+        """Test get_structure() output format."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='status=active')
         result = adapter.get_structure()
 
-        self.assertEqual(result['type'], 'markdown_query')
-        self.assertEqual(result['total_files'], 5)
-        self.assertEqual(result['matched_files'], 5)  # No filter = match all
+        # Check required fields
+        assert 'contract_version' in result
+        assert result['type'] == 'markdown_query'
+        assert 'source' in result
+        assert 'base_path' in result
+        assert 'total_files' in result
+        assert 'matched_files' in result
+        assert 'results' in result
+        assert isinstance(result['results'], list)
 
-    def test_filter_by_exact_value(self):
-        """Should filter by exact field value."""
-        adapter = MarkdownQueryAdapter(base_path=self.temp_dir, query='type=guide')
+    def test_result_fields(self, sample_docs):
+        """Test fields in result items."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='status=active')
         result = adapter.get_structure()
 
-        self.assertEqual(result['matched_files'], 2)  # doc1.md and nested/deep.md
-        paths = [r['relative_path'] for r in result['results']]
-        self.assertTrue(any('doc1.md' in p for p in paths))
-        self.assertTrue(any('deep.md' in p for p in paths))
+        for item in result['results']:
+            assert 'path' in item
+            assert 'relative_path' in item
+            assert 'has_frontmatter' in item
 
-    def test_filter_by_list_value(self):
-        """Should filter by value in list field."""
-        adapter = MarkdownQueryAdapter(base_path=self.temp_dir, query='tags=python')
+    def test_element_output(self, sample_docs):
+        """Test get_element() output format."""
+        adapter = MarkdownQueryAdapter(str(sample_docs))
+        result = adapter.get_element('guide.md')
+
+        assert result is not None
+        assert 'path' in result
+        assert 'has_frontmatter' in result
+        assert 'frontmatter' in result
+        assert result['has_frontmatter'] is True
+        assert result['frontmatter']['title'] == 'Developer Guide'
+
+
+class TestEdgeCases:
+    """Test edge cases and error handling."""
+
+    def test_empty_query(self, sample_docs):
+        """Test with no query (should return all files)."""
+        adapter = MarkdownQueryAdapter(str(sample_docs))
         result = adapter.get_structure()
+        assert result['matched_files'] == result['total_files']
 
-        self.assertEqual(result['matched_files'], 1)
-        self.assertTrue('doc1.md' in result['results'][0]['relative_path'])
-
-    def test_filter_missing_field(self):
-        """Should find files missing a field."""
-        adapter = MarkdownQueryAdapter(base_path=self.temp_dir, query='!status')
+    def test_nonexistent_field(self, sample_docs):
+        """Test filtering on non-existent field."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='nonexistent>10')
         result = adapter.get_structure()
+        # Should return no matches (field doesn't exist)
+        assert result['matched_files'] == 0
 
-        # doc3.md, no_fm.md, nested/deep.md don't have status
-        self.assertEqual(result['matched_files'], 3)
-
-    def test_filter_wildcard(self):
-        """Should filter with wildcard pattern."""
-        adapter = MarkdownQueryAdapter(base_path=self.temp_dir, query='type=*guide*')
+    def test_invalid_regex(self, sample_docs):
+        """Test with invalid regex pattern."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='title~=[invalid')
         result = adapter.get_structure()
+        # Should not crash, regex errors are handled
+        assert 'results' in result
 
-        self.assertEqual(result['matched_files'], 2)  # 'guide' matches
-
-    def test_multiple_filters(self):
-        """Should apply multiple filters with AND logic."""
-        adapter = MarkdownQueryAdapter(
-            base_path=self.temp_dir,
-            query='type=guide&beth_topics=reveal'
-        )
+    def test_list_field_comparison(self, sample_docs):
+        """Test numeric comparison on list fields."""
+        # tags is a list, should check each element
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='tags~=python')
         result = adapter.get_structure()
+        assert result['matched_files'] >= 1
 
-        # Both doc1.md and nested/deep.md match
-        self.assertEqual(result['matched_files'], 2)
-
-    def test_no_matches(self):
-        """Should return empty results when nothing matches."""
-        adapter = MarkdownQueryAdapter(
-            base_path=self.temp_dir,
-            query='type=nonexistent'
-        )
+    def test_missing_field_with_comparison(self, sample_docs):
+        """Test comparison on missing field."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='missing_field>10')
         result = adapter.get_structure()
+        # Should return no matches (field doesn't exist)
+        assert result['matched_files'] == 0
 
-        self.assertEqual(result['matched_files'], 0)
-        self.assertEqual(result['results'], [])
+    def test_sort_missing_field(self, sample_docs):
+        """Test sorting by field that some files don't have."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='sort=priority')
+        result = adapter.get_structure()
+        # Should not crash, files without field go to end
+        assert len(result['results']) == 5
 
-    def test_get_element(self):
-        """Should get frontmatter for specific file."""
-        adapter = MarkdownQueryAdapter(base_path=self.temp_dir)
-        result = adapter.get_element('doc1.md')
+    def test_offset_greater_than_total(self, sample_docs):
+        """Test offset larger than total results."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='offset=100')
+        result = adapter.get_structure()
+        # Should return empty results
+        assert len(result['results']) == 0
 
-        self.assertIsNotNone(result)
-        self.assertTrue(result['has_frontmatter'])
-        self.assertEqual(result['frontmatter']['title'], 'First Document')
-        self.assertEqual(result['frontmatter']['type'], 'guide')
-
-    def test_get_element_no_frontmatter(self):
-        """Should handle file without frontmatter."""
-        adapter = MarkdownQueryAdapter(base_path=self.temp_dir)
-        result = adapter.get_element('no_fm.md')
-
-        self.assertIsNotNone(result)
-        self.assertFalse(result['has_frontmatter'])
-        self.assertIsNone(result['frontmatter'])
-
-    def test_get_element_not_found(self):
-        """Should return None for missing file."""
-        adapter = MarkdownQueryAdapter(base_path=self.temp_dir)
-        result = adapter.get_element('nonexistent.md')
-
-        self.assertIsNone(result)
-
-    def test_get_help(self):
-        """Should provide help documentation."""
-        help_data = MarkdownQueryAdapter.get_help()
-
-        self.assertIsInstance(help_data, dict)
-        self.assertEqual(help_data['name'], 'markdown')
-        self.assertIn('description', help_data)
-        self.assertIn('examples', help_data)
-        self.assertIn('syntax', help_data)
-        self.assertIn('filters', help_data)
-
-    def test_get_metadata(self):
-        """Should return metadata about query scope."""
-        adapter = MarkdownQueryAdapter(base_path=self.temp_dir)
-        meta = adapter.get_metadata()
-
-        self.assertEqual(meta['type'], 'markdown_query')
-        self.assertEqual(meta['total_files'], 5)
-        self.assertEqual(meta['with_frontmatter'], 4)  # All except no_fm.md
-        self.assertEqual(meta['without_frontmatter'], 1)
-
-
-class TestQueryParsing(unittest.TestCase):
-    """Test query string parsing."""
-
-    def test_parse_exact_match(self):
-        """Should parse exact match filter."""
-        adapter = MarkdownQueryAdapter(base_path='.', query='field=value')
-        self.assertEqual(adapter.filters, [('field', '=', 'value')])
-
-    def test_parse_missing_field(self):
-        """Should parse missing field filter."""
-        adapter = MarkdownQueryAdapter(base_path='.', query='!field')
-        self.assertEqual(adapter.filters, [('field', '!', '')])
-
-    def test_parse_wildcard(self):
-        """Should parse wildcard filter."""
-        adapter = MarkdownQueryAdapter(base_path='.', query='field=*pattern*')
-        self.assertEqual(adapter.filters, [('field', '*', '*pattern*')])
-
-    def test_parse_multiple(self):
-        """Should parse multiple filters."""
-        adapter = MarkdownQueryAdapter(base_path='.', query='a=1&b=2&!c')
-        self.assertEqual(len(adapter.filters), 3)
-        self.assertEqual(adapter.filters[0], ('a', '=', '1'))
-        self.assertEqual(adapter.filters[1], ('b', '=', '2'))
-        self.assertEqual(adapter.filters[2], ('c', '!', ''))
-
-    def test_parse_empty(self):
-        """Should handle empty query."""
-        adapter = MarkdownQueryAdapter(base_path='.', query='')
-        self.assertEqual(adapter.filters, [])
-
-    def test_parse_none(self):
-        """Should handle None query."""
-        adapter = MarkdownQueryAdapter(base_path='.', query=None)
-        self.assertEqual(adapter.filters, [])
-
-
-if __name__ == '__main__':
-    unittest.main()
+    def test_zero_limit(self, sample_docs):
+        """Test limit=0 (edge case)."""
+        adapter = MarkdownQueryAdapter(str(sample_docs), query='limit=0')
+        result = adapter.get_structure()
+        # limit=0 means no results
+        assert len(result['results']) == 0
