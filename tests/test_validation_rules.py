@@ -21,6 +21,7 @@ from reveal.rules.validation.V012 import V012
 from reveal.rules.validation.V013 import V013
 from reveal.rules.validation.V015 import V015
 from reveal.rules.validation.V016 import V016
+from reveal.rules.validation.V017 import V017
 from reveal.rules.validation.V018 import V018
 from reveal.rules.validation.V019 import V019
 from reveal.rules.validation.V020 import V020
@@ -1563,6 +1564,180 @@ class TestV019AdapterInitialization(unittest.TestCase):
         self.assertIn("TypeError", description)
         # Should mention initialization
         self.assertIn("initialization", description.lower())
+
+
+class TestV017TreeSitterNodeTypes(unittest.TestCase):
+    """Test V017: Tree-sitter node type coverage validation."""
+
+    def setUp(self):
+        self.rule = V017()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V017")
+        self.assertEqual(self.rule.severity.name, "HIGH")
+        self.assertIn("node types", self.rule.message.lower())
+
+    def test_non_treesitter_file_ignored(self):
+        """Test that non-treesitter.py files are ignored."""
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_treesitter_file_processed(self):
+        """Test that treesitter.py files are processed."""
+        # Even with empty content, should process and likely find issues
+        detections = self.rule.check(
+            file_path="reveal/treesitter.py",
+            structure=None,
+            content=""
+        )
+        self.assertIsInstance(detections, list)
+
+    def test_sufficient_function_types(self):
+        """Test that sufficient function node types pass validation."""
+        content = """
+def _get_function_node_types(self):
+    return [
+        'function_definition',
+        'function_declaration',
+        'function_item',
+        'function_signature',
+        'method_declaration',
+        'method_definition',
+    ]
+"""
+        detections = self.rule.check(
+            file_path="reveal/treesitter.py",
+            structure=None,
+            content=content
+        )
+        # Should not detect issues with 6 function types
+        function_issues = [d for d in detections if "function node types" in d.message.lower()]
+        self.assertEqual(len(function_issues), 0)
+
+    def test_insufficient_function_types(self):
+        """Test that insufficient function node types are detected."""
+        content = """
+def _get_function_node_types(self):
+    return [
+        'function_definition',
+        'function_declaration',
+    ]
+"""
+        detections = self.rule.check(
+            file_path="reveal/treesitter.py",
+            structure=None,
+            content=content
+        )
+        # Should detect issue with only 2 function types
+        function_issues = [d for d in detections if "function node types" in d.message.lower()]
+        self.assertGreater(len(function_issues), 0)
+        self.assertIn("2 found", function_issues[0].message)
+
+    def test_sufficient_class_types(self):
+        """Test that sufficient class node types pass validation."""
+        content = """
+def _get_function_node_types(self):
+    return ['function_definition', 'function_declaration', 'function_item',
+            'method_declaration', 'method_definition']
+
+def _get_class_node_types(self):
+    return [
+        'class_definition',
+        'class_declaration',
+        'struct_item',
+        'class_specifier',
+    ]
+"""
+        detections = self.rule.check(
+            file_path="reveal/treesitter.py",
+            structure=None,
+            content=content
+        )
+        # Should not detect issues with 4 class types
+        class_issues = [d for d in detections if "class node types" in d.message.lower()]
+        self.assertEqual(len(class_issues), 0)
+
+    def test_insufficient_class_types(self):
+        """Test that insufficient class node types are detected."""
+        content = """
+def _get_function_node_types(self):
+    return ['function_definition', 'function_declaration', 'function_item',
+            'method_declaration', 'method_definition']
+
+def _get_class_node_types(self):
+    return [
+        'class_definition',
+    ]
+"""
+        detections = self.rule.check(
+            file_path="reveal/treesitter.py",
+            structure=None,
+            content=content
+        )
+        # Should detect issue with only 1 class type
+        class_issues = [d for d in detections if "class node types" in d.message.lower()]
+        self.assertGreater(len(class_issues), 0)
+        self.assertIn("1 found", class_issues[0].message)
+
+    def test_simple_identifier_present(self):
+        """Test that simple_identifier presence passes validation."""
+        content = """
+def _get_function_node_types(self):
+    return ['function_definition', 'function_declaration', 'function_item',
+            'method_declaration', 'method_definition']
+
+def _get_class_node_types(self):
+    return ['class_definition', 'class_declaration', 'struct_item']
+
+# Name extraction uses both identifier types
+name_types = ['identifier', 'simple_identifier']
+"""
+        detections = self.rule.check(
+            file_path="reveal/treesitter.py",
+            structure=None,
+            content=content
+        )
+        # Should not detect simple_identifier issue when it's present
+        identifier_issues = [d for d in detections if "simple_identifier" in d.message.lower()]
+        self.assertEqual(len(identifier_issues), 0)
+
+    def test_simple_identifier_missing(self):
+        """Test that missing simple_identifier is detected."""
+        content = """
+def _get_function_node_types(self):
+    return ['function_definition', 'function_declaration', 'function_item',
+            'method_declaration', 'method_definition']
+
+def _get_class_node_types(self):
+    return ['class_definition', 'class_declaration', 'struct_item']
+
+# Name extraction uses only identifier
+name_types = ['identifier']
+"""
+        detections = self.rule.check(
+            file_path="reveal/treesitter.py",
+            structure=None,
+            content=content
+        )
+        # Should detect missing simple_identifier when identifier is present
+        identifier_issues = [d for d in detections if "simple_identifier" in d.message.lower()]
+        self.assertGreater(len(identifier_issues), 0)
+        self.assertIn("Kotlin/Swift", identifier_issues[0].message)
+
+    def test_description_explains_node_types(self):
+        """Test that rule description explains node type coverage."""
+        description = self.rule.get_description()
+        self.assertIsInstance(description, str)
+        self.assertGreater(len(description), 50)
+        # Should mention node types
+        self.assertIn("node type", description.lower())
+        # Should mention tree-sitter
+        self.assertIn("tree-sitter", description.lower())
 
 
 if __name__ == '__main__':
