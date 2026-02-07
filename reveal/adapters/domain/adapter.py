@@ -238,11 +238,14 @@ class DomainAdapter(ResourceAdapter):
         """Run domain health checks.
 
         Args:
-            **kwargs: Check options
+            **kwargs: Check options (advanced, only_failures)
 
         Returns:
             Health check result dict
         """
+        advanced = kwargs.get('advanced', False)
+        only_failures = kwargs.get('only_failures', False)
+
         checks = []
 
         # Check 1: DNS resolution
@@ -257,7 +260,7 @@ class DomainAdapter(ResourceAdapter):
         # Check 4: SSL certificate (delegate to ssl:// adapter)
         from ..ssl.certificate import check_ssl_health
         try:
-            ssl_check = check_ssl_health(self.domain, 443)
+            ssl_check = check_ssl_health(self.domain, 443, advanced=advanced)
             # Add SSL expiry as a domain check
             if 'certificate' in ssl_check:
                 cert = ssl_check['certificate']
@@ -311,10 +314,14 @@ class DomainAdapter(ResourceAdapter):
         else:
             overall_status = 'pass'
 
-        # Summary
+        # Summary (before filtering)
         passed = sum(1 for c in checks if c['status'] == 'pass')
         warnings = sum(1 for c in checks if c['status'] == 'warning')
         failures = sum(1 for c in checks if c['status'] == 'failure')
+
+        # Filter to only failures if requested
+        if only_failures:
+            checks = [c for c in checks if c['status'] in ('failure', 'warning')]
 
         # Generate next steps based on failures
         next_steps = []

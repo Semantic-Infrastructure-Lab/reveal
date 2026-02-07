@@ -1,12 +1,24 @@
 # Reveal Roadmap
 
-> **Last updated**: 2026-01-20
+> **Last updated**: 2026-02-06
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.44.2
+- ✅ **SSL certificate parsing fix** — TLS 1.3 connections properly handled (cryptography dependency)
+- ✅ **52 SSL tests passing** — Comprehensive test coverage
+
+### v0.44.1
+- ✅ **Batch SSL filter flags** — `--only-failures`, `--summary`, `--expiring-within` work with `--stdin --check`
+- ✅ **Issue #19 resolved** — Composable SSL batch checks fully functional
+
+### v0.44.0
+- ✅ **`--extract` flag** — Extract structured data for composable pipelines
+- ✅ **domain:// adapter** — Domain registration, DNS records, health status inspection
 
 ### v0.43.0
 - ✅ **`@file` batch syntax** — Read targets from a file (`reveal @domains.txt --check`)
@@ -153,12 +165,13 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 
 ## Adapter Status
 
-### Implemented (15)
+### Implemented (16)
 | Adapter | Description |
 |---------|-------------|
 | `ast://` | Query code as database (complexity, size, type filters) |
 | `claude://` | Claude conversation analysis |
 | `diff://` | Compare files or git revisions |
+| `domain://` | Domain registration, DNS records, health status |
 | `env://` | Environment variable inspection |
 | `git://` | Repository history, blame, commits |
 | `help://` | Built-in documentation |

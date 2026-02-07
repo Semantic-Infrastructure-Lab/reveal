@@ -99,6 +99,11 @@ def _build_adapter_examples() -> str:
   reveal 'ast://app.py?lines>50'              # Find long functions
   reveal 'ast://.?type=function' --format=json  # All functions as JSON
 
+  # Universal operation flags (work across all adapters with --check)
+  reveal ssl://example.com --check --advanced        # SSL deep health check
+  reveal domain://example.com --check --advanced     # Domain + DNS validation
+  reveal mysql://localhost --check --only-failures   # Show only MySQL problems
+
 File-type specific features:
   • Markdown: --links, --code, --frontmatter (extract links/code/metadata)
   • HTML: --metadata, --semantic, --scripts, --styles (extract SEO/elements/scripts)
@@ -292,16 +297,24 @@ def _add_schema_validation_options(parser: argparse.ArgumentParser) -> None:
                         help='List all built-in schemas available for validation')
 
 
+def _add_universal_operation_flags(parser: argparse.ArgumentParser) -> None:
+    """Add universal operation flags that work across all adapters.
+
+    These flags provide consistent behavior for health checks and filtering
+    across all adapters that support validation (--check).
+    """
+    parser.add_argument('--advanced', action='store_true',
+                        help='Run advanced checks with --check (enables deeper validation)')
+    parser.add_argument('--only-failures', action='store_true',
+                        help='Only show failed/warning checks (hide healthy results)')
+
+
 def _add_ssl_options(parser: argparse.ArgumentParser) -> None:
     """Add SSL-specific options for batch checks."""
-    parser.add_argument('--only-failures', action='store_true',
-                        help='Only show failed/warning SSL checks (hide healthy certificates)')
     parser.add_argument('--summary', action='store_true',
                         help='Show aggregated summary instead of full details')
     parser.add_argument('--expiring-within', type=str, metavar='DAYS',
                         help='Only show certificates expiring within N days (e.g., 7, 30)')
-    parser.add_argument('--advanced', action='store_true',
-                        help='Run advanced checks with --check (TLS version, self-signed detection, issuer type)')
     parser.add_argument('--validate-nginx', action='store_true',
                         help='Cross-validate SSL certificates against nginx configuration')
 
@@ -332,6 +345,7 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     _add_type_aware_options(parser)
     _add_display_options(parser)
     _add_pattern_detection_options(parser)
+    _add_universal_operation_flags(parser)
     _add_navigation_options(parser)
     _add_markdown_options(parser)
     _add_html_options(parser)

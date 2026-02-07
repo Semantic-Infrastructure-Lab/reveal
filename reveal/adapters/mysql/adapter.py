@@ -930,6 +930,9 @@ class MySQLAdapter(ResourceAdapter):
     def check(self, **kwargs) -> Dict[str, Any]:
         """Run health checks with pass/warn/fail thresholds.
 
+        Args:
+            **kwargs: Check options (advanced, only_failures)
+
         Refactored to reduce complexity from 58 → ~15 by extracting helpers.
 
         Returns:
@@ -954,6 +957,9 @@ class MySQLAdapter(ResourceAdapter):
                 }
             }
         """
+        advanced = kwargs.get('advanced', False)
+        only_failures = kwargs.get('only_failures', False)
+
         # Collect all health metrics using extracted helper
         metrics = self._collect_health_metrics()
 
@@ -978,12 +984,19 @@ class MySQLAdapter(ResourceAdapter):
                 )
                 checks.append(check_result)
 
-        # Calculate summary and overall status using extracted helper
+        # Calculate summary and overall status using extracted helper (before filtering)
         overall_status, exit_code, summary = self._calculate_check_summary(checks)
+
+        # Filter to only failures if requested
+        filtered_checks = checks
+        if only_failures:
+            filtered_checks = [c for c in checks if c['status'] in ('failure', 'warning')]
+
+        # Note: advanced parameter reserved for future enhanced checks
 
         return {
             'status': overall_status,
             'exit_code': exit_code,
-            'checks': checks,
+            'checks': filtered_checks,
             'summary': summary
         }

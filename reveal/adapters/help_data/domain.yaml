@@ -26,6 +26,12 @@ examples:
   - uri: 'domain://example.com --check'
     description: 'Health check (DNS resolution, propagation, SSL certificate, expiry)'
 
+  - uri: 'domain://example.com --check --advanced'
+    description: 'Advanced health check (includes deeper SSL validation)'
+
+  - uri: 'domain://example.com --check --only-failures'
+    description: 'Show only problems (hide passed checks)'
+
   # Batch operations via stdin
   - uri: 'cat domains.txt | sed ''s/^/domain:\/\//'' | reveal --stdin --check'
     description: 'Batch domain health checks from file via stdin'
@@ -41,6 +47,8 @@ elements:
 
 flags:
   --check: 'Run health checks (DNS resolution, propagation, SSL certificate)'
+  --advanced: 'Run advanced checks with --check (enables deeper validation) [Universal flag]'
+  --only-failures: 'Hide healthy results, show only warnings and failures [Universal flag]'
 
 features:
   - 'Progressive disclosure (overview → elements → health checks)'

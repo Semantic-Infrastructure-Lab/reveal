@@ -20,6 +20,8 @@ examples:
     description: 'Storage usage by database'
   - uri: 'mysql://localhost --check'
     description: 'Run health checks with thresholds'
+  - uri: 'mysql://localhost --check --only-failures'
+    description: 'Show only problems (hide passed checks)'
   - uri: 'mysql:///innodb'
     description: 'Use ~/.my.cnf credentials, specify element only'
 
@@ -34,6 +36,11 @@ elements:
   variables: 'Server configuration'
   health: 'Comprehensive health check'
   databases: 'Database list'
+
+flags:
+  --check: 'Run health checks with pass/warn/fail thresholds'
+  --advanced: 'Run advanced checks with --check (reserved for future enhanced checks) [Universal flag]'
+  --only-failures: 'Hide passed checks, show only warnings and failures [Universal flag]'
 
 features:
   - 'DBA health snapshot (~100 tokens vs 5000+ for raw SQL)'

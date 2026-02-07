@@ -67,8 +67,8 @@ elements:
 
 flags:
   --check: 'Run health checks (expiry, chain validity, hostname match)'
-  --advanced: 'Run advanced checks with --check (TLS version, key strength, issuer type, self-signed)'
-  --only-failures: 'Hide healthy certs, show only warnings and failures (batch mode)'
+  --advanced: 'Run advanced checks with --check (TLS version, key strength, issuer type, self-signed) [Universal flag]'
+  --only-failures: 'Hide healthy results, show only warnings and failures [Universal flag]'
   --summary: 'Show aggregated counts instead of per-domain details (batch mode)'
   --expiring-within: 'Filter to certs expiring within N days (e.g., --expiring-within=30)'
   --validate-nginx: 'Cross-validate nginx SSL config against actual certificates (nginx mode only)'
