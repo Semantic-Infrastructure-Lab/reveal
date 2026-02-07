@@ -1,9 +1,13 @@
-# Output Contract Specification v1.0
+# Output Contract Specification
 
-**Version**: 1.0.0
+**Current Version**: 1.1.0
 **Status**: Released
-**Date**: 2026-01-17
+**Date**: 2026-02-06
 **Stability**: Stable 🟢
+
+## Version History
+- **v1.1** (2026-02-06): Added trust metadata (`meta` field)
+- **v1.0** (2026-01-17): Initial release with core contract fields
 
 ---
 
@@ -143,6 +147,146 @@ These fields are OPTIONAL but recommended for common patterns:
 
 ---
 
+## Contract v1.1 Schema (Added 2026-02-06)
+
+### Trust Metadata Field
+
+**v1.1 adds the optional `meta` field** for parse quality and confidence information. This enables AI agents to know when to trust results and handle degraded parsing gracefully.
+
+**`meta`** (optional, dict)
+- **Purpose**: Parse quality, confidence, warnings, errors
+- **Added**: v1.1 (2026-02-06)
+- **Backward Compatible**: Yes (v1.0 clients ignore this field)
+
+**Structure:**
+```python
+'meta': {
+    'parse_mode': str,          # How parsing was performed
+    'confidence': float,        # 0.0-1.0 overall confidence
+    'warnings': [dict],         # Non-fatal issues
+    'errors': [dict]            # Fatal issues (with fallback info)
+}
+```
+
+**Field Details:**
+
+**`meta.parse_mode`** (optional, string)
+- **Values**: `"tree_sitter_full"` | `"tree_sitter_partial"` | `"fallback"` | `"regex"` | `"heuristic"`
+- **Purpose**: Indicates how the data was parsed
+- **Examples**:
+  - `"tree_sitter_full"` - Full tree-sitter AST parsing (high confidence)
+  - `"tree_sitter_partial"` - Partial tree-sitter parsing (some parse errors)
+  - `"fallback"` - Tree-sitter failed, used fallback method
+  - `"regex"` - Regular expression extraction
+  - `"heuristic"` - Pattern-based heuristics
+
+**`meta.confidence`** (optional, float)
+- **Range**: 0.0 (no confidence) to 1.0 (complete confidence)
+- **Purpose**: Overall confidence in the results
+- **Guidelines**:
+  - `1.0` - Perfect parse, all elements extracted correctly
+  - `0.95-0.99` - High confidence, minor ambiguities
+  - `0.80-0.94` - Good confidence, some elements may be incomplete
+  - `0.50-0.79` - Partial results, fallback methods used
+  - `< 0.50` - Low confidence, results may be unreliable
+
+**`meta.warnings`** (optional, array of dicts)
+- **Purpose**: Non-fatal issues encountered during parsing
+- **Schema**:
+  ```python
+  {
+      'code': str,         # Warning code (e.g., 'W001')
+      'message': str,      # Human-readable message
+      'file': str,         # (optional) Affected file
+      'line': int,         # (optional) Line number
+      'suggestion': str    # (optional) How to fix
+  }
+  ```
+- **Examples**:
+  ```python
+  'warnings': [
+      {
+          'code': 'W001',
+          'message': 'File encoding uncertain, assumed UTF-8',
+          'file': 'legacy.py',
+          'suggestion': 'Add # -*- coding: utf-8 -*- header'
+      }
+  ]
+  ```
+
+**`meta.errors`** (optional, array of dicts)
+- **Purpose**: Fatal errors that prevented normal parsing
+- **Schema**:
+  ```python
+  {
+      'code': str,         # Error code (e.g., 'E002')
+      'message': str,      # Human-readable error
+      'file': str,         # Affected file
+      'line': int,         # (optional) Error location
+      'fallback': str      # What fallback method was used
+  }
+  ```
+- **Examples**:
+  ```python
+  'errors': [
+      {
+          'code': 'E002',
+          'message': 'Parse failed: malformed syntax',
+          'file': 'src/broken.py',
+          'fallback': 'Used regex fallback'
+      }
+  ]
+  ```
+
+**Complete v1.1 Example:**
+```python
+{
+    'contract_version': '1.1',
+    'type': 'ast_query',
+    'source': 'src/',
+    'source_type': 'directory',
+
+    # NEW in v1.1
+    'meta': {
+        'parse_mode': 'tree_sitter_full',
+        'confidence': 0.95,
+        'warnings': [
+            {
+                'code': 'W001',
+                'message': 'File encoding uncertain, assumed UTF-8',
+                'file': 'src/legacy.py'
+            }
+        ],
+        'errors': []
+    },
+
+    'results': [
+        {
+            'symbol': 'authenticate',
+            'file': 'src/auth.py',
+            'line': 42,
+            # Per-item confidence (optional, adapter-specific)
+            'confidence': 0.98,
+            'parse_warnings': []
+        }
+    ]
+}
+```
+
+**Per-Item Confidence** (optional, adapter-specific):
+Adapters MAY include confidence/warning fields on individual result items:
+- `confidence` (float 0.0-1.0) - Confidence for this specific item
+- `parse_warnings` (array) - Item-specific warnings
+
+**When to use v1.1:**
+- ✅ Adapter uses tree-sitter or complex parsing
+- ✅ Fallback methods are available
+- ✅ Results may have varying quality
+- ✅ AI agents need to know when to trust results
+- ❌ Simple data extraction (no parsing complexity)
+
+---
+
 ### Adapter-Specific Fields
 
 Adapters MAY include additional fields beyond the contract. These fields:
@@ -180,12 +324,13 @@ The following field names are reserved and MUST NOT be used for adapter-specific
 - `type`
 - `source`
 - `source_type`
+- `meta` (v1.1+)
 - `metadata`
 - `query`
 - `next_steps`
 - `status`
 - `issues`
-- `error` (use `status.errors` instead)
+- `error` (use `status.errors` or `meta.errors` instead)
 - `version` (use `contract_version` instead)
 
 ---

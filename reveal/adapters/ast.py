@@ -377,11 +377,21 @@ class AstAdapter(ResourceAdapter):
         # Apply filters
         filtered = self._apply_filters(structures)
 
+        # Create trust metadata (v1.1)
+        # AST adapter uses tree-sitter for parsing
+        meta = self.create_meta(
+            parse_mode='tree_sitter_full',
+            confidence=1.0 if structures else 0.0,
+            warnings=[],
+            errors=[]
+        )
+
         return {
-            'contract_version': '1.0',
+            'contract_version': '1.1',
             'type': 'ast_query',
             'source': self.path,
             'source_type': 'directory' if Path(self.path).is_dir() else 'file',
+            'meta': meta,
             'path': self.path,
             'query': self._format_query(self.query),
             'total_files': len(structures),

@@ -1,7 +1,7 @@
 """Base adapter interface for URI resources."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 class ResourceAdapter(ABC):
@@ -15,6 +15,79 @@ class ResourceAdapter(ABC):
             Dict containing structured representation of the resource
         """
         pass
+
+    @staticmethod
+    def create_meta(
+        parse_mode: Optional[str] = None,
+        confidence: Optional[float] = None,
+        warnings: Optional[List[Dict[str, Any]]] = None,
+        errors: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """Create Output Contract v1.1 meta dict with trust metadata.
+
+        For adapters that use parsing (tree-sitter, regex, heuristics) to provide
+        quality/confidence information to AI agents.
+
+        Args:
+            parse_mode: How parsing was performed
+                - "tree_sitter_full" - Complete AST parsing (high confidence)
+                - "tree_sitter_partial" - Partial AST parsing (some errors)
+                - "fallback" - Tree-sitter failed, used fallback
+                - "regex" - Regular expression extraction
+                - "heuristic" - Pattern-based heuristics
+            confidence: Overall confidence (0.0-1.0)
+                - 1.0 = Perfect parse
+                - 0.95-0.99 = High confidence
+                - 0.80-0.94 = Good confidence
+                - 0.50-0.79 = Partial results
+                - < 0.50 = Low confidence
+            warnings: Non-fatal issues
+                [{'code': 'W001', 'message': '...', 'file': '...'}]
+            errors: Fatal errors with fallback info
+                [{'code': 'E002', 'message': '...', 'file': '...', 'fallback': '...'}]
+
+        Returns:
+            Meta dict for Output Contract v1.1
+
+        Example:
+            meta = ResourceAdapter.create_meta(
+                parse_mode='tree_sitter_full',
+                confidence=0.95,
+                warnings=[{
+                    'code': 'W001',
+                    'message': 'File encoding uncertain',
+                    'file': 'legacy.py'
+                }]
+            )
+            return {
+                'contract_version': '1.1',
+                'type': 'ast_query',
+                'source': 'src/',
+                'source_type': 'directory',
+                'meta': meta,  # <- Include meta
+                'results': [...]
+            }
+        """
+        meta: Dict[str, Any] = {}
+
+        if parse_mode is not None:
+            meta['parse_mode'] = parse_mode
+
+        if confidence is not None:
+            # Clamp to [0.0, 1.0]
+            meta['confidence'] = max(0.0, min(1.0, confidence))
+
+        if warnings is not None:
+            meta['warnings'] = warnings
+        else:
+            meta['warnings'] = []
+
+        if errors is not None:
+            meta['errors'] = errors
+        else:
+            meta['errors'] = []
+
+        return meta if meta else {}
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get details about a specific element within the resource.
