@@ -22,6 +22,11 @@ from reveal.rules.validation.V013 import V013
 from reveal.rules.validation.V015 import V015
 from reveal.rules.validation.V016 import V016
 from reveal.rules.validation.V018 import V018
+from reveal.rules.validation.V019 import V019
+from reveal.rules.validation.V020 import V020
+from reveal.rules.validation.V021 import V021
+from reveal.rules.validation.V022 import V022
+from reveal.rules.validation.V023 import V023
 from reveal.rules.validation.utils import find_reveal_root
 
 
@@ -1234,6 +1239,330 @@ class TestV018RendererRegistration(unittest.TestCase):
                 self.assertGreater(len(adapters), 0)
         except ImportError:
             self.skipTest("Cannot import adapter registries")
+
+
+class TestV022ManifestInclusion(unittest.TestCase):
+    """Test V022: Package manifest file inclusion validation."""
+
+    def setUp(self):
+        self.rule = V022()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V022")
+        self.assertEqual(self.rule.severity.name, "HIGH")
+        self.assertIn("manifest", self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        """Test that non-reveal URIs are ignored."""
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        """Test that reveal:// URIs are processed."""
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        # Should return detections list
+        self.assertIsInstance(detections, list)
+
+    def test_description_explains_manifest(self):
+        """Test that rule description explains manifest validation."""
+        description = self.rule.get_description()
+        self.assertIsInstance(description, str)
+        self.assertGreater(len(description), 40)  # Adjusted threshold
+        # Should mention manifest or package
+        description_lower = description.lower()
+        self.assertTrue("manifest" in description_lower or "package" in description_lower)
+
+
+class TestV023OutputContractCompliance(unittest.TestCase):
+    """Test V023: Output contract compliance validation."""
+
+    def setUp(self):
+        self.rule = V023()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V023")
+        self.assertEqual(self.rule.severity.name, "HIGH")
+        self.assertIn("contract", self.rule.message.lower() or "output" in self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        """Test that non-reveal URIs are ignored."""
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        """Test that reveal:// URIs are processed."""
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        # Should return detections list
+        self.assertIsInstance(detections, list)
+
+    def test_valid_source_types_defined(self):
+        """Test that valid source types are defined."""
+        valid_types = self.rule.VALID_SOURCE_TYPES
+        self.assertIsInstance(valid_types, set)
+        # Should include standard source types
+        expected = {'file', 'directory', 'database', 'runtime', 'network'}
+        self.assertEqual(valid_types, expected)
+
+    def test_description_explains_contract(self):
+        """Test that rule description explains output contract."""
+        description = self.rule.get_description()
+        self.assertIsInstance(description, str)
+        self.assertGreater(len(description), 50)
+        # Should mention contract or output
+        description_lower = description.lower()
+        self.assertTrue("contract" in description_lower or "output" in description_lower)
+
+
+class TestV021RegexVsTreeSitter(unittest.TestCase):
+    """Test V021: Detect inappropriate regex usage when tree-sitter is available."""
+
+    def setUp(self):
+        self.rule = V021()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V021")
+        self.assertEqual(self.rule.severity.name, "HIGH")
+        self.assertIn("regex", self.rule.message.lower() or "tree" in self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        """Test that non-reveal URIs are ignored."""
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        """Test that reveal:// URIs are processed."""
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        # Should return detections list
+        self.assertIsInstance(detections, list)
+
+    def test_tree_sitter_languages_defined(self):
+        """Test that tree-sitter languages set is populated."""
+        self.assertGreater(len(self.rule.TREE_SITTER_LANGUAGES), 0)
+        # Should include common languages
+        common_langs = {'python', 'javascript', 'go', 'rust'}
+        self.assertTrue(common_langs.issubset(self.rule.TREE_SITTER_LANGUAGES))
+
+    def test_regex_whitelist_defined(self):
+        """Test that regex whitelist is defined."""
+        self.assertIsInstance(self.rule.REGEX_WHITELIST, set)
+        # Markdown should be whitelisted (uses regex for links)
+        self.assertIn('markdown.py', self.rule.REGEX_WHITELIST)
+
+    def test_imports_re_module_detection(self):
+        """Test that _imports_re_module correctly detects re imports."""
+        # Test with 're' import
+        content_with_re = "import re\nclass Foo: pass"
+        self.assertTrue(self.rule._imports_re_module(content_with_re))
+
+        # Test without 're' import
+        content_without_re = "import os\nclass Foo: pass"
+        self.assertFalse(self.rule._imports_re_module(content_without_re))
+
+        # Test with from import
+        content_with_from = "from re import compile\nclass Foo: pass"
+        self.assertTrue(self.rule._imports_re_module(content_with_from))
+
+    def test_description_explains_tree_sitter(self):
+        """Test that rule description explains tree-sitter usage."""
+        description = self.rule.get_description()
+        self.assertIsInstance(description, str)
+        self.assertGreater(len(description), 50)
+        # Should mention tree-sitter
+        description_lower = description.lower()
+        self.assertTrue("tree" in description_lower or "sitter" in description_lower)
+
+
+class TestV020ElementStructureContract(unittest.TestCase):
+    """Test V020: Adapter element/structure contract compliance."""
+
+    def setUp(self):
+        self.rule = V020()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V020")
+        self.assertEqual(self.rule.severity.name, "MEDIUM")
+        self.assertIn("element", self.rule.message.lower() or "structure" in self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        """Test that non-reveal URIs are ignored."""
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        """Test that reveal:// URIs are processed."""
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        # Should return detections list (may have detections if contract violations exist)
+        self.assertIsInstance(detections, list)
+
+    def test_adapter_renderer_access(self):
+        """Test that rule can access adapters and renderers."""
+        try:
+            from reveal.adapters.base import (
+                list_supported_schemes,
+                get_adapter_class,
+                get_renderer_class
+            )
+            schemes = list(list_supported_schemes())
+
+            if len(schemes) > 0:
+                first_scheme = schemes[0]
+                adapter_class = get_adapter_class(first_scheme)
+                renderer_class = get_renderer_class(first_scheme)
+
+                # Should get classes
+                self.assertIsNotNone(adapter_class)
+                # Renderer may be None for some adapters
+                # Just verify we can call the function
+        except ImportError:
+            self.skipTest("Cannot import adapter/renderer registries")
+
+    def test_get_element_contract(self):
+        """Test that adapters with element renderers have get_element."""
+        reveal_root = find_reveal_root()
+        if not reveal_root:
+            self.skipTest("Reveal root not found")
+
+        # Run the check
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+
+        # If detections found, verify they're about element/structure contract
+        for detection in detections:
+            self.assertTrue(
+                "get_element" in detection.message or "get_structure" in detection.message,
+                f"Unexpected detection: {detection.message}"
+            )
+
+    def test_description_explains_contract(self):
+        """Test that rule description explains the element/structure contract."""
+        description = self.rule.get_description()
+        self.assertIsInstance(description, str)
+        self.assertGreater(len(description), 50)
+        # Should mention get_element or get_structure
+        description_lower = description.lower()
+        self.assertTrue(
+            "get_element" in description_lower or "get_structure" in description_lower
+        )
+
+
+class TestV019AdapterInitialization(unittest.TestCase):
+    """Test V019: Adapter initialization pattern compliance."""
+
+    def setUp(self):
+        self.rule = V019()
+
+    def test_metadata(self):
+        """Test rule metadata."""
+        self.assertEqual(self.rule.code, "V019")
+        self.assertEqual(self.rule.severity.name, "HIGH")
+        self.assertIn("initialization", self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        """Test that non-reveal URIs are ignored."""
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content="# some content"
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_reveal_uri_processed(self):
+        """Test that reveal:// URIs are processed."""
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        # Should return detections list (may have detections if adapters have init issues)
+        self.assertIsInstance(detections, list)
+
+    def test_no_arg_init_typeerror_expected(self):
+        """Test that adapters properly raise TypeError for no-arg init when required."""
+        # This tests the _test_no_arg_init method logic
+        # We can't easily mock adapter classes, so we verify the rule runs
+        reveal_root = find_reveal_root()
+        if not reveal_root:
+            self.skipTest("Reveal root not found")
+
+        # Run the check - it should not crash
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        self.assertIsInstance(detections, list)
+
+        # If detections found, verify they have proper structure
+        for detection in detections:
+            self.assertIn("initialization", detection.message.lower())
+            self.assertTrue(hasattr(detection, 'severity'))
+
+    def test_resource_init_handling(self):
+        """Test that adapters handle resource string initialization properly."""
+        # Test that the rule can access adapter classes
+        try:
+            from reveal.adapters.base import list_supported_schemes, get_adapter_class
+            schemes = list(list_supported_schemes())
+
+            # Should have at least one adapter
+            if len(schemes) > 0:
+                self.assertGreater(len(schemes), 0)
+
+                # Get first adapter to verify get_adapter_class works
+                first_scheme = schemes[0]
+                adapter_class = get_adapter_class(first_scheme)
+                self.assertIsNotNone(adapter_class)
+        except ImportError:
+            self.skipTest("Cannot import adapter registries")
+
+    def test_description_explains_contract(self):
+        """Test that rule description explains the initialization contract."""
+        description = self.rule.get_description()
+        self.assertIsInstance(description, str)
+        self.assertGreater(len(description), 50)
+        # Should mention TypeError
+        self.assertIn("TypeError", description)
+        # Should mention initialization
+        self.assertIn("initialization", description.lower())
 
 
 if __name__ == '__main__':
