@@ -80,6 +80,57 @@ class ResourceAdapter(ABC):
         """
         return None
 
+    @staticmethod
+    def get_schema() -> Optional[Dict[str, Any]]:
+        """Get machine-readable schema for this adapter (optional).
+
+        For AI agent integration: Implement this method to provide discoverable
+        schemas that enable agents to auto-generate valid queries.
+
+        Returns:
+            Dict containing schema metadata, or None if no schema available.
+
+            Required keys:
+                - adapter (str): Adapter scheme name (e.g., 'ssl', 'ast')
+                - description (str): One-line summary
+                - uri_syntax (str): URI pattern (e.g., 'ssl://<host>[:<port>][/<element>]')
+
+            Recommended keys:
+                - query_params (Dict[str, Dict]): Query parameters with type/description
+                  {'param_name': {'type': 'string', 'description': '...', 'required': bool}}
+                - elements (List[str]): Available elements for element-based queries
+                - output_types (List[Dict]): Output structure definitions
+                  [{'type': 'ssl_certificate', 'schema': {...}, 'example': {...}}]
+                - cli_flags (List[str]): Available CLI flags
+                - example_queries (List[Dict]): Canonical query examples
+                  [{'uri': '...', 'description': '...', 'output_type': '...'}]
+
+            Optional keys:
+                - operators (Dict[str, str]): Supported query operators (>, <, =, etc.)
+                - filters (Dict[str, Dict]): Available filters with type info
+                - supports_batch (bool): Whether adapter supports stdin batch mode
+                - supports_advanced (bool): Whether --advanced flag is supported
+
+        Purpose:
+            - AI agents discover capabilities programmatically
+            - Auto-generate valid queries without hardcoding
+            - Understand expected output structure
+            - Generate correct query parameters
+
+        Best Practices:
+            - Include JSON Schema definitions for complex output types
+            - Provide example outputs (small, realistic samples)
+            - Document all query parameters with types
+            - Include 3-5 example queries covering common use cases
+
+        For detailed guidance:
+            reveal help://adapter-authoring - Schema authoring guide
+
+        Examples:
+            See reveal/adapters/ssl.py, ast.py for reference implementations
+        """
+        return None
+
 
 # Registry for URI scheme adapters
 _ADAPTER_REGISTRY: Dict[str, type] = {}

@@ -274,10 +274,12 @@ Exit code: 5 (number of failures)
 
 ---
 
-## Phase 3: Query Operator Standardization (Medium Priority - 16 hours)
+## Phase 3: Query Operator Standardization (Medium Priority - 20 hours)
+
+**Updated**: 2026-02-06 - Added sort/limit operators (+4 hours)
 
 ### Goal
-Unified query syntax across all adapters.
+Unified query syntax across all adapters, including sorting and pagination.
 
 ### Current Operator Support
 
@@ -315,6 +317,14 @@ Unified query syntax across all adapters.
 |    OR (explicit)          ast://src?type=function|method
 ()   Grouping               ast://src?(lines>50|complexity>10)&decorator=cached
 !    NOT prefix             markdown://docs/?!deprecated&status=active
+```
+
+#### Result Control (NEW - from agentic AI feedback)
+```
+sort=field       Sort ascending       ast://src?lines>50&sort=complexity
+sort=-field      Sort descending      ast://src?lines>50&sort=-complexity
+limit=N          Limit results        ast://src?lines>50&limit=20
+offset=M         Skip first M         ast://src?lines>50&offset=10&limit=10
 ```
 
 ### Implementation
@@ -414,10 +424,12 @@ reveal 'json://data.json/users?age>18&status==active'
 
 ---
 
-## Phase 4: Field Selection for Token Efficiency (Medium Priority - 8 hours)
+## Phase 4: Field Selection + Budget Awareness (Medium Priority - 12 hours)
+
+**Updated**: 2026-02-06 - Added budget-aware flags (+4 hours from agentic AI feedback)
 
 ### Goal
-Reduce token usage by selecting specific fields in output.
+Reduce token usage by selecting specific fields in output AND enable explicit token budget constraints for LLM loops.
 
 ### Current State
 Full structure returned (100-500 lines):
@@ -428,8 +440,15 @@ reveal ssl://example.com --format=json
 
 ### Proposed Enhancement
 ```bash
+# Field selection (original)
 reveal ssl://example.com --select=domain,expiry,days_until_expiry --format=json
 # Returns: ~10 lines of JSON (40x reduction)
+
+# Budget constraints (NEW)
+reveal ast://src --max-items=50                    # Stop after 50 results
+reveal ast://src?lines>50 --max-bytes=4096         # Stay under token budget
+reveal src/ --max-depth=2                          # Shallow tree only
+reveal file.py --max-snippet-chars=200             # Truncate long strings
 ```
 
 ### Implementation
@@ -474,6 +493,54 @@ class SSLRenderer:
 
         # Continue with normal rendering
         ...
+```
+
+#### 4. Budget-Aware Flags (NEW)
+
+**Add to universal flags:**
+```python
+def _add_universal_filter_flags(parser: argparse.ArgumentParser) -> None:
+    """Universal filters for result limiting."""
+    # Field selection (already planned)
+    parser.add_argument('--select', type=str, metavar='FIELDS',
+                        help='Select specific fields (comma-separated)')
+
+    # Budget constraints (NEW)
+    parser.add_argument('--max-items', type=int, metavar='N',
+                        help='Stop after N results')
+    parser.add_argument('--max-bytes', type=int, metavar='N',
+                        help='Stop after N bytes (token budget mode)')
+    parser.add_argument('--max-depth', type=int, metavar='N',
+                        help='Limit tree depth to N levels')
+    parser.add_argument('--max-snippet-chars', type=int, metavar='N',
+                        help='Truncate long strings to N characters')
+```
+
+#### 5. Truncation Metadata (NEW)
+
+**Enhance Output Contract to expose truncation:**
+```python
+def apply_budget_limits(items, args):
+    """Apply budget constraints and track truncation."""
+    truncated = False
+    total_available = len(items)
+
+    # Apply max-items
+    if args.max_items and len(items) > args.max_items:
+        items = items[:args.max_items]
+        truncated = True
+
+    # Add metadata
+    return {
+        'items': items,
+        'meta': {
+            'truncated': truncated,
+            'reason': 'max_items_exceeded' if truncated else None,
+            'total_available': total_available,
+            'returned': len(items),
+            'next_cursor': f'offset={len(items)}' if truncated else None
+        }
+    }
 ```
 
 ### Expected Behavior
@@ -622,6 +689,328 @@ All adapters with elements show hints:
 
 ---
 
+## Phase 6: Help Introspection ✅ COMPLETE (4 hours actual)
+
+**Added**: 2026-02-06 - From agentic AI feedback
+**Completed**: 2026-02-06 - Session jinipoke-0206
+**Effort**: 4 hours (vs 4-6 estimated) - 67% efficiency
+
+### Goal
+Make help:// adapter machine-readable for AI agents to auto-discover capabilities and generate valid queries.
+
+### Implementation Summary
+- ✅ Added `get_schema()` method to base adapter
+- ✅ Implemented `help://schemas/<adapter>` route
+- ✅ Implemented `help://examples/<task>` route with 4 task categories (security, codebase, debugging, quality)
+- ✅ Added schemas to SSL, AST, and Stats adapters as examples
+- ✅ All routes tested and working
+- ✅ JSON schemas include query params, operators, output types, examples
+
+### Proposed Enhancement
+
+```bash
+# Current (human-readable)
+reveal help://ssl                # Markdown guide
+
+# NEW: Machine-readable introspection
+reveal help://adapters           # List all adapters with metadata
+reveal help://schemas/ssl        # JSON schema for ssl:// output
+reveal help://adapters/ssl       # SSL adapter metadata + schema
+reveal help://examples/task      # Canonical query recipes
+```
+
+### Implementation
+
+#### 1. Extend help:// Adapter
+
+**Add routes:**
+```python
+# reveal/adapters/help_adapter.py
+
+class HelpAdapter(ResourceAdapter):
+    def get_structure(self, **kwargs):
+        if self.resource == 'adapters':
+            return self._list_adapters()
+        elif self.resource.startswith('schemas/'):
+            adapter_name = self.resource.split('/')[1]
+            return self._get_adapter_schema(adapter_name)
+        elif self.resource.startswith('adapters/'):
+            adapter_name = self.resource.split('/')[1]
+            return self._get_adapter_metadata(adapter_name)
+        elif self.resource.startswith('examples/'):
+            task = self.resource.split('/')[1]
+            return self._get_task_examples(task)
+        # ...existing help logic
+```
+
+#### 2. Schema Generation
+
+**Leverage Output Contract v1.0:**
+```python
+def _get_adapter_schema(self, adapter_name: str) -> Dict:
+    """Generate JSON schema from adapter's Output Contract."""
+    adapter_class = get_adapter_class(adapter_name)
+
+    return {
+        'contract_version': '1.0',
+        'type': 'adapter_schema',
+        'adapter': adapter_name,
+        'description': adapter_class.get_description(),
+        'uri_syntax': adapter_class.get_uri_syntax(),
+        'query_params': adapter_class.get_query_params(),
+        'elements': adapter_class.get_available_elements(),
+        'output_types': adapter_class.get_output_types(),
+        'cli_flags': adapter_class.get_cli_flags(),
+        'example_queries': adapter_class.get_example_queries()
+    }
+```
+
+#### 3. Example Recipes
+
+**Add task-based query recipes:**
+```python
+def _get_task_examples(self, task: str) -> Dict:
+    """Get canonical query recipes for common tasks."""
+    recipes = {
+        'code-review': [
+            {
+                'description': 'Find complex functions',
+                'query': 'ast://src?complexity>10&sort=-complexity&limit=20',
+                'adapter': 'ast'
+            },
+            {
+                'description': 'Check code quality',
+                'query': 'reveal src/ --check',
+                'adapter': 'file'
+            }
+        ],
+        'onboarding': [
+            {
+                'description': 'See project structure',
+                'query': 'reveal src/ --max-depth=2',
+                'adapter': 'file'
+            }
+        ],
+        # ... more recipes
+    }
+    return recipes.get(task, [])
+```
+
+### Expected Output
+
+**List adapters:**
+```bash
+$ reveal help://adapters --format=json
+{
+  "contract_version": "1.0",
+  "type": "adapter_list",
+  "adapters": [
+    {
+      "name": "ssl",
+      "description": "SSL/TLS certificate inspection",
+      "uri_pattern": "ssl://<host>[:<port>]",
+      "stability": "beta",
+      "query_capable": true,
+      "batch_capable": true
+    },
+    ...
+  ]
+}
+```
+
+**Get adapter schema:**
+```bash
+$ reveal help://schemas/ssl --format=json
+{
+  "adapter": "ssl",
+  "uri_syntax": "ssl://<host>[:<port>][/<element>]",
+  "query_params": {
+    "check": {"type": "boolean", "description": "Run health checks"},
+    "advanced": {"type": "boolean", "description": "Enable advanced checks"}
+  },
+  "output_types": [
+    {
+      "type": "ssl_certificate",
+      "fields": {
+        "domain": {"type": "string"},
+        "expiry": {"type": "datetime"},
+        "days_until_expiry": {"type": "integer"}
+      }
+    }
+  ],
+  "example_queries": [
+    {
+      "uri": "ssl://example.com",
+      "description": "Certificate overview"
+    }
+  ]
+}
+```
+
+### Files to Modify
+- `reveal/adapters/help_adapter.py` - Add schema routes
+- `reveal/adapters/base.py` - Add schema metadata methods
+- All adapter classes - Implement metadata methods
+- `reveal/adapters/help_data/` - Add schema generation
+
+### Success Criteria
+- [ ] `help://adapters` lists all adapters with metadata
+- [ ] `help://schemas/<adapter>` returns JSON schema
+- [ ] Schema includes all URI patterns, query params, output types
+- [ ] `help://examples/<task>` returns canonical recipes
+- [ ] AI agents can auto-discover capabilities
+
+---
+
+## Phase 7: Output Contract v1.1 - Trust Metadata (High Priority - 2-4 hours)
+
+**Added**: 2026-02-06 - From agentic AI feedback
+
+### Goal
+Expose parsing confidence, warnings, and errors in-band so AI agents know when to trust results.
+
+### Current State
+- Output Contract v1.0 has: `contract_version`, `type`, `source`, `source_type`
+- No quality/confidence metadata
+- Warnings shown in text output but not structured
+- Parsing failures silent or cause exceptions
+
+### Problem
+AI agents can't:
+- Determine if results are reliable
+- Handle degraded parsing gracefully
+- Distinguish full parse from fallback
+- Collect warnings programmatically
+
+### Proposed Enhancement: Output Contract v1.1
+
+**Add meta section with trust indicators:**
+```json
+{
+  "contract_version": "1.1",
+  "type": "ast_query_results",
+  "source": "src/",
+  "source_type": "directory",
+
+  // NEW: Quality metadata
+  "meta": {
+    "parse_mode": "tree_sitter_full",      // or "fallback", "regex", "heuristic"
+    "confidence": 0.95,                     // 0.0-1.0 overall parse confidence
+    "warnings": [
+      {
+        "code": "W001",
+        "message": "File encoding uncertain, assumed UTF-8",
+        "file": "legacy.py",
+        "severity": "low"
+      }
+    ],
+    "errors": [
+      {
+        "code": "E002",
+        "message": "Parse failed for malformed.py",
+        "file": "malformed.py",
+        "fallback": "Used regex fallback",
+        "severity": "medium"
+      }
+    ]
+  },
+
+  // Optional: Per-item confidence
+  "items": [
+    {
+      "symbol": "authenticate",
+      "confidence": 0.98,            // Per-item confidence
+      "parse_warnings": []           // Per-item warnings
+    }
+  ]
+}
+```
+
+### Implementation
+
+#### 1. Update Output Contract Spec
+
+**Add to `docs/OUTPUT_CONTRACT.md`:**
+- Define v1.1 fields
+- Document confidence scoring (0.0-1.0)
+- Define parse_mode values: `tree_sitter_full`, `tree_sitter_partial`, `fallback`, `regex`, `heuristic`
+- Define warning/error structure
+
+#### 2. Enhance Base Adapter
+
+```python
+# reveal/adapters/base.py
+
+class ResourceAdapter(ABC):
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
+        # Existing implementation...
+
+        # NEW: Add meta section with trust indicators
+        result = {
+            'contract_version': '1.1',
+            'type': self._get_output_type(),
+            'source': self._get_source(),
+            'source_type': self._get_source_type(),
+            'meta': {
+                'parse_mode': self._get_parse_mode(),      # NEW
+                'confidence': self._calculate_confidence(),  # NEW
+                'warnings': self._collect_warnings(),        # NEW
+                'errors': self._collect_errors()             # NEW
+            },
+            # ...adapter-specific fields
+        }
+        return result
+```
+
+#### 3. Confidence Scoring
+
+**Parse mode determines baseline confidence:**
+```python
+def _calculate_confidence(self) -> float:
+    """Calculate overall parsing confidence."""
+    base_confidence = {
+        'tree_sitter_full': 0.95,
+        'tree_sitter_partial': 0.80,
+        'fallback': 0.60,
+        'regex': 0.50,
+        'heuristic': 0.40
+    }[self.parse_mode]
+
+    # Adjust for warnings/errors
+    if self.warnings:
+        base_confidence -= 0.05 * len(self.warnings)
+    if self.errors:
+        base_confidence -= 0.10 * len(self.errors)
+
+    return max(0.0, min(1.0, base_confidence))
+```
+
+### Migration Strategy
+
+**Backward Compatible:**
+- v1.0 clients ignore `meta` field
+- v1.1 clients get enhanced metadata
+- Both versions supported simultaneously
+
+**Deprecation:**
+- v1.0 remains supported indefinitely (no breaking changes)
+- v1.1 becomes default in reveal v0.46+
+
+### Files to Modify
+- `docs/OUTPUT_CONTRACT.md` - Add v1.1 spec
+- `reveal/adapters/base.py` - Add meta section methods
+- All adapter classes - Implement confidence/warnings/errors
+- Tests for each adapter - Validate v1.1 compliance
+
+### Success Criteria
+- [ ] All adapters emit v1.1 meta section
+- [ ] Confidence scores accurate (validated against test fixtures)
+- [ ] Warnings collected programmatically
+- [ ] Errors don't crash, return in `meta.errors`
+- [ ] AI agents can check `meta.confidence` before trusting results
+
+---
+
 ## Backward Compatibility Strategy
 
 ### Principles
@@ -699,11 +1088,13 @@ Reference this document
 
 #### 2. Create IMPLEMENTATION_STATUS.md (NEW)
 Track progress:
-- [ ] Phase 1: Universal flags
-- [ ] Phase 2: Batch processing
-- [ ] Phase 3: Query operators
-- [ ] Phase 4: Field selection
+- [x] Phase 1: Universal flags (v0.45.0)
+- [x] Phase 2: Batch processing (v0.45.0)
+- [ ] Phase 3: Query operators + sort/limit
+- [ ] Phase 4: Field selection + budget awareness
 - [ ] Phase 5: Element discovery
+- [x] Phase 6: Help introspection (v0.46.0) ✅ 2026-02-06
+- [ ] Phase 7: Output Contract v1.1 (NEW)
 
 ---
 
@@ -737,28 +1128,46 @@ Track progress:
 
 ## Implementation Priority
 
-### High Priority (Next 2 weeks)
-1. **Phase 1**: Universal operation flags (4 hours)
-   - Immediate value for ssl://, domain://, mysql://
-   - Foundation for other phases
+**Updated**: 2026-02-06 - Phases 1+2 complete, added Phases 6+7
 
-2. **Phase 2**: Stdin batch processing (8 hours)
-   - High user value
-   - Enables bulk operations
+### ✅ COMPLETE (v0.45.0)
+1. **Phase 1**: Universal operation flags (4 hours) ✅
+   - `--advanced`, `--only-failures` work across all adapters
+   - Completed: pulsing-supernova-0206
 
-### Medium Priority (Next 1-2 months)
-3. **Phase 3**: Query operator standardization (16 hours)
+2. **Phase 2**: Stdin batch processing (8 hours) ✅
+   - Universal `--batch` flag with aggregation
+   - Completed: pulsing-supernova-0206
+
+### High Priority (Next 2-4 weeks) - 38 hours total
+3. **Phase 3**: Query operator standardization + sort/limit (20 hours, was 16)
+   - Universal operators: `>`, `<`, `=`, `!=`, `~=`, `..`, `&`, `|`, `!`, `()`
+   - **NEW**: `sort=`, `limit=`, `offset=` query params
    - Significant effort but high consistency value
-   - Can be done incrementally per adapter
 
-4. **Phase 4**: Field selection (8 hours)
-   - Token efficiency critical for AI agents
-   - Relatively straightforward implementation
+4. **Phase 4**: Field selection + budget awareness (12 hours, was 8)
+   - `--select=fields` for token reduction
+   - **NEW**: `--max-items`, `--max-bytes`, `--max-depth`, `--max-snippet-chars`
+   - **NEW**: Truncation metadata in Output Contract
+   - Critical for AI agent token budgets
 
-### Low Priority (Next 3-6 months)
-5. **Phase 5**: Element discovery hints (4 hours)
+5. **Phase 6**: Help introspection (4-6 hours) **NEW**
+   - Machine-readable `help://adapters`, `help://schemas/<adapter>`
+   - JSON schemas for all adapters
+   - Canonical query recipes
+   - Enables AI agent auto-discovery
+
+### Medium Priority (Next 1-2 months) - 6 hours total
+6. **Phase 7**: Output Contract v1.1 (2-4 hours) **NEW**
+   - Add `meta.parse_mode`, `meta.confidence`, `meta.warnings`, `meta.errors`
+   - Trust metadata for AI agents
+   - Backward compatible with v1.0
+
+7. **Phase 5**: Element discovery hints (4 hours)
    - Nice-to-have for UX
    - Can be added incrementally
+
+**Total Effort**: 44-50 hours (5-7 weeks)
 
 ---
 

@@ -122,6 +122,194 @@ class StatsAdapter(ResourceAdapter):
         """
         return load_help_data('stats') or {}
 
+    @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Get machine-readable schema for stats:// adapter.
+
+        Returns JSON schema for AI agent integration.
+        """
+        return {
+            'adapter': 'stats',
+            'description': 'Codebase metrics, quality analysis, and hotspot detection',
+            'uri_syntax': 'stats://<path>?<filter1>&<filter2>&...',
+            'query_params': {
+                'hotspots': {
+                    'type': 'boolean',
+                    'description': 'Include hotspot analysis (files needing attention)',
+                    'examples': ['hotspots=true']
+                },
+                'code_only': {
+                    'type': 'boolean',
+                    'description': 'Exclude data/config files from analysis',
+                    'examples': ['code_only=true']
+                },
+                'min_lines': {
+                    'type': 'integer',
+                    'description': 'Filter files with at least this many lines',
+                    'examples': ['min_lines=50']
+                },
+                'max_lines': {
+                    'type': 'integer',
+                    'description': 'Filter files with at most this many lines',
+                    'examples': ['max_lines=500']
+                },
+                'min_complexity': {
+                    'type': 'number',
+                    'description': 'Filter files with avg complexity >= this',
+                    'examples': ['min_complexity=5.0']
+                },
+                'max_complexity': {
+                    'type': 'number',
+                    'description': 'Filter files with avg complexity <= this',
+                    'examples': ['max_complexity=15.0']
+                },
+                'min_functions': {
+                    'type': 'integer',
+                    'description': 'Filter files with at least this many functions',
+                    'examples': ['min_functions=10']
+                }
+            },
+            'operators': {},  # No operators, uses query params
+            'elements': {},  # No element-based queries
+            'cli_flags': ['--only-failures'],
+            'supports_batch': False,
+            'supports_advanced': True,
+            'output_types': [
+                {
+                    'type': 'stats_summary',
+                    'description': 'Directory-level codebase statistics',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'stats_summary'},
+                            'path': {'type': 'string'},
+                            'summary': {
+                                'type': 'object',
+                                'properties': {
+                                    'total_files': {'type': 'integer'},
+                                    'total_lines': {'type': 'integer'},
+                                    'total_code_lines': {'type': 'integer'},
+                                    'total_functions': {'type': 'integer'},
+                                    'total_classes': {'type': 'integer'},
+                                    'avg_complexity': {'type': 'number'},
+                                    'avg_quality_score': {'type': 'number'}
+                                }
+                            },
+                            'hotspots': {
+                                'type': 'array',
+                                'items': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'file': {'type': 'string'},
+                                        'quality_score': {'type': 'number'},
+                                        'hotspot_score': {'type': 'number'},
+                                        'issues': {'type': 'array', 'items': {'type': 'string'}}
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    'example': {
+                        'type': 'stats_summary',
+                        'path': './src',
+                        'summary': {
+                            'total_files': 42,
+                            'total_lines': 8543,
+                            'total_code_lines': 6234,
+                            'total_functions': 187,
+                            'total_classes': 34,
+                            'avg_complexity': 4.2,
+                            'avg_quality_score': 78.5
+                        },
+                        'hotspots': [
+                            {
+                                'file': 'src/core.py',
+                                'quality_score': 45.2,
+                                'hotspot_score': 85.3,
+                                'issues': ['High complexity', 'Long functions', 'Deep nesting']
+                            }
+                        ]
+                    }
+                },
+                {
+                    'type': 'stats_file',
+                    'description': 'File-level statistics',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'stats_file'},
+                            'file': {'type': 'string'},
+                            'lines': {
+                                'type': 'object',
+                                'properties': {
+                                    'total': {'type': 'integer'},
+                                    'code': {'type': 'integer'},
+                                    'comments': {'type': 'integer'},
+                                    'empty': {'type': 'integer'}
+                                }
+                            },
+                            'elements': {
+                                'type': 'object',
+                                'properties': {
+                                    'functions': {'type': 'integer'},
+                                    'classes': {'type': 'integer'},
+                                    'imports': {'type': 'integer'}
+                                }
+                            },
+                            'complexity': {
+                                'type': 'object',
+                                'properties': {
+                                    'average': {'type': 'number'},
+                                    'max': {'type': 'integer'}
+                                }
+                            },
+                            'quality': {
+                                'type': 'object',
+                                'properties': {
+                                    'score': {'type': 'number'},
+                                    'long_functions': {'type': 'integer'},
+                                    'deep_nesting': {'type': 'integer'}
+                                }
+                            }
+                        }
+                    }
+                }
+            ],
+            'example_queries': [
+                {
+                    'uri': 'stats://./src',
+                    'description': 'Get codebase statistics for src directory',
+                    'output_type': 'stats_summary'
+                },
+                {
+                    'uri': 'stats://./src?hotspots=true',
+                    'description': 'Include hotspot analysis (files needing attention)',
+                    'output_type': 'stats_summary'
+                },
+                {
+                    'uri': 'stats://./src?min_complexity=5.0',
+                    'description': 'Show only files with avg complexity >= 5.0',
+                    'output_type': 'stats_summary'
+                },
+                {
+                    'uri': 'stats://./src?code_only=true',
+                    'description': 'Exclude data/config files',
+                    'output_type': 'stats_summary'
+                },
+                {
+                    'uri': 'stats://src/core.py',
+                    'description': 'File-level statistics',
+                    'output_type': 'stats_file'
+                },
+                {
+                    'uri': 'stats://./src --only-failures',
+                    'description': 'Show only files with quality issues',
+                    'cli_flag': '--only-failures',
+                    'output_type': 'stats_summary'
+                }
+            ]
+        }
+
     def __init__(self, path: str, query_string: str = None):
         """Initialize stats adapter.
 

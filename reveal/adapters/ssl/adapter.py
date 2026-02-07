@@ -35,6 +35,145 @@ class SSLAdapter(ResourceAdapter):
         """
         return load_help_data('ssl') or {}
 
+    @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Get machine-readable schema for ssl:// adapter.
+
+        Returns JSON schema for AI agent integration.
+        """
+        return {
+            'adapter': 'ssl',
+            'description': 'SSL/TLS certificate inspection and health monitoring',
+            'uri_syntax': 'ssl://<host>[:<port>][/<element>]',
+            'query_params': {},  # No query params currently
+            'elements': {
+                'san': 'Subject Alternative Names (all domain names)',
+                'chain': 'Certificate chain (intermediate + root)',
+                'issuer': 'Certificate issuer details',
+                'subject': 'Certificate subject details',
+                'dates': 'Validity dates (not_before, not_after)',
+                'full': 'Complete certificate dump (all fields)'
+            },
+            'cli_flags': [
+                '--check',  # Health checks (expiry, chain validation)
+                '--advanced',  # Advanced checks (OCSP, revocation)
+                '--only-failures',  # Show only failed checks
+                '--expiring-within=<days>'  # Filter by expiry window
+            ],
+            'supports_batch': True,
+            'supports_advanced': True,
+            'output_types': [
+                {
+                    'type': 'ssl_certificate',
+                    'description': 'Certificate overview with health status',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'ssl_certificate'},
+                            'host': {'type': 'string'},
+                            'port': {'type': 'integer'},
+                            'common_name': {'type': 'string'},
+                            'issuer': {'type': 'string'},
+                            'valid_from': {'type': 'string', 'format': 'date'},
+                            'valid_until': {'type': 'string', 'format': 'date'},
+                            'days_until_expiry': {'type': 'integer'},
+                            'health_status': {
+                                'type': 'string',
+                                'enum': ['HEALTHY', 'WARNING', 'CRITICAL', 'EXPIRED']
+                            },
+                            'san_count': {'type': 'integer'},
+                            'verification': {
+                                'type': 'object',
+                                'properties': {
+                                    'chain_valid': {'type': 'boolean'},
+                                    'hostname_match': {'type': 'boolean'},
+                                    'error': {'type': ['string', 'null']}
+                                }
+                            }
+                        }
+                    },
+                    'example': {
+                        'type': 'ssl_certificate',
+                        'host': 'example.com',
+                        'port': 443,
+                        'common_name': 'example.com',
+                        'issuer': "Let's Encrypt",
+                        'valid_from': '2026-01-01',
+                        'valid_until': '2026-04-01',
+                        'days_until_expiry': 54,
+                        'health_status': 'HEALTHY',
+                        'san_count': 2,
+                        'verification': {
+                            'chain_valid': True,
+                            'hostname_match': True,
+                            'error': None
+                        }
+                    }
+                },
+                {
+                    'type': 'ssl_san',
+                    'description': 'Subject Alternative Names list',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'ssl_san'},
+                            'host': {'type': 'string'},
+                            'common_name': {'type': 'string'},
+                            'san': {'type': 'array', 'items': {'type': 'string'}},
+                            'san_count': {'type': 'integer'}
+                        }
+                    }
+                },
+                {
+                    'type': 'ssl_chain',
+                    'description': 'Certificate chain details',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'ssl_chain'},
+                            'host': {'type': 'string'},
+                            'chain_length': {'type': 'integer'},
+                            'certificates': {'type': 'array'}
+                        }
+                    }
+                }
+            ],
+            'example_queries': [
+                {
+                    'uri': 'ssl://example.com',
+                    'description': 'Get certificate overview with health status',
+                    'output_type': 'ssl_certificate'
+                },
+                {
+                    'uri': 'ssl://example.com:8443',
+                    'description': 'Check certificate on non-standard port',
+                    'output_type': 'ssl_certificate'
+                },
+                {
+                    'uri': 'ssl://example.com/san',
+                    'description': 'List all domain names in certificate',
+                    'output_type': 'ssl_san'
+                },
+                {
+                    'uri': 'ssl://example.com/chain',
+                    'description': 'Show certificate chain (intermediate + root)',
+                    'output_type': 'ssl_chain'
+                },
+                {
+                    'uri': 'ssl://example.com --check',
+                    'description': 'Run health checks (expiry, validation)',
+                    'cli_flag': '--check',
+                    'output_type': 'ssl_certificate'
+                },
+                {
+                    'uri': 'ssl://example.com --expiring-within=30',
+                    'description': 'Check if certificate expires in 30 days',
+                    'cli_flag': '--expiring-within',
+                    'output_type': 'ssl_certificate'
+                }
+            ]
+        }
+
     def __init__(self, connection_string: str = ""):
         """Initialize SSL adapter with host details.
 

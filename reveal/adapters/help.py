@@ -55,6 +55,12 @@ class HelpAdapter(ResourceAdapter):
         help://adapters            # List all adapters with help
         help://agent               # Agent usage guide (AGENT_HELP.md)
         help://agent-full          # Full agent guide (AGENT_HELP_FULL.md)
+
+    Agent Introspection (v0.46.0+):
+        help://schemas/ssl         # Machine-readable schema for ssl:// adapter
+        help://schemas/ast         # Machine-readable schema for ast:// adapter
+        help://examples/security   # Query recipes for security analysis
+        help://examples/codebase   # Query recipes for codebase exploration
     """
 
     # Valid section names for help://adapter/section queries
@@ -173,10 +179,22 @@ class HelpAdapter(ResourceAdapter):
         Args:
             topic: Topic name (adapter scheme, 'adapters', 'agent', etc.)
                    Can also be 'adapter/section' for section extraction
+                   Or 'schemas/adapter' for machine-readable schemas
+                   Or 'examples/task' for canonical query recipes
 
         Returns:
             Help content dict or None if not found
         """
+        # Check for schemas route: help://schemas/ssl
+        if topic.startswith('schemas/'):
+            adapter_name = topic.split('/', 1)[1]
+            return self._get_adapter_schema(adapter_name)
+
+        # Check for examples route: help://examples/security
+        if topic.startswith('examples/'):
+            task_name = topic.split('/', 1)[1]
+            return self._get_example_recipes(task_name)
+
         # Check for section extraction: help://ast/workflows
         if '/' in topic:
             adapter_name, section = topic.split('/', 1)
@@ -457,3 +475,177 @@ class HelpAdapter(ResourceAdapter):
                 'error': 'Load failed',
                 'message': str(e)
             }
+
+    def _get_adapter_schema(self, adapter_name: str) -> Optional[Dict[str, Any]]:
+        """Get machine-readable schema for an adapter.
+
+        Args:
+            adapter_name: Adapter scheme name (e.g., 'ssl', 'ast')
+
+        Returns:
+            Schema dict or error dict if adapter not found or has no schema
+        """
+        adapter_class = _ADAPTER_REGISTRY.get(adapter_name)
+        if not adapter_class:
+            return {
+                'type': 'adapter_schema',
+                'adapter': adapter_name,
+                'error': 'Unknown adapter',
+                'message': f"No adapter named '{adapter_name}'"
+            }
+
+        if not hasattr(adapter_class, 'get_schema'):
+            return {
+                'type': 'adapter_schema',
+                'adapter': adapter_name,
+                'error': 'No schema available',
+                'message': (
+                    f'{adapter_class.__name__} does not provide '
+                    f'machine-readable schema'
+                )
+            }
+
+        try:
+            schema_data = adapter_class.get_schema()
+            if schema_data:
+                schema_data['adapter'] = adapter_name  # Ensure adapter is included
+                schema_data['type'] = 'adapter_schema'
+            return schema_data
+        except Exception as e:
+            return {
+                'type': 'adapter_schema',
+                'adapter': adapter_name,
+                'error': 'Schema generation failed',
+                'message': str(e)
+            }
+
+    def _get_example_recipes(self, task_name: str) -> Optional[Dict[str, Any]]:
+        """Get canonical query recipes for a specific task.
+
+        Args:
+            task_name: Task category (e.g., 'security', 'codebase', 'debugging')
+
+        Returns:
+            Recipe dict with example queries or error if task not found
+        """
+        # Define canonical query recipes for common agent tasks
+        recipes = {
+            'security': {
+                'type': 'query_recipes',
+                'task': 'security',
+                'description': 'Security analysis and vulnerability detection',
+                'recipes': [
+                    {
+                        'goal': 'Find authentication functions',
+                        'query': 'ast://src?name~=auth&kind=function',
+                        'description': 'Locate authentication-related code',
+                        'output_type': 'ast_query_results'
+                    },
+                    {
+                        'goal': 'Check SSL certificate expiry',
+                        'query': 'ssl://example.com --expiring-within=30',
+                        'description': 'Find certificates expiring soon',
+                        'output_type': 'ssl_certificate'
+                    },
+                    {
+                        'goal': 'Find SQL query construction',
+                        'query': 'ast://src?name~=query&complexity>5',
+                        'description': 'Locate complex database queries (SQL injection risk)',
+                        'output_type': 'ast_query_results'
+                    }
+                ]
+            },
+            'codebase': {
+                'type': 'query_recipes',
+                'task': 'codebase',
+                'description': 'Codebase exploration and understanding',
+                'recipes': [
+                    {
+                        'goal': 'Get project overview',
+                        'query': 'reveal src/',
+                        'description': 'Progressive disclosure: structure first',
+                        'output_type': 'reveal_structure'
+                    },
+                    {
+                        'goal': 'Find entry points',
+                        'query': 'ast://src?name=main&kind=function',
+                        'description': 'Locate main() functions',
+                        'output_type': 'ast_query_results'
+                    },
+                    {
+                        'goal': 'List public API',
+                        'query': 'ast://src?visibility=public&kind=function',
+                        'description': 'Find all public functions',
+                        'output_type': 'ast_query_results'
+                    },
+                    {
+                        'goal': 'Find complex code',
+                        'query': 'ast://src?complexity>15',
+                        'description': 'Locate high-complexity functions',
+                        'output_type': 'ast_query_results'
+                    }
+                ]
+            },
+            'debugging': {
+                'type': 'query_recipes',
+                'task': 'debugging',
+                'description': 'Debugging and error investigation',
+                'recipes': [
+                    {
+                        'goal': 'Find error handlers',
+                        'query': 'ast://src?name~=error&kind=function',
+                        'description': 'Locate error handling code',
+                        'output_type': 'ast_query_results'
+                    },
+                    {
+                        'goal': 'Check recent changes',
+                        'query': 'git://src?since=7days',
+                        'description': 'Review changes in last week',
+                        'output_type': 'git_log'
+                    },
+                    {
+                        'goal': 'Find large functions',
+                        'query': 'ast://src?lines>100&kind=function',
+                        'description': 'Locate potentially problematic large functions',
+                        'output_type': 'ast_query_results'
+                    }
+                ]
+            },
+            'quality': {
+                'type': 'query_recipes',
+                'task': 'quality',
+                'description': 'Code quality and hotspot analysis',
+                'recipes': [
+                    {
+                        'goal': 'Find quality hotspots',
+                        'query': 'stats://src --only-failures',
+                        'description': 'Show only files with quality issues',
+                        'output_type': 'stats_results'
+                    },
+                    {
+                        'goal': 'Check code complexity',
+                        'query': 'ast://src?complexity>10',
+                        'description': 'High complexity functions',
+                        'output_type': 'ast_query_results'
+                    },
+                    {
+                        'goal': 'Find undocumented code',
+                        'query': 'ast://src?has_docstring=false&kind=function',
+                        'description': 'Functions missing documentation',
+                        'output_type': 'ast_query_results'
+                    }
+                ]
+            }
+        }
+
+        if task_name not in recipes:
+            available = ', '.join(sorted(recipes.keys()))
+            return {
+                'type': 'query_recipes',
+                'task': task_name,
+                'error': 'Unknown task',
+                'message': f"Unknown task '{task_name}'. Available: {available}",
+                'available_tasks': list(recipes.keys())
+            }
+
+        return recipes[task_name]

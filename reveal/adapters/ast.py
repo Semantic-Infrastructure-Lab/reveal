@@ -202,6 +202,157 @@ class AstAdapter(ResourceAdapter):
             ]
         }
 
+    @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Get machine-readable schema for ast:// adapter.
+
+        Returns JSON schema for AI agent integration.
+        """
+        return {
+            'adapter': 'ast',
+            'description': 'Query code as an AST database - find functions, classes, methods by properties',
+            'uri_syntax': 'ast://<path>?<filter1>&<filter2>&...',
+            'query_params': {
+                'lines': {
+                    'type': 'integer',
+                    'description': 'Number of lines in function/class',
+                    'operators': ['>', '<', '>=', '<=', '=='],
+                    'examples': ['lines>50', 'lines<20', 'lines==100']
+                },
+                'complexity': {
+                    'type': 'integer',
+                    'description': 'McCabe cyclomatic complexity (>10 needs refactoring, >20 high risk)',
+                    'operators': ['>', '<', '>=', '<=', '=='],
+                    'examples': ['complexity>10', 'complexity<5']
+                },
+                'type': {
+                    'type': 'string',
+                    'description': 'Element type (function, class, method)',
+                    'operators': ['==', '|'],
+                    'examples': ['type=function', 'type=class|function'],
+                    'valid_values': ['function', 'class', 'method']
+                },
+                'name': {
+                    'type': 'string',
+                    'description': 'Element name with wildcard support (* = any chars, ? = one char)',
+                    'operators': ['==', '~='],
+                    'examples': ['name=main', 'name=test_*', 'name=*helper*', 'name=get_?']
+                },
+                'decorator': {
+                    'type': 'string',
+                    'description': 'Decorator pattern with wildcard support',
+                    'operators': ['==', '~='],
+                    'examples': ['decorator=property', 'decorator=*cache*', 'decorator=staticmethod']
+                }
+            },
+            'operators': {
+                '>': 'Greater than (numeric)',
+                '<': 'Less than (numeric)',
+                '>=': 'Greater than or equal (numeric)',
+                '<=': 'Less than or equal (numeric)',
+                '==': 'Equal to (exact match)',
+                '~=': 'Pattern match (with wildcards)',
+                '&': 'AND (combine filters)',
+                '|': 'OR (alternate values)'
+            },
+            'elements': {},  # AST adapter doesn't use element-based queries
+            'cli_flags': ['--format=json', '--format=grep', '--outline'],
+            'supports_batch': False,
+            'supports_advanced': False,
+            'output_types': [
+                {
+                    'type': 'ast_query',
+                    'description': 'Query results with matched functions/classes',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'ast_query'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string', 'enum': ['file', 'directory']},
+                            'path': {'type': 'string'},
+                            'query': {'type': 'string'},
+                            'total_files': {'type': 'integer'},
+                            'total_results': {'type': 'integer'},
+                            'results': {
+                                'type': 'array',
+                                'items': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'file': {'type': 'string'},
+                                        'symbol': {'type': 'string'},
+                                        'type': {'type': 'string'},
+                                        'line': {'type': 'integer'},
+                                        'lines': {'type': 'integer'},
+                                        'complexity': {'type': 'integer'},
+                                        'decorators': {'type': 'array'}
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    'example': {
+                        'contract_version': '1.0',
+                        'type': 'ast_query',
+                        'source': './src',
+                        'source_type': 'directory',
+                        'path': './src',
+                        'query': 'complexity>10',
+                        'total_files': 15,
+                        'total_results': 3,
+                        'results': [
+                            {
+                                'file': 'src/core.py',
+                                'symbol': 'process_data',
+                                'type': 'function',
+                                'line': 42,
+                                'lines': 87,
+                                'complexity': 15,
+                                'decorators': []
+                            }
+                        ]
+                    }
+                }
+            ],
+            'example_queries': [
+                {
+                    'uri': 'ast://./src',
+                    'description': 'All code structure in src directory',
+                    'output_type': 'ast_query'
+                },
+                {
+                    'uri': 'ast://./src?lines>50',
+                    'description': 'Functions with more than 50 lines',
+                    'output_type': 'ast_query'
+                },
+                {
+                    'uri': 'ast://./src?complexity>10',
+                    'description': 'Complex functions (high cyclomatic complexity)',
+                    'output_type': 'ast_query'
+                },
+                {
+                    'uri': 'ast://main.py?type=function',
+                    'description': 'Only functions (not classes or methods)',
+                    'output_type': 'ast_query'
+                },
+                {
+                    'uri': 'ast://.?name=test_*',
+                    'description': 'All functions/classes starting with test_',
+                    'output_type': 'ast_query'
+                },
+                {
+                    'uri': 'ast://.?decorator=property',
+                    'description': 'Find all @property decorated methods',
+                    'output_type': 'ast_query'
+                },
+                {
+                    'uri': 'ast://.?lines>30&complexity<5',
+                    'description': 'Long but simple functions',
+                    'output_type': 'ast_query'
+                }
+            ]
+        }
+
     def __init__(self, path: str, query_string: str = None):
         """Initialize AST adapter.
 

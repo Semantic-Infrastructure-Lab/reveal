@@ -1,5 +1,5 @@
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.43.0
+**Version:** 0.46.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -17,6 +17,63 @@
 - Implementing reveal integration in your agent
 
 **For interactive usage:** Use `reveal --agent-help` + `reveal help://topic` for progressive discovery.
+
+---
+
+## Agent Introspection (v0.46.0+)
+
+**NEW: Auto-discover capabilities programmatically**
+
+AI agents can now query reveal's capabilities via machine-readable schemas:
+
+```bash
+# Discover all available adapters with metadata
+reveal help://schemas/ssl --format=json        # SSL adapter schema
+reveal help://schemas/ast --format=json        # AST adapter schema
+reveal help://schemas/stats --format=json      # Stats adapter schema
+
+# Get canonical query recipes for common tasks
+reveal help://examples/security --format=json  # Security analysis recipes
+reveal help://examples/codebase --format=json  # Codebase exploration recipes
+reveal help://examples/debugging --format=json # Debugging recipes
+reveal help://examples/quality --format=json   # Code quality recipes
+```
+
+**What you get:**
+- **Query parameters**: All available filters with types and operators
+- **Output schemas**: JSON Schema definitions of adapter outputs
+- **Example queries**: Canonical examples for each adapter
+- **CLI flags**: Available command-line flags
+- **Elements**: Available element-based queries
+
+**Use case:** Generate valid queries from schema without hardcoding adapter syntax.
+
+**Example schema output:**
+```json
+{
+  "adapter": "ast",
+  "uri_syntax": "ast://<path>?<filter1>&<filter2>&...",
+  "query_params": {
+    "lines": {
+      "type": "integer",
+      "operators": [">", "<", ">=", "<=", "=="],
+      "examples": ["lines>50", "lines<20"]
+    },
+    "complexity": {
+      "type": "integer",
+      "operators": [">", "<", ">=", "<=", "=="],
+      "examples": ["complexity>10"]
+    }
+  },
+  "example_queries": [
+    {
+      "uri": "ast://./src?complexity>10",
+      "description": "Find complex functions",
+      "output_type": "ast_query"
+    }
+  ]
+}
+```
 
 ---
 
