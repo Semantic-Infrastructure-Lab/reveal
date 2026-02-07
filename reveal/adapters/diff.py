@@ -262,6 +262,17 @@ class DiffAdapter(ResourceAdapter):
                     'output_type': 'diff'
                 },
                 {
+                    'uri': 'diff://app.py:git://app.py@HEAD~1',
+                    'description': 'Compare current file to git version (1 commit ago)',
+                    'output_type': 'diff',
+                    'note': 'Git URIs use path@ref format, not ref:path'
+                },
+                {
+                    'uri': 'diff://git://app.py@main:git://app.py@develop',
+                    'description': 'Compare file across two git branches',
+                    'output_type': 'diff'
+                },
+                {
                     'uri': 'diff://env://:env://production',
                     'description': 'Compare local environment to production',
                     'output_type': 'diff'
@@ -282,7 +293,9 @@ class DiffAdapter(ResourceAdapter):
                 'Supports any two reveal URIs that resolve to comparable structures',
                 'Automatically detects resource types and adapts comparison strategy',
                 'Element-specific diffs extract and compare individual functions/classes',
-                'Works with files, databases, environments, and other adapters'
+                'Works with files, databases, environments, and other adapters',
+                'Git URIs use path@ref format: git://file.py@HEAD~1 (not git://HEAD~1:file.py)',
+                'Git ref format matches git adapter syntax, not git CLI show command'
             ]
         }
 
@@ -449,6 +462,16 @@ class DiffAdapter(ResourceAdapter):
             )
 
         # Validate git URI format - should have path@REF or .@REF format
+        # Detect common mistake: REF:path instead of path@REF
+        if ':' in resource and '@' not in resource:
+            # Likely wrong format: "HEAD~1:file.py" instead of "file.py@HEAD~1"
+            parts = resource.split(':', 1)
+            raise ValueError(
+                f"Git URI format error. Got '{resource}' but expected 'path@ref' format.\n"
+                f"Hint: Use 'git://{parts[1]}@{parts[0]}' instead of 'git://{resource}'\n"
+                f"Example: 'git://app.py@HEAD~1' (not 'git://HEAD~1:app.py')"
+            )
+
         # Simple check: if no @ and no / in resource, it's likely just a ref without path
         if '@' not in resource and '/' not in resource and resource:
             raise ValueError(
@@ -712,6 +735,16 @@ class DiffAdapter(ResourceAdapter):
                 # git:// adapter format: git://path@REF
                 # Delegate to GitAdapter
                 return self._resolve_git_adapter(resource)
+            elif ':' in resource and '/' in resource:
+                # Common mistake: git://REF:path instead of git://path@REF
+                # Detect and provide helpful error
+                parts = resource.split(':', 1)
+                raise ValueError(
+                    f"Git URI format error. Got 'git://{resource}' but git:// URIs must use:\n"
+                    f"  1. Modern format:  git://path@ref  (e.g., git://app.py@HEAD~1)\n"
+                    f"  2. Legacy format:  git://ref/path  (e.g., git://HEAD~1/app.py)\n"
+                    f"Hint: Try 'git://{parts[1]}@{parts[0].split('/')[0]}' or fix the separator"
+                )
             elif '/' in resource:
                 # diff legacy format: git://REF/path
                 # Parse git://REF/path format (e.g., git://HEAD~1/file.py, git://main/src/)
