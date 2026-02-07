@@ -21,9 +21,9 @@ def coerce_value(value: str) -> Union[bool, int, float, str]:
     if not isinstance(value, str):
         return value
 
-    # Boolean
-    if value.lower() in ('true', 'false'):
-        return value.lower() == 'true'
+    # Boolean (including numeric representations: '1'=True, '0'=False)
+    if value.lower() in ('true', 'false', 'yes', 'no', '1', '0'):
+        return value.lower() in ('true', 'yes', '1')
 
     # Try numeric
     try:
