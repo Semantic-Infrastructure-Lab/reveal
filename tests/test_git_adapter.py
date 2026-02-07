@@ -462,3 +462,179 @@ class TestEdgeCases:
         assert structure['type'] == 'git_repository'
         assert structure['contract_version'] == '1.0'
         assert structure['stats']['is_bare']
+
+
+class TestCommitFiltering:
+    """Test commit filtering functionality."""
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_filter_by_author(self, git_repo):
+        """Test filtering commits by author name."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'author': 'Test User'}
+        )
+        structure = adapter.get_structure()
+
+        # All commits should be by "Test User"
+        assert structure['type'] == 'git_repository'
+        commits = structure['commits']['recent']
+        assert len(commits) >= 3  # We made 3 commits with Test User
+        for commit in commits:
+            assert commit['author'] == 'Test User'
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_filter_by_author_case_insensitive(self, git_repo):
+        """Test filtering commits by author name (case-insensitive)."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'author': 'test user'}  # lowercase
+        )
+        structure = adapter.get_structure()
+
+        commits = structure['commits']['recent']
+        assert len(commits) >= 3  # Should still match "Test User"
+        for commit in commits:
+            assert commit['author'] == 'Test User'
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_filter_by_author_partial_match(self, git_repo):
+        """Test filtering commits by partial author name (regex)."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'author~': 'Test'}  # Regex match
+        )
+        structure = adapter.get_structure()
+
+        commits = structure['commits']['recent']
+        assert len(commits) >= 3
+        for commit in commits:
+            assert 'Test' in commit['author'] or 'test' in commit['author'].lower()
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_filter_by_email(self, git_repo):
+        """Test filtering commits by email."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'email': 'test@example.com'}
+        )
+        structure = adapter.get_structure()
+
+        commits = structure['commits']['recent']
+        assert len(commits) >= 3
+        for commit in commits:
+            assert commit['email'] == 'test@example.com'
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_filter_by_message(self, git_repo):
+        """Test filtering commits by message."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'message~': 'README'}  # Regex match for commits with README
+        )
+        structure = adapter.get_structure()
+
+        commits = structure['commits']['recent']
+        # Should find "Update README" (only commit with README in message)
+        assert len(commits) == 1
+        assert 'README' in commits[0]['message']
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_filter_by_message_exact(self, git_repo):
+        """Test filtering commits by exact message."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'message': 'Add main.py'}
+        )
+        structure = adapter.get_structure()
+
+        commits = structure['commits']['recent']
+        assert len(commits) == 1
+        assert commits[0]['message'] == 'Add main.py'
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_filter_no_matches(self, git_repo):
+        """Test filtering with no matching commits."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'author': 'Nonexistent User'}
+        )
+        structure = adapter.get_structure()
+
+        commits = structure['commits']['recent']
+        assert len(commits) == 0
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_filter_multiple_criteria(self, git_repo):
+        """Test filtering with multiple criteria (AND logic)."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={
+                'author': 'Test User',
+                'message~': 'README'
+            }
+        )
+        structure = adapter.get_structure()
+
+        commits = structure['commits']['recent']
+        # Should match commits by "Test User" with "README" in message
+        assert len(commits) == 1
+        for commit in commits:
+            assert commit['author'] == 'Test User'
+            assert 'README' in commit['message']
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_filter_file_history(self, git_repo):
+        """Test filtering in file history."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            subpath='README.md',
+            query={
+                'type': 'history',
+                'message~': 'Update'
+            }
+        )
+        structure = adapter.get_structure()
+
+        assert structure['type'] == 'git_file_history'
+        commits = structure['commits']
+        # Should only include commits with "Update" in message
+        assert len(commits) == 1
+        assert 'Update' in commits[0]['message']
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_filter_preserves_default_limit(self, git_repo):
+        """Test that filtering works with default limit."""
+        # Create more commits (more than the default limit of 10)
+        repo = pygit2.Repository(str(git_repo))
+        signature = pygit2.Signature("Test User", "test@example.com")
+
+        # Add 12 more commits (we already have 3, so total will be 15)
+        for i in range(12):
+            file1 = Path(git_repo) / "README.md"
+            file1.write_text(f"# Test Repository\n\nUpdate {i}\n")
+            index = repo.index
+            index.add("README.md")
+            index.write()
+            tree = index.write_tree()
+            repo.create_commit(
+                "HEAD",
+                signature,
+                signature,
+                f"Update {i}",
+                tree,
+                [repo.head.target]
+            )
+
+        # Filter - should get default limit of 10
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'author': 'Test User'}
+        )
+        structure = adapter.get_structure()
+
+        commits = structure['commits']['recent']
+        # Should respect default limit of 10
+        assert len(commits) == 10
+        for commit in commits:
+            assert commit['author'] == 'Test User'

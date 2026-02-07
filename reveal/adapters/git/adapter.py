@@ -11,6 +11,13 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from urllib.parse import parse_qs, urlparse
 from ..base import ResourceAdapter, register_adapter, register_renderer
+from ...utils.query import (
+    parse_query_filters,
+    parse_result_control,
+    compare_values,
+    QueryFilter,
+    ResultControl
+)
 
 
 # Check if pygit2 is available
@@ -296,6 +303,31 @@ class GitAdapter(ResourceAdapter):
 
         self.repo = None
 
+        # Parse query filters for commit filtering (e.g., author=John, message~=bug)
+        # Exclude operational parameters (type, limit, detail, element) from filtering
+        # Handle keys that already include operators (e.g., 'message~' -> 'message~=value')
+        filter_parts = []
+        for k, v in self.query.items():
+            if k in ['type', 'limit', 'detail', 'element']:
+                continue
+            # Check if key already ends with an operator character (~, !, >, <, .)
+            if k and k[-1] in ['~', '!', '>', '<', '.']:
+                # Key has operator, just add = between key and value
+                filter_parts.append(f"{k}={v}")
+            else:
+                # Regular key, use = operator
+                filter_parts.append(f"{k}={v}")
+        # Join with & to match query parser's expected format
+        filter_query = '&'.join(filter_parts)
+
+        self.query_filters = []
+        if filter_query:
+            try:
+                self.query_filters = parse_query_filters(filter_query)
+            except Exception:
+                # If parsing fails, fall back to empty filters
+                self.query_filters = []
+
     @staticmethod
     def _parse_resource_string(resource: str) -> Dict[str, Any]:
         """Parse git resource string.
@@ -458,6 +490,26 @@ class GitAdapter(ResourceAdapter):
                     'type': 'string',
                     'description': 'Semantic element for blame (function/class name)',
                     'examples': ['?type=blame&element=load_config']
+                },
+                'author': {
+                    'type': 'string',
+                    'description': 'Filter commits by author name (case-insensitive)',
+                    'examples': ['?author=John', '?author~=john']
+                },
+                'email': {
+                    'type': 'string',
+                    'description': 'Filter commits by author email (case-insensitive)',
+                    'examples': ['?email=john@example.com', '?email~=@example.com']
+                },
+                'message': {
+                    'type': 'string',
+                    'description': 'Filter commits by message (supports regex with ~=)',
+                    'examples': ['?message~=bug', '?message=Initial commit']
+                },
+                'hash': {
+                    'type': 'string',
+                    'description': 'Filter commits by hash prefix',
+                    'examples': ['?hash=a1b2c3d']
                 }
             },
             'elements': {},  # File paths and refs are dynamic
@@ -628,12 +680,19 @@ class GitAdapter(ResourceAdapter):
                 {'uri': 'git://src/app.py?type=blame', 'description': 'File blame summary (contributors + key hunks)'},
                 {'uri': 'git://src/app.py?type=blame&detail=full', 'description': 'File blame detailed (line-by-line)'},
                 {'uri': 'git://src/app.py?type=blame&element=load_config', 'description': 'Semantic blame (who wrote this function)'},
+                {'uri': 'git://.?author=John', 'description': 'Filter commits by author name'},
+                {'uri': 'git://.?message~=bug', 'description': 'Filter commits with "bug" in message (regex)'},
+                {'uri': 'git://.?author=John&message~=fix', 'description': 'Filter by author AND message'},
             ],
             'query_parameters': {
                 'type': 'Operation type: history (file history) or blame (line annotations)',
                 'detail': 'For blame: "full" shows line-by-line (default is summary)',
                 'element': 'For blame: function/class name for semantic blame',
                 'limit': 'Limit number of results (default: 50 for history, 20 for refs)',
+                'author': 'Filter commits by author name (case-insensitive, use ~= for regex)',
+                'email': 'Filter commits by author email (case-insensitive, use ~= for regex)',
+                'message': 'Filter commits by message (use ~= for regex matching)',
+                'hash': 'Filter commits by hash prefix',
             },
             'notes': [
                 'Requires pygit2: pip install reveal-cli[git]',
@@ -643,6 +702,8 @@ class GitAdapter(ResourceAdapter):
                 'Use ? for query parameters: git://path?type=history',
                 'Overview (git://.) shows 10 most recent items per category',
                 'Use ?limit=N on history/element queries for more results',
+                'Commit filtering: Use =, ~=, >, <, >=, <=, != operators',
+                'Multiple filters use AND logic: ?author=John&message~=bug',
             ],
             'see_also': [
                 'reveal help://diff - Compare two files or directories',
@@ -770,10 +831,13 @@ class GitAdapter(ResourceAdapter):
             for commit in walker:
                 # Check if this commit touched the file
                 if self._commit_touches_file(repo, commit, self.subpath):
-                    commits.append(self._format_commit(commit))
+                    commit_dict = self._format_commit(commit)
+                    # Apply query filters
+                    if self._matches_all_filters(commit_dict):
+                        commits.append(commit_dict)
 
-                    if len(commits) >= limit:
-                        break
+                        if len(commits) >= limit:
+                            break
 
             return {
                 'contract_version': '1.0',
@@ -1041,9 +1105,12 @@ class GitAdapter(ResourceAdapter):
             walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
 
             for commit in walker:
-                commits.append(self._format_commit(commit))
-                if len(commits) >= limit:
-                    break
+                commit_dict = self._format_commit(commit)
+                # Apply query filters
+                if self._matches_all_filters(commit_dict):
+                    commits.append(commit_dict)
+                    if len(commits) >= limit:
+                        break
         except Exception:
             pass
 
@@ -1058,13 +1125,61 @@ class GitAdapter(ResourceAdapter):
             walker = repo.walk(start_commit.id, pygit2.GIT_SORT_TIME)
 
             for commit in walker:
-                commits.append(self._format_commit(commit))
-                if len(commits) >= limit:
-                    break
+                commit_dict = self._format_commit(commit)
+                # Apply query filters
+                if self._matches_all_filters(commit_dict):
+                    commits.append(commit_dict)
+                    if len(commits) >= limit:
+                        break
         except Exception:
             pass
 
         return commits
+
+    def _compare(self, field_value: Any, operator: str, target_value: str) -> bool:
+        """Compare field value against target using operator.
+
+        Uses unified compare_values() from query.py to eliminate duplication.
+
+        Args:
+            field_value: Value from commit dict
+            operator: Comparison operator (=, >, <, >=, <=, !=, ~=, ..)
+            target_value: Target value to compare against
+
+        Returns:
+            True if comparison passes, False otherwise
+        """
+        return compare_values(
+            field_value,
+            operator,
+            target_value,
+            options={
+                'allow_list_any': False,  # Git commits don't have list fields
+                'case_sensitive': False,  # Author/email/message searches case-insensitive
+                'coerce_numeric': True,   # For timestamp comparisons
+                'none_matches_not_equal': True
+            }
+        )
+
+    def _matches_all_filters(self, commit_dict: Dict[str, Any]) -> bool:
+        """Check if commit matches all query filters.
+
+        Args:
+            commit_dict: Formatted commit dict from _format_commit()
+
+        Returns:
+            True if matches all filters, False otherwise
+        """
+        if not self.query_filters:
+            return True
+
+        for qf in self.query_filters:
+            # Get field value from commit dict
+            field_value = commit_dict.get(qf.field)
+            if not self._compare(field_value, qf.op, qf.value):
+                return False
+
+        return True
 
     def _format_commit(self, commit: 'pygit2.Commit', detailed: bool = False) -> Dict[str, Any]:
         """Format commit information."""
