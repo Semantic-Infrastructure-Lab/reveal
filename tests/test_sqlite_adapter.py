@@ -398,5 +398,359 @@ class TestSQLiteAdapterHelp(unittest.TestCase):
         self.assertTrue(len(help_info['examples']) > 0)
 
 
+class TestSQLiteAdapterSchema(unittest.TestCase):
+    """Test schema generation for AI agent integration."""
+
+    def test_get_schema(self):
+        """Should return machine-readable schema."""
+        schema = SQLiteAdapter.get_schema()
+
+        self.assertIsNotNone(schema)
+        self.assertEqual(schema['adapter'], 'sqlite')
+        self.assertIn('description', schema)
+        self.assertIn('uri_syntax', schema)
+        self.assertEqual(schema['uri_syntax'], 'sqlite:///path/to/db.db[/table]')
+
+    def test_schema_query_params(self):
+        """Schema should document query parameters."""
+        schema = SQLiteAdapter.get_schema()
+
+        self.assertIn('query_params', schema)
+        self.assertIsInstance(schema['query_params'], dict)
+
+    def test_schema_cli_flags(self):
+        """Schema should document CLI flags."""
+        schema = SQLiteAdapter.get_schema()
+
+        self.assertIn('cli_flags', schema)
+        self.assertIn('--check', schema['cli_flags'])
+
+    def test_schema_output_types(self):
+        """Schema should define output types."""
+        schema = SQLiteAdapter.get_schema()
+
+        self.assertIn('output_types', schema)
+        self.assertTrue(len(schema['output_types']) >= 2)
+
+        # Should have sqlite_database output type
+        output_types = [ot['type'] for ot in schema['output_types']]
+        self.assertIn('sqlite_database', output_types)
+        self.assertIn('sqlite_table', output_types)
+
+    def test_schema_examples(self):
+        """Schema should include usage examples."""
+        schema = SQLiteAdapter.get_schema()
+
+        self.assertIn('example_queries', schema)
+        self.assertTrue(len(schema['example_queries']) >= 3)
+
+        # Examples should have required fields
+        for example in schema['example_queries']:
+            self.assertIn('uri', example)
+            self.assertIn('description', example)
+
+
+class TestSQLiteAdapterQuery(unittest.TestCase):
+    """Test query execution methods."""
+
+    def setUp(self):
+        """Create temporary database for testing."""
+        self.temp_db = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.db')
+        self.temp_db.close()
+        self.db_path = self.temp_db.name
+
+        # Create test data
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            CREATE TABLE test_table (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                value INTEGER
+            )
+        """)
+
+        cursor.execute("INSERT INTO test_table (name, value) VALUES ('Alice', 100)")
+        cursor.execute("INSERT INTO test_table (name, value) VALUES ('Bob', 200)")
+        cursor.execute("INSERT INTO test_table (name, value) VALUES ('Charlie', 300)")
+
+        conn.commit()
+        conn.close()
+
+        self.adapter = SQLiteAdapter(f"sqlite://{self.db_path}")
+
+    def tearDown(self):
+        """Clean up temporary database."""
+        if os.path.exists(self.db_path):
+            os.unlink(self.db_path)
+
+    def test_execute_query_multiple_results(self):
+        """_execute_query should return list of dicts."""
+        results = self.adapter._execute_query("SELECT * FROM test_table ORDER BY id")
+
+        self.assertEqual(len(results), 3)
+        self.assertEqual(results[0]['name'], 'Alice')
+        self.assertEqual(results[1]['name'], 'Bob')
+        self.assertEqual(results[2]['name'], 'Charlie')
+
+    def test_execute_query_empty_result(self):
+        """_execute_query should return empty list for no results."""
+        results = self.adapter._execute_query("SELECT * FROM test_table WHERE id = 999")
+
+        self.assertEqual(results, [])
+
+    def test_execute_single_one_result(self):
+        """_execute_single should return single dict."""
+        result = self.adapter._execute_single("SELECT name, value FROM test_table WHERE id = 2")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result['name'], 'Bob')
+        self.assertEqual(result['value'], 200)
+
+    def test_execute_single_no_result(self):
+        """_execute_single should return None for no results."""
+        result = self.adapter._execute_single("SELECT * FROM test_table WHERE id = 999")
+
+        self.assertIsNone(result)
+
+    def test_execute_query_column_types(self):
+        """Query results should handle different column types."""
+        results = self.adapter._execute_query("SELECT id, name, value FROM test_table WHERE id = 1")
+
+        self.assertEqual(len(results), 1)
+        self.assertIsInstance(results[0]['id'], int)
+        self.assertIsInstance(results[0]['name'], str)
+        self.assertIsInstance(results[0]['value'], int)
+
+
+class TestSQLiteRenderer(unittest.TestCase):
+    """Test renderer output formatting."""
+
+    def setUp(self):
+        """Set up test database."""
+        self.temp_db = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.db')
+        self.temp_db.close()
+        self.db_path = self.temp_db.name
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                email TEXT
+            )
+        """)
+
+        cursor.execute("CREATE INDEX idx_username ON users(username)")
+        cursor.execute("INSERT INTO users (username, email) VALUES ('alice', 'alice@example.com')")
+
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        """Clean up."""
+        if os.path.exists(self.db_path):
+            os.unlink(self.db_path)
+
+    def test_renderer_database_overview(self):
+        """Renderer should format database overview correctly."""
+        from reveal.adapters.sqlite.renderer import SqliteRenderer
+        from io import StringIO
+
+        adapter = SQLiteAdapter(f"sqlite://{self.db_path}")
+        result = adapter.get_structure()
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        SqliteRenderer.render_structure(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain key sections
+        self.assertIn('SQLite Database:', output)
+        self.assertIn('Version:', output)
+        self.assertIn('Configuration:', output)
+        self.assertIn('Statistics:', output)
+        self.assertIn('Tables:', output)
+        self.assertIn('users', output)
+
+    def test_renderer_table_details(self):
+        """Renderer should format table details correctly."""
+        from reveal.adapters.sqlite.renderer import SqliteRenderer
+        from io import StringIO
+
+        adapter = SQLiteAdapter(f"sqlite://{self.db_path}/users")
+        result = adapter.get_element('users')
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        SqliteRenderer.render_structure(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain table details
+        self.assertIn('Table: users', output)
+        self.assertIn('Columns', output)
+        self.assertIn('id', output)
+        self.assertIn('username', output)
+        self.assertIn('Indexes', output)
+        self.assertIn('idx_username', output)
+
+    def test_renderer_error_handling(self):
+        """Renderer should handle errors gracefully."""
+        from reveal.adapters.sqlite.renderer import SqliteRenderer
+        from io import StringIO
+
+        # Capture stderr
+        old_stderr = sys.stderr
+        sys.stderr = captured_output = StringIO()
+
+        error = FileNotFoundError("Database not found")
+        SqliteRenderer.render_error(error)
+
+        sys.stderr = old_stderr
+        output = captured_output.getvalue()
+
+        self.assertIn('Error accessing SQLite database', output)
+
+
+class TestSQLiteAdapterEdgeCases(unittest.TestCase):
+    """Test edge cases and special scenarios."""
+
+    def test_empty_database(self):
+        """Should handle database with no tables."""
+        temp_db = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.db')
+        temp_db.close()
+        db_path = temp_db.name
+
+        # Create empty database
+        conn = sqlite3.connect(db_path)
+        conn.close()
+
+        try:
+            adapter = SQLiteAdapter(f"sqlite://{db_path}")
+            result = adapter.get_structure()
+
+            self.assertEqual(result['statistics']['tables'], 0)
+            self.assertEqual(result['statistics']['views'], 0)
+            self.assertEqual(result['statistics']['total_rows'], 0)
+            self.assertEqual(len(result['tables']), 0)
+        finally:
+            os.unlink(db_path)
+
+    def test_table_with_no_indexes(self):
+        """Should handle table without indexes."""
+        temp_db = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.db')
+        temp_db.close()
+        db_path = temp_db.name
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("CREATE TABLE simple (id INTEGER, name TEXT)")
+        cursor.execute("INSERT INTO simple VALUES (1, 'test')")
+        conn.commit()
+        conn.close()
+
+        try:
+            adapter = SQLiteAdapter(f"sqlite://{db_path}/simple")
+            result = adapter.get_element('simple')
+
+            self.assertEqual(result['table'], 'simple')
+            self.assertEqual(len(result['indexes']), 0)
+            self.assertEqual(result['row_count'], 1)
+        finally:
+            os.unlink(db_path)
+
+    def test_view_inspection(self):
+        """Should handle views correctly."""
+        temp_db = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.db')
+        temp_db.close()
+        db_path = temp_db.name
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("CREATE TABLE base_table (id INTEGER, value TEXT)")
+        cursor.execute("CREATE VIEW test_view AS SELECT id, value FROM base_table WHERE id > 0")
+        conn.commit()
+        conn.close()
+
+        try:
+            adapter = SQLiteAdapter(f"sqlite://{db_path}")
+            result = adapter.get_structure()
+
+            # Should list both table and view
+            table_names = [t['name'] for t in result['tables']]
+            self.assertIn('base_table', table_names)
+            self.assertIn('test_view', table_names)
+
+            # View should be marked as type 'view'
+            view = next(t for t in result['tables'] if t['name'] == 'test_view')
+            self.assertEqual(view['type'], 'view')
+        finally:
+            os.unlink(db_path)
+
+    def test_special_characters_in_table_name(self):
+        """Should handle tables with special characters in names."""
+        temp_db = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.db')
+        temp_db.close()
+        db_path = temp_db.name
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        # Use quotes for special characters
+        cursor.execute('CREATE TABLE "table-with-dashes" (id INTEGER)')
+        cursor.execute('INSERT INTO "table-with-dashes" VALUES (1)')
+        conn.commit()
+        conn.close()
+
+        try:
+            adapter = SQLiteAdapter(f"sqlite://{db_path}")
+            result = adapter.get_structure()
+
+            table_names = [t['name'] for t in result['tables']]
+            self.assertIn('table-with-dashes', table_names)
+
+            # Should be able to query specific table
+            element = adapter.get_element('table-with-dashes')
+            self.assertIsNotNone(element)
+            self.assertEqual(element['table'], 'table-with-dashes')
+        finally:
+            os.unlink(db_path)
+
+    def test_connection_cleanup(self):
+        """Should clean up connection properly."""
+        temp_db = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.db')
+        temp_db.close()
+        db_path = temp_db.name
+
+        conn = sqlite3.connect(db_path)
+        conn.execute("CREATE TABLE test (id INTEGER)")
+        conn.close()
+
+        try:
+            adapter = SQLiteAdapter(f"sqlite://{db_path}")
+            _ = adapter.get_structure()
+
+            # Delete adapter, should trigger __del__ and close connection
+            del adapter
+
+            # Should be able to delete database file (connection closed)
+            os.unlink(db_path)
+            self.assertFalse(os.path.exists(db_path))
+        except:
+            if os.path.exists(db_path):
+                os.unlink(db_path)
+            raise
+
+
 if __name__ == '__main__':
     unittest.main()
