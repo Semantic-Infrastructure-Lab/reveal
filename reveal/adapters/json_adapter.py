@@ -6,6 +6,12 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..utils.query import (
+    parse_query_filters,
+    parse_result_control,
+    QueryFilter,
+    ResultControl
+)
 
 
 class JsonRenderer:
@@ -52,12 +58,21 @@ class JsonAdapter(ResourceAdapter):
     def _get_queries_help() -> Dict[str, str]:
         """Query parameters documentation."""
         return {
+            # Legacy query modes
             'schema': 'Show type structure of data',
             'flatten': 'Flatten to grep-able lines (gron-style output)',
             'gron': 'Alias for flatten (named after github.com/tomnomnom/gron)',
             'type': 'Show type at current path',
             'keys': 'List keys (objects) or length (arrays)',
             'length': 'Get array/string length or object key count',
+            # Filtering and result control
+            'field=value': 'Filter arrays by exact match',
+            'field>value': 'Filter arrays by numeric comparison',
+            'field~=pattern': 'Filter arrays by regex match',
+            'sort=field': 'Sort array by field (ascending)',
+            'sort=-field': 'Sort array by field (descending)',
+            'limit=N': 'Limit results to N items',
+            'offset=M': 'Skip first M items',
         }
 
     @staticmethod
@@ -74,6 +89,15 @@ class JsonAdapter(ResourceAdapter):
             {'uri': 'json://config.json?flatten', 'description': 'Flatten to grep-able format (also: ?gron)'},
             {'uri': 'json://data.json/users?type', 'description': 'Get type at path (e.g., Array[Object])'},
             {'uri': 'json://package.json/dependencies?keys', 'description': 'List all dependency names'},
+            # Filtering examples
+            {'uri': 'json://data.json/users?age>25', 'description': 'Filter users older than 25'},
+            {'uri': 'json://data.json/products?price=10..50', 'description': 'Products in price range $10-$50'},
+            {'uri': 'json://data.json/users?name~=^John', 'description': 'Users with names starting with "John"'},
+            {'uri': 'json://data.json/items?status!=inactive', 'description': 'Active items (exclude inactive)'},
+            # Result control examples
+            {'uri': 'json://data.json/users?sort=-age', 'description': 'Sort users by age descending'},
+            {'uri': 'json://data.json/products?sort=price&limit=10', 'description': 'Top 10 cheapest products'},
+            {'uri': 'json://data.json/users?age>21&sort=-age&limit=5', 'description': 'Top 5 oldest users over 21'},
         ]
 
     @staticmethod
@@ -290,6 +314,9 @@ class JsonAdapter(ResourceAdapter):
                 'Schema inference for understanding structure',
                 'Gron-style flattening for grep/search workflows',
                 'Type introspection at any path',
+                'Array filtering with 8 operators (=, >, <, >=, <=, !=, ~=, ..)',
+                'Result control (sort, limit, offset) for arrays',
+                'Nested field access with dot notation (user.name)',
             ],
             'try_now': [
                 "reveal json://package.json?schema",
@@ -298,12 +325,31 @@ class JsonAdapter(ResourceAdapter):
             ],
             'workflows': JsonAdapter._get_workflows(),
             'anti_patterns': JsonAdapter._get_anti_patterns(),
+            'operators': {
+                'field=value': 'Exact match (case-insensitive for strings)',
+                'field>value': 'Greater than (numeric)',
+                'field<value': 'Less than (numeric)',
+                'field>=value': 'Greater than or equal (numeric)',
+                'field<=value': 'Less than or equal (numeric)',
+                'field!=value': 'Not equal',
+                'field~=pattern': 'Regex match',
+                'field=min..max': 'Range (inclusive, numeric or string)',
+            },
+            'result_control': {
+                'sort=field': 'Sort by field ascending',
+                'sort=-field': 'Sort by field descending',
+                'limit=N': 'Limit results to N items',
+                'offset=M': 'Skip first M items (for pagination)',
+            },
             'notes': [
                 'Paths use / separator (like URLs)',
                 'Array indices are 0-based',
                 'Slices use [start:end] syntax (end exclusive)',
                 'Schema shows inferred types from actual values',
                 'Gron output can be piped to grep for searching',
+                'Filtering applies to arrays of objects only',
+                'Field names support dot notation (e.g., user.age)',
+                'Result control enables pagination for large arrays',
             ],
             'output_formats': ['text', 'json'],
             'see_also': [
@@ -318,17 +364,38 @@ class JsonAdapter(ResourceAdapter):
 
         Args:
             path: File path, optionally with JSON path (file.json/path/to/key)
-            query_string: Query parameters (schema, gron, type, keys, length)
+            query_string: Query parameters (schema, gron, type, keys, length, or filters)
         """
         self.query_string = query_string
         self.json_path = []
         self.slice_spec = None
+        self.query_filters = []
+        self.result_control = ResultControl()
 
         # Parse file path and JSON path
         self._parse_path(path)
 
         # Load JSON data
         self.data = self._load_json()
+
+        # Parse query filters and result control
+        if query_string:
+            # Detect if this is a legacy query mode (single word flag)
+            legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
+            is_legacy_mode = query_string.lower() in legacy_modes
+
+            if not is_legacy_mode:
+                # Parse result control first (removes sort/limit/offset from query)
+                filter_query, self.result_control = parse_result_control(query_string)
+
+                # Parse query filters if there's a filter query
+                # (JSON adapter has no legacy filter syntax, so parse all non-legacy queries)
+                if filter_query:
+                    try:
+                        self.query_filters = parse_query_filters(filter_query)
+                    except Exception:
+                        # If parsing fails, fall back to empty filters
+                        self.query_filters = []
 
     def _parse_path(self, path: str) -> None:
         """Parse file path and JSON navigation path.
@@ -417,6 +484,204 @@ class JsonAdapter(ResourceAdapter):
                     f"Suggestion: Check file format or use 'reveal {self.file_path}' for structure analysis"
                 ) from e
 
+    def _get_field_value(self, obj: Any, field: str) -> Any:
+        """Get field value from JSON object, supporting nested paths.
+
+        Args:
+            obj: JSON object (dict)
+            field: Field name, supports dot notation (e.g., 'user.name')
+
+        Returns:
+            Field value or None if not found
+        """
+        if not isinstance(obj, dict):
+            return None
+
+        # Support nested field access with dot notation
+        parts = field.split('.')
+        current = obj
+
+        for part in parts:
+            if isinstance(current, dict) and part in current:
+                current = current[part]
+            else:
+                return None
+
+        return current
+
+    def _compare(self, field_value: Any, operator: str, target_value: str) -> bool:
+        """Compare field value against target using operator.
+
+        Args:
+            field_value: Value from JSON object
+            operator: Comparison operator (=, >, <, >=, <=, !=, ~=, ..)
+            target_value: Target value to compare against
+
+        Returns:
+            True if comparison passes, False otherwise
+        """
+        # Handle None/null values
+        if field_value is None:
+            if operator == '!=' and target_value.lower() != 'null':
+                return True
+            if operator == '=' and target_value.lower() == 'null':
+                return True
+            return False
+
+        # Convert to string for comparison
+        field_str = str(field_value).lower()
+        target_str = str(target_value).lower()
+
+        # Handle range operator first (before numeric conversion)
+        if operator == '..':
+            if '..' in target_value:
+                try:
+                    min_val, max_val = target_value.split('..', 1)
+                    # Try numeric comparison
+                    if isinstance(field_value, (int, float)):
+                        return float(min_val) <= field_value <= float(max_val)
+                    # Fall back to string comparison
+                    return min_val <= field_str <= max_val
+                except (ValueError, TypeError):
+                    return False
+            return False
+
+        # Regex operator
+        if operator == '~=':
+            try:
+                import re
+                return bool(re.search(target_value, str(field_value)))
+            except re.error:
+                return False
+
+        # Equality operators
+        if operator == '=':
+            # Handle different types
+            if isinstance(field_value, bool):
+                return field_str == target_str
+            if isinstance(field_value, (int, float)):
+                try:
+                    return field_value == float(target_value)
+                except ValueError:
+                    return field_str == target_str
+            if isinstance(field_value, list):
+                # Check if any element matches
+                return any(str(item).lower() == target_str for item in field_value)
+            return field_str == target_str
+
+        if operator == '!=':
+            # Inverse of equality
+            result = self._compare(field_value, '=', target_value)
+            return not result
+
+        # Numeric comparison operators
+        if operator in ('>', '<', '>=', '<='):
+            try:
+                if isinstance(field_value, (int, float)):
+                    field_num = field_value
+                else:
+                    field_num = float(str(field_value))
+
+                target_num = float(target_value)
+
+                if operator == '>':
+                    return field_num > target_num
+                elif operator == '<':
+                    return field_num < target_num
+                elif operator == '>=':
+                    return field_num >= target_num
+                elif operator == '<=':
+                    return field_num <= target_num
+            except (ValueError, TypeError):
+                return False
+
+        return False
+
+    def _matches_all_filters(self, obj: Any) -> bool:
+        """Check if object matches all query filters.
+
+        Args:
+            obj: JSON object to test
+
+        Returns:
+            True if matches all filters, False otherwise
+        """
+        if not self.query_filters:
+            return True
+
+        for qf in self.query_filters:
+            field_value = self._get_field_value(obj, qf.field)
+            if not self._compare(field_value, qf.op, qf.value):
+                return False
+
+        return True
+
+    def _filter_array(self, arr: List[Any]) -> List[Any]:
+        """Filter array elements based on query filters.
+
+        Args:
+            arr: Array to filter
+
+        Returns:
+            Filtered array
+        """
+        if not self.query_filters:
+            return arr
+
+        return [item for item in arr if self._matches_all_filters(item)]
+
+    def _apply_result_control(self, arr: List[Any]) -> tuple[List[Any], Dict[str, Any]]:
+        """Apply result control (sort, limit, offset) to array.
+
+        Args:
+            arr: Array to control
+
+        Returns:
+            Tuple of (controlled array, metadata dict)
+        """
+        metadata = {}
+        total_matches = len(arr)
+        controlled = arr
+
+        # Sort
+        if self.result_control.sort_field:
+            try:
+                field = self.result_control.sort_field
+                reverse = self.result_control.sort_descending
+
+                def sort_key(item):
+                    """Extract sort key from item."""
+                    value = self._get_field_value(item, field)
+                    # Handle None values (sort to end)
+                    if value is None:
+                        return (1, '') if not reverse else (0, '')
+                    return (0, value)
+
+                controlled = sorted(controlled, key=sort_key, reverse=reverse)
+            except Exception:
+                # If sorting fails, continue without sorting
+                pass
+
+        # Offset
+        if self.result_control.offset is not None and self.result_control.offset > 0:
+            controlled = controlled[self.result_control.offset:]
+
+        # Limit
+        if self.result_control.limit is not None:
+            controlled = controlled[:self.result_control.limit]
+
+        # Add truncation warning if results were limited
+        displayed = len(controlled)
+        if displayed < total_matches:
+            metadata['warnings'] = [{
+                'type': 'truncated',
+                'message': f'Results truncated: showing {displayed} of {total_matches} total matches'
+            }]
+            metadata['displayed_results'] = displayed
+            metadata['total_matches'] = total_matches
+
+        return controlled, metadata
+
     def _navigate_to_path(self, data: Any = None) -> Any:
         """Navigate to the specified JSON path."""
         if data is None:
@@ -459,12 +724,52 @@ class JsonAdapter(ResourceAdapter):
                 'error': str(e)
             }
 
-        # Handle query parameters
-        if self.query_string:
+        # Handle legacy query modes (schema, flatten, etc.)
+        legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
+        if self.query_string and self.query_string.lower() in legacy_modes:
             return self._handle_query(value)
 
+        # Check for unknown query (not legacy mode, no valid operators/result control)
+        # Query parser treats single words as existence checks (?), which JSON adapter doesn't support
+        has_only_existence_checks = (
+            self.query_filters and
+            all(qf.op == '?' for qf in self.query_filters)
+        )
+        has_no_result_control = (
+            not self.result_control.sort_field and
+            self.result_control.limit is None and
+            (self.result_control.offset is None or self.result_control.offset == 0)
+        )
+
+        if self.query_string and (has_only_existence_checks or (not self.query_filters and has_no_result_control)):
+            # Unknown query or unsupported syntax, return error
+            return {
+                'contract_version': '1.0',
+                'type': 'json_error',
+                'source': str(self.file_path),
+                'source_type': 'file',
+                'file': str(self.file_path),
+                'error': f"Unknown query: {self.query_string}",
+                'valid_queries': list(legacy_modes) + ['field=value', 'field>value', 'sort=field', 'limit=N']
+            }
+
+        # Apply filtering and result control to arrays
+        metadata = {}
+        has_result_control = (self.result_control.sort_field is not None or
+                              self.result_control.limit is not None or
+                              (self.result_control.offset is not None and self.result_control.offset > 0))
+
+        if isinstance(value, list) and (self.query_filters or has_result_control):
+            # Filter array elements
+            if self.query_filters:
+                value = self._filter_array(value)
+
+            # Apply result control (sort, limit, offset)
+            if has_result_control:
+                value, metadata = self._apply_result_control(value)
+
         # Default: return the value
-        return {
+        result = {
             'contract_version': '1.0',
             'type': 'json_value',
             'source': str(self.file_path),
@@ -474,6 +779,12 @@ class JsonAdapter(ResourceAdapter):
             'value_type': self._get_type_str(value),
             'value': value
         }
+
+        # Add metadata if present
+        if metadata:
+            result.update(metadata)
+
+        return result
 
     def _handle_query(self, value: Any) -> Dict[str, Any]:
         """Handle query parameters like ?schema, ?gron, ?type."""

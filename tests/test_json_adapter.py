@@ -305,5 +305,234 @@ class TestJsonAdapterEdgeCases(unittest.TestCase):
         self.assertTrue(any('["key with spaces"]' in line for line in lines))
 
 
+class TestJsonAdapterFiltering(unittest.TestCase):
+    """Test JSON adapter filtering with unified query syntax."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Create test JSON with array data."""
+        cls.temp_dir = tempfile.mkdtemp()
+
+        # Users array for filtering tests
+        cls.users_json = Path(cls.temp_dir) / 'users.json'
+        cls.users_json.write_text(json.dumps({
+            'users': [
+                {'name': 'Alice', 'age': 30, 'status': 'active', 'score': 85.5},
+                {'name': 'Bob', 'age': 25, 'status': 'inactive', 'score': 92.0},
+                {'name': 'Charlie', 'age': 35, 'status': 'active', 'score': 78.3},
+                {'name': 'David', 'age': 28, 'status': 'active', 'score': 88.7},
+                {'name': 'Eve', 'age': 22, 'status': 'inactive', 'score': 95.2}
+            ]
+        }))
+
+        # Products array for range tests
+        cls.products_json = Path(cls.temp_dir) / 'products.json'
+        cls.products_json.write_text(json.dumps({
+            'products': [
+                {'id': 1, 'name': 'Widget', 'price': 15.99, 'category': 'tools'},
+                {'id': 2, 'name': 'Gadget', 'price': 25.50, 'category': 'electronics'},
+                {'id': 3, 'name': 'Gizmo', 'price': 8.75, 'category': 'toys'},
+                {'id': 4, 'name': 'Doohickey', 'price': 45.00, 'category': 'tools'},
+                {'id': 5, 'name': 'Thingamabob', 'price': 12.25, 'category': 'household'}
+            ]
+        }))
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up test files."""
+        import shutil
+        shutil.rmtree(cls.temp_dir)
+
+    def test_filter_greater_than(self):
+        """Should filter array by numeric greater than."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'age>28')
+        result = adapter.get_structure()
+
+        self.assertEqual(result['type'], 'json_value')
+        users = result['value']
+        self.assertEqual(len(users), 2)  # Alice (30), Charlie (35)
+        self.assertTrue(all(u['age'] > 28 for u in users))
+
+    def test_filter_less_than(self):
+        """Should filter array by numeric less than."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'age<28')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 2)  # Bob (25), Eve (22)
+        self.assertTrue(all(u['age'] < 28 for u in users))
+
+    def test_filter_equals(self):
+        """Should filter array by exact match."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'status=active')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 3)  # Alice, Charlie, David
+        self.assertTrue(all(u['status'] == 'active' for u in users))
+
+    def test_filter_not_equals(self):
+        """Should filter array by not equals."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'status!=inactive')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 3)  # Alice, Charlie, David
+        self.assertTrue(all(u['status'] != 'inactive' for u in users))
+
+    def test_filter_range_numeric(self):
+        """Should filter array by numeric range."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'age=25..30')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 3)  # Bob (25), David (28), Alice (30)
+        self.assertTrue(all(25 <= u['age'] <= 30 for u in users))
+
+    def test_filter_regex(self):
+        """Should filter array by regex match."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'name~=^[AC]')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 2)  # Alice, Charlie
+        self.assertTrue(all(u['name'][0] in ['A', 'C'] for u in users))
+
+    def test_filter_greater_equals(self):
+        """Should filter array by greater than or equal."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'score>=90')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 2)  # Bob (92.0), Eve (95.2)
+        self.assertTrue(all(u['score'] >= 90 for u in users))
+
+    def test_filter_less_equals(self):
+        """Should filter array by less than or equal."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'score<=85.5')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 2)  # Alice (85.5), Charlie (78.3)
+        self.assertTrue(all(u['score'] <= 85.5 for u in users))
+
+    def test_result_control_sort_ascending(self):
+        """Should sort array ascending."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'sort=age')
+        result = adapter.get_structure()
+
+        users = result['value']
+        ages = [u['age'] for u in users]
+        self.assertEqual(ages, [22, 25, 28, 30, 35])
+
+    def test_result_control_sort_descending(self):
+        """Should sort array descending."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'sort=-age')
+        result = adapter.get_structure()
+
+        users = result['value']
+        ages = [u['age'] for u in users]
+        self.assertEqual(ages, [35, 30, 28, 25, 22])
+
+    def test_result_control_limit(self):
+        """Should limit array results."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'limit=2')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 2)
+        # Should have truncation warning
+        self.assertIn('warnings', result)
+        self.assertEqual(result['total_matches'], 5)
+        self.assertEqual(result['displayed_results'], 2)
+
+    def test_result_control_offset(self):
+        """Should skip first N results."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'offset=2')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 3)  # Should get last 3 users
+
+    def test_result_control_combined(self):
+        """Should combine sort, limit, and offset."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'sort=-age&limit=2&offset=1')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 2)
+        # After sorting descending by age: 35, 30, 28, 25, 22
+        # Offset 1: 30, 28, 25, 22
+        # Limit 2: 30, 28
+        ages = [u['age'] for u in users]
+        self.assertEqual(ages, [30, 28])
+
+    def test_filter_and_result_control(self):
+        """Should combine filtering and result control."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'age>25&sort=-age&limit=2')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 2)
+        # Filter: age > 25 → Alice (30), Charlie (35), David (28)
+        # Sort descending: Charlie (35), Alice (30), David (28)
+        # Limit 2: Charlie (35), Alice (30)
+        names = [u['name'] for u in users]
+        self.assertEqual(names, ['Charlie', 'Alice'])
+
+    def test_filter_price_range(self):
+        """Should filter products by price range."""
+        adapter = JsonAdapter(f'{self.products_json}/products', 'price=10..25')
+        result = adapter.get_structure()
+
+        products = result['value']
+        # Widget (15.99), Thingamabob (12.25), Gadget (25.50 is > 25, excluded)
+        self.assertEqual(len(products), 2)
+        self.assertTrue(all(10 <= p['price'] <= 25 for p in products))
+
+    def test_filter_missing_field(self):
+        """Should handle missing field gracefully."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'nonexistent>100')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 0)  # No users have this field
+
+    def test_sort_missing_field(self):
+        """Should handle sorting by missing field."""
+        # Add a user without score field
+        test_json = Path(self.temp_dir) / 'test_missing.json'
+        test_json.write_text(json.dumps({
+            'users': [
+                {'name': 'Alice', 'score': 85},
+                {'name': 'Bob'},  # Missing score
+                {'name': 'Charlie', 'score': 90}
+            ]
+        }))
+
+        adapter = JsonAdapter(f'{test_json}/users', 'sort=score')
+        result = adapter.get_structure()
+
+        users = result['value']
+        # Users with score should come first (sorted), then those without
+        self.assertEqual(len(users), 3)
+
+    def test_zero_limit(self):
+        """Should support limit=0 (return empty array)."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'limit=0')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 0)
+
+    def test_offset_greater_than_total(self):
+        """Should handle offset greater than array length."""
+        adapter = JsonAdapter(f'{self.users_json}/users', 'offset=100')
+        result = adapter.get_structure()
+
+        users = result['value']
+        self.assertEqual(len(users), 0)
+
+
 if __name__ == '__main__':
     unittest.main()
