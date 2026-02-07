@@ -51,8 +51,14 @@ def parse_query_params(query: str, coerce: bool = False) -> Dict[str, Any]:
 
     params = {}
     for part in query.split('&'):
+        part = part.strip()
+        if not part:  # Skip empty parts
+            continue
+
         if '=' in part:
             key, value = part.split('=', 1)
+            key = key.strip()
+            value = value.strip()
             if coerce:
                 value = coerce_value(value)
             params[key] = value
@@ -68,17 +74,23 @@ class QueryFilter:
 
     Attributes:
         field: Field name to filter on
-        op: Operator (>, <, >=, <=, =, !=, ~=, .., ?, !)
+        op: Operator (>, <, >=, <=, =, !=, ~=, .., ?, !, *)
         value: Target value for comparison
     """
     field: str
     op: str
     value: str
 
+    VALID_OPERATORS = {'=', '>', '<', '>=', '<=', '!=', '~=', '!~', '..', '?', '!', '*', '=='}
+
     def __post_init__(self):
         # Normalize operators
         if self.op == '==':
             self.op = '='
+
+        # Validate operator
+        if self.op not in self.VALID_OPERATORS:
+            raise ValueError(f"Invalid operator: {self.op}. Must be one of {sorted(self.VALID_OPERATORS)}")
 
 
 def parse_query_filters(
@@ -111,11 +123,17 @@ def parse_query_filters(
         if not part:
             continue
 
-        # Try to match operators (order matters for precedence)
-        # Check compound operators first (>=, <=, !=, ~=, !~) but NOT ..
-        # The .. is special - it should only match if no other operator is present
         matched = False
 
+        # Check for negation prefix (!field)
+        if support_existence and part.startswith('!'):
+            field = part[1:].strip()
+            if field:  # Make sure there's a field name after !
+                filters.append(QueryFilter(field, '!', ''))
+                matched = True
+                continue
+
+        # Try to match operators (order matters for precedence)
         # Two-character operators (except ..)
         for op in ['>=', '<=', '!=', '~=', '!~']:
             if op in part:
@@ -133,13 +151,28 @@ def parse_query_filters(
         if matched:
             continue
 
-        # Single-character operators
+        # Single-character operators (>, <, =)
         for op in ['>', '<', '=']:
             if op in part:
                 field, value = part.split(op, 1)
                 field = field.strip()
                 value = value.strip()
 
+                # Special handling for = operator
+                if op == '=':
+                    # Check for wildcard pattern (*value*)
+                    if '*' in value:
+                        filters.append(QueryFilter(field, '*', value))
+                        matched = True
+                        break
+
+                    # Check for range pattern (value1..value2)
+                    if '..' in value:
+                        filters.append(QueryFilter(field, '..', value))
+                        matched = True
+                        break
+
+                # Normal operator handling
                 if coerce_numeric:
                     value = coerce_value(value)
 
@@ -150,21 +183,8 @@ def parse_query_filters(
         if matched:
             continue
 
-        # Range operator (..) - only check if no other operator matched
-        # This allows "age=25..30" to be parsed as field='age', op='=', value='25..30'
-        if '..' in part:
-            field, value = part.split('..', 1)
-            field = field.strip()
-            value = value.strip()
-
-            if coerce_numeric:
-                value = coerce_value(value)
-
-            filters.append(QueryFilter(field, '..', value))
-            matched = True
-
         # If no operator found, treat as existence check (if supported)
-        if not matched and support_existence:
+        if support_existence:
             filters.append(QueryFilter(part, '?', ''))
 
     return filters
@@ -269,6 +289,21 @@ def compare_values(
             # Fall back to string comparison
             return min_val <= field_str <= max_val
         except (ValueError, TypeError, AttributeError):
+            return False
+
+    # Handle wildcard operator (*)
+    if operator == '*':
+        # Convert shell-style wildcards (*) to regex
+        # *test* -> .*test.*
+        # test* -> test.*
+        # *test -> .*test
+        pattern_str = str(target_value)
+        # Escape special regex characters except *
+        pattern_str = re.escape(pattern_str).replace(r'\*', '.*')
+        try:
+            pattern = re.compile(pattern_str, re.IGNORECASE if not opts['case_sensitive'] else 0)
+            return bool(pattern.search(field_str))
+        except re.error:
             return False
 
     # Handle regex operators (~=, !~)
