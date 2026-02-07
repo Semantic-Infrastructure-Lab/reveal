@@ -3,6 +3,7 @@
 import unittest
 import tempfile
 import os
+import sys
 import shutil
 import subprocess
 from pathlib import Path
@@ -675,6 +676,383 @@ class TestGitDiff(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             adapter.get_structure()
         self.assertIn("Git URI must be in format", str(ctx.exception))
+
+
+class TestDiffAdapterInit(unittest.TestCase):
+    """Test diff adapter initialization with various URI formats."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.original_cwd = os.getcwd()
+
+    def tearDown(self):
+        """Clean up test fixtures."""
+        import shutil
+        os.chdir(self.original_cwd)
+        try:
+            shutil.rmtree(self.temp_dir)
+        except Exception:
+            pass
+
+    def create_file(self, content: str, filename: str) -> str:
+        """Create a temporary file."""
+        path = os.path.join(self.temp_dir, filename)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def test_init_with_file_paths(self):
+        """Should initialize with two file paths."""
+        v1 = "def foo(): pass"
+        v2 = "def bar(): pass"
+        path1 = self.create_file(v1, "v1.py")
+        path2 = self.create_file(v2, "v2.py")
+
+        adapter = DiffAdapter(path1, path2)
+        self.assertEqual(adapter.left_uri, path1)
+        self.assertEqual(adapter.right_uri, path2)
+
+    def test_init_with_combined_uri(self):
+        """Should parse combined 'left:right' format."""
+        v1 = "def foo(): pass"
+        v2 = "def bar(): pass"
+        path1 = self.create_file(v1, "v1.py")
+        path2 = self.create_file(v2, "v2.py")
+
+        adapter = DiffAdapter(f"{path1}:{path2}")
+        self.assertEqual(adapter.left_uri, path1)
+        self.assertEqual(adapter.right_uri, path2)
+
+    def test_init_with_explicit_right_uri(self):
+        """Should accept left URI as resource and right_uri parameter."""
+        v1 = "def foo(): pass"
+        v2 = "def bar(): pass"
+        path1 = self.create_file(v1, "v1.py")
+        path2 = self.create_file(v2, "v2.py")
+
+        adapter = DiffAdapter(path1, right_uri=path2)
+        self.assertEqual(adapter.left_uri, path1)
+        self.assertEqual(adapter.right_uri, path2)
+
+    def test_init_with_file_scheme(self):
+        """Should handle file:// scheme in URIs."""
+        v1 = "def foo(): pass"
+        v2 = "def bar(): pass"
+        path1 = self.create_file(v1, "v1.py")
+        path2 = self.create_file(v2, "v2.py")
+
+        adapter = DiffAdapter(f"file://{path1}:file://{path2}")
+        self.assertEqual(adapter.left_uri, f"file://{path1}")
+        self.assertEqual(adapter.right_uri, f"file://{path2}")
+
+    def test_init_missing_right_uri(self):
+        """Should raise error if right URI not provided."""
+        path1 = self.create_file("def foo(): pass", "v1.py")
+
+        with self.assertRaises(ValueError) as ctx:
+            DiffAdapter(path1)
+        self.assertIn("requires 'left:right' format", str(ctx.exception))
+
+    def test_init_with_directories(self):
+        """Should accept directory paths."""
+        dir1 = os.path.join(self.temp_dir, "dir1")
+        dir2 = os.path.join(self.temp_dir, "dir2")
+        os.makedirs(dir1)
+        os.makedirs(dir2)
+
+        adapter = DiffAdapter(dir1, dir2)
+        self.assertEqual(adapter.left_uri, dir1)
+        self.assertEqual(adapter.right_uri, dir2)
+
+
+class TestDiffAdapterSchema(unittest.TestCase):
+    """Test schema generation for AI agent integration."""
+
+    def test_get_schema(self):
+        """Should return machine-readable schema."""
+        schema = DiffAdapter.get_schema()
+
+        self.assertIsNotNone(schema)
+        self.assertEqual(schema['adapter'], 'diff')
+        self.assertIn('description', schema)
+        self.assertIn('uri_syntax', schema)
+
+    def test_schema_cli_flags(self):
+        """Schema should document CLI flags."""
+        schema = DiffAdapter.get_schema()
+
+        self.assertIn('cli_flags', schema)
+        self.assertIsInstance(schema['cli_flags'], list)
+
+    def test_schema_output_types(self):
+        """Schema should define output types."""
+        schema = DiffAdapter.get_schema()
+
+        self.assertIn('output_types', schema)
+        self.assertTrue(len(schema['output_types']) >= 1)
+
+        # Should have diff output type
+        output_types = [ot['type'] for ot in schema['output_types']]
+        self.assertIn('diff', output_types)
+
+    def test_schema_examples(self):
+        """Schema should include usage examples."""
+        schema = DiffAdapter.get_schema()
+
+        self.assertIn('example_queries', schema)
+        self.assertTrue(len(schema['example_queries']) >= 5)
+
+        # Examples should have required fields
+        for example in schema['example_queries']:
+            self.assertIn('uri', example)
+            self.assertIn('description', example)
+
+    def test_schema_git_examples(self):
+        """Schema should include git:// usage examples."""
+        schema = DiffAdapter.get_schema()
+
+        # Should have git:// examples from bug fix
+        git_examples = [ex for ex in schema['example_queries'] if 'git://' in ex['uri']]
+        self.assertGreaterEqual(len(git_examples), 2)
+
+
+class TestDiffRenderer(unittest.TestCase):
+    """Test renderer output formatting."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.original_cwd = os.getcwd()
+
+    def tearDown(self):
+        """Clean up test fixtures."""
+        import shutil
+        os.chdir(self.original_cwd)
+        try:
+            shutil.rmtree(self.temp_dir)
+        except Exception:
+            pass
+
+    def create_file(self, content: str, filename: str) -> str:
+        """Create a temporary file."""
+        path = os.path.join(self.temp_dir, filename)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def test_renderer_structure_diff(self):
+        """Renderer should format structure diff correctly."""
+        from reveal.adapters.diff import DiffRenderer
+        from io import StringIO
+
+        v1 = "def foo(): pass"
+        v2 = "def foo(): pass\ndef bar(): pass"
+        path1 = self.create_file(v1, "v1.py")
+        path2 = self.create_file(v2, "v2.py")
+
+        adapter = DiffAdapter(path1, path2)
+        result = adapter.get_structure()
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        DiffRenderer.render_structure(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain key sections
+        self.assertIn('Structure Diff', output)
+        self.assertIn('Summary', output)
+        self.assertIn('Functions', output)
+        self.assertIn('bar', output)  # Added function name
+
+    def test_renderer_element_diff(self):
+        """Renderer should format element diff correctly."""
+        from reveal.adapters.diff import DiffRenderer
+        from io import StringIO
+
+        v1 = "def foo():\n    return 1"
+        v2 = "def foo():\n    return 2\ndef bar(): pass"
+        path1 = self.create_file(v1, "v1.py")
+        path2 = self.create_file(v2, "v2.py")
+
+        adapter = DiffAdapter(path1, path2)
+        result = adapter.get_element('foo')
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        DiffRenderer.render_element(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain element details
+        self.assertIn('foo', output)
+        self.assertIn('diff', output.lower())
+
+    def test_renderer_error_handling(self):
+        """Renderer should handle errors gracefully."""
+        from reveal.adapters.diff import DiffRenderer
+        from io import StringIO
+
+        # Capture stderr (render_error outputs to stderr)
+        old_stderr = sys.stderr
+        sys.stderr = captured_output = StringIO()
+
+        error = FileNotFoundError("File not found")
+        DiffRenderer.render_error(error)
+
+        sys.stderr = old_stderr
+        output = captured_output.getvalue()
+
+        self.assertIn('Error', output)
+        self.assertIn('File not found', output)
+
+    def test_renderer_json_format(self):
+        """Renderer should support JSON output."""
+        import json
+        from reveal.adapters.diff import DiffRenderer
+        from io import StringIO
+
+        v1 = "def foo(): pass"
+        v2 = "def bar(): pass"
+        path1 = self.create_file(v1, "v1.py")
+        path2 = self.create_file(v2, "v2.py")
+
+        adapter = DiffAdapter(path1, path2)
+        result = adapter.get_structure()
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        DiffRenderer.render_structure(result, format='json')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should be valid JSON
+        parsed = json.loads(output)
+        self.assertEqual(parsed['type'], 'diff_comparison')
+
+
+class TestDiffAdapterEdgeCases(unittest.TestCase):
+    """Test edge cases and error handling."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.original_cwd = os.getcwd()
+
+    def tearDown(self):
+        """Clean up test fixtures."""
+        import shutil
+        os.chdir(self.original_cwd)
+        try:
+            shutil.rmtree(self.temp_dir)
+        except Exception:
+            pass
+
+    def create_file(self, content: str, filename: str) -> str:
+        """Create a temporary file."""
+        path = os.path.join(self.temp_dir, filename)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def test_nonexistent_left_file(self):
+        """Should handle nonexistent left file gracefully."""
+        path2 = self.create_file("def foo(): pass", "v2.py")
+        nonexistent = os.path.join(self.temp_dir, "nonexistent.py")
+
+        adapter = DiffAdapter(nonexistent, path2)
+        with self.assertRaises(FileNotFoundError):
+            adapter.get_structure()
+
+    def test_nonexistent_right_file(self):
+        """Should handle nonexistent right file gracefully."""
+        path1 = self.create_file("def foo(): pass", "v1.py")
+        nonexistent = os.path.join(self.temp_dir, "nonexistent.py")
+
+        adapter = DiffAdapter(path1, nonexistent)
+        with self.assertRaises(FileNotFoundError):
+            adapter.get_structure()
+
+    def test_empty_files(self):
+        """Should handle empty files."""
+        path1 = self.create_file("", "empty1.py")
+        path2 = self.create_file("", "empty2.py")
+
+        adapter = DiffAdapter(path1, path2)
+        result = adapter.get_structure()
+
+        # Should complete without error
+        self.assertEqual(result['type'], 'diff_comparison')
+        self.assertEqual(result['summary']['functions']['added'], 0)
+
+    def test_large_file_diff(self):
+        """Should handle diffs between large files."""
+        # Create files with many functions
+        v1_content = "\n".join([f"def func_{i}():\n    return {i}" for i in range(100)])
+        v2_content = "\n".join([f"def func_{i}():\n    return {i}" for i in range(100, 200)])
+
+        path1 = self.create_file(v1_content, "large1.py")
+        path2 = self.create_file(v2_content, "large2.py")
+
+        adapter = DiffAdapter(path1, path2)
+        result = adapter.get_structure()
+
+        # Should detect all removals and additions
+        self.assertEqual(result['summary']['functions']['removed'], 100)
+        self.assertEqual(result['summary']['functions']['added'], 100)
+
+    def test_binary_files(self):
+        """Should handle binary files gracefully."""
+        # Create binary files
+        path1 = os.path.join(self.temp_dir, "binary1.bin")
+        path2 = os.path.join(self.temp_dir, "binary2.bin")
+        with open(path1, 'wb') as f:
+            f.write(b'\x00\x01\x02\x03')
+        with open(path2, 'wb') as f:
+            f.write(b'\x04\x05\x06\x07')
+
+        adapter = DiffAdapter(path1, path2)
+
+        # Binary files with no analyzer should raise ValueError
+        with self.assertRaises(ValueError) as ctx:
+            adapter.get_structure()
+        self.assertIn("No analyzer found", str(ctx.exception))
+
+    def test_mixed_file_types(self):
+        """Should handle comparing Python file with non-analyzable file."""
+        path1 = self.create_file("def foo(): pass", "code.py")
+        path2 = self.create_file("Hello World", "text.txt")
+
+        adapter = DiffAdapter(path1, path2)
+
+        # Non-Python file should raise ValueError
+        with self.assertRaises(ValueError) as ctx:
+            adapter.get_structure()
+        self.assertIn("No analyzer found", str(ctx.exception))
+
+    def test_identical_files_different_paths(self):
+        """Should detect no changes for identical content."""
+        content = "def foo():\n    return 42\n"
+        path1 = self.create_file(content, "v1.py")
+        path2 = self.create_file(content, "v2.py")
+
+        adapter = DiffAdapter(path1, path2)
+        result = adapter.get_structure()
+
+        # Should show no changes
+        self.assertEqual(result['summary']['functions']['added'], 0)
+        self.assertEqual(result['summary']['functions']['removed'], 0)
+        self.assertEqual(result['summary']['functions']['modified'], 0)
 
 
 class TestDiffMetadata(unittest.TestCase):
