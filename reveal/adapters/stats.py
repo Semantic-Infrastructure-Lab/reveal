@@ -675,8 +675,17 @@ class StatsAdapter(ResourceAdapter):
             avg_complexity, avg_func_length, len(long_functions), len(deep_nesting), len(functions)
         )
 
+        # For single file analysis, self.path is the file itself
+        # Use the file name instead of trying to get relative path
+        if self.path.is_file() and file_path == self.path:
+            file_display = file_path.name
+        elif file_path.is_relative_to(self.path):
+            file_display = str(file_path.relative_to(self.path))
+        else:
+            file_display = str(file_path)
+
         return {
-            'file': str(file_path.relative_to(self.path)) if file_path.is_relative_to(self.path) else str(file_path),
+            'file': file_display,
             'lines': {
                 'total': total_lines,
                 'code': code_lines,
