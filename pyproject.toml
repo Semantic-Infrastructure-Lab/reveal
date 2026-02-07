@@ -96,7 +96,14 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 # Disable plugins that reveal doesn't use (prevents auto-load failures)
-addopts = "-v --cov=reveal --cov-report=term-missing -p no:postgresql -p no:redis"
+# Coverage removed from default opts - use 'pytest --cov=reveal' for coverage
+# Use 'pytest -n auto' for parallel execution (3.1x speedup)
+addopts = "-v -p no:postgresql -p no:redis"
+markers = [
+    "unit: fast unit tests (< 0.1s each)",
+    "integration: integration tests (subprocess-based, slower)",
+    "slow: tests taking > 1s each",
+]
 
 [tool.coverage.run]
 source = ["reveal"]

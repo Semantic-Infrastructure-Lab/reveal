@@ -34,6 +34,7 @@ def run_reveal(args, check=True):
     return result
 
 
+@pytest.mark.slow
 class TestHugoSchema:
     """Test Hugo static site schema validation."""
 
@@ -228,6 +229,7 @@ description: "Static page without date"
             Path(temp_path).unlink()
 
 
+@pytest.mark.slow
 class TestObsidianSchema:
     """Test Obsidian vault schema validation."""
 
@@ -428,6 +430,7 @@ Comprehensive project note with all metadata.
             Path(temp_path).unlink()
 
 
+@pytest.mark.slow
 class TestJekyllSchema:
     """Test Jekyll static site schema validation (GitHub Pages)."""
 
@@ -614,6 +617,7 @@ This is a comprehensive guide.
             Path(temp_path).unlink()
 
 
+@pytest.mark.slow
 class TestMkDocsSchema:
     """Test MkDocs documentation schema validation."""
 
@@ -814,6 +818,7 @@ This tutorial will walk you through the basics.
             Path(temp_path).unlink()
 
 
+@pytest.mark.slow
 class TestSchemaListing:
     """Test that new schemas appear in listing."""
 
@@ -843,6 +848,7 @@ class TestSchemaListing:
             Path(temp_path).unlink()
 
 
+@pytest.mark.slow
 class TestCrossSchemaComparison:
     """Test validation differences between schemas."""
 
@@ -876,6 +882,7 @@ date: 2026-01-02
             Path(temp_path).unlink()
 
 
+@pytest.mark.slow
 class TestEdgeCases:
     """Test edge cases and special scenarios."""
 

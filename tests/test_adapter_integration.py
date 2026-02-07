@@ -10,6 +10,7 @@ import sys
 import tempfile
 import os
 from pathlib import Path
+import pytest
 
 # Check if pygit2 is available for git:// adapter tests
 try:
@@ -19,6 +20,7 @@ except ImportError:
     PYGIT2_AVAILABLE = False
 
 
+@pytest.mark.integration
 class TestHelpAdapterIntegration(unittest.TestCase):
     """Integration tests for help:// adapter."""
 
@@ -86,6 +88,7 @@ class TestHelpAdapterIntegration(unittest.TestCase):
         )
 
 
+@pytest.mark.integration
 class TestEnvAdapterIntegration(unittest.TestCase):
     """Integration tests for env:// adapter."""
 
@@ -158,6 +161,7 @@ class TestEnvAdapterIntegration(unittest.TestCase):
         )
 
 
+@pytest.mark.integration
 class TestAstAdapterIntegration(unittest.TestCase):
     """Integration tests for ast:// adapter."""
 
@@ -247,6 +251,7 @@ def goodbye():
             self.assertNotIn('Traceback (most recent call last)', result.stderr)
 
 
+@pytest.mark.integration
 @unittest.skipUnless(PYGIT2_AVAILABLE, "pygit2 not available")
 class TestGitAdapterIntegration(unittest.TestCase):
     """Integration tests for git:// adapter."""
@@ -351,6 +356,7 @@ class TestGitAdapterIntegration(unittest.TestCase):
         )
 
 
+@pytest.mark.integration
 class TestJsonAdapterIntegration(unittest.TestCase):
     """Integration tests for json:// adapter."""
 
@@ -451,6 +457,7 @@ class TestJsonAdapterIntegration(unittest.TestCase):
             os.unlink(temp_file)
 
 
+@pytest.mark.integration
 class TestMarkdownAdapterIntegration(unittest.TestCase):
     """Integration tests for markdown:// adapter."""
 
@@ -505,6 +512,7 @@ author: Another Author
             )
 
 
+@pytest.mark.integration
 class TestPythonAdapterIntegration(unittest.TestCase):
     """Integration tests for python:// adapter."""
 
@@ -596,6 +604,7 @@ class TestPythonAdapterIntegration(unittest.TestCase):
         )
 
 
+@pytest.mark.integration
 class TestStatsAdapterIntegration(unittest.TestCase):
     """Integration tests for stats:// adapter."""
 
@@ -639,6 +648,7 @@ class TestStatsAdapterIntegration(unittest.TestCase):
         )
 
 
+@pytest.mark.integration
 class TestImportsAdapterIntegration(unittest.TestCase):
     """Integration tests for imports:// adapter."""
 
@@ -698,6 +708,7 @@ class TestImportsAdapterIntegration(unittest.TestCase):
         )
 
 
+@pytest.mark.integration
 class TestDiffAdapterIntegration(unittest.TestCase):
     """Integration tests for diff:// adapter."""
 
@@ -749,6 +760,7 @@ class TestDiffAdapterIntegration(unittest.TestCase):
         )
 
 
+@pytest.mark.integration
 class TestRevealAdapterIntegration(unittest.TestCase):
     """Integration tests for reveal:// adapter."""
 
