@@ -530,11 +530,15 @@ class AstAdapter(ResourceAdapter):
                 # Wildcard becomes glob operator
                 filters[key] = {'op': 'glob', 'value': value}
             elif qf.op == '=':
-                # Preserve '==' if it appeared in the original query for backward compat
-                # The unified parser normalizes '==' to '=', but check original query
-                if f'{key}==' in query_string:
-                    op = '=='
-                filters[key] = {'op': op, 'value': value}
+                # Check if value contains range operator (..)
+                # Unified parser may have parsed "lines=10..100" as op='=' with value='10..100'
+                if isinstance(value, str) and '..' in value:
+                    # Convert to range operator
+                    filters[key] = {'op': '..', 'value': value}
+                else:
+                    # AST adapter historically used '==' for all equality checks
+                    # This maintains backward compatibility with existing behavior
+                    filters[key] = {'op': '==', 'value': value}
             else:
                 # Standard operators (>, <, >=, <=, !=, ~=, ..)
                 filters[key] = {'op': op, 'value': value}

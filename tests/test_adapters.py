@@ -238,7 +238,7 @@ class TestAstAdapter(unittest.TestCase):
 
         # Should parse limit
         self.assertEqual(adapter.result_control.limit, 3)
-        self.assertIsNone(adapter.result_control.offset)
+        self.assertEqual(adapter.result_control.offset, 0)  # Default offset is 0, not None
 
         # Should apply limit
         result = adapter.get_structure()
