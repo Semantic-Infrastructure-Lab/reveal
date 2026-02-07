@@ -208,6 +208,83 @@ class TestAstAdapter(unittest.TestCase):
                 self.assertGreater(elem.get('line_count', 0), 0,
                     f"Class {elem.get('name')} has 0 line_count")
 
+    def test_not_equals_operator(self):
+        """Should support != operator for filtering."""
+        adapter = AstAdapter(str(self.test_file), 'type!=function')
+
+        # Should parse != operator
+        self.assertEqual(adapter.query['type']['op'], '!=')
+        self.assertEqual(adapter.query['type']['value'], 'function')
+
+    def test_regex_operator(self):
+        """Should support ~= operator for regex matching."""
+        adapter = AstAdapter(str(self.test_file), 'name~=^test_')
+
+        # Should parse ~= operator
+        self.assertEqual(adapter.query['name']['op'], '~=')
+        self.assertEqual(adapter.query['name']['value'], '^test_')
+
+    def test_range_operator(self):
+        """Should support .. operator for range filtering."""
+        adapter = AstAdapter(str(self.test_file), 'lines=10..100')
+
+        # Should parse .. operator
+        self.assertEqual(adapter.query['lines']['op'], '..')
+        self.assertEqual(adapter.query['lines']['value'], '10..100')
+
+    def test_result_control_limit(self):
+        """Should support limit parameter for result pagination."""
+        adapter = AstAdapter(str(self.test_file), 'type=function&limit=3')
+
+        # Should parse limit
+        self.assertEqual(adapter.result_control.limit, 3)
+        self.assertIsNone(adapter.result_control.offset)
+
+        # Should apply limit
+        result = adapter.get_structure()
+        self.assertLessEqual(result['displayed_results'], 3)
+        self.assertLessEqual(len(result['results']), 3)
+
+    def test_result_control_offset(self):
+        """Should support offset parameter for result pagination."""
+        adapter = AstAdapter(str(self.test_file), 'type=function&offset=2')
+
+        # Should parse offset
+        self.assertEqual(adapter.result_control.offset, 2)
+        self.assertIsNone(adapter.result_control.limit)
+
+    def test_result_control_sort_ascending(self):
+        """Should support sort parameter for ascending sort."""
+        adapter = AstAdapter(str(self.test_file), 'type=function&sort=name')
+
+        # Should parse sort
+        self.assertEqual(adapter.result_control.sort_field, 'name')
+        self.assertFalse(adapter.result_control.sort_descending)
+
+    def test_result_control_sort_descending(self):
+        """Should support sort=-field for descending sort."""
+        adapter = AstAdapter(str(self.test_file), 'type=function&sort=-lines')
+
+        # Should parse descending sort
+        self.assertEqual(adapter.result_control.sort_field, 'lines')
+        self.assertTrue(adapter.result_control.sort_descending)
+
+    def test_result_control_combined(self):
+        """Should support combined result control parameters."""
+        adapter = AstAdapter(str(self.test_file), 'type=function&sort=-complexity&limit=5&offset=2')
+
+        # Should parse all parameters
+        self.assertEqual(adapter.result_control.sort_field, 'complexity')
+        self.assertTrue(adapter.result_control.sort_descending)
+        self.assertEqual(adapter.result_control.limit, 5)
+        self.assertEqual(adapter.result_control.offset, 2)
+
+        # Query should not include result control params
+        self.assertIn('type', adapter.query)
+        self.assertNotIn('sort', adapter.query)
+        self.assertNotIn('limit', adapter.query)
+        self.assertNotIn('offset', adapter.query)
+
 
 class TestHelpAdapter(unittest.TestCase):
     """Test help meta-adapter."""

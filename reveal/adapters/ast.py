@@ -1,12 +1,20 @@
 """AST query adapter (ast://)."""
 
 import os
+import re
 import sys
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..core import suppress_treesitter_warnings
+from ..utils.query import (
+    parse_query_filters,
+    parse_result_control,
+    apply_result_control,
+    QueryFilter,
+    ResultControl
+)
 
 # Suppress tree-sitter warnings (centralized in core module)
 suppress_treesitter_warnings()
@@ -43,6 +51,10 @@ class AstAdapter(ResourceAdapter):
         ast://./src?complexity>10        # Complex functions
         ast://app.py?type=function       # Only functions
         ast://.?lines>20&complexity<5    # Long but simple functions
+        ast://.?type!=function           # All non-functions (NEW: != operator)
+        ast://.?name~=^test_             # Regex match (NEW: ~= operator)
+        ast://.?lines=50..200            # Range filter (NEW: .. operator)
+        ast://.?complexity>10&sort=-complexity&limit=10  # Top 10 most complex (NEW: sort, limit)
     """
 
     @staticmethod
@@ -57,14 +69,22 @@ class AstAdapter(ResourceAdapter):
                 '<': 'Less than',
                 '>=': 'Greater than or equal',
                 '<=': 'Less than or equal',
-                '==': 'Equal to'
+                '==': 'Equal to',
+                '!=': 'Not equal to (NEW)',
+                '~=': 'Regex match (NEW)',
+                '..': 'Range (e.g., lines=50..200) (NEW)'
             },
             'filters': {
-                'lines': 'Number of lines in function/class (e.g., lines>50)',
+                'lines': 'Number of lines in function/class (e.g., lines>50, lines=10..100)',
                 'complexity': 'McCabe cyclomatic complexity (industry threshold: >10 needs refactoring, >20 is high risk)',
                 'type': 'Element type: function, class, method. Supports OR with | or , (e.g., type=function, type=class|function)',
-                'name': 'Element name pattern with wildcards (e.g., name=test_*, name=*helper*, name=get_?)',
-                'decorator': 'Decorator pattern - find decorated functions/classes (e.g., decorator=property, decorator=*cache*)'
+                'name': 'Element name pattern with wildcards or regex (e.g., name=test_*, name~=^test_)',
+                'decorator': 'Decorator pattern - find decorated functions/classes (e.g., decorator=property, decorator!=property)'
+            },
+            'result_control': {
+                'sort': 'Sort results by field (e.g., sort=complexity, sort=-lines for descending)',
+                'limit': 'Limit number of results (e.g., limit=10)',
+                'offset': 'Skip first N results (e.g., offset=5)'
             },
             'examples': [
                 {
@@ -118,6 +138,30 @@ class AstAdapter(ResourceAdapter):
                 {
                     'uri': 'ast://.?decorator=property&lines>10',
                     'description': 'Find complex properties (potential code smell)'
+                },
+                {
+                    'uri': 'ast://.?type!=function',
+                    'description': 'All non-function elements (NEW: != operator)'
+                },
+                {
+                    'uri': 'ast://.?name~=^test_',
+                    'description': 'Functions starting with test_ using regex (NEW: ~= operator)'
+                },
+                {
+                    'uri': 'ast://.?lines=50..200',
+                    'description': 'Functions between 50-200 lines (NEW: .. range operator)'
+                },
+                {
+                    'uri': 'ast://.?complexity>10&sort=-complexity',
+                    'description': 'Most complex functions first (NEW: sort)'
+                },
+                {
+                    'uri': 'ast://.?type=function&sort=lines&limit=10',
+                    'description': 'Top 10 shortest functions (NEW: sort + limit)'
+                },
+                {
+                    'uri': 'ast://.?complexity>5&sort=-lines&limit=20&offset=10',
+                    'description': 'Complex functions, paginated results (NEW: full result control)'
                 }
             ],
             # Executable examples for current directory
@@ -189,6 +233,9 @@ class AstAdapter(ResourceAdapter):
             ],
             'notes': [
                 'Quote URIs with > or < operators: \'ast://path?lines>50\' (shell interprets > as redirect)',
+                'NEW operators: != (not equals), ~= (regex), .. (range)',
+                'NEW result control: sort=field (or sort=-field for descending), limit=N, offset=M',
+                'Result control enables efficient pagination for AI agents and large codebases',
                 'Complexity is currently heuristic-based (line count). Tree-sitter-based calculation coming soon.',
                 'Scans all code files in directory recursively',
                 'Supports Python, JS, TS, Rust, Go, and 50+ languages via tree-sitter',
@@ -358,11 +405,19 @@ class AstAdapter(ResourceAdapter):
 
         Args:
             path: File or directory path to analyze
-            query_string: Query parameters (e.g., "lines>50&complexity>10")
+            query_string: Query parameters (e.g., "lines>50&complexity>10&sort=-lines&limit=20")
         """
         # Expand ~ to home directory
         self.path = os.path.expanduser(path)
-        self.query = self._parse_query(query_string) if query_string else {}
+
+        # Extract result control parameters (sort, limit, offset)
+        if query_string:
+            cleaned_query, self.result_control = parse_result_control(query_string)
+            self.query = self._parse_query(cleaned_query)
+        else:
+            self.query = {}
+            self.result_control = ResultControl()
+
         self.results = []
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
@@ -377,6 +432,9 @@ class AstAdapter(ResourceAdapter):
         # Apply filters
         filtered = self._apply_filters(structures)
 
+        # Apply result control (sort, limit, offset)
+        controlled = apply_result_control(filtered, self.result_control)
+
         # Create trust metadata (v1.1)
         # AST adapter uses tree-sitter for parsing
         meta = self.create_meta(
@@ -385,6 +443,16 @@ class AstAdapter(ResourceAdapter):
             warnings=[],
             errors=[]
         )
+
+        # Add truncation metadata if results were limited
+        if self.result_control.limit or self.result_control.offset:
+            if not meta.get('warnings'):
+                meta['warnings'] = []
+            if len(filtered) > len(controlled):
+                meta['warnings'].append({
+                    'type': 'truncated',
+                    'message': f'Results truncated: showing {len(controlled)} of {len(filtered)} total matches'
+                })
 
         return {
             'contract_version': '1.1',
@@ -396,7 +464,8 @@ class AstAdapter(ResourceAdapter):
             'query': self._format_query(self.query),
             'total_files': len(structures),
             'total_results': len(filtered),
-            'results': filtered
+            'displayed_results': len(controlled),
+            'results': controlled
         }
 
     def _parse_equality_value(self, key: str, value: str) -> Dict[str, Any]:
@@ -428,6 +497,9 @@ class AstAdapter(ResourceAdapter):
     def _parse_query(self, query_string: str) -> Dict[str, Any]:
         """Parse query string into filter conditions.
 
+        Now uses unified query parser from utils.query while maintaining
+        backward compatibility with existing filter format.
+
         Args:
             query_string: URL query string (e.g., "lines>50&type=function")
 
@@ -437,24 +509,34 @@ class AstAdapter(ResourceAdapter):
         if not query_string:
             return {}
 
+        # Use unified query parser to get list of QueryFilter objects
+        query_filters = parse_query_filters(query_string)
+
+        # Convert to existing dict format for backward compatibility
         filters = {}
-        for param in query_string.split('&'):
-            # Handle comparison operators (order matters: >= before >)
-            if '>=' in param:
-                key, value = param.split('>=', 1)
-                filters[key] = {'op': '>=', 'value': int(value)}
-            elif '<=' in param:
-                key, value = param.split('<=', 1)
-                filters[key] = {'op': '<=', 'value': int(value)}
-            elif '>' in param:
-                key, value = param.split('>', 1)
-                filters[key] = {'op': '>', 'value': int(value)}
-            elif '<' in param:
-                key, value = param.split('<', 1)
-                filters[key] = {'op': '<', 'value': int(value)}
-            elif '=' in param:
-                key, value = param.split('=', 1)
-                filters[key] = self._parse_equality_value(key, value)
+        for qf in query_filters:
+            key = qf.field
+            value = qf.value
+            op = qf.op
+
+            # Handle special cases from old _parse_equality_value logic
+            if qf.op == '=' and key == 'type' and ('|' in str(value) or ',' in str(value)):
+                # OR logic for type filters: type=class|function
+                separator = '|' if '|' in str(value) else ','
+                types = [t.strip() for t in str(value).split(separator)]
+                filters[key] = {'op': 'in', 'value': types}
+            elif qf.op == '*':
+                # Wildcard becomes glob operator
+                filters[key] = {'op': 'glob', 'value': value}
+            elif qf.op == '=':
+                # Preserve '==' if it appeared in the original query for backward compat
+                # The unified parser normalizes '==' to '=', but check original query
+                if f'{key}==' in query_string:
+                    op = '=='
+                filters[key] = {'op': op, 'value': value}
+            else:
+                # Standard operators (>, <, >=, <=, !=, ~=, ..)
+                filters[key] = {'op': op, 'value': value}
 
         return filters
 
@@ -766,6 +848,8 @@ class AstAdapter(ResourceAdapter):
     def _compare(self, value: Any, condition: Dict[str, Any]) -> bool:
         """Compare value against condition.
 
+        Supports all unified query parser operators including new ones (!=, ~=, ..).
+
         Args:
             value: Actual value
             condition: Condition dict with 'op' and 'value'
@@ -776,6 +860,7 @@ class AstAdapter(ResourceAdapter):
         op = condition['op']
         target = condition['value']
 
+        # Numeric comparison operators
         if op == '>':
             return value > target
         elif op == '<':
@@ -784,13 +869,39 @@ class AstAdapter(ResourceAdapter):
             return value >= target
         elif op == '<=':
             return value <= target
-        elif op == '==':
+
+        # Equality operators
+        elif op == '=' or op == '==':
             return str(value) == str(target)
-        elif op == 'in':
-            # OR logic: check if value matches any in target list
-            return str(value) in [str(t) for t in target]
+        elif op == '!=':
+            # NEW: Not equals operator
+            return str(value) != str(target)
+
+        # Pattern matching operators
+        elif op == '~=':
+            # NEW: Regex match operator
+            try:
+                pattern = re.compile(str(target))
+                return bool(pattern.search(str(value)))
+            except re.error:
+                return False
         elif op == 'glob':
             # Wildcard pattern matching (case-sensitive)
             return fnmatch(str(value), str(target))
+
+        # Range operator
+        elif op == '..':
+            # NEW: Range operator (e.g., lines=50..200)
+            try:
+                min_val, max_val = map(float, str(target).split('..'))
+                num_value = float(value) if isinstance(value, str) else value
+                return min_val <= num_value <= max_val
+            except (ValueError, TypeError, AttributeError):
+                return False
+
+        # List membership
+        elif op == 'in':
+            # OR logic: check if value matches any in target list
+            return str(value) in [str(t) for t in target]
 
         return False
