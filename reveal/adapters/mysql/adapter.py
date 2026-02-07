@@ -39,6 +39,131 @@ class MySQLAdapter(ResourceAdapter):
     """
 
     @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Get machine-readable schema for mysql:// adapter.
+
+        Returns JSON schema for AI agent integration.
+        """
+        return {
+            'adapter': 'mysql',
+            'description': 'MySQL database inspection with health monitoring, performance analysis, and replication status',
+            'uri_syntax': 'mysql://[user:pass@]host[:port][/element]',
+            'query_params': {},  # No query parameters
+            'elements': {
+                'connections': 'Connection pool and thread details',
+                'innodb': 'InnoDB buffer pool and engine status',
+                'replication': 'Replication status and lag',
+                'storage': 'Database and table sizes',
+                'performance': 'Query performance metrics',
+                'variables': 'Server configuration variables'
+            },
+            'cli_flags': [
+                '--check',  # Run health checks
+                '--advanced',  # Include advanced metrics
+                '--only-failures'  # Show only failed health checks
+            ],
+            'supports_batch': False,
+            'supports_advanced': True,
+            'output_types': [
+                {
+                    'type': 'mysql_health',
+                    'description': 'Database health overview with connection, InnoDB, and resource metrics',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'mysql_health'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string', 'const': 'database'},
+                            'server': {'type': 'string'},
+                            'version': {'type': 'string'},
+                            'uptime': {'type': 'integer'},
+                            'connections': {'type': 'object'},
+                            'innodb': {'type': 'object'},
+                            'resources': {'type': 'object'}
+                        }
+                    }
+                },
+                {
+                    'type': 'mysql_replication',
+                    'description': 'Replication status including lag and IO/SQL thread state',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'mysql_replication'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string', 'const': 'database'},
+                            'io_running': {'type': 'boolean'},
+                            'sql_running': {'type': 'boolean'},
+                            'lag_seconds': {'type': ['integer', 'null']},
+                            'master_log_file': {'type': 'string'},
+                            'relay_log_file': {'type': 'string'}
+                        }
+                    }
+                },
+                {
+                    'type': 'mysql_storage',
+                    'description': 'Database and table size information',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'mysql_storage'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string', 'const': 'database'},
+                            'databases': {'type': 'array'},
+                            'total_size_mb': {'type': 'number'}
+                        }
+                    }
+                }
+            ],
+            'example_queries': [
+                {
+                    'uri': 'mysql://localhost',
+                    'description': 'Database health overview',
+                    'output_type': 'mysql_health'
+                },
+                {
+                    'uri': 'mysql://localhost --check',
+                    'description': 'Run health checks (connection, InnoDB, resources)',
+                    'cli_flag': '--check',
+                    'output_type': 'mysql_health'
+                },
+                {
+                    'uri': 'mysql://localhost/connections',
+                    'description': 'Connection pool and thread details',
+                    'element': 'connections',
+                    'output_type': 'mysql_health'
+                },
+                {
+                    'uri': 'mysql://localhost/replication',
+                    'description': 'Replication status and lag',
+                    'element': 'replication',
+                    'output_type': 'mysql_replication'
+                },
+                {
+                    'uri': 'mysql://localhost/storage',
+                    'description': 'Database and table sizes',
+                    'element': 'storage',
+                    'output_type': 'mysql_storage'
+                },
+                {
+                    'uri': 'mysql://user:pass@prod.db.host:3306/innodb',
+                    'description': 'InnoDB buffer pool status',
+                    'element': 'innodb',
+                    'output_type': 'mysql_health'
+                }
+            ],
+            'notes': [
+                'Requires pymysql package (pip install pymysql)',
+                'Credentials can be provided in URI or via environment variables',
+                'Read-only operations for safety',
+                'Health checks include connection utilization, InnoDB buffer pool, and resource limits'
+            ]
+        }
+
+    @staticmethod
     def get_help() -> Dict[str, Any]:
         """Get help documentation for mysql:// adapter.
 

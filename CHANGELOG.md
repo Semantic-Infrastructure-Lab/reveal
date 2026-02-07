@@ -34,6 +34,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added "Production Database Monitoring" workflow
   - Noted production validation against 189GB Digital Ocean MySQL 8.0.35
 
+## [0.47.0] - 2026-02-06
+
+### Added
+- **Phase 6 Complete: AI Agent Introspection - 100% Adapter Coverage**
+  - All 15 adapters now have machine-readable `get_schema()` methods
+  - Complete schema coverage enables AI agents to auto-discover capabilities
+  - Added schemas to 12 remaining adapters:
+    - **Simple adapters**: env, json, markdown, reveal
+    - **Analysis adapters**: diff, imports
+    - **Data adapters**: mysql, sqlite, python
+    - **Complex adapters**: git, domain, claude
+  - Each schema includes:
+    - URI syntax patterns
+    - Query parameters with types and operators
+    - Available elements and CLI flags
+    - Output types with JSON Schema definitions
+    - Example queries with expected outputs
+  - Updated AGENT_HELP.md with complete adapter list organized by category
+  - Session: xtreme-shockwave-0206 (4 hours implementation)
+
+### Changed
+- **AGENT_HELP.md updated to v0.47.0**
+  - Now lists all 15 adapters organized by category (File & Analysis, Environment & Data, Infrastructure, Meta)
+  - Clear examples for each adapter schema query
+
+### Documentation
+- **Phase 6 marked as FULLY COMPLETE in planning documents**
+  - Updated ADAPTER_UX_CONSISTENCY_2026-02-06.md with 100% coverage status
+  - Added adapter coverage matrix showing all 15 adapters with schemas
+
 ## [0.44.2] - 2026-01-21
 
 ### Fixed

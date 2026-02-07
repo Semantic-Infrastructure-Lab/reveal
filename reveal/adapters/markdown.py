@@ -62,6 +62,135 @@ class MarkdownQueryAdapter(ResourceAdapter):
         self.filters = self._parse_query(query) if query else []
 
     @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Get machine-readable schema for markdown:// adapter.
+
+        Returns JSON schema for AI agent integration.
+        """
+        return {
+            'adapter': 'markdown',
+            'description': 'Query markdown files by YAML frontmatter fields with filtering support',
+            'uri_syntax': 'markdown://[path/]?[field=value][&field2=value2]',
+            'query_params': {
+                'field=value': {
+                    'type': 'filter',
+                    'description': 'Exact match (or substring for list fields)',
+                    'operators': ['='],
+                    'examples': ['topics=reveal', 'status=active', 'tags=python']
+                },
+                'field=*pattern*': {
+                    'type': 'filter',
+                    'description': 'Glob-style wildcard matching',
+                    'operators': ['=', '*'],
+                    'examples': ['type=*guide*', 'title=*API*']
+                },
+                '!field': {
+                    'type': 'filter',
+                    'description': 'File is missing this field',
+                    'operators': ['!'],
+                    'examples': ['!topics', '!status', '!title']
+                }
+            },
+            'elements': {},  # Dynamic based on filenames
+            'cli_flags': [],
+            'supports_batch': False,
+            'supports_advanced': False,
+            'filter_logic': 'Multiple filters use AND logic (field1=val1&field2=val2)',
+            'output_types': [
+                {
+                    'type': 'markdown_query',
+                    'description': 'Markdown files matching frontmatter filters',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'markdown_query'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string', 'enum': ['directory', 'file']},
+                            'base_path': {'type': 'string'},
+                            'query': {'type': 'string'},
+                            'filters': {'type': 'array'},
+                            'total_files': {'type': 'integer'},
+                            'matched_files': {'type': 'integer'},
+                            'results': {
+                                'type': 'array',
+                                'items': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'path': {'type': 'string'},
+                                        'relative_path': {'type': 'string'},
+                                        'has_frontmatter': {'type': 'boolean'},
+                                        'title': {'type': 'string'},
+                                        'type': {'type': 'string'},
+                                        'status': {'type': 'string'},
+                                        'tags': {'type': 'array'},
+                                        'topics': {'type': 'array'}
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    'example': {
+                        'contract_version': '1.0',
+                        'type': 'markdown_query',
+                        'source': 'docs/',
+                        'source_type': 'directory',
+                        'base_path': '/home/user/docs',
+                        'query': 'topics=reveal&status=active',
+                        'total_files': 42,
+                        'matched_files': 5,
+                        'results': [
+                            {
+                                'path': '/home/user/docs/reveal_guide.md',
+                                'relative_path': 'docs/reveal_guide.md',
+                                'has_frontmatter': True,
+                                'title': 'Reveal Guide',
+                                'topics': ['reveal', 'documentation'],
+                                'status': 'active'
+                            }
+                        ]
+                    }
+                }
+            ],
+            'example_queries': [
+                {
+                    'uri': 'markdown://',
+                    'description': 'List all markdown files in current directory',
+                    'output_type': 'markdown_query'
+                },
+                {
+                    'uri': 'markdown://docs/',
+                    'description': 'List all markdown files in docs/ directory',
+                    'output_type': 'markdown_query'
+                },
+                {
+                    'uri': 'markdown://sessions/?topics=reveal',
+                    'description': 'Find files where topics contains "reveal"',
+                    'cli_flag': '?topics=reveal',
+                    'output_type': 'markdown_query'
+                },
+                {
+                    'uri': 'markdown://docs/?tags=python&status=active',
+                    'description': 'Multiple filters (AND logic)',
+                    'cli_flag': '?tags=python&status=active',
+                    'output_type': 'markdown_query'
+                },
+                {
+                    'uri': 'markdown://?!topics',
+                    'description': 'Find files missing topics field',
+                    'cli_flag': '?!topics',
+                    'output_type': 'markdown_query'
+                },
+                {
+                    'uri': 'markdown://?type=*guide*',
+                    'description': 'Wildcard matching (glob-style)',
+                    'cli_flag': '?type=*guide*',
+                    'output_type': 'markdown_query'
+                }
+            ]
+        }
+
+    @staticmethod
     def get_help() -> Dict[str, Any]:
         """Get help documentation for markdown:// adapter."""
         return {

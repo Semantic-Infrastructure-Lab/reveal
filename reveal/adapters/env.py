@@ -43,6 +43,101 @@ class EnvAdapter(ResourceAdapter):
     """Adapter for exploring environment variables via env:// URIs."""
 
     @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Get machine-readable schema for env:// adapter.
+
+        Returns JSON schema for AI agent integration.
+        """
+        return {
+            'adapter': 'env',
+            'description': 'Environment variable inspection with auto-categorization and sensitive value redaction',
+            'uri_syntax': 'env://[variable_name]',
+            'query_params': {},  # No query parameters
+            'elements': {},  # Variable names are not fixed elements
+            'cli_flags': [],
+            'supports_batch': False,
+            'supports_advanced': False,
+            'output_types': [
+                {
+                    'type': 'environment',
+                    'description': 'All environment variables categorized by type',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'environment'},
+                            'source': {'type': 'string', 'const': 'system'},
+                            'source_type': {'type': 'string', 'const': 'runtime'},
+                            'total_count': {'type': 'integer'},
+                            'categories': {
+                                'type': 'object',
+                                'properties': {
+                                    'System': {'type': 'array'},
+                                    'Python': {'type': 'array'},
+                                    'Node': {'type': 'array'},
+                                    'Application': {'type': 'array'},
+                                    'Custom': {'type': 'array'}
+                                }
+                            }
+                        }
+                    },
+                    'example': {
+                        'contract_version': '1.0',
+                        'type': 'environment',
+                        'source': 'system',
+                        'source_type': 'runtime',
+                        'total_count': 42,
+                        'categories': {
+                            'System': [
+                                {'name': 'PATH', 'value': '/usr/local/bin:/usr/bin', 'sensitive': False, 'length': 25},
+                                {'name': 'HOME', 'value': '/home/user', 'sensitive': False, 'length': 10}
+                            ],
+                            'Python': [
+                                {'name': 'PYTHONPATH', 'value': '/opt/python', 'sensitive': False, 'length': 11}
+                            ]
+                        }
+                    }
+                },
+                {
+                    'type': 'env_variable',
+                    'description': 'Specific environment variable details',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'name': {'type': 'string'},
+                            'value': {'type': 'string'},
+                            'category': {'type': 'string', 'enum': ['System', 'Python', 'Node', 'Application', 'Custom']},
+                            'sensitive': {'type': 'boolean'},
+                            'length': {'type': 'integer'}
+                        }
+                    }
+                }
+            ],
+            'example_queries': [
+                {
+                    'uri': 'env://',
+                    'description': 'List all environment variables grouped by category',
+                    'output_type': 'environment'
+                },
+                {
+                    'uri': 'env://PATH',
+                    'description': 'Get PATH variable value and metadata',
+                    'output_type': 'env_variable'
+                },
+                {
+                    'uri': 'env://DATABASE_URL',
+                    'description': 'Get database URL (sensitive values automatically redacted)',
+                    'output_type': 'env_variable'
+                }
+            ],
+            'security_features': [
+                'Automatic sensitive value redaction',
+                'Pattern-based detection: PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH',
+                'Redacted values shown as ***'
+            ]
+        }
+
+    @staticmethod
     def get_help() -> Dict[str, Any]:
         """Get help documentation for env:// adapter."""
         return {

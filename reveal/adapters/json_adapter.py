@@ -117,6 +117,164 @@ class JsonAdapter(ResourceAdapter):
         ]
 
     @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Get machine-readable schema for json:// adapter.
+
+        Returns JSON schema for AI agent integration.
+        """
+        return {
+            'adapter': 'json',
+            'description': 'JSON file navigation with path access, schema inference, and gron-style flattening',
+            'uri_syntax': 'json://<file>[/path/to/key][?query]',
+            'query_params': {
+                'schema': {
+                    'type': 'flag',
+                    'description': 'Show type structure of data'
+                },
+                'flatten': {
+                    'type': 'flag',
+                    'description': 'Flatten to grep-able lines (gron-style output)'
+                },
+                'gron': {
+                    'type': 'flag',
+                    'description': 'Alias for flatten (named after github.com/tomnomnom/gron)'
+                },
+                'type': {
+                    'type': 'flag',
+                    'description': 'Show type at current path'
+                },
+                'keys': {
+                    'type': 'flag',
+                    'description': 'List keys (objects) or indices (arrays)'
+                },
+                'length': {
+                    'type': 'flag',
+                    'description': 'Get array/string length or object key count'
+                }
+            },
+            'path_syntax': {
+                '/key': 'Access object key',
+                '/0': 'Access array index (0-based)',
+                '/key/subkey': 'Navigate nested paths',
+                '/arr[0:3]': 'Array slice (first 3 elements)',
+                '/arr[-1]': 'Negative index (last element)'
+            },
+            'elements': {},  # Dynamic based on JSON structure
+            'cli_flags': [],
+            'supports_batch': False,
+            'supports_advanced': False,
+            'output_types': [
+                {
+                    'type': 'json_value',
+                    'description': 'Raw JSON value at specified path',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'json_value'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string', 'const': 'file'},
+                            'file': {'type': 'string'},
+                            'path': {'type': 'string'},
+                            'value_type': {'type': 'string'},
+                            'value': {}  # Any JSON type
+                        }
+                    }
+                },
+                {
+                    'type': 'json_schema',
+                    'description': 'Type structure inferred from data',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'json_schema'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string', 'const': 'file'},
+                            'file': {'type': 'string'},
+                            'path': {'type': 'string'},
+                            'schema': {}  # Inferred schema structure
+                        }
+                    }
+                },
+                {
+                    'type': 'json_flatten',
+                    'description': 'Gron-style flattened output for grep',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'json_flatten'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string', 'const': 'file'},
+                            'file': {'type': 'string'},
+                            'path': {'type': 'string'},
+                            'lines': {'type': 'array', 'items': {'type': 'string'}},
+                            'line_count': {'type': 'integer'}
+                        }
+                    }
+                },
+                {
+                    'type': 'json_keys',
+                    'description': 'Object keys or array indices',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'json_keys'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string', 'const': 'file'},
+                            'file': {'type': 'string'},
+                            'path': {'type': 'string'},
+                            'keys': {'type': 'array', 'items': {'type': 'string'}},
+                            'count': {'type': 'integer'}
+                        }
+                    }
+                }
+            ],
+            'example_queries': [
+                {
+                    'uri': 'json://package.json',
+                    'description': 'View entire JSON file (pretty-printed)',
+                    'output_type': 'json_value'
+                },
+                {
+                    'uri': 'json://package.json/name',
+                    'description': 'Get package name',
+                    'output_type': 'json_value'
+                },
+                {
+                    'uri': 'json://data.json/users/0',
+                    'description': 'Get first user from array',
+                    'output_type': 'json_value'
+                },
+                {
+                    'uri': 'json://data.json/users[0:3]',
+                    'description': 'Get first 3 users (array slice)',
+                    'output_type': 'json_value'
+                },
+                {
+                    'uri': 'json://config.json?schema',
+                    'description': 'Show type structure of entire file',
+                    'cli_flag': '?schema',
+                    'output_type': 'json_schema'
+                },
+                {
+                    'uri': 'json://config.json?flatten',
+                    'description': 'Flatten to grep-able format (also: ?gron)',
+                    'cli_flag': '?flatten',
+                    'output_type': 'json_flatten'
+                },
+                {
+                    'uri': 'json://package.json/dependencies?keys',
+                    'description': 'List all dependency names',
+                    'cli_flag': '?keys',
+                    'output_type': 'json_keys'
+                }
+            ]
+        }
+
+    @staticmethod
     def get_help() -> Dict[str, Any]:
         """Get help documentation for json:// adapter."""
         return {

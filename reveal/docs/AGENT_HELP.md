@@ -20,17 +20,38 @@
 
 ---
 
-## Agent Introspection (v0.46.0+)
+## Agent Introspection (v0.46.0+ → v0.47.0 Complete Coverage)
 
 **NEW: Auto-discover capabilities programmatically**
 
 AI agents can now query reveal's capabilities via machine-readable schemas:
 
 ```bash
-# Discover all available adapters with metadata
-reveal help://schemas/ssl --format=json        # SSL adapter schema
-reveal help://schemas/ast --format=json        # AST adapter schema
-reveal help://schemas/stats --format=json      # Stats adapter schema
+# Discover adapter schemas (ALL 15 adapters now supported)
+reveal help://schemas/<adapter> --format=json
+
+# File & Analysis Adapters
+reveal help://schemas/ast --format=json        # Code structure analysis
+reveal help://schemas/stats --format=json      # Code statistics
+reveal help://schemas/imports --format=json    # Import graph analysis
+reveal help://schemas/diff --format=json       # Resource comparison
+
+# Environment & Data Adapters
+reveal help://schemas/env --format=json        # Environment variables
+reveal help://schemas/json --format=json       # JSON file navigation
+reveal help://schemas/markdown --format=json   # Markdown queries
+reveal help://schemas/python --format=json     # Python runtime
+reveal help://schemas/mysql --format=json      # MySQL databases
+reveal help://schemas/sqlite --format=json     # SQLite databases
+
+# Infrastructure Adapters
+reveal help://schemas/ssl --format=json        # SSL certificates
+reveal help://schemas/domain --format=json     # Domain DNS/WHOIS
+reveal help://schemas/git --format=json        # Git repositories
+reveal help://schemas/claude --format=json     # Claude conversations
+
+# Meta Adapters
+reveal help://schemas/reveal --format=json     # Self-inspection
 
 # Get canonical query recipes for common tasks
 reveal help://examples/security --format=json  # Security analysis recipes

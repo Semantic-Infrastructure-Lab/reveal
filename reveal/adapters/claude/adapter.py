@@ -350,6 +350,194 @@ class ClaudeAdapter(ResourceAdapter):
         return calculate_tool_success_rate(messages)
 
     @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Get machine-readable schema for claude:// adapter.
+
+        Returns JSON schema for AI agent integration.
+        """
+        return {
+            'adapter': 'claude',
+            'description': 'Claude Code conversation analysis with tool usage, workflow tracking, and error detection',
+            'uri_syntax': 'claude://session/{name}[/resource][?query]',
+            'query_params': {
+                'summary': {
+                    'type': 'flag',
+                    'description': 'Session summary (overview + key events)'
+                },
+                'errors': {
+                    'type': 'flag',
+                    'description': 'Filter for messages containing errors'
+                },
+                'tools': {
+                    'type': 'string',
+                    'description': 'Filter for specific tool usage',
+                    'examples': ['?tools=Bash', '?tools=Edit']
+                },
+                'contains': {
+                    'type': 'string',
+                    'description': 'Filter messages containing text',
+                    'examples': ['?contains=reveal', '?contains=error']
+                },
+                'role': {
+                    'type': 'string',
+                    'description': 'Filter by message role',
+                    'values': ['user', 'assistant'],
+                    'examples': ['?role=user']
+                }
+            },
+            'elements': {
+                'workflow': 'Chronological sequence of tool operations',
+                'files': 'All files read, written, or edited',
+                'tools': 'All tool usage with success rates',
+                'thinking': 'All thinking blocks',
+                'errors': 'All errors and exceptions',
+                'timeline': 'Chronological message timeline',
+                'context': 'Context window changes over session'
+            },
+            'cli_flags': [],
+            'supports_batch': False,
+            'supports_advanced': False,
+            'output_types': [
+                {
+                    'type': 'claude_overview',
+                    'description': 'Session overview with message counts and tool usage',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'claude_overview'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string', 'const': 'file'},
+                            'session_name': {'type': 'string'},
+                            'message_count': {'type': 'integer'},
+                            'tool_calls': {'type': 'integer'},
+                            'duration': {'type': 'string'},
+                            'tool_summary': {'type': 'array'}
+                        }
+                    }
+                },
+                {
+                    'type': 'claude_workflow',
+                    'description': 'Chronological tool operation sequence',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'claude_workflow'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string'},
+                            'session_name': {'type': 'string'},
+                            'operations': {'type': 'array'}
+                        }
+                    }
+                },
+                {
+                    'type': 'claude_files',
+                    'description': 'Files touched during session',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'claude_files'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string'},
+                            'session_name': {'type': 'string'},
+                            'files': {'type': 'array'}
+                        }
+                    }
+                },
+                {
+                    'type': 'claude_tools',
+                    'description': 'Tool usage statistics',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'claude_tools'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string'},
+                            'session_name': {'type': 'string'},
+                            'tools': {'type': 'array'},
+                            'success_rate': {'type': 'number'}
+                        }
+                    }
+                },
+                {
+                    'type': 'claude_errors',
+                    'description': 'All errors and exceptions in session',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'claude_errors'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string'},
+                            'session_name': {'type': 'string'},
+                            'errors': {'type': 'array'},
+                            'count': {'type': 'integer'}
+                        }
+                    }
+                }
+            ],
+            'example_queries': [
+                {
+                    'uri': 'claude://session/infernal-earth-0118',
+                    'description': 'Session overview (messages, tools, duration)',
+                    'output_type': 'claude_overview'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118/workflow',
+                    'description': 'Chronological sequence of tool operations',
+                    'element': 'workflow',
+                    'output_type': 'claude_workflow'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118/files',
+                    'description': 'All files read, written, or edited',
+                    'element': 'files',
+                    'output_type': 'claude_files'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118/tools',
+                    'description': 'All tool usage with success rates',
+                    'element': 'tools',
+                    'output_type': 'claude_tools'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118/errors',
+                    'description': 'All errors and exceptions',
+                    'element': 'errors',
+                    'output_type': 'claude_errors'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118?tools=Bash',
+                    'description': 'Filter for Bash tool usage',
+                    'query_param': '?tools=Bash',
+                    'output_type': 'claude_overview'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118?errors',
+                    'description': 'Filter for error messages',
+                    'query_param': '?errors',
+                    'output_type': 'claude_overview'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118?summary',
+                    'description': 'Session summary with key events',
+                    'query_param': '?summary',
+                    'output_type': 'claude_overview'
+                }
+            ],
+            'notes': [
+                'Reads Claude Code conversation JSONL files from ~/.claude/projects/',
+                'Supports composite queries (e.g., ?tools=Bash&errors)',
+                'Workflow tracking shows tool operation sequences',
+                'File tracking shows all Read/Write/Edit operations',
+                'Tool success rates calculated from result vs error status'
+            ]
+        }
+
+    @staticmethod
     def get_help() -> Dict[str, Any]:
         """Get help documentation for claude:// adapter.
 

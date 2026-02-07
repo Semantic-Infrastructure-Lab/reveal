@@ -32,6 +32,116 @@ class DomainAdapter(ResourceAdapter):
     """
 
     @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Get machine-readable schema for domain:// adapter.
+
+        Returns JSON schema for AI agent integration.
+        """
+        return {
+            'adapter': 'domain',
+            'description': 'Domain registration, DNS, and SSL inspection with health checks',
+            'uri_syntax': 'domain://<domain>[/element]',
+            'query_params': {},  # No query parameters
+            'elements': {
+                'dns': 'DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)',
+                'whois': 'WHOIS registration data (requires python-whois)',
+                'ssl': 'SSL certificate status (delegates to ssl:// adapter)',
+                'registrar': 'Registrar and nameserver information'
+            },
+            'cli_flags': [
+                '--check',  # DNS propagation, SSL, expiry checks
+                '--advanced',  # Advanced DNS diagnostics
+                '--only-failures'  # Show only failed checks
+            ],
+            'supports_batch': False,
+            'supports_advanced': True,
+            'output_types': [
+                {
+                    'type': 'domain_overview',
+                    'description': 'Domain overview with DNS and SSL summary',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'domain_overview'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string'},
+                            'domain': {'type': 'string'},
+                            'dns': {
+                                'type': 'object',
+                                'properties': {
+                                    'nameservers': {'type': 'array'},
+                                    'a_records': {'type': 'array'},
+                                    'has_mx': {'type': 'boolean'},
+                                    'error': {'type': ['string', 'null']}
+                                }
+                            },
+                            'ssl': {'type': 'object'},
+                            'next_steps': {'type': 'array'}
+                        }
+                    }
+                },
+                {
+                    'type': 'domain_dns',
+                    'description': 'All DNS records for domain',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'domain_dns'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string'},
+                            'domain': {'type': 'string'},
+                            'records': {
+                                'type': 'object',
+                                'properties': {
+                                    'A': {'type': 'array'},
+                                    'AAAA': {'type': 'array'},
+                                    'MX': {'type': 'array'},
+                                    'TXT': {'type': 'array'},
+                                    'NS': {'type': 'array'},
+                                    'CNAME': {'type': 'array'},
+                                    'SOA': {'type': 'array'}
+                                }
+                            }
+                        }
+                    }
+                }
+            ],
+            'example_queries': [
+                {
+                    'uri': 'domain://example.com',
+                    'description': 'Domain overview (registrar, DNS, SSL status)',
+                    'output_type': 'domain_overview'
+                },
+                {
+                    'uri': 'domain://example.com/dns',
+                    'description': 'All DNS records',
+                    'element': 'dns',
+                    'output_type': 'domain_dns'
+                },
+                {
+                    'uri': 'domain://example.com/ssl',
+                    'description': 'SSL certificate status (delegates to ssl://)',
+                    'element': 'ssl',
+                    'output_type': 'ssl_certificate'
+                },
+                {
+                    'uri': 'domain://example.com --check',
+                    'description': 'Health checks (DNS propagation, SSL, expiry)',
+                    'cli_flag': '--check',
+                    'output_type': 'domain_health'
+                }
+            ],
+            'notes': [
+                'DNS resolution via dnspython library',
+                'SSL inspection delegates to ssl:// adapter',
+                'WHOIS requires python-whois package (optional)',
+                'Health checks include DNS propagation and SSL expiry'
+            ]
+        }
+
+    @staticmethod
     def get_help() -> Dict[str, Any]:
         """Get help documentation for domain:// adapter.
 

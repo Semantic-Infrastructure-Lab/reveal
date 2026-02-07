@@ -79,6 +79,118 @@ class RevealAdapter(ResourceAdapter):
     """
 
     @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Get machine-readable schema for reveal:// adapter.
+
+        Returns JSON schema for AI agent integration.
+        """
+        return {
+            'adapter': 'reveal',
+            'description': 'Self-inspection of reveal\'s own codebase and configuration with validation rules',
+            'uri_syntax': 'reveal://[path][/element]',
+            'query_params': {},  # No query parameters
+            'elements': {
+                'config': 'Active configuration with sources and precedence',
+                'analyzers': 'List all registered analyzers',
+                'rules': 'List all available validation rules',
+                'adapters': 'List all registered adapters'
+            },
+            'cli_flags': [
+                '--check',  # Run validation rules
+                '--select=<rules>',  # Select specific rules (e.g., V001,V002)
+                '--only-failures'  # Show only failed checks
+            ],
+            'supports_batch': False,
+            'supports_advanced': False,
+            'validation_rules': {
+                'V001': 'Help documentation completeness',
+                'V002': 'Analyzer registration validation',
+                'V003': 'Feature matrix coverage',
+                'V004': 'Test coverage gaps',
+                'V005': 'Static help file sync',
+                'V006': 'Output format support',
+                'V016': 'Output Contract compliance'
+            },
+            'output_types': [
+                {
+                    'type': 'reveal_structure',
+                    'description': 'Overview of reveal\'s internal structure',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'reveal_structure'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string'},
+                            'adapters': {'type': 'array'},
+                            'analyzers': {'type': 'array'},
+                            'rules': {'type': 'array'}
+                        }
+                    }
+                },
+                {
+                    'type': 'reveal_check',
+                    'description': 'Validation check results',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'reveal_check'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string'},
+                            'detections': {'type': 'array'},
+                            'passed': {'type': 'integer'},
+                            'failed': {'type': 'integer'},
+                            'total': {'type': 'integer'}
+                        }
+                    }
+                }
+            ],
+            'example_queries': [
+                {
+                    'uri': 'reveal://',
+                    'description': 'Show reveal\'s internal structure (analyzers, rules, adapters)',
+                    'output_type': 'reveal_structure'
+                },
+                {
+                    'uri': 'reveal://config',
+                    'description': 'Show active configuration with full transparency',
+                    'element': 'config',
+                    'output_type': 'reveal_structure'
+                },
+                {
+                    'uri': 'reveal://analyzers',
+                    'description': 'List all registered analyzers',
+                    'element': 'analyzers',
+                    'output_type': 'reveal_structure'
+                },
+                {
+                    'uri': 'reveal://rules',
+                    'description': 'List all available validation rules',
+                    'element': 'rules',
+                    'output_type': 'reveal_structure'
+                },
+                {
+                    'uri': 'reveal:// --check',
+                    'description': 'Run all validation rules (V-series)',
+                    'cli_flag': '--check',
+                    'output_type': 'reveal_check'
+                },
+                {
+                    'uri': 'reveal:// --check --select V001,V002',
+                    'description': 'Run specific validation rules',
+                    'cli_flag': '--check --select',
+                    'output_type': 'reveal_check'
+                },
+                {
+                    'uri': 'reveal://adapters/reveal.py get_element',
+                    'description': 'Extract specific function from reveal\'s source',
+                    'output_type': 'code_element'
+                }
+            ]
+        }
+
+    @staticmethod
     def get_help() -> Dict[str, Any]:
         """Get help documentation for reveal:// adapter."""
         return {
