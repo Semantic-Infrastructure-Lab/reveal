@@ -365,6 +365,25 @@ reveal diff://env://:env://production        # Environment drift detection
 reveal help://diff                           # Complete diff guide
 ```
 
+**🔍 Unified Query Infrastructure (v0.37.0+)** 🆕
+
+All adapters now use a **unified query engine** for consistent filtering:
+
+```bash
+# 8 universal operators work everywhere: =, !=, >, <, >=, <=, ~= (regex), .. (range)
+reveal 'ast://src?lines>50&complexity<10'   # AST: Long but simple functions
+reveal 'json://data.json?age=18..65'        # JSON: Range filtering
+reveal 'stats://src?lines>100'              # Stats: Large files
+reveal 'markdown://docs/?status=active'     # Markdown: Filter by frontmatter
+reveal 'git://.?author=John&message~=bug'   # Git: Filter commits by author & message
+
+# Result control: sort, limit, offset (pagination)
+reveal 'ast://src?complexity>10&sort=-complexity&limit=10'  # Top 10 complex functions
+reveal 'stats://src?sort=-lines&limit=5'                    # 5 largest files
+
+# See reveal help://<adapter> for adapter-specific operators and examples
+```
+
 **15 Built-in Adapters (Organized by Purpose):**
 
 🟢 **Universal Tools** (core functionality, everyone benefits):

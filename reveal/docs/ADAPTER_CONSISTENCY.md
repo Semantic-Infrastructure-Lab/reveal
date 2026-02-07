@@ -1,8 +1,8 @@
 # Adapter Consistency Guide
 
 **Audience**: Users and adapter authors
-**Last Updated**: 2026-02-06
-**See Also**: [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md)
+**Last Updated**: 2026-02-07 (Phase 3: Unified Query Infrastructure)
+**See Also**: [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md), [../internal-docs/UNIFIED_OPERATOR_REFERENCE.md](../internal-docs/UNIFIED_OPERATOR_REFERENCE.md)
 
 ---
 
@@ -134,34 +134,69 @@ Display flags filter **the view** of the same resource:
 
 ## Query Operator Reference
 
-### Comparison Operators
+**Updated**: 2026-02-07 (Phase 3: Unified Query Infrastructure)
 
-| Operator | Meaning | Example |
-|----------|---------|---------|
-| `>` | Greater than | `lines>50` |
-| `<` | Less than | `lines<200` |
-| `>=` | Greater or equal | `complexity>=10` |
-| `<=` | Less or equal | `complexity<=5` |
-| `==` | Equals | `type==function` |
-| `!=` | Not equals | `decorator!=property` |
-| `~=` | Regex match | `name~=^test_` |
-| `..` | Range | `lines=50..200` |
+All query filtering now uses a **unified comparison engine** (`compare_values()` in `reveal/utils/query.py`), ensuring consistent behavior across all adapters.
 
-### Wildcards
+### Universal Comparison Operators
 
-| Pattern | Meaning | Example |
-|---------|---------|---------|
-| `*` | Glob wildcard (any chars) | `name=test_*` |
-| `?` | Single character | `name=test_?` |
+These operators work in **all 5 core adapters** (JSON, Markdown, Stats, AST, Git):
+
+| Operator | Meaning | Example | Notes |
+|----------|---------|---------|-------|
+| `=` | Exact match | `author=John` | Case-insensitive for strings |
+| `!=` | Not equals | `status!=draft` | - |
+| `>` | Greater than | `lines>50` | Numeric comparison |
+| `<` | Less than | `complexity<10` | Numeric comparison |
+| `>=` | Greater or equal | `priority>=5` | Numeric comparison |
+| `<=` | Less or equal | `functions<=20` | Numeric comparison |
+| `~=` | Regex match | `message~=bug.*fix` | Uses Python `re` module |
+| `..` | Range (inclusive) | `lines=50..200` | Works with numbers and strings |
+
+**Single source of truth**: All operators use the same comparison logic, so behavior is consistent everywhere.
+
+### Adapter-Specific Operators
+
+**AST only** (code structure queries):
+- `glob`: Glob-style wildcards (`name=test_*`)
+- `in`: List membership (`type in [function, class]`)
+
+**Markdown only** (frontmatter queries):
+- `!field`: Check if field is missing/undefined (`!topics`)
 
 ### Boolean Logic
 
 | Operator | Meaning | Example |
 |----------|---------|---------|
-| `&` | AND (implicit) | `lines>50&complexity>10` |
-| `\|` | OR (explicit) | `type=function\|method` |
-| `()` | Grouping | `(lines>50\|complexity>10)&decorator=cached` |
-| `!` | NOT prefix | `!deprecated&status=active` |
+| `&` | AND (all filters must match) | `lines>50&complexity>10` |
+
+**Note**: OR logic (`|`) and grouping (`()`) are adapter-specific. Check adapter help for details.
+
+### Result Control
+
+All adapters support result manipulation:
+
+| Parameter | Meaning | Example |
+|-----------|---------|---------|
+| `sort=field` | Sort ascending | `sort=lines` |
+| `sort=-field` | Sort descending | `sort=-complexity` |
+| `limit=N` | Limit to N results | `limit=10` |
+| `offset=M` | Skip first M results | `offset=20` |
+
+### Implementation Details
+
+- **File**: `reveal/utils/query.py` (`compare_values()` function)
+- **Code reduction**: 299 lines → 163 lines (-45.5%)
+- **Test coverage**: 179/182 tests passing (98.4%)
+- **Documentation**: See `internal-docs/UNIFIED_OPERATOR_REFERENCE.md` for comprehensive details
+
+### Adapter Support Matrix
+
+| Operator | JSON | Markdown | Stats | AST | Git |
+|----------|------|----------|-------|-----|-----|
+| `=`, `!=`, `>`, `<`, `>=`, `<=`, `~=`, `..` | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `glob`, `in` | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `!field` | ❌ | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
