@@ -750,5 +750,267 @@ class TestCheckMethod(unittest.TestCase):
         self.assertEqual(check_names, expected_names)
 
 
+class TestMySQLAdapterSchema(unittest.TestCase):
+    """Test schema generation for AI agent integration."""
+
+    def test_get_schema(self):
+        """Should return machine-readable schema."""
+        schema = MySQLAdapter.get_schema()
+
+        self.assertIsNotNone(schema)
+        self.assertEqual(schema['adapter'], 'mysql')
+        self.assertIn('description', schema)
+        self.assertIn('uri_syntax', schema)
+        self.assertEqual(schema['uri_syntax'], 'mysql://[user:pass@]host[:port][/element]')
+
+    def test_schema_query_params(self):
+        """Schema should document query parameters."""
+        schema = MySQLAdapter.get_schema()
+
+        self.assertIn('query_params', schema)
+        self.assertIsInstance(schema['query_params'], dict)
+
+    def test_schema_cli_flags(self):
+        """Schema should document CLI flags."""
+        schema = MySQLAdapter.get_schema()
+
+        self.assertIn('cli_flags', schema)
+        self.assertIn('--check', schema['cli_flags'])
+
+    def test_schema_output_types(self):
+        """Schema should define output types."""
+        schema = MySQLAdapter.get_schema()
+
+        self.assertIn('output_types', schema)
+        self.assertTrue(len(schema['output_types']) >= 2)
+
+        # Should have mysql output types
+        output_types = [ot['type'] for ot in schema['output_types']]
+        # Common types: mysql_health, mysql_replication, mysql_storage
+        self.assertGreater(len(output_types), 0)
+
+    def test_schema_examples(self):
+        """Schema should include usage examples."""
+        schema = MySQLAdapter.get_schema()
+
+        self.assertIn('example_queries', schema)
+        self.assertTrue(len(schema['example_queries']) >= 3)
+
+        # Examples should have required fields
+        for example in schema['example_queries']:
+            self.assertIn('uri', example)
+            self.assertIn('description', example)
+
+    def test_schema_elements(self):
+        """Schema should document available elements."""
+        schema = MySQLAdapter.get_schema()
+
+        self.assertIn('elements', schema)
+        self.assertIsInstance(schema['elements'], dict)
+
+        # Should include common elements like 'databases', 'tables', etc.
+        self.assertGreater(len(schema['elements']), 0)
+
+
+class TestMySQLRenderer(unittest.TestCase):
+    """Test renderer output formatting."""
+
+    def test_renderer_check_output(self):
+        """Renderer should format check output correctly."""
+        from reveal.adapters.mysql.renderer import MySQLRenderer
+        from io import StringIO
+
+        # Mock check result with proper structure
+        result = {
+            'contract_version': '1.0',
+            'type': 'mysql_check',
+            'status': 'pass',
+            'summary': {
+                'passed': 1,
+                'warnings': 0,
+                'failures': 0,
+                'total': 1
+            },
+            'exit_code': 0,
+            'checks': [
+                {
+                    'name': 'Connection Test',
+                    'status': 'pass',
+                    'value': 'OK',
+                    'threshold': None,
+                    'severity': 'info'
+                }
+            ]
+        }
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        MySQLRenderer.render_check(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain key sections
+        self.assertIn('MySQL Health Check', output)
+        self.assertIn('Connection Test', output)
+        self.assertIn('pass', output.lower())
+
+    def test_renderer_check_json_output(self):
+        """Renderer should support JSON format."""
+        import json
+        from reveal.adapters.mysql.renderer import MySQLRenderer
+        from io import StringIO
+
+        result = {
+            'contract_version': '1.0',
+            'type': 'mysql_check',
+            'status': 'pass',
+            'summary': {
+                'passed': 0,
+                'warnings': 0,
+                'failures': 0,
+                'total': 0
+            },
+            'exit_code': 0,
+            'checks': []
+        }
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        MySQLRenderer.render_check(result, format='json')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should be valid JSON
+        parsed = json.loads(output)
+        self.assertEqual(parsed['type'], 'mysql_check')
+
+    def test_renderer_check_only_failures(self):
+        """Renderer should support only_failures flag."""
+        from reveal.adapters.mysql.renderer import MySQLRenderer
+        from io import StringIO
+
+        result = {
+            'contract_version': '1.0',
+            'type': 'mysql_check',
+            'status': 'warning',
+            'summary': {
+                'passed': 1,
+                'warnings': 0,
+                'failures': 1,
+                'total': 2
+            },
+            'exit_code': 1,
+            'checks': [
+                {
+                    'name': 'Pass Check',
+                    'status': 'pass',
+                    'value': 'OK',
+                    'threshold': None,
+                    'severity': 'info'
+                },
+                {
+                    'name': 'Fail Check',
+                    'status': 'failure',
+                    'value': 95,
+                    'threshold': 80,
+                    'severity': 'critical'
+                }
+            ]
+        }
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        MySQLRenderer.render_check(result, format='text', only_failures=True)
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should show fail check but not pass check
+        self.assertIn('Fail Check', output)
+        self.assertNotIn('Pass Check', output)
+
+    def test_renderer_error_handling(self):
+        """Renderer should handle errors gracefully."""
+        from reveal.adapters.mysql.renderer import MySQLRenderer
+        from io import StringIO
+
+        # Capture stderr (render_error outputs to stderr)
+        old_stderr = sys.stderr
+        sys.stderr = captured_output = StringIO()
+
+        error = ConnectionError("Failed to connect to MySQL")
+        MySQLRenderer.render_error(error)
+
+        sys.stderr = old_stderr
+        output = captured_output.getvalue()
+
+        self.assertIn('Error', output)
+        self.assertIn('Failed to connect to MySQL', output)
+
+    def test_renderer_server_output(self):
+        """Renderer should format server overview correctly."""
+        from reveal.adapters.mysql.renderer import MySQLRenderer
+        from io import StringIO
+
+        # Mock server result with proper structure
+        result = {
+            'contract_version': '1.0',
+            'type': 'mysql_server',
+            'server': 'localhost:3306',
+            'version': '8.0.32',
+            'uptime': '5 days',
+            'connection_health': {
+                'status': 'healthy',
+                'current': 10,
+                'max': 100,
+                'percentage': '10%'
+            },
+            'performance': {
+                'qps': 150,
+                'slow_queries': 5,
+                'threads_running': 3
+            },
+            'innodb_health': {
+                'status': 'healthy',
+                'buffer_pool_hit_rate': '99.5%',
+                'row_lock_waits': 0,
+                'deadlocks': 0
+            },
+            'replication': {
+                'role': 'master'
+            },
+            'storage': {
+                'total_size_gb': 50.5,
+                'database_count': 10,
+                'largest_db': 'production'
+            },
+            'health_status': 'healthy',
+            'health_issues': [],
+            'next_steps': ['Monitor slow queries']
+        }
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        MySQLRenderer._render_mysql_server(result)
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain server info
+        self.assertIn('MySQL Server', output)
+        self.assertIn('localhost:3306', output)
+        self.assertIn('8.0.32', output)
+
+
 if __name__ == '__main__':
     unittest.main()
