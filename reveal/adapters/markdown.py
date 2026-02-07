@@ -12,6 +12,7 @@ from ..utils.query import (
     parse_query_filters,
     parse_result_control,
     apply_result_control,
+    compare_values,
     QueryFilter,
     ResultControl
 )
@@ -389,97 +390,27 @@ class MarkdownQueryAdapter(ResourceAdapter):
     def _compare(self, field_value: Any, operator: str, target_value: str) -> bool:
         """Compare field value against target using operator.
 
+        Uses unified compare_values() from query.py to eliminate duplication.
+
         Args:
             field_value: Value from frontmatter field
-            operator: Comparison operator (>, <, >=, <=, ==, !=, ~=, ..)
+            operator: Comparison operator (>, <, >=, <=, ==, !=, ~=, .., !~)
             target_value: Target value to compare against
 
         Returns:
             True if comparison matches
         """
-        # Handle None values
-        if field_value is None:
-            return operator in ('!=', '!~')
-
-        # Handle list fields - check if any element matches
-        if isinstance(field_value, list):
-            return any(self._compare(item, operator, target_value) for item in field_value)
-
-        # Convert to comparable types
-        field_str = str(field_value)
-
-        # Handle range operator first (before trying numeric conversion)
-        if operator == '..':
-            if '..' in target_value:
-                try:
-                    min_val, max_val = target_value.split('..', 1)
-                    # Try numeric comparison first
-                    try:
-                        field_num = float(field_value) if not isinstance(field_value, (int, float)) else field_value
-                        return float(min_val) <= field_num <= float(max_val)
-                    except (ValueError, TypeError):
-                        # Fall back to string lexicographic comparison
-                        return min_val <= field_str <= max_val
-                except (ValueError, TypeError):
-                    return False
-            return False
-
-        # Try numeric comparison for other operators
-        try:
-            field_num = float(field_value) if not isinstance(field_value, (int, float)) else field_value
-            target_num = float(target_value)
-
-            if operator == '>':
-                return field_num > target_num
-            elif operator == '<':
-                return field_num < target_num
-            elif operator == '>=':
-                return field_num >= target_num
-            elif operator == '<=':
-                return field_num <= target_num
-            elif operator == '==':
-                return field_num == target_num
-            elif operator == '!=':
-                return field_num != target_num
-        except (ValueError, TypeError):
-            # Fall back to string comparison
-            pass
-
-        # String comparison
-        if operator == '==':
-            return field_str == target_value
-        elif operator == '!=':
-            return field_str != target_value
-        elif operator == '~=':
-            # Regex match
-            try:
-                return re.search(target_value, field_str) is not None
-            except re.error:
-                return False
-        elif operator == '!~':
-            # Negative regex match
-            try:
-                return re.search(target_value, field_str) is None
-            except re.error:
-                return True
-        elif operator == '..':
-            # Range for strings (lexicographic)
-            if '..' in target_value:
-                min_val, max_val = target_value.split('..', 1)
-                return min_val <= field_str <= max_val
-            return False
-
-        # For comparison operators on strings, compare lexicographically
-        if operator == '>':
-            return field_str > target_value
-        elif operator == '<':
-            return field_str < target_value
-        elif operator == '>=':
-            return field_str >= target_value
-        elif operator == '<=':
-            return field_str <= target_value
-
-        return False
+        return compare_values(
+            field_value,
+            operator,
+            target_value,
+            options={
+                'allow_list_any': True,
+                'case_sensitive': False,
+                'coerce_numeric': True,
+                'none_matches_not_equal': True
+            }
+        )
 
     def _find_markdown_files(self) -> List[Path]:
         """Find all markdown files in base_path recursively.

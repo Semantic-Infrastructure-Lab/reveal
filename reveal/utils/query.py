@@ -1,36 +1,7 @@
-"""Query string parsing utilities.
+"""Query parsing and filtering utilities for Reveal adapters.
 
-Provides unified parsing for URI query strings used across adapters.
-Supports simple key=value parameters, operator-based filters, and result control.
-
-Examples:
-    # Simple parameters (stats, claude adapters)
-    parse_query_params("hotspots=true&min_lines=50", coerce=True)
-    # -> {'hotspots': True, 'min_lines': 50}
-
-    # Bare keywords become True
-    parse_query_params("errors&tools=Bash")
-    # -> {'errors': True, 'tools': 'Bash'}
-
-    # Operator-based filters (ast adapter)
-    parse_query_filters("lines>50&type=function")
-    # -> [QueryFilter('lines', '>', 50), QueryFilter('type', '=', 'function')]
-
-    # NEW: Not equals, regex match
-    parse_query_filters("decorator!=property&name~=^test_")
-    # -> [QueryFilter('decorator', '!=', 'property'), QueryFilter('name', '~=', '^test_')]
-
-    # NEW: Range operator
-    parse_query_filters("lines=50..200")
-    # -> [QueryFilter('lines', '..', '50..200')]
-
-    # Existence/missing filters (markdown adapter)
-    parse_query_filters("!draft&tags")
-    # -> [QueryFilter('draft', '!', ''), QueryFilter('tags', '?', '')]
-
-    # NEW: Result control (sorting, pagination)
-    parse_result_control("lines>50&sort=-complexity&limit=20&offset=10")
-    # -> ('lines>50', ResultControl(sort_field='complexity', sort_descending=True, limit=20, offset=10))
+Provides unified query syntax parsing and comparison logic used across all adapters.
+This eliminates code duplication and ensures consistent behavior.
 """
 
 import re
@@ -39,31 +10,22 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 
 def coerce_value(value: str) -> Union[bool, int, float, str]:
-    """Coerce string value to appropriate type.
+    """Coerce a string value to its appropriate type.
 
     Args:
         value: String value to coerce
 
     Returns:
-        Coerced value (bool, int, float, or original string)
-
-    Examples:
-        >>> coerce_value('true')
-        True
-        >>> coerce_value('42')
-        42
-        >>> coerce_value('3.14')
-        3.14
-        >>> coerce_value('hello')
-        'hello'
+        Value coerced to bool, int, float, or left as string
     """
-    # Boolean coercion
-    if value.lower() in ('true', '1', 'yes'):
-        return True
-    if value.lower() in ('false', '0', 'no'):
-        return False
+    if not isinstance(value, str):
+        return value
 
-    # Numeric coercion
+    # Boolean
+    if value.lower() in ('true', 'false'):
+        return value.lower() == 'true'
+
+    # Try numeric
     try:
         if '.' in value:
             return float(value)
@@ -75,40 +37,26 @@ def coerce_value(value: str) -> Union[bool, int, float, str]:
 
 
 def parse_query_params(query: str, coerce: bool = False) -> Dict[str, Any]:
-    """Parse query string into key-value parameters.
-
-    Handles both key=value pairs and bare keywords (which become True).
+    """Parse URL query string into parameter dictionary.
 
     Args:
-        query: Query string (e.g., "hotspots=true&min_lines=50&errors")
-        coerce: If True, automatically coerce values to bool/int/float
+        query: Query string (e.g., "key1=value1&key2=value2")
+        coerce: Whether to coerce values to their appropriate types
 
     Returns:
-        Dictionary of parameter names to values
-
-    Examples:
-        >>> parse_query_params("tools=Bash&errors")
-        {'tools': 'Bash', 'errors': True}
-
-        >>> parse_query_params("min_lines=50&active=true", coerce=True)
-        {'min_lines': 50, 'active': True}
+        Dictionary of query parameters
     """
     if not query:
         return {}
 
     params = {}
     for part in query.split('&'):
-        part = part.strip()
-        if not part:
-            continue
-
         if '=' in part:
             key, value = part.split('=', 1)
-            key = key.strip()
-            value = value.strip()
-            params[key] = coerce_value(value) if coerce else value
+            if coerce:
+                value = coerce_value(value)
+            params[key] = value
         else:
-            # Bare keyword becomes True
             params[part] = True
 
     return params
@@ -116,39 +64,21 @@ def parse_query_params(query: str, coerce: bool = False) -> Dict[str, Any]:
 
 @dataclass
 class QueryFilter:
-    """Structured query filter with field, operator, and value.
+    """Represents a single filter condition.
 
     Attributes:
         field: Field name to filter on
-        op: Operator ('=', '>', '<', '>=', '<=', '!=', '~=', '..', '!', '?', '*')
-        value: Filter value (may be empty for existence operators)
-
-    Operators:
-        '='  - Equality match
-        '!=' - Not equals (NEW)
-        '>'  - Greater than (numeric)
-        '<'  - Less than (numeric)
-        '>=' - Greater than or equal (numeric)
-        '<=' - Less than or equal (numeric)
-        '~=' - Regex match (NEW)
-        '..' - Range (e.g., "50..200") (NEW)
-        '!'  - Field must be missing/empty
-        '?'  - Field must exist (presence check)
-        '*'  - Wildcard pattern match
+        op: Operator (>, <, >=, <=, =, !=, ~=, .., ?, !)
+        value: Target value for comparison
     """
     field: str
     op: str
-    value: Any
+    value: str
 
     def __post_init__(self):
-        """Validate operator."""
-        valid_ops = {'=', '!=', '>', '<', '>=', '<=', '~=', '..', '!', '?', '*'}
-        if self.op not in valid_ops:
-            raise ValueError(f"Invalid operator: {self.op}. Must be one of {valid_ops}")
-
-
-# Operator precedence for parsing (longer operators first)
-_COMPARISON_OPS = ['>=', '<=', '!=', '~=', '..', '>', '<', '=']
+        # Normalize operators
+        if self.op == '==':
+            self.op = '='
 
 
 def parse_query_filters(
@@ -156,88 +86,259 @@ def parse_query_filters(
     coerce_numeric: bool = True,
     support_existence: bool = True
 ) -> List[QueryFilter]:
-    """Parse query string into structured filters with operators.
+    """Parse query string into list of QueryFilter objects.
 
-    Supports comparison operators (>, <, >=, <=, =) and existence
-    operators (!, ? for missing/present).
+    Supports operators: >, <, >=, <=, =, ==, !=, ~=, .., ?, !
 
     Args:
-        query: Query string (e.g., "lines>50&type=function&!draft")
-        coerce_numeric: If True, coerce comparison values to int
-        support_existence: If True, support ! (missing) and bare field (exists)
+        query: Query string with filters (e.g., "age>25&status=active")
+        coerce_numeric: Try to coerce numeric values
+        support_existence: Support ? and ! existence checks
 
     Returns:
         List of QueryFilter objects
-
-    Examples:
-        >>> parse_query_filters("lines>50&type=function")
-        [QueryFilter('lines', '>', 50), QueryFilter('type', '=', 'function')]
-
-        >>> parse_query_filters("!draft&tags")
-        [QueryFilter('draft', '!', ''), QueryFilter('tags', '?', '')]
     """
     if not query:
         return []
 
     filters = []
-    for part in query.split('&'):
+
+    # Split by & to get individual filters
+    parts = query.split('&')
+
+    for part in parts:
         part = part.strip()
         if not part:
             continue
 
-        # Check for missing field operator (!)
-        if support_existence and part.startswith('!'):
-            field = part[1:].strip()
-            filters.append(QueryFilter(field, '!', ''))
+        # Try to match operators (order matters for precedence)
+        # Check compound operators first (>=, <=, !=, ~=, !~) but NOT ..
+        # The .. is special - it should only match if no other operator is present
+        matched = False
+
+        # Two-character operators (except ..)
+        for op in ['>=', '<=', '!=', '~=', '!~']:
+            if op in part:
+                field, value = part.split(op, 1)
+                field = field.strip()
+                value = value.strip()
+
+                if coerce_numeric and op not in ('~=', '!~'):
+                    value = coerce_value(value)
+
+                filters.append(QueryFilter(field, op, value))
+                matched = True
+                break
+
+        if matched:
             continue
 
-        # Try comparison operators (order matters: >= before >, but = last for range detection)
-        parsed = False
-
-        # Special handling for range operator: check if value contains ".."
-        if '=' in part and '..' in part:
-            # Could be a range like "lines=50..200"
-            if part.split('=', 1)[1].strip().count('..') > 0:
-                key, value = part.split('=', 1)
-                key = key.strip()
+        # Single-character operators
+        for op in ['>', '<', '=']:
+            if op in part:
+                field, value = part.split(op, 1)
+                field = field.strip()
                 value = value.strip()
-                if '..' in value:
-                    filters.append(QueryFilter(key, '..', value))
-                    parsed = True
 
-        # Try other operators if not parsed yet
-        if not parsed:
-            for op in _COMPARISON_OPS:
-                if op == '..' and parsed:
-                    # Skip .. if already handled above
-                    continue
-                if op in part:
-                    key, value = part.split(op, 1)
-                    key = key.strip()
-                    value = value.strip()
+                if coerce_numeric:
+                    value = coerce_value(value)
 
-                    # Handle wildcard in value
-                    if '*' in value:
-                        filters.append(QueryFilter(key, '*', value))
-                    else:
-                        # Coerce to int for numeric comparison operators (but not range or regex)
-                        if coerce_numeric and op in {'>', '<', '>=', '<=', '!='}:
-                            try:
-                                value = int(value)
-                            except ValueError:
-                                pass
-                        # Range and regex operators keep string values
-                        filters.append(QueryFilter(key, op, value))
-                    parsed = True
-                    break
+                filters.append(QueryFilter(field, op, value))
+                matched = True
+                break
 
-        # If no operator found and existence checking enabled, treat as exists check
-        if not parsed:
-            if support_existence:
-                filters.append(QueryFilter(part, '?', ''))
-            # Otherwise skip unknown syntax
+        if matched:
+            continue
+
+        # Range operator (..) - only check if no other operator matched
+        # This allows "age=25..30" to be parsed as field='age', op='=', value='25..30'
+        if '..' in part:
+            field, value = part.split('..', 1)
+            field = field.strip()
+            value = value.strip()
+
+            if coerce_numeric:
+                value = coerce_value(value)
+
+            filters.append(QueryFilter(field, '..', value))
+            matched = True
+
+        # If no operator found, treat as existence check (if supported)
+        if not matched and support_existence:
+            filters.append(QueryFilter(part, '?', ''))
 
     return filters
+
+
+def compare_values(
+    field_value: Any,
+    operator: str,
+    target_value: Any,
+    options: Optional[Dict[str, bool]] = None
+) -> bool:
+    """Universal comparison function for all adapters.
+
+    This is the single source of truth for comparison logic, eliminating
+    ~300 lines of duplicate code across adapters.
+
+    Args:
+        field_value: The value to compare (from data)
+        operator: Comparison operator (=, !=, >, <, >=, <=, ~=, .., ==, !~)
+        target_value: The target value to compare against
+        options: Optional behavior flags:
+            - allow_list_any: Check if any list element matches (default: True)
+            - case_sensitive: Case-sensitive string comparison (default: False)
+            - coerce_numeric: Try numeric comparison first (default: True)
+            - none_matches_not_equal: None matches != operator (default: True)
+
+    Returns:
+        True if comparison passes, False otherwise
+
+    Examples:
+        >>> compare_values(25, '>', 20)
+        True
+        >>> compare_values('active', '=', 'active')
+        True
+        >>> compare_values('test', '~=', '^te')
+        True
+        >>> compare_values(None, '!=', 'something')
+        True
+    """
+    # Default options
+    opts = {
+        'allow_list_any': True,
+        'case_sensitive': False,
+        'coerce_numeric': True,
+        'none_matches_not_equal': True
+    }
+    if options:
+        opts.update(options)
+
+    # Normalize operator
+    if operator == '==':
+        operator = '='
+
+    # Handle None/null values
+    if field_value is None:
+        if opts['none_matches_not_equal'] and operator in ('!=', '!~'):
+            return True
+        if operator == '=' and isinstance(target_value, str) and target_value.lower() == 'null':
+            return True
+        return False
+
+    # Handle list fields - check if any element matches
+    if opts['allow_list_any'] and isinstance(field_value, list):
+        return any(compare_values(item, operator, target_value, options) for item in field_value)
+
+    # Convert to string for string operations
+    field_str = str(field_value)
+    target_str = str(target_value)
+
+    # Case sensitivity
+    if not opts['case_sensitive']:
+        field_str_lower = field_str.lower()
+        target_str_lower = target_str.lower()
+    else:
+        field_str_lower = field_str
+        target_str_lower = target_str
+
+    # Handle range operator (..)
+    if operator == '..':
+        if not isinstance(target_value, str) or '..' not in str(target_value):
+            return False
+
+        try:
+            parts = str(target_value).split('..', 1)
+            min_val, max_val = parts[0].strip(), parts[1].strip()
+
+            # Try numeric comparison first if coercion enabled
+            if opts['coerce_numeric']:
+                try:
+                    if isinstance(field_value, (int, float)):
+                        field_num = field_value
+                    else:
+                        field_num = float(field_value)
+
+                    min_num = float(min_val) if min_val else float('-inf')
+                    max_num = float(max_val) if max_val else float('inf')
+
+                    return min_num <= field_num <= max_num
+                except (ValueError, TypeError):
+                    pass
+
+            # Fall back to string comparison
+            return min_val <= field_str <= max_val
+        except (ValueError, TypeError, AttributeError):
+            return False
+
+    # Handle regex operators (~=, !~)
+    if operator in ('~=', '!~'):
+        try:
+            pattern = re.compile(str(target_value))
+            matches = bool(pattern.search(field_str))
+            return matches if operator == '~=' else not matches
+        except re.error:
+            return False if operator == '~=' else True
+
+    # Handle equality operators (=, !=)
+    if operator in ('=', '!='):
+        # Special case: if value contains .., treat as range (for backward compatibility)
+        # This handles queries like "age=25..30" which parse as op='=' with value='25..30'
+        if operator == '=' and isinstance(target_value, str) and '..' in str(target_value):
+            # Delegate to range handling
+            return compare_values(field_value, '..', target_value, options)
+
+        # Try numeric comparison if enabled
+        if opts['coerce_numeric']:
+            try:
+                if isinstance(field_value, (int, float)):
+                    field_num = field_value
+                else:
+                    field_num = float(field_value)
+
+                target_num = float(target_value)
+                numeric_equal = field_num == target_num
+                return numeric_equal if operator == '=' else not numeric_equal
+            except (ValueError, TypeError):
+                pass
+
+        # String comparison
+        strings_equal = field_str_lower == target_str_lower
+        return strings_equal if operator == '=' else not strings_equal
+
+    # Handle numeric comparison operators (>, <, >=, <=)
+    if operator in ('>', '<', '>=', '<='):
+        try:
+            # Get numeric value
+            if isinstance(field_value, (int, float)):
+                field_num = field_value
+            else:
+                field_num = float(field_value)
+
+            target_num = float(target_value)
+
+            if operator == '>':
+                return field_num > target_num
+            elif operator == '<':
+                return field_num < target_num
+            elif operator == '>=':
+                return field_num >= target_num
+            elif operator == '<=':
+                return field_num <= target_num
+        except (ValueError, TypeError):
+            # Fall back to string comparison if coercion disabled or failed
+            if not opts['coerce_numeric']:
+                if operator == '>':
+                    return field_str > target_str
+                elif operator == '<':
+                    return field_str < target_str
+                elif operator == '>=':
+                    return field_str >= target_str
+                elif operator == '<=':
+                    return field_str <= target_str
+            return False
+
+    return False
 
 
 def apply_filter(item: Dict[str, Any], filter: QueryFilter) -> bool:
@@ -260,177 +361,124 @@ def apply_filter(item: Dict[str, Any], filter: QueryFilter) -> bool:
         # Existence check
         return field_value is not None and field_value != ''
 
-    if field_value is None:
-        return False
-
-    if filter.op == '=':
-        return str(field_value) == str(filter.value)
-
-    if filter.op == '!=':
-        # Not equals (NEW)
-        return str(field_value) != str(filter.value)
-
-    if filter.op == '~=':
-        # Regex match (NEW)
-        try:
-            pattern = re.compile(str(filter.value))
-            return bool(pattern.search(str(field_value)))
-        except re.error:
-            return False
-
-    if filter.op == '..':
-        # Range operator (NEW): value should be "min..max"
-        try:
-            min_val, max_val = map(float, str(filter.value).split('..'))
-            num_value = float(field_value) if isinstance(field_value, str) else field_value
-            return min_val <= num_value <= max_val
-        except (ValueError, TypeError, AttributeError):
-            return False
-
-    if filter.op == '*':
-        # Wildcard match
-        pattern = filter.value.replace('*', '')
-        return pattern.lower() in str(field_value).lower()
-
-    # Numeric comparisons
-    try:
-        num_value = float(field_value) if isinstance(field_value, str) else field_value
-        filter_num = float(filter.value) if isinstance(filter.value, str) else filter.value
-
-        if filter.op == '>':
-            return num_value > filter_num
-        if filter.op == '<':
-            return num_value < filter_num
-        if filter.op == '>=':
-            return num_value >= filter_num
-        if filter.op == '<=':
-            return num_value <= filter_num
-    except (ValueError, TypeError):
-        return False
-
-    return False
+    # Use unified comparison logic
+    return compare_values(field_value, filter.op, filter.value)
 
 
 def apply_filters(item: Dict[str, Any], filters: List[QueryFilter]) -> bool:
-    """Apply multiple filters to an item (all must match).
+    """Apply multiple filters to an item (AND logic).
 
     Args:
         item: Dictionary to check
         filters: List of QueryFilter objects
 
     Returns:
-        True if item matches ALL filters, False otherwise
+        True if item matches all filters, False otherwise
     """
     return all(apply_filter(item, f) for f in filters)
 
 
 @dataclass
 class ResultControl:
-    """Result control parameters for sorting and pagination.
+    """Control parameters for result formatting.
 
     Attributes:
         sort_field: Field to sort by (None = no sorting)
-        sort_descending: True for descending order
-        limit: Maximum number of results (None = unlimited)
-        offset: Number of results to skip (None = 0)
+        sort_descending: Sort in descending order
+        limit: Maximum number of results (None = no limit)
+        offset: Number of results to skip (default: 0)
     """
     sort_field: Optional[str] = None
     sort_descending: bool = False
     limit: Optional[int] = None
-    offset: Optional[int] = None
+    offset: int = 0
 
 
 def parse_result_control(query: str) -> Tuple[str, ResultControl]:
     """Parse result control parameters from query string.
 
-    Extracts sort=, limit=, offset= parameters and returns cleaned query.
+    Extracts sort=field, sort=-field, limit=N, offset=M parameters.
 
     Args:
-        query: Query string (e.g., "lines>50&sort=-complexity&limit=20")
+        query: Query string
 
     Returns:
         Tuple of (cleaned_query, ResultControl)
-
-    Examples:
-        >>> parse_result_control("lines>50&sort=complexity")
-        ('lines>50', ResultControl(sort_field='complexity', sort_descending=False))
-
-        >>> parse_result_control("type=function&sort=-lines&limit=10&offset=5")
-        ('type=function', ResultControl(sort_field='lines', sort_descending=True, limit=10, offset=5))
+        - cleaned_query: Query string with control params removed
+        - ResultControl: Parsed control parameters
     """
     if not query:
         return '', ResultControl()
 
     control = ResultControl()
-    cleaned_parts = []
+    remaining_parts = []
 
     for part in query.split('&'):
         part = part.strip()
         if not part:
             continue
 
-        # Check for result control parameters
+        # Check for control parameters
         if part.startswith('sort='):
-            sort_spec = part[5:].strip()
-            if sort_spec.startswith('-'):
-                control.sort_field = sort_spec[1:]
+            sort_field = part[5:]  # Remove "sort="
+            if sort_field.startswith('-'):
                 control.sort_descending = True
+                control.sort_field = sort_field[1:]
             else:
-                control.sort_field = sort_spec
                 control.sort_descending = False
+                control.sort_field = sort_field
+
         elif part.startswith('limit='):
             try:
-                control.limit = int(part[6:].strip())
+                control.limit = int(part[6:])
             except ValueError:
-                pass  # Skip invalid limit
+                pass
+
         elif part.startswith('offset='):
             try:
-                control.offset = int(part[7:].strip())
+                control.offset = int(part[7:])
             except ValueError:
-                pass  # Skip invalid offset
-        else:
-            # Not a control parameter, keep in cleaned query
-            cleaned_parts.append(part)
+                pass
 
-    cleaned_query = '&'.join(cleaned_parts)
+        else:
+            # Not a control parameter, keep it
+            remaining_parts.append(part)
+
+    # Reconstruct query without control parameters
+    cleaned_query = '&'.join(remaining_parts)
+
     return cleaned_query, control
 
 
 def apply_result_control(items: List[Dict[str, Any]], control: ResultControl) -> List[Dict[str, Any]]:
-    """Apply sorting, offset, and limit to results.
+    """Apply result control to a list of items.
 
     Args:
-        items: List of items to process
-        control: ResultControl with sorting/pagination parameters
+        items: List of items (dicts)
+        control: ResultControl with sort/limit/offset
 
     Returns:
         Processed list of items
-
-    Examples:
-        >>> items = [{'name': 'a', 'value': 3}, {'name': 'b', 'value': 1}]
-        >>> control = ResultControl(sort_field='value', limit=1)
-        >>> apply_result_control(items, control)
-        [{'name': 'b', 'value': 1}]
     """
-    result = list(items)  # Copy to avoid modifying original
+    result = items[:]
 
     # Apply sorting
     if control.sort_field:
-        try:
-            result.sort(
-                key=lambda x: x.get(control.sort_field, ''),
-                reverse=control.sort_descending
-            )
-        except (TypeError, KeyError):
-            # Skip sorting if field doesn't exist or isn't comparable
-            pass
+        def sort_key(item):
+            value = item.get(control.sort_field)
+            # Handle None values (sort to end)
+            if value is None:
+                return (1, '') if not control.sort_descending else (0, '')
+            return (0, value)
+
+        result.sort(key=sort_key, reverse=control.sort_descending)
 
     # Apply offset
-    if control.offset and control.offset > 0:
+    if control.offset > 0:
         result = result[control.offset:]
 
     # Apply limit
-    if control.limit and control.limit > 0:
+    if control.limit is not None:
         result = result[:control.limit]
 
     return result

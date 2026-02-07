@@ -12,6 +12,7 @@ from ..utils.query import (
     parse_query_filters,
     parse_result_control,
     apply_result_control,
+    compare_values,
     QueryFilter,
     ResultControl
 )
@@ -848,7 +849,8 @@ class AstAdapter(ResourceAdapter):
     def _compare(self, value: Any, condition: Dict[str, Any]) -> bool:
         """Compare value against condition.
 
-        Supports all unified query parser operators including new ones (!=, ~=, ..).
+        Uses unified compare_values() from query.py to eliminate duplication.
+        Adapts AST's condition dict format to the standard interface.
 
         Args:
             value: Actual value
@@ -860,48 +862,25 @@ class AstAdapter(ResourceAdapter):
         op = condition['op']
         target = condition['value']
 
-        # Numeric comparison operators
-        if op == '>':
-            return value > target
-        elif op == '<':
-            return value < target
-        elif op == '>=':
-            return value >= target
-        elif op == '<=':
-            return value <= target
-
-        # Equality operators
-        elif op == '=' or op == '==':
-            return str(value) == str(target)
-        elif op == '!=':
-            # NEW: Not equals operator
-            return str(value) != str(target)
-
-        # Pattern matching operators
-        elif op == '~=':
-            # NEW: Regex match operator
-            try:
-                pattern = re.compile(str(target))
-                return bool(pattern.search(str(value)))
-            except re.error:
-                return False
-        elif op == 'glob':
+        # Special case: 'glob' operator (AST-specific, not in unified parser)
+        if op == 'glob':
             # Wildcard pattern matching (case-sensitive)
             return fnmatch(str(value), str(target))
 
-        # Range operator
-        elif op == '..':
-            # NEW: Range operator (e.g., lines=50..200)
-            try:
-                min_val, max_val = map(float, str(target).split('..'))
-                num_value = float(value) if isinstance(value, str) else value
-                return min_val <= num_value <= max_val
-            except (ValueError, TypeError, AttributeError):
-                return False
-
-        # List membership
+        # Special case: 'in' operator (list membership, AST-specific)
         elif op == 'in':
             # OR logic: check if value matches any in target list
             return str(value) in [str(t) for t in target]
 
-        return False
+        # All other operators: use unified comparison
+        return compare_values(
+            value,
+            op,
+            target,
+            options={
+                'allow_list_any': False,  # AST doesn't have list fields
+                'case_sensitive': True,   # AST comparisons are case-sensitive
+                'coerce_numeric': True,
+                'none_matches_not_equal': False
+            }
+        )

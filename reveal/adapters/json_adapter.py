@@ -9,6 +9,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils.query import (
     parse_query_filters,
     parse_result_control,
+    compare_values,
     QueryFilter,
     ResultControl
 )
@@ -512,6 +513,8 @@ class JsonAdapter(ResourceAdapter):
     def _compare(self, field_value: Any, operator: str, target_value: str) -> bool:
         """Compare field value against target using operator.
 
+        Uses unified compare_values() from query.py to eliminate duplication.
+
         Args:
             field_value: Value from JSON object
             operator: Comparison operator (=, >, <, >=, <=, !=, ~=, ..)
@@ -520,82 +523,17 @@ class JsonAdapter(ResourceAdapter):
         Returns:
             True if comparison passes, False otherwise
         """
-        # Handle None/null values
-        if field_value is None:
-            if operator == '!=' and target_value.lower() != 'null':
-                return True
-            if operator == '=' and target_value.lower() == 'null':
-                return True
-            return False
-
-        # Convert to string for comparison
-        field_str = str(field_value).lower()
-        target_str = str(target_value).lower()
-
-        # Handle range operator first (before numeric conversion)
-        if operator == '..':
-            if '..' in target_value:
-                try:
-                    min_val, max_val = target_value.split('..', 1)
-                    # Try numeric comparison
-                    if isinstance(field_value, (int, float)):
-                        return float(min_val) <= field_value <= float(max_val)
-                    # Fall back to string comparison
-                    return min_val <= field_str <= max_val
-                except (ValueError, TypeError):
-                    return False
-            return False
-
-        # Regex operator
-        if operator == '~=':
-            try:
-                import re
-                return bool(re.search(target_value, str(field_value)))
-            except re.error:
-                return False
-
-        # Equality operators
-        if operator == '=':
-            # Handle different types
-            if isinstance(field_value, bool):
-                return field_str == target_str
-            if isinstance(field_value, (int, float)):
-                try:
-                    return field_value == float(target_value)
-                except ValueError:
-                    return field_str == target_str
-            if isinstance(field_value, list):
-                # Check if any element matches
-                return any(str(item).lower() == target_str for item in field_value)
-            return field_str == target_str
-
-        if operator == '!=':
-            # Inverse of equality
-            result = self._compare(field_value, '=', target_value)
-            return not result
-
-        # Numeric comparison operators
-        if operator in ('>', '<', '>=', '<='):
-            try:
-                if isinstance(field_value, (int, float)):
-                    field_num = field_value
-                else:
-                    field_num = float(str(field_value))
-
-                target_num = float(target_value)
-
-                if operator == '>':
-                    return field_num > target_num
-                elif operator == '<':
-                    return field_num < target_num
-                elif operator == '>=':
-                    return field_num >= target_num
-                elif operator == '<=':
-                    return field_num <= target_num
-            except (ValueError, TypeError):
-                return False
-
-        return False
+        return compare_values(
+            field_value,
+            operator,
+            target_value,
+            options={
+                'allow_list_any': True,
+                'case_sensitive': False,
+                'coerce_numeric': True,
+                'none_matches_not_equal': True
+            }
+        )
 
     def _matches_all_filters(self, obj: Any) -> bool:
         """Check if object matches all query filters.

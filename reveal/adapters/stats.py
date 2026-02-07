@@ -13,6 +13,7 @@ from ..utils.query import (
     parse_query_filters,
     parse_result_control,
     apply_result_control,
+    compare_values,
     QueryFilter,
     ResultControl,
 )
@@ -839,6 +840,8 @@ class StatsAdapter(ResourceAdapter):
     def _compare(self, value: Any, op: str, target: Any) -> bool:
         """Compare a value against a target using an operator.
 
+        Uses unified compare_values() from query.py to eliminate duplication.
+
         Args:
             value: The value to compare
             op: Comparison operator (>, <, >=, <=, ==, =, !=, ~=, ..)
@@ -847,53 +850,17 @@ class StatsAdapter(ResourceAdapter):
         Returns:
             True if comparison passes
         """
-        import re
-
-        if value is None:
-            return False
-
-        # Handle range operator (..)
-        if op == '..':
-            if not isinstance(target, str) or '..' not in target:
-                return False
-            try:
-                min_val, max_val = target.split('..')
-                min_val = float(min_val) if min_val else float('-inf')
-                max_val = float(max_val) if max_val else float('inf')
-                return min_val <= float(value) <= max_val
-            except (ValueError, AttributeError):
-                return False
-
-        # Handle regex operator (~=)
-        if op == '~=':
-            try:
-                return bool(re.search(str(target), str(value)))
-            except re.error:
-                return False
-
-        # Handle equality/inequality
-        if op in ('==', '='):
-            return str(value) == str(target)
-        if op == '!=':
-            return str(value) != str(target)
-
-        # Handle numeric comparisons
-        try:
-            value_num = float(value)
-            target_num = float(target)
-
-            if op == '>':
-                return value_num > target_num
-            elif op == '<':
-                return value_num < target_num
-            elif op == '>=':
-                return value_num >= target_num
-            elif op == '<=':
-                return value_num <= target_num
-        except (ValueError, TypeError):
-            return False
-
-        return False
+        return compare_values(
+            value,
+            op,
+            target,
+            options={
+                'allow_list_any': False,  # Stats doesn't have list fields
+                'case_sensitive': False,
+                'coerce_numeric': True,
+                'none_matches_not_equal': False  # Stats: None doesn't match anything
+            }
+        )
 
     def _matches_filters(self,
                         stats: Dict[str, Any],
