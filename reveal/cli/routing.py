@@ -419,6 +419,12 @@ def _render_structure(adapter, renderer_class: type, args: 'Namespace',
                 else:
                     result['meta'] = budget_result['meta']
 
+    # Add available elements if adapter supports element discovery
+    if hasattr(adapter, 'get_available_elements'):
+        available_elements = adapter.get_available_elements()
+        if available_elements:  # Only add if non-empty
+            result['available_elements'] = available_elements
+
     renderer_class.render_structure(result, args.format)
 
 

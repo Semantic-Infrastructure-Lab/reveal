@@ -371,6 +371,48 @@ class SSLAdapter(ResourceAdapter):
 
         return None
 
+    def get_available_elements(self) -> List[Dict[str, str]]:
+        """Get list of available certificate elements.
+
+        Returns:
+            List of available elements with descriptions
+        """
+        self._fetch_certificate()
+        cert = self._certificate
+
+        return [
+            {
+                'name': 'san',
+                'description': f'Subject Alternative Names ({len(cert.san)} domains)',
+                'example': f'reveal ssl://{self.host}/san'
+            },
+            {
+                'name': 'chain',
+                'description': f'Certificate chain ({len(self._chain) + 1} certificates)',
+                'example': f'reveal ssl://{self.host}/chain'
+            },
+            {
+                'name': 'issuer',
+                'description': 'Certificate issuer details',
+                'example': f'reveal ssl://{self.host}/issuer'
+            },
+            {
+                'name': 'subject',
+                'description': 'Certificate subject details',
+                'example': f'reveal ssl://{self.host}/subject'
+            },
+            {
+                'name': 'dates',
+                'description': f'Validity dates (expires in {cert.days_until_expiry} days)',
+                'example': f'reveal ssl://{self.host}/dates'
+            },
+            {
+                'name': 'full',
+                'description': 'Full certificate details',
+                'example': f'reveal ssl://{self.host}/full'
+            },
+        ]
+
     def _get_san(self) -> Dict[str, Any]:
         """Get Subject Alternative Names."""
         cert = self._certificate

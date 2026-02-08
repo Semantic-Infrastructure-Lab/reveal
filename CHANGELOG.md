@@ -34,6 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Works with all adapters**: Universal routing layer integration
   - **Combines with Phase 3**: Query operators + field selection = powerful precision
   - Session: luminous-twilight-0208 (~4 hours, full implementation + testing + documentation)
+- **Phase 5: Element Discovery** (v0.47.3) - COMPLETE ✅
+  - **Auto-discovery**: Adapters show available elements in overview with descriptions
+  - **Text hints**: "📍 Available elements" section shows element names, descriptions, example usage
+  - **JSON output**: `available_elements` array enables programmatic element discovery
+  - **4 adapters with fixed elements**: SSL (6), Domain (4), MySQL (11), Python (7)
+  - **10 adapters with dynamic elements**: Git, JSON, Env, Stats, Markdown, SQLite, Help, Imports, Reveal, Diff
+  - **Progressive disclosure**: Start with overview, drill down to specific elements
+  - Session: scarlet-shade-0208 (~4 hours, implementation + testing + documentation)
 - **Phase 7: Output Contract v1.1** - Trust metadata for AI agents (v0.47.0)
   - Added optional `meta` field with parse_mode, confidence, warnings, errors
   - Enables AI agents to assess result trustworthiness
@@ -77,6 +85,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Common patterns: AI agent loops, monitoring, pagination, progressive loading
   - Advanced patterns: Multi-source aggregation, budget-aware search, incremental fetching
   - Session: luminous-twilight-0208
+- **Phase 5 Documentation Complete** (2026-02-08)
+  - Created `ELEMENT_DISCOVERY_GUIDE.md` - Complete reference for element discovery (698 lines)
+  - What elements are and why progressive disclosure matters
+  - Element discovery in text and JSON output
+  - Element access syntax and examples for all adapters
+  - Common patterns: Progressive exploration, element loops, conditional access
+  - Best practices: When to use elements vs query parameters
+  - Adapter element reference table (fixed vs dynamic elements)
+  - Session: scarlet-shade-0208
 - **MySQL adapter production validation** - Updated help_data/mysql.yaml
   - Added `mysql://` example (simplest form using ~/.my.cnf)
   - Added "Production Database Monitoring" workflow

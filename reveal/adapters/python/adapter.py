@@ -3,7 +3,7 @@
 import sys
 import platform
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .bytecode import check_bytecode, pyc_to_source
@@ -102,6 +102,50 @@ class PythonAdapter(ResourceAdapter):
             return {"error": "Specify debug type: bytecode"}
 
         return None
+
+    def get_available_elements(self) -> List[Dict[str, str]]:
+        """Get list of available Python runtime elements.
+
+        Returns:
+            List of available elements with descriptions
+        """
+        return [
+            {
+                'name': 'version',
+                'description': 'Python version and build details',
+                'example': 'reveal python://version'
+            },
+            {
+                'name': 'env',
+                'description': 'Python environment configuration',
+                'example': 'reveal python://env'
+            },
+            {
+                'name': 'venv',
+                'description': 'Virtual environment status',
+                'example': 'reveal python://venv'
+            },
+            {
+                'name': 'packages',
+                'description': 'Installed packages list',
+                'example': 'reveal python://packages'
+            },
+            {
+                'name': 'imports',
+                'description': 'Currently loaded modules',
+                'example': 'reveal python://imports'
+            },
+            {
+                'name': 'syspath',
+                'description': 'sys.path analysis with conflicts',
+                'example': 'reveal python://syspath'
+            },
+            {
+                'name': 'doctor',
+                'description': 'Auto-detect environment issues',
+                'example': 'reveal python://doctor'
+            },
+        ]
 
     def _get_version(self, **kwargs) -> Dict[str, Any]:
         """Get detailed Python version information.

@@ -1,6 +1,6 @@
 """Domain adapter for DNS, whois, and domain validation (domain://)."""
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from .dns import (
@@ -252,6 +252,35 @@ class DomainAdapter(ResourceAdapter):
             return handler()
 
         return None
+
+    def get_available_elements(self) -> List[Dict[str, str]]:
+        """Get list of available domain elements.
+
+        Returns:
+            List of available elements with descriptions
+        """
+        return [
+            {
+                'name': 'dns',
+                'description': 'DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)',
+                'example': f'reveal domain://{self.domain}/dns'
+            },
+            {
+                'name': 'whois',
+                'description': 'WHOIS registration data',
+                'example': f'reveal domain://{self.domain}/whois'
+            },
+            {
+                'name': 'ssl',
+                'description': 'SSL certificate status',
+                'example': f'reveal domain://{self.domain}/ssl'
+            },
+            {
+                'name': 'registrar',
+                'description': 'Registrar and nameserver information',
+                'example': f'reveal domain://{self.domain}/registrar'
+            },
+        ]
 
     def _get_dns_records(self) -> Dict[str, Any]:
         """Get all DNS records."""

@@ -592,10 +592,12 @@ reveal git://repo/file.py --select=hash,author,date,message --format=json
 
 ---
 
-## Phase 5: Element Discovery Hints (Low Priority - 4 hours)
+## Phase 5: Element Discovery Hints ✅ COMPLETE (4 hours actual)
+
+**Completed**: 2026-02-08 - Session scarlet-shade-0208
 
 ### Goal
-Show available elements in overview for better discoverability.
+Show available elements in overview for better discoverability. ✅
 
 ### Current State
 Users don't know what elements exist:
@@ -690,9 +692,11 @@ All adapters with elements show hints:
 - All adapter renderers - Show elements in overview
 
 ### Success Criteria
-- [ ] All adapters with elements show hints
-- [ ] JSON output includes available elements
-- [ ] Breadcrumbs reference available elements
+- [x] All adapters with elements show hints
+- [x] JSON output includes available elements
+- [x] Documentation created (ELEMENT_DISCOVERY_GUIDE.md)
+
+**Note**: Breadcrumbs are future enhancement (not blocking Phase 5 completion)
 
 ---
 
@@ -1121,9 +1125,9 @@ Reference this document
 Track progress:
 - [x] Phase 1: Universal flags (v0.45.0)
 - [x] Phase 2: Batch processing (v0.45.0)
-- [ ] Phase 3: Query operators + sort/limit
-- [ ] Phase 4: Field selection + budget awareness
-- [ ] Phase 5: Element discovery
+- [x] Phase 3: Query operators + sort/limit (v0.47.1) ✅ 2026-02-08
+- [x] Phase 4: Field selection + budget awareness (v0.47.2) ✅ 2026-02-08
+- [x] Phase 5: Element discovery (v0.47.3) ✅ 2026-02-08
 - [x] Phase 6: Help introspection (v0.46.0) ✅ 2026-02-06
 - [x] Phase 7: Output Contract v1.1 (v0.46.0) ✅ 2026-02-06
 

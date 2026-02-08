@@ -37,6 +37,20 @@ def render_python_structure(data: Dict[str, Any], output_format: str) -> None:
 
     print(f"Packages:       {data['packages_count']} installed")
     print(f"Modules:        {data['modules_loaded']} loaded")
+    print()
+
+    # Available elements (Phase 5: Element Discovery)
+    if data.get('available_elements'):
+        print("📍 Available elements:")
+        for elem in data['available_elements']:
+            name = elem['name']
+            desc = elem['description']
+            print(f"  /{name:<12} {desc}")
+        print()
+        # Show example usage hint with first element
+        if data['available_elements']:
+            example = data['available_elements'][0]['example']
+            print(f"💡 Try: {example}")
 
 
 def _render_python_packages(data: Dict[str, Any]) -> None:

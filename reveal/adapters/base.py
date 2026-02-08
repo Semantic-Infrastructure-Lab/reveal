@@ -100,6 +100,44 @@ class ResourceAdapter(ABC):
         """
         return None
 
+    def get_available_elements(self) -> List[Dict[str, str]]:
+        """Get list of available elements for this resource.
+
+        Returns list of available elements that can be accessed via get_element().
+        Each element includes name, description, and example usage.
+
+        Returns:
+            List of dicts with keys:
+                - name (str): Element identifier (e.g., 'san', 'chain')
+                - description (str): Human-readable description
+                - example (str): Example usage (e.g., 'reveal ssl://example.com/san')
+
+        Example:
+            [
+                {
+                    'name': 'san',
+                    'description': 'Subject Alternative Names (3 domains)',
+                    'example': 'reveal ssl://example.com/san'
+                },
+                {
+                    'name': 'chain',
+                    'description': 'Certificate chain (2 certificates)',
+                    'example': 'reveal ssl://example.com/chain'
+                }
+            ]
+
+        Note:
+            Default implementation returns empty list. Adapters with element support
+            should override this method to provide discoverable elements.
+
+            For adapters with dynamic elements (e.g., env:// with variable names,
+            json:// with keys), consider returning:
+                - Empty list (no static elements)
+                - Sample/common elements with note
+                - Top N most relevant elements from current data
+        """
+        return []
+
     def get_metadata(self) -> Dict[str, Any]:
         """Get metadata about the resource.
 

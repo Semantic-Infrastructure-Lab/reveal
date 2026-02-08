@@ -519,6 +519,74 @@ class MySQLAdapter(ResourceAdapter):
             return handler()
         return None
 
+    def get_available_elements(self) -> List[Dict[str, str]]:
+        """Get list of available MySQL elements.
+
+        Returns:
+            List of available elements with descriptions
+        """
+        connection_string = f"mysql://{self.host}:{self.port}"
+        if self.database:
+            connection_string += f"/{self.database}"
+
+        return [
+            {
+                'name': 'connections',
+                'description': 'Active connections and processlist',
+                'example': f'reveal {connection_string}/connections'
+            },
+            {
+                'name': 'performance',
+                'description': 'Query performance metrics',
+                'example': f'reveal {connection_string}/performance'
+            },
+            {
+                'name': 'innodb',
+                'description': 'InnoDB engine status',
+                'example': f'reveal {connection_string}/innodb'
+            },
+            {
+                'name': 'replication',
+                'description': 'Replication status (if configured)',
+                'example': f'reveal {connection_string}/replication'
+            },
+            {
+                'name': 'storage',
+                'description': 'Storage usage by database',
+                'example': f'reveal {connection_string}/storage'
+            },
+            {
+                'name': 'errors',
+                'description': 'Recent errors and warnings',
+                'example': f'reveal {connection_string}/errors'
+            },
+            {
+                'name': 'variables',
+                'description': 'Server configuration variables',
+                'example': f'reveal {connection_string}/variables'
+            },
+            {
+                'name': 'health',
+                'description': 'Health check results',
+                'example': f'reveal {connection_string}/health'
+            },
+            {
+                'name': 'databases',
+                'description': 'List of databases',
+                'example': f'reveal {connection_string}/databases'
+            },
+            {
+                'name': 'indexes',
+                'description': 'Index usage analysis',
+                'example': f'reveal {connection_string}/indexes'
+            },
+            {
+                'name': 'slow-queries',
+                'description': 'Slow query log analysis',
+                'example': f'reveal {connection_string}/slow-queries'
+            },
+        ]
+
     def _get_connections(self) -> Dict[str, Any]:
         """Get connection details and processlist."""
         processlist = self._execute_query("SHOW FULL PROCESSLIST")

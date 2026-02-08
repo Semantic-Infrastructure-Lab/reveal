@@ -97,9 +97,14 @@ This document outlines reveal's development priorities and future direction. For
   - Truncation metadata in output contract
   - Documentation: FIELD_SELECTION_GUIDE.md created (644 lines)
   - Completed: 2026-02-08 (Session: luminous-twilight-0208, ~4 hours)
-- **Phase 5**: Element discovery (next)
-  - Auto-show available elements in adapter output
-  - Estimated: ~6 hours
+- **Phase 5**: Element discovery ✅ **COMPLETE**
+  - Added `get_available_elements()` to base adapter
+  - Text output shows "📍 Available elements" hints with descriptions
+  - JSON output includes `available_elements` array for programmatic discovery
+  - Implemented in 4 adapters with fixed elements (SSL, Domain, MySQL, Python)
+  - 10 adapters with dynamic elements use default empty list
+  - Documentation: ELEMENT_DISCOVERY_GUIDE.md created (698 lines)
+  - Completed: 2026-02-08 (Session: scarlet-shade-0208, ~4 hours)
 
 ### Stability & Polish
 - Output contract v1.1 enforcement

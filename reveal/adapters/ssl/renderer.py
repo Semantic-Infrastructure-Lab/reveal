@@ -54,6 +54,20 @@ class SSLRenderer(TypeDispatchRenderer):
             print("Next Steps:")
             for step in result['next_steps']:
                 print(f"  {step}")
+            print()
+
+        # Available elements (Phase 5: Element Discovery)
+        if result.get('available_elements'):
+            print("📍 Available elements:")
+            for elem in result['available_elements']:
+                name = elem['name']
+                desc = elem['description']
+                print(f"  /{name:<12} {desc}")
+            print()
+            # Show example usage hint with first element
+            if result['available_elements']:
+                example = result['available_elements'][0]['example']
+                print(f"💡 Try: {example}")
 
     @staticmethod
     def _render_ssl_san(result: dict) -> None:

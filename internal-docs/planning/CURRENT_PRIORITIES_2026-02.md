@@ -185,15 +185,22 @@ updated_from: zibeta-0207
 **Session**: luminous-twilight-0208 (~4 hours)
 **Token Reduction**: 5-40x depending on adapter and field selection
 
-### Phase 5: Element Discovery (~6 hours)
+### Phase 5: Element Discovery - ✅ **COMPLETE** (2026-02-08)
 
-**Goal**: Auto-show available elements
-**Features**:
-- Adapters display available elements in overview
-- JSON output includes element list
-- Breadcrumbs reference elements
+**Goal**: Auto-show available elements ✅
 
-**When**: Next priority (after Phase 4 completion)
+**Delivered**:
+- ✅ Added `get_available_elements()` to ResourceAdapter base class
+- ✅ Implemented in 4 fixed-element adapters (SSL, Domain, MySQL, Python)
+- ✅ Text output shows "📍 Available elements" hints with descriptions
+- ✅ JSON output includes `available_elements` array
+- ✅ Dynamic adapters (10) use default empty list
+- ✅ Comprehensive documentation (ELEMENT_DISCOVERY_GUIDE.md, 698 lines)
+- ✅ Full testing across adapters (text + JSON output)
+
+**Session**: scarlet-shade-0208 (~4 hours)
+
+**Impact**: Users can now discover available elements without consulting documentation. AI agents can programmatically explore adapter capabilities via `available_elements` JSON field.
 
 ---
 
