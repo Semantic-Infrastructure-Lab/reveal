@@ -1128,14 +1128,14 @@ Track progress:
 - [ ] All adapters support `--check` (where validation makes sense)
 - [x] All adapters support `--format=json|text` ✅ (Verified 2026-02-07)
 - [ ] All adapters support `--format=compact` (Not yet implemented)
-- [ ] All adapters support `--batch` for stdin input
+- [x] All adapters support `--batch` for stdin input ✅ (Verified 2026-02-07)
 - [ ] All query-based adapters use same operator syntax
 - [ ] All adapters support `--select` for field selection
 
 ### Token Efficiency
 - [ ] `--select` reduces output by 5-10x (measured)
 - [ ] `--format=compact` reduces output by 2-3x (measured)
-- [ ] `--batch` aggregates results (no repeated headers)
+- [x] `--batch` aggregates results (no repeated headers) ✅ (Verified 2026-02-07)
 
 ### Discoverability
 - [ ] Overview shows available elements
