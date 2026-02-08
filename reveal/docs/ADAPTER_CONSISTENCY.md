@@ -2,7 +2,7 @@
 
 **Audience**: Users and adapter authors
 **Last Updated**: 2026-02-07 (Phase 3: Unified Query Infrastructure)
-**See Also**: [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md), [../internal-docs/UNIFIED_OPERATOR_REFERENCE.md](../internal-docs/UNIFIED_OPERATOR_REFERENCE.md)
+**See Also**: [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md), [../../internal-docs/UNIFIED_OPERATOR_REFERENCE.md](../../internal-docs/UNIFIED_OPERATOR_REFERENCE.md)
 
 ---
 

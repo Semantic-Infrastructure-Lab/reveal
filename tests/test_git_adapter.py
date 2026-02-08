@@ -10,8 +10,10 @@ Tests cover:
 """
 
 import os
+import sys
 import tempfile
 import shutil
+import unittest
 from pathlib import Path
 import pytest
 
@@ -638,3 +640,172 @@ class TestCommitFiltering:
         assert len(commits) == 10
         for commit in commits:
             assert commit['author'] == 'Test User'
+
+
+class TestGitAdapterSchema(unittest.TestCase):
+    """Test schema generation for AI agent integration."""
+
+    def test_get_schema(self):
+        """Should return machine-readable schema."""
+        schema = GitAdapter.get_schema()
+
+        self.assertIsNotNone(schema)
+        self.assertEqual(schema['adapter'], 'git')
+        self.assertIn('description', schema)
+        self.assertIn('uri_syntax', schema)
+        self.assertIn('git://', schema['uri_syntax'])
+
+    def test_schema_query_params(self):
+        """Schema should document query parameters."""
+        schema = GitAdapter.get_schema()
+
+        self.assertIn('query_params', schema)
+        query_params = schema['query_params']
+
+        # Should have filtering params
+        self.assertIn('author', query_params)
+        self.assertIn('email', query_params)
+        self.assertIn('message', query_params)
+        self.assertIn('hash', query_params)
+
+        # Should have type param for history/blame
+        self.assertIn('type', query_params)
+        type_param = query_params['type']
+        self.assertIn('history', type_param['values'])
+        self.assertIn('blame', type_param['values'])
+
+    def test_schema_cli_flags(self):
+        """Schema should document CLI flags."""
+        schema = GitAdapter.get_schema()
+
+        self.assertIn('cli_flags', schema)
+        self.assertIsInstance(schema['cli_flags'], list)
+
+    def test_schema_output_types(self):
+        """Schema should define output types."""
+        schema = GitAdapter.get_schema()
+
+        self.assertIn('output_types', schema)
+        self.assertTrue(len(schema['output_types']) >= 1)
+
+        # Should have repository output type
+        output_types = [ot['type'] for ot in schema['output_types']]
+        self.assertIn('git_repository', output_types)
+
+    def test_schema_examples(self):
+        """Schema should include usage examples."""
+        schema = GitAdapter.get_schema()
+
+        self.assertIn('example_queries', schema)
+        self.assertTrue(len(schema['example_queries']) >= 5)
+
+        # Examples should have required fields
+        for example in schema['example_queries']:
+            self.assertIn('uri', example)
+            self.assertIn('description', example)
+
+    def test_schema_batch_support(self):
+        """Schema should indicate batch support status."""
+        schema = GitAdapter.get_schema()
+
+        self.assertIn('supports_batch', schema)
+        self.assertIn('supports_advanced', schema)
+
+
+class TestGitRenderer(unittest.TestCase):
+    """Test renderer output formatting."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, git_repo):
+        """Set up test fixtures."""
+        self.git_repo = git_repo
+
+    def test_renderer_repository_overview(self):
+        """Renderer should format repository overview correctly."""
+        from reveal.adapters.git.adapter import GitRenderer
+        from io import StringIO
+
+        adapter = GitAdapter(path=str(self.git_repo))
+        result = adapter.get_structure()
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        GitRenderer.render_structure(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain key sections
+        self.assertIn('Repository:', output)
+        self.assertIn('HEAD:', output)
+        self.assertIn('Branches:', output)
+        self.assertIn('Recent Commits:', output)
+
+    def test_renderer_json_format(self):
+        """Renderer should support JSON output."""
+        import json
+        from reveal.adapters.git.adapter import GitRenderer
+        from io import StringIO
+
+        adapter = GitAdapter(path=str(self.git_repo))
+        result = adapter.get_structure()
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        GitRenderer.render_structure(result, format='json')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should be valid JSON
+        parsed = json.loads(output)
+        self.assertIn('type', parsed)
+        self.assertEqual(parsed['type'], 'git_repository')
+
+    def test_renderer_error_handling(self):
+        """Renderer should handle errors gracefully."""
+        from reveal.adapters.git.adapter import GitRenderer
+        from io import StringIO
+
+        # Capture stderr (render_error outputs to stderr)
+        old_stderr = sys.stderr
+        sys.stderr = captured_output = StringIO()
+
+        error = FileNotFoundError("Repository not found")
+        GitRenderer.render_error(error)
+
+        sys.stderr = old_stderr
+        output = captured_output.getvalue()
+
+        self.assertIn('Error', output)
+        self.assertIn('Repository not found', output)
+
+    def test_renderer_file_history(self):
+        """Renderer should format file history correctly."""
+        from reveal.adapters.git.adapter import GitRenderer
+        from io import StringIO
+
+        adapter = GitAdapter(
+            path=str(self.git_repo),
+            subpath='test.txt',
+            query={'type': 'history'}
+        )
+        result = adapter.get_structure()
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        GitRenderer.render_structure(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain file history info
+        self.assertIn('File History:', output)
+        self.assertIn('test.txt', output)
+        self.assertIn('Commits:', output)

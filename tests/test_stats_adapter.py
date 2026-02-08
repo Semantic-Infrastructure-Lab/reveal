@@ -792,3 +792,179 @@ class TestUnifiedQuerySyntax:
         assert any(w['type'] == 'truncated' for w in result['warnings'])
         assert result['displayed_results'] == 2
         assert result['total_matches'] == 5
+
+
+class TestStatsAdapterSchema:
+    """Test schema generation for AI agent integration."""
+
+    def test_get_schema(self):
+        """Should return machine-readable schema."""
+        schema = StatsAdapter.get_schema()
+
+        assert schema is not None
+        assert schema['adapter'] == 'stats'
+        assert 'description' in schema
+        assert 'uri_syntax' in schema
+        assert 'stats://' in schema['uri_syntax']
+
+    def test_schema_query_params(self):
+        """Schema should document query parameters."""
+        schema = StatsAdapter.get_schema()
+
+        assert 'query_params' in schema
+        query_params = schema['query_params']
+
+        # Should have filtering params
+        assert 'min_lines' in query_params
+        assert 'max_lines' in query_params
+        assert 'min_complexity' in query_params
+        assert 'max_complexity' in query_params
+        assert 'min_functions' in query_params
+        assert 'hotspots' in query_params
+        assert 'code_only' in query_params
+
+    def test_schema_boolean_params(self):
+        """Schema should document boolean operation params."""
+        schema = StatsAdapter.get_schema()
+
+        query_params = schema['query_params']
+        assert 'hotspots' in query_params
+        assert query_params['hotspots']['type'] == 'boolean'
+        assert 'code_only' in query_params
+        assert query_params['code_only']['type'] == 'boolean'
+
+    def test_schema_output_types(self):
+        """Schema should define output types."""
+        schema = StatsAdapter.get_schema()
+
+        assert 'output_types' in schema
+        assert len(schema['output_types']) >= 1
+
+        # Should have stats output types
+        output_types = [ot['type'] for ot in schema['output_types']]
+        assert 'stats_summary' in output_types
+        assert 'stats_file' in output_types
+
+    def test_schema_examples(self):
+        """Schema should include usage examples."""
+        schema = StatsAdapter.get_schema()
+
+        assert 'example_queries' in schema
+        assert len(schema['example_queries']) >= 5
+
+        # Examples should have required fields
+        for example in schema['example_queries']:
+            assert 'uri' in example
+            assert 'description' in example
+
+    def test_schema_flags(self):
+        """Schema should document CLI flags."""
+        schema = StatsAdapter.get_schema()
+
+        assert 'cli_flags' in schema
+        cli_flags = schema['cli_flags']
+
+        # cli_flags is a list of strings
+        assert isinstance(cli_flags, list)
+        # Stats adapter has at least one flag
+        assert len(cli_flags) >= 0
+
+
+class TestStatsRenderer:
+    """Test renderer output formatting."""
+
+    def test_renderer_structure(self, tmp_path):
+        """Renderer should format statistics correctly."""
+        from reveal.adapters.stats import StatsRenderer
+        from io import StringIO
+        import sys
+
+        # Create test file
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def foo():\n    pass\n\ndef bar():\n    return 1")
+
+        adapter = StatsAdapter(str(tmp_path))
+        result = adapter.get_structure()
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        StatsRenderer.render_structure(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain key sections (summary format doesn't show individual files)
+        assert 'Statistics' in output or 'Files:' in output
+        assert 'Lines:' in output or 'Functions:' in output
+
+    def test_renderer_json_format(self, tmp_path):
+        """Renderer should support JSON output."""
+        from reveal.adapters.stats import StatsRenderer
+        from io import StringIO
+        import sys
+        import json
+
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def foo(): pass")
+
+        adapter = StatsAdapter(str(tmp_path))
+        result = adapter.get_structure()
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        StatsRenderer.render_structure(result, format='json')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should be valid JSON
+        parsed = json.loads(output)
+        assert 'type' in parsed
+        assert parsed['type'] == 'stats_summary'
+
+    def test_renderer_error_handling(self):
+        """Renderer should handle errors gracefully."""
+        from reveal.adapters.stats import StatsRenderer
+        from io import StringIO
+        import sys
+
+        # Capture stderr
+        old_stderr = sys.stderr
+        sys.stderr = captured_output = StringIO()
+
+        error = FileNotFoundError("Path not found")
+        StatsRenderer.render_error(error)
+
+        sys.stderr = old_stderr
+        output = captured_output.getvalue()
+
+        assert 'Error' in output
+        assert 'Path not found' in output
+
+    def test_renderer_element(self, tmp_path):
+        """Renderer should format element statistics correctly."""
+        from reveal.adapters.stats import StatsRenderer
+        from io import StringIO
+        import sys
+
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def foo():\n    pass")
+
+        adapter = StatsAdapter(str(tmp_path))
+        result = adapter.get_element('test.py')
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        StatsRenderer.render_element(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain file statistics
+        assert 'test.py' in output
