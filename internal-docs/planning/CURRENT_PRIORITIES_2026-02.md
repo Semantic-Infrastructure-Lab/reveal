@@ -1,15 +1,17 @@
 ---
-date: 2026-02-07
-session: zibeta-0207
+date: 2026-02-08
+session: cooling-frost-0208
 type: current-priorities
 status: active
+updated_from: zibeta-0207
 ---
 
 # Reveal Current Priorities - February 2026
 
-**Last Updated**: 2026-02-07 (Session: zibeta-0207)
+**Last Updated**: 2026-02-08 (Session: cooling-frost-0208)
+**Previous Update**: 2026-02-07 (Session: zibeta-0207)
 **Project Version**: v0.47.0
-**Overall Status**: Strong foundation, focused quality improvements
+**Overall Status**: Strong foundation, Phase 3 complete, documentation consolidation in progress
 
 ---
 
@@ -41,42 +43,59 @@ status: active
 
 ---
 
-## Priority 1: Test Coverage Expansion (HIGH)
+## Priority 1: Test Coverage Status - UPDATED 2026-02-08
 
-**Current Status**: 73% coverage, critical gaps in database adapters
+**Current Status**: 75% overall coverage (updated from 73%)
 
-### Critical Gaps (< 20% coverage)
+**IMPORTANT UPDATE**: Previous coverage numbers were severely outdated. Actual current state measured 2026-02-08:
 
-| Adapter | Coverage | Lines Missing | Impact |
-|---------|----------|---------------|--------|
-| MySQL adapter | 19.5% | 264 | Production database adapter |
-| SQLite adapter | 18.2% | 99 | Production database adapter |
-| MySQL renderer | 11.4% | 78 | Output rendering |
-| SQLite renderer | 12.5% | 63 | Output rendering |
-| Domain DNS | 14.5% | 65 | DNS functionality |
+### Database Adapter Coverage (Actual)
 
-**Why Priority 1**:
-- MySQL and SQLite are production features with <20% coverage
-- Quality risk for user-facing database adapters
-- Established test pattern makes implementation straightforward
-- Previous sessions show 40 min per adapter with pattern
+| Adapter | Actual Coverage | Lines Missing | Status |
+|---------|-----------------|---------------|--------|
+| **SQLite adapter** | **96%** | 8/193 | ✅ **COMPLETE** |
+| **SQLite renderer** | **90%** | 7/72 | ✅ **COMPLETE** |
+| **MySQL adapter** | **54%** | 293/641 | 🟡 Moderate |
+| **MySQL connection** | **81%** | 20/105 | ✅ Good |
+| **MySQL renderer** | **83%** | 15/88 | ✅ Good |
+| **MySQL health** | **17%** | 43/52 | 🔴 Low |
+| **MySQL performance** | **16%** | 37/44 | 🔴 Low |
 
-### Action Plan
+### Key Findings
 
-**Week 1** (8 hours):
-1. MySQL adapter tests (3 hours)
-   - Schema tests (6): validate AI agent documentation
-   - Renderer tests (4): validate output formatting
-   - Target: 70%+ coverage
+**SQLite**: Essentially complete at 96% coverage (was incorrectly reported as 18.2%)
+- adapter.py: 99% coverage (1 line missing)
+- renderer.py: 90% coverage (7 lines missing)
+- **Recommendation**: Mark as COMPLETE ✅
 
-2. SQLite adapter tests (2 hours)
-   - Apply same pattern
-   - Target: 70%+ coverage
+**MySQL**: Reasonable at 54% overall (was incorrectly reported as 19.5%)
+- Core adapter: 54% (decent for database adapter)
+- Main gaps: health.py (17%), performance.py (16%)
+- Note: `pyproject.toml` excludes MySQL/SQLite with comment "Database adapters require external connections for meaningful testing"
 
-3. MySQL renderer tests (1.5 hours)
-4. SQLite renderer tests (1.5 hours)
+### Coverage Report Issue
 
-**Expected Outcome**: Eliminate critical quality risk, raise coverage to ~76%
+**Root Cause**: Quality report from zibeta-0207 used stale data. Test commits were made Feb 7 but not reflected in report.
+
+**Resolution**: Ran fresh coverage analysis 2026-02-08, bypassing pyproject.toml exclusions.
+
+### Revised Priority Assessment
+
+**Priority Downgraded**: LOW → MEDIUM
+
+**Rationale**:
+- SQLite is done (96% coverage)
+- MySQL at 54% is reasonable for database adapter requiring live connections
+- Project explicitly excludes DB adapters from coverage (architectural decision)
+- Main gaps are health/performance modules that need live DB
+
+### Optional Action Plan
+
+**If pursuing MySQL improvement** (~4 hours):
+1. MySQL health.py tests (2 hours) - 17% → 60%+
+2. MySQL performance.py tests (2 hours) - 16% → 60%+
+
+**Alternative**: Accept 54% MySQL coverage as adequate architectural boundary, remove from critical priorities
 
 ---
 
@@ -94,24 +113,26 @@ status: active
 
 ---
 
-## Priority 3: Phase 3 - Query Operator Standardization (MEDIUM)
+## Priority 3: Phase 3 - Query Operator Standardization ✅ COMPLETE
 
-**Status**: Infrastructure complete, operators need standardization
+**Status**: ✅ Complete (2026-02-08, Session: hosuki-0208)
 
 **Completed** (Phase 3a - Query Infrastructure Unification):
 - Unified query parser across 5 adapters
 - -299 duplicate lines removed
 - ast, stats, markdown, git, json adapters unified
 
-**Remaining** (Phase 3b - Operator Standardization):
-- Standardize operators across all query-capable adapters
-- Add sort/limit/offset query parameters
-- Document operator reference for all adapters
+**Completed** (Phase 3b - Operator Standardization):
+- ✅ All 5 adapters support unified operator syntax
+- ✅ Result control (sort/limit/offset) in all adapters
+- ✅ Fixed markdown routing bug (query parsing)
+- ✅ Added result control to git adapter
 
-**Effort Estimate**: 20 hours
-**Impact**: High consistency value, enables predictable queries
+**Effort**: 3 hours actual vs 20 hours estimated
+**Commits**: a36d6b5 (markdown), 3610488 (git)
+**Impact**: All query-capable adapters now consistent
 
-**When**: After test coverage expansion (Priority 1)
+**Remaining**: Documentation (QUERY_SYNTAX_GUIDE.md)
 
 ---
 
@@ -164,32 +185,37 @@ status: active
 
 ## Next Actions
 
-### This Week (8 hours)
+### Immediate (This Week)
 
-1. **MySQL adapter test expansion** (3 hours)
-   - Start Monday
-   - Apply established pattern (6 schema + 4 renderer tests)
-   - Target: 70%+ coverage
+1. **Documentation Updates** (2 hours) - **IN PROGRESS**
+   - ✅ Update CURRENT_PRIORITIES with actual coverage (done)
+   - Update CHANGELOG.md with Phase 3 completion
+   - Update ROADMAP.md (mark Phase 3 complete)
+   - Create QUERY_SYNTAX_GUIDE.md (Phase 3 remaining work)
 
-2. **SQLite adapter test expansion** (2 hours)
-   - Continue Tuesday
-   - Same pattern
-   - Target: 70%+ coverage
+2. **Documentation Consolidation** (3 hours)
+   - Audit complete (cooling-frost-0208)
+   - Create navigation/index for internal-docs/
+   - Review and archive stale docs
 
-3. **Renderer tests** (3 hours)
-   - MySQL and SQLite renderers
-   - Complete by Wednesday
+### Next Priority Options
 
-**Expected Outcome**: 76% coverage, critical gaps eliminated
+**Option A: Phase 4 & 5 Implementation** (18 hours)
+- Phase 4: Field selection + budget awareness (~12 hours)
+- Phase 5: Element discovery (~6 hours)
+- Builds on completed Phase 3
 
-### Next Week (20 hours)
+**Option B: MySQL Coverage Improvement** (4 hours)
+- health.py tests (17% → 60%)
+- performance.py tests (16% → 60%)
+- Would raise MySQL from 54% → ~70%
 
-**Phase 3b: Query Operator Standardization**
-1. Audit current operator support across adapters
-2. Design universal operator set
-3. Implement across all query-capable adapters
-4. Document operator reference
-5. Add tests for operator consistency
+**Option C: Documentation & User Experience**
+- Complete QUERY_SYNTAX_GUIDE.md
+- Review public docs for accuracy
+- Update examples with Phase 3 query syntax
+
+**Recommendation**: Option A (Phase 4/5) - Continue UX consistency momentum
 
 ---
 

@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-02-07
+> **Last updated**: 2026-02-08 (Phase 3 complete, coverage data corrected)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -80,20 +80,23 @@ This document outlines reveal's development priorities and future direction. For
 
 ## Current Focus: Path to v1.0
 
-### Test Coverage & Quality (In Progress)
-- Expanding test coverage for database adapters (MySQL 19%, SQLite 18%)
-- Overall coverage: 73% (2912 tests passing)
-- Target: 80%+ coverage for all adapters
+### Test Coverage & Quality
+- Overall coverage: 75% (2911 tests passing)
+- Database adapter status: MySQL 54%, SQLite 96% ✅
+- Target: 80%+ coverage for core adapters
 
 ### UX Consistency (Phases 3-5)
-- **Phase 3**: Query operator standardization (in progress)
-  - Universal operators across all adapters
-  - Sort/limit/offset query parameters
-- **Phase 4**: Field selection + budget awareness
+- **Phase 3**: Query operator standardization ✅ **COMPLETE**
+  - Universal operators across all 5 query-capable adapters
+  - Sort/limit/offset result control unified
+  - Completed: 2026-02-08 (Session: hosuki-0208)
+- **Phase 4**: Field selection + budget awareness (next)
   - `--select=fields` for token reduction
   - Budget-aware flags for AI agent loops
+  - Estimated: ~12 hours
 - **Phase 5**: Element discovery
   - Auto-show available elements in adapter output
+  - Estimated: ~6 hours
 
 ### Stability & Polish
 - Output contract v1.1 enforcement

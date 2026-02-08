@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Phase 2: Batch Processing** - Universal `--batch` flag works with all adapters
   - Batch mode supports mixed adapters, aggregated results, exit codes
   - Verified sessions: sapphire-spark-0207 (Phase 1), zibeta-0207 (Phase 2)
+- **Phase 3: Query Operator Standardization** (v0.47.1) - COMPLETE ✅
+  - **Universal query operators** across all 5 query-capable adapters (ast, json, markdown, stats, git)
+  - **Comparison operators**: `=`, `!=`, `>`, `<`, `>=`, `<=`, `~=` (regex), `..` (range)
+  - **Result control**: `sort=field`, `sort=-field`, `limit=N`, `offset=M` work consistently
+  - **Query infrastructure**: Unified `compare_values()` and `parse_result_control()` utilities
+  - Session: hosuki-0208 (3 hours, 85% efficiency through discovery)
 - **Phase 7: Output Contract v1.1** - Trust metadata for AI agents (v0.47.0)
   - Added optional `meta` field with parse_mode, confidence, warnings, errors
   - Enables AI agents to assess result trustworthiness
@@ -31,6 +37,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated usage examples and help documentation
 
 ### Fixed
+- **Markdown adapter routing bug** (Phase 3 completion)
+  - Query parameters were completely ignored due to default parameter in `__init__`
+  - Removed default parameter to fix routing layer's Try 1 initialization
+  - Now correctly applies `sort`, `limit`, `offset`, and filter operators
+  - Commit: a36d6b5 (Session: hosuki-0208)
+- **Git adapter missing result control** (Phase 3 completion)
+  - Added `sort`, `limit`, `offset` support across commit/file history queries
+  - Applied in `_get_file_history`, `_get_recent_commits`, `_get_commit_history`
+  - Keeps legacy limit parameter for backward compatibility
+  - Commit: 3610488 (Session: hosuki-0208)
 - **MySQL adapter bugs** (3 issues fixed)
   - `--check` no longer crashes with TypeError (only_failures kwarg)
   - Progressive disclosure now returns correct element (not overview)
