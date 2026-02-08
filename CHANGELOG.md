@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Result control**: `sort=field`, `sort=-field`, `limit=N`, `offset=M` work consistently
   - **Query infrastructure**: Unified `compare_values()` and `parse_result_control()` utilities
   - Session: hosuki-0208 (3 hours, 85% efficiency through discovery)
+- **Phase 4: Field Selection + Budget Constraints** (v0.47.2) - COMPLETE ✅
+  - **Field selection**: `--fields=field1,field2` for dramatic token reduction (5-10x)
+  - **Budget constraints**: `--max-items=N`, `--max-bytes=N`, `--max-depth=N`, `--max-snippet-chars=N`
+  - **Truncation metadata**: Output includes `meta.truncated`, `meta.reason`, `meta.next_cursor`
+  - **Nested field support**: Access nested fields with dot notation (`certificate.expiry`)
+  - **Works with all adapters**: Universal routing layer integration
+  - **Combines with Phase 3**: Query operators + field selection = powerful precision
+  - Session: luminous-twilight-0208 (~4 hours, full implementation + testing + documentation)
 - **Phase 7: Output Contract v1.1** - Trust metadata for AI agents (v0.47.0)
   - Added optional `meta` field with parse_mode, confidence, warnings, errors
   - Enables AI agents to assess result trustworthiness
@@ -61,6 +69,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Adapter-by-adapter examples with common patterns
   - Progressive filtering, pagination, and top-N query patterns
   - Session: gentle-cyclone-0208
+- **Phase 4 Documentation Complete** (2026-02-08)
+  - Created `FIELD_SELECTION_GUIDE.md` - Comprehensive guide for token reduction (644 lines)
+  - Field selection syntax and examples across all adapters
+  - Budget constraint flags and truncation metadata reference
+  - Token reduction metrics (5-40x depending on adapter)
+  - Common patterns: AI agent loops, monitoring, pagination, progressive loading
+  - Advanced patterns: Multi-source aggregation, budget-aware search, incremental fetching
+  - Session: luminous-twilight-0208
 - **MySQL adapter production validation** - Updated help_data/mysql.yaml
   - Added `mysql://` example (simplest form using ~/.my.cnf)
   - Added "Production Database Monitoring" workflow

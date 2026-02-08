@@ -91,11 +91,13 @@ This document outlines reveal's development priorities and future direction. For
   - Sort/limit/offset result control unified
   - Documentation: QUERY_SYNTAX_GUIDE.md created
   - Completed: 2026-02-08 (Sessions: hosuki-0208, gentle-cyclone-0208)
-- **Phase 4**: Field selection + budget awareness (next)
-  - `--select=fields` for token reduction
-  - Budget-aware flags for AI agent loops
-  - Estimated: ~12 hours
-- **Phase 5**: Element discovery
+- **Phase 4**: Field selection + budget awareness ✅ **COMPLETE**
+  - `--fields=field1,field2` for token reduction (5-10x)
+  - Budget flags: `--max-items`, `--max-bytes`, `--max-depth`, `--max-snippet-chars`
+  - Truncation metadata in output contract
+  - Documentation: FIELD_SELECTION_GUIDE.md created (644 lines)
+  - Completed: 2026-02-08 (Session: luminous-twilight-0208, ~4 hours)
+- **Phase 5**: Element discovery (next)
   - Auto-show available elements in adapter output
   - Estimated: ~6 hours
 

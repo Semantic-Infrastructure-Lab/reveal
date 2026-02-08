@@ -6,6 +6,69 @@ from typing import Any, Dict, List, Optional
 from reveal.base import FileAnalyzer
 
 
+def set_nested(d: Dict[str, Any], keys: List[str], value: Any) -> None:
+    """Set a value in a nested dictionary using a list of keys.
+
+    Args:
+        d: Dictionary to modify
+        keys: List of keys representing path (e.g., ['certificate', 'expiry'])
+        value: Value to set at the path
+
+    Example:
+        >>> d = {}
+        >>> set_nested(d, ['a', 'b', 'c'], 42)
+        >>> d
+        {'a': {'b': {'c': 42}}}
+    """
+    for key in keys[:-1]:
+        if key not in d:
+            d[key] = {}
+        d = d[key]
+    d[keys[-1]] = value
+
+
+def filter_fields(structure: Dict[str, Any], fields: List[str]) -> Dict[str, Any]:
+    """Filter structure to only include selected fields.
+
+    Args:
+        structure: Full structure dictionary
+        fields: List of field names to include (supports nested: "parent.child")
+
+    Returns:
+        Filtered dictionary with only requested fields
+
+    Examples:
+        >>> structure = {'name': 'test', 'value': 42, 'meta': {'created': '2026-01-01'}}
+        >>> filter_fields(structure, ['name', 'value'])
+        {'name': 'test', 'value': 42}
+        >>> filter_fields(structure, ['name', 'meta.created'])
+        {'name': 'test', 'meta': {'created': '2026-01-01'}}
+    """
+    if not fields:
+        return structure
+
+    filtered = {}
+    for field in fields:
+        if '.' in field:  # Nested field: "certificate.expiry"
+            parts = field.split('.')
+            value = structure
+            for part in parts:
+                if isinstance(value, dict):
+                    value = value.get(part)
+                else:
+                    value = None
+                    break
+                if value is None:
+                    break
+            if value is not None:
+                set_nested(filtered, parts, value)
+        else:  # Flat field
+            if field in structure:
+                filtered[field] = structure[field]
+
+    return filtered
+
+
 def _format_frontmatter(fm: Optional[Dict[str, Any]]) -> None:
     """Format and display YAML front matter."""
     if fm is None:

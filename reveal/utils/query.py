@@ -517,3 +517,143 @@ def apply_result_control(items: List[Dict[str, Any]], control: ResultControl) ->
         result = result[:control.limit]
 
     return result
+
+
+def apply_budget_limits(
+    items: List[Dict[str, Any]],
+    max_items: Optional[int] = None,
+    max_bytes: Optional[int] = None,
+    max_depth: Optional[int] = None,
+    truncate_strings: Optional[int] = None
+) -> Dict[str, Any]:
+    """Apply budget constraints to results and track truncation.
+
+    Args:
+        items: List of result items
+        max_items: Stop after N items
+        max_bytes: Stop after N bytes (approximate token budget)
+        max_depth: Limit nested dict/list depth (not implemented yet)
+        truncate_strings: Truncate long string values to N characters
+
+    Returns:
+        Dictionary with 'items' and 'meta' keys containing truncation metadata
+
+    Example:
+        >>> items = [{'name': 'a'}, {'name': 'b'}, {'name': 'c'}]
+        >>> result = apply_budget_limits(items, max_items=2)
+        >>> result['meta']['truncated']
+        True
+        >>> len(result['items'])
+        2
+    """
+    import json
+
+    truncated = False
+    truncation_reason = None
+    total_available = len(items)
+    result_items = items.copy()
+
+    # Apply max_items constraint
+    if max_items is not None and len(result_items) > max_items:
+        result_items = result_items[:max_items]
+        truncated = True
+        truncation_reason = 'max_items_exceeded'
+
+    # Apply max_bytes constraint (approximate)
+    if max_bytes is not None and not truncated:
+        accumulated_bytes = 0
+        truncated_at = len(result_items)
+
+        for i, item in enumerate(result_items):
+            # Approximate size by JSON serialization
+            item_json = json.dumps(item, default=str)
+            accumulated_bytes += len(item_json.encode('utf-8'))
+
+            if accumulated_bytes > max_bytes:
+                truncated_at = i
+                truncated = True
+                truncation_reason = 'max_bytes_exceeded'
+                break
+
+        if truncated:
+            result_items = result_items[:truncated_at]
+
+    # Apply string truncation (to each item's string values)
+    if truncate_strings is not None:
+        result_items = _truncate_string_values(result_items, truncate_strings)
+
+    # Build metadata
+    meta = {
+        'truncated': truncated,
+        'reason': truncation_reason,
+        'total_available': total_available,
+        'returned': len(result_items)
+    }
+
+    # Add pagination hint if truncated
+    if truncated:
+        meta['next_cursor'] = f'offset={len(result_items)}'
+
+    return {
+        'items': result_items,
+        'meta': meta
+    }
+
+
+def _truncate_string_values(items: List[Dict[str, Any]], max_length: int) -> List[Dict[str, Any]]:
+    """Truncate long string values in items.
+
+    Args:
+        items: List of dictionaries
+        max_length: Maximum string length
+
+    Returns:
+        List with truncated strings
+    """
+    result = []
+    for item in items:
+        truncated_item = {}
+        for key, value in item.items():
+            if isinstance(value, str) and len(value) > max_length:
+                truncated_item[key] = value[:max_length] + '...'
+            elif isinstance(value, dict):
+                truncated_item[key] = _truncate_dict_strings(value, max_length)
+            elif isinstance(value, list):
+                truncated_item[key] = [
+                    _truncate_dict_strings(v, max_length) if isinstance(v, dict)
+                    else v[:max_length] + '...' if isinstance(v, str) and len(v) > max_length
+                    else v
+                    for v in value
+                ]
+            else:
+                truncated_item[key] = value
+        result.append(truncated_item)
+    return result
+
+
+def _truncate_dict_strings(d: Dict[str, Any], max_length: int) -> Dict[str, Any]:
+    """Recursively truncate strings in a dictionary.
+
+    Args:
+        d: Dictionary to process
+        max_length: Maximum string length
+
+    Returns:
+        Dictionary with truncated strings
+    """
+    result = {}
+    for key, value in d.items():
+        if isinstance(value, str) and len(value) > max_length:
+            result[key] = value[:max_length] + '...'
+        elif isinstance(value, dict):
+            result[key] = _truncate_dict_strings(value, max_length)
+        elif isinstance(value, list):
+            result[key] = [
+                _truncate_dict_strings(v, max_length) if isinstance(v, dict)
+                else v[:max_length] + '...' if isinstance(v, str) and len(v) > max_length
+                else v
+                for v in value
+            ]
+        else:
+            result[key] = value
+    return result

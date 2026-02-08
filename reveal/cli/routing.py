@@ -383,6 +383,42 @@ def _render_structure(adapter, renderer_class: type, args: 'Namespace',
             print(f"Error{scheme_hint}: {error_msg}", file=sys.stderr)
         sys.exit(1)
 
+    # Apply field selection if --fields specified
+    if hasattr(args, 'fields') and args.fields:
+        from reveal.display.formatting import filter_fields
+        fields = [f.strip() for f in args.fields.split(',')]
+        result = filter_fields(result, fields)
+
+    # Apply budget constraints if specified
+    if hasattr(result, 'get') and isinstance(result, dict):
+        # Check if result has a list field that we can apply budget limits to
+        # Common list fields: 'items', 'results', 'checks'
+        list_field = None
+        for field_name in ['items', 'results', 'checks', 'commits', 'files']:
+            if field_name in result and isinstance(result[field_name], list):
+                list_field = field_name
+                break
+
+        if list_field:
+            from reveal.utils.query import apply_budget_limits
+
+            budget_result = apply_budget_limits(
+                result[list_field],
+                max_items=getattr(args, 'max_items', None),
+                max_bytes=getattr(args, 'max_bytes', None),
+                max_depth=getattr(args, 'max_depth', None),
+                truncate_strings=getattr(args, 'max_snippet_chars', None)
+            )
+
+            # Update result with budget-limited items and add metadata
+            result[list_field] = budget_result['items']
+            if budget_result['meta']['truncated']:
+                # Merge with existing meta if present
+                if 'meta' in result and isinstance(result['meta'], dict):
+                    result['meta']['budget'] = budget_result['meta']
+                else:
+                    result['meta'] = budget_result['meta']
+
     renderer_class.render_structure(result, args.format)
 
 

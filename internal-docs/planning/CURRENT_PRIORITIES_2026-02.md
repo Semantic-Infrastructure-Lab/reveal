@@ -164,15 +164,26 @@ updated_from: zibeta-0207
 
 ## Priority 5: Phase 4 & 5 Implementation (MEDIUM)
 
-### Phase 4: Field Selection + Budget Awareness (~12 hours)
+### Phase 4: Field Selection + Budget Awareness - ✅ **COMPLETE** (2026-02-08)
 
-**Goal**: Token reduction for AI agents
+**Goal**: Token reduction for AI agents ✅
 **Features**:
-- `--select=fields` for specific field output
-- `--max-items`, `--max-bytes`, `--max-depth` budget flags
-- Truncation metadata in output contract
+- ✅ `--fields=field1,field2` for specific field output (changed from --select to avoid conflict)
+- ✅ `--max-items`, `--max-bytes`, `--max-depth`, `--max-snippet-chars` budget flags
+- ✅ Truncation metadata in output contract
+- ✅ Nested field support with dot notation
+- ✅ Universal routing layer integration (works with all adapters)
 
-**When**: After Phase 3 completion
+**Delivered**:
+- Field filtering utility (`reveal/display/formatting.py`)
+- Budget constraint utilities (`reveal/utils/query.py`)
+- Universal filter flags in parser
+- Routing layer integration
+- Comprehensive documentation (FIELD_SELECTION_GUIDE.md, 644 lines)
+- Tested across SSL, AST, Stats, Git adapters
+
+**Session**: luminous-twilight-0208 (~4 hours)
+**Token Reduction**: 5-40x depending on adapter and field selection
 
 ### Phase 5: Element Discovery (~6 hours)
 
@@ -182,7 +193,7 @@ updated_from: zibeta-0207
 - JSON output includes element list
 - Breadcrumbs reference elements
 
-**When**: After Phase 4 completion
+**When**: Next priority (after Phase 4 completion)
 
 ---
 

@@ -316,6 +316,27 @@ def _add_universal_operation_flags(parser: argparse.ArgumentParser) -> None:
                         help='Batch mode: process multiple URIs from stdin with aggregated results')
 
 
+def _add_universal_filter_flags(parser: argparse.ArgumentParser) -> None:
+    """Add universal filtering flags for field selection and budget constraints.
+
+    These flags enable token reduction through field selection and explicit
+    budget constraints for AI agent loops.
+    """
+    # Field selection
+    parser.add_argument('--fields', type=str, metavar='FIELDS',
+                        help='Select specific fields (comma-separated, supports nested: field.subfield)')
+
+    # Budget constraints
+    parser.add_argument('--max-items', type=int, metavar='N',
+                        help='Stop after N results (budget mode)')
+    parser.add_argument('--max-bytes', type=int, metavar='N',
+                        help='Stop after N bytes/tokens (budget mode)')
+    parser.add_argument('--max-depth', type=int, metavar='N',
+                        help='Limit nested structure depth to N levels')
+    parser.add_argument('--max-snippet-chars', type=int, metavar='N',
+                        help='Truncate long string values to N characters')
+
+
 def _add_ssl_options(parser: argparse.ArgumentParser) -> None:
     """Add SSL-specific options for batch checks."""
     parser.add_argument('--summary', action='store_true',
@@ -353,6 +374,7 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     _add_display_options(parser)
     _add_pattern_detection_options(parser)
     _add_universal_operation_flags(parser)
+    _add_universal_filter_flags(parser)
     _add_navigation_options(parser)
     _add_markdown_options(parser)
     _add_html_options(parser)
