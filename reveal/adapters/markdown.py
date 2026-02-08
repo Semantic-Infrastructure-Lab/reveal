@@ -58,7 +58,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
     missing fields, or wildcards. Works on local directory trees.
     """
 
-    def __init__(self, base_path: str = '.', query: Optional[str] = None):
+    def __init__(self, base_path: str, query: Optional[str] = None):
         """Initialize the markdown query adapter.
 
         Args:
