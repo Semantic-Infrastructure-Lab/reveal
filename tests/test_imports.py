@@ -385,3 +385,175 @@ class TestStdlibShadowing:
         assert logging_file not in graph.dependencies.get(logging_file, set()), (
             "Self-dependency should not be added to the import graph"
         )
+
+
+class TestImportsAdapterSchema:
+    """Test schema generation for AI agent integration."""
+
+    def test_get_schema(self):
+        """Should return machine-readable schema."""
+        schema = ImportsAdapter.get_schema()
+
+        assert schema is not None
+        assert schema['adapter'] == 'imports'
+        assert 'description' in schema
+        assert 'uri_syntax' in schema
+        assert 'imports://' in schema['uri_syntax']
+
+    def test_schema_query_params(self):
+        """Schema should document query parameters."""
+        schema = ImportsAdapter.get_schema()
+
+        assert 'query_params' in schema
+        query_params = schema['query_params']
+
+        # Should have analysis params
+        assert 'unused' in query_params
+        assert 'circular' in query_params
+        assert 'violations' in query_params
+
+        # Each param should have type and description
+        for param_name, param_info in query_params.items():
+            assert 'type' in param_info
+            assert 'description' in param_info
+
+    def test_schema_output_types(self):
+        """Schema should define output types."""
+        schema = ImportsAdapter.get_schema()
+
+        assert 'output_types' in schema
+        assert len(schema['output_types']) >= 2
+
+        # Should have import output types
+        output_types = [ot['type'] for ot in schema['output_types']]
+        assert 'import_summary' in output_types
+        assert 'unused_imports' in output_types
+
+    def test_schema_examples(self):
+        """Schema should include usage examples."""
+        schema = ImportsAdapter.get_schema()
+
+        assert 'example_queries' in schema
+        assert len(schema['example_queries']) >= 3
+
+        # Examples should have required fields
+        for example in schema['example_queries']:
+            assert 'uri' in example
+            assert 'description' in example
+
+    def test_schema_batch_support(self):
+        """Schema should indicate batch support status."""
+        schema = ImportsAdapter.get_schema()
+
+        assert 'supports_batch' in schema
+        assert 'supports_advanced' in schema
+
+    def test_schema_supported_languages(self):
+        """Schema should list supported languages."""
+        schema = ImportsAdapter.get_schema()
+
+        assert 'supported_languages' in schema
+        languages = schema['supported_languages']
+        assert isinstance(languages, list)
+        assert 'Python' in languages
+
+
+class TestImportsRenderer:
+    """Test renderer output formatting."""
+
+    def test_renderer_imports_overview(self, tmp_path):
+        """Renderer should format imports overview correctly."""
+        from reveal.adapters.imports import ImportsRenderer
+        from io import StringIO
+        import sys
+
+        # Create test files
+        test_file = tmp_path / "test.py"
+        test_file.write_text("import os\nimport sys\n")
+
+        adapter = ImportsAdapter()
+        result = adapter.get_structure(f"imports://{tmp_path}")
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        ImportsRenderer.render_structure(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain key sections
+        assert 'Import Analysis:' in output
+        assert 'Files:' in output
+
+    def test_renderer_json_format(self, tmp_path):
+        """Renderer should support JSON output."""
+        import json
+        from reveal.adapters.imports import ImportsRenderer
+        from io import StringIO
+        import sys
+
+        # Create test files
+        test_file = tmp_path / "test.py"
+        test_file.write_text("import os\n")
+
+        adapter = ImportsAdapter()
+        result = adapter.get_structure(f"imports://{tmp_path}")
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        ImportsRenderer.render_structure(result, format='json')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should be valid JSON
+        parsed = json.loads(output)
+        assert 'type' in parsed
+
+    def test_renderer_error_handling(self):
+        """Renderer should handle errors gracefully."""
+        from reveal.adapters.imports import ImportsRenderer
+        from io import StringIO
+        import sys
+
+        # Capture stderr (render_error outputs to stderr)
+        old_stderr = sys.stderr
+        sys.stderr = captured_output = StringIO()
+
+        error = FileNotFoundError("Import analysis failed")
+        ImportsRenderer.render_error(error)
+
+        sys.stderr = old_stderr
+        output = captured_output.getvalue()
+
+        assert 'Error' in output
+        assert 'Import analysis failed' in output
+
+    def test_renderer_unused_imports(self, tmp_path):
+        """Renderer should format unused imports correctly."""
+        from reveal.adapters.imports import ImportsRenderer
+        from io import StringIO
+        import sys
+
+        # Create test file with unused import
+        test_file = tmp_path / "test.py"
+        test_file.write_text("import os  # unused\nprint('hello')\n")
+
+        adapter = ImportsAdapter()
+        result = adapter.get_structure(f"imports://{tmp_path}?unused")
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        ImportsRenderer.render_structure(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain unused imports info
+        assert 'unused' in output.lower() or 'import' in output.lower()

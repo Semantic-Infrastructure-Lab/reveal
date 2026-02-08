@@ -357,6 +357,33 @@ class TestDomainAdapterSchema(unittest.TestCase):
         self.assertIn('domain_overview', output_type_names)
         self.assertIn('domain_dns', output_type_names)
 
+    def test_schema_query_params(self):
+        """Schema should document query parameters."""
+        schema = DomainAdapter.get_schema()
+
+        self.assertIn('query_params', schema)
+        # Domain adapter doesn't use query params
+        self.assertIsInstance(schema['query_params'], dict)
+
+    def test_schema_examples(self):
+        """Schema should include usage examples."""
+        schema = DomainAdapter.get_schema()
+
+        self.assertIn('example_queries', schema)
+        self.assertTrue(len(schema['example_queries']) >= 4)
+
+        # Examples should have required fields
+        for example in schema['example_queries']:
+            self.assertIn('uri', example)
+            self.assertIn('description', example)
+
+    def test_schema_batch_support(self):
+        """Schema should indicate batch support status."""
+        schema = DomainAdapter.get_schema()
+
+        self.assertIn('supports_batch', schema)
+        self.assertIn('supports_advanced', schema)
+
 
 class TestDomainAdapterHelp(unittest.TestCase):
     """Test domain adapter help system."""
@@ -407,6 +434,128 @@ class TestDomainAdapterIntegration(unittest.TestCase):
         dns_element = adapter.get_element('dns')
         self.assertIsNotNone(dns_element)
         self.assertIn('records', dns_element)
+
+
+class TestDomainRenderer(unittest.TestCase):
+    """Test renderer output formatting."""
+
+    def test_renderer_domain_overview(self):
+        """Renderer should format domain overview correctly."""
+        from reveal.adapters.domain.renderer import DomainRenderer
+        from io import StringIO
+
+        result = {
+            'type': 'domain_overview',
+            'domain': 'example.com',
+            'dns': {
+                'nameservers': ['ns1.example.com', 'ns2.example.com'],
+                'a_records': ['192.0.2.1'],
+                'has_mx': True,
+                'error': None
+            },
+            'ssl': {
+                'has_certificate': True,
+                'days_until_expiry': 30,
+                'health_status': 'warning'
+            }
+        }
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        DomainRenderer.render_structure(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain key sections
+        self.assertIn('example.com', output)
+        self.assertIn('DNS Configuration:', output)
+        self.assertIn('ns1.example.com', output)
+        self.assertIn('SSL Status:', output)
+
+    def test_renderer_json_format(self):
+        """Renderer should support JSON output."""
+        import json
+        from reveal.adapters.domain.renderer import DomainRenderer
+        from io import StringIO
+
+        result = {
+            'type': 'domain_overview',
+            'domain': 'example.com',
+            'dns': {
+                'nameservers': ['ns1.example.com'],
+                'a_records': ['192.0.2.1'],
+                'has_mx': True,
+                'error': None
+            },
+            'ssl': {}
+        }
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        DomainRenderer.render_structure(result, format='json')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should be valid JSON
+        parsed = json.loads(output)
+        self.assertIn('type', parsed)
+        self.assertEqual(parsed['type'], 'domain_overview')
+        self.assertEqual(parsed['domain'], 'example.com')
+
+    def test_renderer_error_handling(self):
+        """Renderer should handle errors gracefully."""
+        from reveal.adapters.domain.renderer import DomainRenderer
+        from io import StringIO
+
+        # Capture stderr (render_error outputs to stderr)
+        old_stderr = sys.stderr
+        sys.stderr = captured_output = StringIO()
+
+        error = Exception("DNS lookup failed")
+        DomainRenderer.render_error(error)
+
+        sys.stderr = old_stderr
+        output = captured_output.getvalue()
+
+        self.assertIn('Error', output)
+        self.assertIn('DNS lookup failed', output)
+
+    def test_renderer_dns_records(self):
+        """Renderer should format DNS records correctly."""
+        from reveal.adapters.domain.renderer import DomainRenderer
+        from io import StringIO
+
+        result = {
+            'type': 'domain_dns_records',
+            'domain': 'example.com',
+            'records': {
+                'a': ['192.0.2.1', '192.0.2.2'],
+                'mx': ['10 mail.example.com'],
+                'ns': ['ns1.example.com', 'ns2.example.com'],
+                'txt': []
+            }
+        }
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        DomainRenderer.render_structure(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain DNS records
+        self.assertIn('example.com', output)
+        self.assertIn('192.0.2.1', output)
+        self.assertIn('mail.example.com', output)
+        self.assertIn('ns1.example.com', output)
 
 
 if __name__ == '__main__':

@@ -794,6 +794,228 @@ class TestToolSuccessRate:
             orphan.unlink()
 
 
+class TestClaudeAdapterSchema:
+    """Test schema generation for AI agent integration."""
+
+    def test_get_schema(self):
+        """Should return machine-readable schema."""
+        schema = ClaudeAdapter.get_schema()
+
+        assert schema is not None
+        assert schema['adapter'] == 'claude'
+        assert 'description' in schema
+        assert 'uri_syntax' in schema
+        assert 'claude://session/' in schema['uri_syntax']
+
+    def test_schema_query_params(self):
+        """Schema should document query parameters."""
+        schema = ClaudeAdapter.get_schema()
+
+        assert 'query_params' in schema
+        query_params = schema['query_params']
+
+        # Should have filtering params
+        assert 'summary' in query_params
+        assert 'errors' in query_params
+        assert 'tools' in query_params
+        assert 'contains' in query_params
+        assert 'role' in query_params
+
+        # Role param should have values
+        role_param = query_params['role']
+        assert 'values' in role_param
+        assert 'user' in role_param['values']
+        assert 'assistant' in role_param['values']
+
+    def test_schema_elements(self):
+        """Schema should document available elements."""
+        schema = ClaudeAdapter.get_schema()
+
+        assert 'elements' in schema
+        elements = schema['elements']
+
+        # Should have all claude elements
+        assert 'workflow' in elements
+        assert 'files' in elements
+        assert 'tools' in elements
+        assert 'thinking' in elements
+        assert 'errors' in elements
+        assert 'timeline' in elements
+        assert 'context' in elements
+
+    def test_schema_output_types(self):
+        """Schema should define output types."""
+        schema = ClaudeAdapter.get_schema()
+
+        assert 'output_types' in schema
+        assert len(schema['output_types']) >= 5
+
+        # Should have claude output types
+        output_types = [ot['type'] for ot in schema['output_types']]
+        assert 'claude_overview' in output_types
+        assert 'claude_workflow' in output_types
+        assert 'claude_files' in output_types
+        assert 'claude_tools' in output_types
+        assert 'claude_errors' in output_types
+
+    def test_schema_examples(self):
+        """Schema should include usage examples."""
+        schema = ClaudeAdapter.get_schema()
+
+        assert 'example_queries' in schema
+        assert len(schema['example_queries']) >= 8
+
+        # Examples should have required fields
+        for example in schema['example_queries']:
+            assert 'uri' in example
+            assert 'description' in example
+
+    def test_schema_batch_support(self):
+        """Schema should indicate batch support status."""
+        schema = ClaudeAdapter.get_schema()
+
+        assert 'supports_batch' in schema
+        assert 'supports_advanced' in schema
+
+
+class TestClaudeRenderer:
+    """Test renderer output formatting."""
+
+    @pytest.fixture
+    def mock_session_file(self, tmp_path):
+        """Create a mock session file."""
+        session_file = tmp_path / "conversations.jsonl"
+        messages = [
+            {
+                "type": "user",
+                "content": "Test message",
+                "timestamp": "2024-01-01T12:00:00"
+            },
+            {
+                "type": "assistant",
+                "content": "Response",
+                "timestamp": "2024-01-01T12:00:01"
+            }
+        ]
+        with open(session_file, 'w') as f:
+            for msg in messages:
+                f.write(json.dumps(msg) + '\n')
+        return session_file
+
+    def test_renderer_session_overview(self, mock_session_file):
+        """Renderer should format session overview correctly."""
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        from io import StringIO
+        import sys
+
+        result = {
+            'type': 'claude_session_overview',
+            'session': 'test-session',
+            'message_count': 10,
+            'user_messages': 5,
+            'assistant_messages': 5,
+            'tools_used': {'Bash': 3, 'Read': 2},
+            'conversation_file': str(mock_session_file)
+        }
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        ClaudeRenderer.render_structure(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain key sections
+        assert 'test-session' in output
+        assert 'Messages:' in output
+        assert 'Tools Used:' in output
+        assert 'Bash' in output
+
+    def test_renderer_json_format(self, mock_session_file):
+        """Renderer should support JSON output."""
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        from io import StringIO
+        import sys
+
+        result = {
+            'type': 'claude_session_overview',
+            'session': 'test-session',
+            'message_count': 10,
+            'user_messages': 5,
+            'assistant_messages': 5,
+            'tools_used': {'Bash': 3, 'Read': 2},
+            'conversation_file': str(mock_session_file)
+        }
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        ClaudeRenderer.render_structure(result, format='json')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should be valid JSON
+        parsed = json.loads(output)
+        assert 'type' in parsed
+        assert parsed['type'] == 'claude_session_overview'
+        assert parsed['session'] == 'test-session'
+
+    def test_renderer_error_handling(self):
+        """Renderer should handle errors gracefully."""
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        from io import StringIO
+        import sys
+
+        # Capture stderr (render_error outputs to stderr)
+        old_stderr = sys.stderr
+        sys.stderr = captured_output = StringIO()
+
+        error = FileNotFoundError("Session file not found")
+        ClaudeRenderer.render_error(error)
+
+        sys.stderr = old_stderr
+        output = captured_output.getvalue()
+
+        assert 'Error' in output
+        assert 'Session file not found' in output
+
+    def test_renderer_tool_calls(self, mock_session_file):
+        """Renderer should format tool calls correctly."""
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        from io import StringIO
+        import sys
+
+        result = {
+            'type': 'claude_tool_calls',
+            'tool_name': 'Bash',
+            'call_count': 3,
+            'session': 'test-session',
+            'calls': [
+                {
+                    'input': {'command': 'ls -la', 'description': 'List files'},
+                    'result': 'file1.txt\nfile2.txt'
+                }
+            ]
+        }
+
+        # Capture stdout
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+
+        ClaudeRenderer.render_structure(result, format='text')
+
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        # Should contain tool call info
+        assert 'Bash' in output
+        assert 'ls -la' in output
+
+
 # Run tests with pytest
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
