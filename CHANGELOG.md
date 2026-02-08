@@ -54,6 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Lag display no longer appends "s" to "Unknown" values
 
 ### Documentation
+- **Phase 3 Documentation Complete** (2026-02-08)
+  - Created `QUERY_SYNTAX_GUIDE.md` - Complete reference for unified query operators
+  - Documents all 8 universal operators (`=`, `!=`, `>`, `<`, `>=`, `<=`, `~=`, `..`)
+  - Result control reference (sort/limit/offset)
+  - Adapter-by-adapter examples with common patterns
+  - Progressive filtering, pagination, and top-N query patterns
+  - Session: gentle-cyclone-0208
 - **MySQL adapter production validation** - Updated help_data/mysql.yaml
   - Added `mysql://` example (simplest form using ~/.my.cnf)
   - Added "Production Database Monitoring" workflow

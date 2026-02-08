@@ -421,7 +421,7 @@ reveal 'json://data.json/users?age>18&status==active'
 ### Success Criteria
 - [x] All adapters use same operator syntax ✅ (2026-02-08)
 - [x] Backward compatible with existing queries ✅ (2026-02-08)
-- [ ] Documentation includes operator reference (TODO: create QUERY_SYNTAX_GUIDE.md)
+- [x] Documentation includes operator reference ✅ (2026-02-08 - QUERY_SYNTAX_GUIDE.md created)
 - [ ] Error messages suggest correct syntax (TODO: verify)
 
 ---

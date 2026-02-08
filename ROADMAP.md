@@ -89,7 +89,8 @@ This document outlines reveal's development priorities and future direction. For
 - **Phase 3**: Query operator standardization ✅ **COMPLETE**
   - Universal operators across all 5 query-capable adapters
   - Sort/limit/offset result control unified
-  - Completed: 2026-02-08 (Session: hosuki-0208)
+  - Documentation: QUERY_SYNTAX_GUIDE.md created
+  - Completed: 2026-02-08 (Sessions: hosuki-0208, gentle-cyclone-0208)
 - **Phase 4**: Field selection + budget awareness (next)
   - `--select=fields` for token reduction
   - Budget-aware flags for AI agent loops
