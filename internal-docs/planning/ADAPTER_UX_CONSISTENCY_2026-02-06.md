@@ -159,7 +159,7 @@ reveal stats://src --select=path,quality_score
 ### Success Criteria
 - [ ] All adapters support `--check` (where validation makes sense)
 - [ ] All adapters support `--advanced` modifier
-- [ ] All adapters support `--format` consistently
+- [x] All adapters support `--format` consistently ✅ (Verified 2026-02-07 - all 16 adapters via BaseRenderer)
 - [ ] Documentation updated for universal flags
 
 ---
@@ -1126,7 +1126,8 @@ Track progress:
 
 ### Consistency
 - [ ] All adapters support `--check` (where validation makes sense)
-- [ ] All adapters support `--format=json|text|compact`
+- [x] All adapters support `--format=json|text` ✅ (Verified 2026-02-07)
+- [ ] All adapters support `--format=compact` (Not yet implemented)
 - [ ] All adapters support `--batch` for stdin input
 - [ ] All query-based adapters use same operator syntax
 - [ ] All adapters support `--select` for field selection
@@ -1230,7 +1231,8 @@ All future adapters should:
 ```markdown
 - [ ] Supports `--check` (if validation makes sense)
 - [ ] Supports `--advanced` modifier
-- [ ] Supports `--format=json|text|compact`
+- [x] Supports `--format=json|text` (inherited from BaseRenderer)
+- [ ] Supports `--format=compact` (not yet implemented)
 - [ ] Supports `--select=fields`
 - [ ] Supports `--batch` mode
 - [ ] Uses unified query parser (if filtering needed)
