@@ -303,23 +303,37 @@ class GitAdapter(ResourceAdapter):
 
         self.repo = None
 
-        # Parse query filters for commit filtering (e.g., author=John, message~=bug)
-        # Exclude operational parameters (type, limit, detail, element) from filtering
-        # Handle keys that already include operators (e.g., 'message~' -> 'message~=value')
+        # Parse result control parameters (sort, limit, offset) and query filters
+        # Separate result control params from filter params
+        result_control_parts = []
         filter_parts = []
-        for k, v in self.query.items():
-            if k in ['type', 'limit', 'detail', 'element']:
-                continue
-            # Check if key already ends with an operator character (~, !, >, <, .)
-            if k and k[-1] in ['~', '!', '>', '<', '.']:
-                # Key has operator, just add = between key and value
-                filter_parts.append(f"{k}={v}")
-            else:
-                # Regular key, use = operator
-                filter_parts.append(f"{k}={v}")
-        # Join with & to match query parser's expected format
-        filter_query = '&'.join(filter_parts)
 
+        for k, v in self.query.items():
+            # Result control parameters
+            if k in ['sort', 'limit', 'offset']:
+                result_control_parts.append(f"{k}={v}")
+            # Operational parameters (exclude from both)
+            elif k in ['type', 'detail', 'element']:
+                continue
+            # Filter parameters
+            else:
+                # Check if key already ends with an operator character (~, !, >, <, .)
+                if k and k[-1] in ['~', '!', '>', '<', '.']:
+                    # Key has operator, just add = between key and value
+                    filter_parts.append(f"{k}={v}")
+                else:
+                    # Regular key, use = operator
+                    filter_parts.append(f"{k}={v}")
+
+        # Parse result control (sort/limit/offset)
+        result_control_query = '&'.join(result_control_parts)
+        if result_control_query:
+            _, self.result_control = parse_result_control(result_control_query)
+        else:
+            self.result_control = ResultControl()
+
+        # Parse query filters for commit filtering (e.g., author=John, message~=bug)
+        filter_query = '&'.join(filter_parts)
         self.query_filters = []
         if filter_query:
             try:
@@ -836,8 +850,15 @@ class GitAdapter(ResourceAdapter):
                     if self._matches_all_filters(commit_dict):
                         commits.append(commit_dict)
 
+                        # Legacy limit parameter support (for backward compatibility)
+                        # Note: Prefer using ?limit=N in query string for result control
                         if len(commits) >= limit:
                             break
+
+            # Apply result control (sort, limit, offset) from query params
+            from ...utils.query import apply_result_control
+            total_matches = len(commits)
+            controlled_commits = apply_result_control(commits, self.result_control)
 
             return {
                 'contract_version': '1.0',
@@ -846,8 +867,9 @@ class GitAdapter(ResourceAdapter):
                 'source_type': 'file',
                 'path': self.subpath,
                 'ref': self.ref,
-                'commits': commits,
-                'count': len(commits),
+                'commits': controlled_commits,
+                'count': len(controlled_commits),
+                'total_matches': total_matches if total_matches != len(controlled_commits) else None,
             }
 
         except (KeyError, pygit2.GitError) as e:
@@ -1109,10 +1131,16 @@ class GitAdapter(ResourceAdapter):
                 # Apply query filters
                 if self._matches_all_filters(commit_dict):
                     commits.append(commit_dict)
+                    # Legacy limit for backward compatibility
                     if len(commits) >= limit:
                         break
         except Exception:
             pass
+
+        # Apply result control if specified in query
+        if self.result_control.limit or self.result_control.sort_field or self.result_control.offset:
+            from ...utils.query import apply_result_control
+            commits = apply_result_control(commits, self.result_control)
 
         return commits
 
@@ -1129,10 +1157,16 @@ class GitAdapter(ResourceAdapter):
                 # Apply query filters
                 if self._matches_all_filters(commit_dict):
                     commits.append(commit_dict)
+                    # Legacy limit for backward compatibility
                     if len(commits) >= limit:
                         break
         except Exception:
             pass
+
+        # Apply result control if specified in query
+        if self.result_control.limit or self.result_control.sort_field or self.result_control.offset:
+            from ...utils.query import apply_result_control
+            commits = apply_result_control(commits, self.result_control)
 
         return commits
 
