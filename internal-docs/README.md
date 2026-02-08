@@ -7,16 +7,30 @@ Internal development documentation for the reveal project. These docs capture ar
 ```
 internal-docs/
 ├── README.md                    # This file
+├── LIFECYCLE.md                 # Document lifecycle policy
+├── UNIFIED_OPERATOR_REFERENCE.md # Query operator reference (Phase 3)
+├── archived/                    # Completed work (not tracked in git)
+│   ├── case-studies/
+│   ├── planning/
+│   ├── refactoring/
+│   └── research/
 ├── case-studies/                # Bug analysis, real-world usage
-│   └── BUG_PREVENTION.md        # git:// routing bug analysis
+│   └── BUG_PREVENTION.md
 ├── marketing/                   # Marketing intelligence and voice development
-│   └── MARKETING_INTELLIGENCE_2026-01-20.md  # Comprehensive marketing meta
+│   └── MARKETING_INTELLIGENCE_2026-01-20.md
 ├── planning/                    # Feature planning and design
-│   └── TECHNICAL_DEBT_RESOLUTION.md  # Tech debt audit response
+│   ├── CURRENT_PRIORITIES_2026-02.md  # Active priorities
+│   ├── ADAPTER_UX_CONSISTENCY_2026-02-06.md  # UX roadmap (5 phases)
+│   └── TECHNICAL_DEBT_RESOLUTION.md
 ├── refactoring/                 # Code quality reviews
-│   └── CODE_QUALITY_REVIEW_2026-01-18.md
+│   ├── REFACTORING_ACTION_PLAN.md
+│   ├── CODE_QUALITY_REVIEW_2026-01-18.md
+│   └── ARCHITECTURE_IMPROVEMENTS_2026-01-20.md
 └── research/                    # Dogfooding, experiments
-    └── DOGFOODING_REPORT_2026-01-19.md
+    ├── DOGFOODING_REPORT_2026-01-19.md
+    ├── UX_ISSUES_2026-01-20.md
+    ├── VALIDATION_REPORT.md
+    └── MYSQL_VALIDATION_REPORT.md
 ```
 
 ## Document Inventory
@@ -37,7 +51,8 @@ internal-docs/
 
 | Document | Description | Date |
 |----------|-------------|------|
-| [ADAPTER_UX_CONSISTENCY_2026-02-06.md](planning/ADAPTER_UX_CONSISTENCY_2026-02-06.md) | **New** - Long-term roadmap for adapter consistency (3-tier model, 5 phases) | 2026-02-06 |
+| [CURRENT_PRIORITIES_2026-02.md](planning/CURRENT_PRIORITIES_2026-02.md) | **Active** - Current project priorities and status (Phases 1-5 complete) | 2026-02-08 |
+| [ADAPTER_UX_CONSISTENCY_2026-02-06.md](planning/ADAPTER_UX_CONSISTENCY_2026-02-06.md) | Long-term roadmap for adapter consistency (3-tier model, 5 phases) | 2026-02-06 |
 | [TECHNICAL_DEBT_RESOLUTION.md](planning/TECHNICAL_DEBT_RESOLUTION.md) | TreeSitter architecture audit response (~90% complete) | 2026-01-13 |
 
 ### Refactoring
@@ -56,6 +71,12 @@ internal-docs/
 | [UX_ISSUES_2026-01-20.md](research/UX_ISSUES_2026-01-20.md) | UX issues identified during dogfooding | 2026-01-20 |
 | [VALIDATION_REPORT.md](research/VALIDATION_REPORT.md) | Claude adapter validation (all tests passed) | 2026-01-22 |
 | [MYSQL_VALIDATION_REPORT.md](research/MYSQL_VALIDATION_REPORT.md) | MySQL adapter production validation (56 tests + live db) | 2026-01-22 |
+
+### Reference Documentation
+
+| Document | Description | Date |
+|----------|-------------|------|
+| [UNIFIED_OPERATOR_REFERENCE.md](UNIFIED_OPERATOR_REFERENCE.md) | Authoritative reference for query operators across all adapters (Phase 3) | 2026-02-07 |
 
 ## Related Documentation
 
