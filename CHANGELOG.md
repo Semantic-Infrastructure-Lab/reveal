@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Phase 1 & 2 UX Consistency verified complete** (v0.47.0)
+  - **Phase 1: Format Consistency** - All 16 adapters support `--format json|text`
+  - **Phase 2: Batch Processing** - Universal `--batch` flag works with all adapters
+  - Batch mode supports mixed adapters, aggregated results, exit codes
+  - Verified sessions: sapphire-spark-0207 (Phase 1), zibeta-0207 (Phase 2)
+- **Phase 7: Output Contract v1.1** - Trust metadata for AI agents (v0.47.0)
+  - Added optional `meta` field with parse_mode, confidence, warnings, errors
+  - Enables AI agents to assess result trustworthiness
+  - Implemented in AST adapter, available to all adapters via base class
 - **Claude adapter session analysis elements**
   - `/workflow` - Chronological sequence of tool operations
   - `/files` - All files read, written, or edited during session

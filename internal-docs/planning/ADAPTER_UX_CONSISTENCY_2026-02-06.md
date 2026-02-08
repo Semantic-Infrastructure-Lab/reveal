@@ -861,11 +861,11 @@ $ reveal help://schemas/ssl --format=json
 - `reveal/adapters/help_data/` - Add schema generation
 
 ### Success Criteria
-- [x] `help://adapters` lists all adapters with metadata
-- [x] `help://schemas/<adapter>` returns JSON schema for ALL 15 adapters
-- [x] Schema includes all URI patterns, query params, output types
-- [x] `help://examples/<task>` returns canonical recipes
-- [x] AI agents can auto-discover capabilities
+- [x] `help://adapters` lists all adapters with metadata ✅ (Verified 2026-02-07)
+- [x] `help://schemas/<adapter>` returns JSON schema for ALL 15 adapters ✅ (Verified 2026-02-07)
+- [x] Schema includes all URI patterns, query params, output types ✅ (Verified 2026-02-07)
+- [x] `help://examples/<task>` returns canonical recipes ✅ (Verified 2026-02-07)
+- [x] AI agents can auto-discover capabilities ✅ (Verified 2026-02-07)
 
 ### Adapter Coverage (15/15 = 100%)
 ```

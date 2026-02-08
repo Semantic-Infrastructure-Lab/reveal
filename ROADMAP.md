@@ -1,12 +1,23 @@
 # Reveal Roadmap
-
-> **Last updated**: 2026-02-06
+> **Last updated**: 2026-02-07
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.46.0
+- ✅ **Phase 6: Help Introspection** — Machine-readable adapter schemas for all 15 adapters
+- ✅ **Phase 7: Output Contract v1.1** — Trust metadata (parse_mode, confidence, warnings, errors)
+- ✅ **help://schemas/<adapter>** — JSON schemas for AI agent auto-discovery
+- ✅ **help://examples/<task>** — Canonical query recipes for common tasks
+
+### v0.45.0
+- ✅ **Phase 1: Universal Operation Flags** — `--advanced`, `--only-failures` across all adapters
+- ✅ **Phase 2: Stdin Batch Processing** — Universal `--batch` flag with result aggregation
+- ✅ **Batch mode** — Works with any adapter, mixed adapter batches supported
+- ✅ **Format consistency** — All 16 adapters support `--format json|text`
 
 ### v0.44.2
 - ✅ **SSL certificate parsing fix** — TLS 1.3 connections properly handled (cryptography dependency)
@@ -69,14 +80,23 @@ This document outlines reveal's development priorities and future direction. For
 
 ## Current Focus: Path to v1.0
 
-### Documentation Consolidation
-- Unified help system across all adapters
-- Consistent examples and workflows
-- Agent-optimized documentation (`--agent-help`)
+### Test Coverage & Quality (In Progress)
+- Expanding test coverage for database adapters (MySQL 19%, SQLite 18%)
+- Overall coverage: 73% (2912 tests passing)
+- Target: 80%+ coverage for all adapters
+
+### UX Consistency (Phases 3-5)
+- **Phase 3**: Query operator standardization (in progress)
+  - Universal operators across all adapters
+  - Sort/limit/offset query parameters
+- **Phase 4**: Field selection + budget awareness
+  - `--select=fields` for token reduction
+  - Budget-aware flags for AI agent loops
+- **Phase 5**: Element discovery
+  - Auto-show available elements in adapter output
 
 ### Stability & Polish
-- Output contract enforcement
-- Test coverage improvements
+- Output contract v1.1 enforcement
 - Performance optimization for large codebases
 
 ---
