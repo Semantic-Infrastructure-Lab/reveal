@@ -174,6 +174,151 @@ class SSLRenderer(TypeDispatchRenderer):
         else:
             print("No SSL-enabled domains found in config.")
 
+    @staticmethod
+    def _parse_expiring_within(expiring_within: str = None) -> int:
+        """Parse expiring_within parameter to integer days.
+
+        Args:
+            expiring_within: String like '30d' or '30'
+
+        Returns:
+            Integer days, or None if invalid/not provided
+        """
+        if not expiring_within:
+            return None
+        try:
+            return int(expiring_within.rstrip('d'))
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _render_single_host_header(host: str, port: int, status: str,
+                                    summary: dict) -> None:
+        """Render single host check header.
+
+        Args:
+            host: Hostname
+            port: Port number
+            status: Overall status
+            summary: Summary dict with passed/total/warnings/failures
+        """
+        status_icon = '\u2705' if status == 'pass' else '\u26a0\ufe0f' if status == 'warning' else '\u274c'
+        port_str = f":{port}" if port != 443 else ""
+        print(f"\nSSL Health Check: {host}{port_str}")
+        print(f"Status: {status_icon} {status.upper()}")
+
+        print(f"\nSummary: {summary['passed']}/{summary['total']} passed, "
+              f"{summary['warnings']} warnings, {summary['failures']} failures")
+        print()
+
+    @staticmethod
+    def _render_certificate_info(result: dict) -> None:
+        """Render certificate information if available.
+
+        Args:
+            result: Check result dict
+        """
+        if 'certificate' not in result:
+            return
+
+        cert = result['certificate']
+        print(f"Certificate: {cert.get('common_name', 'Unknown')}")
+        print(f"  Expires: {cert.get('not_after', 'Unknown')[:10]} "
+              f"({cert.get('days_until_expiry', '?')} days)")
+        print()
+
+    @staticmethod
+    def _group_checks_by_status(checks: list) -> tuple:
+        """Group checks into failures, warnings, passes, and infos.
+
+        Args:
+            checks: List of check dicts
+
+        Returns:
+            Tuple of (failures, warnings, passes, infos)
+        """
+        failures = [c for c in checks if c['status'] == 'failure']
+        warnings = [c for c in checks if c['status'] == 'warning']
+        passes = [c for c in checks if c['status'] == 'pass']
+        infos = [c for c in checks if c['status'] == 'info']
+        return failures, warnings, passes, infos
+
+    @staticmethod
+    def _render_check_failures(failures: list) -> None:
+        """Render failed checks section.
+
+        Args:
+            failures: List of failed checks
+        """
+        if not failures:
+            return
+
+        print("\u274c Failures:")
+        for check in failures:
+            print(f"  \u2022 {check['name']}: {check['message']}")
+        print()
+
+    @staticmethod
+    def _render_check_warnings(warnings: list) -> None:
+        """Render warning checks section.
+
+        Args:
+            warnings: List of warning checks
+        """
+        if not warnings:
+            return
+
+        print("\u26a0\ufe0f  Warnings:")
+        for check in warnings:
+            print(f"  \u2022 {check['name']}: {check['message']}")
+        print()
+
+    @staticmethod
+    def _render_check_passes(passes: list, failures: list, warnings: list) -> None:
+        """Render passed checks section (only if no failures/warnings).
+
+        Args:
+            passes: List of passed checks
+            failures: List of failed checks (to check if empty)
+            warnings: List of warning checks (to check if empty)
+        """
+        if not passes or failures or warnings:
+            return
+
+        print("\u2705 All Checks Passed:")
+        for check in passes:
+            print(f"  \u2022 {check['name']}: {check['message']}")
+        print()
+
+    @staticmethod
+    def _render_check_infos(infos: list) -> None:
+        """Render info checks section.
+
+        Args:
+            infos: List of info checks
+        """
+        if not infos:
+            return
+
+        print("\u2139\ufe0f  Additional Information:")
+        for check in infos:
+            print(f"  \u2022 {check['name']}: {check['message']}")
+        print()
+
+    @staticmethod
+    def _render_check_next_steps(result: dict) -> None:
+        """Render next steps section if available.
+
+        Args:
+            result: Check result dict
+        """
+        if not result.get('next_steps'):
+            return
+
+        print("\nNext Steps:")
+        for step in result['next_steps']:
+            print(f"  • {step}")
+
     @classmethod
     def render_check(cls, result: dict, format: str = 'text',
                      only_failures: bool = False, summary: bool = False,
@@ -187,86 +332,34 @@ class SSLRenderer(TypeDispatchRenderer):
             summary: Show aggregated summary only
             expiring_within: Filter to certs expiring within N days
         """
-        # Parse expiring_within if provided
-        expiring_days = None
-        if expiring_within:
-            try:
-                expiring_days = int(expiring_within.rstrip('d'))
-            except ValueError:
-                pass
+        expiring_days = cls._parse_expiring_within(expiring_within)
 
-        # Apply filters to result for JSON output
+        # Handle JSON format
         if cls.should_render_json(format):
             filtered = cls._filter_results(result, only_failures, expiring_days)
             cls.render_json(filtered)
             return
 
+        # Route to batch check renderer
         result_type = result.get('type', 'ssl_check')
-
         if result_type == 'ssl_batch_check':
             cls._render_ssl_batch_check(result, only_failures, summary, expiring_days)
             return
 
         # Single host check
-        status = result['status']
-        host = result['host']
-        port = result['port']
+        cls._render_single_host_header(result['host'], result['port'],
+                                        result['status'], result['summary'])
+        cls._render_certificate_info(result)
 
-        # Header with overall status
-        status_icon = '\u2705' if status == 'pass' else '\u26a0\ufe0f' if status == 'warning' else '\u274c'
-        port_str = f":{port}" if port != 443 else ""
-        print(f"\nSSL Health Check: {host}{port_str}")
-        print(f"Status: {status_icon} {status.upper()}")
-
-        summary = result['summary']
-        print(f"\nSummary: {summary['passed']}/{summary['total']} passed, "
-              f"{summary['warnings']} warnings, {summary['failures']} failures")
-        print()
-
-        # Show certificate info if available
-        if 'certificate' in result:
-            cert = result['certificate']
-            print(f"Certificate: {cert.get('common_name', 'Unknown')}")
-            print(f"  Expires: {cert.get('not_after', 'Unknown')[:10]} "
-                  f"({cert.get('days_until_expiry', '?')} days)")
-            print()
-
-        # Group checks by status
+        # Group and render checks
         checks = result.get('checks', [])
-        failures = [c for c in checks if c['status'] == 'failure']
-        warnings = [c for c in checks if c['status'] == 'warning']
-        passes = [c for c in checks if c['status'] == 'pass']
-        infos = [c for c in checks if c['status'] == 'info']
+        failures, warnings, passes, infos = cls._group_checks_by_status(checks)
 
-        if failures:
-            print("\u274c Failures:")
-            for check in failures:
-                print(f"  \u2022 {check['name']}: {check['message']}")
-            print()
-
-        if warnings:
-            print("\u26a0\ufe0f  Warnings:")
-            for check in warnings:
-                print(f"  \u2022 {check['name']}: {check['message']}")
-            print()
-
-        if passes and not failures and not warnings:
-            print("\u2705 All Checks Passed:")
-            for check in passes:
-                print(f"  \u2022 {check['name']}: {check['message']}")
-            print()
-
-        if infos:
-            print("\u2139\ufe0f  Additional Information:")
-            for check in infos:
-                print(f"  \u2022 {check['name']}: {check['message']}")
-            print()
-
-        # Show next steps if available
-        if result.get('next_steps'):
-            print("\nNext Steps:")
-            for step in result['next_steps']:
-                print(f"  • {step}")
+        cls._render_check_failures(failures)
+        cls._render_check_warnings(warnings)
+        cls._render_check_passes(passes, failures, warnings)
+        cls._render_check_infos(infos)
+        cls._render_check_next_steps(result)
 
         print(f"\nExit code: {result['exit_code']}")
 
