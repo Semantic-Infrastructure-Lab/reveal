@@ -537,71 +537,69 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
         return True
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
-        """Query markdown files and return matching results.
+    def _build_result_item(self, path: Path, frontmatter: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Build result item dict with path and frontmatter fields."""
+        result = {
+            'path': str(path),
+            'relative_path': str(path.relative_to(Path.cwd())
+                                if path.is_relative_to(Path.cwd())
+                                else path),
+            'has_frontmatter': frontmatter is not None,
+        }
 
-        Returns:
-            Dict containing matched files with frontmatter summary
-        """
-        files = self._find_markdown_files()
-        results = []
+        # Include key frontmatter fields
+        if frontmatter:
+            for key in ['title', 'type', 'status', 'tags', 'topics']:
+                if key in frontmatter:
+                    result[key] = frontmatter[key]
 
-        for path in files:
-            frontmatter = self._extract_frontmatter(path)
+        return result
 
-            if self._matches_all_filters(frontmatter):
-                result = {
-                    'path': str(path),
-                    'relative_path': str(path.relative_to(Path.cwd())
-                                         if path.is_relative_to(Path.cwd())
-                                         else path),
-                    'has_frontmatter': frontmatter is not None,
-                }
-
-                # Include key frontmatter fields
-                if frontmatter:
-                    for key in ['title', 'type', 'status', 'tags', 'topics']:
-                        if key in frontmatter:
-                            result[key] = frontmatter[key]
-
-                results.append(result)
-
-        # Apply result control (sort, limit, offset)
-        total_matches = len(results)
-        controlled_results = results
-
-        # Sorting
-        if self.result_control.sort_field:
-            def get_sort_key(item):
-                # Check if field exists in the result dict (including frontmatter fields)
-                if self.result_control.sort_field in item:
-                    value = item[self.result_control.sort_field]
-                    # Handle None values (sort to end)
-                    if value is None:
-                        return (1, 0) if self.result_control.sort_descending else (0, 0)
-                    # Handle list values (use first element)
-                    if isinstance(value, list):
-                        return (0, str(value[0]) if value else '')
-                    return (0, value)
+    def _create_sort_key(self, item: Dict[str, Any]) -> tuple:
+        """Create sort key for an item based on result_control.sort_field."""
+        # Check if field exists in the result dict (including frontmatter fields)
+        if self.result_control.sort_field in item:
+            value = item[self.result_control.sort_field]
+            # Handle None values (sort to end)
+            if value is None:
                 return (1, 0) if self.result_control.sort_descending else (0, 0)
+            # Handle list values (use first element)
+            if isinstance(value, list):
+                return (0, str(value[0]) if value else '')
+            return (0, value)
+        return (1, 0) if self.result_control.sort_descending else (0, 0)
 
-            try:
-                controlled_results.sort(
-                    key=get_sort_key,
-                    reverse=self.result_control.sort_descending
-                )
-            except Exception:
-                # If sorting fails, continue without sorting
-                pass
+    def _apply_sorting(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Apply sorting to results based on result_control."""
+        if not self.result_control.sort_field:
+            return results
 
-        # Offset and limit
+        try:
+            return sorted(
+                results,
+                key=self._create_sort_key,
+                reverse=self.result_control.sort_descending
+            )
+        except Exception:
+            # If sorting fails, continue without sorting
+            return results
+
+    def _apply_pagination(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Apply offset and limit to results based on result_control."""
         if self.result_control.offset:
-            controlled_results = controlled_results[self.result_control.offset:]
+            results = results[self.result_control.offset:]
         if self.result_control.limit is not None:
-            controlled_results = controlled_results[:self.result_control.limit]
+            results = results[:self.result_control.limit]
+        return results
 
-        # Build response with result control metadata
-        response = {
+    def _build_response_dict(
+        self,
+        files: List[Path],
+        total_matches: int,
+        controlled_results: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Build response dict with metadata."""
+        return {
             'contract_version': '1.0',
             'type': 'markdown_query',
             'source': str(self.base_path),
@@ -617,8 +615,13 @@ class MarkdownQueryAdapter(ResourceAdapter):
             'results': controlled_results,
         }
 
-        # Add truncation warning if results were limited
-        displayed = len(controlled_results)
+    def _add_truncation_warning(
+        self,
+        response: Dict[str, Any],
+        displayed: int,
+        total_matches: int
+    ) -> None:
+        """Add truncation warning to response if results were limited."""
         if displayed < total_matches:
             response['warnings'] = [{
                 'type': 'truncated',
@@ -626,6 +629,34 @@ class MarkdownQueryAdapter(ResourceAdapter):
             }]
             response['displayed_results'] = displayed
             response['total_matches'] = total_matches
+
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
+        """Query markdown files and return matching results.
+
+        Returns:
+            Dict containing matched files with frontmatter summary
+        """
+        files = self._find_markdown_files()
+        results = []
+
+        # Build results for matching files
+        for path in files:
+            frontmatter = self._extract_frontmatter(path)
+            if self._matches_all_filters(frontmatter):
+                result = self._build_result_item(path, frontmatter)
+                results.append(result)
+
+        # Apply result control (sort, limit, offset)
+        total_matches = len(results)
+        controlled_results = self._apply_sorting(results)
+        controlled_results = self._apply_pagination(controlled_results)
+
+        # Build response with metadata
+        response = self._build_response_dict(files, total_matches, controlled_results)
+
+        # Add truncation warning if needed
+        displayed = len(controlled_results)
+        self._add_truncation_warning(response, displayed, total_matches)
 
         return response
 
