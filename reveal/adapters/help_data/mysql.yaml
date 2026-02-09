@@ -48,6 +48,7 @@ features:
   - 'Progressive disclosure (structure → element → detail)'
   - 'Industry-standard tuning ratios (table scans, thread cache, temp tables, etc.)'
   - 'Time context accuracy (uses MySQL clock, not local machine)'
+  - 'Snapshot timestamps on ALL endpoints (snapshot_time, server_start_time, uptime_seconds, measurement_window)'
   - 'Index usage analysis (most used, unused)'
   - 'Health checks with pass/warn/fail thresholds'
   - 'Credential resolution (env vars, ~/.my.cnf)'
@@ -78,6 +79,12 @@ workflows:
       - "reveal mysql://                       # Auto-connect, health overview"
       - "reveal mysql:// --check               # Automated health checks"
       - "reveal mysql:///storage               # Storage usage trends"
+  - name: 'Track Storage Growth Over Time'
+    scenario: 'Monitor database growth trends with accurate timestamps'
+    steps:
+      - "reveal mysql://localhost/storage --format=json | jq '.snapshot_time, .databases[0].size_gb'"
+      - "# Compare snapshots at different times using snapshot_time field"
+      - "# All endpoints include snapshot_time for accurate time-series analysis"
 
 anti_patterns:
   - bad: "mysql -e 'SHOW STATUS' | grep -i innodb"
@@ -96,6 +103,8 @@ notes:
   - 'Production validated: Tested against 189GB Digital Ocean MySQL 8.0.35 with SSL/TLS'
   - 'Health thresholds: connections <80%, buffer pool >99%, replication lag <60s'
   - 'DBA tuning ratios: table scans <25%, thread cache miss <10%, temp tables on disk <25%'
+  - 'Timing context: All endpoints include snapshot_time (when collected), server_start_time (when server booted), uptime_seconds (server uptime), measurement_window (human-readable uptime)'
+  - 'Timestamp accuracy: Uses MySQL UNIX_TIMESTAMP() to avoid timezone/drift issues with remote connections'
   - 'All metrics show "since server start" with accurate MySQL timestamps'
   - 'Simple usage: Just run "reveal mysql://" if ~/.my.cnf is configured'
 
