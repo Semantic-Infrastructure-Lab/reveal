@@ -7,7 +7,7 @@ This module provides commands for understanding how reveal analyzes files:
 """
 
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 
 from ..registry import get_analyzer, get_all_analyzers
 
@@ -191,6 +191,170 @@ def _format_ast_node(node, depth: int = 0, max_depth: Optional[int] = None, pref
     return "\n".join(lines)
 
 
+# Helper functions for language info
+
+def _find_language_by_name(language: str) -> Tuple[Optional[str], Optional[Dict], Optional[str]]:
+    """Find extension and info by language name.
+
+    Args:
+        language: Language name to search for
+
+    Returns:
+        Tuple of (ext, info, error_message)
+    """
+    all_analyzers = get_all_analyzers()
+    matches = []
+    for ext, info in all_analyzers.items():
+        if language.lower() in info['name'].lower():
+            matches.append((ext, info))
+
+    if not matches:
+        return None, None, f"❌ Language not found: {language}\n\nTry: reveal --languages to see all supported languages"
+
+    if len(matches) > 1:
+        lines = [f"🔍 Multiple matches for '{language}':"]
+        lines.append("")
+        for ext, info in matches:
+            icon = info['icon'] or '📄'
+            lines.append(f"  {icon} {info['name']} ({ext})")
+        lines.append("")
+        lines.append("Please specify extension: reveal --language-info <extension>")
+        return None, None, "\n".join(lines)
+
+    ext, info = matches[0]
+    return ext, info, None
+
+
+def _validate_extension(ext: str) -> Tuple[Optional[Dict], Optional[str]]:
+    """Validate extension exists and return its info.
+
+    Args:
+        ext: Extension to validate
+
+    Returns:
+        Tuple of (info, error_message)
+    """
+    all_analyzers = get_all_analyzers()
+    if ext not in all_analyzers:
+        return None, f"❌ Extension not supported: {ext}\n\nTry: reveal --languages"
+    return all_analyzers[ext], None
+
+
+def _build_language_header(info: Dict[str, Any], ext: str) -> List[str]:
+    """Build language information header.
+
+    Args:
+        info: Language info dict
+        ext: Extension
+
+    Returns:
+        List of header lines
+    """
+    icon = info['icon'] or '📄'
+    return [
+        f"{icon} {info['name']}",
+        "=" * 50,
+        "",
+        f"📋 Extension: {ext}",
+        f"🔧 Analyzer: {info['class'].__name__}",
+        "",
+    ]
+
+
+def _detect_analyzer_capabilities(analyzer_cls) -> List[str]:
+    """Detect capabilities from analyzer class.
+
+    Args:
+        analyzer_cls: Analyzer class to inspect
+
+    Returns:
+        List of capability descriptions
+    """
+    caps = []
+    if hasattr(analyzer_cls, 'get_functions'):
+        caps.append("Functions with signatures")
+    if hasattr(analyzer_cls, 'get_classes'):
+        caps.append("Classes with methods")
+    if hasattr(analyzer_cls, 'get_imports'):
+        caps.append("Import statements")
+    if hasattr(analyzer_cls, 'get_decorators'):
+        caps.append("Decorators/annotations")
+    if hasattr(analyzer_cls, 'get_types'):
+        caps.append("Type definitions")
+    if hasattr(analyzer_cls, 'get_structure'):
+        caps.append("File structure")
+    if hasattr(analyzer_cls, 'get_comments'):
+        caps.append("Comments and docstrings")
+
+    return caps if caps else ["Basic structure extraction"]
+
+
+def _build_fallback_info(info: Dict[str, Any]) -> List[str]:
+    """Build fallback analyzer information.
+
+    Args:
+        info: Language info dict with fallback data
+
+    Returns:
+        List of information lines
+    """
+    return [
+        "⚠️  Tree-sitter Fallback",
+        f"   Language: {info['fallback_language']}",
+        f"   Quality: {info['fallback_quality']}",
+        "",
+        "📊 Capabilities (Basic):",
+        "   • Functions",
+        "   • Classes",
+        "   • Imports",
+        "   • Structure",
+        "",
+        "⚠️  Note: Fallback analyzers provide basic structural",
+        "   analysis only. No language-specific features.",
+    ]
+
+
+def _build_full_support_info(info: Dict[str, Any]) -> List[str]:
+    """Build full language support information.
+
+    Args:
+        info: Language info dict
+
+    Returns:
+        List of information lines
+    """
+    lines = [
+        "✅ Full Language Support",
+        "",
+        "📊 Capabilities:",
+    ]
+
+    caps = _detect_analyzer_capabilities(info['class'])
+    for cap in caps:
+        lines.append(f"   • {cap}")
+
+    return lines
+
+
+def _build_usage_examples(ext: str) -> List[str]:
+    """Build usage example lines.
+
+    Args:
+        ext: Extension for examples
+
+    Returns:
+        List of example lines
+    """
+    return [
+        "",
+        "💡 Usage Examples:",
+        f"   reveal file{ext}              # Show structure",
+        f"   reveal file{ext} MyClass      # Extract specific class",
+        f"   reveal file{ext} --check      # Run quality checks",
+        f"   reveal file{ext} --explain    # Show how it's analyzed",
+    ]
+
+
 def get_language_info_detailed(language: str) -> str:
     """Get detailed information about a language's capabilities.
 
@@ -200,98 +364,28 @@ def get_language_info_detailed(language: str) -> str:
     Returns:
         Formatted language information
     """
-    # Normalize input
+    # Normalize input and find extension
     if not language.startswith('.'):
-        # Try to find extension by language name
-        all_analyzers = get_all_analyzers()
-        matches = []
-        for ext, info in all_analyzers.items():
-            if language.lower() in info['name'].lower():
-                matches.append((ext, info))
-
-        if not matches:
-            return f"❌ Language not found: {language}\n\nTry: reveal --languages to see all supported languages"
-
-        if len(matches) > 1:
-            lines = [f"🔍 Multiple matches for '{language}':"]
-            lines.append("")
-            for ext, info in matches:
-                icon = info['icon'] or '📄'
-                lines.append(f"  {icon} {info['name']} ({ext})")
-            lines.append("")
-            lines.append("Please specify extension: reveal --language-info <extension>")
-            return "\n".join(lines)
-
-        ext, info = matches[0]
+        ext, info, error = _find_language_by_name(language)
+        if error:
+            return error
     else:
         ext = language.lower()
-        all_analyzers = get_all_analyzers()
-        if ext not in all_analyzers:
-            return f"❌ Extension not supported: {ext}\n\nTry: reveal --languages"
-        info = all_analyzers[ext]
+        info, error = _validate_extension(ext)
+        if error:
+            return error
 
-    # Build detailed info
-    lines = []
-    icon = info['icon'] or '📄'
-    lines.append(f"{icon} {info['name']}")
-    lines.append("=" * 50)
-    lines.append("")
+    # Build detailed information
+    lines = _build_language_header(info, ext)
 
-    lines.append(f"📋 Extension: {ext}")
-    lines.append(f"🔧 Analyzer: {info['class'].__name__}")
-    lines.append("")
-
-    # Fallback info
+    # Add fallback or full support information
     if info['is_fallback']:
-        lines.append("⚠️  Tree-sitter Fallback")
-        lines.append(f"   Language: {info['fallback_language']}")
-        lines.append(f"   Quality: {info['fallback_quality']}")
-        lines.append("")
-        lines.append("📊 Capabilities (Basic):")
-        lines.append("   • Functions")
-        lines.append("   • Classes")
-        lines.append("   • Imports")
-        lines.append("   • Structure")
-        lines.append("")
-        lines.append("⚠️  Note: Fallback analyzers provide basic structural")
-        lines.append("   analysis only. No language-specific features.")
+        lines.extend(_build_fallback_info(info))
     else:
-        lines.append("✅ Full Language Support")
-        lines.append("")
+        lines.extend(_build_full_support_info(info))
 
-        # Try to determine capabilities
-        analyzer_cls = info['class']
-        lines.append("📊 Capabilities:")
-
-        caps = []
-        if hasattr(analyzer_cls, 'get_functions'):
-            caps.append("Functions with signatures")
-        if hasattr(analyzer_cls, 'get_classes'):
-            caps.append("Classes with methods")
-        if hasattr(analyzer_cls, 'get_imports'):
-            caps.append("Import statements")
-        if hasattr(analyzer_cls, 'get_decorators'):
-            caps.append("Decorators/annotations")
-        if hasattr(analyzer_cls, 'get_types'):
-            caps.append("Type definitions")
-        if hasattr(analyzer_cls, 'get_structure'):
-            caps.append("File structure")
-        if hasattr(analyzer_cls, 'get_comments'):
-            caps.append("Comments and docstrings")
-
-        for cap in caps:
-            lines.append(f"   • {cap}")
-
-        if not caps:
-            lines.append("   • Basic structure extraction")
-
-    # Usage examples
-    lines.append("")
-    lines.append("💡 Usage Examples:")
-    lines.append(f"   reveal file{ext}              # Show structure")
-    lines.append(f"   reveal file{ext} MyClass      # Extract specific class")
-    lines.append(f"   reveal file{ext} --check      # Run quality checks")
-    lines.append(f"   reveal file{ext} --explain    # Show how it's analyzed")
+    # Add usage examples
+    lines.extend(_build_usage_examples(ext))
 
     return "\n".join(lines)
 
