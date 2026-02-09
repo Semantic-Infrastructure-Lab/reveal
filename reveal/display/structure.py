@@ -22,6 +22,49 @@ from .formatting import (
 )
 
 
+# Map structure categories to extraction element types
+# Comprehensive mapping for all analyzers (GraphQL, HCL, Protobuf, etc.)
+CATEGORY_TO_ELEMENT_TYPE = {
+    # Core code elements
+    'functions': 'function',
+    'classes': 'class',
+    'structs': 'struct',
+    'imports': 'import',
+    'tests': 'test',
+    # Markdown/docs
+    'headings': 'section',
+    'sections': 'section',
+    # Nginx
+    'servers': 'server',
+    'locations': 'location',
+    'upstreams': 'upstream',
+    # Config files
+    'keys': 'key',
+    'tables': 'section',  # TOML tables
+    # GraphQL
+    'queries': 'query',
+    'mutations': 'mutation',
+    'types': 'type',
+    'interfaces': 'interface',
+    'enums': 'enum',
+    # Protobuf/gRPC
+    'messages': 'message',
+    'services': 'service',
+    'rpcs': 'rpc',
+    # Terraform/HCL
+    'resources': 'resource',
+    'variables': 'variable',
+    'outputs': 'output',
+    'modules': 'module',
+    # Zig/Rust
+    'unions': 'union',
+    # Jupyter
+    'cells': 'cell',
+    # JSONL
+    'records': 'record',
+}
+
+
 # Helper functions for typed structure rendering
 
 def _matches_category_filter(el, filter_value: str) -> bool:
@@ -261,6 +304,47 @@ def _render_typed_structure_output(
     print_breadcrumbs("typed", file_path, file_type=file_type, config=config)
 
 
+def _get_element_name(item: Dict[str, Any]) -> str:
+    """Extract element name from item dict.
+
+    Tries common name fields: name, text, title
+    """
+    return item.get('name') or item.get('text') or item.get('title')
+
+
+def _extract_element_names(items: List[Dict[str, Any]]) -> List[str]:
+    """Extract all element names from items list."""
+    names = []
+    for item in items:
+        name = _get_element_name(item)
+        if name:
+            names.append(name)
+    return names
+
+
+def _build_extraction_examples(extractable: Dict[str, List[str]], file_path: str) -> List[str]:
+    """Build example extraction commands for agents.
+
+    Returns:
+        List of example commands like: reveal file.py function_name
+    """
+    examples = []
+    if not extractable:
+        return examples
+
+    # Pick first available element for example
+    for etype, names in extractable.items():
+        if names:
+            name = names[0]
+            # Quote names with spaces or special characters
+            if ' ' in name or '"' in name or "'" in name:
+                name = f'"{name}"'
+            examples.append(f"reveal {file_path} {name}")
+            break
+
+    return examples
+
+
 def _build_extractable_meta(structure: Dict[str, List[Dict[str, Any]]], file_path: str) -> Dict[str, Any]:
     """Build meta.extractable info for agent discoverability.
 
@@ -274,48 +358,6 @@ def _build_extractable_meta(structure: Dict[str, List[Dict[str, Any]]], file_pat
     Returns:
         Dict with 'types' (available element types) and 'elements' (extractable by type)
     """
-    # Map structure categories to extraction element types
-    # Comprehensive mapping for all analyzers (GraphQL, HCL, Protobuf, etc.)
-    category_to_type = {
-        # Core code elements
-        'functions': 'function',
-        'classes': 'class',
-        'structs': 'struct',
-        'imports': 'import',
-        'tests': 'test',
-        # Markdown/docs
-        'headings': 'section',
-        'sections': 'section',
-        # Nginx
-        'servers': 'server',
-        'locations': 'location',
-        'upstreams': 'upstream',
-        # Config files
-        'keys': 'key',
-        'tables': 'section',  # TOML tables
-        # GraphQL
-        'queries': 'query',
-        'mutations': 'mutation',
-        'types': 'type',
-        'interfaces': 'interface',
-        'enums': 'enum',
-        # Protobuf/gRPC
-        'messages': 'message',
-        'services': 'service',
-        'rpcs': 'rpc',
-        # Terraform/HCL
-        'resources': 'resource',
-        'variables': 'variable',
-        'outputs': 'output',
-        'modules': 'module',
-        # Zig/Rust
-        'unions': 'union',
-        # Jupyter
-        'cells': 'cell',
-        # JSONL
-        'records': 'record',
-    }
-
     extractable = {}
     types_available = []
 
@@ -323,17 +365,12 @@ def _build_extractable_meta(structure: Dict[str, List[Dict[str, Any]]], file_pat
         if not items or not isinstance(items, list):
             continue
 
-        element_type = category_to_type.get(category)
+        element_type = CATEGORY_TO_ELEMENT_TYPE.get(category)
         if not element_type:
             continue
 
-        # Get element names from the items
-        names = []
-        for item in items:
-            # Try common name fields
-            name = item.get('name') or item.get('text') or item.get('title')
-            if name:
-                names.append(name)
+        # Extract element names
+        names = _extract_element_names(items)
 
         if names:
             if element_type not in types_available:
@@ -341,17 +378,7 @@ def _build_extractable_meta(structure: Dict[str, List[Dict[str, Any]]], file_pat
             extractable[element_type] = names
 
     # Build example commands for agents
-    examples = []
-    if extractable:
-        # Pick first available element for example
-        for etype, names in extractable.items():
-            if names:
-                name = names[0]
-                # Quote names with spaces or special characters
-                if ' ' in name or '"' in name or "'" in name:
-                    name = f'"{name}"'
-                examples.append(f"reveal {file_path} {name}")
-                break
+    examples = _build_extraction_examples(extractable, file_path)
 
     return {
         'types': types_available,
