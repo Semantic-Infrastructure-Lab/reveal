@@ -288,6 +288,242 @@ class SSLFetcher:
             return datetime.now(timezone.utc)
 
 
+# Helper functions for SSL health checks
+
+def _check_certificate_expiry(
+    days: int, warn_days: int, critical_days: int
+) -> Dict[str, Any]:
+    """Check certificate expiry status.
+
+    Args:
+        days: Days until certificate expires
+        warn_days: Warning threshold
+        critical_days: Critical threshold
+
+    Returns:
+        Certificate expiry check result dict
+    """
+    if days < 0:
+        status = 'failure'
+        message = f'Certificate expired {abs(days)} days ago'
+    elif days < critical_days:
+        status = 'failure'
+        message = f'Certificate expires in {days} days (critical threshold: {critical_days})'
+    elif days < warn_days:
+        status = 'warning'
+        message = f'Certificate expires in {days} days (warning threshold: {warn_days})'
+    else:
+        status = 'pass'
+        message = f'Certificate valid for {days} days'
+
+    return {
+        'name': 'certificate_expiry',
+        'status': status,
+        'value': f'{days} days',
+        'threshold': f'{warn_days}/{critical_days} days',
+        'message': message,
+        'severity': 'high',
+    }
+
+
+def _check_chain_verification(verification: Dict[str, Any]) -> Dict[str, Any]:
+    """Check certificate chain verification status.
+
+    Args:
+        verification: Verification result dict
+
+    Returns:
+        Chain verification check result dict
+    """
+    if verification['verified']:
+        return {
+            'name': 'chain_verification',
+            'status': 'pass',
+            'value': 'Valid',
+            'threshold': 'Trusted chain',
+            'message': 'Certificate chain verified by system trust store',
+            'severity': 'high',
+        }
+    else:
+        return {
+            'name': 'chain_verification',
+            'status': 'warning',
+            'value': 'Unverified',
+            'threshold': 'Trusted chain',
+            'message': f'Chain verification failed: {verification["error"]}',
+            'severity': 'high',
+        }
+
+
+def _hostname_matches_san(host: str, san_list: List[str]) -> bool:
+    """Check if hostname matches any SAN entry.
+
+    Args:
+        host: Hostname to check
+        san_list: List of Subject Alternative Names
+
+    Returns:
+        True if hostname matches any SAN entry
+    """
+    return host in san_list or any(
+        san.startswith('*.') and host.endswith(san[1:])
+        for san in san_list
+    )
+
+
+def _check_hostname_match(
+    host: str, leaf: CertificateInfo, verification: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Check if certificate is valid for the hostname.
+
+    Args:
+        host: Hostname to verify
+        leaf: Certificate information
+        verification: Verification result dict
+
+    Returns:
+        Hostname match check result dict
+    """
+    if verification['hostname_match']:
+        return {
+            'name': 'hostname_match',
+            'status': 'pass',
+            'value': 'Match',
+            'threshold': f'Matches {host}',
+            'message': f'Certificate valid for {host}',
+            'severity': 'high',
+        }
+
+    # Check if hostname is in SANs
+    if _hostname_matches_san(host, leaf.san):
+        return {
+            'name': 'hostname_match',
+            'status': 'pass',
+            'value': 'Match (SAN)',
+            'threshold': f'Matches {host}',
+            'message': f'Certificate valid for {host} via SAN',
+            'severity': 'high',
+        }
+
+    # Hostname mismatch
+    return {
+        'name': 'hostname_match',
+        'status': 'failure',
+        'value': 'Mismatch',
+        'threshold': f'Matches {host}',
+        'message': f'Certificate not valid for {host}',
+        'severity': 'high',
+    }
+
+
+def _determine_overall_ssl_status(checks: List[Dict[str, Any]]) -> str:
+    """Determine overall SSL health status from check results.
+
+    Args:
+        checks: List of check result dicts
+
+    Returns:
+        Overall status (failure, warning, or pass)
+    """
+    statuses = [c['status'] for c in checks]
+    if 'failure' in statuses:
+        return 'failure'
+    elif 'warning' in statuses:
+        return 'warning'
+    else:
+        return 'pass'
+
+
+def _calculate_ssl_check_summary(checks: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Calculate summary counts from SSL check results.
+
+    Args:
+        checks: List of check result dicts
+
+    Returns:
+        Summary dict with total, passed, warnings, failures counts
+    """
+    return {
+        'total': len(checks),
+        'passed': sum(1 for c in checks if c['status'] == 'pass'),
+        'warnings': sum(1 for c in checks if c['status'] == 'warning'),
+        'failures': sum(1 for c in checks if c['status'] == 'failure'),
+    }
+
+
+def _build_ssl_health_success_result(
+    host: str,
+    port: int,
+    overall_status: str,
+    leaf: CertificateInfo,
+    checks: List[Dict[str, Any]],
+    summary: Dict[str, int],
+    advanced: bool,
+) -> Dict[str, Any]:
+    """Build successful SSL health check result.
+
+    Args:
+        host: Hostname checked
+        port: Port checked
+        overall_status: Overall status
+        leaf: Certificate information
+        checks: List of check results
+        summary: Summary counts
+        advanced: Whether advanced checks were run
+
+    Returns:
+        SSL health check result dict
+    """
+    return {
+        'type': 'ssl_check_advanced' if advanced else 'ssl_check',
+        'host': host,
+        'port': port,
+        'status': overall_status,
+        'certificate': leaf.to_dict(),
+        'checks': checks,
+        'summary': summary,
+        'exit_code': 0 if overall_status == 'pass' else (1 if overall_status == 'warning' else 2),
+    }
+
+
+def _build_ssl_health_error_result(
+    host: str, port: int, error: Exception, advanced: bool
+) -> Dict[str, Any]:
+    """Build SSL health check error result.
+
+    Args:
+        host: Hostname checked
+        port: Port checked
+        error: Exception that occurred
+        advanced: Whether advanced checks were requested
+
+    Returns:
+        SSL health check error result dict
+    """
+    return {
+        'type': 'ssl_check_advanced' if advanced else 'ssl_check',
+        'host': host,
+        'port': port,
+        'status': 'failure',
+        'error': str(error),
+        'checks': [{
+            'name': 'connection',
+            'status': 'failure',
+            'value': 'Failed',
+            'threshold': 'Successful connection',
+            'message': str(error),
+            'severity': 'critical',
+        }],
+        'summary': {
+            'total': 1,
+            'passed': 0,
+            'warnings': 0,
+            'failures': 1,
+        },
+        'exit_code': 2,
+    }
+
+
 def check_ssl_health(
     host: str, port: int = 443, warn_days: int = 30, critical_days: int = 7,
     advanced: bool = False
@@ -305,158 +541,38 @@ def check_ssl_health(
         Health check result dict
     """
     fetcher = SSLFetcher()
-    checks = []
-    overall_status = 'pass'
 
     try:
-        leaf, chain, verification = fetcher.fetch_certificate_with_verification(
-            host, port
-        )
+        leaf, chain, verification = fetcher.fetch_certificate_with_verification(host, port)
 
-        # Check 1: Certificate expiry
-        days = leaf.days_until_expiry
-        if days < 0:
-            status = 'failure'
-            message = f'Certificate expired {abs(days)} days ago'
-            overall_status = 'failure'
-        elif days < critical_days:
-            status = 'failure'
-            message = f'Certificate expires in {days} days (critical threshold: {critical_days})'
-            overall_status = 'failure'
-        elif days < warn_days:
-            status = 'warning'
-            message = f'Certificate expires in {days} days (warning threshold: {warn_days})'
-            if overall_status == 'pass':
-                overall_status = 'warning'
-        else:
-            status = 'pass'
-            message = f'Certificate valid for {days} days'
+        # Run all checks
+        checks = []
+        checks.append(_check_certificate_expiry(leaf.days_until_expiry, warn_days, critical_days))
+        checks.append(_check_chain_verification(verification))
+        checks.append(_check_hostname_match(host, leaf, verification))
 
-        checks.append({
-            'name': 'certificate_expiry',
-            'status': status,
-            'value': f'{days} days',
-            'threshold': f'{warn_days}/{critical_days} days',
-            'message': message,
-            'severity': 'high',
-        })
-
-        # Check 2: Chain verification
-        if verification['verified']:
-            checks.append({
-                'name': 'chain_verification',
-                'status': 'pass',
-                'value': 'Valid',
-                'threshold': 'Trusted chain',
-                'message': 'Certificate chain verified by system trust store',
-                'severity': 'high',
-            })
-        else:
-            checks.append({
-                'name': 'chain_verification',
-                'status': 'warning',
-                'value': 'Unverified',
-                'threshold': 'Trusted chain',
-                'message': f'Chain verification failed: {verification["error"]}',
-                'severity': 'high',
-            })
-            if overall_status == 'pass':
-                overall_status = 'warning'
-
-        # Check 3: Hostname match
-        if verification['hostname_match']:
-            checks.append({
-                'name': 'hostname_match',
-                'status': 'pass',
-                'value': 'Match',
-                'threshold': f'Matches {host}',
-                'message': f'Certificate valid for {host}',
-                'severity': 'high',
-            })
-        else:
-            # Check if hostname is in SANs
-            hostname_in_san = host in leaf.san or any(
-                san.startswith('*.') and host.endswith(san[1:])
-                for san in leaf.san
-            )
-            if hostname_in_san:
-                checks.append({
-                    'name': 'hostname_match',
-                    'status': 'pass',
-                    'value': 'Match (SAN)',
-                    'threshold': f'Matches {host}',
-                    'message': f'Certificate valid for {host} via SAN',
-                    'severity': 'high',
-                })
-            else:
-                checks.append({
-                    'name': 'hostname_match',
-                    'status': 'failure',
-                    'value': 'Mismatch',
-                    'threshold': f'Matches {host}',
-                    'message': f'Certificate not valid for {host}',
-                    'severity': 'high',
-                })
-                overall_status = 'failure'
-
-        # Advanced checks (only if requested)
+        # Add advanced checks if requested
         if advanced:
             advanced_checks = _run_advanced_checks(host, port, leaf)
             checks.extend(advanced_checks['checks'])
-            # Update overall status if advanced checks fail
-            if advanced_checks['has_failures'] and overall_status == 'pass':
-                overall_status = 'warning'
 
-        # Summary
-        passed = sum(1 for c in checks if c['status'] == 'pass')
-        warnings = sum(1 for c in checks if c['status'] == 'warning')
-        failures = sum(1 for c in checks if c['status'] == 'failure')
+        # Calculate overall status and summary
+        overall_status = _determine_overall_ssl_status(checks)
+        summary = _calculate_ssl_check_summary(checks)
 
-        result = {
-            'type': 'ssl_check_advanced' if advanced else 'ssl_check',
-            'host': host,
-            'port': port,
-            'status': overall_status,
-            'certificate': leaf.to_dict(),
-            'checks': checks,
-            'summary': {
-                'total': len(checks),
-                'passed': passed,
-                'warnings': warnings,
-                'failures': failures,
-            },
-            'exit_code': 0 if overall_status == 'pass' else (1 if overall_status == 'warning' else 2),
-        }
+        # Build result
+        result = _build_ssl_health_success_result(
+            host, port, overall_status, leaf, checks, summary, advanced
+        )
 
-        # Add next steps based on results
+        # Add next steps for advanced mode
         if advanced:
             result['next_steps'] = _generate_remediation_steps(checks, host)
 
         return result
 
     except Exception as e:
-        return {
-            'type': 'ssl_check_advanced' if advanced else 'ssl_check',
-            'host': host,
-            'port': port,
-            'status': 'failure',
-            'error': str(e),
-            'checks': [{
-                'name': 'connection',
-                'status': 'failure',
-                'value': 'Failed',
-                'threshold': 'Successful connection',
-                'message': str(e),
-                'severity': 'critical',
-            }],
-            'summary': {
-                'total': 1,
-                'passed': 0,
-                'warnings': 0,
-                'failures': 1,
-            },
-            'exit_code': 2,
-        }
+        return _build_ssl_health_error_result(host, port, e, advanced)
 
 
 def _run_advanced_checks(host: str, port: int, cert: CertificateInfo) -> Dict[str, Any]:
