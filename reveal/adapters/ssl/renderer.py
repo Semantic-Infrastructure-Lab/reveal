@@ -305,22 +305,19 @@ class SSLRenderer(TypeDispatchRenderer):
         return filtered
 
     @staticmethod
-    def _render_ssl_batch_check(result: dict, only_failures: bool = False,
-                                 summary_only: bool = False,
-                                 expiring_days: int = None) -> None:
-        """Render batch SSL check results.
+    def _filter_batch_results(all_results: list, only_failures: bool,
+                               expiring_days: int = None) -> list:
+        """Apply filters to batch check results.
 
         Args:
-            result: Batch check result dict
-            only_failures: Only show failed/warning results
-            summary_only: Show aggregated summary without details
-            expiring_days: Filter to certs expiring within N days
-        """
-        status = result['status']
-        source = result.get('source', 'stdin')
+            all_results: List of check results
+            only_failures: Only include failed/warning results
+            expiring_days: Only include certs expiring within N days
 
-        # Apply filters to results
-        all_results = result.get('results', [])
+        Returns:
+            Filtered list of results
+        """
+        filtered = all_results
 
         if expiring_days is not None:
             def within_days(r):
@@ -328,29 +325,61 @@ class SSLRenderer(TypeDispatchRenderer):
                 if days is None:
                     return r['status'] == 'failure'
                 return days <= expiring_days
-            all_results = [r for r in all_results if within_days(r)]
+            filtered = [r for r in filtered if within_days(r)]
 
         if only_failures:
-            all_results = [r for r in all_results if r['status'] in ('failure', 'warning')]
+            filtered = [r for r in filtered if r['status'] in ('failure', 'warning')]
 
-        # Group by status
+        return filtered
+
+    @staticmethod
+    def _group_results_by_status(all_results: list) -> tuple:
+        """Group results into failures, warnings, and passes.
+
+        Args:
+            all_results: List of check results
+
+        Returns:
+            Tuple of (failures, warnings, passes)
+        """
         failures = [r for r in all_results if r['status'] == 'failure']
         warnings = [r for r in all_results if r['status'] == 'warning']
         passes = [r for r in all_results if r['status'] == 'pass']
+        return failures, warnings, passes
 
-        # Summary mode - aggregated counts only
-        if summary_only:
-            original_summary = result.get('summary', {})
-            print(f"\nSSL Audit: {result.get('domains_checked', len(result.get('results', [])))} domains")
-            print(f"✅ Healthy (>30d): {original_summary.get('passed', len(passes))}")
-            print(f"⚠️  Warning (<30d): {original_summary.get('warnings', len(warnings))}")
-            print(f"❌ Failed/Expired: {original_summary.get('failures', len(failures))}")
-            if expiring_days:
-                print(f"\n(Filtered to ≤{expiring_days} days)")
-            print(f"\nExit code: {result.get('exit_code', 0)}")
-            return
+    @staticmethod
+    def _render_batch_summary_mode(result: dict, passes: list, warnings: list,
+                                    failures: list, expiring_days: int = None) -> None:
+        """Render summary mode output (aggregated counts only).
 
-        # Full output
+        Args:
+            result: Batch check result dict
+            passes: List of passed results
+            warnings: List of warning results
+            failures: List of failed results
+            expiring_days: Filter value if applied
+        """
+        original_summary = result.get('summary', {})
+        print(f"\nSSL Audit: {result.get('domains_checked', len(result.get('results', [])))} domains")
+        print(f"✅ Healthy (>30d): {original_summary.get('passed', len(passes))}")
+        print(f"⚠️  Warning (<30d): {original_summary.get('warnings', len(warnings))}")
+        print(f"❌ Failed/Expired: {original_summary.get('failures', len(failures))}")
+        if expiring_days:
+            print(f"\n(Filtered to ≤{expiring_days} days)")
+        print(f"\nExit code: {result.get('exit_code', 0)}")
+
+    @staticmethod
+    def _render_batch_header(source: str, status: str, result: dict,
+                             expiring_days: int = None, only_failures: bool = False) -> None:
+        """Render batch check header with status and summary.
+
+        Args:
+            source: Source identifier (e.g., 'stdin')
+            status: Overall status ('pass', 'warning', 'failure')
+            result: Batch check result dict
+            expiring_days: Filter value if applied
+            only_failures: Whether filtering to failures only
+        """
         status_icon = '\u2705' if status == 'pass' else '\u26a0\ufe0f' if status == 'warning' else '\u274c'
         print(f"\nSSL Batch Check: {source}")
         print(f"Status: {status_icon} {status.upper()}")
@@ -366,42 +395,111 @@ class SSLRenderer(TypeDispatchRenderer):
             print("Filter: showing failures and warnings only")
         print()
 
-        if failures:
-            print("\u274c Failed:")
-            for r in failures:
-                host = r['host']
-                if 'certificate' in r:
-                    days = r['certificate'].get('days_until_expiry', '?')
-                    print(f"  {host}: {days} days")
-                elif 'error' in r:
-                    print(f"  {host}: {r['error']}")
-                else:
-                    print(f"  {host}")
-            print()
+    @staticmethod
+    def _render_failed_domains(failures: list) -> None:
+        """Render failed domains section.
 
-        if warnings:
-            print("\u26a0\ufe0f  Warnings:")
-            for r in warnings:
-                host = r['host']
-                days = r.get('certificate', {}).get('days_until_expiry', '?')
+        Args:
+            failures: List of failed check results
+        """
+        if not failures:
+            return
+
+        print("\u274c Failed:")
+        for r in failures:
+            host = r['host']
+            if 'certificate' in r:
+                days = r['certificate'].get('days_until_expiry', '?')
                 print(f"  {host}: {days} days")
-            print()
+            elif 'error' in r:
+                print(f"  {host}: {r['error']}")
+            else:
+                print(f"  {host}")
+        print()
 
-        # Only show passes if not filtering to failures
-        if passes and not only_failures:
-            print("\u2705 Healthy:")
-            for r in passes:
-                host = r['host']
-                days = r.get('certificate', {}).get('days_until_expiry', '?')
-                print(f"  {host}: {days} days")
-            print()
+    @staticmethod
+    def _render_warning_domains(warnings: list) -> None:
+        """Render warning domains section.
 
-        # Show next steps if available
-        if result.get('next_steps'):
-            print("Next Steps:")
-            for step in result['next_steps']:
-                print(f"  • {step}")
-            print()
+        Args:
+            warnings: List of warning check results
+        """
+        if not warnings:
+            return
+
+        print("\u26a0\ufe0f  Warnings:")
+        for r in warnings:
+            host = r['host']
+            days = r.get('certificate', {}).get('days_until_expiry', '?')
+            print(f"  {host}: {days} days")
+        print()
+
+    @staticmethod
+    def _render_healthy_domains(passes: list, only_failures: bool) -> None:
+        """Render healthy domains section (if not filtering to failures only).
+
+        Args:
+            passes: List of passed check results
+            only_failures: Whether filtering to failures only
+        """
+        if not passes or only_failures:
+            return
+
+        print("\u2705 Healthy:")
+        for r in passes:
+            host = r['host']
+            days = r.get('certificate', {}).get('days_until_expiry', '?')
+            print(f"  {host}: {days} days")
+        print()
+
+    @staticmethod
+    def _render_next_steps(result: dict) -> None:
+        """Render next steps section if available.
+
+        Args:
+            result: Batch check result dict
+        """
+        if not result.get('next_steps'):
+            return
+
+        print("Next Steps:")
+        for step in result['next_steps']:
+            print(f"  • {step}")
+        print()
+
+    @staticmethod
+    def _render_ssl_batch_check(result: dict, only_failures: bool = False,
+                                 summary_only: bool = False,
+                                 expiring_days: int = None) -> None:
+        """Render batch SSL check results.
+
+        Args:
+            result: Batch check result dict
+            only_failures: Only show failed/warning results
+            summary_only: Show aggregated summary without details
+            expiring_days: Filter to certs expiring within N days
+        """
+        status = result['status']
+        source = result.get('source', 'stdin')
+        all_results = result.get('results', [])
+
+        # Apply filters
+        all_results = SSLRenderer._filter_batch_results(all_results, only_failures, expiring_days)
+
+        # Group by status
+        failures, warnings, passes = SSLRenderer._group_results_by_status(all_results)
+
+        # Summary mode - aggregated counts only
+        if summary_only:
+            SSLRenderer._render_batch_summary_mode(result, passes, warnings, failures, expiring_days)
+            return
+
+        # Full output
+        SSLRenderer._render_batch_header(source, status, result, expiring_days, only_failures)
+        SSLRenderer._render_failed_domains(failures)
+        SSLRenderer._render_warning_domains(warnings)
+        SSLRenderer._render_healthy_domains(passes, only_failures)
+        SSLRenderer._render_next_steps(result)
 
         print(f"Exit code: {result['exit_code']}")
 
