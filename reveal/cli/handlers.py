@@ -571,6 +571,143 @@ def _collect_batch_result(uri: str, args: 'Namespace') -> dict:
         }
 
 
+def _aggregate_batch_stats(results: list) -> dict:
+    """Aggregate batch statistics.
+
+    Args:
+        results: List of individual results
+
+    Returns:
+        Dict with total, successful, warnings, failures counts
+    """
+    return {
+        'total': len(results),
+        'successful': sum(1 for r in results if r['status'] in ('success', 'pass')),
+        'warnings': sum(1 for r in results if r['status'] == 'warning'),
+        'failures': sum(1 for r in results if r['status'] in ('failure', 'error')),
+    }
+
+
+def _group_results_by_scheme(results: list) -> dict:
+    """Group results by adapter scheme.
+
+    Args:
+        results: List of individual results
+
+    Returns:
+        Dict mapping scheme to list of results
+    """
+    by_scheme = {}
+    for result in results:
+        scheme = result.get('scheme', 'unknown')
+        if scheme not in by_scheme:
+            by_scheme[scheme] = []
+        by_scheme[scheme].append(result)
+    return by_scheme
+
+
+def _filter_batch_display_results(results: list, only_failures: bool) -> list:
+    """Filter results to failures/warnings if requested.
+
+    Args:
+        results: All results
+        only_failures: Whether to filter to failures only
+
+    Returns:
+        Filtered or original results
+    """
+    if only_failures:
+        return [r for r in results if r['status'] in ('failure', 'error', 'warning')]
+    return results
+
+
+def _determine_batch_overall_status(failures: int, warnings: int) -> str:
+    """Determine overall batch status.
+
+    Args:
+        failures: Number of failures
+        warnings: Number of warnings
+
+    Returns:
+        Status string: 'pass', 'warning', or 'failure'
+    """
+    if failures == 0 and warnings == 0:
+        return 'pass'
+    return 'warning' if failures == 0 else 'failure'
+
+
+def _get_status_indicator(status: str) -> str:
+    """Get status indicator emoji.
+
+    Args:
+        status: Status string
+
+    Returns:
+        Emoji indicator
+    """
+    if status in ('success', 'pass'):
+        return '✓'
+    elif status == 'warning':
+        return '⚠'
+    else:
+        return '✗'
+
+
+def _render_batch_text_output(stats: dict, overall_status: str,
+                               by_scheme: dict, display_results: list) -> None:
+    """Render batch results in text format.
+
+    Args:
+        stats: Statistics dict
+        overall_status: Overall status string
+        by_scheme: Results grouped by scheme
+        display_results: Filtered results to display
+    """
+    print(f"\n{'='*60}")
+    print(f"BATCH CHECK RESULTS")
+    print(f"{'='*60}")
+    print(f"Total URIs: {stats['total']}")
+    print(f"Successful: {stats['successful']} ✓")
+    if stats['warnings'] > 0:
+        print(f"Warnings: {stats['warnings']} ⚠")
+    if stats['failures'] > 0:
+        print(f"Failures: {stats['failures']} ✗")
+    print(f"Overall Status: {overall_status.upper()}")
+
+    if len(by_scheme) > 1:
+        print(f"\nAdapters used: {', '.join(by_scheme.keys())}")
+
+    print(f"{'='*60}\n")
+
+    # Show individual results if not summary-only
+    if display_results:
+        for result in display_results:
+            uri = result['uri']
+            status = result['status']
+            indicator = _get_status_indicator(status)
+
+            print(f"{indicator} {uri}: {status.upper()}")
+
+            # Show error details
+            if 'error' in result:
+                print(f"  Error: {result['error']}")
+
+
+def _calculate_batch_exit_code(failures: int, warnings: int) -> int:
+    """Calculate appropriate exit code.
+
+    Args:
+        failures: Number of failures
+        warnings: Number of warnings
+
+    Returns:
+        Exit code (0, 1, or 2)
+    """
+    if failures == 0:
+        return 0
+    return 1 if warnings > 0 else 2
+
+
 def _render_batch_results(results: list, args: 'Namespace') -> None:
     """Render collected batch results with aggregation.
 
@@ -580,39 +717,31 @@ def _render_batch_results(results: list, args: 'Namespace') -> None:
     """
     import json
 
-    # Aggregate stats
-    total = len(results)
-    successful = sum(1 for r in results if r['status'] in ('success', 'pass'))
-    warnings = sum(1 for r in results if r['status'] == 'warning')
-    failures = sum(1 for r in results if r['status'] in ('failure', 'error'))
+    # Aggregate statistics
+    stats = _aggregate_batch_stats(results)
 
-    # Group by scheme for multi-adapter batches
-    by_scheme = {}
-    for result in results:
-        scheme = result.get('scheme', 'unknown')
-        if scheme not in by_scheme:
-            by_scheme[scheme] = []
-        by_scheme[scheme].append(result)
+    # Group by scheme
+    by_scheme = _group_results_by_scheme(results)
 
-    # Filter if only_failures requested
-    display_results = results
-    if getattr(args, 'only_failures', False):
-        display_results = [r for r in results if r['status'] in ('failure', 'error', 'warning')]
+    # Filter results if requested
+    display_results = _filter_batch_display_results(
+        results, getattr(args, 'only_failures', False)
+    )
 
-    # Overall status
-    overall_status = 'pass' if failures == 0 and warnings == 0 else (
-        'warning' if failures == 0 else 'failure'
+    # Determine overall status
+    overall_status = _determine_batch_overall_status(
+        stats['failures'], stats['warnings']
     )
 
     # Build batch output
     batch_result = {
         'type': 'batch_check',
-        'total': total,
+        'total': stats['total'],
         'status': overall_status,
         'summary': {
-            'successful': successful,
-            'warnings': warnings,
-            'failures': failures,
+            'successful': stats['successful'],
+            'warnings': stats['warnings'],
+            'failures': stats['failures'],
         },
         'adapters': list(by_scheme.keys()),
         'results': display_results,
@@ -622,45 +751,10 @@ def _render_batch_results(results: list, args: 'Namespace') -> None:
     if args.format == 'json':
         print(json.dumps(batch_result, indent=2))
     else:
-        # Text format
-        print(f"\n{'='*60}")
-        print(f"BATCH CHECK RESULTS")
-        print(f"{'='*60}")
-        print(f"Total URIs: {total}")
-        print(f"Successful: {successful} ✓")
-        if warnings > 0:
-            print(f"Warnings: {warnings} ⚠")
-        if failures > 0:
-            print(f"Failures: {failures} ✗")
-        print(f"Overall Status: {overall_status.upper()}")
-
-        if len(by_scheme) > 1:
-            print(f"\nAdapters used: {', '.join(by_scheme.keys())}")
-
-        print(f"{'='*60}\n")
-
-        # Show individual results if not summary-only
-        if display_results:
-            for result in display_results:
-                uri = result['uri']
-                status = result['status']
-
-                # Status indicator
-                if status in ('success', 'pass'):
-                    indicator = '✓'
-                elif status == 'warning':
-                    indicator = '⚠'
-                else:
-                    indicator = '✗'
-
-                print(f"{indicator} {uri}: {status.upper()}")
-
-                # Show error details
-                if 'error' in result:
-                    print(f"  Error: {result['error']}")
+        _render_batch_text_output(stats, overall_status, by_scheme, display_results)
 
     # Exit with appropriate code
-    exit_code = 0 if failures == 0 else (1 if warnings > 0 else 2)
+    exit_code = _calculate_batch_exit_code(stats['failures'], stats['warnings'])
     sys.exit(exit_code)
 
 
