@@ -97,19 +97,24 @@ class Calculator:
         adapter = StatsAdapter(str(test_file))
         result = adapter.get_structure()
 
-        assert 'file' in result
-        assert 'lines' in result
-        assert 'elements' in result
-        assert 'complexity' in result
-        assert 'quality' in result
+        # Structure changed - file stats now in files array
+        assert 'files' in result
+        assert len(result['files']) == 1
+        file_stats = result['files'][0]
+
+        assert 'file' in file_stats
+        assert 'lines' in file_stats
+        assert 'elements' in file_stats
+        assert 'complexity' in file_stats
+        assert 'quality' in file_stats
 
         # Check line counts
-        assert result['lines']['total'] > 0
-        assert result['lines']['code'] > 0
+        assert file_stats['lines']['total'] > 0
+        assert file_stats['lines']['code'] > 0
 
         # Check element counts
-        assert result['elements']['functions'] >= 2  # add, subtract (multiply is a method)
-        assert result['elements']['classes'] >= 1    # Calculator
+        assert file_stats['elements']['functions'] >= 2  # add, subtract (multiply is a method)
+        assert file_stats['elements']['classes'] >= 1    # Calculator
 
     def test_analyze_file_with_complexity(self, tmp_path):
         """Test analyzing a file with complex functions."""
@@ -130,8 +135,12 @@ def complex_function(x):
         adapter = StatsAdapter(str(test_file))
         result = adapter.get_structure()
 
+        # Structure changed - file stats now in files array
+        assert 'files' in result
+        file_stats = result['files'][0]
+
         # Should detect complexity from if/elif/else statements
-        assert result['complexity']['average'] >= 1
+        assert file_stats['complexity']['average'] >= 1
 
     def test_analyze_file_with_long_function(self, tmp_path):
         """Test detecting long functions (>100 lines)."""
@@ -144,9 +153,13 @@ def complex_function(x):
         adapter = StatsAdapter(str(test_file))
         result = adapter.get_structure()
 
+        # Structure changed - file stats now in files array
+        assert 'files' in result
+        file_stats = result['files'][0]
+
         # Should detect long function
-        assert 'long_functions' in result['quality']
-        # Note: This might be 0 if tree-sitter doesn't parse it correctly, but we're testing the logic
+        assert 'issues' in file_stats
+        # Note: This might be empty if tree-sitter doesn't parse it correctly, but we're testing the logic
 
     def test_get_element_for_existing_file(self, tmp_path):
         """Test get_element retrieves stats for a specific file."""
@@ -406,7 +419,8 @@ def subtract(a, b):
         result = adapter.get_structure()
 
         # Clean code should have high quality score (close to 100)
-        assert result['quality']['score'] >= 70
+        # Use summary for aggregated stats
+        assert result['summary']['avg_quality_score'] >= 70
 
     def test_complexity_estimation(self, tmp_path):
         """Test complexity estimation for functions."""
@@ -433,8 +447,10 @@ def with_multiple_branches(x):
         result = adapter.get_structure()
 
         # Should calculate some complexity
-        assert result['complexity']['average'] >= 1
-        assert result['complexity']['max'] >= 1
+        # Use files array for file-specific stats
+        file_stats = result['files'][0]
+        assert file_stats['complexity']['average'] >= 1
+        assert file_stats['complexity']['max'] >= 1
 
     def test_empty_and_comment_line_detection(self, tmp_path):
         """Test detection of empty and comment lines."""
@@ -451,9 +467,11 @@ def hello():
         adapter = StatsAdapter(str(test_file))
         result = adapter.get_structure()
 
-        assert result['lines']['total'] > 0
-        assert result['lines']['empty'] >= 1
-        assert result['lines']['comments'] >= 2
+        # Use files array for file-specific stats
+        file_stats = result['files'][0]
+        assert file_stats['lines']['total'] > 0
+        assert file_stats['lines']['empty'] >= 1
+        assert file_stats['lines']['comments'] >= 2
 
 
 class TestEdgeCases:
