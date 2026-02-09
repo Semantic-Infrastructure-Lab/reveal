@@ -191,16 +191,15 @@ def check_and_collect_file(
         return 0, []
 
 
-def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
-    """Handle recursive quality checking of a directory.
+def _build_cli_overrides(args: 'Namespace') -> dict:
+    """Build CLI overrides dictionary from args.
 
     Args:
-        directory: Directory to check recursively
         args: Parsed arguments
-    """
-    import json
 
-    # Build CLI overrides for config system
+    Returns:
+        CLI overrides dict for config system
+    """
     cli_overrides = {}
     if args.select or args.ignore:
         rules_override = {}
@@ -209,103 +208,194 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         if args.ignore:
             rules_override['disable'] = [r.strip() for r in args.ignore.split(',')]
         cli_overrides['rules'] = rules_override
+    return cli_overrides
 
-    # Initialize config with CLI overrides (highest precedence)
+
+def _handle_no_files_found(directory: Path, output_format: str) -> None:
+    """Handle case when no files found to check.
+
+    Args:
+        directory: Directory that was checked
+        output_format: Output format (json or text)
+    """
+    import json
+
+    if output_format == 'json':
+        print(json.dumps({
+            "files": [],
+            "summary": {
+                "files_checked": 0,
+                "files_with_issues": 0,
+                "total_issues": 0,
+                "exit_code": 0
+            }
+        }, indent=2))
+    else:
+        print(f"No supported files found in {directory}")
+
+
+def _check_files_json(
+    files: List[Path], directory: Path, select: Optional[List[str]], ignore: Optional[List[str]]
+) -> tuple:
+    """Check files and collect JSON results.
+
+    Args:
+        files: List of files to check
+        directory: Base directory
+        select: Rule codes to select
+        ignore: Rule codes to ignore
+
+    Returns:
+        Tuple of (total_issues, files_with_issues, file_results)
+    """
+    total_issues = 0
+    files_with_issues = 0
+    file_results = []
+
+    for file_path in sorted(files):
+        issue_count, detections = check_and_collect_file(file_path, directory, select, ignore)
+        if issue_count > 0:
+            total_issues += issue_count
+            files_with_issues += 1
+            file_results.append({
+                "file": str(file_path.relative_to(directory)),
+                "issues": issue_count,
+                "detections": [
+                    {
+                        "line": d.line,
+                        "column": d.column,
+                        "rule_code": d.rule_code,
+                        "message": d.message,
+                        "severity": d.severity.value,
+                        "suggestion": d.suggestion,
+                        "context": d.context
+                    }
+                    for d in detections
+                ]
+            })
+
+    return total_issues, files_with_issues, file_results
+
+
+def _check_files_text(
+    files: List[Path], directory: Path, select: Optional[List[str]], ignore: Optional[List[str]]
+) -> tuple:
+    """Check files with text output.
+
+    Args:
+        files: List of files to check
+        directory: Base directory
+        select: Rule codes to select
+        ignore: Rule codes to ignore
+
+    Returns:
+        Tuple of (total_issues, files_with_issues)
+    """
+    total_issues = 0
+    files_with_issues = 0
+
+    for file_path in sorted(files):
+        issue_count = check_and_report_file(file_path, directory, select, ignore)
+        if issue_count > 0:
+            total_issues += issue_count
+            files_with_issues += 1
+
+    return total_issues, files_with_issues
+
+
+def _print_json_output(
+    file_results: List[dict], files_checked: int, files_with_issues: int, total_issues: int
+) -> None:
+    """Print JSON output with results and summary.
+
+    Args:
+        file_results: List of file result dicts
+        files_checked: Total files checked
+        files_with_issues: Files with issues count
+        total_issues: Total issues count
+    """
+    import json
+
+    result = {
+        "files": file_results,
+        "summary": {
+            "files_checked": files_checked,
+            "files_with_issues": files_with_issues,
+            "total_issues": total_issues,
+            "exit_code": 1 if total_issues > 0 else 0
+        }
+    }
+    print(json.dumps(result, indent=2))
+
+
+def _print_text_summary(
+    files_checked: int, files_with_issues: int, total_issues: int, directory: Path, config
+) -> None:
+    """Print text summary with breadcrumbs.
+
+    Args:
+        files_checked: Total files checked
+        files_with_issues: Files with issues count
+        total_issues: Total issues count
+        directory: Directory checked
+        config: RevealConfig instance
+    """
+    print(f"\n{'='*60}")
+    print(f"Checked {files_checked} files")
+    if total_issues > 0:
+        print(f"Found {total_issues} issue{'s' if total_issues != 1 else ''} in {files_with_issues} file{'s' if files_with_issues != 1 else ''}")
+    else:
+        print(f"✅ No issues found")
+
+    # Print workflow breadcrumbs
+    from ..utils.breadcrumbs import print_breadcrumbs
+    print_breadcrumbs(
+        'directory-check',
+        str(directory),
+        config=config,
+        total_issues=total_issues,
+        files_with_issues=files_with_issues,
+        files_checked=files_checked
+    )
+
+
+def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
+    """Handle recursive quality checking of a directory.
+
+    Args:
+        directory: Directory to check recursively
+        args: Parsed arguments
+    """
+    # Build CLI overrides and initialize config
+    cli_overrides = _build_cli_overrides(args)
     from reveal.config import RevealConfig
     config = RevealConfig.get(start_path=directory, cli_overrides=cli_overrides if cli_overrides else None)
 
-    # Load gitignore patterns and collect files
+    # Collect files to check
     gitignore_patterns = load_gitignore_patterns(directory)
     files_to_check = collect_files_to_check(directory, gitignore_patterns)
 
+    # Handle no files found
+    output_format = getattr(args, 'format', 'text')
     if not files_to_check:
-        if getattr(args, 'format', 'text') == 'json':
-            print(json.dumps({
-                "files": [],
-                "summary": {
-                    "files_checked": 0,
-                    "files_with_issues": 0,
-                    "total_issues": 0,
-                    "exit_code": 0
-                }
-            }, indent=2))
-        else:
-            print(f"No supported files found in {directory}")
+        _handle_no_files_found(directory, output_format)
         return
 
-    # Parse select/ignore options for backwards compatibility with RuleRegistry
+    # Parse select/ignore options
     select = args.select.split(',') if args.select else None
     ignore = args.ignore.split(',') if args.ignore else None
 
-    # Determine output format
-    output_format = getattr(args, 'format', 'text')
-
-    # Check all files and collect results
-    total_issues = 0
-    files_with_issues = 0
-    file_results = []  # For JSON output
-
-    for file_path in sorted(files_to_check):
-        if output_format == 'json':
-            # Collect structured results for JSON output
-            issue_count, detections = check_and_collect_file(file_path, directory, select, ignore)
-            if issue_count > 0:
-                total_issues += issue_count
-                files_with_issues += 1
-                file_results.append({
-                    "file": str(file_path.relative_to(directory)),
-                    "issues": issue_count,
-                    "detections": [
-                        {
-                            "line": d.line,
-                            "column": d.column,
-                            "rule_code": d.rule_code,
-                            "message": d.message,
-                            "severity": d.severity.value,
-                            "suggestion": d.suggestion,
-                            "context": d.context
-                        }
-                        for d in detections
-                    ]
-                })
-        else:
-            # Text output (original behavior)
-            issue_count = check_and_report_file(file_path, directory, select, ignore)
-            if issue_count > 0:
-                total_issues += issue_count
-                files_with_issues += 1
-
-    # Output results based on format
+    # Check files based on output format
     if output_format == 'json':
-        result = {
-            "files": file_results,
-            "summary": {
-                "files_checked": len(files_to_check),
-                "files_with_issues": files_with_issues,
-                "total_issues": total_issues,
-                "exit_code": 1 if total_issues > 0 else 0
-            }
-        }
-        print(json.dumps(result, indent=2))
-    else:
-        # Print text summary
-        print(f"\n{'='*60}")
-        print(f"Checked {len(files_to_check)} files")
-        if total_issues > 0:
-            print(f"Found {total_issues} issue{'s' if total_issues != 1 else ''} in {files_with_issues} file{'s' if files_with_issues != 1 else ''}")
-        else:
-            print(f"✅ No issues found")
-
-        # Print workflow breadcrumbs
-        from ..utils.breadcrumbs import print_breadcrumbs
-        print_breadcrumbs(
-            'directory-check',
-            str(directory),
-            config=config,
-            total_issues=total_issues,
-            files_with_issues=files_with_issues,
-            files_checked=len(files_to_check)
+        total_issues, files_with_issues, file_results = _check_files_json(
+            files_to_check, directory, select, ignore
         )
+        _print_json_output(file_results, len(files_to_check), files_with_issues, total_issues)
+    else:
+        total_issues, files_with_issues = _check_files_text(
+            files_to_check, directory, select, ignore
+        )
+        _print_text_summary(len(files_to_check), files_with_issues, total_issues, directory, config)
 
     # Exit with appropriate code
     sys.exit(1 if total_issues > 0 else 0)
