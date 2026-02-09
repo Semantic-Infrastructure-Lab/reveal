@@ -32,7 +32,10 @@ Comprehensive guides for users, developers, and AI agents.
 |-------|---------|
 | [QUICK_START.md](QUICK_START.md) | 5-minute introduction |
 | [RECIPES.md](RECIPES.md) | Task-based workflows and patterns |
-| [QUERY_PARAMETER_REFERENCE.md](QUERY_PARAMETER_REFERENCE.md) | **New** - Query parameters for all adapters |
+| [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md) | **Phase 3** - Universal query operators and result control |
+| [FIELD_SELECTION_GUIDE.md](FIELD_SELECTION_GUIDE.md) | **Phase 4** - Token reduction with --fields and budget constraints |
+| [ELEMENT_DISCOVERY_GUIDE.md](ELEMENT_DISCOVERY_GUIDE.md) | **Phase 5** - Progressive disclosure with available_elements |
+| [QUERY_PARAMETER_REFERENCE.md](QUERY_PARAMETER_REFERENCE.md) | Query parameters for all adapters |
 | [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) | Configuration options |
 | [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) | Complete codebase review workflows |
 
@@ -103,6 +106,6 @@ reveal help://ast                # Adapter-specific help
 
 ---
 
-**Last updated:** 2026-02-06
+**Last updated:** 2026-02-08
 
 [← Project README](../../README.md)
