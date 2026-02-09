@@ -10,6 +10,181 @@ from .dns import (
 from .renderer import DomainRenderer
 
 
+# Helper functions for domain health checks
+
+def _run_dns_checks(domain: str) -> List[Dict[str, Any]]:
+    """Run all DNS health checks for a domain.
+
+    Args:
+        domain: Domain name to check
+
+    Returns:
+        List of DNS check results
+    """
+    return [
+        check_dns_resolution(domain),
+        check_nameserver_response(domain),
+        check_dns_propagation(domain),
+    ]
+
+
+def _determine_ssl_status(days: int) -> tuple[str, str]:
+    """Determine SSL certificate status and message based on days until expiry.
+
+    Args:
+        days: Days until SSL certificate expires
+
+    Returns:
+        Tuple of (status, message)
+    """
+    if days < 0:
+        return 'failure', f'SSL certificate expired {abs(days)} days ago'
+    elif days < 7:
+        return 'failure', f'SSL certificate expires in {days} days (critical)'
+    elif days < 30:
+        return 'warning', f'SSL certificate expires in {days} days'
+    else:
+        return 'pass', f'SSL certificate valid for {days} days'
+
+
+def _build_ssl_check_result(status: str, days: int, message: str) -> Dict[str, Any]:
+    """Build SSL certificate check result dict.
+
+    Args:
+        status: Check status (pass, warning, failure)
+        days: Days until expiry
+        message: Status message
+
+    Returns:
+        SSL check result dict
+    """
+    return {
+        'name': 'ssl_certificate',
+        'status': status,
+        'value': f'{days} days',
+        'threshold': '30+ days',
+        'message': message,
+        'severity': 'high',
+    }
+
+
+def _build_ssl_failure_result(error_msg: str, value: str = 'Check failed') -> Dict[str, Any]:
+    """Build SSL certificate failure check result.
+
+    Args:
+        error_msg: Error message
+        value: Check value (default: 'Check failed')
+
+    Returns:
+        SSL failure check result dict
+    """
+    return {
+        'name': 'ssl_certificate',
+        'status': 'failure',
+        'value': value,
+        'threshold': 'Valid certificate',
+        'message': error_msg,
+        'severity': 'high',
+    }
+
+
+def _check_ssl_certificate(domain: str, advanced: bool = False) -> Dict[str, Any]:
+    """Check SSL certificate health for a domain.
+
+    Args:
+        domain: Domain name to check
+        advanced: Whether to run advanced SSL checks
+
+    Returns:
+        SSL check result dict
+    """
+    from ..ssl.certificate import check_ssl_health
+
+    try:
+        ssl_check = check_ssl_health(domain, 443, advanced=advanced)
+
+        # Process certificate if available
+        if 'certificate' in ssl_check:
+            cert = ssl_check['certificate']
+            days = cert.get('days_until_expiry', 0)
+            status, message = _determine_ssl_status(days)
+            return _build_ssl_check_result(status, days, message)
+        else:
+            error_msg = ssl_check.get('error', 'No SSL certificate found')
+            return _build_ssl_failure_result(error_msg, value='No certificate')
+
+    except Exception as e:
+        return _build_ssl_failure_result(f'SSL check failed: {e}')
+
+
+def _calculate_overall_status(checks: List[Dict[str, Any]]) -> str:
+    """Calculate overall status from check results.
+
+    Args:
+        checks: List of check result dicts
+
+    Returns:
+        Overall status (failure, warning, or pass)
+    """
+    statuses = [c['status'] for c in checks]
+    if 'failure' in statuses:
+        return 'failure'
+    elif 'warning' in statuses:
+        return 'warning'
+    else:
+        return 'pass'
+
+
+def _calculate_check_summary(checks: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Calculate summary counts from check results.
+
+    Args:
+        checks: List of check result dicts
+
+    Returns:
+        Summary dict with total, passed, warnings, failures counts
+    """
+    return {
+        'total': len(checks),
+        'passed': sum(1 for c in checks if c['status'] == 'pass'),
+        'warnings': sum(1 for c in checks if c['status'] == 'warning'),
+        'failures': sum(1 for c in checks if c['status'] == 'failure'),
+    }
+
+
+def _generate_domain_next_steps(checks: List[Dict[str, Any]], domain: str) -> List[str]:
+    """Generate contextual next steps based on check results.
+
+    Args:
+        checks: List of check result dicts
+        domain: Domain name
+
+    Returns:
+        List of next step suggestions
+    """
+    next_steps = []
+
+    # DNS resolution failures
+    if any(c['name'] == 'dns_resolution' and c['status'] == 'failure' for c in checks):
+        next_steps.append("Check DNS configuration with registrar")
+        next_steps.append(f"View DNS records: reveal domain://{domain}/dns")
+
+    # DNS propagation warnings
+    if any(c['name'] == 'dns_propagation' and c['status'] == 'warning' for c in checks):
+        next_steps.append("DNS propagation in progress - wait and check again")
+
+    # SSL certificate issues
+    if any(c['name'] == 'ssl_certificate' and c['status'] in ('failure', 'warning') for c in checks):
+        next_steps.append(f"Inspect SSL certificate: reveal ssl://{domain} --check-advanced")
+
+    # Default next steps if all passed
+    if not next_steps:
+        next_steps.append(f"View DNS records: reveal domain://{domain}/dns")
+        next_steps.append(f"View SSL certificate: reveal ssl://{domain}")
+
+    return next_steps
+
+
 @register_adapter('domain')
 @register_renderer(DomainRenderer)
 class DomainAdapter(ResourceAdapter):
@@ -385,110 +560,27 @@ class DomainAdapter(ResourceAdapter):
         advanced = kwargs.get('advanced', False)
         only_failures = kwargs.get('only_failures', False)
 
-        checks = []
+        # Run all checks
+        checks = _run_dns_checks(self.domain)
+        checks.append(_check_ssl_certificate(self.domain, advanced))
 
-        # Check 1: DNS resolution
-        checks.append(check_dns_resolution(self.domain))
+        # Calculate metrics
+        overall_status = _calculate_overall_status(checks)
+        summary = _calculate_check_summary(checks)
 
-        # Check 2: Nameserver response
-        checks.append(check_nameserver_response(self.domain))
-
-        # Check 3: DNS propagation
-        checks.append(check_dns_propagation(self.domain))
-
-        # Check 4: SSL certificate (delegate to ssl:// adapter)
-        from ..ssl.certificate import check_ssl_health
-        try:
-            ssl_check = check_ssl_health(self.domain, 443, advanced=advanced)
-            # Add SSL expiry as a domain check
-            if 'certificate' in ssl_check:
-                cert = ssl_check['certificate']
-                days = cert.get('days_until_expiry', 0)
-                if days < 0:
-                    status = 'failure'
-                    message = f'SSL certificate expired {abs(days)} days ago'
-                elif days < 7:
-                    status = 'failure'
-                    message = f'SSL certificate expires in {days} days (critical)'
-                elif days < 30:
-                    status = 'warning'
-                    message = f'SSL certificate expires in {days} days'
-                else:
-                    status = 'pass'
-                    message = f'SSL certificate valid for {days} days'
-
-                checks.append({
-                    'name': 'ssl_certificate',
-                    'status': status,
-                    'value': f'{days} days',
-                    'threshold': '30+ days',
-                    'message': message,
-                    'severity': 'high',
-                })
-            else:
-                checks.append({
-                    'name': 'ssl_certificate',
-                    'status': 'failure',
-                    'value': 'No certificate',
-                    'threshold': 'Valid certificate',
-                    'message': ssl_check.get('error', 'No SSL certificate found'),
-                    'severity': 'high',
-                })
-        except Exception as e:
-            checks.append({
-                'name': 'ssl_certificate',
-                'status': 'failure',
-                'value': 'Check failed',
-                'threshold': 'Valid certificate',
-                'message': f'SSL check failed: {e}',
-                'severity': 'high',
-            })
-
-        # Compute overall status
-        statuses = [c['status'] for c in checks]
-        if 'failure' in statuses:
-            overall_status = 'failure'
-        elif 'warning' in statuses:
-            overall_status = 'warning'
-        else:
-            overall_status = 'pass'
-
-        # Summary (before filtering)
-        passed = sum(1 for c in checks if c['status'] == 'pass')
-        warnings = sum(1 for c in checks if c['status'] == 'warning')
-        failures = sum(1 for c in checks if c['status'] == 'failure')
-
-        # Filter to only failures if requested
+        # Filter results if requested
         if only_failures:
             checks = [c for c in checks if c['status'] in ('failure', 'warning')]
 
-        # Generate next steps based on failures
-        next_steps = []
-        if any(c['name'] == 'dns_resolution' and c['status'] == 'failure' for c in checks):
-            next_steps.append("Check DNS configuration with registrar")
-            next_steps.append(f"View DNS records: reveal domain://{self.domain}/dns")
-
-        if any(c['name'] == 'dns_propagation' and c['status'] == 'warning' for c in checks):
-            next_steps.append("DNS propagation in progress - wait and check again")
-
-        if any(c['name'] == 'ssl_certificate' and c['status'] in ('failure', 'warning') for c in checks):
-            next_steps.append(f"Inspect SSL certificate: reveal ssl://{self.domain} --check-advanced")
-
-        if not next_steps:
-            next_steps.append(f"View DNS records: reveal domain://{self.domain}/dns")
-            next_steps.append(f"View SSL certificate: reveal ssl://{self.domain}")
+        # Generate contextual next steps
+        next_steps = _generate_domain_next_steps(checks, self.domain)
 
         return {
             'type': 'domain_health_check',
             'domain': self.domain,
             'status': overall_status,
             'checks': checks,
-            'summary': {
-                'total': len(checks),
-                'passed': passed,
-                'warnings': warnings,
-                'failures': failures,
-            },
+            'summary': summary,
             'next_steps': next_steps,
             'exit_code': 0 if overall_status == 'pass' else (1 if overall_status == 'warning' else 2),
         }
