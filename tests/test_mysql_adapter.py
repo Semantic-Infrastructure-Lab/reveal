@@ -1012,5 +1012,82 @@ class TestMySQLRenderer(unittest.TestCase):
         self.assertIn('8.0.32', output)
 
 
+class TestMySQLConnectionSnapshotContext(unittest.TestCase):
+    """Test MySQLConnection.get_snapshot_context() method."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        from reveal.adapters.mysql.connection import MySQLConnection
+        with patch('reveal.adapters.mysql.connection.PYMYSQL_AVAILABLE', True):
+            self.conn = MySQLConnection("mysql://localhost")
+            # Mock the connection
+            self.conn._connection = Mock()
+
+    def test_snapshot_context_returns_all_fields(self):
+        """Test that get_snapshot_context returns all required fields."""
+        # Mock MySQL timestamp query (current time)
+        self.conn.execute_single = Mock(return_value={'timestamp': '1704672000'})
+        # Mock uptime query (23 days, 23 hours)
+        self.conn.execute_query = Mock(return_value=[{'Variable_name': 'Uptime', 'Value': '2071522'}])
+
+        result = self.conn.get_snapshot_context()
+
+        # Check all required fields exist
+        self.assertIn('snapshot_time', result)
+        self.assertIn('server_start_time', result)
+        self.assertIn('uptime_seconds', result)
+        self.assertIn('measurement_window', result)
+
+    def test_snapshot_context_uses_mysql_clock(self):
+        """Test that snapshot uses MySQL's UNIX_TIMESTAMP, not local time."""
+        # Mock MySQL timestamp
+        mysql_timestamp = 1704672000
+        self.conn.execute_single = Mock(return_value={'timestamp': str(mysql_timestamp)})
+        self.conn.execute_query = Mock(return_value=[{'Variable_name': 'Uptime', 'Value': '86400'}])
+
+        result = self.conn.get_snapshot_context()
+
+        # Verify execute_single was called with MySQL timestamp query
+        self.conn.execute_single.assert_called_once_with("SELECT UNIX_TIMESTAMP() as timestamp")
+        # Verify snapshot_time is in ISO 8601 format
+        self.assertRegex(result['snapshot_time'], r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00')
+
+    def test_snapshot_context_calculates_server_start_time(self):
+        """Test that server_start_time is calculated correctly."""
+        # Current time: 1704672000, Uptime: 86400 (1 day)
+        # Expected start: 1704672000 - 86400 = 1704585600
+        self.conn.execute_single = Mock(return_value={'timestamp': '1704672000'})
+        self.conn.execute_query = Mock(return_value=[{'Variable_name': 'Uptime', 'Value': '86400'}])
+
+        result = self.conn.get_snapshot_context()
+
+        # Check uptime is correct
+        self.assertEqual(result['uptime_seconds'], 86400)
+        # Check measurement window format
+        self.assertEqual(result['measurement_window'], '1d 0h (since server start)')
+        # Check server_start_time is in ISO format
+        self.assertRegex(result['server_start_time'], r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00')
+
+    def test_snapshot_context_formats_measurement_window(self):
+        """Test that measurement_window is formatted correctly."""
+        # 23 days, 23 hours = 2071522 seconds
+        self.conn.execute_single = Mock(return_value={'timestamp': '1704672000'})
+        self.conn.execute_query = Mock(return_value=[{'Variable_name': 'Uptime', 'Value': '2071522'}])
+
+        result = self.conn.get_snapshot_context()
+
+        self.assertEqual(result['measurement_window'], '23d 23h (since server start)')
+
+    def test_snapshot_context_handles_zero_uptime(self):
+        """Test that zero uptime is handled gracefully."""
+        self.conn.execute_single = Mock(return_value={'timestamp': '1704672000'})
+        self.conn.execute_query = Mock(return_value=[{'Variable_name': 'Uptime', 'Value': '0'}])
+
+        result = self.conn.get_snapshot_context()
+
+        self.assertEqual(result['uptime_seconds'], 0)
+        self.assertEqual(result['measurement_window'], '0d 0h (since server start)')
+
+
 if __name__ == '__main__':
     unittest.main()

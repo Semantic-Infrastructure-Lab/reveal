@@ -222,6 +222,13 @@ class TestPerformanceAnalyzer(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.mock_conn = Mock()
+        # Mock get_snapshot_context() to return standard timing dict
+        self.mock_conn.get_snapshot_context.return_value = {
+            'snapshot_time': '2026-02-09T20:00:00+00:00',
+            'server_start_time': '2026-01-01T00:00:00+00:00',
+            'uptime_seconds': 100000,
+            'measurement_window': '1d 3h (since server start)',
+        }
         self.analyzer = PerformanceAnalyzer(self.mock_conn)
 
     def _setup_status_vars(self, **overrides):
@@ -429,6 +436,13 @@ class TestPerformanceAnalyzer(unittest.TestCase):
             Uptime='183900',  # 2 days, 3 hours
         )
         self.mock_conn.execute_single.return_value = {'timestamp': '1000000'}
+        # Mock get_snapshot_context with correct uptime
+        self.mock_conn.get_snapshot_context.return_value = {
+            'snapshot_time': '2026-02-09T20:00:00+00:00',
+            'server_start_time': '2026-02-07T17:00:00+00:00',
+            'uptime_seconds': 183900,
+            'measurement_window': '2d 3h (since server start)',
+        }
 
         result = self.analyzer.get_performance()
 
@@ -441,6 +455,13 @@ class TestPerformanceAnalyzer(unittest.TestCase):
             Uptime='183900',  # 2 days, 3 hours
         )
         self.mock_conn.execute_single.return_value = {'timestamp': '1000000'}
+        # Mock get_snapshot_context with correct uptime
+        self.mock_conn.get_snapshot_context.return_value = {
+            'snapshot_time': '2026-02-09T20:00:00+00:00',
+            'server_start_time': '2026-02-07T17:00:00+00:00',
+            'uptime_seconds': 183900,
+            'measurement_window': '2d 3h (since server start)',
+        }
 
         result = self.analyzer.get_innodb()
 
