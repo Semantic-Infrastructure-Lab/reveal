@@ -511,17 +511,42 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
                                          dir_limit=getattr(args, 'dir_limit', 0))
             print(output)
     elif path.is_file():
-        # --section is an alias for element extraction on markdown files
-        # element_from_path takes priority (from file:line syntax)
-        element = element_from_path or args.element
-        if not element and getattr(args, 'section', None):
-            if path.suffix.lower() in ('.md', '.markdown'):
-                element = args.section
-            else:
-                print(f"Error: --section only works with markdown files (.md, .markdown)", file=sys.stderr)
-                print(f"For other files, use: reveal {path_str} \"element_name\"", file=sys.stderr)
-                sys.exit(1)
-        handle_file(str(path), element, args.meta, args.format, args)
+        # Check if convenience flags are set (--search, --sort, --type)
+        # If so, convert to AST query for ergonomic within-file filtering
+        has_convenience_flags = (
+            getattr(args, 'search', None) or
+            getattr(args, 'sort', None) or
+            getattr(args, 'type', None)
+        )
+
+        if has_convenience_flags:
+            # Build AST query from convenience flags
+            query_params = []
+            if getattr(args, 'search', None):
+                query_params.append(f"name~={args.search}")
+            if getattr(args, 'type', None):
+                query_params.append(f"type={args.type}")
+            if getattr(args, 'sort', None):
+                query_params.append(f"sort={args.sort}")
+
+            query_string = '&'.join(query_params)
+            ast_uri = f"ast://{path}?{query_string}"
+
+            # Route to AST adapter with query
+            handle_uri(ast_uri, args.element, args)
+        else:
+            # Normal file handling
+            # --section is an alias for element extraction on markdown files
+            # element_from_path takes priority (from file:line syntax)
+            element = element_from_path or args.element
+            if not element and getattr(args, 'section', None):
+                if path.suffix.lower() in ('.md', '.markdown'):
+                    element = args.section
+                else:
+                    print(f"Error: --section only works with markdown files (.md, .markdown)", file=sys.stderr)
+                    print(f"For other files, use: reveal {path_str} \"element_name\"", file=sys.stderr)
+                    sys.exit(1)
+            handle_file(str(path), element, args.meta, args.format, args)
     else:
         print(f"Error: {path_str} is neither file nor directory", file=sys.stderr)
         sys.exit(1)

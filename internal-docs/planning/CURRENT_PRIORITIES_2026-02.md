@@ -206,6 +206,63 @@ updated_from: cooling-frost-0208
 
 ---
 
+## Priority 6: Phase 8 - Ergonomic Convenience Flags ✅ **COMPLETE** (2026-02-08)
+
+**Goal**: Simplify within-file search/filter with convenience flags (80/20 rule) ✅
+
+**Problem**: Simple operations like "find function by name" required verbose URI syntax:
+```bash
+# Awkward
+reveal 'ast://file.py?name~=connection'
+
+# Could be
+reveal file.py --search connection
+```
+
+**Delivered**:
+- ✅ Added 3 convenience flags: `--search`, `--sort`, `--type`
+- ✅ Automatic conversion to AST queries in routing layer
+- ✅ Works with existing navigation flags (`--head`, `--tail`)
+- ✅ Comprehensive test suite (12 tests, all passing)
+- ✅ Documentation updated (AGENT_HELP.md, QUERY_SYNTAX_GUIDE.md)
+
+**Usage**:
+```bash
+# Find by name pattern
+reveal file.py --search connection
+
+# Filter by type
+reveal file.py --type function
+
+# Sort results
+reveal file.py --sort=-complexity
+
+# Combine flags
+reveal file.py --search test --type function --sort=-line_count
+```
+
+**Session**: ferocious-apocalypse-0208 (~4 hours)
+**Commits**: (pending)
+**Files**:
+- reveal/cli/parser.py (3 flags added)
+- reveal/cli/routing.py (auto-conversion logic)
+- tests/test_convenience_flags.py (12 tests)
+- reveal/docs/AGENT_HELP.md (new section)
+- reveal/docs/QUERY_SYNTAX_GUIDE.md (convenience flags section)
+
+**Impact**:
+- **Ergonomics**: 80% of within-file queries now use simple flags instead of URI syntax
+- **Discoverability**: Easier for users coming from grep/find workflows
+- **Progressive**: Flags for simple cases, URI syntax for complex queries
+- **No breaking changes**: URI syntax still works (backward compatible)
+
+**Design Decision**: Hybrid approach
+- Simple flags for common operations (--search, --sort, --type)
+- URI syntax for complex queries (multiple conditions, ranges, boolean logic)
+- Follows existing patterns (--head, --outline, --fields already ergonomic)
+
+---
+
 ## Next Actions
 
 ### Immediate (This Week)

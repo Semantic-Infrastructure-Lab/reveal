@@ -34,6 +34,76 @@ reveal 'git://.?message~=bug.*fix'
 
 ---
 
+## Convenience Flags vs URI Syntax (NEW - v0.47.3)
+
+**For simple within-file queries, use convenience flags instead of URI syntax.**
+
+### Ergonomic Flags for Common Operations
+
+```bash
+# Search by name pattern
+reveal file.py --search connection
+# Equivalent to: reveal 'ast://file.py?name~=connection'
+
+# Filter by element type
+reveal file.py --type function
+# Equivalent to: reveal 'ast://file.py?type=function'
+
+# Sort results
+reveal file.py --sort complexity          # Ascending
+reveal file.py --sort=-complexity         # Descending
+# Equivalent to: reveal 'ast://file.py?sort=complexity' or 'ast://file.py?sort=-complexity'
+
+# Combine flags
+reveal file.py --search test --type function --sort=-line_count
+# Equivalent to: reveal 'ast://file.py?name~=test&type=function&sort=-line_count'
+```
+
+### When to Use Convenience Flags
+
+**Use flags for** (80% of queries):
+- ✅ Searching within a single file
+- ✅ Simple name pattern matching
+- ✅ Basic type filtering
+- ✅ Sorting results
+- ✅ Quick grep-like workflows
+
+**Use URI syntax for** (20% of queries):
+- ✅ Multiple conditions: `?complexity>10&lines>50`
+- ✅ Range queries: `?lines=10..50`
+- ✅ Boolean logic: `?type=function|method`
+- ✅ Cross-directory queries: `ast://./src?name=*test*`
+- ✅ Adapter-specific params: `git://.?author=John&since=2024-01-01`
+
+### Comparison Table
+
+| Task | Convenience Flag | URI Syntax |
+|------|-----------------|------------|
+| Find by name | `reveal file.py --search pattern` | `reveal 'ast://file.py?name~=pattern'` |
+| Filter type | `reveal file.py --type function` | `reveal 'ast://file.py?type=function'` |
+| Sort | `reveal file.py --sort complexity` | `reveal 'ast://file.py?sort=complexity'` |
+| Complex filter | ❌ (not supported) | `reveal 'ast://src/?complexity>10&lines>50&type=function&sort=-complexity'` |
+
+### Progressive Escalation
+
+Start simple (flags), escalate to URI syntax when needed:
+
+```bash
+# Step 1: Simple search
+reveal file.py --search authenticate
+
+# Step 2: Add type filter
+reveal file.py --search authenticate --type function
+
+# Step 3: Add sorting
+reveal file.py --search authenticate --type function --sort=-complexity
+
+# Step 4: Need complex conditions? Use URI syntax
+reveal 'ast://file.py?name~=authenticate&type=function&complexity>10&lines>50&sort=-complexity'
+```
+
+---
+
 ## Query-Capable Adapters
 
 These 5 adapters support the unified query syntax:

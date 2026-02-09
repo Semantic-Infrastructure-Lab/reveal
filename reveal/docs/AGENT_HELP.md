@@ -240,6 +240,63 @@ src/processor/main.py:
 
 ---
 
+### Task: "Search within a single file" (NEW - v0.47.3)
+
+**Ergonomic convenience flags for within-file operations:**
+
+```bash
+# Find functions by name pattern (simple)
+reveal file.py --search connection
+# Same as: reveal 'ast://file.py?name~=connection'
+
+# Filter by element type
+reveal file.py --type function
+# Same as: reveal 'ast://file.py?type=function'
+
+# Sort results
+reveal file.py --sort complexity          # Ascending
+reveal file.py --sort=-complexity         # Descending (note the = sign)
+
+# Combine flags
+reveal file.py --search test --type function --sort=-complexity
+# Same as: reveal 'ast://file.py?name~=test&type=function&sort=-complexity'
+```
+
+**Why use convenience flags?**
+- **Ergonomic**: Simpler syntax for common operations (80% use case)
+- **Familiar**: Similar to grep/find command patterns
+- **Progressive**: Use flags for simple queries, URI syntax for complex ones
+
+**Convenience flags vs URI syntax:**
+
+| Task | Convenience Flags | URI Syntax |
+|------|------------------|------------|
+| Find by name | `--search pattern` | `?name~=pattern` |
+| Filter type | `--type function` | `?type=function` |
+| Sort results | `--sort field` | `?sort=field` |
+| Complex query | ❌ (use URI) | `?complexity>10&lines>50&sort=-complexity` |
+
+**Example: Replace grep workflow**
+```bash
+# Old workflow (grep)
+grep -n "get_repository" file.py
+
+# New workflow (reveal)
+reveal file.py --search get_repository
+# Output shows line numbers, complexity, signatures
+
+# With sorting
+reveal file.py --search get_repository --sort=-line_count
+```
+
+**When to use URI syntax instead:**
+- Multiple conditions: `?complexity>10&lines>50`
+- Range queries: `?lines=10..50`
+- Boolean logic: `?type=function|method`
+- Advanced operators: `!=`, `~=`, `..`
+
+---
+
 ### Task: "Review code quality"
 
 **Pattern:**

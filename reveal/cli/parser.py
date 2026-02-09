@@ -248,6 +248,14 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--range', type=str, metavar='START-END',
                         help='Show semantic units in range (e.g., 10-20, 1-indexed)')
 
+    # Convenience flags for within-file search and filtering
+    parser.add_argument('--search', type=str, metavar='PATTERN',
+                        help='Search for symbols matching pattern (regex on name field)')
+    parser.add_argument('--sort', type=str, metavar='FIELD',
+                        help='Sort results by field (prefix with - for descending, e.g., -complexity)')
+    parser.add_argument('--type', type=str, metavar='TYPE',
+                        help='Filter by element type (function, class, method, etc.)')
+
 
 def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
     """Add markdown-specific extraction options."""
