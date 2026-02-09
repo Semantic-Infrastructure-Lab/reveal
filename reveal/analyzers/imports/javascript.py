@@ -197,88 +197,92 @@ class JavaScriptExtractor(LanguageExtractor):
             alias=alias
         )]
 
-    def _parse_require_call(self, node, file_path: Path, analyzer) -> Optional[ImportStatement]:
-        """Parse CommonJS require() call using tree-sitter.
+    def _determine_call_type(self, node, analyzer) -> Optional[str]:
+        """Determine if node is require() or dynamic import().
 
-        Handles:
-            const foo = require('module')
-            const { foo, bar } = require('module')
-            require('module')  // side-effect only
-            await import('./module')  // dynamic import
+        Returns:
+            'require', 'import', or None
         """
-        # Check if this is require() or dynamic import() by looking at the call target
-        # For require: call_expression has identifier child with text 'require'
-        # For dynamic import: call_expression starts with 'import' keyword
-        func_name = None
         for child in node.children:
             if child.type == 'identifier':
                 text = analyzer._get_node_text(child)
                 if text == 'require':
-                    func_name = 'require'
-                    break
+                    return 'require'
             elif child.type == 'import':
-                func_name = 'import'
-                break
+                return 'import'
+        return None
 
-        if not func_name:
-            return None
+    def _extract_module_path(self, node, analyzer) -> Optional[str]:
+        """Extract module path from call arguments.
 
-        # Extract module path from arguments (should be a string node)
-        module_path = None
+        Returns:
+            Module path string or None
+        """
         for child in node.children:
             if child.type == 'arguments':
                 for arg in child.children:
                     if arg.type == 'string':
-                        module_path = analyzer._get_node_text(arg).strip('"\'')
-                        break
+                        return analyzer._get_node_text(arg).strip('"\'')
+        return None
 
-        if not module_path:
-            return None
+    def _build_dynamic_import_statement(
+        self, file_path: Path, line_number: int, module_path: str
+    ) -> ImportStatement:
+        """Build ImportStatement for dynamic import()."""
+        return ImportStatement(
+            file_path=file_path,
+            line_number=line_number,
+            module_name=module_path,
+            imported_names=[],
+            is_relative=module_path.startswith('.'),
+            import_type='dynamic_import',
+            alias=None
+        )
 
-        line_number = node.start_point[0] + 1
+    def _parse_destructured_names(self, left_side: str) -> List[str]:
+        """Parse destructured import names from { foo, bar } pattern.
 
-        # For dynamic imports
-        if func_name == 'import':
-            return ImportStatement(
-                file_path=file_path,
-                line_number=line_number,
-                module_name=module_path,
-                imported_names=[],
-                is_relative=module_path.startswith('.'),
-                import_type='dynamic_import',
-                alias=None
-            )
-
-        # For require(), check if it's part of a variable declaration
-        # We need to look at the parent node to see the assignment
+        Handles renaming: { foo: bar }
+        """
         imported_names = []
-        import_type = 'commonjs_require'
+        names_str = left_side.strip('{}')
+        for name in names_str.split(','):
+            name = name.strip()
+            # Handle renaming: { foo: bar }
+            if ':' in name:
+                name = name.split(':')[0].strip()
+            if name:
+                imported_names.append(name)
+        return imported_names
 
-        # Try to find variable declaration parent
+    def _extract_require_imported_names(self, node, analyzer) -> List[str]:
+        """Extract imported names from require() variable declaration.
+
+        Handles:
+            const foo = require('module')           -> ['foo']
+            const { foo, bar } = require('module')  -> ['foo', 'bar']
+        """
         parent = node.parent
-        if parent and parent.type == 'variable_declarator':
-            # Get the left side (identifier or pattern)
-            if parent.children:
-                left_side = analyzer._get_node_text(parent.children[0])
+        if not parent or parent.type != 'variable_declarator':
+            return []
 
-                # Destructured: { foo, bar }
-                if left_side.startswith('{'):
-                    names_str = left_side.strip('{}')
-                    for name in names_str.split(','):
-                        name = name.strip()
-                        # Handle renaming: { foo: bar }
-                        if ':' in name:
-                            name = name.split(':')[0].strip()
-                        if name:
-                            imported_names.append(name)
+        if not parent.children:
+            return []
 
-                # Single assignment: foo
-                else:
-                    imported_names = [left_side]
+        left_side = analyzer._get_node_text(parent.children[0])
 
-        # Side-effect only if no assignment
-        if not imported_names:
-            import_type = 'side_effect_require'
+        # Destructured: { foo, bar }
+        if left_side.startswith('{'):
+            return self._parse_destructured_names(left_side)
+
+        # Single assignment: foo
+        return [left_side]
+
+    def _build_require_import_statement(
+        self, file_path: Path, line_number: int, module_path: str, imported_names: List[str]
+    ) -> ImportStatement:
+        """Build ImportStatement for CommonJS require()."""
+        import_type = 'side_effect_require' if not imported_names else 'commonjs_require'
 
         return ImportStatement(
             file_path=file_path,
@@ -289,6 +293,35 @@ class JavaScriptExtractor(LanguageExtractor):
             import_type=import_type,
             alias=None
         )
+
+    def _parse_require_call(self, node, file_path: Path, analyzer) -> Optional[ImportStatement]:
+        """Parse CommonJS require() call using tree-sitter.
+
+        Handles:
+            const foo = require('module')
+            const { foo, bar } = require('module')
+            require('module')  // side-effect only
+            await import('./module')  // dynamic import
+        """
+        # Determine call type
+        func_name = self._determine_call_type(node, analyzer)
+        if not func_name:
+            return None
+
+        # Extract module path
+        module_path = self._extract_module_path(node, analyzer)
+        if not module_path:
+            return None
+
+        line_number = node.start_point[0] + 1
+
+        # Handle dynamic import
+        if func_name == 'import':
+            return self._build_dynamic_import_statement(file_path, line_number, module_path)
+
+        # Handle CommonJS require
+        imported_names = self._extract_require_imported_names(node, analyzer)
+        return self._build_require_import_statement(file_path, line_number, module_path, imported_names)
 
     def _is_usage_context(self, node) -> bool:
         """Check if identifier node is in a usage context (not definition).
