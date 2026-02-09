@@ -627,6 +627,85 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
         sys.exit(1)
 
 
+def _get_analyzer_or_exit(path: str, allow_fallback: bool):
+    """Get analyzer for path or exit with error.
+
+    Args:
+        path: File path
+        allow_fallback: Whether to allow fallback analyzers
+
+    Returns:
+        Analyzer instance
+
+    Exits:
+        With error code 1 if no analyzer found
+    """
+    from ..registry import get_analyzer
+
+    analyzer_class = get_analyzer(path, allow_fallback=allow_fallback)
+    if not analyzer_class:
+        ext = Path(path).suffix or '(no extension)'
+        print(f"Error: No analyzer found for {path} ({ext})", file=sys.stderr)
+        print(f"\nError: File type '{ext}' is not supported yet", file=sys.stderr)
+        print("Run 'reveal --list-supported' to see all supported file types", file=sys.stderr)
+        print("Visit https://github.com/Semantic-Infrastructure-Lab/reveal to request new file types", file=sys.stderr)
+        sys.exit(1)
+
+    return analyzer_class(path)
+
+
+def _build_file_cli_overrides(args: Optional['Namespace']) -> dict:
+    """Build CLI overrides dictionary from args.
+
+    Args:
+        args: Argument namespace
+
+    Returns:
+        CLI overrides dict
+    """
+    cli_overrides = {}
+    if args and getattr(args, 'no_breadcrumbs', False):
+        cli_overrides['display'] = {'breadcrumbs': False}
+    return cli_overrides
+
+
+def _handle_domain_extraction(analyzer) -> None:
+    """Handle domain extraction from analyzer.
+
+    Args:
+        analyzer: Analyzer instance
+
+    Exits:
+        With error code 1 if domain extraction not supported
+    """
+    if hasattr(analyzer, 'extract_ssl_domains'):
+        domains = analyzer.extract_ssl_domains()
+        for domain in domains:
+            print(f"ssl://{domain}")
+    else:
+        print(f"Error: --extract domains not supported for {type(analyzer).__name__}", file=sys.stderr)
+        print("This option is available for nginx config files.", file=sys.stderr)
+        sys.exit(1)
+
+
+def _handle_extract_option(analyzer, extract_type: str) -> None:
+    """Handle --extract option with validation.
+
+    Args:
+        analyzer: Analyzer instance
+        extract_type: Type to extract (e.g., 'domains')
+
+    Exits:
+        With error code 1 if extract type unknown
+    """
+    if extract_type == 'domains':
+        _handle_domain_extraction(analyzer)
+    else:
+        print(f"Error: Unknown extract type '{extract_type}'", file=sys.stderr)
+        print("Supported types: domains (for nginx configs)", file=sys.stderr)
+        sys.exit(1)
+
+
 def handle_file(path: str, element: Optional[str], show_meta: bool,
                 output_format: str, args: Optional['Namespace'] = None) -> None:
     """Handle file analysis.
@@ -638,56 +717,28 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         output_format: Output format ('text', 'json', 'grep')
         args: Full argument namespace (for filter options)
     """
-    from ..registry import get_analyzer
     from ..display import show_structure, show_metadata, extract_element
     from ..config import RevealConfig
 
+    # Get analyzer
     allow_fallback = not getattr(args, 'no_fallback', False) if args else True
-
-    analyzer_class = get_analyzer(path, allow_fallback=allow_fallback)
-    if not analyzer_class:
-        ext = Path(path).suffix or '(no extension)'
-        print(f"Error: No analyzer found for {path} ({ext})", file=sys.stderr)
-        print(f"\nError: File type '{ext}' is not supported yet", file=sys.stderr)
-        print("Run 'reveal --list-supported' to see all supported file types", file=sys.stderr)
-        print("Visit https://github.com/Semantic-Infrastructure-Lab/reveal to request new file types", file=sys.stderr)
-        sys.exit(1)
-
-    analyzer = analyzer_class(path)
-
-    # Build CLI overrides for config (including --no-breadcrumbs)
-    cli_overrides = {}
-    if args and getattr(args, 'no_breadcrumbs', False):
-        cli_overrides['display'] = {'breadcrumbs': False}
+    analyzer = _get_analyzer_or_exit(path, allow_fallback)
 
     # Load config with CLI overrides
+    cli_overrides = _build_file_cli_overrides(args)
     config = RevealConfig.get(
         start_path=Path(path).parent if Path(path).is_file() else Path(path),
         cli_overrides=cli_overrides if cli_overrides else None
     )
 
+    # Route to appropriate handler based on flags
     if show_meta:
         show_metadata(analyzer, output_format, config=config)
         return
 
-    # Handle --extract for composable pipelines
     if args and getattr(args, 'extract', None):
-        extract_type = args.extract.lower()
-        if extract_type == 'domains':
-            # Check if analyzer supports domain extraction
-            if hasattr(analyzer, 'extract_ssl_domains'):
-                domains = analyzer.extract_ssl_domains()
-                for domain in domains:
-                    print(f"ssl://{domain}")
-                return
-            else:
-                print(f"Error: --extract domains not supported for {type(analyzer).__name__}", file=sys.stderr)
-                print("This option is available for nginx config files.", file=sys.stderr)
-                sys.exit(1)
-        else:
-            print(f"Error: Unknown extract type '{extract_type}'", file=sys.stderr)
-            print("Supported types: domains (for nginx configs)", file=sys.stderr)
-            sys.exit(1)
+        _handle_extract_option(analyzer, args.extract.lower())
+        return
 
     if args and getattr(args, 'validate_schema', None):
         from ..main import run_schema_validation
