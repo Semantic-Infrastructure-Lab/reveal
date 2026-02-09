@@ -7,7 +7,6 @@ Provides schema inference and data quality metrics.
 import csv
 import logging
 from typing import Dict, List, Any, Optional
-from collections import Counter
 from ..base import FileAnalyzer
 from ..registry import register
 

@@ -14,7 +14,7 @@ Usage:
 
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from urllib.parse import urlparse
 
 from .base import ResourceAdapter, register_adapter, register_renderer

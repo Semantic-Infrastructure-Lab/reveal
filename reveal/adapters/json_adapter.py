@@ -10,7 +10,6 @@ from ..utils.query import (
     parse_query_filters,
     parse_result_control,
     compare_values,
-    QueryFilter,
     ResultControl
 )
 

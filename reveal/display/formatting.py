@@ -47,6 +47,47 @@ def filter_fields(structure: Dict[str, Any], fields: List[str]) -> Dict[str, Any
     if not fields:
         return structure
 
+    # Check if structure has a result list field (common in adapters)
+    list_fields = ['results', 'items', 'checks', 'commits', 'files', 'records']
+    result_list_field = None
+    for list_field in list_fields:
+        if list_field in structure and isinstance(structure.get(list_field), list):
+            result_list_field = list_field
+            break
+
+    # If we have a result list, filter each item in the list
+    if result_list_field:
+        filtered_items = []
+        for item in structure[result_list_field]:
+            filtered_item = {}
+            for field in fields:
+                if '.' in field:  # Nested field
+                    parts = field.split('.')
+                    value = item
+                    for part in parts:
+                        if isinstance(value, dict):
+                            value = value.get(part)
+                        else:
+                            value = None
+                            break
+                        if value is None:
+                            break
+                    if value is not None:
+                        set_nested(filtered_item, parts, value)
+                else:  # Flat field
+                    if field in item:
+                        filtered_item[field] = item[field]
+            filtered_items.append(filtered_item)
+
+        # Return structure with filtered list and preserve meta/contract fields
+        result = {result_list_field: filtered_items}
+        # Preserve important metadata fields
+        for meta_field in ['contract_version', 'type', 'meta', 'source', 'source_type']:
+            if meta_field in structure:
+                result[meta_field] = structure[meta_field]
+        return result
+
+    # Otherwise, filter the top-level structure (original behavior)
     filtered = {}
     for field in fields:
         if '.' in field:  # Nested field: "certificate.expiry"

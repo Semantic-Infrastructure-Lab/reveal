@@ -11,9 +11,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils.query import (
     parse_query_filters,
     parse_result_control,
-    apply_result_control,
     compare_values,
-    QueryFilter,
     ResultControl
 )
 

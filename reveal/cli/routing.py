@@ -22,10 +22,6 @@ if TYPE_CHECKING:
 # ============================================================================
 
 from .file_checker import (
-    load_gitignore_patterns,
-    should_skip_file,
-    collect_files_to_check,
-    check_and_report_file,
     handle_recursive_check,
 )
 
@@ -92,6 +88,85 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
     _handle_rendering(adapter, renderer_class, scheme, resource, element, args)
 
 
+def _try_no_args_init(adapter_class: type) -> tuple[any, Optional[Exception]]:
+    """Try no-argument initialization (env, python adapters)."""
+    try:
+        return adapter_class(), None
+    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
+        return None, None
+    except ImportError as e:
+        return None, e
+
+
+def _try_query_parsing_init(adapter_class: type, resource: str) -> tuple[any, Optional[Exception]]:
+    """Try query-parsing initialization (ast, json with ?query)."""
+    if '?' not in resource:
+        return None, None
+
+    try:
+        path, query = resource.split('?', 1)
+        path = path or '.'  # Default empty path to current directory
+        return adapter_class(path, query), None
+    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
+        return None, None
+    except ImportError as e:
+        return None, e
+
+
+def _try_keyword_args_init(adapter_class: type, resource: str) -> tuple[any, Optional[Exception]]:
+    """Try keyword arguments initialization (markdown with base_path/query)."""
+    try:
+        if '?' in resource:
+            path_part, query = resource.split('?', 1)
+            path = path_part.rstrip('/') if path_part else '.'
+        else:
+            path = resource.rstrip('/') if resource else '.'
+            query = None
+        return adapter_class(base_path=path, query=query), None
+    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
+        return None, None
+    except ImportError as e:
+        return None, e
+
+
+def _try_resource_arg_init(adapter_class: type, resource: str) -> tuple[any, Optional[Exception]]:
+    """Try resource argument initialization (help, git, etc)."""
+    if resource is None:
+        return None, None
+
+    try:
+        if '?' not in resource:
+            path = resource or '.'
+            # Try with query=None for query-parsing adapters
+            try:
+                return adapter_class(path, None), None
+            except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
+                # Try simple resource argument
+                return adapter_class(resource), None
+            except ImportError as e:
+                return None, e
+        else:
+            return adapter_class(resource), None
+    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError) as e:
+        return None, e
+    except ImportError as e:
+        return None, e
+
+
+def _try_full_uri_init(adapter_class: type, scheme: str, resource: str,
+                       element: Optional[str]) -> tuple[any, Optional[Exception]]:
+    """Try full URI initialization (mysql, sqlite)."""
+    try:
+        full_uri = f"{scheme}://{resource}"
+        if element and '://' in full_uri:
+            full_uri = f"{full_uri}/{element}"
+        return adapter_class(full_uri), None
+    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError) as e:
+        return None, e
+    except ImportError as e:
+        return None, e
+
+
 def _try_initialize_adapter(adapter_class: type, scheme: str, resource: str,
                             element: Optional[str], renderer_class: type):
     """Try multiple initialization patterns to instantiate adapter.
@@ -108,90 +183,94 @@ def _try_initialize_adapter(adapter_class: type, scheme: str, resource: str,
     Raises:
         SystemExit: If initialization fails
     """
+    # Try initialization patterns in order
+    init_attempts = [
+        lambda: _try_no_args_init(adapter_class),
+        lambda: _try_query_parsing_init(adapter_class, resource),
+        lambda: _try_keyword_args_init(adapter_class, resource),
+        lambda: _try_resource_arg_init(adapter_class, resource),
+        lambda: _try_full_uri_init(adapter_class, scheme, resource, element)
+    ]
+
     adapter = None
     init_error = None
 
-    # Try 1: No arguments (env, python)
-    try:
-        adapter = adapter_class()
-    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
-        pass  # Not a no-arg adapter
-    except ImportError as e:
-        init_error = e  # Capture import errors for special handling
+    for attempt in init_attempts:
+        adapter, error = attempt()
+        if adapter is not None:
+            return adapter
+        if error is not None:
+            init_error = error  # Keep last error
 
-    # Try 2: Resource with query parsing (ast, json)
-    if adapter is None and '?' in resource:
-        try:
-            path, query = resource.split('?', 1)
-            # Default empty path to current directory for ast-like adapters
-            if not path:
-                path = '.'
-            adapter = adapter_class(path, query)
-        except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
-            pass  # Not a query-parsing adapter
-        except ImportError as e:
-            init_error = e
+    # All attempts failed
+    if isinstance(init_error, ImportError):
+        renderer_class.render_error(init_error)
+    else:
+        print(f"Error initializing {scheme}:// adapter: {init_error}", file=sys.stderr)
+    sys.exit(1)
 
-    # Try 3: Keyword args (markdown with base_path/query)
-    if adapter is None:
-        try:
-            if '?' in resource:
-                path_part, query = resource.split('?', 1)
-                path = path_part.rstrip('/') if path_part else '.'
-            else:
-                path = resource.rstrip('/') if resource else '.'
-                query = None
-            adapter = adapter_class(base_path=path, query=query)
-        except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
-            pass  # Not a keyword-arg adapter
-        except ImportError as e:
-            init_error = e
 
-    # Try 4: Resource argument (help, ast without query, json without query)
-    # Handle empty resource from bare URIs like "git://"
-    if adapter is None and resource is not None:
-        try:
-            # For ast/json, if no query, just pass path
-            if '?' not in resource:
-                path = resource if resource else '.'
-                try:
-                    # Try with query=None for query-parsing adapters
-                    adapter = adapter_class(path, None)
-                except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
-                    # Try simple resource argument
-                    adapter = adapter_class(resource)
-                except ImportError as e:
-                    init_error = e
-            else:
-                adapter = adapter_class(resource)
-        except (TypeError, ValueError, FileNotFoundError, IsADirectoryError) as e:
-            init_error = e
-        except ImportError as e:
-            init_error = e
+def _build_check_kwargs(adapter, args: 'Namespace') -> dict:
+    """Build kwargs for adapter.check() by inspecting signature.
 
-    # Try 5: Full URI (mysql, sqlite with element)
-    if adapter is None:
-        try:
-            # Construct full URI with element if provided (for sqlite://path/table pattern)
-            full_uri = f"{scheme}://{resource}"
-            if element and '://' in full_uri:  # Only append element for URI-based adapters
-                full_uri = f"{full_uri}/{element}"
-            adapter = adapter_class(full_uri)
-        except (TypeError, ValueError, FileNotFoundError, IsADirectoryError) as e:
-            init_error = e
-        except ImportError as e:
-            init_error = e
+    Args:
+        adapter: Adapter with check() method
+        args: CLI arguments
 
-    # Check if initialization failed
-    if adapter is None:
-        if isinstance(init_error, ImportError):
-            # Render user-friendly error for missing dependencies
-            renderer_class.render_error(init_error)
-        else:
-            print(f"Error initializing {scheme}:// adapter: {init_error}", file=sys.stderr)
-        sys.exit(1)
+    Returns:
+        Dict of kwargs to pass to check()
+    """
+    import inspect
 
-    return adapter
+    sig = inspect.signature(adapter.check)
+    kwargs = {}
+    has_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+
+    # Helper to add param if supported
+    def add_if_supported(param_name, arg_name=None):
+        arg_name = arg_name or param_name
+        if (has_var_keyword or param_name in sig.parameters) and hasattr(args, arg_name):
+            value = getattr(args, arg_name)
+            if value is not None:
+                # Split comma-separated strings
+                if param_name in ('select', 'ignore') and isinstance(value, str):
+                    value = value.split(',')
+                kwargs[param_name] = value
+
+    add_if_supported('select')
+    add_if_supported('ignore')
+    add_if_supported('advanced')
+    add_if_supported('validate_nginx')
+
+    return kwargs
+
+
+def _build_render_opts(renderer_class: type, args: 'Namespace') -> dict:
+    """Build render options by inspecting renderer signature.
+
+    Args:
+        renderer_class: Renderer class
+        args: CLI arguments
+
+    Returns:
+        Dict of options to pass to render method
+    """
+    import inspect
+
+    if not hasattr(renderer_class, 'render_check'):
+        return {}
+
+    render_sig = inspect.signature(renderer_class.render_check)
+    opts = {}
+
+    # Map CLI args to render options
+    for opt_name in ['only_failures', 'summary', 'expiring_within']:
+        if opt_name in render_sig.parameters and hasattr(args, opt_name):
+            value = getattr(args, opt_name)
+            if value is not None:
+                opts[opt_name] = value
+
+    return opts
 
 
 def _handle_check_mode(adapter, renderer_class: type, args: 'Namespace') -> None:
@@ -203,46 +282,14 @@ def _handle_check_mode(adapter, renderer_class: type, args: 'Namespace') -> None
         args: CLI arguments with check flags
     """
     import json
-    import inspect
 
-    # Pass select/ignore args if adapter's check() method supports them
-    sig = inspect.signature(adapter.check)
-    check_kwargs = {}
-
-    if 'select' in sig.parameters and hasattr(args, 'select') and args.select:
-        check_kwargs['select'] = args.select.split(',') if isinstance(args.select, str) else args.select
-    if 'ignore' in sig.parameters and hasattr(args, 'ignore') and args.ignore:
-        check_kwargs['ignore'] = args.ignore.split(',') if isinstance(args.ignore, str) else args.ignore
-
-    # Pass SSL-specific options (works with **kwargs adapters)
-    # Check signature only if not using **kwargs
-    has_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
-
-    if has_kwargs or 'advanced' in sig.parameters:
-        if hasattr(args, 'advanced'):
-            check_kwargs['advanced'] = args.advanced
-
-    if has_kwargs or 'validate_nginx' in sig.parameters:
-        if hasattr(args, 'validate_nginx'):
-            check_kwargs['validate_nginx'] = args.validate_nginx
-
+    # Build check kwargs and execute
+    check_kwargs = _build_check_kwargs(adapter, args)
     result = adapter.check(**check_kwargs)
 
     # Render check results
     if hasattr(renderer_class, 'render_check'):
-        # Build render options from args (only pass if renderer supports them)
-        import inspect
-        render_sig = inspect.signature(renderer_class.render_check)
-        render_opts = {}
-
-        # Check which SSL-specific options are supported
-        if 'only_failures' in render_sig.parameters and hasattr(args, 'only_failures'):
-            render_opts['only_failures'] = args.only_failures
-        if 'summary' in render_sig.parameters and hasattr(args, 'summary'):
-            render_opts['summary'] = args.summary
-        if 'expiring_within' in render_sig.parameters and hasattr(args, 'expiring_within'):
-            render_opts['expiring_within'] = args.expiring_within
-
+        render_opts = _build_render_opts(renderer_class, args)
         renderer_class.render_check(result, args.format, **render_opts)
     else:
         # Fallback to generic JSON rendering
@@ -251,7 +298,7 @@ def _handle_check_mode(adapter, renderer_class: type, args: 'Namespace') -> None
         else:
             print(result)
 
-    # Exit with appropriate code if provided
+    # Exit with appropriate code
     exit_code = result.get('exit_code', 0) if isinstance(result, dict) else 0
     sys.exit(exit_code)
 
@@ -311,6 +358,96 @@ def _render_element(adapter, renderer_class: type, element: Optional[str],
     renderer_class.render_element(result, args.format)
 
 
+def _build_adapter_kwargs(adapter, args: 'Namespace', scheme: str = None, resource: str = None) -> dict:
+    """Build kwargs for adapter.get_structure() by inspecting signature.
+
+    Args:
+        adapter: Adapter instance
+        args: CLI arguments
+        scheme: Optional URI scheme
+        resource: Optional resource string
+
+    Returns:
+        Dict of kwargs to pass to get_structure()
+    """
+    import inspect
+
+    if not hasattr(adapter, 'get_structure'):
+        return {}
+
+    sig = inspect.signature(adapter.get_structure)
+    kwargs = {}
+
+    # URI parameter - reconstruct full URI for adapters that need it
+    if 'uri' in sig.parameters and scheme and resource is not None:
+        kwargs['uri'] = f"{scheme}://{resource}"
+
+    # Map CLI args to adapter params (only if param exists and value is not None)
+    param_mapping = {
+        'hotspots': 'hotspots',
+        'code_only': 'code_only',
+        'min_lines': 'min_lines',
+        'max_lines': 'max_lines',
+        'min_complexity': 'min_complexity',
+        'max_complexity': 'max_complexity',
+        'min_functions': 'min_functions'
+    }
+
+    for arg_name, param_name in param_mapping.items():
+        if param_name in sig.parameters:
+            value = getattr(args, arg_name, None)
+            if value is not None:
+                kwargs[param_name] = value
+
+    return kwargs
+
+
+def _apply_field_selection(result: dict, args: 'Namespace') -> dict:
+    """Apply field selection if --fields specified."""
+    if hasattr(args, 'fields') and args.fields:
+        from reveal.display.formatting import filter_fields
+        fields = [f.strip() for f in args.fields.split(',')]
+        return filter_fields(result, fields)
+    return result
+
+
+def _apply_budget_constraints(result: dict, args: 'Namespace') -> dict:
+    """Apply budget constraints to result list fields."""
+    if not (hasattr(result, 'get') and isinstance(result, dict)):
+        return result
+
+    # Find list field to apply budget limits to
+    list_field = None
+    for field_name in ['items', 'results', 'checks', 'commits', 'files']:
+        if field_name in result and isinstance(result[field_name], list):
+            list_field = field_name
+            break
+
+    if not list_field:
+        return result
+
+    from reveal.utils.query import apply_budget_limits
+
+    budget_result = apply_budget_limits(
+        result[list_field],
+        max_items=getattr(args, 'max_items', None),
+        max_bytes=getattr(args, 'max_bytes', None),
+        max_depth=getattr(args, 'max_depth', None),
+        truncate_strings=getattr(args, 'max_snippet_chars', None)
+    )
+
+    # Update result with budget-limited items
+    result[list_field] = budget_result['items']
+    if budget_result['meta']['truncated']:
+        # Merge budget metadata
+        if 'meta' in result and isinstance(result['meta'], dict):
+            result['meta']['budget'] = budget_result['meta']
+        else:
+            result['meta'] = budget_result['meta']
+
+    return result
+
+
 def _render_structure(adapter, renderer_class: type, args: 'Namespace',
                       scheme: str = None, resource: str = None) -> None:
     """Render full structure from adapter.
@@ -322,60 +459,14 @@ def _render_structure(adapter, renderer_class: type, args: 'Namespace',
         scheme: Optional URI scheme (for adapters that need full URI)
         resource: Optional resource string (for adapters that need full URI)
     """
-    import inspect
+    # Build adapter kwargs
+    structure_kwargs = _build_adapter_kwargs(adapter, args, scheme, resource)
 
-    # Structure-based adapters: always use get_structure()
-    # Pass adapter-specific parameters if supported (similar to check() handling)
-    structure_kwargs = {}
-
-    # For stats adapter: pass hotspots, min_lines, etc. if get_structure() supports them
-    if hasattr(adapter, 'get_structure'):
-        sig = inspect.signature(adapter.get_structure)
-
-        # URI parameter - reconstruct full URI for adapters that need it (e.g., imports)
-        if 'uri' in sig.parameters and scheme and resource is not None:
-            structure_kwargs['uri'] = f"{scheme}://{resource}"
-
-        # Hotspots parameter
-        if 'hotspots' in sig.parameters and hasattr(args, 'hotspots'):
-            structure_kwargs['hotspots'] = args.hotspots
-
-        # Code-only parameter
-        if 'code_only' in sig.parameters and hasattr(args, 'code_only'):
-            structure_kwargs['code_only'] = args.code_only
-
-        # Filter parameters for stats adapter (only pass if not None)
-        if 'min_lines' in sig.parameters:
-            min_lines = getattr(args, 'min_lines', None)
-            if min_lines is not None:
-                structure_kwargs['min_lines'] = min_lines
-
-        if 'max_lines' in sig.parameters:
-            max_lines = getattr(args, 'max_lines', None)
-            if max_lines is not None:
-                structure_kwargs['max_lines'] = max_lines
-
-        if 'min_complexity' in sig.parameters:
-            min_complexity = getattr(args, 'min_complexity', None)
-            if min_complexity is not None:
-                structure_kwargs['min_complexity'] = min_complexity
-
-        if 'max_complexity' in sig.parameters:
-            max_complexity = getattr(args, 'max_complexity', None)
-            if max_complexity is not None:
-                structure_kwargs['max_complexity'] = max_complexity
-
-        if 'min_functions' in sig.parameters:
-            min_functions = getattr(args, 'min_functions', None)
-            if min_functions is not None:
-                structure_kwargs['min_functions'] = min_functions
-
+    # Get structure from adapter
     try:
         result = adapter.get_structure(**structure_kwargs)
     except Exception as e:
-        # Handle adapter errors cleanly (e.g., MySQL connection failures)
         error_msg = str(e)
-        # If error message already has structure (multi-line), use it as-is
         if '\n' in error_msg:
             print(f"Error: {error_msg}", file=sys.stderr)
         else:
@@ -383,46 +474,14 @@ def _render_structure(adapter, renderer_class: type, args: 'Namespace',
             print(f"Error{scheme_hint}: {error_msg}", file=sys.stderr)
         sys.exit(1)
 
-    # Apply field selection if --fields specified
-    if hasattr(args, 'fields') and args.fields:
-        from reveal.display.formatting import filter_fields
-        fields = [f.strip() for f in args.fields.split(',')]
-        result = filter_fields(result, fields)
+    # Apply post-processing
+    result = _apply_field_selection(result, args)
+    result = _apply_budget_constraints(result, args)
 
-    # Apply budget constraints if specified
-    if hasattr(result, 'get') and isinstance(result, dict):
-        # Check if result has a list field that we can apply budget limits to
-        # Common list fields: 'items', 'results', 'checks'
-        list_field = None
-        for field_name in ['items', 'results', 'checks', 'commits', 'files']:
-            if field_name in result and isinstance(result[field_name], list):
-                list_field = field_name
-                break
-
-        if list_field:
-            from reveal.utils.query import apply_budget_limits
-
-            budget_result = apply_budget_limits(
-                result[list_field],
-                max_items=getattr(args, 'max_items', None),
-                max_bytes=getattr(args, 'max_bytes', None),
-                max_depth=getattr(args, 'max_depth', None),
-                truncate_strings=getattr(args, 'max_snippet_chars', None)
-            )
-
-            # Update result with budget-limited items and add metadata
-            result[list_field] = budget_result['items']
-            if budget_result['meta']['truncated']:
-                # Merge with existing meta if present
-                if 'meta' in result and isinstance(result['meta'], dict):
-                    result['meta']['budget'] = budget_result['meta']
-                else:
-                    result['meta'] = budget_result['meta']
-
-    # Add available elements if adapter supports element discovery
+    # Add available elements if adapter supports discovery
     if hasattr(adapter, 'get_available_elements'):
         available_elements = adapter.get_available_elements()
-        if available_elements:  # Only add if non-empty
+        if available_elements:
             result['available_elements'] = available_elements
 
     renderer_class.render_structure(result, args.format)
@@ -455,6 +514,56 @@ def handle_adapter(adapter_class: type, scheme: str, resource: str,
     generic_adapter_handler(adapter_class, renderer_class, scheme, resource, element, args)
 
 
+def _parse_file_line_syntax(path_str: str) -> tuple[Path, Optional[str]]:
+    """Parse file:line or file:line-line syntax.
+
+    Args:
+        path_str: Path string potentially with :line suffix
+
+    Returns:
+        Tuple of (Path, element_from_path)
+    """
+    path = Path(path_str)
+    element_from_path = None
+
+    # Support file:line and file:line-line syntax (e.g., app.py:50, app.py:50-60)
+    if not path.exists() and ':' in path_str:
+        match = re.match(r'^(.+?):(\d+(?:-\d+)?)$', path_str)
+        if match:
+            potential_path = Path(match.group(1))
+            if potential_path.exists():
+                path = potential_path
+                element_from_path = f":{match.group(2)}"
+
+    return path, element_from_path
+
+
+def _validate_path_exists(path: Path, path_str: str) -> None:
+    """Validate that path exists, providing helpful error messages."""
+    if not path.exists():
+        if ':' in path_str and re.search(r':\d+', path_str):
+            base_path = path_str.rsplit(':', 1)[0]
+            print(f"Error: {path_str} not found", file=sys.stderr)
+            print(f"Hint: If extracting lines, use: reveal {base_path} :{path_str.rsplit(':', 1)[1]}", file=sys.stderr)
+        else:
+            print(f"Error: {path_str} not found", file=sys.stderr)
+        sys.exit(1)
+
+
+def _build_ast_query_from_flags(path: Path, args: 'Namespace') -> str:
+    """Build AST query URI from convenience flags."""
+    query_params = []
+    if getattr(args, 'search', None):
+        query_params.append(f"name~={args.search}")
+    if getattr(args, 'type', None):
+        query_params.append(f"type={args.type}")
+    if getattr(args, 'sort', None):
+        query_params.append(f"sort={args.sort}")
+
+    query_string = '&'.join(query_params)
+    return f"ast://{path}?{query_string}"
+
+
 def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     """Handle regular file or directory path.
 
@@ -475,29 +584,9 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
         print("Learn more: reveal help://stats", file=sys.stderr)
         sys.exit(1)
 
-    path = Path(path_str)
-    element_from_path = None
-
-    # Support file:line and file:line-line syntax (e.g., app.py:50, app.py:50-60)
-    # This matches common editor/grep output format
-    if not path.exists() and ':' in path_str:
-        match = re.match(r'^(.+?):(\d+(?:-\d+)?)$', path_str)
-        if match:
-            potential_path = Path(match.group(1))
-            if potential_path.exists():
-                path = potential_path
-                path_str = str(potential_path)
-                element_from_path = f":{match.group(2)}"  # Preserve line extraction format
-
-    if not path.exists():
-        # Provide helpful error for line extraction syntax
-        if ':' in path_str and re.search(r':\d+', path_str):
-            base_path = path_str.rsplit(':', 1)[0]
-            print(f"Error: {path_str} not found", file=sys.stderr)
-            print(f"Hint: If extracting lines, use: reveal {base_path} :{path_str.rsplit(':', 1)[1]}", file=sys.stderr)
-        else:
-            print(f"Error: {path_str} not found", file=sys.stderr)
-        sys.exit(1)
+    # Parse path and check existence
+    path, element_from_path = _parse_file_line_syntax(path_str)
+    _validate_path_exists(path, path_str)
 
     if path.is_dir():
         # Check if recursive mode is enabled with --check
@@ -512,7 +601,6 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
             print(output)
     elif path.is_file():
         # Check if convenience flags are set (--search, --sort, --type)
-        # If so, convert to AST query for ergonomic within-file filtering
         has_convenience_flags = (
             getattr(args, 'search', None) or
             getattr(args, 'sort', None) or
@@ -520,24 +608,11 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
         )
 
         if has_convenience_flags:
-            # Build AST query from convenience flags
-            query_params = []
-            if getattr(args, 'search', None):
-                query_params.append(f"name~={args.search}")
-            if getattr(args, 'type', None):
-                query_params.append(f"type={args.type}")
-            if getattr(args, 'sort', None):
-                query_params.append(f"sort={args.sort}")
-
-            query_string = '&'.join(query_params)
-            ast_uri = f"ast://{path}?{query_string}"
-
-            # Route to AST adapter with query
+            # Convert to AST query for ergonomic within-file filtering
+            ast_uri = _build_ast_query_from_flags(path, args)
             handle_uri(ast_uri, args.element, args)
         else:
             # Normal file handling
-            # --section is an alias for element extraction on markdown files
-            # element_from_path takes priority (from file:line syntax)
             element = element_from_path or args.element
             if not element and getattr(args, 'section', None):
                 if path.suffix.lower() in ('.md', '.markdown'):

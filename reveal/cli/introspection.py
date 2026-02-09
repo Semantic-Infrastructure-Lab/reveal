@@ -6,12 +6,10 @@ This module provides commands for understanding how reveal analyzes files:
 - get_language_info_detailed(): Show detailed language capabilities
 """
 
-import json
 from pathlib import Path
 from typing import Optional, Dict, Any
 
 from ..registry import get_analyzer, get_all_analyzers
-from ..base import FileAnalyzer
 
 
 def explain_file(path: str, verbose: bool = False) -> str:

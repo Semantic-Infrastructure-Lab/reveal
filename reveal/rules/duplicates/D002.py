@@ -13,7 +13,7 @@ Philosophy:
 """
 
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from collections import Counter
 import math
 import re

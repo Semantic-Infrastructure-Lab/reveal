@@ -7,7 +7,7 @@ Supports any file type through abstraction layers:
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
 import numpy as np

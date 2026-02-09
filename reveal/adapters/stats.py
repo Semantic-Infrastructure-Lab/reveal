@@ -12,10 +12,7 @@ from ..utils.query import (
     parse_query_params,
     parse_query_filters,
     parse_result_control,
-    apply_result_control,
     compare_values,
-    QueryFilter,
-    ResultControl,
 )
 
 # Quality scoring defaults - configurable via .reveal/stats-quality.yaml
@@ -451,7 +448,13 @@ class StatsAdapter(ResourceAdapter):
         max_complexity = self.query_params.get('max_complexity', max_complexity)
         min_functions = self.query_params.get('min_functions', min_functions)
         if self.path.is_file():
-            return self._analyze_file(self.path)
+            # Analyze single file and wrap in aggregate format for consistency
+            file_stats = self._analyze_file(self.path)
+            if file_stats:
+                return self._aggregate_stats([file_stats])
+            else:
+                # Return empty aggregate if analysis fails
+                return self._aggregate_stats([])
 
         # Directory analysis
         file_stats = []

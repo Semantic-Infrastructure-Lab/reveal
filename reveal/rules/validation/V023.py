@@ -34,8 +34,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from .adapter_utils import get_adapter_schemes, get_adapter_class
-from .utils import find_reveal_root
+from .adapter_utils import get_adapter_class
 
 
 class V023(BaseRule):

@@ -6,7 +6,7 @@ particularly for finding and working with reveal's installation directory.
 
 import os
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 
 def find_reveal_root(dev_only: bool = False) -> Optional[Path]:

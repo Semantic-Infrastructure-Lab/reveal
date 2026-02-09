@@ -20,8 +20,8 @@ import sys
 import logging
 import json
 import re
-from typing import Optional, List, Dict, Any, Set
-from dataclasses import dataclass, field
+from typing import Optional, List, Dict, Any
+from dataclasses import dataclass
 import fnmatch
 
 try:

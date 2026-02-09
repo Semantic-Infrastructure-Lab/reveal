@@ -12,7 +12,7 @@ Example violation:
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional
 import re
 
 from ..base import BaseRule, Detection, RulePrefix, Severity

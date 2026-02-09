@@ -6,8 +6,7 @@ Distinguishes between explicit analyzers (full featured) and tree-sitter
 fallback analyzers (basic structure extraction).
 """
 
-from typing import Dict, List, Tuple, Set
-from pathlib import Path
+from typing import Dict, List, Tuple
 
 
 def list_supported_languages() -> str:
@@ -16,7 +15,7 @@ def list_supported_languages() -> str:
     Returns:
         Formatted string showing explicit and fallback language support
     """
-    from ..registry import get_analyzer_mapping, _guess_treesitter_language
+    from ..registry import get_analyzer_mapping
 
     # Get explicit analyzers
     analyzer_mapping = get_analyzer_mapping()

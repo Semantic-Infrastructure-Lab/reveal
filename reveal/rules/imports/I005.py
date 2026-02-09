@@ -6,11 +6,10 @@ Common in test files where imports are repeated inside test methods.
 
 import logging
 from collections import defaultdict
-from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from ...analyzers.imports.base import get_extractor, get_all_extensions
+from ...analyzers.imports.base import get_all_extensions
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,6 @@
 
 import os
 import sqlite3
-from pathlib import Path
 from typing import Dict, Any, List, Optional
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data

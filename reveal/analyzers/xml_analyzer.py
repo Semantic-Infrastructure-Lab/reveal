@@ -6,7 +6,7 @@ Common uses: Maven pom.xml, Spring configs, Android manifests, SOAP APIs.
 
 import xml.etree.ElementTree as ET
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 from ..base import FileAnalyzer
 from ..registry import register
 

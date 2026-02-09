@@ -11,7 +11,7 @@ Core types are defined here; language-specific extractors are in submodules.
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set
-from collections import defaultdict, deque
+from collections import defaultdict
 
 
 @dataclass

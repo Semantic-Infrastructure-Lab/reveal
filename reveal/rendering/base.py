@@ -6,7 +6,7 @@ Provides common functionality for adapter renderers to reduce duplication.
 import json
 import sys
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Dict, Optional
 
 
 class RendererMixin:

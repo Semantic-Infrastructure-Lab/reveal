@@ -70,76 +70,14 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
     def _extract_services(self) -> List[Dict[str, Any]]:
         """Extract gRPC service definitions."""
         services = []
-
         service_nodes = self._find_nodes_by_type('service')
 
         for service_node in service_nodes:
-            service_name = None
-            rpcs = []
-
-            # Get service name
-            for child in service_node.children:
-                if child.type == 'service_name':
-                    for name_child in child.children:
-                        if name_child.type == 'identifier':
-                            service_name = self._get_node_text(name_child)
-
+            service_name = self._get_service_name(service_node)
             if not service_name:
                 continue
 
-            # Extract RPC methods
-            rpc_nodes = self._find_nodes_in_subtree(service_node, 'rpc')
-
-            for rpc_node in rpc_nodes:
-                rpc_name = None
-                request_type = None
-                response_type = None
-                is_streaming_request = False
-                is_streaming_response = False
-
-                for child in rpc_node.children:
-                    if child.type == 'rpc_name':
-                        for name_child in child.children:
-                            if name_child.type == 'identifier':
-                                rpc_name = self._get_node_text(name_child)
-                    elif child.type == 'message_or_enum_type':
-                        # This is the request type (first occurrence)
-                        if request_type is None:
-                            for type_child in child.children:
-                                if type_child.type == 'identifier':
-                                    request_type = self._get_node_text(type_child)
-                        else:
-                            # This is the response type (second occurrence)
-                            for type_child in child.children:
-                                if type_child.type == 'identifier':
-                                    response_type = self._get_node_text(type_child)
-                    elif child.type == 'stream':
-                        # Check if this is before request or response
-                        # Need to look at position relative to returns keyword
-                        stream_pos = child.start_point[0]
-                        returns_pos = None
-                        for returns_child in rpc_node.children:
-                            if returns_child.type == 'returns':
-                                returns_pos = returns_child.start_point[0]
-                                break
-
-                        if returns_pos is None or stream_pos < returns_pos:
-                            is_streaming_request = True
-                        else:
-                            is_streaming_response = True
-
-                if rpc_name and request_type and response_type:
-                    # Build signature
-                    req = f"stream {request_type}" if is_streaming_request else request_type
-                    resp = f"stream {response_type}" if is_streaming_response else response_type
-                    signature = f"{rpc_name}({req}) returns ({resp})"
-
-                    rpcs.append({
-                        'name': rpc_name,
-                        'signature': signature,
-                        'line': rpc_node.start_point[0] + 1,
-                    })
-
+            rpcs = self._extract_service_rpcs(service_node)
             services.append({
                 'line': service_node.start_point[0] + 1,
                 'name': service_name,
@@ -147,6 +85,108 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
             })
 
         return services
+
+    def _get_service_name(self, service_node) -> Optional[str]:
+        """Extract service name from service node."""
+        for child in service_node.children:
+            if child.type == 'service_name':
+                for name_child in child.children:
+                    if name_child.type == 'identifier':
+                        return self._get_node_text(name_child)
+        return None
+
+    def _extract_service_rpcs(self, service_node) -> List[Dict[str, Any]]:
+        """Extract all RPC methods from a service node."""
+        rpcs = []
+        rpc_nodes = self._find_nodes_in_subtree(service_node, 'rpc')
+
+        for rpc_node in rpc_nodes:
+            rpc_data = self._extract_single_rpc(rpc_node)
+            if rpc_data:
+                rpcs.append(rpc_data)
+
+        return rpcs
+
+    def _extract_single_rpc(self, rpc_node) -> Optional[Dict[str, Any]]:
+        """Extract details of a single RPC method."""
+        rpc_name = self._get_rpc_name(rpc_node)
+        request_type, response_type = self._get_rpc_types(rpc_node)
+        is_streaming_request, is_streaming_response = self._get_rpc_streaming(rpc_node)
+
+        if not (rpc_name and request_type and response_type):
+            return None
+
+        signature = self._build_rpc_signature(
+            rpc_name, request_type, response_type,
+            is_streaming_request, is_streaming_response
+        )
+
+        return {
+            'name': rpc_name,
+            'signature': signature,
+            'line': rpc_node.start_point[0] + 1,
+        }
+
+    def _get_rpc_name(self, rpc_node) -> Optional[str]:
+        """Extract RPC method name."""
+        for child in rpc_node.children:
+            if child.type == 'rpc_name':
+                for name_child in child.children:
+                    if name_child.type == 'identifier':
+                        return self._get_node_text(name_child)
+        return None
+
+    def _get_rpc_types(self, rpc_node):
+        """Extract request and response types from RPC node."""
+        request_type = None
+        response_type = None
+
+        for child in rpc_node.children:
+            if child.type == 'message_or_enum_type':
+                if request_type is None:
+                    # First occurrence is request type
+                    for type_child in child.children:
+                        if type_child.type == 'identifier':
+                            request_type = self._get_node_text(type_child)
+                            break
+                else:
+                    # Second occurrence is response type
+                    for type_child in child.children:
+                        if type_child.type == 'identifier':
+                            response_type = self._get_node_text(type_child)
+                            break
+
+        return request_type, response_type
+
+    def _get_rpc_streaming(self, rpc_node):
+        """Determine if RPC uses streaming for request/response."""
+        is_streaming_request = False
+        is_streaming_response = False
+
+        # Find returns position for reference
+        returns_pos = None
+        for child in rpc_node.children:
+            if child.type == 'returns':
+                returns_pos = child.start_point[0]
+                break
+
+        # Check each stream keyword position
+        for child in rpc_node.children:
+            if child.type == 'stream':
+                stream_pos = child.start_point[0]
+                if returns_pos is None or stream_pos < returns_pos:
+                    is_streaming_request = True
+                else:
+                    is_streaming_response = True
+
+        return is_streaming_request, is_streaming_response
+
+    def _build_rpc_signature(self, rpc_name: str, request_type: str, response_type: str,
+                            is_streaming_request: bool, is_streaming_response: bool) -> str:
+        """Build RPC signature string."""
+        req = f"stream {request_type}" if is_streaming_request else request_type
+        resp = f"stream {response_type}" if is_streaming_response else response_type
+        return f"{rpc_name}({req}) returns ({resp})"
 
     def _extract_messages(self) -> List[Dict[str, Any]]:
         """Extract message definitions."""

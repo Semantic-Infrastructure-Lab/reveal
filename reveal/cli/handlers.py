@@ -467,7 +467,6 @@ def _render_ssl_batch_results(results: list, args: 'Namespace') -> None:
         results: List of individual check results
         args: CLI arguments with batch flags
     """
-    import json
     from ..adapters.ssl.renderer import SSLRenderer
 
     # Build batch result structure
@@ -518,9 +517,6 @@ def _collect_batch_result(uri: str, args: 'Namespace') -> dict:
         Result dict with status and data, or error result
     """
     from ..adapters.base import get_adapter_class
-    from .routing import handle_uri
-    import io
-    import sys
 
     try:
         # Parse scheme from URI

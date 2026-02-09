@@ -1,7 +1,7 @@
 """DNS resolution and validation utilities."""
 
 import socket
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 
 try:
     import dns.resolver

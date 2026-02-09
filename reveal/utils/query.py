@@ -190,6 +190,108 @@ def parse_query_filters(
     return filters
 
 
+def _handle_range_operator(field_value: Any, target_value: Any, opts: dict) -> bool:
+    """Handle range operator (..) comparison."""
+    if not isinstance(target_value, str) or '..' not in str(target_value):
+        return False
+
+    try:
+        parts = str(target_value).split('..', 1)
+        min_val, max_val = parts[0].strip(), parts[1].strip()
+
+        # Try numeric comparison first if coercion enabled
+        if opts['coerce_numeric']:
+            try:
+                field_num = field_value if isinstance(field_value, (int, float)) else float(field_value)
+                min_num = float(min_val) if min_val else float('-inf')
+                max_num = float(max_val) if max_val else float('inf')
+                return min_num <= field_num <= max_num
+            except (ValueError, TypeError):
+                pass
+
+        # Fall back to string comparison
+        return min_val <= str(field_value) <= max_val
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
+def _handle_wildcard_operator(field_value: Any, target_value: Any, opts: dict) -> bool:
+    """Handle wildcard operator (*) comparison."""
+    pattern_str = str(target_value)
+    # Escape special regex characters except *
+    pattern_str = re.escape(pattern_str).replace(r'\*', '.*')
+    try:
+        pattern = re.compile(pattern_str, re.IGNORECASE if not opts['case_sensitive'] else 0)
+        return bool(pattern.search(str(field_value)))
+    except re.error:
+        return False
+
+
+def _handle_regex_operator(field_value: Any, operator: str, target_value: Any) -> bool:
+    """Handle regex operators (~=, !~)."""
+    try:
+        pattern = re.compile(str(target_value))
+        matches = bool(pattern.search(str(field_value)))
+        return matches if operator == '~=' else not matches
+    except re.error:
+        return False if operator == '~=' else True
+
+
+def _handle_equality_operator(field_value: Any, operator: str, target_value: Any, opts: dict) -> bool:
+    """Handle equality operators (=, !=)."""
+    # Special case: if value contains .., treat as range (backward compatibility)
+    if operator == '=' and isinstance(target_value, str) and '..' in str(target_value):
+        return _handle_range_operator(field_value, target_value, opts)
+
+    # Try numeric comparison if enabled
+    if opts['coerce_numeric']:
+        try:
+            field_num = field_value if isinstance(field_value, (int, float)) else float(field_value)
+            target_num = float(target_value)
+            numeric_equal = field_num == target_num
+            return numeric_equal if operator == '=' else not numeric_equal
+        except (ValueError, TypeError):
+            pass
+
+    # String comparison
+    field_str = str(field_value).lower() if not opts['case_sensitive'] else str(field_value)
+    target_str = str(target_value).lower() if not opts['case_sensitive'] else str(target_value)
+    strings_equal = field_str == target_str
+    return strings_equal if operator == '=' else not strings_equal
+
+
+def _handle_numeric_operator(field_value: Any, operator: str, target_value: Any, opts: dict) -> bool:
+    """Handle numeric comparison operators (>, <, >=, <=)."""
+    try:
+        field_num = field_value if isinstance(field_value, (int, float)) else float(field_value)
+        target_num = float(target_value)
+
+        if operator == '>':
+            return field_num > target_num
+        elif operator == '<':
+            return field_num < target_num
+        elif operator == '>=':
+            return field_num >= target_num
+        elif operator == '<=':
+            return field_num <= target_num
+    except (ValueError, TypeError):
+        # Fall back to string comparison if coercion disabled or failed
+        if not opts['coerce_numeric']:
+            field_str = str(field_value)
+            target_str = str(target_value)
+            if operator == '>':
+                return field_str > target_str
+            elif operator == '<':
+                return field_str < target_str
+            elif operator == '>=':
+                return field_str >= target_str
+            elif operator == '<=':
+                return field_str <= target_str
+        return False
+
+    return False
+
+
 def compare_values(
     field_value: Any,
     operator: str,
@@ -250,128 +352,17 @@ def compare_values(
     if opts['allow_list_any'] and isinstance(field_value, list):
         return any(compare_values(item, operator, target_value, options) for item in field_value)
 
-    # Convert to string for string operations
-    field_str = str(field_value)
-    target_str = str(target_value)
-
-    # Case sensitivity
-    if not opts['case_sensitive']:
-        field_str_lower = field_str.lower()
-        target_str_lower = target_str.lower()
-    else:
-        field_str_lower = field_str
-        target_str_lower = target_str
-
-    # Handle range operator (..)
+    # Dispatch to specific operator handlers
     if operator == '..':
-        if not isinstance(target_value, str) or '..' not in str(target_value):
-            return False
-
-        try:
-            parts = str(target_value).split('..', 1)
-            min_val, max_val = parts[0].strip(), parts[1].strip()
-
-            # Try numeric comparison first if coercion enabled
-            if opts['coerce_numeric']:
-                try:
-                    if isinstance(field_value, (int, float)):
-                        field_num = field_value
-                    else:
-                        field_num = float(field_value)
-
-                    min_num = float(min_val) if min_val else float('-inf')
-                    max_num = float(max_val) if max_val else float('inf')
-
-                    return min_num <= field_num <= max_num
-                except (ValueError, TypeError):
-                    pass
-
-            # Fall back to string comparison
-            return min_val <= field_str <= max_val
-        except (ValueError, TypeError, AttributeError):
-            return False
-
-    # Handle wildcard operator (*)
-    if operator == '*':
-        # Convert shell-style wildcards (*) to regex
-        # *test* -> .*test.*
-        # test* -> test.*
-        # *test -> .*test
-        pattern_str = str(target_value)
-        # Escape special regex characters except *
-        pattern_str = re.escape(pattern_str).replace(r'\*', '.*')
-        try:
-            pattern = re.compile(pattern_str, re.IGNORECASE if not opts['case_sensitive'] else 0)
-            return bool(pattern.search(field_str))
-        except re.error:
-            return False
-
-    # Handle regex operators (~=, !~)
-    if operator in ('~=', '!~'):
-        try:
-            pattern = re.compile(str(target_value))
-            matches = bool(pattern.search(field_str))
-            return matches if operator == '~=' else not matches
-        except re.error:
-            return False if operator == '~=' else True
-
-    # Handle equality operators (=, !=)
-    if operator in ('=', '!='):
-        # Special case: if value contains .., treat as range (for backward compatibility)
-        # This handles queries like "age=25..30" which parse as op='=' with value='25..30'
-        if operator == '=' and isinstance(target_value, str) and '..' in str(target_value):
-            # Delegate to range handling
-            return compare_values(field_value, '..', target_value, options)
-
-        # Try numeric comparison if enabled
-        if opts['coerce_numeric']:
-            try:
-                if isinstance(field_value, (int, float)):
-                    field_num = field_value
-                else:
-                    field_num = float(field_value)
-
-                target_num = float(target_value)
-                numeric_equal = field_num == target_num
-                return numeric_equal if operator == '=' else not numeric_equal
-            except (ValueError, TypeError):
-                pass
-
-        # String comparison
-        strings_equal = field_str_lower == target_str_lower
-        return strings_equal if operator == '=' else not strings_equal
-
-    # Handle numeric comparison operators (>, <, >=, <=)
-    if operator in ('>', '<', '>=', '<='):
-        try:
-            # Get numeric value
-            if isinstance(field_value, (int, float)):
-                field_num = field_value
-            else:
-                field_num = float(field_value)
-
-            target_num = float(target_value)
-
-            if operator == '>':
-                return field_num > target_num
-            elif operator == '<':
-                return field_num < target_num
-            elif operator == '>=':
-                return field_num >= target_num
-            elif operator == '<=':
-                return field_num <= target_num
-        except (ValueError, TypeError):
-            # Fall back to string comparison if coercion disabled or failed
-            if not opts['coerce_numeric']:
-                if operator == '>':
-                    return field_str > target_str
-                elif operator == '<':
-                    return field_str < target_str
-                elif operator == '>=':
-                    return field_str >= target_str
-                elif operator == '<=':
-                    return field_str <= target_str
-            return False
+        return _handle_range_operator(field_value, target_value, opts)
+    elif operator == '*':
+        return _handle_wildcard_operator(field_value, target_value, opts)
+    elif operator in ('~=', '!~'):
+        return _handle_regex_operator(field_value, operator, target_value)
+    elif operator in ('=', '!='):
+        return _handle_equality_operator(field_value, operator, target_value, opts)
+    elif operator in ('>', '<', '>=', '<='):
+        return _handle_numeric_operator(field_value, operator, target_value, opts)
 
     return False
 
@@ -499,14 +490,44 @@ def apply_result_control(items: List[Dict[str, Any]], control: ResultControl) ->
 
     # Apply sorting
     if control.sort_field:
+        # First pass: check if we have mixed types and convert if needed
+        values = [item.get(control.sort_field) for item in result]
+        has_numbers = any(isinstance(v, (int, float)) and v is not None for v in values)
+        has_strings = any(isinstance(v, str) for v in values)
+
+        # If we have mixed types, convert all to numbers (parsing strings) or all to strings
+        if has_numbers and has_strings:
+            # Try to convert strings to numbers
+            def safe_numeric(v):
+                if v is None:
+                    return None
+                if isinstance(v, (int, float)):
+                    return v
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    return None  # Non-numeric strings become None
+
         def sort_key(item):
             value = item.get(control.sort_field)
+
+            # Apply type conversion if we have mixed types
+            if has_numbers and has_strings:
+                value = safe_numeric(value)
+
             # Handle None values (sort to end)
             if value is None:
-                return (1, '') if not control.sort_descending else (0, '')
-            return (0, value)
+                # Use very large/small number for None depending on sort direction
+                return float('inf') if not control.sort_descending else float('-inf')
 
-        result.sort(key=sort_key, reverse=control.sort_descending)
+            return value
+
+        try:
+            result.sort(key=sort_key, reverse=control.sort_descending)
+        except TypeError:
+            # If sorting still fails (shouldn't happen), fall back to string comparison
+            result.sort(key=lambda item: str(item.get(control.sort_field) or ''),
+                       reverse=control.sort_descending)
 
     # Apply offset
     if control.offset > 0:

@@ -622,9 +622,6 @@ class SSLAdapter(ResourceAdapter):
                 'exit_code': 2,
             }
 
-        import glob
-        import os
-        from reveal.analyzers.nginx import NginxAnalyzer
 
         # Get domains from nginx config
         domain_info = self._get_nginx_domains()

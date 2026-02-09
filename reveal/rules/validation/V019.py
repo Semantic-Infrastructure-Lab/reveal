@@ -22,7 +22,6 @@ This allows generic_adapter_handler to try the next pattern gracefully.
 
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-import inspect
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from .utils import find_reveal_root

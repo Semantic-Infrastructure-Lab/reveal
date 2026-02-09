@@ -5,7 +5,7 @@ Handles Windows INI files and Java properties files.
 
 import configparser
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 from ..base import FileAnalyzer
 from ..registry import register
 

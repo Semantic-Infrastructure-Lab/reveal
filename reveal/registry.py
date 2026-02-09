@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .base import FileAnalyzer
+    pass
 
 logger = logging.getLogger(__name__)
 

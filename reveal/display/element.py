@@ -9,6 +9,184 @@ from reveal.treesitter import (
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 
 
+def _parse_element_syntax(element: str):
+    """Parse element syntax to determine extraction type.
+
+    Args:
+        element: Element string to parse
+
+    Returns:
+        Dict with 'type' and parsed values:
+        - ordinal: {'type': 'ordinal', 'ordinal': int, 'element_type': str or None}
+        - line: {'type': 'line', 'start_line': int, 'end_line': int or None}
+        - hierarchical: {'type': 'hierarchical'}
+        - name: {'type': 'name'} (default)
+    """
+    import re
+
+    # Check for @N ordinal extraction syntax (e.g., "@3" or "function:3")
+    ordinal_match = re.match(r'^@(\d+)$', element)
+    typed_ordinal_match = re.match(r'^(\w+):(\d+)$', element)
+    if ordinal_match or typed_ordinal_match:
+        if ordinal_match:
+            return {
+                'type': 'ordinal',
+                'ordinal': int(ordinal_match.group(1)),
+                'element_type': None
+            }
+        else:
+            return {
+                'type': 'ordinal',
+                'ordinal': int(typed_ordinal_match.group(2)),
+                'element_type': typed_ordinal_match.group(1)
+            }
+
+    # Check for :LINE extraction syntax (e.g., ":73" or ":73-91")
+    line_match = re.match(r'^:(\d+)(?:-(\d+))?$', element)
+    if line_match:
+        return {
+            'type': 'line',
+            'start_line': int(line_match.group(1)),
+            'end_line': int(line_match.group(2)) if line_match.group(2) else None
+        }
+
+    # Check for hierarchical extraction (Class.method syntax)
+    if '.' in element:
+        return {'type': 'hierarchical'}
+
+    # Default: name-based extraction
+    return {'type': 'name'}
+
+
+def _extract_by_syntax(analyzer, element: str, syntax: dict):
+    """Extract element based on parsed syntax.
+
+    Args:
+        analyzer: File analyzer instance
+        element: Original element string
+        syntax: Parsed syntax dict from _parse_element_syntax
+
+    Returns:
+        Element dict or None if not found
+    """
+    syntax_type = syntax['type']
+
+    if syntax_type == 'ordinal':
+        return _extract_ordinal_element(analyzer, syntax['ordinal'], syntax['element_type'])
+
+    elif syntax_type == 'line':
+        if syntax['end_line']:
+            return _extract_line_range(analyzer, syntax['start_line'], syntax['end_line'])
+        else:
+            return _extract_element_at_line(analyzer, syntax['start_line'])
+
+    elif syntax_type == 'hierarchical':
+        from ..treesitter import TreeSitterAnalyzer
+        if isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
+            return _extract_hierarchical_element(analyzer, element)
+        return None
+
+    else:  # name-based extraction
+        return _extract_by_name(analyzer, element)
+
+
+def _extract_by_name(analyzer, element: str):
+    """Extract element by name using tree-sitter or grep.
+
+    Args:
+        analyzer: File analyzer instance
+        element: Element name to find
+
+    Returns:
+        Element dict or None if not found
+    """
+    from ..treesitter import TreeSitterAnalyzer
+
+    # Try tree-sitter first if available
+    if isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
+        result = _try_treesitter_extraction(analyzer, element)
+        if result:
+            return result
+
+    # Fallback to grep-based extraction
+    return _try_grep_extraction(analyzer, element)
+
+
+def _try_treesitter_extraction(analyzer, element: str):
+    """Try extracting element using tree-sitter.
+
+    Args:
+        analyzer: TreeSitterAnalyzer instance
+        element: Element name to find
+
+    Returns:
+        Element dict or None if not found
+    """
+    for element_type in ['class', 'function', 'struct', 'section', 'server', 'location', 'upstream']:
+        node_types = ELEMENT_TYPE_MAP.get(element_type, [element_type])
+
+        for node_type in node_types:
+            nodes = analyzer._find_nodes_by_type(node_type)
+            for node in nodes:
+                node_name = analyzer._get_node_name(node)
+                if node_name == element:
+                    return {
+                        'name': element,
+                        'line_start': node.start_point[0] + 1,
+                        'line_end': node.end_point[0] + 1,
+                        'source': analyzer._get_node_text(node),
+                    }
+    return None
+
+
+def _try_grep_extraction(analyzer, element: str):
+    """Try extracting element using grep fallback.
+
+    Args:
+        analyzer: File analyzer instance
+        element: Element name to find
+
+    Returns:
+        Element dict or None if not found
+    """
+    for element_type in ['function', 'class', 'struct', 'section', 'server', 'location', 'upstream']:
+        result = analyzer.extract_element(element_type, element)
+        if result:
+            return result
+    return None
+
+
+def _handle_extraction_error(analyzer, element: str, syntax: dict):
+    """Print appropriate error message based on extraction type.
+
+    Args:
+        analyzer: File analyzer instance
+        element: Element string that failed
+        syntax: Parsed syntax dict
+    """
+    syntax_type = syntax['type']
+
+    if syntax_type == 'ordinal':
+        element_type = syntax['element_type']
+        ordinal = syntax['ordinal']
+        if element_type:
+            print(f"Error: No {element_type} #{ordinal} found in {analyzer.path}", file=sys.stderr)
+        else:
+            print(f"Error: No element #{ordinal} found in {analyzer.path}", file=sys.stderr)
+
+    elif syntax_type == 'line':
+        target_line = syntax['start_line']
+        print(f"Error: No element found at line {target_line} in {analyzer.path}", file=sys.stderr)
+
+    elif syntax_type == 'hierarchical':
+        parent, child = element.rsplit('.', 1)
+        print(f"Error: Element '{element}' not found in {analyzer.path}", file=sys.stderr)
+        print(f"Hint: Looking for '{child}' within '{parent}'", file=sys.stderr)
+
+    else:
+        print(f"Error: Element '{element}' not found in {analyzer.path}", file=sys.stderr)
+
+
 def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, config=None):
     """Extract a specific element.
 
@@ -18,131 +196,19 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
         output_format: Output format
         config: Optional RevealConfig instance
     """
-    import re
+    # Parse element syntax to determine extraction strategy
+    syntax = _parse_element_syntax(element)
 
-    # For tree-sitter analyzers, try all types with tree-sitter first
-    # before falling back to grep. This prevents matching type variables
-    # or other non-semantic matches when a proper definition exists.
-    from ..treesitter import TreeSitterAnalyzer
+    # Route to appropriate extraction handler
+    result = _extract_by_syntax(analyzer, element, syntax)
 
-    result = None
-
-    # Check for @N ordinal extraction syntax (e.g., "@3" or "function:3")
-    ordinal_match = re.match(r'^@(\d+)$', element)
-    typed_ordinal_match = re.match(r'^(\w+):(\d+)$', element)
-    if ordinal_match or typed_ordinal_match:
-        if ordinal_match:
-            ordinal = int(ordinal_match.group(1))
-            element_type = None  # Will use dominant category
-        else:
-            element_type = typed_ordinal_match.group(1)
-            ordinal = int(typed_ordinal_match.group(2))
-
-        result = _extract_ordinal_element(analyzer, ordinal, element_type)
-        if result:
-            _output_result(analyzer, result, element, output_format, config)
-            return
-        else:
-            if element_type:
-                print(f"Error: No {element_type} #{ordinal} found in {analyzer.path}", file=sys.stderr)
-            else:
-                print(f"Error: No element #{ordinal} found in {analyzer.path}", file=sys.stderr)
-            sys.exit(1)
-
-    # Check for :LINE extraction syntax (e.g., ":73" or ":73-91")
-    line_match = re.match(r'^:(\d+)(?:-(\d+))?$', element)
-    if line_match:
-        target_line = int(line_match.group(1))
-        end_line = int(line_match.group(2)) if line_match.group(2) else None
-
-        if end_line:
-            # Explicit range: extract lines directly
-            result = _extract_line_range(analyzer, target_line, end_line)
-        else:
-            # Single line: find element containing this line
-            result = _extract_element_at_line(analyzer, target_line)
-
-        if result:
-            _output_result(analyzer, result, element, output_format, config)
-            return
-        else:
-            print(f"Error: No element found at line {target_line} in {analyzer.path}", file=sys.stderr)
-            sys.exit(1)
-
-    # Check for hierarchical extraction (Class.method syntax)
-    if '.' in element and isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
-        result = _extract_hierarchical_element(analyzer, element)
-
-    if not result and isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
-        # Try common element types with tree-sitter only (no grep fallback)
-        for element_type in ['class', 'function', 'struct', 'section', 'server', 'location', 'upstream']:
-            node_types = ELEMENT_TYPE_MAP.get(element_type, [element_type])
-
-            for node_type in node_types:
-                nodes = analyzer._find_nodes_by_type(node_type)
-                for node in nodes:
-                    node_name = analyzer._get_node_name(node)
-                    if node_name == element:
-                        result = {
-                            'name': element,
-                            'line_start': node.start_point[0] + 1,
-                            'line_end': node.end_point[0] + 1,
-                            'source': analyzer._get_node_text(node),
-                        }
-                        break
-                if result:
-                    break
-            if result:
-                break
-
-    # Fallback: try extract_element with grep for non-tree-sitter analyzers
-    # or if tree-sitter didn't find anything
+    # Handle extraction failure
     if not result:
-        for element_type in ['function', 'class', 'struct', 'section', 'server', 'location', 'upstream']:
-            result = analyzer.extract_element(element_type, element)
-            if result:
-                break
-
-    if not result:
-        # Not found - provide helpful message for hierarchical requests
-        if '.' in element:
-            parent, child = element.rsplit('.', 1)
-            print(f"Error: Element '{element}' not found in {analyzer.path}", file=sys.stderr)
-            print(f"Hint: Looking for '{child}' within '{parent}'", file=sys.stderr)
-        else:
-            print(f"Error: Element '{element}' not found in {analyzer.path}", file=sys.stderr)
+        _handle_extraction_error(analyzer, element, syntax)
         sys.exit(1)
 
-    # Format output
-    if output_format == 'json':
-        print(safe_json_dumps(result))
-        return
-
-    path = analyzer.path
-    line_start = result.get('line_start', 1)
-    line_end = result.get('line_end', line_start)
-    source = result.get('source', '')
-    name = result.get('name', element)
-
-    # Header
-    print(f"{path}:{line_start}-{line_end} | {name}\n")
-
-    # Source with line numbers
-    if output_format == 'grep':
-        # Grep format: filename:linenum:content
-        for i, line in enumerate(source.split('\n')):
-            line_num = line_start + i
-            print(f"{path}:{line_num}:{line}")
-    else:
-        # Human-readable format
-        formatted = analyzer.format_with_lines(source, line_start)
-        print(formatted)
-
-        # Navigation hints
-        file_type = get_file_type_from_analyzer(analyzer)
-        line_count = line_end - line_start + 1
-        print_breadcrumbs('element', path, file_type=file_type, config=config,
-                         element_name=name, line_count=line_count, line_start=line_start)
+    # Output result in requested format
+    _output_result(analyzer, result, element, output_format, config)
 
 
 def _extract_hierarchical_element(analyzer, element: str):

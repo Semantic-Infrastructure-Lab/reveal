@@ -1,7 +1,6 @@
 """AST query adapter (ast://)."""
 
 import os
-import re
 import sys
 from fnmatch import fnmatch
 from pathlib import Path
@@ -13,7 +12,6 @@ from ..utils.query import (
     parse_result_control,
     apply_result_control,
     compare_values,
-    QueryFilter,
     ResultControl
 )
 

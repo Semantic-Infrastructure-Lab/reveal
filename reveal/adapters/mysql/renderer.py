@@ -1,7 +1,6 @@
 """MySQL result rendering for CLI output."""
 
 import sys
-from typing import Dict, Any
 
 from reveal.rendering import TypeDispatchRenderer
 
