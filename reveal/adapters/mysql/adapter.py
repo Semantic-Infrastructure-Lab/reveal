@@ -300,12 +300,15 @@ class MySQLAdapter(ResourceAdapter):
                 return result
             # Fall through to overview if element not recognized
 
+        # Get timing context for snapshot
+        timing = self.conn.get_snapshot_context()
+
         # Get server version and status
         version_info = self._execute_single("SELECT VERSION() as version")
         status_vars = {row['Variable_name']: row['Value']
                       for row in self._execute_query("SHOW GLOBAL STATUS")}
 
-        # Calculate uptime and health metrics
+        # Calculate uptime and health metrics (for detailed display)
         uptime_days, uptime_hours, uptime_mins, server_start_time = (
             self._get_server_uptime_info(status_vars)
         )
@@ -333,6 +336,7 @@ class MySQLAdapter(ResourceAdapter):
             'type': 'mysql_server',
             'source': server_display,
             'source_type': 'database',
+            'snapshot_time': timing['snapshot_time'],
             'server': server_display,
             'version': version_info['version'],
             'uptime': f"{uptime_days}d {uptime_hours}h {uptime_mins}m",
@@ -588,7 +592,12 @@ class MySQLAdapter(ResourceAdapter):
         ]
 
     def _get_connections(self) -> Dict[str, Any]:
-        """Get connection details and processlist."""
+        """Get connection details and processlist.
+
+        Returns connection details with snapshot timing context to accurately
+        interpret long_running_queries time values.
+        """
+        timing = self.conn.get_snapshot_context()
         processlist = self._execute_query("SHOW FULL PROCESSLIST")
 
         # Group by state
@@ -614,6 +623,7 @@ class MySQLAdapter(ResourceAdapter):
 
         return {
             'type': 'connections',
+            **timing,
             'total_connections': len(processlist),
             'by_state': by_state,
             'long_running_queries': long_running,
@@ -795,26 +805,13 @@ class MySQLAdapter(ResourceAdapter):
 
     def _get_errors(self) -> Dict[str, Any]:
         """Get error indicators."""
-        from datetime import datetime, timezone
-
+        timing = self.conn.get_snapshot_context()
         status_vars = {row['Variable_name']: row['Value']
                       for row in self._execute_query("SHOW GLOBAL STATUS")}
 
-        uptime_seconds = int(status_vars.get('Uptime', 1))
-        uptime_days = uptime_seconds // 86400
-        uptime_hours = (uptime_seconds % 86400) // 3600
-
-        # Calculate server start time using MySQL's clock
-        mysql_time = self._execute_single("SELECT UNIX_TIMESTAMP() as timestamp")
-        mysql_timestamp = int(mysql_time['timestamp'])
-        server_start_timestamp = mysql_timestamp - uptime_seconds
-        server_start_time = datetime.fromtimestamp(server_start_timestamp, timezone.utc)
-
         return {
             'type': 'errors',
-            'measurement_window': f'{uptime_days}d {uptime_hours}h (since server start)',
-            'server_start_time': server_start_time.isoformat(),
-            'uptime_seconds': uptime_seconds,
+            **timing,
             'aborted_clients': f"{status_vars.get('Aborted_clients', 0)} (since server start)",
             'aborted_connects': f"{status_vars.get('Aborted_connects', 0)} (since server start)",
             'connection_errors_internal': f"{status_vars.get('Connection_errors_internal', 0)} (since server start)",
@@ -822,7 +819,8 @@ class MySQLAdapter(ResourceAdapter):
         }
 
     def _get_variables(self) -> Dict[str, Any]:
-        """Get key server variables."""
+        """Get key server variables with snapshot timing context."""
+        timing = self.conn.get_snapshot_context()
         variables = self._execute_query("""
             SHOW VARIABLES WHERE Variable_name IN (
                 'max_connections', 'innodb_buffer_pool_size',
@@ -832,6 +830,7 @@ class MySQLAdapter(ResourceAdapter):
 
         return {
             'type': 'variables',
+            **timing,
             'variables': {row['Variable_name']: row['Value'] for row in variables},
         }
 
@@ -841,30 +840,19 @@ class MySQLAdapter(ResourceAdapter):
         return self.get_structure()
 
     def _get_databases(self) -> Dict[str, Any]:
-        """Get database list."""
+        """Get database list with snapshot timing context."""
+        timing = self.conn.get_snapshot_context()
         databases = self._execute_query("SHOW DATABASES")
 
         return {
             'type': 'databases',
+            **timing,
             'databases': [db['Database'] for db in databases],
         }
 
     def _get_indexes(self) -> Dict[str, Any]:
         """Get index usage statistics from performance_schema."""
-        from datetime import datetime, timezone
-
-        # Get uptime for measurement window context
-        status_vars = {row['Variable_name']: row['Value']
-                      for row in self._execute_query("SHOW GLOBAL STATUS WHERE Variable_name = 'Uptime'")}
-        uptime_seconds = int(status_vars.get('Uptime', 1))
-        uptime_days = uptime_seconds // 86400
-        uptime_hours = (uptime_seconds % 86400) // 3600
-
-        # Calculate server start time using MySQL's clock
-        mysql_time = self._execute_single("SELECT UNIX_TIMESTAMP() as timestamp")
-        mysql_timestamp = int(mysql_time['timestamp'])
-        server_start_timestamp = mysql_timestamp - uptime_seconds
-        server_start_time = datetime.fromtimestamp(server_start_timestamp, timezone.utc)
+        timing = self.conn.get_snapshot_context()
 
         # Most used indexes
         most_used = self._execute_query("""
@@ -899,10 +887,8 @@ class MySQLAdapter(ResourceAdapter):
 
         return {
             'type': 'indexes',
-            'measurement_window': f'{uptime_days}d {uptime_hours}h (since server start or performance_schema enable)',
-            'server_start_time': server_start_time.isoformat(),
-            'uptime_seconds': uptime_seconds,
-            'note': 'Counters are cumulative since server start or last performance_schema reset',
+            **timing,
+            'note': 'Counters are cumulative since server start (or last performance_schema reset if detected)',
             'most_used': most_used,
             'unused': unused,
             'unused_count': len(unused),
