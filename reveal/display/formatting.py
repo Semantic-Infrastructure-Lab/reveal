@@ -6,6 +6,11 @@ from typing import Any, Dict, List, Optional
 from reveal.base import FileAnalyzer
 
 
+# Constants for field filtering
+LIST_FIELD_NAMES = ['results', 'items', 'checks', 'commits', 'files', 'records']
+METADATA_FIELD_NAMES = ['contract_version', 'type', 'meta', 'source', 'source_type']
+
+
 def set_nested(d: Dict[str, Any], keys: List[str], value: Any) -> None:
     """Set a value in a nested dictionary using a list of keys.
 
@@ -25,6 +30,130 @@ def set_nested(d: Dict[str, Any], keys: List[str], value: Any) -> None:
             d[key] = {}
         d = d[key]
     d[keys[-1]] = value
+
+
+# Helper functions for field filtering
+
+def _find_list_field(structure: Dict[str, Any]) -> Optional[str]:
+    """Find which list field exists in the structure.
+
+    Args:
+        structure: Structure dictionary to search
+
+    Returns:
+        Name of the list field, or None if not found
+    """
+    for list_field in LIST_FIELD_NAMES:
+        if list_field in structure and isinstance(structure.get(list_field), list):
+            return list_field
+    return None
+
+
+def _extract_nested_value(obj: Dict[str, Any], field_path: str) -> Optional[Any]:
+    """Extract nested field value using dot notation.
+
+    Args:
+        obj: Object to extract from
+        field_path: Field path (e.g., 'certificate.expiry')
+
+    Returns:
+        Extracted value, or None if not found
+    """
+    parts = field_path.split('.')
+    value = obj
+    for part in parts:
+        if isinstance(value, dict):
+            value = value.get(part)
+        else:
+            return None
+        if value is None:
+            return None
+    return value
+
+
+def _filter_single_item_fields(
+    item: Dict[str, Any], fields: List[str]
+) -> Dict[str, Any]:
+    """Filter a single item to only include specified fields.
+
+    Args:
+        item: Item dictionary to filter
+        fields: List of field names (supports nested: "parent.child")
+
+    Returns:
+        Filtered item dictionary
+    """
+    filtered_item = {}
+    for field in fields:
+        if '.' in field:  # Nested field
+            value = _extract_nested_value(item, field)
+            if value is not None:
+                set_nested(filtered_item, field.split('.'), value)
+        else:  # Flat field
+            if field in item:
+                filtered_item[field] = item[field]
+    return filtered_item
+
+
+def _preserve_metadata(
+    result: Dict[str, Any], structure: Dict[str, Any]
+) -> None:
+    """Preserve important metadata fields in result.
+
+    Args:
+        result: Result dictionary to update
+        structure: Original structure with metadata
+    """
+    for meta_field in METADATA_FIELD_NAMES:
+        if meta_field in structure:
+            result[meta_field] = structure[meta_field]
+
+
+def _filter_list_items(
+    structure: Dict[str, Any], list_field: str, fields: List[str]
+) -> Dict[str, Any]:
+    """Filter all items in a list field.
+
+    Args:
+        structure: Full structure with list field
+        list_field: Name of the list field
+        fields: Fields to include in each item
+
+    Returns:
+        Filtered structure with list and metadata
+    """
+    filtered_items = [
+        _filter_single_item_fields(item, fields)
+        for item in structure[list_field]
+    ]
+
+    result = {list_field: filtered_items}
+    _preserve_metadata(result, structure)
+    return result
+
+
+def _filter_toplevel_structure(
+    structure: Dict[str, Any], fields: List[str]
+) -> Dict[str, Any]:
+    """Filter top-level structure fields.
+
+    Args:
+        structure: Structure to filter
+        fields: Fields to include (supports nested: "parent.child")
+
+    Returns:
+        Filtered structure
+    """
+    filtered = {}
+    for field in fields:
+        if '.' in field:  # Nested field
+            value = _extract_nested_value(structure, field)
+            if value is not None:
+                set_nested(filtered, field.split('.'), value)
+        else:  # Flat field
+            if field in structure:
+                filtered[field] = structure[field]
+    return filtered
 
 
 def filter_fields(structure: Dict[str, Any], fields: List[str]) -> Dict[str, Any]:
@@ -47,67 +176,14 @@ def filter_fields(structure: Dict[str, Any], fields: List[str]) -> Dict[str, Any
     if not fields:
         return structure
 
-    # Check if structure has a result list field (common in adapters)
-    list_fields = ['results', 'items', 'checks', 'commits', 'files', 'records']
-    result_list_field = None
-    for list_field in list_fields:
-        if list_field in structure and isinstance(structure.get(list_field), list):
-            result_list_field = list_field
-            break
+    # Check if structure has a list field that needs filtering
+    list_field = _find_list_field(structure)
 
-    # If we have a result list, filter each item in the list
-    if result_list_field:
-        filtered_items = []
-        for item in structure[result_list_field]:
-            filtered_item = {}
-            for field in fields:
-                if '.' in field:  # Nested field
-                    parts = field.split('.')
-                    value = item
-                    for part in parts:
-                        if isinstance(value, dict):
-                            value = value.get(part)
-                        else:
-                            value = None
-                            break
-                        if value is None:
-                            break
-                    if value is not None:
-                        set_nested(filtered_item, parts, value)
-                else:  # Flat field
-                    if field in item:
-                        filtered_item[field] = item[field]
-            filtered_items.append(filtered_item)
-
-        # Return structure with filtered list and preserve meta/contract fields
-        result = {result_list_field: filtered_items}
-        # Preserve important metadata fields
-        for meta_field in ['contract_version', 'type', 'meta', 'source', 'source_type']:
-            if meta_field in structure:
-                result[meta_field] = structure[meta_field]
-        return result
-
-    # Otherwise, filter the top-level structure (original behavior)
-    filtered = {}
-    for field in fields:
-        if '.' in field:  # Nested field: "certificate.expiry"
-            parts = field.split('.')
-            value = structure
-            for part in parts:
-                if isinstance(value, dict):
-                    value = value.get(part)
-                else:
-                    value = None
-                    break
-                if value is None:
-                    break
-            if value is not None:
-                set_nested(filtered, parts, value)
-        else:  # Flat field
-            if field in structure:
-                filtered[field] = structure[field]
-
-    return filtered
+    # Filter list items if found, otherwise filter top-level
+    if list_field:
+        return _filter_list_items(structure, list_field, fields)
+    else:
+        return _filter_toplevel_structure(structure, fields)
 
 
 def _format_frontmatter(fm: Optional[Dict[str, Any]]) -> None:
