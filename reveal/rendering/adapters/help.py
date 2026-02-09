@@ -126,7 +126,7 @@ def _render_dynamic_adapters_section(adapters: list) -> None:
     if not adapters:
         return
 
-    print("### URI Adapters ({}) registered)".format(len(adapters)))
+    print("### URI Adapters ({} registered)".format(len(adapters)))
     print("Source: Live adapter registry")
     print("Updates: Automatic when new adapters added")
     print("Legend: 🟢 Stable | 🟡 Beta | 🎓 Project Adapters | 🔴 Experimental")
