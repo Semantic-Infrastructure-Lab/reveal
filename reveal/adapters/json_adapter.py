@@ -648,26 +648,49 @@ class JsonAdapter(ResourceAdapter):
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get JSON data with optional query processing."""
+        # Navigate to requested path
         try:
             value = self._navigate_to_path()
         except (KeyError, IndexError, TypeError) as e:
-            return {
-                'contract_version': '1.0',
-                'type': 'json_error',
-                'source': str(self.file_path),
-                'source_type': 'file',
-                'file': str(self.file_path),
-                'path': '/'.join(str(p) for p in self.json_path),
-                'error': str(e)
-            }
+            return self._build_error_result(str(e))
 
-        # Handle legacy query modes (schema, flatten, etc.)
-        legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
-        if self.query_string and self.query_string.lower() in legacy_modes:
+        # Handle legacy query modes
+        if self._is_legacy_query():
             return self._handle_query(value)
 
-        # Check for unknown query (not legacy mode, no valid operators/result control)
-        # Query parser treats single words as existence checks (?), which JSON adapter doesn't support
+        # Validate query syntax
+        validation_error = self._validate_query_syntax()
+        if validation_error:
+            return validation_error
+
+        # Process array values with filters/sorting
+        value, metadata = self._process_value(value)
+
+        # Build and return result
+        return self._build_success_result(value, metadata)
+
+    def _build_error_result(self, error_msg: str) -> Dict[str, Any]:
+        """Build error result dict."""
+        return {
+            'contract_version': '1.0',
+            'type': 'json_error',
+            'source': str(self.file_path),
+            'source_type': 'file',
+            'file': str(self.file_path),
+            'path': '/'.join(str(p) for p in self.json_path),
+            'error': error_msg
+        }
+
+    def _is_legacy_query(self) -> bool:
+        """Check if query uses legacy mode."""
+        legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
+        return self.query_string and self.query_string.lower() in legacy_modes
+
+    def _validate_query_syntax(self) -> Optional[Dict[str, Any]]:
+        """Validate query syntax, return error dict if invalid."""
+        if not self.query_string:
+            return None
+
         has_only_existence_checks = (
             self.query_filters and
             all(qf.op == '?' for qf in self.query_filters)
@@ -678,8 +701,8 @@ class JsonAdapter(ResourceAdapter):
             (self.result_control.offset is None or self.result_control.offset == 0)
         )
 
-        if self.query_string and (has_only_existence_checks or (not self.query_filters and has_no_result_control)):
-            # Unknown query or unsupported syntax, return error
+        if has_only_existence_checks or (not self.query_filters and has_no_result_control):
+            legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
             return {
                 'contract_version': '1.0',
                 'type': 'json_error',
@@ -690,22 +713,40 @@ class JsonAdapter(ResourceAdapter):
                 'valid_queries': list(legacy_modes) + ['field=value', 'field>value', 'sort=field', 'limit=N']
             }
 
-        # Apply filtering and result control to arrays
+        return None
+
+    def _process_value(self, value: Any):
+        """Process value with filters and result control."""
         metadata = {}
-        has_result_control = (self.result_control.sort_field is not None or
-                              self.result_control.limit is not None or
-                              (self.result_control.offset is not None and self.result_control.offset > 0))
 
-        if isinstance(value, list) and (self.query_filters or has_result_control):
-            # Filter array elements
-            if self.query_filters:
-                value = self._filter_array(value)
+        # Only process arrays with filters or result control
+        if not isinstance(value, list):
+            return value, metadata
 
-            # Apply result control (sort, limit, offset)
-            if has_result_control:
-                value, metadata = self._apply_result_control(value)
+        has_result_control = self._has_result_control()
+        if not (self.query_filters or has_result_control):
+            return value, metadata
 
-        # Default: return the value
+        # Apply filters
+        if self.query_filters:
+            value = self._filter_array(value)
+
+        # Apply result control (sort, limit, offset)
+        if has_result_control:
+            value, metadata = self._apply_result_control(value)
+
+        return value, metadata
+
+    def _has_result_control(self) -> bool:
+        """Check if result control is specified."""
+        return (
+            self.result_control.sort_field is not None or
+            self.result_control.limit is not None or
+            (self.result_control.offset is not None and self.result_control.offset > 0)
+        )
+
+    def _build_success_result(self, value: Any, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Build success result dict."""
         result = {
             'contract_version': '1.0',
             'type': 'json_value',
