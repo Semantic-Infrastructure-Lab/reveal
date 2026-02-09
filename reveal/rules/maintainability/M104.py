@@ -58,6 +58,48 @@ class M104(BaseRule, ASTParsingMixin):
         'pattern': 'Patterns may need updates for new cases',
     }
 
+    def _count_dict_list_values(self, node: ast.Dict) -> int:
+        """Count number of list values in dict that meet size threshold."""
+        list_value_count = 0
+        for key, val in zip(node.keys, node.values):
+            if isinstance(val, ast.List) and len(val.elts) >= self.MIN_DICT_VALUE_SIZE:
+                list_value_count += 1
+        return list_value_count
+
+    def _extract_dict_sample_keys(self, node: ast.Dict, max_samples: int = 3) -> List[str]:
+        """Extract sample keys from dict with list values."""
+        sample_keys = []
+        for key, val in zip(node.keys, node.values):
+            if isinstance(val, ast.List) and len(val.elts) >= self.MIN_DICT_VALUE_SIZE:
+                key_name = key.value if isinstance(key, ast.Constant) else '?'
+                sample_keys.append(str(key_name))
+                if len(sample_keys) >= max_samples:
+                    break
+        return sample_keys
+
+    def _check_dict_with_list_values(self, node: ast.Dict, file_path: str) -> Optional[Detection]:
+        """Check if dict has many list values (lookup table pattern).
+
+        Returns:
+            Detection if dict has 5+ list values, None otherwise
+        """
+        list_value_count = self._count_dict_list_values(node)
+
+        # Flag if dict has 5+ list values (significant lookup table)
+        if list_value_count >= 5:
+            sample_keys = self._extract_dict_sample_keys(node)
+
+            return self.create_detection(
+                file_path=file_path,
+                line=node.lineno,
+                message=f"Large lookup table with {list_value_count} hardcoded list values",
+                suggestion="Consider deriving these mappings from registered components or a central config",
+                context=f"Keys include: {', '.join(sample_keys)}...",
+                severity=Severity.MEDIUM
+            )
+
+        return None
+
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
@@ -83,29 +125,9 @@ class M104(BaseRule, ASTParsingMixin):
             # Flag dicts that have many list values - these are often lookup tables
             # that should be derived from a single source of truth
             if isinstance(node, ast.Dict):
-                list_value_count = 0
-                for key, val in zip(node.keys, node.values):
-                    if isinstance(val, ast.List) and len(val.elts) >= self.MIN_DICT_VALUE_SIZE:
-                        list_value_count += 1
-
-                # Flag if dict has 5+ list values (significant lookup table)
-                if list_value_count >= 5:
-                    sample_keys = []
-                    for key, val in zip(node.keys, node.values):
-                        if isinstance(val, ast.List) and len(val.elts) >= self.MIN_DICT_VALUE_SIZE:
-                            key_name = key.value if isinstance(key, ast.Constant) else '?'
-                            sample_keys.append(str(key_name))
-                            if len(sample_keys) >= 3:
-                                break
-
-                    detections.append(self.create_detection(
-                        file_path=file_path,
-                        line=node.lineno,
-                        message=f"Large lookup table with {list_value_count} hardcoded list values",
-                        suggestion="Consider deriving these mappings from registered components or a central config",
-                        context=f"Keys include: {', '.join(sample_keys)}...",
-                        severity=Severity.MEDIUM
-                    ))
+                detection = self._check_dict_with_list_values(node, file_path)
+                if detection:
+                    detections.append(detection)
 
         return detections
 
