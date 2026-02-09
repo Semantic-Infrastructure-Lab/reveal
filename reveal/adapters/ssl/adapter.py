@@ -539,6 +539,99 @@ class SSLAdapter(ResourceAdapter):
             source=self._nginx_path
         )
 
+    def _check_all_domains(self, domains: List[str], warn_days: int,
+                           critical_days: int, advanced: bool) -> List[Dict[str, Any]]:
+        """Check SSL health for all domains.
+
+        Args:
+            domains: List of domain names to check
+            warn_days: Days until expiry to trigger warning
+            critical_days: Days until expiry to trigger critical
+            advanced: Run advanced checks
+
+        Returns:
+            List of check results for all domains
+        """
+        all_results = []
+        for domain in domains:
+            result = check_ssl_health(
+                domain, 443, warn_days, critical_days, advanced
+            )
+            all_results.append(result)
+        return all_results
+
+    def _filter_failure_results(self, all_results: List[Dict[str, Any]],
+                                 only_failures: bool) -> List[Dict[str, Any]]:
+        """Filter results to only failures/warnings if requested.
+
+        Args:
+            all_results: All check results
+            only_failures: Whether to filter to failures/warnings only
+
+        Returns:
+            Filtered results (or all results if not filtering)
+        """
+        if only_failures:
+            return [r for r in all_results if r['status'] in ('failure', 'warning')]
+        return all_results
+
+    def _calculate_summary_counts(self, all_results: List[Dict[str, Any]]) -> Dict[str, int]:
+        """Calculate summary counts from all results.
+
+        Args:
+            all_results: All check results
+
+        Returns:
+            Dict with total, passed, warnings, failures counts
+        """
+        return {
+            'total': len(all_results),
+            'passed': sum(1 for r in all_results if r['status'] == 'pass'),
+            'warnings': sum(1 for r in all_results if r['status'] == 'warning'),
+            'failures': sum(1 for r in all_results if r['status'] == 'failure'),
+        }
+
+    def _generate_batch_next_steps(self, all_results: List[Dict[str, Any]],
+                                    failures: int, warnings: int, advanced: bool,
+                                    only_failures: bool, source: str = None) -> List[str]:
+        """Generate contextual next steps based on results.
+
+        Args:
+            all_results: All check results
+            failures: Number of failures
+            warnings: Number of warnings
+            advanced: Whether advanced checks were run
+            only_failures: Whether results are filtered to failures
+            source: Source description
+
+        Returns:
+            List of next step suggestions
+        """
+        next_steps = []
+        if failures > 0 or warnings > 0:
+            failed_domains = [r['host'] for r in all_results if r['status'] == 'failure']
+            if failed_domains and not advanced:
+                next_steps.append(f"Inspect first failure: reveal ssl://{failed_domains[0]} --check-advanced")
+            if not only_failures and (failures > 0 or warnings > 0):
+                next_steps.append("Show only problems: ... --only-failures")
+            if source and 'nginx' in str(source).lower():
+                next_steps.append("Validate nginx config: reveal ssl:// --from-nginx <path> --validate")
+        return next_steps
+
+    def _determine_overall_status(self, failures: int, warnings: int) -> str:
+        """Determine overall batch check status.
+
+        Args:
+            failures: Number of failures
+            warnings: Number of warnings
+
+        Returns:
+            Status string: 'pass', 'warning', or 'failure'
+        """
+        if failures == 0 and warnings == 0:
+            return 'pass'
+        return 'warning' if failures == 0 else 'failure'
+
     def _batch_check_domains(
         self, domains: List[str], warn_days: int = 30, critical_days: int = 7,
         advanced: bool = False, only_failures: bool = False, source: str = None
@@ -556,52 +649,33 @@ class SSLAdapter(ResourceAdapter):
         Returns:
             Batch check results
         """
-        # Check each domain
-        all_results = []
-        for domain in domains:
-            result = check_ssl_health(
-                domain, 443, warn_days, critical_days, advanced
-            )
-            all_results.append(result)
+        # Check all domains
+        all_results = self._check_all_domains(domains, warn_days, critical_days, advanced)
 
         # Filter results if requested
-        results = all_results
-        if only_failures:
-            results = [r for r in all_results if r['status'] in ('failure', 'warning')]
+        results = self._filter_failure_results(all_results, only_failures)
 
-        # Summary (based on ALL results, not just filtered)
-        total = len(all_results)
-        passed = sum(1 for r in all_results if r['status'] == 'pass')
-        warnings = sum(1 for r in all_results if r['status'] == 'warning')
-        failures = sum(1 for r in all_results if r['status'] == 'failure')
+        # Calculate summary (based on ALL results, not just filtered)
+        summary = self._calculate_summary_counts(all_results)
 
-        # Generate next steps based on results
-        next_steps = []
-        if failures > 0 or warnings > 0:
-            failed_domains = [r['host'] for r in all_results if r['status'] == 'failure']
-            if failed_domains and not advanced:
-                next_steps.append(f"Inspect first failure: reveal ssl://{failed_domains[0]} --check-advanced")
-            if not only_failures and (failures > 0 or warnings > 0):
-                next_steps.append("Show only problems: ... --only-failures")
-            if source and 'nginx' in str(source).lower():
-                next_steps.append("Validate nginx config: reveal ssl:// --from-nginx <path> --validate")
+        # Generate next steps
+        next_steps = self._generate_batch_next_steps(
+            all_results, summary['failures'], summary['warnings'],
+            advanced, only_failures, source
+        )
+
+        # Determine overall status
+        status = self._determine_overall_status(summary['failures'], summary['warnings'])
 
         return {
             'type': 'ssl_batch_check',
             'source': source or 'batch',
-            'domains_checked': total,
-            'status': 'pass' if failures == 0 and warnings == 0 else (
-                'warning' if failures == 0 else 'failure'
-            ),
-            'summary': {
-                'total': total,
-                'passed': passed,
-                'warnings': warnings,
-                'failures': failures,
-            },
+            'domains_checked': summary['total'],
+            'status': status,
+            'summary': summary,
             'results': results,  # May be filtered
             'next_steps': next_steps,
-            'exit_code': 0 if failures == 0 else 2,
+            'exit_code': 0 if summary['failures'] == 0 else 2,
         }
 
     def validate_nginx_ssl(self, **kwargs) -> Dict[str, Any]:
