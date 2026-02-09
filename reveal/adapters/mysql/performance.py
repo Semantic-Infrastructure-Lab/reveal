@@ -1,7 +1,6 @@
 """MySQL performance metrics and InnoDB engine status."""
 
 from typing import Dict, Any
-from datetime import datetime, timezone
 
 
 class PerformanceAnalyzer:
@@ -25,22 +24,11 @@ class PerformanceAnalyzer:
         Returns:
             Dict with QPS, slow queries, table scans, thread cache, temp tables
         """
+        timing = self.conn.get_snapshot_context()
         status_vars = {row['Variable_name']: row['Value']
                       for row in self.conn.execute_query("SHOW GLOBAL STATUS")}
 
-        uptime_seconds = int(status_vars.get('Uptime', 1))
-        uptime_days = uptime_seconds // 86400
-        uptime_hours = (uptime_seconds % 86400) // 3600
-
-        # Calculate server start time using MySQL's clock
-        mysql_time = self.conn.execute_single(
-            "SELECT UNIX_TIMESTAMP() as timestamp"
-        )
-        mysql_timestamp = int(mysql_time['timestamp'])
-        server_start_timestamp = mysql_timestamp - uptime_seconds
-        server_start_time = datetime.fromtimestamp(
-            server_start_timestamp, timezone.utc
-        )
+        uptime_seconds = timing['uptime_seconds']
 
         # Full table scan detection
         select_scan = int(status_vars.get('Select_scan', 0))
@@ -75,10 +63,7 @@ class PerformanceAnalyzer:
 
         return {
             'type': 'performance',
-            'measurement_window': (f'{uptime_days}d {uptime_hours}h '
-                                  '(since server start)'),
-            'server_start_time': server_start_time.isoformat(),
-            'uptime_seconds': uptime_seconds,
+            **timing,
             'queries_per_second': questions / float(uptime_seconds),
             'slow_queries_total': f"{slow_queries} (since server start)",
             'full_table_scans': {
@@ -118,22 +103,9 @@ class PerformanceAnalyzer:
         Returns:
             Dict with buffer pool hit rate, locks, deadlocks
         """
+        timing = self.conn.get_snapshot_context()
         status_vars = {row['Variable_name']: row['Value']
                       for row in self.conn.execute_query("SHOW GLOBAL STATUS")}
-
-        uptime_seconds = int(status_vars.get('Uptime', 1))
-        uptime_days = uptime_seconds // 86400
-        uptime_hours = (uptime_seconds % 86400) // 3600
-
-        # Calculate server start time using MySQL's clock
-        mysql_time = self.conn.execute_single(
-            "SELECT UNIX_TIMESTAMP() as timestamp"
-        )
-        mysql_timestamp = int(mysql_time['timestamp'])
-        server_start_timestamp = mysql_timestamp - uptime_seconds
-        server_start_time = datetime.fromtimestamp(
-            server_start_timestamp, timezone.utc
-        )
 
         buffer_reads = int(status_vars.get('Innodb_buffer_pool_reads', 0))
         buffer_requests = int(
@@ -144,10 +116,7 @@ class PerformanceAnalyzer:
 
         return {
             'type': 'innodb',
-            'measurement_window': (f'{uptime_days}d {uptime_hours}h '
-                                  '(since server start)'),
-            'server_start_time': server_start_time.isoformat(),
-            'uptime_seconds': uptime_seconds,
+            **timing,
             'buffer_pool_hit_rate': f"{hit_rate:.2f}%",
             'buffer_pool_reads': f"{buffer_reads} (since server start)",
             'buffer_pool_read_requests': f"{buffer_requests} (since server start)",
