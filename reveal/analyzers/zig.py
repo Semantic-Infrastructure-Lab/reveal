@@ -37,63 +37,81 @@ class ZigAnalyzer(TreeSitterAnalyzer):
         # Remove empty categories
         return {k: v for k, v in structure.items() if v}
 
+    def _has_pub_visibility(self, decl_node) -> bool:
+        """Check if declaration has pub keyword."""
+        return (decl_node.prev_sibling and
+                decl_node.prev_sibling.type == 'pub')
+
+    def _find_fn_proto(self, decl_node):
+        """Find FnProto child node in declaration."""
+        for child in decl_node.children:
+            if child.type == 'FnProto':
+                return child
+        return None
+
+    def _extract_function_name(self, fn_proto) -> Optional[str]:
+        """Extract function name from FnProto node."""
+        for fn_child in fn_proto.children:
+            if fn_child.type == 'fn':
+                # Next sibling should be the identifier (function name)
+                next_sib = fn_child.next_sibling
+                if next_sib and next_sib.type == 'IDENTIFIER':
+                    return self._get_node_text(next_sib)
+        return None
+
+    def _extract_param_names(self, fn_proto) -> List[str]:
+        """Extract parameter names from FnProto node."""
+        params = []
+        for fn_child in fn_proto.children:
+            if fn_child.type == 'ParamDeclList':
+                # Extract parameter names
+                for param_child in fn_child.children:
+                    if param_child.type == 'ParamDecl':
+                        # Try to get parameter name
+                        for p in param_child.children:
+                            if p.type == 'IDENTIFIER':
+                                params.append(self._get_node_text(p))
+                                break
+        return params
+
+    def _build_function_signature(self, fn_name: str, params: List[str]) -> str:
+        """Build function signature string."""
+        return f"{fn_name}({', '.join(params)})" if params else fn_name
+
+    def _build_function_info(self, decl_node, fn_name: str, signature: str, has_pub: bool) -> Dict[str, Any]:
+        """Build function information dictionary."""
+        func_info = {
+            'line': decl_node.start_point[0] + 1,
+            'name': fn_name,
+            'signature': signature,
+        }
+        if has_pub:
+            func_info['visibility'] = 'pub'
+        return func_info
+
     def _extract_functions(self) -> List[Dict[str, Any]]:
         """Extract function definitions."""
         functions = []
-
-        # Find all Decl nodes that contain FnProto
         decl_nodes = self._find_nodes_by_type('Decl')
 
         for decl_node in decl_nodes:
-            # Check if this decl has a function prototype
-            fn_proto = None
-            has_pub = False
-
-            # Check siblings for pub keyword
-            if decl_node.prev_sibling and decl_node.prev_sibling.type == 'pub':
-                has_pub = True
-
-            for child in decl_node.children:
-                if child.type == 'FnProto':
-                    fn_proto = child
-                    break
+            # Check visibility and find function prototype
+            has_pub = self._has_pub_visibility(decl_node)
+            fn_proto = self._find_fn_proto(decl_node)
 
             if not fn_proto:
                 continue
 
-            # Extract function name and signature
-            fn_name = None
-            params = []
+            # Extract function details
+            fn_name = self._extract_function_name(fn_proto)
+            if not fn_name:
+                continue
 
-            for fn_child in fn_proto.children:
-                if fn_child.type == 'fn':
-                    # Next sibling should be the identifier (function name)
-                    next_sib = fn_child.next_sibling
-                    if next_sib and next_sib.type == 'IDENTIFIER':
-                        fn_name = self._get_node_text(next_sib)
-                elif fn_child.type == 'ParamDeclList':
-                    # Extract parameter names
-                    for param_child in fn_child.children:
-                        if param_child.type == 'ParamDecl':
-                            # Try to get parameter name
-                            for p in param_child.children:
-                                if p.type == 'IDENTIFIER':
-                                    params.append(self._get_node_text(p))
-                                    break
+            params = self._extract_param_names(fn_proto)
+            signature = self._build_function_signature(fn_name, params)
+            func_info = self._build_function_info(decl_node, fn_name, signature, has_pub)
 
-            if fn_name:
-                signature = f"{fn_name}({', '.join(params)})" if params else fn_name
-
-                func_info = {
-                    'line': decl_node.start_point[0] + 1,
-                    'name': fn_name,
-                    'signature': signature,
-                }
-
-                if has_pub:
-                    func_info['visibility'] = 'pub'
-
-                functions.append(func_info)
+            functions.append(func_info)
 
         return functions
 
