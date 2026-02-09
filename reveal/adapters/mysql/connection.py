@@ -202,6 +202,45 @@ class MySQLConnection:
         results = self.execute_query(query)
         return results[0] if results else None
 
+    def get_snapshot_context(self) -> Dict[str, Any]:
+        """Get standardized timing context for all metrics.
+
+        Returns timing information using MySQL's clock for accuracy.
+        All timestamps in UTC ISO 8601 format.
+
+        Returns:
+            Dict with:
+            - snapshot_time: When this snapshot was taken (ISO 8601)
+            - server_start_time: When MySQL server started (ISO 8601)
+            - uptime_seconds: Server uptime in seconds
+            - measurement_window: Human-readable uptime (e.g., "23d 23h (since server start)")
+        """
+        from datetime import datetime, timezone
+
+        # Get MySQL's current timestamp (not local machine time)
+        mysql_time = self.execute_single("SELECT UNIX_TIMESTAMP() as timestamp")
+        snapshot_timestamp = int(mysql_time['timestamp'])
+        snapshot_time = datetime.fromtimestamp(snapshot_timestamp, timezone.utc)
+
+        # Get server uptime
+        status_vars = {row['Variable_name']: row['Value']
+                      for row in self.execute_query("SHOW GLOBAL STATUS WHERE Variable_name = 'Uptime'")}
+        uptime_seconds = int(status_vars.get('Uptime', 0))
+
+        # Calculate server start time
+        server_start_timestamp = snapshot_timestamp - uptime_seconds
+        server_start_time = datetime.fromtimestamp(server_start_timestamp, timezone.utc)
+
+        uptime_days = uptime_seconds // 86400
+        uptime_hours = (uptime_seconds % 86400) // 3600
+
+        return {
+            'snapshot_time': snapshot_time.isoformat(),
+            'server_start_time': server_start_time.isoformat(),
+            'uptime_seconds': uptime_seconds,
+            'measurement_window': f'{uptime_days}d {uptime_hours}h (since server start)',
+        }
+
     def close(self):
         """Close MySQL connection."""
         if self._connection:
