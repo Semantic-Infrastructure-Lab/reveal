@@ -8,6 +8,47 @@ from reveal.treesitter import (
 )
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
 
+# Dominant category priority by file type
+_DOMINANT_CATEGORY_PRIORITY = [
+    'functions', 'classes', 'structs',  # Code
+    'headings', 'sections',              # Markdown
+    'queries', 'mutations', 'types',     # GraphQL
+    'messages', 'services',              # Protobuf
+    'resources', 'variables',            # Terraform
+    'keys', 'tables',                    # Config
+    'cells',                             # Jupyter
+]
+
+# Map element type names to category names
+_TYPE_TO_CATEGORY = {
+    'function': 'functions',
+    'class': 'classes',
+    'struct': 'structs',
+    'section': 'headings',
+    'heading': 'headings',
+    'query': 'queries',
+    'mutation': 'mutations',
+    'type': 'types',
+    'interface': 'interfaces',
+    'enum': 'enums',
+    'message': 'messages',
+    'service': 'services',
+    'rpc': 'rpcs',
+    'resource': 'resources',
+    'variable': 'variables',
+    'output': 'outputs',
+    'module': 'modules',
+    'import': 'imports',
+    'test': 'tests',
+    'union': 'unions',
+    'cell': 'cells',
+    'key': 'keys',
+    'table': 'tables',
+    'server': 'servers',
+    'location': 'locations',
+    'upstream': 'upstreams',
+}
+
 
 def _parse_element_syntax(element: str):
     """Parse element syntax to determine extraction type.
@@ -429,111 +470,110 @@ def _extract_ordinal_element(analyzer, ordinal: int, element_type: str = None):
     Returns:
         Element dict with name, line_start, line_end, source, or None
     """
-    from ..treesitter import TreeSitterAnalyzer
-
     if ordinal < 1:
         return None
 
     # Get structure from analyzer
-    try:
-        structure = analyzer.get_structure()
-    except Exception:
-        return None
-
+    structure = _get_analyzer_structure(analyzer)
     if not structure:
         return None
 
-    # Dominant category priority by file type
-    # Code files: functions > classes > structs
-    # Markdown: headings > sections
-    # Config: keys > tables
-    dominant_priority = [
-        'functions', 'classes', 'structs',  # Code
-        'headings', 'sections',              # Markdown
-        'queries', 'mutations', 'types',     # GraphQL
-        'messages', 'services',              # Protobuf
-        'resources', 'variables',            # Terraform
-        'keys', 'tables',                    # Config
-        'cells',                             # Jupyter
-    ]
-
-    # Map element_type to category name (reverse of category_to_type)
-    type_to_category = {
-        'function': 'functions',
-        'class': 'classes',
-        'struct': 'structs',
-        'section': 'headings',
-        'heading': 'headings',
-        'query': 'queries',
-        'mutation': 'mutations',
-        'type': 'types',
-        'interface': 'interfaces',
-        'enum': 'enums',
-        'message': 'messages',
-        'service': 'services',
-        'rpc': 'rpcs',
-        'resource': 'resources',
-        'variable': 'variables',
-        'output': 'outputs',
-        'module': 'modules',
-        'import': 'imports',
-        'test': 'tests',
-        'union': 'unions',
-        'cell': 'cells',
-        'key': 'keys',
-        'table': 'tables',
-        'server': 'servers',
-        'location': 'locations',
-        'upstream': 'upstreams',
-    }
-
-    # Determine which category to use
-    if element_type:
-        # User specified type explicitly (e.g., "function:3")
-        category = type_to_category.get(element_type)
-        if not category:
-            # Try using element_type directly as category (e.g., "functions:3")
-            category = element_type if element_type in structure else None
-        if not category or category not in structure:
-            return None
-        target_categories = [category]
-    else:
-        # Find dominant category (first non-empty category in priority order)
-        target_categories = [cat for cat in dominant_priority if cat in structure and structure[cat]]
-        if not target_categories:
-            # Fallback: use any category with items
-            target_categories = [cat for cat in structure if isinstance(structure[cat], list) and structure[cat]]
-
-    if not target_categories:
+    # Determine target category
+    category = _determine_target_category(structure, element_type)
+    if not category:
         return None
 
-    # Get elements from first matching category
-    category = target_categories[0]
-    items = structure.get(category, [])
+    # Get and validate items
+    items = _get_category_items(structure, category)
+    if not items or ordinal > len(items):
+        return None
 
+    # Extract item at ordinal position
+    item = items[ordinal - 1]
+    return _build_element_from_item(analyzer, item, category, ordinal)
+
+
+def _get_analyzer_structure(analyzer):
+    """Get structure from analyzer, return None on failure."""
+    try:
+        structure = analyzer.get_structure()
+        return structure if structure else None
+    except Exception:
+        return None
+
+
+def _determine_target_category(structure, element_type: str = None):
+    """Determine which category to extract from.
+
+    Args:
+        structure: File structure dict
+        element_type: Optional explicit type (e.g., "function")
+
+    Returns:
+        Category name or None
+    """
+    if element_type:
+        # User specified type explicitly
+        category = _TYPE_TO_CATEGORY.get(element_type)
+        if not category:
+            # Try using element_type directly as category
+            category = element_type if element_type in structure else None
+        return category if (category and category in structure) else None
+
+    # Find dominant category (first non-empty category in priority order)
+    for cat in _DOMINANT_CATEGORY_PRIORITY:
+        if cat in structure and structure[cat]:
+            return cat
+
+    # Fallback: use any category with items
+    for cat in structure:
+        if isinstance(structure[cat], list) and structure[cat]:
+            return cat
+
+    return None
+
+
+def _get_category_items(structure, category: str):
+    """Get and sort items from category.
+
+    Args:
+        structure: File structure dict
+        category: Category name
+
+    Returns:
+        Sorted list of items or None
+    """
+    items = structure.get(category, [])
     if not items or not isinstance(items, list):
         return None
 
     # Sort by line number to ensure consistent ordering
-    items = sorted(items, key=lambda x: x.get('line', x.get('line_start', 0)))
+    return sorted(items, key=lambda x: x.get('line', x.get('line_start', 0)))
 
-    # Check if ordinal is valid (1-indexed)
-    if ordinal > len(items):
-        return None
 
-    item = items[ordinal - 1]
+def _build_element_from_item(analyzer, item, category: str, ordinal: int):
+    """Build element dict from structure item.
 
-    # Extract the element
+    Args:
+        analyzer: File analyzer instance
+        item: Structure item dict
+        category: Category name
+        ordinal: Ordinal position
+
+    Returns:
+        Element dict with name, line_start, line_end, source
+    """
+    from ..treesitter import TreeSitterAnalyzer
+
+    # Extract metadata
     name = item.get('name') or item.get('text') or item.get('title') or f'{category}@{ordinal}'
     line_start = item.get('line', item.get('line_start', 1))
     line_end = item.get('line_end', line_start)
 
     # Get source code
     if isinstance(analyzer, TreeSitterAnalyzer) and analyzer.tree:
-        # Try to find the actual node for better source extraction
         source = _get_source_for_item(analyzer, item, line_start, line_end)
     else:
-        # Fallback: read lines directly
         source = _read_lines(analyzer.path, line_start, line_end)
 
     return {

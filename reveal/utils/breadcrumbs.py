@@ -201,55 +201,112 @@ def _handle_structure(path, file_type, **kwargs):
     print(f"Next: reveal {path} {element_placeholder}   # Extract by name")
 
     structure = kwargs.get('structure', {})
+    if not structure:
+        _print_type_specific_hints(path, file_type)
+        return
+
+    # Try various suggestion strategies
     hints_shown = 0
+    hints_shown += _suggest_hierarchical_extraction(path, file_type, structure)
+    hints_shown += _suggest_line_extraction(path, file_type, structure, hints_shown)
+    hints_shown += _suggest_ordinal_extraction(path, structure, hints_shown)
+    _suggest_imports_analysis(path, file_type, structure)
 
-    # Suggest hierarchical extraction for classes with methods
-    if structure and file_type in _CODE_TYPES:
-        classes = structure.get('classes', [])
-        if classes:
-            # Find first class with methods for example
-            for cls in classes:
-                cls_name = cls.get('name', '') if isinstance(cls, dict) else str(cls)
-                if cls_name:
-                    print(f"      reveal {path} {cls_name}.method  # Hierarchical extraction")
-                    hints_shown += 1
-                    break
-
-    # Suggest line-based extraction (from :LINE shown in structure output)
-    if structure and file_type in _CODE_TYPES:
-        functions = structure.get('functions', [])
-        if functions and hints_shown < 2:
-            # Get line number from first function for example
-            first_func = functions[0]
-            line = first_func.get('line', 0) if isinstance(first_func, dict) else 0
-            if line:
-                print(f"      reveal {path} :{line}       # Extract at line number")
-                hints_shown += 1
-
-    # Suggest ordinal extraction for files with many elements
-    if structure:
-        total = sum(len(v) for v in structure.values() if isinstance(v, list))
-        if total > 5 and hints_shown < 2:
-            print(f"      reveal {path} @3           # Extract 3rd element")
-            hints_shown += 1
-
-    # Suggest imports:// for files with many imports
-    if structure and 'imports' in structure:
-        import_count = len(structure.get('imports', []))
-        if import_count > 5 and file_type in ('python', 'javascript', 'typescript'):
-            print(f"      reveal 'imports://{path}'   # ({import_count} imports)")
-
-    # Suggest AST queries for large files
-    if structure:
-        total = sum(len(v) for v in structure.values() if isinstance(v, list))
-        large_file_types = ('python', 'javascript', 'typescript', 'rust', 'go')
-        if total > 20 and file_type in large_file_types:
-            print(f"      reveal 'ast://{path}?complexity>10'   # Find complex functions")
-            print(f"      reveal 'ast://{path}?lines>50'        # Find large elements")
-            print(f"      reveal {path} --check      # Check code quality")
-            return  # Skip standard suggestions for large files
+    # Check for large files - suggest AST queries and exit early
+    if _suggest_ast_queries_for_large_file(path, file_type, structure):
+        return
 
     _print_type_specific_hints(path, file_type)
+
+
+def _suggest_hierarchical_extraction(path, file_type, structure):
+    """Suggest hierarchical extraction for classes with methods.
+
+    Returns:
+        Number of hints shown (0 or 1)
+    """
+    if file_type not in _CODE_TYPES:
+        return 0
+
+    classes = structure.get('classes', [])
+    if not classes:
+        return 0
+
+    # Find first class with a name
+    for cls in classes:
+        cls_name = cls.get('name', '') if isinstance(cls, dict) else str(cls)
+        if cls_name:
+            print(f"      reveal {path} {cls_name}.method  # Hierarchical extraction")
+            return 1
+
+    return 0
+
+
+def _suggest_line_extraction(path, file_type, structure, hints_shown):
+    """Suggest line-based extraction using first function's line.
+
+    Returns:
+        Number of hints shown (0 or 1)
+    """
+    if file_type not in _CODE_TYPES or hints_shown >= 2:
+        return 0
+
+    functions = structure.get('functions', [])
+    if not functions:
+        return 0
+
+    first_func = functions[0]
+    line = first_func.get('line', 0) if isinstance(first_func, dict) else 0
+    if line:
+        print(f"      reveal {path} :{line}       # Extract at line number")
+        return 1
+
+    return 0
+
+
+def _suggest_ordinal_extraction(path, structure, hints_shown):
+    """Suggest ordinal extraction for files with many elements.
+
+    Returns:
+        Number of hints shown (0 or 1)
+    """
+    if hints_shown >= 2:
+        return 0
+
+    total = sum(len(v) for v in structure.values() if isinstance(v, list))
+    if total > 5:
+        print(f"      reveal {path} @3           # Extract 3rd element")
+        return 1
+
+    return 0
+
+
+def _suggest_imports_analysis(path, file_type, structure):
+    """Suggest imports:// for files with many imports."""
+    if 'imports' not in structure:
+        return
+
+    import_count = len(structure.get('imports', []))
+    if import_count > 5 and file_type in ('python', 'javascript', 'typescript'):
+        print(f"      reveal 'imports://{path}'   # ({import_count} imports)")
+
+
+def _suggest_ast_queries_for_large_file(path, file_type, structure):
+    """Suggest AST queries for large files.
+
+    Returns:
+        True if suggestions were shown (caller should skip other hints)
+    """
+    total = sum(len(v) for v in structure.values() if isinstance(v, list))
+    large_file_types = ('python', 'javascript', 'typescript', 'rust', 'go')
+
+    if total > 20 and file_type in large_file_types:
+        print(f"      reveal 'ast://{path}?complexity>10'   # Find complex functions")
+        print(f"      reveal 'ast://{path}?lines>50'        # Find large elements")
+        print(f"      reveal {path} --check      # Check code quality")
+        return True
+
+    return False
 
 
 def _handle_typed(path, file_type, **kwargs):
