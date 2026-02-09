@@ -22,8 +22,11 @@ class StorageAnalyzer:
         """Get storage usage by database.
 
         Returns:
-            Dict with database sizes, table counts, data/index breakdown
+            Dict with database sizes, table counts, data/index breakdown,
+            plus snapshot timing context for tracking growth trends
         """
+        timing = self.conn.get_snapshot_context()
+
         db_sizes = self.conn.execute_query("""
             SELECT
                 table_schema as db_name,
@@ -41,6 +44,7 @@ class StorageAnalyzer:
 
         return {
             'type': 'storage',
+            **timing,
             'databases': db_sizes,
         }
 
@@ -51,8 +55,10 @@ class StorageAnalyzer:
             db_name: Database name
 
         Returns:
-            Dict with table-level storage breakdown
+            Dict with table-level storage breakdown plus snapshot timing context
         """
+        timing = self.conn.get_snapshot_context()
+
         tables = self.conn.execute_query(f"""
             SELECT
                 table_name,
@@ -66,6 +72,7 @@ class StorageAnalyzer:
 
         return {
             'type': 'database_storage',
+            **timing,
             'database': db_name,
             'tables': tables,
         }
