@@ -43,51 +43,17 @@ class HCLAnalyzer(TreeSitterAnalyzer):
     def _extract_blocks(self, block_type: str) -> List[Dict[str, Any]]:
         """Extract blocks of a specific type (resource, variable, output, etc.)."""
         blocks = []
-
-        # Find all blocks in the file
         all_blocks = self._find_nodes_by_type('block')
 
         for block_node in all_blocks:
-            # Get block identifier (type)
-            block_identifier = None
-            labels = []
-
-            for i, child in enumerate(block_node.children):
-                if child.type == 'identifier' and i == 0:
-                    block_identifier = self._get_node_text(child)
-                elif child.type == 'string_lit':
-                    # Remove quotes from string literals
-                    label_text = self._get_node_text(child)
-                    if label_text.startswith('"') and label_text.endswith('"'):
-                        label_text = label_text[1:-1]
-                    labels.append(label_text)
+            block_identifier, labels = self._parse_block_header(block_node)
 
             # Only process blocks of the requested type
             if block_identifier != block_type:
                 continue
 
-            # Build block name/description based on type
-            if block_type in ['resource', 'data']:
-                # resource "aws_instance" "web" or data "aws_ami" "ubuntu"
-                if len(labels) >= 2:
-                    name = f"{labels[0]}.{labels[1]}"
-                elif len(labels) >= 1:
-                    name = labels[0]
-                else:
-                    name = block_type
-            elif block_type in ['variable', 'output', 'module', 'provider']:
-                # variable "region" or output "instance_id"
-                if len(labels) >= 1:
-                    name = labels[0]
-                else:
-                    name = block_type
-            elif block_type == 'locals':
-                # locals { ... }
-                name = 'locals'
-            else:
-                name = block_type
-
-            # Extract key attributes from block body
+            # Build block info
+            name = self._build_block_name(block_type, labels)
             attributes = self._extract_block_attributes(block_node)
 
             block_info = {
@@ -95,19 +61,85 @@ class HCLAnalyzer(TreeSitterAnalyzer):
                 'name': name,
             }
 
-            # Add type-specific info
-            if block_type == 'variable' and 'type' in attributes:
-                block_info['type'] = attributes['type']
-            if block_type == 'variable' and 'default' in attributes:
-                block_info['default'] = attributes['default']
-            if block_type == 'output' and 'value' in attributes:
-                block_info['value'] = attributes['value']
-            if block_type == 'module' and 'source' in attributes:
-                block_info['source'] = attributes['source']
+            # Add type-specific attributes
+            self._add_type_specific_info(block_info, block_type, attributes)
 
             blocks.append(block_info)
 
         return blocks
+
+    def _parse_block_header(self, block_node):
+        """Parse block identifier and labels from block node.
+
+        Args:
+            block_node: HCL block node
+
+        Returns:
+            Tuple of (identifier, labels_list)
+        """
+        block_identifier = None
+        labels = []
+
+        for i, child in enumerate(block_node.children):
+            if child.type == 'identifier' and i == 0:
+                block_identifier = self._get_node_text(child)
+            elif child.type == 'string_lit':
+                # Remove quotes from string literals
+                label_text = self._get_node_text(child)
+                if label_text.startswith('"') and label_text.endswith('"'):
+                    label_text = label_text[1:-1]
+                labels.append(label_text)
+
+        return block_identifier, labels
+
+    def _build_block_name(self, block_type: str, labels: List[str]) -> str:
+        """Build block name based on type and labels.
+
+        Args:
+            block_type: Block type (resource, variable, etc.)
+            labels: List of block labels
+
+        Returns:
+            Block name string
+        """
+        if block_type in ['resource', 'data']:
+            # resource "aws_instance" "web" -> "aws_instance.web"
+            if len(labels) >= 2:
+                return f"{labels[0]}.{labels[1]}"
+            elif len(labels) >= 1:
+                return labels[0]
+            return block_type
+
+        elif block_type in ['variable', 'output', 'module', 'provider']:
+            # variable "region" -> "region"
+            return labels[0] if labels else block_type
+
+        elif block_type == 'locals':
+            return 'locals'
+
+        return block_type
+
+    def _add_type_specific_info(self, block_info: Dict[str, Any], block_type: str, attributes: Dict[str, Any]):
+        """Add type-specific attributes to block info.
+
+        Args:
+            block_info: Block info dict to modify
+            block_type: Block type
+            attributes: Extracted attributes from block
+        """
+        if block_type == 'variable':
+            if 'type' in attributes:
+                block_info['type'] = attributes['type']
+            if 'default' in attributes:
+                block_info['default'] = attributes['default']
+
+        elif block_type == 'output':
+            if 'value' in attributes:
+                block_info['value'] = attributes['value']
+
+        elif block_type == 'module':
+            if 'source' in attributes:
+                block_info['source'] = attributes['source']
 
     def _extract_block_attributes(self, block_node) -> Dict[str, str]:
         """Extract key-value attributes from a block's body."""
