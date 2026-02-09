@@ -6,6 +6,38 @@ from typing import Any, Dict
 from reveal.utils import safe_json_dumps
 
 
+# Module constants for help list mode
+STABLE_ADAPTERS = {'help', 'env', 'ast', 'python'}
+BETA_ADAPTERS = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git'}
+PROJECT_ADAPTERS = {'reveal', 'claude'}
+
+GUIDE_CATEGORIES = {
+    'getting_started': ['quick-start'],
+    'ai_guides': ['agent', 'agent-full'],
+    'feature_guides': ['python-guide', 'markdown', 'reveal-guide', 'html', 'configuration', 'schemas', 'duplicates'],
+    'best_practices': ['anti-patterns', 'tricks'],
+    'dev_guides': ['adapter-authoring', 'help', 'release'],
+}
+
+TOKEN_ESTIMATES = {
+    'quick-start': '~2,000',
+    'agent': '~2,200',
+    'agent-full': '~12,000',
+    'python-guide': '~2,500',
+    'markdown': '~4,000',
+    'reveal-guide': '~3,000',
+    'html': '~2,000',
+    'configuration': '~3,500',
+    'schemas': '~4,500',
+    'duplicates': '~5,500',
+    'anti-patterns': '~2,000',
+    'tricks': '~3,500',
+    'adapter-authoring': '~2,500',
+    'help': '~2,500',
+    'release': '~2,500',
+}
+
+
 def _render_help_breadcrumbs(scheme: str, data: Dict[str, Any]) -> None:
     """Render breadcrumbs after help output.
 
@@ -60,8 +92,20 @@ def _render_help_breadcrumbs(scheme: str, data: Dict[str, Any]) -> None:
     print()
 
 
-def _render_help_list_mode(data: Dict[str, Any]) -> None:
-    """Render help system topic list (reveal help://)."""
+def _get_stability_badge(scheme: str) -> str:
+    """Get stability badge for an adapter."""
+    if scheme in STABLE_ADAPTERS:
+        return "🟢"
+    elif scheme in BETA_ADAPTERS:
+        return "🟡"
+    elif scheme in PROJECT_ADAPTERS:
+        return "🎓"
+    else:
+        return "🔴"
+
+
+def _render_help_header() -> None:
+    """Render help system header."""
     print("# Reveal Help System")
     print("**Purpose:** Progressive, explorable documentation")
     print("**Usage:** reveal help://<topic>")
@@ -69,139 +113,74 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
     print("---")
     print()
 
-    # Group topics
-    adapters = [a for a in data.get('adapters', []) if a.get('has_help')]
-    static = data.get('static_guides', [])
 
-    # Stability classification for adapters
-    stable_adapters = {'help', 'env', 'ast', 'python'}
-    beta_adapters = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git'}
-    project_adapters = {'reveal', 'claude'}
+def _render_dynamic_adapters_section(adapters: list) -> None:
+    """Render dynamic adapters section.
 
-    def get_stability_badge(scheme: str) -> str:
-        """Get stability badge for an adapter."""
-        if scheme in stable_adapters:
-            return "🟢"
-        elif scheme in beta_adapters:
-            return "🟡"
-        elif scheme in project_adapters:
-            return "🎓"
-        else:
-            return "🔴"
-
-    # DYNAMIC CONTENT
+    Args:
+        adapters: List of adapter dicts with 'scheme' and 'description'
+    """
     print("## 📦 DYNAMIC CONTENT (Runtime Discovery)")
     print()
 
-    if adapters:
-        print("### URI Adapters ({} registered)".format(len(adapters)))
-        print("Source: Live adapter registry")
-        print("Updates: Automatic when new adapters added")
-        print("Legend: 🟢 Stable | 🟡 Beta | 🎓 Project Adapters | 🔴 Experimental")
-        print()
-        for adapter in adapters:
-            scheme = adapter['scheme']
-            desc = adapter.get('description', 'No description')
-            badge = get_stability_badge(scheme)
-            print(f"  {badge} {scheme}://      - {desc}")
-            print(f"                 Details: reveal help://{scheme}")
-        print()
+    if not adapters:
+        return
 
-    # STATIC CONTENT
+    print("### URI Adapters ({}) registered)".format(len(adapters)))
+    print("Source: Live adapter registry")
+    print("Updates: Automatic when new adapters added")
+    print("Legend: 🟢 Stable | 🟡 Beta | 🎓 Project Adapters | 🔴 Experimental")
+    print()
+    for adapter in adapters:
+        scheme = adapter['scheme']
+        desc = adapter.get('description', 'No description')
+        badge = _get_stability_badge(scheme)
+        print(f"  {badge} {scheme}://      - {desc}")
+        print(f"                 Details: reveal help://{scheme}")
+    print()
+
+
+def _render_static_guides_header() -> None:
+    """Render static guides section header."""
     print("## 📄 STATIC GUIDES (Markdown Files)")
     print("Source: reveal/ and reveal/adapters/ directories")
     print("Location: Bundled with installation")
     print()
 
-    if static:
-        # Organize static guides by category
-        getting_started = ['quick-start']
-        ai_guides = ['agent', 'agent-full']
-        feature_guides = ['python-guide', 'markdown', 'reveal-guide', 'html', 'configuration', 'schemas', 'duplicates']
-        best_practices = ['anti-patterns', 'tricks']
-        dev_guides = ['adapter-authoring', 'help', 'release']
 
-        # Map topics to their files for source attribution
-        from reveal.adapters.help import HelpAdapter
-        static_help_map = HelpAdapter.STATIC_HELP
+def _render_guide_category(category_name: str, topics: list, static: list,
+                            static_help_map: dict, special_handling: dict = None) -> None:
+    """Render a category of guide topics.
 
-        # Getting Started
-        if any(t in static for t in getting_started):
-            print("### Getting Started")
-            for topic in [t for t in getting_started if t in static]:
-                file = static_help_map.get(topic, 'unknown')
-                token_estimate = '~2,000'
-                print(f"  {topic:16} - {_get_guide_description(topic)}")
-                print(f"                     File: {file}")
-                print(f"                     Token cost: {token_estimate}")
-                print(f"                     Recommended: Start here if you're new to reveal!")
-            print()
+    Args:
+        category_name: Display name for the category
+        topics: List of topic IDs in this category
+        static: List of available static guides
+        static_help_map: Map of topic IDs to file paths
+        special_handling: Optional dict with topic-specific handling (aliases, notes, etc.)
+    """
+    available_topics = [t for t in topics if t in static]
+    if not available_topics and category_name != "For AI Agents":
+        return
 
-        # AI Agent Guides
-        print("### For AI Agents")
-        for topic in [t for t in ai_guides if t in static]:
-            file = static_help_map.get(topic, 'unknown')
-            token_estimate = {
-                'agent': '~2,200',
-                'agent-full': '~12,000'
-            }.get(topic, '~1,500')
+    print(f"### {category_name}")
+    for topic in available_topics:
+        file = static_help_map.get(topic, 'unknown')
+        token_estimate = TOKEN_ESTIMATES.get(topic, '~2,000')
 
-            alias = ''
-            if topic == 'agent':
-                alias = '\n                     Alias: --agent-help flag'
-            elif topic == 'agent-full':
-                alias = '\n                     Alias: --agent-help-full flag'
+        # Handle special cases
+        extra_info = ''
+        if special_handling and topic in special_handling:
+            extra_info = special_handling[topic]
 
-            print(f"  {topic:16} - {_get_guide_description(topic)}")
-            print(f"                     File: {file}")
-            print(f"                     Token cost: {token_estimate}{alias}")
-        print()
+        print(f"  {topic:16} - {_get_guide_description(topic)}")
+        print(f"                     File: {file}")
+        print(f"                     Token cost: {token_estimate}{extra_info}")
+    print()
 
-        # Feature Guides
-        if any(t in static for t in feature_guides):
-            print("### Feature Guides")
-            for topic in [t for t in feature_guides if t in static]:
-                file = static_help_map.get(topic, 'unknown')
-                token_estimate = {
-                    'python-guide': '~2,500',
-                    'markdown': '~4,000',
-                    'reveal-guide': '~3,000',
-                    'html': '~2,000',
-                    'configuration': '~3,500',
-                    'schemas': '~4,500',
-                    'duplicates': '~5,500'
-                }.get(topic, '~2,000')
-                print(f"  {topic:16} - {_get_guide_description(topic)}")
-                print(f"                     File: {file}")
-                print(f"                     Token cost: {token_estimate}")
-            print()
 
-        # Best Practices
-        if any(t in static for t in best_practices):
-            print("### Best Practices")
-            for topic in [t for t in best_practices if t in static]:
-                file = static_help_map.get(topic, 'unknown')
-                token_estimate = {
-                    'anti-patterns': '~2,000',
-                    'tricks': '~3,500'
-                }.get(topic, '~2,000')
-                print(f"  {topic:16} - {_get_guide_description(topic)}")
-                print(f"                     File: {file}")
-                print(f"                     Token cost: {token_estimate}")
-            print()
-
-        # Development
-        if any(t in static for t in dev_guides):
-            print("### Development")
-            for topic in [t for t in dev_guides if t in static]:
-                file = static_help_map.get(topic, 'unknown')
-                token_estimate = '~2,500'
-                print(f"  {topic:16} - {_get_guide_description(topic)}")
-                print(f"                     File: {file}")
-                print(f"                     Token cost: {token_estimate}")
-            print()
-
-    # SPECIAL TOPICS
+def _render_special_topics_section() -> None:
+    """Render special topics section."""
     print("## 🧭 SPECIAL TOPICS")
     print()
     print("  adapters         - Summary of all URI adapters")
@@ -209,7 +188,9 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
     print("                     Token cost: ~300 tokens")
     print()
 
-    # NAVIGATION
+
+def _render_navigation_section() -> None:
+    """Render navigation tips section."""
     print("---")
     print()
     print("## Navigation Tips")
@@ -238,6 +219,69 @@ def _render_help_list_mode(data: Dict[str, Any]) -> None:
     print("  🎓 Project Adapters = Production-ready examples for specific projects")
     print("  reveal:// and claude:// show how to adapt reveal to YOUR project")
     print("  -> reveal help://adapter-authoring  # Learn how to build adapters")
+
+
+def _render_help_list_mode(data: Dict[str, Any]) -> None:
+    """Render help system topic list (reveal help://)."""
+    _render_help_header()
+
+    # Group topics
+    adapters = [a for a in data.get('adapters', []) if a.get('has_help')]
+    static = data.get('static_guides', [])
+
+    # Render dynamic adapters
+    _render_dynamic_adapters_section(adapters)
+
+    # Render static guides
+    if static:
+        from reveal.adapters.help import HelpAdapter
+        static_help_map = HelpAdapter.STATIC_HELP
+
+        _render_static_guides_header()
+
+        # Getting Started
+        _render_guide_category(
+            "Getting Started",
+            GUIDE_CATEGORIES['getting_started'],
+            static, static_help_map,
+            {'quick-start': '\n                     Recommended: Start here if you\'re new to reveal!'}
+        )
+
+        # AI Agent Guides
+        _render_guide_category(
+            "For AI Agents",
+            GUIDE_CATEGORIES['ai_guides'],
+            static, static_help_map,
+            {
+                'agent': '\n                     Alias: --agent-help flag',
+                'agent-full': '\n                     Alias: --agent-help-full flag'
+            }
+        )
+
+        # Feature Guides
+        _render_guide_category(
+            "Feature Guides",
+            GUIDE_CATEGORIES['feature_guides'],
+            static, static_help_map
+        )
+
+        # Best Practices
+        _render_guide_category(
+            "Best Practices",
+            GUIDE_CATEGORIES['best_practices'],
+            static, static_help_map
+        )
+
+        # Development
+        _render_guide_category(
+            "Development",
+            GUIDE_CATEGORIES['dev_guides'],
+            static, static_help_map
+        )
+
+    # Special topics and navigation
+    _render_special_topics_section()
+    _render_navigation_section()
 
 
 def _get_guide_description(topic: str) -> str:
