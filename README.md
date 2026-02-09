@@ -95,6 +95,14 @@ reveal 'ast://./src?complexity>10'    # Find complex functions
 reveal stats://./src --hotspots       # Technical debt map
 ```
 
+**Within-file search:**
+```bash
+reveal file.py --search pattern           # Find functions/classes by name (replaces grep)
+reveal file.py --type function            # Show only functions
+reveal file.py --sort=-complexity         # Find refactoring targets
+reveal file.py --search "^handle" --type function --sort=-complexity  # Combined
+```
+
 **Debugging:**
 ```bash
 reveal python://doctor           # Environment health check
@@ -384,7 +392,7 @@ reveal 'stats://src?sort=-lines&limit=5'                    # 5 largest files
 # See reveal help://<adapter> for adapter-specific operators and examples
 ```
 
-**15 Built-in Adapters (Organized by Purpose):**
+**16 Built-in Adapters (Organized by Purpose):**
 
 🟢 **Universal Tools** (core functionality, everyone benefits):
 - `help://` - Self-documenting help system (discover all features)

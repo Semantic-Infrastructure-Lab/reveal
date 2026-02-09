@@ -7,7 +7,15 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
-### v0.46.0
+### v0.48.0
+- ✅ **Phase 3: Query Operator Standardization** — Universal query operators (`=`, `!=`, `>`, `<`, `>=`, `<=`, `~=`, `..`) across all adapters
+- ✅ **Phase 4: Field Selection** — Token reduction with `--fields`, budget constraints (`--max-items`, `--max-bytes`)
+- ✅ **Phase 5: Element Discovery** — Auto-discovery of available elements in text and JSON output
+- ✅ **Phase 8: Convenience Flags** — Ergonomic `--search`, `--sort`, `--type` flags for 80% of within-file queries
+- ✅ **Result control** — `sort`, `limit`, `offset` work consistently across ast://, json://, markdown://, stats://, git://
+- ✅ **Progressive disclosure** — `available_elements` enables programmatic element discovery
+
+### v0.47.0
 - ✅ **Phase 6: Help Introspection** — Machine-readable adapter schemas for all 15 adapters
 - ✅ **Phase 7: Output Contract v1.1** — Trust metadata (parse_mode, confidence, warnings, errors)
 - ✅ **help://schemas/<adapter>** — JSON schemas for AI agent auto-discovery

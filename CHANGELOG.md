@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-02-08
+
 ### Added
 - **Phase 1 & 2 UX Consistency verified complete** (v0.47.0)
   - **Phase 1: Format Consistency** - All 16 adapters support `--format json|text`
@@ -42,6 +44,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **10 adapters with dynamic elements**: Git, JSON, Env, Stats, Markdown, SQLite, Help, Imports, Reveal, Diff
   - **Progressive disclosure**: Start with overview, drill down to specific elements
   - Session: scarlet-shade-0208 (~4 hours, implementation + testing + documentation)
+- **Phase 8: Convenience Flags** (v0.47.3) - COMPLETE ✅
+  - **Ergonomic within-file operations**: Simple flags for 80% of within-file queries
+  - **Three convenience flags**: `--search PATTERN`, `--sort FIELD`, `--type TYPE`
+  - **Grep replacement workflow**: `reveal file.py --search pattern` replaces `grep -n pattern file.py` with richer output
+  - **Progressive escalation**: Start with simple flags, graduate to URI syntax for complex queries
+  - **Auto-conversion**: Flags transparently convert to AST query URIs at routing layer
+  - **Full compatibility**: Works with all existing flags (`--head`, `--format json`, etc.)
+  - **Shell-safe sorting**: `--sort=-field` syntax avoids shell interpretation issues
+  - **Comprehensive tests**: 12 new tests covering all flag combinations and edge cases
+  - Session: ferocious-apocalypse-0208 (~4 hours, validation + implementation + documentation)
+  - Commit: d9b873d
 - **Phase 7: Output Contract v1.1** - Trust metadata for AI agents (v0.47.0)
   - Added optional `meta` field with parse_mode, confidence, warnings, errors
   - Enables AI agents to assess result trustworthiness
@@ -68,6 +81,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Progressive disclosure now returns correct element (not overview)
   - Server display shows actual host/port when using ~/.my.cnf (was "None:None")
   - Lag display no longer appends "s" to "Unknown" values
+- **I005 rule signature mismatch** (Phase 8 preparation)
+  - Added missing `content` parameter to match BaseRule interface
+  - Fixes TypeError when running `--check` on files with I005 rule enabled
+  - Session: cakiyawu-0208
 
 ### Documentation
 - **Phase 3 Documentation Complete** (2026-02-08)
@@ -94,6 +111,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Best practices: When to use elements vs query parameters
   - Adapter element reference table (fixed vs dynamic elements)
   - Session: scarlet-shade-0208
+- **Phase 8 Documentation Complete** (2026-02-08)
+  - Updated `AGENT_HELP.md` - New "Task: Search within a single file" section
+  - Updated `QUERY_SYNTAX_GUIDE.md` - Added "Convenience Flags vs URI Syntax" comparison
+  - Convenience flag examples with grep replacement workflows
+  - Progressive escalation guidance (when to use flags vs URI syntax)
+  - Real-world examples showing 80/20 split in action
+  - Session: ferocious-apocalypse-0208
 - **MySQL adapter production validation** - Updated help_data/mysql.yaml
   - Added `mysql://` example (simplest form using ~/.my.cnf)
   - Added "Production Database Monitoring" workflow

@@ -53,12 +53,13 @@ class I005(BaseRule):
     file_patterns = _initialize_file_patterns()
     version = "1.0.0"
 
-    def check(self, file_path: str, structure: Dict[str, Any]) -> List[Detection]:
+    def check(self, file_path: str, structure: Dict[str, Any], content: List[str]) -> List[Detection]:
         """Check for duplicate imports in the file.
 
         Args:
             file_path: Path to the file being analyzed
             structure: File structure from analyzer
+            content: File content lines (unused for this rule)
 
         Returns:
             List of detections for duplicate imports
