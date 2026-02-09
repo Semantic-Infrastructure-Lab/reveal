@@ -1,5 +1,5 @@
 """Zig analyzer using tree-sitter."""
-from typing import Dict, List, Any
+from typing import Any, Dict, List, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -97,75 +97,99 @@ class ZigAnalyzer(TreeSitterAnalyzer):
 
         return functions
 
+    def _has_pub_keyword(self, node) -> bool:
+        """Check if node has a pub keyword as previous sibling."""
+        return node.prev_sibling and node.prev_sibling.type == 'pub'
+
+    def _find_var_decl_in_node(self, decl_node) -> Any:
+        """Find VarDecl child node in a Decl node."""
+        for child in decl_node.children:
+            if child.type == 'VarDecl':
+                return child
+        return None
+
+    def _extract_var_name_and_container(self, var_decl) -> tuple:
+        """Extract variable name and ContainerDecl from VarDecl node.
+
+        Returns:
+            Tuple of (var_name, container_decl)
+        """
+        var_name = None
+        container_decl = None
+
+        for var_child in var_decl.children:
+            if var_child.type == 'IDENTIFIER':
+                var_name = self._get_node_text(var_child)
+            elif var_child.type == 'ContainerDecl':
+                container_decl = var_child
+
+        return var_name, container_decl
+
+    def _is_correct_container_type(self, container_decl, container_type: str) -> bool:
+        """Check if ContainerDecl is of the specified type (struct/enum/union)."""
+        for cont_child in container_decl.children:
+            if cont_child.type == container_type:
+                return True
+        return False
+
+    def _extract_container_field_names(self, member) -> List[str]:
+        """Extract field names from a ContainerField node."""
+        for field_child in member.children:
+            if field_child.type == 'IDENTIFIER':
+                return [self._get_node_text(field_child)]
+        return []
+
+    def _extract_container_members(self, container_decl) -> List[str]:
+        """Extract member field names from a ContainerDecl."""
+        members = []
+        for cont_child in container_decl.children:
+            if cont_child.type == 'ContainerDeclAuto':
+                for member in cont_child.children:
+                    if member.type == 'ContainerField':
+                        members.extend(self._extract_container_field_names(member))
+        return members
+
+    def _build_container_info(
+        self, decl_node, var_name: str, members: List[str], has_pub: bool
+    ) -> Dict[str, Any]:
+        """Build container information dictionary."""
+        container_info = {
+            'line': decl_node.start_point[0] + 1,
+            'name': var_name,
+            'members': members,
+        }
+
+        if has_pub:
+            container_info['visibility'] = 'pub'
+
+        return container_info
+
     def _extract_container_decls(self, container_type: str) -> List[Dict[str, Any]]:
         """Extract struct, enum, or union definitions."""
         containers = []
-
-        # Find VarDecl nodes that define containers
         decl_nodes = self._find_nodes_by_type('Decl')
 
         for decl_node in decl_nodes:
-            has_pub = False
-            var_decl = None
+            # Check visibility
+            has_pub = self._has_pub_keyword(decl_node)
 
-            # Check siblings for pub keyword
-            if decl_node.prev_sibling and decl_node.prev_sibling.type == 'pub':
-                has_pub = True
-
-            # Find VarDecl child
-            for child in decl_node.children:
-                if child.type == 'VarDecl':
-                    var_decl = child
-                    break
-
+            # Find VarDecl
+            var_decl = self._find_var_decl_in_node(decl_node)
             if not var_decl:
                 continue
 
-            # Look for ContainerDecl of the right type
-            container_decl = None
-            var_name = None
-
-            for var_child in var_decl.children:
-                if var_child.type == 'IDENTIFIER':
-                    var_name = self._get_node_text(var_child)
-                elif var_child.type == 'ContainerDecl':
-                    container_decl = var_child
-
+            # Extract name and container declaration
+            var_name, container_decl = self._extract_var_name_and_container(var_decl)
             if not container_decl or not var_name:
                 continue
 
-            # Check if this is the right container type
-            is_correct_type = False
-            for cont_child in container_decl.children:
-                if cont_child.type == container_type:
-                    is_correct_type = True
-                    break
-
-            if not is_correct_type:
+            # Verify container type
+            if not self._is_correct_container_type(container_decl, container_type):
                 continue
 
-            # Extract fields/values
-            members = []
-            for cont_child in container_decl.children:
-                if cont_child.type == 'ContainerDeclAuto':
-                    # Extract container members
-                    for member in cont_child.children:
-                        if member.type == 'ContainerField':
-                            # Get field name
-                            for field_child in member.children:
-                                if field_child.type == 'IDENTIFIER':
-                                    members.append(self._get_node_text(field_child))
-                                    break
-
-            container_info = {
-                'line': decl_node.start_point[0] + 1,
-                'name': var_name,
-                'members': members,
-            }
-
-            if has_pub:
-                container_info['visibility'] = 'pub'
-
+            # Extract members and build result
+            members = self._extract_container_members(container_decl)
+            container_info = self._build_container_info(decl_node, var_name, members, has_pub)
             containers.append(container_info)
 
         return containers
