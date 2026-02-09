@@ -383,8 +383,8 @@ def _render_help_section(data: Dict[str, Any]) -> None:
 
 
 # Section renderers - each handles one aspect of help documentation
-def _render_help_header(scheme: str, data: Dict[str, Any]) -> None:
-    """Render help header with scheme, description, and metadata."""
+def _render_help_detail_header(scheme: str, data: Dict[str, Any]) -> None:
+    """Render help header with scheme, description, and metadata for detail mode."""
     # Stability classification
     stable_adapters = {'help', 'env', 'ast', 'python', 'reveal'}
     beta_adapters = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git'}
@@ -530,7 +530,7 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
     scheme = data.get('scheme', data.get('name', ''))
 
     # Render all sections in order
-    _render_help_header(scheme, data)
+    _render_help_detail_header(scheme, data)
     _render_help_syntax(data)
     _render_help_operators(data)
     _render_help_filters(data)
