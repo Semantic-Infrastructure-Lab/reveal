@@ -93,6 +93,96 @@ class QueryFilter:
             raise ValueError(f"Invalid operator: {self.op}. Must be one of {sorted(self.VALID_OPERATORS)}")
 
 
+def _try_parse_negation_filter(part: str) -> Optional[QueryFilter]:
+    """Try to parse negation filter (!field).
+
+    Args:
+        part: Filter part to parse
+
+    Returns:
+        QueryFilter if negation found, None otherwise
+    """
+    if part.startswith('!'):
+        field = part[1:].strip()
+        if field:
+            return QueryFilter(field, '!', '')
+    return None
+
+
+def _try_parse_two_char_operators(part: str, coerce_numeric: bool) -> Optional[QueryFilter]:
+    """Try to parse two-character operators (>=, <=, !=, ~=, !~).
+
+    Args:
+        part: Filter part to parse
+        coerce_numeric: Whether to coerce numeric values
+
+    Returns:
+        QueryFilter if operator matched, None otherwise
+    """
+    for op in ['>=', '<=', '!=', '~=', '!~']:
+        if op in part:
+            field, value = part.split(op, 1)
+            field = field.strip()
+            value = value.strip()
+
+            if coerce_numeric and op not in ('~=', '!~'):
+                value = coerce_value(value)
+
+            return QueryFilter(field, op, value)
+    return None
+
+
+def _parse_equals_special_cases(field: str, value: str) -> Optional[QueryFilter]:
+    """Parse special cases for = operator (wildcards, ranges).
+
+    Args:
+        field: Field name
+        value: Value to check for special patterns
+
+    Returns:
+        QueryFilter if special case matched, None otherwise
+    """
+    # Check for wildcard pattern (*value*)
+    if '*' in value:
+        return QueryFilter(field, '*', value)
+
+    # Check for range pattern (value1..value2)
+    if '..' in value:
+        return QueryFilter(field, '..', value)
+
+    return None
+
+
+def _try_parse_single_char_operators(part: str, coerce_numeric: bool) -> Optional[QueryFilter]:
+    """Try to parse single-character operators (>, <, =).
+
+    Args:
+        part: Filter part to parse
+        coerce_numeric: Whether to coerce numeric values
+
+    Returns:
+        QueryFilter if operator matched, None otherwise
+    """
+    for op in ['>', '<', '=']:
+        if op in part:
+            field, value = part.split(op, 1)
+            field = field.strip()
+            value = value.strip()
+
+            # Special handling for = operator
+            if op == '=':
+                special_filter = _parse_equals_special_cases(field, value)
+                if special_filter:
+                    return special_filter
+
+            # Normal operator handling
+            if coerce_numeric:
+                value = coerce_value(value)
+
+            return QueryFilter(field, op, value)
+    return None
+
+
 def parse_query_filters(
     query: str,
     coerce_numeric: bool = True,
@@ -114,8 +204,6 @@ def parse_query_filters(
         return []
 
     filters = []
-
-    # Split by & to get individual filters
     parts = query.split('&')
 
     for part in parts:
@@ -123,67 +211,29 @@ def parse_query_filters(
         if not part:
             continue
 
-        matched = False
+        # Try parsing in order of precedence
+        parsed_filter = None
 
-        # Check for negation prefix (!field)
-        if support_existence and part.startswith('!'):
-            field = part[1:].strip()
-            if field:  # Make sure there's a field name after !
-                filters.append(QueryFilter(field, '!', ''))
-                matched = True
+        # 1. Check for negation prefix (!field)
+        if support_existence:
+            parsed_filter = _try_parse_negation_filter(part)
+            if parsed_filter:
+                filters.append(parsed_filter)
                 continue
 
-        # Try to match operators (order matters for precedence)
-        # Two-character operators (except ..)
-        for op in ['>=', '<=', '!=', '~=', '!~']:
-            if op in part:
-                field, value = part.split(op, 1)
-                field = field.strip()
-                value = value.strip()
-
-                if coerce_numeric and op not in ('~=', '!~'):
-                    value = coerce_value(value)
-
-                filters.append(QueryFilter(field, op, value))
-                matched = True
-                break
-
-        if matched:
+        # 2. Try two-character operators
+        parsed_filter = _try_parse_two_char_operators(part, coerce_numeric)
+        if parsed_filter:
+            filters.append(parsed_filter)
             continue
 
-        # Single-character operators (>, <, =)
-        for op in ['>', '<', '=']:
-            if op in part:
-                field, value = part.split(op, 1)
-                field = field.strip()
-                value = value.strip()
-
-                # Special handling for = operator
-                if op == '=':
-                    # Check for wildcard pattern (*value*)
-                    if '*' in value:
-                        filters.append(QueryFilter(field, '*', value))
-                        matched = True
-                        break
-
-                    # Check for range pattern (value1..value2)
-                    if '..' in value:
-                        filters.append(QueryFilter(field, '..', value))
-                        matched = True
-                        break
-
-                # Normal operator handling
-                if coerce_numeric:
-                    value = coerce_value(value)
-
-                filters.append(QueryFilter(field, op, value))
-                matched = True
-                break
-
-        if matched:
+        # 3. Try single-character operators
+        parsed_filter = _try_parse_single_char_operators(part, coerce_numeric)
+        if parsed_filter:
+            filters.append(parsed_filter)
             continue
 
-        # If no operator found, treat as existence check (if supported)
+        # 4. Fallback to existence check
         if support_existence:
             filters.append(QueryFilter(part, '?', ''))
 
