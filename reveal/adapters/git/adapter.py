@@ -233,24 +233,19 @@ class GitAdapter(ResourceAdapter):
     Requires: pip install reveal-cli[git]
     """
 
-    def __init__(self, resource: Optional[str] = None, ref: Optional[str] = None,
-                 subpath: Optional[str] = None, query: Optional[Dict[str, str]] = None,
-                 path: Optional[str] = None):
-        """
-        Initialize Git adapter.
-
-        Supports two initialization styles:
-        1. Single resource string (new style, for generic handler):
-           GitAdapter("path/file.py@ref?type=history")
-        2. Multiple arguments (old style, backward compatibility):
-           GitAdapter(path=".", ref="main", subpath="file.py", query={...})
+    def _normalize_resource_parameter(self, resource: Optional[str],
+                                       path: Optional[str]) -> str:
+        """Normalize resource parameter handling backward compatibility.
 
         Args:
-            resource: Either resource URI string or repository path (optional if path provided)
-            ref: Git reference (commit, branch, tag, HEAD~N)
-            subpath: Path within repository (file or directory)
-            query: Query parameters (type=history|blame, since, author, etc.)
-            path: Alias for resource (backward compatibility with tests)
+            resource: Resource string
+            path: Backward compatibility path parameter
+
+        Returns:
+            Normalized resource string
+
+        Raises:
+            TypeError: If no resource provided
         """
         # Handle backward compatibility: path= parameter takes precedence
         if path is not None:
@@ -261,8 +256,21 @@ class GitAdapter(ResourceAdapter):
         if resource is None:
             raise TypeError("GitAdapter requires a resource path")
 
-        # Handle routing.py passing query string as ref parameter
-        # (routing.py Try 2 does: adapter_class(path, query))
+        return resource
+
+    def _handle_routing_query_workaround(self, ref: Optional[str],
+                                          query: Optional[Dict[str, str]]) -> tuple:
+        """Handle routing.py passing query string as ref parameter.
+
+        routing.py Try 2 does: adapter_class(path, query)
+
+        Args:
+            ref: Git reference (or query string)
+            query: Query parameters dict
+
+        Returns:
+            Tuple of (ref, query) with query string extracted if needed
+        """
         if ref is not None and '=' in ref and query is None:
             # ref looks like a query string, move it to query
             query_string = ref
@@ -273,6 +281,19 @@ class GitAdapter(ResourceAdapter):
                     key, value = param.split('=', 1)
                     query[key] = value
 
+        return ref, query
+
+    def _parse_and_initialize_attributes(self, resource: str, ref: Optional[str],
+                                          subpath: Optional[str],
+                                          query: Optional[Dict[str, str]]) -> None:
+        """Parse resource string or use explicit args to initialize attributes.
+
+        Args:
+            resource: Resource string or path
+            ref: Git reference
+            subpath: Path within repository
+            query: Query parameters
+        """
         # Parse resource string if it looks like a URI (has @ or is a file path)
         # This handles both "README.md@ref" and "README.md" (treated as subpath)
         # Also handles empty string from bare URIs like "git://"
@@ -298,10 +319,12 @@ class GitAdapter(ResourceAdapter):
             self.subpath = subpath
             self.query = query or {}
 
-        self.repo = None
+    def _separate_query_parameters(self) -> tuple:
+        """Separate result control params from filter params.
 
-        # Parse result control parameters (sort, limit, offset) and query filters
-        # Separate result control params from filter params
+        Returns:
+            Tuple of (result_control_parts, filter_parts)
+        """
         result_control_parts = []
         filter_parts = []
 
@@ -322,14 +345,26 @@ class GitAdapter(ResourceAdapter):
                     # Regular key, use = operator
                     filter_parts.append(f"{k}={v}")
 
-        # Parse result control (sort/limit/offset)
+        return result_control_parts, filter_parts
+
+    def _initialize_result_control(self, result_control_parts: list) -> None:
+        """Initialize result control from parts.
+
+        Args:
+            result_control_parts: List of result control parameter strings
+        """
         result_control_query = '&'.join(result_control_parts)
         if result_control_query:
             _, self.result_control = parse_result_control(result_control_query)
         else:
             self.result_control = ResultControl()
 
-        # Parse query filters for commit filtering (e.g., author=John, message~=bug)
+    def _initialize_query_filters(self, filter_parts: list) -> None:
+        """Initialize query filters from parts.
+
+        Args:
+            filter_parts: List of filter parameter strings
+        """
         filter_query = '&'.join(filter_parts)
         self.query_filters = []
         if filter_query:
@@ -338,6 +373,43 @@ class GitAdapter(ResourceAdapter):
             except Exception:
                 # If parsing fails, fall back to empty filters
                 self.query_filters = []
+
+    def __init__(self, resource: Optional[str] = None, ref: Optional[str] = None,
+                 subpath: Optional[str] = None, query: Optional[Dict[str, str]] = None,
+                 path: Optional[str] = None):
+        """
+        Initialize Git adapter.
+
+        Supports two initialization styles:
+        1. Single resource string (new style, for generic handler):
+           GitAdapter("path/file.py@ref?type=history")
+        2. Multiple arguments (old style, backward compatibility):
+           GitAdapter(path=".", ref="main", subpath="file.py", query={...})
+
+        Args:
+            resource: Either resource URI string or repository path (optional if path provided)
+            ref: Git reference (commit, branch, tag, HEAD~N)
+            subpath: Path within repository (file or directory)
+            query: Query parameters (type=history|blame, since, author, etc.)
+            path: Alias for resource (backward compatibility with tests)
+        """
+        # Normalize resource parameter
+        resource = self._normalize_resource_parameter(resource, path)
+
+        # Handle routing workaround
+        ref, query = self._handle_routing_query_workaround(ref, query)
+
+        # Parse and initialize attributes
+        self._parse_and_initialize_attributes(resource, ref, subpath, query)
+
+        self.repo = None
+
+        # Parse query parameters
+        result_control_parts, filter_parts = self._separate_query_parameters()
+
+        # Initialize result control and filters
+        self._initialize_result_control(result_control_parts)
+        self._initialize_query_filters(filter_parts)
 
     @staticmethod
     def _parse_resource_string(resource: str) -> Dict[str, Any]:
