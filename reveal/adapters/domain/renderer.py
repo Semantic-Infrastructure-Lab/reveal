@@ -205,29 +205,25 @@ class DomainRenderer(TypeDispatchRenderer):
             for step in result['next_steps']:
                 print(f"  \u2022 {step}")
 
+    # Status icons for health checks
+    _STATUS_ICONS = {
+        'pass': '\u2705',
+        'warning': '\u26a0\ufe0f',
+        'failure': '\u274c',
+    }
+
     @staticmethod
-    def _render_domain_health_check(result: dict) -> None:
-        """Render domain health check results."""
-        domain = result['domain']
-        checks = result.get('checks', [])
-        summary = result['summary']
-        status = result['status']
-
-        # Header
-        status_icons = {
-            'pass': '\u2705',
-            'warning': '\u26a0\ufe0f',
-            'failure': '\u274c',
-        }
-        status_icon = status_icons.get(status, '\u2753')
-
+    def _print_health_check_header(domain: str, status: str) -> None:
+        """Print health check header with status."""
+        status_icon = DomainRenderer._STATUS_ICONS.get(status, '\u2753')
         print(f"\n{'='*60}")
         print(f"Domain Health Check: {domain}")
         print(f"{'='*60}\n")
-
         print(f"Status: {status_icon} {status.upper()}\n")
 
-        # Summary
+    @staticmethod
+    def _print_health_check_summary(summary: dict) -> None:
+        """Print health check summary statistics."""
         print(f"Summary: {summary['passed']}/{summary['total']} checks passed")
         if summary['warnings'] > 0:
             print(f"  \u26a0\ufe0f  {summary['warnings']} warnings")
@@ -235,40 +231,58 @@ class DomainRenderer(TypeDispatchRenderer):
             print(f"  \u274c {summary['failures']} failures")
         print()
 
-        # Group checks by status
-        failures = [c for c in checks if c['status'] == 'failure']
-        warnings = [c for c in checks if c['status'] == 'warning']
-        passes = [c for c in checks if c['status'] == 'pass']
+    @staticmethod
+    def _group_checks_by_status(checks: list) -> dict:
+        """Group checks by their status."""
+        return {
+            'failures': [c for c in checks if c['status'] == 'failure'],
+            'warnings': [c for c in checks if c['status'] == 'warning'],
+            'passes': [c for c in checks if c['status'] == 'pass'],
+        }
 
-        # Show failures first
-        if failures:
-            print("\u274c Failures:")
-            for check in failures:
+    @staticmethod
+    def _print_check_group(title: str, icon: str, checks: list) -> None:
+        """Print a group of checks with icon and title."""
+        if checks:
+            print(f"{icon} {title}:")
+            for check in checks:
                 print(f"  \u2022 {check['name']}: {check['message']}")
             print()
 
-        # Then warnings
-        if warnings:
-            print("\u26a0\ufe0f  Warnings:")
-            for check in warnings:
-                print(f"  \u2022 {check['name']}: {check['message']}")
-            print()
-
-        # Finally passes (only if no failures/warnings)
-        if passes and not failures and not warnings:
-            print("\u2705 All Checks Passed:")
-            for check in passes:
-                print(f"  \u2022 {check['name']}: {check['message']}")
-            print()
-
-        # Next steps
-        if result.get('next_steps'):
+    @staticmethod
+    def _print_remediation_steps(steps: list) -> None:
+        """Print remediation steps."""
+        if steps:
             print(f"{'-'*60}")
             print("Remediation Steps:")
-            for step in result['next_steps']:
+            for step in steps:
                 print(f"  \u2022 {step}")
             print()
 
+    @staticmethod
+    def _render_domain_health_check(result: dict) -> None:
+        """Render domain health check results."""
+        # Extract data
+        domain = result['domain']
+        checks = result.get('checks', [])
+        summary = result['summary']
+        status = result['status']
+
+        # Print header and summary
+        DomainRenderer._print_health_check_header(domain, status)
+        DomainRenderer._print_health_check_summary(summary)
+
+        # Group and print checks
+        grouped = DomainRenderer._group_checks_by_status(checks)
+        DomainRenderer._print_check_group("Failures", "\u274c", grouped['failures'])
+        DomainRenderer._print_check_group("Warnings", "\u26a0\ufe0f", grouped['warnings'])
+
+        # Only show passes if no failures/warnings
+        if grouped['passes'] and not grouped['failures'] and not grouped['warnings']:
+            DomainRenderer._print_check_group("All Checks Passed", "\u2705", grouped['passes'])
+
+        # Print remediation and exit code
+        DomainRenderer._print_remediation_steps(result.get('next_steps'))
         print(f"Exit code: {result['exit_code']}")
 
     @staticmethod
