@@ -81,6 +81,70 @@ def _is_nginx_content(path: str) -> bool:
         return False
 
 
+def _is_nginx_path(file_path: Path) -> bool:
+    """Check if path indicates nginx config."""
+    path_str = str(file_path.resolve())
+    return '/nginx/' in path_str or '/etc/nginx/' in path_str
+
+
+def _try_conf_detection(path: str, file_path: Path, ext: str) -> Optional[type]:
+    """Try to detect analyzer for .conf files (nginx vs INI)."""
+    if ext != '.conf':
+        return None
+
+    if _is_nginx_path(file_path):
+        from .analyzers.nginx import NginxAnalyzer
+        return NginxAnalyzer
+
+    if _is_nginx_content(path):
+        from .analyzers.nginx import NginxAnalyzer
+        return NginxAnalyzer
+
+    return None
+
+
+def _try_extension_lookup(ext: str) -> Optional[type]:
+    """Try to find analyzer by file extension."""
+    if ext and ext in _ANALYZER_REGISTRY:
+        return _ANALYZER_REGISTRY.get(ext)
+    return None
+
+
+def _try_filename_lookup(file_path: Path) -> Optional[type]:
+    """Try to find analyzer by filename (Dockerfile, Makefile, etc.)."""
+    filename = file_path.name.lower()
+    if filename in _ANALYZER_REGISTRY:
+        return _ANALYZER_REGISTRY.get(filename)
+    return None
+
+
+def _try_nginx_path_detection(file_path: Path) -> Optional[type]:
+    """Try to detect nginx by path patterns."""
+    if _is_nginx_path(file_path):
+        from .analyzers.nginx import NginxAnalyzer
+        return NginxAnalyzer
+    return None
+
+
+def _try_shebang_lookup(path: str, ext: str) -> Optional[type]:
+    """Try to detect analyzer from shebang line."""
+    if not ext or ext not in _ANALYZER_REGISTRY:
+        shebang_ext = _detect_shebang(path)
+        if shebang_ext:
+            return _ANALYZER_REGISTRY.get(shebang_ext)
+    return None
+
+
+def _try_fallback_lookup(ext: str, allow_fallback: bool, path: str) -> Optional[type]:
+    """Try TreeSitter fallback for unknown extensions."""
+    if allow_fallback and ext:
+        fallback = _try_treesitter_fallback(ext)
+        if fallback:
+            logger.debug(f"Using tree-sitter fallback for {path}")
+        return fallback
+    return None
+
+
 def get_analyzer(path: str, allow_fallback: bool = True) -> Optional[type]:
     """Get analyzer class for a file path.
 
@@ -94,46 +158,20 @@ def get_analyzer(path: str, allow_fallback: bool = True) -> Optional[type]:
     file_path = Path(path)
     ext = file_path.suffix.lower()
 
-    # Content-based detection for ambiguous extensions (.conf can be nginx or INI)
-    if ext == '.conf':
-        # Check path first (faster)
-        path_str = str(file_path.resolve())
-        if '/nginx/' in path_str or '/etc/nginx/' in path_str:
-            from .analyzers.nginx import NginxAnalyzer
-            return NginxAnalyzer
-        # Content-based detection
-        if _is_nginx_content(path):
-            from .analyzers.nginx import NginxAnalyzer
-            return NginxAnalyzer
+    # Try detection strategies in order
+    strategies = [
+        lambda: _try_conf_detection(path, file_path, ext),
+        lambda: _try_extension_lookup(ext),
+        lambda: _try_filename_lookup(file_path),
+        lambda: _try_nginx_path_detection(file_path),
+        lambda: _try_shebang_lookup(path, ext),
+        lambda: _try_fallback_lookup(ext, allow_fallback, path),
+    ]
 
-    # If we have an extension, use it
-    if ext and ext in _ANALYZER_REGISTRY:
-        return _ANALYZER_REGISTRY.get(ext)
-
-    # No extension or not found - check special filenames (Dockerfile, Makefile)
-    filename = file_path.name.lower()
-    if filename in _ANALYZER_REGISTRY:
-        return _ANALYZER_REGISTRY.get(filename)
-
-    # Path-based detection for nginx configs (handles /etc/nginx/sites-available/*, etc.)
-    path_str = str(file_path.resolve())
-    if '/nginx/' in path_str or '/etc/nginx/' in path_str:
-        # Import here to avoid circular imports
-        from .analyzers.nginx import NginxAnalyzer
-        return NginxAnalyzer
-
-    # Still no match - check shebang for extensionless scripts
-    if not ext or ext not in _ANALYZER_REGISTRY:
-        shebang_ext = _detect_shebang(path)
-        if shebang_ext:
-            return _ANALYZER_REGISTRY.get(shebang_ext)
-
-    # TreeSitter fallback for unknown extensions
-    if allow_fallback and ext:
-        fallback = _try_treesitter_fallback(ext)
-        if fallback:
-            logger.debug(f"Using tree-sitter fallback for {path}")
-        return fallback
+    for strategy in strategies:
+        result = strategy()
+        if result:
+            return result
 
     return None
 
