@@ -526,6 +526,82 @@ def parse_result_control(query: str) -> Tuple[str, ResultControl]:
     return cleaned_query, control
 
 
+def _safe_numeric(v):
+    """Convert value to numeric, returning None for non-numeric values."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return v
+    try:
+        return float(v)
+    except (ValueError, TypeError):
+        return None
+
+
+def _detect_value_types(items: List[Dict[str, Any]], field: str) -> tuple:
+    """Detect if field values are numeric, string, or mixed.
+
+    Returns:
+        (has_numbers, has_strings) tuple
+    """
+    values = [item.get(field) for item in items]
+    has_numbers = any(isinstance(v, (int, float)) and v is not None for v in values)
+    has_strings = any(isinstance(v, str) for v in values)
+    return has_numbers, has_strings
+
+
+def _create_sort_key(field: str, has_mixed_types: bool, sort_descending: bool):
+    """Create sort key function for given field and type context.
+
+    Args:
+        field: Field name to sort by
+        has_mixed_types: Whether field has mixed numeric/string types
+        sort_descending: Sort direction
+
+    Returns:
+        Sort key function
+    """
+    def sort_key(item):
+        value = item.get(field)
+
+        # Apply type conversion if we have mixed types
+        if has_mixed_types:
+            value = _safe_numeric(value)
+
+        # Handle None values (sort to end)
+        if value is None:
+            return float('inf') if not sort_descending else float('-inf')
+
+        return value
+
+    return sort_key
+
+
+def _apply_sorting(items: List[Dict[str, Any]], field: str, descending: bool) -> List[Dict[str, Any]]:
+    """Apply sorting to items with mixed-type handling and fallback."""
+    has_numbers, has_strings = _detect_value_types(items, field)
+    has_mixed = has_numbers and has_strings
+
+    sort_key = _create_sort_key(field, has_mixed, descending)
+
+    try:
+        items.sort(key=sort_key, reverse=descending)
+    except TypeError:
+        # Fallback to string comparison if sorting fails
+        items.sort(key=lambda item: str(item.get(field) or ''), reverse=descending)
+
+    return items
+
+
+def _apply_offset_and_limit(items: List[Dict[str, Any]], offset: int, limit: Optional[int]) -> List[Dict[str, Any]]:
+    """Apply offset and limit to items list."""
+    if offset > 0:
+        items = items[offset:]
+    if limit is not None:
+        items = items[:limit]
+    return items
+
+
 def apply_result_control(items: List[Dict[str, Any]], control: ResultControl) -> List[Dict[str, Any]]:
     """Apply result control to a list of items.
 
@@ -538,54 +614,10 @@ def apply_result_control(items: List[Dict[str, Any]], control: ResultControl) ->
     """
     result = items[:]
 
-    # Apply sorting
     if control.sort_field:
-        # First pass: check if we have mixed types and convert if needed
-        values = [item.get(control.sort_field) for item in result]
-        has_numbers = any(isinstance(v, (int, float)) and v is not None for v in values)
-        has_strings = any(isinstance(v, str) for v in values)
+        result = _apply_sorting(result, control.sort_field, control.sort_descending)
 
-        # If we have mixed types, convert all to numbers (parsing strings) or all to strings
-        if has_numbers and has_strings:
-            # Try to convert strings to numbers
-            def safe_numeric(v):
-                if v is None:
-                    return None
-                if isinstance(v, (int, float)):
-                    return v
-                try:
-                    return float(v)
-                except (ValueError, TypeError):
-                    return None  # Non-numeric strings become None
-
-        def sort_key(item):
-            value = item.get(control.sort_field)
-
-            # Apply type conversion if we have mixed types
-            if has_numbers and has_strings:
-                value = safe_numeric(value)
-
-            # Handle None values (sort to end)
-            if value is None:
-                # Use very large/small number for None depending on sort direction
-                return float('inf') if not control.sort_descending else float('-inf')
-
-            return value
-
-        try:
-            result.sort(key=sort_key, reverse=control.sort_descending)
-        except TypeError:
-            # If sorting still fails (shouldn't happen), fall back to string comparison
-            result.sort(key=lambda item: str(item.get(control.sort_field) or ''),
-                       reverse=control.sort_descending)
-
-    # Apply offset
-    if control.offset > 0:
-        result = result[control.offset:]
-
-    # Apply limit
-    if control.limit is not None:
-        result = result[:control.limit]
+    result = _apply_offset_and_limit(result, control.offset, control.limit)
 
     return result
 
