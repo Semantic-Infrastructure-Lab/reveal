@@ -662,7 +662,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'do_statement',
 
             # Boolean operators (each adds a branch)
-            'boolean_operator', 'binary_operator',  # Generic
+            # Note: Removed 'binary_operator' as it's too broad (includes comparisons)
+            'boolean_operator',  # Generic boolean operator
             'and', 'or',  # Python
             'logical_and', 'logical_or',  # C-family
 
@@ -684,13 +685,6 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 # Count this node if it's a decision point
                 if child.type in decision_types:
                     count += 1
-
-                # Special handling for boolean operators in expressions
-                # Check if operator is 'and' or 'or' by examining node text
-                if child.type in ('binary_operator', 'boolean_operator'):
-                    text = self._get_node_text(child)
-                    if text and any(op in text for op in [' and ', ' or ', '&&', '||']):
-                        count += 1
 
                 # Recursively count in children
                 count += count_decisions(child)
