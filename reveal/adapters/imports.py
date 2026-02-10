@@ -516,25 +516,37 @@ class ImportsAdapter(ResourceAdapter):
                     self._graph.add_dependency(file_path, resolved)
                     self._graph.resolved_paths[stmt.module_name] = resolved
 
+    def _build_response(self, response_type: str, **data_fields) -> Dict[str, Any]:
+        """Build standardized adapter response with common structure.
+
+        Args:
+            response_type: Type of response (e.g., 'imports', 'unused_imports')
+            **data_fields: Data fields to include in response
+
+        Returns:
+            Standardized response dict with contract_version, type, source, etc.
+        """
+        response = {
+            'contract_version': '1.0',
+            'type': response_type,
+            'source': str(self._target_path),
+            'source_type': 'directory' if self._target_path.is_dir() else 'file',
+        }
+        response.update(data_fields)
+        response['metadata'] = self.get_metadata()
+        return response
+
     def _format_all(self) -> Dict[str, Any]:
         """Format all imports (default view)."""
         if not self._graph:
             return {'imports': []}
 
-        imports_by_file = {}
-        for file_path, imports in self._graph.files.items():
-            imports_by_file[str(file_path)] = [
-                self._format_import(stmt) for stmt in imports
-            ]
-
-        return {
-            'contract_version': '1.0',
-            'type': 'imports',
-            'source': str(self._target_path),
-            'source_type': 'directory' if self._target_path.is_dir() else 'file',
-            'files': imports_by_file,
-            'metadata': self.get_metadata()
+        imports_by_file = {
+            str(file_path): [self._format_import(stmt) for stmt in imports]
+            for file_path, imports in self._graph.files.items()
         }
+
+        return self._build_response('imports', files=imports_by_file)
 
     def _format_unused(self) -> Dict[str, Any]:
         """Format unused imports."""
@@ -543,15 +555,11 @@ class ImportsAdapter(ResourceAdapter):
 
         unused = self._graph.find_unused_imports(self._symbols_by_file)
 
-        return {
-            'contract_version': '1.0',
-            'type': 'unused_imports',
-            'source': str(self._target_path),
-            'source_type': 'directory' if self._target_path.is_dir() else 'file',
-            'unused': [self._format_import(stmt) for stmt in unused],
-            'count': len(unused),
-            'metadata': self.get_metadata()
-        }
+        return self._build_response(
+            'unused_imports',
+            unused=[self._format_import(stmt) for stmt in unused],
+            count=len(unused)
+        )
 
     def _format_circular(self) -> Dict[str, Any]:
         """Format circular dependencies."""
@@ -560,18 +568,11 @@ class ImportsAdapter(ResourceAdapter):
 
         cycles = self._graph.find_cycles()
 
-        return {
-            'contract_version': '1.0',
-            'type': 'circular_dependencies',
-            'source': str(self._target_path),
-            'source_type': 'directory' if self._target_path.is_dir() else 'file',
-            'cycles': [
-                [str(path) for path in cycle]
-                for cycle in cycles
-            ],
-            'count': len(cycles),
-            'metadata': self.get_metadata()
-        }
+        return self._build_response(
+            'circular_dependencies',
+            cycles=[[str(path) for path in cycle] for cycle in cycles],
+            count=len(cycles)
+        )
 
     def _format_violations(self) -> Dict[str, Any]:
         """Format layer violations.
@@ -579,16 +580,12 @@ class ImportsAdapter(ResourceAdapter):
         Note: Requires .reveal.yaml configuration (Phase 4).
         For now, return placeholder.
         """
-        return {
-            'contract_version': '1.0',
-            'type': 'layer_violations',
-            'source': str(self._target_path),
-            'source_type': 'directory' if self._target_path.is_dir() else 'file',
-            'violations': [],
-            'count': 0,
-            'note': 'Layer violation detection requires .reveal.yaml configuration (coming in Phase 4)',
-            'metadata': self.get_metadata()
-        }
+        return self._build_response(
+            'layer_violations',
+            violations=[],
+            count=0,
+            note='Layer violation detection requires .reveal.yaml configuration (coming in Phase 4)'
+        )
 
     @staticmethod
     def _format_import(stmt: ImportStatement) -> Dict[str, Any]:
