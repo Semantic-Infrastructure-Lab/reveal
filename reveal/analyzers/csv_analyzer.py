@@ -88,6 +88,78 @@ class CsvAnalyzer(FileAnalyzer):
                 return '\t'
             return ','
 
+    def _parse_csv_rows(self, delimiter: str) -> tuple:
+        """Parse CSV and return columns and data rows.
+
+        Returns:
+            Tuple of (columns, rows) or (None, None) if parsing fails
+        """
+        reader = csv.reader(self.lines, delimiter=delimiter)
+        try:
+            header = next(reader)
+            columns = [col.strip() for col in header]
+            rows = [row for row in reader if row]  # Skip empty rows
+            return columns, rows
+        except StopIteration:
+            return None, None
+
+    def _calculate_column_stats(self, col_idx: int, col_name: str,
+                                rows: list) -> dict:
+        """Calculate statistics for a single column.
+
+        Args:
+            col_idx: Column index
+            col_name: Column name
+            rows: All data rows
+
+        Returns:
+            Dict with column statistics
+        """
+        # Get all values for this column
+        col_values = [row[col_idx] if col_idx < len(row) else '' for row in rows]
+
+        # Count missing/empty values
+        missing_count = sum(1 for v in col_values if not v or not v.strip())
+        non_empty_values = [v for v in col_values if v and v.strip()]
+
+        # Infer type from non-empty values
+        inferred_type = self._infer_type(non_empty_values)
+
+        # Get unique value count and sample
+        unique_values = list(set(non_empty_values))[:5]
+
+        return {
+            'name': col_name,
+            'type': inferred_type,
+            'missing': missing_count,
+            'missing_pct': round(missing_count / len(rows) * 100, 1),
+            'unique_count': len(set(col_values)),
+            'sample_values': unique_values[:3]
+        }
+
+    def _filter_sample_rows(self, rows: list, head: int = None,
+                           tail: int = None, range: tuple = None) -> list:
+        """Apply filtering to rows based on head/tail/range.
+
+        Args:
+            rows: All data rows
+            head: Show first N rows
+            tail: Show last N rows
+            range: Show rows in range (start, end) - 1-indexed
+
+        Returns:
+            Filtered rows
+        """
+        if head is not None:
+            return rows[:head]
+        elif tail is not None:
+            return rows[-tail:]
+        elif range is not None:
+            start, end = range
+            return rows[start-1:end]  # Convert to 0-indexed
+        else:
+            return rows[:5]  # Default: show first 5 rows
+
     def get_structure(self, head: int = None, tail: int = None,
                       range: tuple = None, **kwargs) -> Dict[str, Any]:
         """Extract CSV schema and statistics.
@@ -103,20 +175,18 @@ class CsvAnalyzer(FileAnalyzer):
         """
         delimiter = self._get_delimiter(self.content)
 
-        # Parse CSV
-        reader = csv.reader(self.lines, delimiter=delimiter)
-
         try:
-            # Get header row
-            header = next(reader)
-            columns = [col.strip() for col in header]
+            # Parse CSV
+            columns, rows = self._parse_csv_rows(delimiter)
 
-            # Read all data rows
-            rows = []
-            for row in reader:
-                if row:  # Skip empty rows
-                    rows.append(row)
+            # Handle parsing failures
+            if columns is None:
+                return {
+                    'row_count': 0,
+                    'message': 'CSV file appears to be empty or malformed'
+                }
 
+            # Handle empty CSV
             if not rows:
                 return {
                     'columns': columns,
@@ -125,44 +195,14 @@ class CsvAnalyzer(FileAnalyzer):
                     'message': 'Empty CSV file (header only)'
                 }
 
-            # Collect column statistics
-            schema = []
-            for col_idx, col_name in enumerate(columns):
-                # Get all values for this column
-                col_values = [row[col_idx] if col_idx < len(row) else ''
-                             for row in rows]
+            # Build schema for all columns
+            schema = [
+                self._calculate_column_stats(col_idx, col_name, rows)
+                for col_idx, col_name in enumerate(columns)
+            ]
 
-                # Count missing/empty values
-                missing_count = sum(1 for v in col_values if not v or not v.strip())
-                non_empty_values = [v for v in col_values if v and v.strip()]
-
-                # Infer type from non-empty values
-                inferred_type = self._infer_type(non_empty_values)
-
-                # Get unique value count and sample
-                unique_values = list(set(non_empty_values))[:5]
-
-                schema.append({
-                    'name': col_name,
-                    'type': inferred_type,
-                    'missing': missing_count,
-                    'missing_pct': round(missing_count / len(rows) * 100, 1),
-                    'unique_count': len(set(col_values)),
-                    'sample_values': unique_values[:3]
-                })
-
-            # Apply filtering if requested
-            sample_rows = rows
-            if head is not None:
-                sample_rows = rows[:head]
-            elif tail is not None:
-                sample_rows = rows[-tail:]
-            elif range is not None:
-                start, end = range
-                sample_rows = rows[start-1:end]  # Convert to 0-indexed
-            else:
-                # Default: show first 5 rows
-                sample_rows = rows[:5]
+            # Filter rows for sample
+            sample_rows = self._filter_sample_rows(rows, head, tail, range)
 
             return {
                 'columns': columns,
@@ -173,12 +213,6 @@ class CsvAnalyzer(FileAnalyzer):
                 'delimiter': 'comma' if delimiter == ',' else 'tab'
             }
 
-        except StopIteration:
-            # No header row
-            return {
-                'row_count': 0,
-                'message': 'CSV file appears to be empty or malformed'
-            }
         except Exception as e:
             logger.debug(f"Error parsing CSV {self.path}: {e}")
             return {
