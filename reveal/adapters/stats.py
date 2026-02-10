@@ -416,6 +416,67 @@ class StatsAdapter(ResourceAdapter):
 
         return config
 
+    def _merge_query_params(self, hotspots, code_only, min_lines, max_lines,
+                           min_complexity, max_complexity, min_functions) -> tuple:
+        """Merge query params with flag params (query params take precedence)."""
+        return (
+            self.query_params.get('hotspots', hotspots),
+            self.query_params.get('code_only', code_only),
+            self.query_params.get('min_lines', min_lines),
+            self.query_params.get('max_lines', max_lines),
+            self.query_params.get('min_complexity', min_complexity),
+            self.query_params.get('max_complexity', max_complexity),
+            self.query_params.get('min_functions', min_functions)
+        )
+
+    def _collect_filtered_stats(self, code_only, min_lines, max_lines,
+                                min_complexity, max_complexity, min_functions) -> list:
+        """Collect file stats that match the specified filters."""
+        file_stats = []
+        for file_path in self._find_analyzable_files(self.path, code_only=code_only):
+            stats = self._analyze_file(file_path)
+            if stats and self._matches_filters(
+                stats, min_lines, max_lines, min_complexity, max_complexity, min_functions
+            ):
+                file_stats.append(stats)
+        return file_stats
+
+    def _apply_sorting(self, file_stats: list) -> list:
+        """Apply sorting to file stats if sort field is specified."""
+        if not self.result_control.sort_field:
+            return list(file_stats)
+
+        try:
+            sorted_stats = list(file_stats)
+            sorted_stats.sort(
+                key=lambda x: self._field_value(x, self.result_control.sort_field) or 0,
+                reverse=self.result_control.sort_descending
+            )
+            return sorted_stats
+        except (TypeError, KeyError):
+            return list(file_stats)  # Skip sorting if field doesn't exist
+
+    def _apply_pagination(self, file_stats: list) -> list:
+        """Apply offset and limit pagination to file stats."""
+        result = file_stats
+        if self.result_control.offset and self.result_control.offset > 0:
+            result = result[self.result_control.offset:]
+        if self.result_control.limit and self.result_control.limit > 0:
+            result = result[:self.result_control.limit]
+        return result
+
+    def _add_truncation_metadata(self, result: dict, displayed: int, total: int) -> None:
+        """Add truncation metadata to result if results were limited."""
+        if displayed < total:
+            if 'warnings' not in result:
+                result['warnings'] = []
+            result['warnings'].append({
+                'type': 'truncated',
+                'message': f'Results truncated: showing {displayed} of {total} total matches'
+            })
+            result['displayed_results'] = displayed
+            result['total_matches'] = total
+
     def get_structure(self,
                      hotspots: bool = False,
                      code_only: bool = False,
@@ -439,67 +500,31 @@ class StatsAdapter(ResourceAdapter):
         Returns:
             Dict containing statistics and optionally hotspots
         """
-        # Merge query params with flag params (query params take precedence)
-        hotspots = self.query_params.get('hotspots', hotspots)
-        code_only = self.query_params.get('code_only', code_only)
-        min_lines = self.query_params.get('min_lines', min_lines)
-        max_lines = self.query_params.get('max_lines', max_lines)
-        min_complexity = self.query_params.get('min_complexity', min_complexity)
-        max_complexity = self.query_params.get('max_complexity', max_complexity)
-        min_functions = self.query_params.get('min_functions', min_functions)
+        # Merge query params with flag params
+        hotspots, code_only, min_lines, max_lines, min_complexity, max_complexity, min_functions = \
+            self._merge_query_params(hotspots, code_only, min_lines, max_lines,
+                                    min_complexity, max_complexity, min_functions)
+
+        # Handle single file analysis
         if self.path.is_file():
-            # Analyze single file and wrap in aggregate format for consistency
             file_stats = self._analyze_file(self.path)
-            if file_stats:
-                return self._aggregate_stats([file_stats])
-            else:
-                # Return empty aggregate if analysis fails
-                return self._aggregate_stats([])
+            return self._aggregate_stats([file_stats] if file_stats else [])
 
-        # Directory analysis
-        file_stats = []
-        for file_path in self._find_analyzable_files(self.path, code_only=code_only):
-            stats = self._analyze_file(file_path)
-            if stats and self._matches_filters(
-                stats, min_lines, max_lines, min_complexity, max_complexity, min_functions
-            ):
-                file_stats.append(stats)
-
-        # Apply result control (sort, limit, offset) if specified
+        # Collect filtered directory statistics
+        file_stats = self._collect_filtered_stats(
+            code_only, min_lines, max_lines, min_complexity, max_complexity, min_functions
+        )
         total_filtered = len(file_stats)
 
-        # Apply sorting manually using _field_value() to handle nested fields
-        controlled_stats = list(file_stats)
-        if self.result_control.sort_field:
-            try:
-                controlled_stats.sort(
-                    key=lambda x: self._field_value(x, self.result_control.sort_field) or 0,
-                    reverse=self.result_control.sort_descending
-                )
-            except (TypeError, KeyError):
-                pass  # Skip sorting if field doesn't exist or isn't comparable
+        # Apply sorting and pagination
+        controlled_stats = self._apply_sorting(file_stats)
+        controlled_stats = self._apply_pagination(controlled_stats)
 
-        # Apply offset and limit
-        if self.result_control.offset and self.result_control.offset > 0:
-            controlled_stats = controlled_stats[self.result_control.offset:]
-        if self.result_control.limit and self.result_control.limit > 0:
-            controlled_stats = controlled_stats[:self.result_control.limit]
-
-        # Aggregate statistics (on controlled results)
+        # Aggregate and build result
         result = self._aggregate_stats(controlled_stats)
+        self._add_truncation_metadata(result, len(controlled_stats), total_filtered)
 
-        # Add truncation metadata if results were limited
-        if len(controlled_stats) < total_filtered:
-            if 'warnings' not in result:
-                result['warnings'] = []
-            result['warnings'].append({
-                'type': 'truncated',
-                'message': f'Results truncated: showing {len(controlled_stats)} of {total_filtered} total matches'
-            })
-            result['displayed_results'] = len(controlled_stats)
-            result['total_matches'] = total_filtered
-
-        # Add hotspots if requested (use controlled stats for consistency)
+        # Add hotspots if requested
         if hotspots:
             result['hotspots'] = self._identify_hotspots(controlled_stats)
 
