@@ -210,6 +210,53 @@ def _render_python_package_details(data: Dict[str, Any]) -> None:
             print(f"  * {dep}")
 
 
+def _handle_python_error(data: Dict[str, Any]) -> None:
+    """Handle and display Python runtime error."""
+    print(f"Error: {data['error']}", file=sys.stderr)
+    if 'details' in data:
+        print(f"Details: {data['details']}", file=sys.stderr)
+    sys.exit(1)
+
+
+def _detect_python_element_type(data: Dict[str, Any]) -> str:
+    """Detect Python element type from data structure.
+
+    Returns:
+        Element type identifier string.
+    """
+    if 'packages' in data and 'count' in data:
+        return 'packages'
+    elif 'loaded' in data and 'count' in data:
+        return 'modules'
+    elif 'health_score' in data and 'checks_performed' in data:
+        return 'doctor'
+    elif 'status' in data and 'issues' in data:
+        return 'bytecode'
+    elif 'sys_path' in data:
+        return 'env_config'
+    elif 'executable' in data and 'compiler' in data:
+        return 'version'
+    elif 'active' in data:
+        return 'venv_status'
+    elif 'name' in data and 'version' in data and 'location' in data:
+        return 'package_details'
+    else:
+        return 'unknown'
+
+
+# Dispatch table mapping element types to renderers
+_PYTHON_ELEMENT_RENDERERS = {
+    'packages': _render_python_packages,
+    'modules': _render_python_modules,
+    'doctor': _render_python_doctor,
+    'bytecode': _render_python_bytecode,
+    'env_config': _render_python_env_config,
+    'version': _render_python_version,
+    'venv_status': _render_python_venv_status,
+    'package_details': _render_python_package_details,
+}
+
+
 def render_python_element(data: Dict[str, Any], output_format: str) -> None:
     """Render specific Python runtime element.
 
@@ -221,30 +268,14 @@ def render_python_element(data: Dict[str, Any], output_format: str) -> None:
         print(safe_json_dumps(data))
         return
 
-    # Handle errors
     if 'error' in data:
-        print(f"Error: {data['error']}", file=sys.stderr)
-        if 'details' in data:
-            print(f"Details: {data['details']}", file=sys.stderr)
-        sys.exit(1)
+        _handle_python_error(data)
+        return
 
-    # Detect element type and dispatch to appropriate renderer
-    if 'packages' in data and 'count' in data:
-        _render_python_packages(data)
-    elif 'loaded' in data and 'count' in data:
-        _render_python_modules(data)
-    elif 'health_score' in data and 'checks_performed' in data:
-        _render_python_doctor(data)
-    elif 'status' in data and 'issues' in data:
-        _render_python_bytecode(data)
-    elif 'sys_path' in data:
-        _render_python_env_config(data)
-    elif 'executable' in data and 'compiler' in data:
-        _render_python_version(data)
-    elif 'active' in data:
-        _render_python_venv_status(data)
-    elif 'name' in data and 'version' in data and 'location' in data:
-        _render_python_package_details(data)
+    element_type = _detect_python_element_type(data)
+    renderer = _PYTHON_ELEMENT_RENDERERS.get(element_type)
+
+    if renderer:
+        renderer(data)
     else:
-        # Generic fallback
         print(safe_json_dumps(data))
