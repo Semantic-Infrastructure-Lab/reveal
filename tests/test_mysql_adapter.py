@@ -1089,5 +1089,111 @@ class TestMySQLConnectionSnapshotContext(unittest.TestCase):
         self.assertEqual(result['measurement_window'], '0d 0h (since server start)')
 
 
+class TestMySQLConnectionPerformanceSchemaStatus(unittest.TestCase):
+    """Test MySQLConnection.get_performance_schema_status() method."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        from reveal.adapters.mysql.connection import MySQLConnection
+        with patch('reveal.adapters.mysql.connection.PYMYSQL_AVAILABLE', True):
+            self.conn = MySQLConnection("mysql://localhost")
+            self.conn._connection = Mock()
+
+    def test_performance_schema_disabled(self):
+        """Test when performance_schema is disabled."""
+        self.conn.execute_single = Mock(return_value={'enabled': 0})
+
+        result = self.conn.get_performance_schema_status()
+
+        self.assertEqual(result['enabled'], False)
+        self.assertEqual(result['counters_reset_detected'], False)
+        self.assertIsNone(result['likely_reset_time'])
+
+    def test_performance_schema_enabled_no_reset(self):
+        """Test when performance_schema is enabled with no reset detected."""
+        # Mock: performance_schema enabled
+        # Mock: uptime = 30 days (2592000 seconds)
+        # Mock: oldest event = 29 days ago (gap < 1 hour, no reset)
+        mock_single_responses = [
+            {'enabled': 1},  # First call: check if enabled
+            {'timestamp': '1704672000'},  # Second call: snapshot time
+            {'oldest_timestamp': 1704586000.0}  # Third call: oldest event (86000s ago, ~1 day)
+        ]
+        self.conn.execute_single = Mock(side_effect=mock_single_responses)
+        self.conn.execute_query = Mock(return_value=[{'Variable_name': 'Uptime', 'Value': '86400'}])  # 1 day uptime
+
+        result = self.conn.get_performance_schema_status()
+
+        self.assertEqual(result['enabled'], True)
+        self.assertEqual(result['counters_reset_detected'], False)
+        self.assertIsNone(result['likely_reset_time'])
+
+    def test_performance_schema_enabled_with_reset(self):
+        """Test when performance_schema reset is detected (>1 hour gap)."""
+        # Mock: uptime = 30 days (2592000 seconds)
+        # Mock: oldest event = 1 day ago (gap = 29 days, reset detected!)
+        mock_single_responses = [
+            {'enabled': 1},  # First call: check if enabled
+            {'timestamp': '1704672000'},  # Second call: snapshot time
+            {'oldest_timestamp': 1704585600.0}  # Third call: oldest event (86400s ago = 1 day)
+        ]
+        self.conn.execute_single = Mock(side_effect=mock_single_responses)
+        # Uptime = 30 days = 2592000 seconds
+        self.conn.execute_query = Mock(return_value=[{'Variable_name': 'Uptime', 'Value': '2592000'}])
+
+        result = self.conn.get_performance_schema_status()
+
+        self.assertEqual(result['enabled'], True)
+        self.assertEqual(result['counters_reset_detected'], True)
+        self.assertIsNotNone(result['likely_reset_time'])
+        # Verify reset time is in ISO format
+        self.assertRegex(result['likely_reset_time'], r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00')
+
+    def test_performance_schema_no_events_yet(self):
+        """Test when performance_schema has no events recorded yet."""
+        mock_single_responses = [
+            {'enabled': 1},  # First call: check if enabled
+            {'timestamp': '1704672000'},  # Second call: snapshot time
+            {'oldest_timestamp': None}  # Third call: no events yet
+        ]
+        self.conn.execute_single = Mock(side_effect=mock_single_responses)
+        self.conn.execute_query = Mock(return_value=[{'Variable_name': 'Uptime', 'Value': '86400'}])
+
+        result = self.conn.get_performance_schema_status()
+
+        self.assertEqual(result['enabled'], True)
+        self.assertEqual(result['counters_reset_detected'], False)
+        self.assertIsNone(result['likely_reset_time'])
+
+    def test_performance_schema_query_failure(self):
+        """Test graceful handling when performance_schema query fails."""
+        # Simulate query failure
+        self.conn.execute_single = Mock(side_effect=Exception("Table doesn't exist"))
+
+        result = self.conn.get_performance_schema_status()
+
+        self.assertEqual(result['enabled'], False)
+        self.assertEqual(result['counters_reset_detected'], False)
+        self.assertIsNone(result['likely_reset_time'])
+
+    def test_performance_schema_reset_detection_threshold(self):
+        """Test that 1 hour gap threshold works correctly."""
+        # Test just above threshold (>3600 seconds gap = >1 hour)
+        mock_single_responses = [
+            {'enabled': 1},
+            {'timestamp': '1704672000'},
+            {'oldest_timestamp': 1704668398.0}  # 3602 seconds ago (just over 1 hour)
+        ]
+        self.conn.execute_single = Mock(side_effect=mock_single_responses)
+        self.conn.execute_query = Mock(return_value=[{'Variable_name': 'Uptime', 'Value': '7203'}])  # 2 hours + 3 seconds uptime
+
+        result = self.conn.get_performance_schema_status()
+
+        # Gap = 7203 - 3602 = 3601 seconds (just over 1 hour)
+        # Should detect reset since gap > 3600
+        self.assertEqual(result['enabled'], True)
+        self.assertEqual(result['counters_reset_detected'], True)
+
+
 if __name__ == '__main__':
     unittest.main()
