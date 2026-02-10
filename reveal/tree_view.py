@@ -94,6 +94,95 @@ def _count_entries(path: Path, depth: int, show_hidden: bool, path_filter: PathF
     return count
 
 
+def _initialize_context() -> dict:
+    """Initialize empty context dictionary."""
+    return {'count': 0, 'max_entries': 0, 'truncated': 0, 'dir_limit': 0}
+
+
+def _get_sorted_entries(path: Path) -> Optional[List[Path]]:
+    """Get sorted directory entries, handling permission errors."""
+    try:
+        return sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name))
+    except PermissionError:
+        return None
+
+
+def _filter_entries(entries: List[Path], show_hidden: bool, path_filter: Optional[PathFilter]) -> List[Path]:
+    """Apply hidden file and path filtering to entries."""
+    if not show_hidden:
+        entries = [e for e in entries if not e.name.startswith('.')]
+    if path_filter:
+        entries = [e for e in entries if not path_filter.should_filter(e)]
+    return entries
+
+
+def _check_global_limit(context: dict, entries: List[Path], i: int) -> bool:
+    """Check if global entry limit reached. Updates truncated count if so.
+
+    Returns:
+        True if limit reached and should stop
+    """
+    if context['max_entries'] > 0 and context['count'] >= context['max_entries']:
+        context['truncated'] += len(entries) - i
+        return True
+    return False
+
+
+def _check_dir_limit(dir_limit: int, dir_entry_count: int, entries: List[Path], i: int,
+                     lines: List[str], prefix: str, context: dict) -> bool:
+    """Check if per-directory limit reached. Adds snip message if so.
+
+    Returns:
+        True if limit reached and should stop
+    """
+    if dir_limit > 0 and dir_entry_count >= dir_limit:
+        snipped_count = len(entries) - i
+        lines.append(f"{prefix}└── [snipped {snipped_count} more entries] (--dir-limit 0 to show all)")
+        context['truncated'] += snipped_count
+        return True
+    return False
+
+
+def _get_tree_connectors(is_last: bool) -> tuple:
+    """Get tree connector and extension characters.
+
+    Returns:
+        (connector, extension) tuple
+    """
+    if is_last:
+        return '└── ', '    '
+    else:
+        return '├── ', '│   '
+
+
+def _process_file_entry(entry: Path, lines: List[str], prefix: str, connector: str,
+                       context: dict, fast: bool) -> int:
+    """Process file entry and add to output.
+
+    Returns:
+        Number of entries added (always 1 for files)
+    """
+    file_info = _get_file_info(entry, fast=fast)
+    lines.append(f"{prefix}{connector}{file_info}")
+    context['count'] += 1
+    return 1
+
+
+def _process_dir_entry(entry: Path, lines: List[str], prefix: str, connector: str, extension: str,
+                      context: dict, depth: int, show_hidden: bool, fast: bool,
+                      path_filter: Optional[PathFilter]) -> int:
+    """Process directory entry and recurse.
+
+    Returns:
+        Number of entries added (always 1 for directories)
+    """
+    lines.append(f"{prefix}{connector}{entry.name}/")
+    context['count'] += 1
+    _walk_directory(entry, lines, prefix + extension, depth - 1,
+                   show_hidden, fast, context, path_filter)
+    return 1
+
+
 def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int = 3,
                    show_hidden: bool = False, fast: bool = False, context: dict = None,
                    path_filter: Optional[PathFilter] = None):
@@ -112,66 +201,32 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
     if depth <= 0:
         return
 
-    if context is None:
-        context = {'count': 0, 'max_entries': 0, 'truncated': 0, 'dir_limit': 0}
+    context = context or _initialize_context()
 
-    try:
-        entries = sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name))
-    except PermissionError:
+    entries = _get_sorted_entries(path)
+    if entries is None:
         return
 
-    # Filter hidden files/dirs
-    if not show_hidden:
-        entries = [e for e in entries if not e.name.startswith('.')]
-
-    # Apply path filtering (gitignore, noise patterns, custom excludes)
-    if path_filter:
-        entries = [e for e in entries if not path_filter.should_filter(e)]
+    entries = _filter_entries(entries, show_hidden, path_filter)
 
     dir_limit = context.get('dir_limit', 0)
-    dir_entry_count = 0  # Track entries shown in THIS directory
+    dir_entry_count = 0
 
     for i, entry in enumerate(entries):
-        # Check if we've hit the global entry limit
-        if context['max_entries'] > 0 and context['count'] >= context['max_entries']:
-            # Count remaining entries
-            context['truncated'] += len(entries) - i
+        if _check_global_limit(context, entries, i):
             return
 
-        # Check if we've hit the per-directory limit
-        if dir_limit > 0 and dir_entry_count >= dir_limit:
-            snipped_count = len(entries) - i
-            # Use appropriate connector for snip message with breadcrumb hint
-            lines.append(f"{prefix}└── [snipped {snipped_count} more entries] (--dir-limit 0 to show all)")
-            # Don't count snip message toward global limit, but do track for truncation stats
-            context['truncated'] += snipped_count
-            return  # Exit this directory, continue with parent's siblings
+        if _check_dir_limit(dir_limit, dir_entry_count, entries, i, lines, prefix, context):
+            return
 
         is_last = (i == len(entries) - 1)
-
-        # Tree characters
-        if is_last:
-            connector = '└── '
-            extension = '    '
-        else:
-            connector = '├── '
-            extension = '│   '
+        connector, extension = _get_tree_connectors(is_last)
 
         if entry.is_file():
-            # Show file with metadata
-            file_info = _get_file_info(entry, fast=fast)
-            lines.append(f"{prefix}{connector}{file_info}")
-            context['count'] += 1
-            dir_entry_count += 1
-
+            dir_entry_count += _process_file_entry(entry, lines, prefix, connector, context, fast)
         elif entry.is_dir():
-            # Show directory
-            lines.append(f"{prefix}{connector}{entry.name}/")
-            context['count'] += 1
-            dir_entry_count += 1
-            # Recurse into subdirectory
-            _walk_directory(entry, lines, prefix + extension, depth - 1,
-                          show_hidden, fast, context, path_filter)
+            dir_entry_count += _process_dir_entry(entry, lines, prefix, connector, extension,
+                                                  context, depth, show_hidden, fast, path_filter)
 
 
 def _get_file_info(path: Path, fast: bool = False) -> str:
