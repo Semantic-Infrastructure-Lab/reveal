@@ -121,7 +121,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if self.language:
             self._parse_tree()
 
-    def _parse_tree(self):
+    def _parse_tree(self) -> None:
         """Parse file with tree-sitter.
 
         Note: Tree-sitter warnings are suppressed at module level via
@@ -210,7 +210,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Get common function node types across languages."""
         return list(FUNCTION_NODE_TYPES)
 
-    def _extract_decorated_functions(self, function_types: List[str]):
+    def _extract_decorated_functions(self, function_types: List[str]) -> tuple[List[Dict[str, Any]], set]:
         """Extract decorated functions (Python-specific).
 
         decorated_definition contains decorator(s) + function/class.
@@ -322,7 +322,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         """Get common class node types across languages."""
         return list(CLASS_NODE_TYPES)
 
-    def _extract_decorated_classes(self, class_types: List[str]):
+    def _extract_decorated_classes(self, class_types: List[str]) -> tuple[List[Dict[str, Any]], set]:
         """Extract decorated classes (Python-specific).
 
         decorated_definition contains decorator(s) + class.
@@ -615,7 +615,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'do_statement', 'switch_statement',
         }
 
-        def get_depth(n, current_depth=0):
+        def get_depth(n, current_depth: int = 0) -> int:
             """Recursively calculate depth."""
             max_depth = current_depth
 
@@ -704,7 +704,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             ('boolean_operator', 'and'),
         }
 
-        def count_decisions(n, parent_type=None):
+        def count_decisions(n, parent_type: Optional[str] = None) -> int:
             """Recursively count decision points.
 
             Args:

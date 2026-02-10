@@ -640,15 +640,27 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool):
     Exits:
         With error code 1 if no analyzer found
     """
-    from ..registry import get_analyzer
+    from ..registry import get_analyzer, get_all_analyzers
+    from ..errors import AnalyzerNotFoundError
 
     analyzer_class = get_analyzer(path, allow_fallback=allow_fallback)
     if not analyzer_class:
-        ext = Path(path).suffix or '(no extension)'
-        print(f"Error: No analyzer found for {path} ({ext})", file=sys.stderr)
-        print(f"\nError: File type '{ext}' is not supported yet", file=sys.stderr)
-        print("Run 'reveal --list-supported' to see all supported file types", file=sys.stderr)
-        print("Visit https://github.com/Semantic-Infrastructure-Lab/reveal to request new file types", file=sys.stderr)
+        # Find similar extensions for suggestions
+        ext = Path(path).suffix
+        similar_exts = None
+        if ext:
+            analyzers = get_all_analyzers()
+            similar_exts = [e for e in analyzers.keys()
+                          if ext.lower() in e.lower() or e.lower() in ext.lower()]
+
+        # Create detailed error with suggestions
+        error = AnalyzerNotFoundError(
+            path=path,
+            allow_fallback=allow_fallback,
+            similar_extensions=similar_exts
+        )
+
+        print(str(error), file=sys.stderr)
         sys.exit(1)
 
     return analyzer_class(path)
