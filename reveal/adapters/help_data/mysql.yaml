@@ -36,6 +36,7 @@ elements:
   variables: 'Server configuration'
   health: 'Comprehensive health check'
   databases: 'Database list'
+  indexes: 'Index usage statistics with reset detection'
 
 flags:
   --check: 'Run health checks with pass/warn/fail thresholds'
@@ -49,7 +50,9 @@ features:
   - 'Industry-standard tuning ratios (table scans, thread cache, temp tables, etc.)'
   - 'Time context accuracy (uses MySQL clock, not local machine)'
   - 'Snapshot timestamps on ALL endpoints (snapshot_time, server_start_time, uptime_seconds, measurement_window)'
-  - 'Index usage analysis (most used, unused)'
+  - 'Index usage analysis (most used, unused) with performance_schema reset detection'
+  - 'Automatic detection of performance_schema counter resets (removes metric ambiguity)'
+  - 'Definitive measurement basis for index metrics (since_server_start or since_reset)'
   - 'Health checks with pass/warn/fail thresholds'
   - 'Credential resolution (env vars, ~/.my.cnf)'
   - 'Token-efficient for AI agent consumption'
@@ -85,6 +88,14 @@ workflows:
       - "reveal mysql://localhost/storage --format=json | jq '.snapshot_time, .databases[0].size_gb'"
       - "# Compare snapshots at different times using snapshot_time field"
       - "# All endpoints include snapshot_time for accurate time-series analysis"
+  - name: 'Index Usage Analysis with Reset Detection'
+    scenario: 'Find unused indexes with confidence about data freshness'
+    steps:
+      - "reveal mysql://localhost/indexes"
+      - "# Check performance_schema_status.counters_reset_detected field"
+      - "# If false: metrics since server start (measurement_start_time shows when)"
+      - "# If true: metrics since performance_schema reset (measurement_start_time shows reset time)"
+      - "# measurement_basis field clarifies: 'since_server_start' or 'since_reset'"
 
 anti_patterns:
   - bad: "mysql -e 'SHOW STATUS' | grep -i innodb"
@@ -105,7 +116,9 @@ notes:
   - 'DBA tuning ratios: table scans <25%, thread cache miss <10%, temp tables on disk <25%'
   - 'Timing context: All endpoints include snapshot_time (when collected), server_start_time (when server booted), uptime_seconds (server uptime), measurement_window (human-readable uptime)'
   - 'Timestamp accuracy: Uses MySQL UNIX_TIMESTAMP() to avoid timezone/drift issues with remote connections'
-  - 'All metrics show "since server start" with accurate MySQL timestamps'
+  - 'Index metrics: /indexes endpoint detects performance_schema counter resets automatically (>1 hour gap between server uptime and oldest event)'
+  - 'Reset detection: If counters were reset (TRUNCATE TABLE performance_schema.*), measurement_basis = "since_reset" with reset timestamp'
+  - 'No reset: measurement_basis = "since_server_start" with server start timestamp'
   - 'Simple usage: Just run "reveal mysql://" if ~/.my.cnf is configured'
 
 output_formats:
