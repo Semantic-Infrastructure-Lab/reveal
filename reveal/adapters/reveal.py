@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer, _ADAPTER_REGISTRY
+from ..rules.validation.utils import find_reveal_root
 
 
 class RevealRenderer:
@@ -311,42 +312,23 @@ class RevealAdapter(ResourceAdapter):
         self.reveal_root = self._find_reveal_root()
 
     def _find_reveal_root(self) -> Path:
-        """Find reveal's root directory.
+        """Find reveal's root directory using shared utility.
 
-        Priority:
-        1. REVEAL_DEV_ROOT environment variable (explicit override)
-        2. Git checkout in CWD or parent directories (prefer development)
-        3. Installed package location (fallback)
+        Delegates to reveal.rules.validation.utils.find_reveal_root for consistent
+        path resolution across all reveal components.
+
+        Returns:
+            Path to reveal's root directory (never None - falls back to package location)
         """
-        import os
+        # Use shared utility (dev_only=False to include installed package fallback)
+        root = find_reveal_root(dev_only=False)
 
-        # 1. Explicit override via environment
-        env_root = os.getenv('REVEAL_DEV_ROOT')
-        if env_root:
-            dev_root = Path(env_root)
-            if (dev_root / 'analyzers').exists() and (dev_root / 'rules').exists():
-                return dev_root
+        # Fallback for edge case where utility returns None
+        # (should never happen with dev_only=False, but ensures backwards compatibility)
+        if root is None:
+            root = Path(__file__).parent.parent
 
-        # 2. Search from CWD for git checkout (prefer development over installed)
-        cwd = Path.cwd()
-        for _ in range(10):  # Search up to 10 levels
-            # Check for reveal git checkout patterns
-            reveal_dir = cwd / 'reveal'
-            if (reveal_dir / 'analyzers').exists() and (reveal_dir / 'rules').exists():
-                # Verify it's a git checkout by checking for pyproject.toml in parent
-                if (cwd / 'pyproject.toml').exists():
-                    return reveal_dir
-            cwd = cwd.parent
-            if cwd == cwd.parent:  # Reached root
-                break
-
-        # 3. Fallback to installed package location
-        installed = Path(__file__).parent.parent
-        if (installed / 'analyzers').exists() and (installed / 'rules').exists():
-            return installed
-
-        # Last resort
-        return Path(__file__).parent.parent
+        return root
 
     def get_structure(self) -> Dict[str, Any]:
         """Get reveal's internal structure.
