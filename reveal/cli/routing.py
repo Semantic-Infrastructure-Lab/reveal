@@ -173,7 +173,7 @@ def _try_initialize_adapter(adapter_class: type, scheme: str, resource: str,
 
     Different adapters have different conventions:
     - No-arg: env, python (take no resource in __init__)
-    - Resource-arg: help (take resource string)
+    - Resource-arg: help, reveal (take resource string as first arg)
     - Query-parsing: ast, json (parse resource to extract path/query)
     - URI: mysql (expect full URI like mysql://host:port)
 
@@ -184,13 +184,24 @@ def _try_initialize_adapter(adapter_class: type, scheme: str, resource: str,
         SystemExit: If initialization fails
     """
     # Try initialization patterns in order
-    init_attempts = [
-        lambda: _try_no_args_init(adapter_class),
-        lambda: _try_query_parsing_init(adapter_class, resource),
-        lambda: _try_keyword_args_init(adapter_class, resource),
-        lambda: _try_resource_arg_init(adapter_class, resource),
-        lambda: _try_full_uri_init(adapter_class, scheme, resource, element)
-    ]
+    # If resource is provided, try using it before trying no-args
+    # This ensures reveal://config passes "config" to RevealAdapter(component="config")
+    if resource:
+        init_attempts = [
+            lambda: _try_query_parsing_init(adapter_class, resource),
+            lambda: _try_resource_arg_init(adapter_class, resource),
+            lambda: _try_keyword_args_init(adapter_class, resource),
+            lambda: _try_no_args_init(adapter_class),
+            lambda: _try_full_uri_init(adapter_class, scheme, resource, element)
+        ]
+    else:
+        init_attempts = [
+            lambda: _try_no_args_init(adapter_class),
+            lambda: _try_query_parsing_init(adapter_class, resource),
+            lambda: _try_keyword_args_init(adapter_class, resource),
+            lambda: _try_resource_arg_init(adapter_class, resource),
+            lambda: _try_full_uri_init(adapter_class, scheme, resource, element)
+        ]
 
     adapter = None
     init_error = None

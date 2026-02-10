@@ -523,3 +523,245 @@ class TestRevealAdapterConfig:
         assert any('CLI' in p for p in precedence)
         assert any('Environment' in p for p in precedence)
         assert any('defaults' in p for p in precedence)
+
+
+class TestRevealAdapterCLIIntegration:
+    """Integration tests for reveal:// CLI routing.
+    
+    These tests verify that the full CLI flow works correctly:
+    reveal reveal://component → routing → adapter initialization → output
+    
+    This catches issues where the adapter works in unit tests but fails
+    via CLI due to routing bugs (like the component parameter not being passed).
+    """
+    
+    def test_reveal_config_via_cli(self):
+        """Test reveal reveal://config routes correctly."""
+        import subprocess
+        
+        result = subprocess.run(
+            ['reveal', 'reveal://config'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        assert 'Reveal Configuration' in result.stdout
+        assert 'Overview' in result.stdout
+        assert 'Project Root' in result.stdout
+        assert 'Active Configuration' in result.stdout
+    
+    def test_reveal_analyzers_via_cli(self):
+        """Test reveal reveal://analyzers routes correctly."""
+        import subprocess
+        
+        result = subprocess.run(
+            ['reveal', 'reveal://analyzers'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        assert 'Analyzers' in result.stdout
+        assert 'python' in result.stdout.lower()
+        # Should NOT show adapters or rules
+        assert 'adapters' not in result.stdout.lower() or result.stdout.lower().count('analyzers') > result.stdout.lower().count('adapters')
+    
+    def test_reveal_adapters_via_cli(self):
+        """Test reveal reveal://adapters routes correctly."""
+        import subprocess
+        
+        result = subprocess.run(
+            ['reveal', 'reveal://adapters'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        assert 'Adapters' in result.stdout
+        assert 'reveal://' in result.stdout
+        assert 'ast://' in result.stdout
+        # Should NOT show analyzers
+        assert result.stdout.lower().count('adapters') > result.stdout.lower().count('analyzers')
+    
+    def test_reveal_rules_via_cli(self):
+        """Test reveal reveal://rules routes correctly."""
+        import subprocess
+        
+        result = subprocess.run(
+            ['reveal', 'reveal://rules'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        assert 'Rules' in result.stdout
+        assert 'C901' in result.stdout  # Complexity rule
+        assert 'bugs' in result.stdout.lower() or 'complexity' in result.stdout.lower()
+    
+    def test_reveal_default_via_cli(self):
+        """Test reveal reveal:// (no component) shows all sections."""
+        import subprocess
+        
+        result = subprocess.run(
+            ['reveal', 'reveal://'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        # Should show all three main sections
+        assert 'Analyzers' in result.stdout
+        assert 'Adapters' in result.stdout
+        assert 'Rules' in result.stdout
+    
+    def test_reveal_config_json_format(self):
+        """Test reveal reveal://config --format json."""
+        import subprocess
+        import json
+        
+        result = subprocess.run(
+            ['reveal', 'reveal://config', '--format', 'json'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        
+        # Should be valid JSON
+        data = json.loads(result.stdout)
+        assert 'active_config' in data
+        assert 'sources' in data
+        assert 'metadata' in data
+        assert 'precedence_order' in data
+    
+    def test_component_case_insensitive_via_cli(self):
+        """Test that component names are case-insensitive via CLI."""
+        import subprocess
+        
+        # Test CONFIG (uppercase)
+        result = subprocess.run(
+            ['reveal', 'reveal://CONFIG'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        assert 'Reveal Configuration' in result.stdout
+        
+        # Test Config (mixed case)
+        result = subprocess.run(
+            ['reveal', 'reveal://Config'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+        assert 'Reveal Configuration' in result.stdout
+
+
+class TestRevealAdapterRoutingRegression:
+    """Regression tests for the CLI routing bug.
+    
+    Background: Config introspection was fully implemented in RevealAdapter
+    but wasn't accessible via CLI because routing.py tried no-args init first,
+    which succeeded but didn't pass the component parameter.
+    
+    These tests ensure the fix stays fixed:
+    - When resource is provided, try using it before no-args init
+    - RevealAdapter("config") should initialize with component="config"
+    """
+    
+    def test_adapter_initialized_with_component_parameter(self):
+        """Test that RevealAdapter gets component from URI resource."""
+        from reveal.cli.routing import _try_initialize_adapter
+        from reveal.adapters.reveal import RevealAdapter, RevealRenderer
+
+        # Simulate: reveal reveal://config
+        adapter = _try_initialize_adapter(
+            adapter_class=RevealAdapter,
+            scheme='reveal',
+            resource='config',  # This should become component="config"
+            element=None,
+            renderer_class=RevealRenderer
+        )
+
+        assert adapter is not None
+        assert adapter.component == 'config'
+    
+    def test_adapter_initialization_with_empty_resource(self):
+        """Test that empty resource still works (reveal://)."""
+        from reveal.cli.routing import _try_initialize_adapter
+        from reveal.adapters.reveal import RevealAdapter, RevealRenderer
+
+        # Simulate: reveal reveal://
+        adapter = _try_initialize_adapter(
+            adapter_class=RevealAdapter,
+            scheme='reveal',
+            resource='',  # Empty resource
+            element=None,
+            renderer_class=RevealRenderer
+        )
+
+        assert adapter is not None
+        assert adapter.component is None  # Should default to None
+    
+    def test_initialization_order_with_resource(self):
+        """Test that resource-arg init is tried before no-args when resource provided."""
+        from reveal.cli.routing import _try_initialize_adapter
+        
+        # Mock adapter that tracks initialization attempts
+        init_attempts = []
+        
+        class TrackedAdapter:
+            def __init__(self, *args, **kwargs):
+                init_attempts.append(('init', args, kwargs))
+                if args:
+                    self.resource = args[0]
+                else:
+                    self.resource = None
+            
+            def get_structure(self):
+                return {}
+        
+        class MockRenderer:
+            @staticmethod
+            def render_error(error):
+                pass
+        
+        # With resource, should try passing it as argument
+        adapter = _try_initialize_adapter(
+            adapter_class=TrackedAdapter,
+            scheme='test',
+            resource='something',
+            element=None,
+            renderer_class=MockRenderer
+        )
+        
+        assert adapter is not None
+        # Should have received the resource as an argument
+        # (may be in query parsing attempt or resource arg attempt)
+        assert any('something' in str(args) for _, args, _ in init_attempts)
+    
+    def test_get_structure_filters_by_component(self):
+        """Test that get_structure() respects component parameter."""
+        adapter = RevealAdapter(component='config')
+        structure = adapter.get_structure()
+        
+        # Should ONLY have config data, not analyzers/adapters/rules
+        assert 'active_config' in structure
+        assert 'sources' in structure
+        assert 'metadata' in structure
+        
+        # Should NOT have other components
+        assert 'analyzers' not in structure or structure.get('analyzers') is None
+        assert 'adapters' not in structure or structure.get('adapters') is None
+        assert 'rules' not in structure or structure.get('rules') is None
