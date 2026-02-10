@@ -853,6 +853,15 @@ class MySQLAdapter(ResourceAdapter):
     def _get_indexes(self) -> Dict[str, Any]:
         """Get index usage statistics from performance_schema."""
         timing = self.conn.get_snapshot_context()
+        ps_status = self.conn.get_performance_schema_status()
+
+        # Determine actual measurement basis
+        if ps_status['counters_reset_detected']:
+            measurement_basis = "since_reset"
+            measurement_start_time = ps_status['likely_reset_time']
+        else:
+            measurement_basis = "since_server_start"
+            measurement_start_time = timing['server_start_time']
 
         # Most used indexes
         most_used = self._execute_query("""
@@ -888,7 +897,9 @@ class MySQLAdapter(ResourceAdapter):
         return {
             'type': 'indexes',
             **timing,
-            'note': 'Counters are cumulative since server start (or last performance_schema reset if detected)',
+            'measurement_basis': measurement_basis,
+            'measurement_start_time': measurement_start_time,
+            'performance_schema_status': ps_status,
             'most_used': most_used,
             'unused': unused,
             'unused_count': len(unused),
