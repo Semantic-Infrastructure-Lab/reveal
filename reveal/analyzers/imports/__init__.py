@@ -108,6 +108,7 @@ class ImportGraph:
 
         Args:
             symbols_by_file: Map of file_path -> set of symbols used in that file
+                             (should include __all__ exports to handle re-exports)
 
         Returns:
             List of unused import statements
@@ -118,14 +119,34 @@ class ImportGraph:
             symbols_used = symbols_by_file.get(file_path, set())
 
             for stmt in imports:
+                # Skip imports explicitly marked as intentional (# noqa comment)
+                if '# noqa' in stmt.source_line or '# type: ignore' in stmt.source_line:
+                    continue
+
+                # Skip TYPE_CHECKING imports - they're type-checking only
+                if stmt.is_type_checking:
+                    continue
+
                 # Check if any imported name is used
                 if stmt.import_type == 'star_import':
                     # Can't reliably detect unused star imports
                     continue
 
                 if stmt.imported_names:
-                    # from X import Y, Z - check if Y or Z are used
-                    used_names = [name for name in stmt.imported_names if name in symbols_used]
+                    # from X import Y, Z - check if Y or Z (or their aliases) are used
+                    # Handle "from X import Y as Z" by extracting alias if present
+                    used_names = []
+                    for name in stmt.imported_names:
+                        # Handle "Name as Alias" format
+                        if ' as ' in name:
+                            _, alias = name.split(' as ', 1)
+                            check_name = alias.strip()
+                        else:
+                            check_name = name
+
+                        if check_name in symbols_used:
+                            used_names.append(check_name)
+
                     if not used_names:
                         unused.append(stmt)
                 else:

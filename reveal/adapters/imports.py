@@ -483,6 +483,13 @@ class ImportsAdapter(ResourceAdapter):
             imports = extractor.extract_imports(file_path)
             symbols = extractor.extract_symbols(file_path)
 
+            # Also extract exports (__all__) - imports listed in __all__ are re-exports
+            # and should not be flagged as unused
+            if hasattr(extractor, 'extract_exports'):
+                exports = extractor.extract_exports(file_path)
+                # Merge exports into symbols to prevent false positives
+                symbols = symbols | exports
+
             self._symbols_by_file[file_path] = symbols
             all_imports.extend(imports)
 
@@ -497,6 +504,11 @@ class ImportsAdapter(ResourceAdapter):
 
             base_path = file_path.parent
             for stmt in imports:
+                # Skip TYPE_CHECKING imports - they're type-checking only, not runtime
+                # circular dependencies (this is a standard Python pattern to avoid real cycles)
+                if stmt.is_type_checking:
+                    continue
+
                 resolved = extractor.resolve_import(stmt, base_path)
                 # Skip self-references (e.g., logging.py importing stdlib logging
                 # should not create logging.py → logging.py dependency)
