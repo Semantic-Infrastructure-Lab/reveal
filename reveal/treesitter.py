@@ -650,44 +650,82 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         # Decision point node types across languages
         # These represent branches in the control flow
+        #
+        # IMPORTANT: Include both long forms (Python's if_statement) and
+        # short forms (Ruby's if, case, when) as they serve as containers
+        # in different languages.
+        #
+        # Note: In Python, 'if' nodes are just keywords with no decision-relevant
+        # children, so they don't cause double-counting. In Ruby, 'if' is the
+        # actual container node type.
         decision_types = {
             # Conditionals (each branch is a decision point)
-            'if_statement', 'if_expression', 'if',
-            'elif_clause', 'else_if_clause',
-            'case_statement', 'switch_case',
+            'if_statement', 'if_expression', 'if',  # Python uses if_statement, Ruby uses if
+            'elif_clause', 'elsif',  # Python uses elif_clause, Ruby uses elsif
+            'else_if_clause',
+            'case_statement', 'case',  # Python uses case_statement, Ruby uses case
+            'when',  # Ruby case branches
+            'switch_case',
+            'unless',  # Ruby negative conditional
 
             # Loops (each loop is a decision point)
-            'for_statement', 'for_expression', 'for',
-            'while_statement', 'while',
+            'for_statement', 'for_expression', 'for',  # Ruby uses 'for'
+            'while_statement', 'while',  # Ruby uses 'while'
+            'until',  # Ruby negative loop
             'do_statement',
 
             # Boolean operators (each adds a branch)
-            # Note: Removed 'binary_operator' as it's too broad (includes comparisons)
-            'boolean_operator',  # Generic boolean operator
-            'and', 'or',  # Python
-            'logical_and', 'logical_or',  # C-family
+            'boolean_operator',  # Python, generic
+            'and', 'or',  # Ruby uses and/or as node types
+            'logical_and', 'logical_or',  # C-family (JavaScript, C++, etc.)
 
             # Ternary/conditional expressions
             'conditional_expression', 'ternary_expression',
 
             # Exception handling (each except/catch is a branch)
             'except_clause', 'catch_clause',
+            'rescue',  # Ruby exception handling
 
             # Pattern matching
             'match_statement', 'case_clause',
         }
 
-        def count_decisions(n):
-            """Recursively count decision points."""
+        # Keyword-container pairs that should not be double-counted
+        # Format: (parent_type, child_type) - if child is just a keyword for parent, skip it
+        keyword_pairs = {
+            ('if_statement', 'if'),
+            ('if_expression', 'if'),
+            ('elif_clause', 'elif'),
+            ('for_statement', 'for'),
+            ('for_expression', 'for'),
+            ('while_statement', 'while'),
+            ('case_statement', 'case'),
+            ('boolean_operator', 'or'),
+            ('boolean_operator', 'and'),
+        }
+
+        def count_decisions(n, parent_type=None):
+            """Recursively count decision points.
+
+            Args:
+                n: Current node
+                parent_type: Type of parent node (to detect keyword children)
+            """
             count = 0
 
             for child in n.children:
-                # Count this node if it's a decision point
-                if child.type in decision_types:
+                child_is_decision = child.type in decision_types
+
+                # Skip if this is a keyword child of its container
+                # (e.g., 'if' keyword inside 'if_statement' in Python)
+                is_keyword_child = (parent_type, child.type) in keyword_pairs
+
+                # Count if this is a decision type and not a keyword child
+                if child_is_decision and not is_keyword_child:
                     count += 1
 
-                # Recursively count in children
-                count += count_decisions(child)
+                # Recursively count in children, passing current node type as parent
+                count += count_decisions(child, parent_type=child.type)
 
             return count
 
