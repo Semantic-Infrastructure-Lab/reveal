@@ -161,35 +161,36 @@ class PythonExtractor(LanguageExtractor):
 
         return imports
 
-    def _parse_from_import(self, node, file_path: Path, analyzer, source_lines: List[str]) -> List[ImportStatement]:
-        """Parse 'from x import y' statements."""
-        # Detect TYPE_CHECKING context
-        is_type_checking = self._is_inside_type_checking(node)
+    def _extract_from_module_name(self, node, analyzer) -> tuple:
+        """Extract module name and relative flag from 'from' import node.
 
-        # Get source line (0-indexed -> 1-indexed)
-        line_number = node.start_point[0] + 1
-        source_line = source_lines[node.start_point[0]].rstrip() if node.start_point[0] < len(source_lines) else ""
-
-        # Parse using tree-sitter AST: from <module> import <names>
-        # Tree-sitter provides: relative_import (with import_prefix) or dotted_name
+        Returns:
+            Tuple of (module_name, is_relative)
+        """
         is_relative = False
         module_name = ''
 
-        # Extract module name from AST
         for child in node.children:
             if child.type == 'relative_import':
                 # Relative import: from . import x, from ..parent import y
                 is_relative = True
-                # Count dots in import_prefix
                 for subchild in child.children:
                     if subchild.type == 'dotted_name':
                         module_name = analyzer._get_node_text(subchild)
-            elif child.type == 'dotted_name' and child.prev_sibling and analyzer._get_node_text(child.prev_sibling) == 'from':
+            elif (child.type == 'dotted_name' and child.prev_sibling and
+                  analyzer._get_node_text(child.prev_sibling) == 'from'):
                 # Absolute import: from pathlib import Path
                 module_name = analyzer._get_node_text(child)
                 break
 
-        # Parse imported names from AST (handle aliases, wildcards)
+        return module_name, is_relative
+
+    def _parse_imported_names(self, node, analyzer) -> tuple:
+        """Parse imported names and determine import type.
+
+        Returns:
+            Tuple of (imported_names, import_type)
+        """
         imported_names = []
         import_type = 'from_import'
         seen_import_keyword = False
@@ -209,16 +210,28 @@ class PythonExtractor(LanguageExtractor):
 
             # Wildcard import: from x import *
             if child.type == 'wildcard_import' or analyzer._get_node_text(child) == '*':
-                imported_names = ['*']
-                import_type = 'star_import'
-                break
+                return ['*'], 'star_import'
 
             # Regular imports: from x import Name or from x import Name as Alias
             if child.type == 'dotted_name':
                 imported_names.append(analyzer._get_node_text(child))
             elif child.type == 'aliased_import':
-                # Contains "Name as Alias"
                 imported_names.append(analyzer._get_node_text(child))
+
+        return imported_names, import_type
+
+    def _parse_from_import(self, node, file_path: Path, analyzer, source_lines: List[str]) -> List[ImportStatement]:
+        """Parse 'from x import y' statements."""
+        # Detect TYPE_CHECKING context
+        is_type_checking = self._is_inside_type_checking(node)
+
+        # Get source line (0-indexed -> 1-indexed)
+        line_number = node.start_point[0] + 1
+        source_line = source_lines[node.start_point[0]].rstrip() if node.start_point[0] < len(source_lines) else ""
+
+        # Extract module name and imported names
+        module_name, is_relative = self._extract_from_module_name(node, analyzer)
+        imported_names, import_type = self._parse_imported_names(node, analyzer)
 
         return [ImportStatement(
             file_path=file_path,
