@@ -80,6 +80,51 @@ class NginxAnalyzer(FileAnalyzer):
                     break
         return loc_info
 
+    def _is_top_level_comment(self, stripped: str, line_num: int) -> bool:
+        """Check if line is a top-level comment header."""
+        return stripped.startswith('#') and line_num <= 10 and len(stripped) > 3
+
+    def _is_server_block_start(self, stripped: str) -> bool:
+        """Check if line starts a server block."""
+        return 'server {' in stripped or stripped.startswith('server {')
+
+    def _try_parse_location_block(self, stripped: str) -> Optional[str]:
+        """Try to parse location path from line."""
+        match = re.match(r'location\s+(.+?)\s*\{', stripped)
+        return match.group(1) if match else None
+
+    def _try_parse_upstream_block(self, stripped: str) -> Optional[str]:
+        """Try to parse upstream name from line."""
+        match = re.match(r'upstream\s+(\S+)\s*\{', stripped)
+        return match.group(1) if match else None
+
+    def _process_comment(self, comments: List, stripped: str, line_num: int) -> None:
+        """Process and add comment to list if it's a top-level header."""
+        if self._is_top_level_comment(stripped, line_num):
+            comments.append({'line': line_num, 'text': stripped[1:].strip()})
+
+    def _process_server_block(self, servers: List, line_num: int) -> tuple:
+        """Process server block and return (server_info, should_enter_server)."""
+        server_info = self._parse_server_block(line_num)
+        servers.append(server_info)
+        return server_info, True
+
+    def _process_location_block(self, locations: List, stripped: str, line_num: int,
+                                 in_server: bool, brace_depth: int, current_server: Optional[Dict]) -> None:
+        """Process location block if inside server context."""
+        if in_server and brace_depth > 0 and 'location ' in stripped:
+            location_path = self._try_parse_location_block(stripped)
+            if location_path:
+                loc_info = self._parse_location_block(line_num, location_path, current_server)
+                locations.append(loc_info)
+
+    def _process_upstream_block(self, upstreams: List, stripped: str, line_num: int) -> None:
+        """Process upstream block if detected."""
+        if 'upstream ' in stripped and '{' in stripped:
+            upstream_name = self._try_parse_upstream_block(stripped)
+            if upstream_name:
+                upstreams.append({'line': line_num, 'name': upstream_name})
+
     def get_structure(self, head: int = None, tail: int = None,
                       range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract nginx config structure."""
@@ -94,32 +139,15 @@ class NginxAnalyzer(FileAnalyzer):
 
         for i, line in enumerate(self.lines, 1):
             stripped = line.strip()
-
             brace_depth += stripped.count('{') - stripped.count('}')
 
-            # Top-level comment headers
-            if stripped.startswith('#') and i <= 10 and len(stripped) > 3:
-                comments.append({'line': i, 'text': stripped[1:].strip()})
+            self._process_comment(comments, stripped, i)
 
-            # Server block
-            if 'server {' in stripped or stripped.startswith('server {'):
-                in_server = True
-                server_info = self._parse_server_block(i)
-                servers.append(server_info)
-                current_server = server_info
-
-            # Location block (inside server)
-            elif in_server and brace_depth > 0 and 'location ' in stripped:
-                match = re.match(r'location\s+(.+?)\s*\{', stripped)
-                if match:
-                    loc_info = self._parse_location_block(i, match.group(1), current_server)
-                    locations.append(loc_info)
-
-            # Upstream block
-            elif 'upstream ' in stripped and '{' in stripped:
-                match = re.match(r'upstream\s+(\S+)\s*\{', stripped)
-                if match:
-                    upstreams.append({'line': i, 'name': match.group(1)})
+            if self._is_server_block_start(stripped):
+                current_server, in_server = self._process_server_block(servers, i)
+            else:
+                self._process_location_block(locations, stripped, i, in_server, brace_depth, current_server)
+                self._process_upstream_block(upstreams, stripped, i)
 
             # Reset server context when we exit server block
             if in_server and brace_depth == 0:
