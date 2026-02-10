@@ -131,16 +131,54 @@ class M104(BaseRule, ASTParsingMixin):
 
         return detections
 
+    def _should_skip_list(self, name: str, list_node: ast.List) -> bool:
+        """Check if list should be skipped (too small or stable pattern)."""
+        if len(list_node.elts) < self.MIN_LIST_SIZE:
+            return True
+
+        name_lower = name.lower()
+        return any(pattern in name_lower for pattern in self.STABLE_PATTERNS)
+
+    def _detect_list_risk_factors(self, name: str, values: list, classification: str) -> tuple:
+        """Detect risk factors and refine classification.
+
+        Returns:
+            (risk_reason, final_classification) tuple
+        """
+        name_lower = name.lower()
+        risk_reason = None
+        final_classification = classification
+
+        # Check for high-staleness-risk patterns
+        for pattern, reason in self.HIGH_RISK_PATTERNS.items():
+            if pattern in name_lower:
+                risk_reason = reason
+                break
+
+        # Also flag lists with file extensions
+        if any(str(v).startswith('.') and len(str(v)) <= 6 for v in values[:5]):
+            risk_reason = 'File extension lists may become stale'
+            final_classification = 'FILE_EXTENSIONS'
+
+        # Flag tree-sitter node types
+        if any('_definition' in str(v) or '_declaration' in str(v) for v in values):
+            risk_reason = 'Tree-sitter node types change with grammar updates'
+            final_classification = 'TREESITTER_NODES'
+
+        return risk_reason, final_classification
+
+    def _format_list_sample(self, values: list) -> str:
+        """Format sample of list values for detection context."""
+        sample = ', '.join(str(v) for v in values[:3])
+        if len(values) > 3:
+            sample += f', ... ({len(values)} items)'
+        return f"[{sample}]"
+
     def _check_list_assignment(self, file_path: str, name: str,
                                list_node: ast.List, line: int) -> Optional[Detection]:
         """Check a named list assignment."""
-        if len(list_node.elts) < self.MIN_LIST_SIZE:
-            return None
-
-        name_lower = name.lower()
-
-        # Skip known stable patterns
-        if any(pattern in name_lower for pattern in self.STABLE_PATTERNS):
+        # Early exit for small lists or stable patterns
+        if self._should_skip_list(name, list_node):
             return None
 
         # Extract values for classification
@@ -151,36 +189,19 @@ class M104(BaseRule, ASTParsingMixin):
         if classification == 'STABLE':
             return None
 
-        # Check for high-staleness-risk patterns
-        risk_reason = None
-        for pattern, reason in self.HIGH_RISK_PATTERNS.items():
-            if pattern in name_lower:
-                risk_reason = reason
-                break
+        # Detect risk factors and refine classification
+        risk_reason, classification = self._detect_list_risk_factors(name, values, classification)
 
-        # Also flag lists with file extensions
-        if any(str(v).startswith('.') and len(str(v)) <= 6 for v in values[:5]):
-            risk_reason = 'File extension lists may become stale'
-            classification = 'FILE_EXTENSIONS'
-
-        # Flag tree-sitter node types
-        if any('_definition' in str(v) or '_declaration' in str(v) for v in values):
-            risk_reason = 'Tree-sitter node types change with grammar updates'
-            classification = 'TREESITTER_NODES'
-
+        # Skip if no risk detected for OTHER classification
         if not risk_reason and classification == 'OTHER':
             return None
-
-        sample = ', '.join(str(v) for v in values[:3])
-        if len(values) > 3:
-            sample += f', ... ({len(values)} items)'
 
         return self.create_detection(
             file_path=file_path,
             line=line,
             message=f"Hardcoded list '{name}' ({classification})",
             suggestion=f"Consider extracting to a constant or deriving dynamically. {risk_reason or ''}",
-            context=f"[{sample}]"
+            context=self._format_list_sample(values)
         )
 
     def _check_dict_list_value(self, file_path: str, key_name: str,
