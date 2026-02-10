@@ -241,6 +241,91 @@ class MySQLConnection:
             'measurement_window': f'{uptime_days}d {uptime_hours}h (since server start)',
         }
 
+    def get_performance_schema_status(self) -> Dict[str, Any]:
+        """Detect if performance_schema counters were reset recently.
+
+        Uses heuristic: if server uptime is much longer than oldest
+        performance_schema event (>1 hour gap), counters were likely reset.
+
+        Returns:
+            Dict with:
+            - enabled: bool - Whether performance_schema is enabled
+            - counters_reset_detected: bool - Whether reset was detected
+            - likely_reset_time: Optional[str] - ISO timestamp of likely reset, or None
+        """
+        from datetime import datetime, timezone
+
+        # Check if performance_schema is enabled
+        try:
+            ps_status = self.execute_single(
+                "SELECT @@global.performance_schema as enabled"
+            )
+            ps_enabled = bool(ps_status['enabled'])
+        except Exception:
+            # If query fails, assume disabled
+            return {
+                'enabled': False,
+                'counters_reset_detected': False,
+                'likely_reset_time': None,
+            }
+
+        if not ps_enabled:
+            return {
+                'enabled': False,
+                'counters_reset_detected': False,
+                'likely_reset_time': None,
+            }
+
+        # Get timing context
+        timing = self.get_snapshot_context()
+        snapshot_timestamp = int(datetime.fromisoformat(timing['snapshot_time']).timestamp())
+        uptime_seconds = timing['uptime_seconds']
+
+        # Find oldest performance_schema event
+        try:
+            oldest_event = self.execute_single("""
+                SELECT MIN(TIMER_START) / 1000000000000 as oldest_timestamp
+                FROM performance_schema.events_statements_summary_by_digest
+                WHERE TIMER_START > 0
+            """)
+        except Exception:
+            # If query fails (table doesn't exist, etc), assume no reset
+            return {
+                'enabled': True,
+                'counters_reset_detected': False,
+                'likely_reset_time': None,
+            }
+
+        if not oldest_event or not oldest_event.get('oldest_timestamp'):
+            # No events recorded yet
+            return {
+                'enabled': True,
+                'counters_reset_detected': False,
+                'likely_reset_time': None,
+            }
+
+        oldest_timestamp = float(oldest_event['oldest_timestamp'])
+        oldest_seconds_ago = snapshot_timestamp - oldest_timestamp
+
+        # If oldest event is much newer than server start (>1 hour gap), reset likely
+        # This means: server has been up for uptime_seconds, but oldest p_s event
+        # is only oldest_seconds_ago old. Gap = uptime_seconds - oldest_seconds_ago
+        gap_seconds = uptime_seconds - oldest_seconds_ago
+
+        if gap_seconds > 3600:  # More than 1 hour gap
+            reset_time = datetime.fromtimestamp(oldest_timestamp, timezone.utc)
+            return {
+                'enabled': True,
+                'counters_reset_detected': True,
+                'likely_reset_time': reset_time.isoformat(),
+            }
+
+        return {
+            'enabled': True,
+            'counters_reset_detected': False,
+            'likely_reset_time': None,
+        }
+
     def close(self):
         """Close MySQL connection."""
         if self._connection:
