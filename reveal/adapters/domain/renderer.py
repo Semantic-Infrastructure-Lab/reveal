@@ -14,51 +14,47 @@ class DomainRenderer(TypeDispatchRenderer):
     # Type dispatch methods (called automatically based on result['type'])
 
     @staticmethod
-    def _render_domain_overview(result: dict) -> None:
-        """Render domain overview."""
-        domain = result['domain']
-        dns = result['dns']
-        ssl = result['ssl']
-
+    def _print_domain_header(domain: str) -> None:
+        """Print domain header."""
         print(f"\n{'='*60}")
         print(f"Domain: {domain}")
         print(f"{'='*60}\n")
 
-        # DNS section
+    @staticmethod
+    def _print_dns_section(dns: dict) -> None:
+        """Print DNS configuration section."""
         print("DNS Configuration:")
         if dns.get('error'):
             print(f"  Error: {dns['error']}")
+            return
+
+        # Nameservers
+        ns_list = dns.get('nameservers', [])
+        if ns_list:
+            ns_display = ', '.join(ns_list[:2])
+            if len(ns_list) > 2:
+                ns_display += f" (+{len(ns_list) - 2} more)"
+            print(f"  Nameservers: {ns_display}")
         else:
-            ns_list = dns.get('nameservers', [])
-            if ns_list:
-                ns_display = ', '.join(ns_list[:2])
-                if len(ns_list) > 2:
-                    ns_display += f" (+{len(ns_list) - 2} more)"
-                print(f"  Nameservers: {ns_display}")
-            else:
-                print("  Nameservers: None")
+            print("  Nameservers: None")
 
-            a_records = dns.get('a_records', [])
-            if a_records:
-                print(f"  A Records:   {', '.join(a_records)}")
-            else:
-                print("  A Records:   None")
+        # A Records
+        a_records = dns.get('a_records', [])
+        print(f"  A Records:   {', '.join(a_records) if a_records else 'None'}")
 
-            mx_icon = '\u2705' if dns.get('has_mx') else '\u274c'
-            print(f"  MX Records:  {mx_icon} {'Configured' if dns.get('has_mx') else 'None'}")
+        # MX Records
+        mx_icon = '\u2705' if dns.get('has_mx') else '\u274c'
+        print(f"  MX Records:  {mx_icon} {'Configured' if dns.get('has_mx') else 'None'}")
 
-        # SSL section
+    @staticmethod
+    def _print_ssl_section(ssl: dict) -> None:
+        """Print SSL status section."""
         print("\nSSL Status:")
         if ssl.get('error'):
             print(f"  Error: {ssl['error']}")
         elif ssl.get('has_certificate'):
-            status_icons = {
-                'pass': '\u2705',
-                'warning': '\u26a0\ufe0f',
-                'failure': '\u274c',
-                'error': '\u274c',
-            }
-            ssl_icon = status_icons.get(ssl.get('health_status'), '\u2753')
+            # Use shared status icons
+            ssl_icon = DomainRenderer._STATUS_ICONS.get(ssl.get('health_status'), '\u2753')
             status_label = ssl.get('health_status', 'unknown').upper()
             print(f"  Status:      {ssl_icon} {status_label}")
 
@@ -67,26 +63,39 @@ class DomainRenderer(TypeDispatchRenderer):
         else:
             print("  No SSL certificate found")
 
-        # Next steps
+    @staticmethod
+    def _print_available_elements(elements: list) -> None:
+        """Print available elements section."""
+        if not elements:
+            return
+
+        print(f"\n{'-'*60}")
+        print("📍 Available elements:")
+        for elem in elements:
+            name = elem['name']
+            desc = elem['description']
+            print(f"  /{name:<12} {desc}")
+        print()
+
+        # Show example usage hint
+        example = elements[0]['example']
+        print(f"💡 Try: {example}")
+
+    @staticmethod
+    def _render_domain_overview(result: dict) -> None:
+        """Render domain overview."""
+        DomainRenderer._print_domain_header(result['domain'])
+        DomainRenderer._print_dns_section(result['dns'])
+        DomainRenderer._print_ssl_section(result['ssl'])
+
+        # Use existing remediation helper if available
         if result.get('next_steps'):
             print(f"\n{'-'*60}")
             print("Next Steps:")
             for step in result['next_steps']:
                 print(f"  \u2022 {step}")
 
-        # Available elements (Phase 5: Element Discovery)
-        if result.get('available_elements'):
-            print(f"\n{'-'*60}")
-            print("📍 Available elements:")
-            for elem in result['available_elements']:
-                name = elem['name']
-                desc = elem['description']
-                print(f"  /{name:<12} {desc}")
-            print()
-            # Show example usage hint with first element
-            if result['available_elements']:
-                example = result['available_elements'][0]['example']
-                print(f"💡 Try: {example}")
+        DomainRenderer._print_available_elements(result.get('available_elements', []))
 
     @staticmethod
     def _render_domain_dns_records(result: dict) -> None:
