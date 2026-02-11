@@ -1,6 +1,7 @@
 """SSL certificate result rendering for CLI output."""
 
 import sys
+from typing import Optional
 
 from reveal.rendering import TypeDispatchRenderer
 
@@ -175,7 +176,7 @@ class SSLRenderer(TypeDispatchRenderer):
             print("No SSL-enabled domains found in config.")
 
     @staticmethod
-    def _parse_expiring_within(expiring_within: str = None) -> int:
+    def _parse_expiring_within(expiring_within: Optional[str] = None) -> Optional[int]:
         """Parse expiring_within parameter to integer days.
 
         Args:
@@ -322,7 +323,7 @@ class SSLRenderer(TypeDispatchRenderer):
     @classmethod
     def render_check(cls, result: dict, format: str = 'text',
                      only_failures: bool = False, summary: bool = False,
-                     expiring_within: str = None) -> None:
+                     expiring_within: Optional[str] = None) -> None:
         """Render SSL health check results.
 
         Args:
@@ -365,7 +366,7 @@ class SSLRenderer(TypeDispatchRenderer):
 
     @staticmethod
     def _filter_results(result: dict, only_failures: bool = False,
-                        expiring_days: int = None) -> dict:
+                        expiring_days: Optional[int] = None) -> dict:
         """Filter check results based on criteria.
 
         Args:
@@ -399,7 +400,7 @@ class SSLRenderer(TypeDispatchRenderer):
 
     @staticmethod
     def _filter_batch_results(all_results: list, only_failures: bool,
-                               expiring_days: int = None) -> list:
+                               expiring_days: Optional[int] = None) -> list:
         """Apply filters to batch check results.
 
         Args:
@@ -442,7 +443,7 @@ class SSLRenderer(TypeDispatchRenderer):
 
     @staticmethod
     def _render_batch_summary_mode(result: dict, passes: list, warnings: list,
-                                    failures: list, expiring_days: int = None) -> None:
+                                    failures: list, expiring_days: Optional[int] = None) -> None:
         """Render summary mode output (aggregated counts only).
 
         Args:
@@ -463,7 +464,7 @@ class SSLRenderer(TypeDispatchRenderer):
 
     @staticmethod
     def _render_batch_header(source: str, status: str, result: dict,
-                             expiring_days: int = None, only_failures: bool = False) -> None:
+                             expiring_days: Optional[int] = None, only_failures: bool = False) -> None:
         """Render batch check header with status and summary.
 
         Args:
@@ -563,7 +564,7 @@ class SSLRenderer(TypeDispatchRenderer):
     @staticmethod
     def _render_ssl_batch_check(result: dict, only_failures: bool = False,
                                  summary_only: bool = False,
-                                 expiring_days: int = None) -> None:
+                                 expiring_days: Optional[int] = None) -> None:
         """Render batch SSL check results.
 
         Args:
