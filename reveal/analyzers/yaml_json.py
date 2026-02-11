@@ -29,8 +29,10 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         Returns:
             List of top-level block_mapping_pair nodes
         """
-        pairs = []
+        pairs: List[Any] = []
         # Navigate to the top-level block_mapping
+        if not self.tree:
+            return pairs
         for node in self.tree.root_node.children:
             if node.type == 'document':
                 for child in node.children:
@@ -58,8 +60,8 @@ class YamlAnalyzer(TreeSitterAnalyzer):
             return key_name, key_node
         return None, None
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract YAML top-level keys using tree-sitter."""
         if not self.tree:
             return {}
@@ -125,8 +127,10 @@ class JsonAnalyzer(TreeSitterAnalyzer):
         Returns:
             List of top-level pair nodes (JSON key-value pairs)
         """
-        pairs = []
+        pairs: List[Any] = []
         # Only look for pairs that are direct children of the root object
+        if not self.tree:
+            return pairs
         for node in self.tree.root_node.children:
             if node.type == 'object':
                 for child in node.children:
@@ -150,8 +154,8 @@ class JsonAnalyzer(TreeSitterAnalyzer):
             return key_name, key_node
         return None, None
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract JSON top-level keys using tree-sitter."""
         if not self.tree:
             return {}
