@@ -26,10 +26,67 @@ from .cli import (
     handle_list_schemas,
     handle_stdin_mode,
     handle_decorator_stats,
+    handle_scaffold_adapter,
+    handle_scaffold_analyzer,
+    handle_scaffold_rule,
     handle_uri,
     handle_file_or_directory,
     handle_file,
 )
+
+
+def _handle_scaffold_command():
+    """Handle 'reveal scaffold' subcommands.
+
+    Returns:
+        bool: True if scaffold command was handled, False otherwise
+    """
+    import argparse
+
+    if len(sys.argv) < 2 or sys.argv[1] != 'scaffold':
+        return False
+
+    # Create scaffold subcommand parser
+    parser = argparse.ArgumentParser(
+        prog='reveal scaffold',
+        description='Scaffold new reveal components (adapters, analyzers, rules)',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    subparsers = parser.add_subparsers(dest='component', help='Component type to scaffold')
+    subparsers.required = True
+
+    # Adapter subcommand
+    adapter_parser = subparsers.add_parser('adapter', help='Scaffold a new adapter')
+    adapter_parser.add_argument('name', help='Adapter name (e.g., github, docker)')
+    adapter_parser.add_argument('uri', help='URI scheme (e.g., github://, docker://)')
+    adapter_parser.add_argument('--force', action='store_true', help='Overwrite existing files')
+
+    # Analyzer subcommand
+    analyzer_parser = subparsers.add_parser('analyzer', help='Scaffold a new analyzer')
+    analyzer_parser.add_argument('name', help='Analyzer name (e.g., kotlin, dart)')
+    analyzer_parser.add_argument('extension', help='File extension (e.g., .kt, .dart)')
+    analyzer_parser.add_argument('--force', action='store_true', help='Overwrite existing files')
+
+    # Rule subcommand
+    rule_parser = subparsers.add_parser('rule', help='Scaffold a new quality rule')
+    rule_parser.add_argument('code', help='Rule code (e.g., C001, X001)')
+    rule_parser.add_argument('name', help='Rule name (e.g., "custom-pattern-check")')
+    rule_parser.add_argument('--category', default='custom', help='Rule category (default: custom)')
+    rule_parser.add_argument('--force', action='store_true', help='Overwrite existing files')
+
+    # Parse scaffold subcommand args (skip 'reveal scaffold' from argv)
+    args = parser.parse_args(sys.argv[2:])
+
+    # Dispatch to appropriate handler
+    if args.component == 'adapter':
+        handle_scaffold_adapter(args.name, args.uri, args.force)
+    elif args.component == 'analyzer':
+        handle_scaffold_analyzer(args.name, args.extension, args.force)
+    elif args.component == 'rule':
+        handle_scaffold_rule(args.code, args.name, args.category, args.force)
+
+    return True
 
 
 def _setup_windows_console():
@@ -96,6 +153,10 @@ def _handle_clipboard_copy(captured_output, original_stdout):
 def main():
     """Main CLI entry point."""
     _setup_windows_console()
+
+    # Handle scaffold subcommands early (before copy mode setup)
+    if _handle_scaffold_command():
+        return
 
     copy_setup = _setup_copy_mode()
     if copy_setup:

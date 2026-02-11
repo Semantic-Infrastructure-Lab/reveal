@@ -43,9 +43,18 @@ def handle_scaffold_analyzer(name: str, extension: str, force: bool = False) -> 
 
     if 'error' in result:
         print(f"Error: {result['error']}", file=sys.stderr)
+        if 'existing_files' in result:
+            print(f"Existing files: {', '.join(result['existing_files'])}", file=sys.stderr)
         sys.exit(1)
 
     print(f"✓ Created analyzer scaffolding for '{name}'")
+    print(f"\nFiles created:")
+    print(f"  • {result['analyzer_file']}")
+    print(f"  • {result['test_file']}")
+    print(f"  • {result['doc_file']}")
+    print(f"\nNext steps:")
+    for step in result['next_steps']:
+        print(f"  {step}")
 
 
 def handle_scaffold_rule(code: str, name: str, category: str = 'custom', force: bool = False) -> None:
@@ -61,6 +70,15 @@ def handle_scaffold_rule(code: str, name: str, category: str = 'custom', force: 
 
     if 'error' in result:
         print(f"Error: {result['error']}", file=sys.stderr)
+        if 'existing_files' in result:
+            print(f"Existing files: {', '.join(result['existing_files'])}", file=sys.stderr)
         sys.exit(1)
 
     print(f"✓ Created rule scaffolding for '{code}'")
+    print(f"\nFiles created:")
+    print(f"  • {result['rule_file']}")
+    print(f"  • {result['test_file']}")
+    print(f"  • {result['doc_file']}")
+    print(f"\nNext steps:")
+    for step in result['next_steps']:
+        print(f"  {step}")

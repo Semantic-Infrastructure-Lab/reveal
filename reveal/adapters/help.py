@@ -87,7 +87,8 @@ class HelpAdapter(ResourceAdapter):
         'output': 'OUTPUT_CONTRACT.md',  # Output format contract
         'schemas': 'SCHEMA_VALIDATION_HELP.md',  # Schema validation guide (v0.29.0+)
         'duplicates': 'DUPLICATE_DETECTION_GUIDE.md',  # Duplicate code detection guide
-        'duplicate-detection': 'DUPLICATE_DETECTION_GUIDE.md'  # Alias for duplicates
+        'duplicate-detection': 'DUPLICATE_DETECTION_GUIDE.md',  # Alias for duplicates
+        'scaffolding': 'SCAFFOLDING_GUIDE.md'  # Component scaffolding system
     }
 
     @staticmethod

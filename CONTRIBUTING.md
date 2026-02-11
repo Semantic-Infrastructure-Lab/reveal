@@ -31,6 +31,31 @@ pytest tests/
 
 ---
 
+## 🚀 Scaffolding System (New!)
+
+**Generate production-ready components in seconds:**
+
+```bash
+# Generate new adapter (2-4 hours → 30 minutes)
+reveal scaffold adapter github github://
+
+# Generate new analyzer (1-3 hours → 20 minutes)
+reveal scaffold analyzer kotlin .kt
+
+# Generate new quality rule (2-3 hours → 30 minutes)
+reveal scaffold rule C999 "excessive-nesting" --category complexity
+```
+
+Each command generates:
+- Complete, tested implementation
+- Comprehensive test suite (passing immediately)
+- Documentation template
+- Next steps guide
+
+**See [SCAFFOLDING_GUIDE.md](SCAFFOLDING_GUIDE.md) for full documentation.**
+
+---
+
 ## Project Structure
 
 This repository contains only the public-facing open source project:
