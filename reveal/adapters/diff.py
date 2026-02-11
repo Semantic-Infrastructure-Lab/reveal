@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, cast
 from .base import ResourceAdapter, register_adapter, register_renderer, get_adapter_class
 from .help_data import load_help_data
 
@@ -69,6 +69,11 @@ class DiffAdapter(ResourceAdapter):
         diff://app.py:old.py/handle_request       # Element-specific diff
     """
 
+    left_uri: str
+    right_uri: str
+    left_structure: Optional[Dict[str, Any]]
+    right_structure: Optional[Dict[str, Any]]
+
     def __init__(self, resource: Optional[str] = None, right_uri: Optional[str] = None):
         """Initialize with either a combined resource string or two URIs.
 
@@ -93,7 +98,7 @@ class DiffAdapter(ResourceAdapter):
 
         if right_uri is not None:
             # Old style: two arguments
-            self.left_uri = resource
+            self.left_uri = cast(str, resource)  # resource must be provided with right_uri
             self.right_uri = right_uri
         elif resource and ':' in resource:
             # New style: parse combined resource string
@@ -508,7 +513,7 @@ class DiffAdapter(ResourceAdapter):
 
                 try:
                     analyzer = analyzer_class(temp_path)
-                    return analyzer.get_structure()
+                    return cast(Dict[str, Any], analyzer.get_structure())
                 finally:
                     os.unlink(temp_path)
 
@@ -550,7 +555,7 @@ class DiffAdapter(ResourceAdapter):
             if not analyzer_class:
                 raise ValueError(f"No analyzer found for file: {path}")
             analyzer = analyzer_class(temp_path)
-            return analyzer.get_structure()
+            return cast(Dict[str, Any], analyzer.get_structure())
         finally:
             os.unlink(temp_path)
 
@@ -757,9 +762,9 @@ class DiffAdapter(ResourceAdapter):
         # For file scheme, handle differently (no adapter class, uses get_analyzer)
         if scheme == 'file':
             # Check if it's a directory
-            path = Path(resource).resolve()
-            if path.is_dir():
-                return self._resolve_directory(str(path))
+            file_path = Path(resource).resolve()
+            if file_path.is_dir():
+                return self._resolve_directory(str(file_path))
 
             # Single file - use analyzer
             from ..registry import get_analyzer
@@ -767,7 +772,7 @@ class DiffAdapter(ResourceAdapter):
             if not analyzer_class:
                 raise ValueError(f"No analyzer found for file: {resource}")
             analyzer = analyzer_class(resource)
-            return analyzer.get_structure(**kwargs)
+            return cast(Dict[str, Any], analyzer.get_structure(**kwargs))
 
         # Get registered adapter
         adapter_class = get_adapter_class(scheme)
@@ -776,7 +781,7 @@ class DiffAdapter(ResourceAdapter):
 
         # Instantiate and get structure
         adapter = self._instantiate_adapter(adapter_class, scheme, resource)
-        return adapter.get_structure(**kwargs)
+        return cast(Dict[str, Any], adapter.get_structure(**kwargs))
 
     def _instantiate_adapter(self, adapter_class: type, scheme: str, resource: str):
         """Instantiate adapter with appropriate arguments.
@@ -804,7 +809,7 @@ class DiffAdapter(ResourceAdapter):
 
         # Try to determine constructor signature
         try:
-            sig = inspect.signature(adapter_class.__init__)
+            sig = inspect.signature(adapter_class.__init__)  # type: ignore[misc]
             params = list(sig.parameters.keys())
 
             # Remove 'self' from params
@@ -856,17 +861,17 @@ class DiffAdapter(ResourceAdapter):
         # Search in functions
         for func in struct.get('functions', []):
             if func.get('name') == element_name:
-                return func
+                return cast(Dict[str, Any], func)
 
         # Search in classes
         for cls in struct.get('classes', []):
             if cls.get('name') == element_name:
-                return cls
+                return cast(Dict[str, Any], cls)
 
             # Search in class methods
             for method in cls.get('methods', []):
                 if method.get('name') == element_name:
-                    return method
+                    return cast(Dict[str, Any], method)
 
         return None
 
