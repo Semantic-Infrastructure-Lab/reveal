@@ -1,12 +1,12 @@
 """Error analysis functions for Claude sessions."""
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 from ....utils.patterns import Patterns
 
 
 def get_error_context(messages: List[Dict], error_msg_index: int,
-                      tool_use_id: str) -> Dict[str, Any]:
+                      tool_use_id: Optional[str]) -> Dict[str, Any]:
     """Get context around an error for debugging.
 
     Looks backwards from the error to find:
@@ -22,7 +22,7 @@ def get_error_context(messages: List[Dict], error_msg_index: int,
     Returns:
         Context dictionary with tool_call, thinking, and prior_action
     """
-    context = {
+    context: Dict[str, Any] = {
         'tool_name': None,
         'tool_input_preview': None,
         'thinking_preview': None,

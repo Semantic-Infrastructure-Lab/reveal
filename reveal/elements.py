@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Callable, Iterator, List, Optional, TYPE_CHECKING
+from typing import Callable, Iterator, List, Optional, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from .type_system import RevealType
@@ -323,16 +323,18 @@ class PythonElement(TypedElement):
     decorators: List[str] = field(default_factory=list)
 
     @property
-    def is_method(self) -> bool:
-        """True if this function is a method (inside a class)."""
-        return (self.category == "function" and self.parent and
-                self.parent.category == "class")
+    def is_method(self) -> Optional[bool]:
+        """True if this function is a method (inside a class), None if no parent."""
+        if self.category == "function" and self.parent:
+            return self.parent.category == "class"
+        return None if self.category == "function" else False
 
     @property
-    def is_nested_function(self) -> bool:
-        """True if this function is nested inside another function."""
-        return (self.category == "function" and self.parent and
-                self.parent.category == "function")
+    def is_nested_function(self) -> Optional[bool]:
+        """True if this function is nested inside another function, None if no parent."""
+        if self.category == "function" and self.parent:
+            return self.parent.category == "function"
+        return None if self.category == "function" else False
 
     @property
     def is_staticmethod(self) -> bool:
@@ -455,7 +457,7 @@ class MarkdownElement(TypedElement):
     @property
     def subsections(self) -> List[MarkdownElement]:
         """Direct child sections."""
-        return [c for c in self.children if c.category == "section"]
+        return [cast(MarkdownElement, c) for c in self.children if c.category == "section"]
 
     def to_dict(self) -> dict:
         """Convert to dict with Markdown-specific fields."""

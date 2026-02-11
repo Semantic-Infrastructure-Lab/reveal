@@ -190,9 +190,9 @@ class SSLAdapter(ResourceAdapter):
             raise TypeError("SSLAdapter requires a connection string")
 
         self.connection_string = connection_string
-        self.host = None
-        self.port = 443
-        self.element = None
+        self.host: Optional[str] = None
+        self.port: int = 443
+        self.element: Optional[str] = None
         self._certificate: Optional[CertificateInfo] = None
         self._chain: List[CertificateInfo] = []
         self._verification: Optional[Dict[str, Any]] = None
@@ -242,7 +242,7 @@ class SSLAdapter(ResourceAdapter):
 
     def _fetch_certificate(self) -> None:
         """Fetch certificate if not already fetched."""
-        if self._certificate is None:
+        if self._certificate is None and self.host:
             (
                 self._certificate,
                 self._chain,
@@ -258,8 +258,11 @@ class SSLAdapter(ResourceAdapter):
         import glob
         from reveal.analyzers.nginx import NginxAnalyzer
 
-        all_domains = set()
-        files_processed = []
+        all_domains: set[str] = set()
+        files_processed: List[str] = []
+
+        if not self._nginx_path:
+            return {'domains': list(all_domains), 'files_processed': files_processed, 'count': 0}
 
         # Handle glob patterns
         paths = glob.glob(self._nginx_path) if '*' in self._nginx_path else [self._nginx_path]
@@ -302,6 +305,9 @@ class SSLAdapter(ResourceAdapter):
         self._fetch_certificate()
         cert = self._certificate
 
+        if not cert:
+            return {'type': 'ssl_certificate', 'error': 'Failed to fetch certificate'}
+
         # Determine health status
         days = cert.days_until_expiry
         if days < 0:
@@ -337,9 +343,9 @@ class SSLAdapter(ResourceAdapter):
             'health_icon': health_icon,
             'san_count': len(cert.san),
             'verification': {
-                'chain_valid': self._verification.get('verified', False),
-                'hostname_match': self._verification.get('hostname_match', False),
-                'error': self._verification.get('error'),
+                'chain_valid': self._verification.get('verified', False) if self._verification else False,
+                'hostname_match': self._verification.get('hostname_match', False) if self._verification else False,
+                'error': self._verification.get('error') if self._verification else None,
             },
             'next_steps': next_steps,
         }
@@ -380,6 +386,9 @@ class SSLAdapter(ResourceAdapter):
         self._fetch_certificate()
         cert = self._certificate
 
+        if not cert:
+            return []
+
         return [
             {
                 'name': 'san',
@@ -416,6 +425,8 @@ class SSLAdapter(ResourceAdapter):
     def _get_san(self) -> Dict[str, Any]:
         """Get Subject Alternative Names."""
         cert = self._certificate
+        if not cert:
+            return {'type': 'ssl_san', 'error': 'Certificate not available'}
         return {
             'type': 'ssl_san',
             'host': self.host,
@@ -428,6 +439,8 @@ class SSLAdapter(ResourceAdapter):
     def _get_chain(self) -> Dict[str, Any]:
         """Get certificate chain information."""
         cert = self._certificate
+        if not cert:
+            return {'type': 'ssl_chain', 'error': 'Certificate not available'}
         return {
             'type': 'ssl_chain',
             'host': self.host,
@@ -443,6 +456,8 @@ class SSLAdapter(ResourceAdapter):
     def _get_issuer(self) -> Dict[str, Any]:
         """Get issuer details."""
         cert = self._certificate
+        if not cert:
+            return {'type': 'ssl_issuer', 'error': 'Certificate not available'}
         return {
             'type': 'ssl_issuer',
             'host': self.host,
@@ -453,6 +468,8 @@ class SSLAdapter(ResourceAdapter):
     def _get_subject(self) -> Dict[str, Any]:
         """Get subject details."""
         cert = self._certificate
+        if not cert:
+            return {'type': 'ssl_subject', 'error': 'Certificate not available'}
         return {
             'type': 'ssl_subject',
             'host': self.host,
@@ -463,6 +480,8 @@ class SSLAdapter(ResourceAdapter):
     def _get_dates(self) -> Dict[str, Any]:
         """Get validity dates."""
         cert = self._certificate
+        if not cert:
+            return {'type': 'ssl_dates', 'error': 'Certificate not available'}
         return {
             'type': 'ssl_dates',
             'host': self.host,
@@ -475,6 +494,8 @@ class SSLAdapter(ResourceAdapter):
     def _get_full(self) -> Dict[str, Any]:
         """Get full certificate details."""
         cert = self._certificate
+        if not cert:
+            return {'type': 'ssl_full', 'error': 'Certificate not available'}
         return {
             'type': 'ssl_full',
             'host': self.host,
@@ -507,6 +528,9 @@ class SSLAdapter(ResourceAdapter):
             return self._check_nginx_domains(
                 warn_days, critical_days, advanced, only_failures
             )
+
+        if not self.host:
+            return {'type': 'ssl_check', 'error': 'No host specified'}
 
         return check_ssl_health(
             self.host, self.port,
@@ -593,7 +617,7 @@ class SSLAdapter(ResourceAdapter):
 
     def _generate_batch_next_steps(self, all_results: List[Dict[str, Any]],
                                     failures: int, warnings: int, advanced: bool,
-                                    only_failures: bool, source: str = None) -> List[str]:
+                                    only_failures: bool, source: Optional[str] = None) -> List[str]:
         """Generate contextual next steps based on results.
 
         Args:
@@ -634,7 +658,7 @@ class SSLAdapter(ResourceAdapter):
 
     def _batch_check_domains(
         self, domains: List[str], warn_days: int = 30, critical_days: int = 7,
-        advanced: bool = False, only_failures: bool = False, source: str = None
+        advanced: bool = False, only_failures: bool = False, source: Optional[str] = None
     ) -> Dict[str, Any]:
         """Core batch checking logic for SSL certificates.
 

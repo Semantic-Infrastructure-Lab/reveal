@@ -170,9 +170,6 @@ def main() -> None:
     if copy_setup:
         tee_writer, captured_output, original_stdout = copy_setup
         sys.stdout = tee_writer
-    else:
-        captured_output = None
-        original_stdout = None
 
     try:
         _main_impl()
@@ -182,6 +179,7 @@ def main() -> None:
         sys.exit(0)
     finally:
         if copy_setup:
+            _, captured_output, original_stdout = copy_setup
             _handle_clipboard_copy(captured_output, original_stdout)
 
 
@@ -195,7 +193,7 @@ def _handle_special_modes(args: Any) -> bool:
         bool: True if a special mode was handled (caller should exit)
     """
     # Special mode handlers (flag -> (handler, *handler_args))
-    special_modes = [
+    special_modes: List[Tuple[Any, Callable[..., Any], List[Any]]] = [
         (args.list_supported, handle_list_supported, [list_supported_types]),
         (getattr(args, 'languages', False), handle_languages, []),
         (getattr(args, 'adapters', False), handle_adapters, []),
@@ -304,7 +302,7 @@ def _main_impl() -> None:
         handle_file_or_directory(args.path, args)
 
 
-def _get_tree_sitter_fallbacks(registered_analyzers: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _get_tree_sitter_fallbacks(registered_analyzers: dict[str, Any]) -> List[Tuple[str, str]]:
     """Probe tree-sitter for additional language support.
 
     Args:
@@ -347,7 +345,7 @@ def _get_tree_sitter_fallbacks(registered_analyzers: dict[str, Any]) -> dict[str
             continue
 
         try:
-            get_language(lang)
+            get_language(lang)  # type: ignore[arg-type]
             available_fallbacks.append((display_name, ext))
         except Exception as e:
             logging.debug(f"Tree-sitter language {lang} not available: {e}")

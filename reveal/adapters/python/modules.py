@@ -36,26 +36,31 @@ def get_pip_package_metadata(module_name: str) -> Optional[Dict[str, Any]]:
         import importlib.metadata
 
         dist = importlib.metadata.distribution(module_name)
+
+        # Get _path safely using getattr (it's a private attribute)
+        dist_path = getattr(dist, "_path", None)
+
         pip_package = {
             "name": dist.name,
             "version": dist.version,
-            "location": str(dist._path.parent) if hasattr(dist, "_path") else "unknown",
+            "location": str(dist_path.parent) if dist_path else "unknown",
             "install_type": "normal",
         }
 
         # Check for editable install
-        try:
-            direct_url_path = dist._path.parent / "direct_url.json"
-            if direct_url_path.exists():
-                import json
+        if dist_path:
+            try:
+                direct_url_path = dist_path.parent / "direct_url.json"
+                if direct_url_path.exists():
+                    import json
 
-                with open(direct_url_path) as f:
-                    direct_url = json.load(f)
-                    editable = direct_url.get("dir_info", {}).get("editable", False)
-                    pip_package["editable"] = editable
-                    pip_package["install_type"] = "editable" if editable else "normal"
-        except Exception:
-            pass  # install_type already set to "normal"
+                    with open(direct_url_path) as f:
+                        direct_url = json.load(f)
+                        editable = direct_url.get("dir_info", {}).get("editable", False)
+                        pip_package["editable"] = editable
+                        pip_package["install_type"] = "editable" if editable else "normal"
+            except Exception:
+                pass  # install_type already set to "normal"
 
         return pip_package
     except Exception:
@@ -142,7 +147,7 @@ def get_module_analysis(module_name: str) -> Dict[str, Any]:
     Returns:
         Dict with module location, pip metadata, and conflict detection
     """
-    result = {
+    result: Dict[str, Any] = {
         "module": module_name,
         "status": "unknown",
         "conflicts": [],
