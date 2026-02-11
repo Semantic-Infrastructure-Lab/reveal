@@ -11,6 +11,7 @@ All are ZIP archives containing XML files following the OASIS ODF standard.
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Optional
 from ...registry import register
+from ...utils import format_size
 from .base import ZipXMLAnalyzer
 
 
@@ -72,8 +73,8 @@ class OdtAnalyzer(OdfAnalyzer):
     # ODF heading outline levels
     HEADING_STYLES = {'Heading': True}  # ODF uses outline-level attribute
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract document structure: headings, paragraphs, tables."""
         if self.parse_error:
             return {'error': [{'message': self.parse_error}]}
@@ -150,7 +151,7 @@ class OdtAnalyzer(OdfAnalyzer):
         media = self._get_embedded_media()
         if media:
             result['media'] = [{
-                'name': f"{m['name']} ({m['type']}, {self._format_size(m['size'])})",
+                'name': f"{m['name']} ({m['type']}, {format_size(m['size'])})",
                 'line': idx + 1,
             } for idx, m in enumerate(media)]
 
@@ -236,8 +237,8 @@ class OdtAnalyzer(OdfAnalyzer):
 class OdsAnalyzer(OdfAnalyzer):
     """Analyzer for LibreOffice/OpenOffice Calc spreadsheets (.ods)."""
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract spreadsheet structure: sheets, dimensions."""
         if self.parse_error:
             return {'error': [{'message': self.parse_error}]}
@@ -391,8 +392,8 @@ class OdsAnalyzer(OdfAnalyzer):
 class OdpAnalyzer(OdfAnalyzer):
     """Analyzer for LibreOffice/OpenOffice Impress presentations (.odp)."""
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract presentation structure: slides with titles."""
         if self.parse_error:
             return {'error': [{'message': self.parse_error}]}
@@ -438,7 +439,7 @@ class OdpAnalyzer(OdfAnalyzer):
         media = self._get_embedded_media()
         if media:
             result['media'] = [{
-                'name': f"{m['name']} ({m['type']}, {self._format_size(m['size'])})",
+                'name': f"{m['name']} ({m['type']}, {format_size(m['size'])})",
                 'line': idx + 1,
             } for idx, m in enumerate(media)]
 
