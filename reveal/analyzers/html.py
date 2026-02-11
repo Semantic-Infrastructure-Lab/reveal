@@ -147,7 +147,7 @@ class HTMLAnalyzer(FileAnalyzer):
 
     def _build_head_info(self) -> Dict[str, Any]:
         """Extract <head> section information."""
-        info = {}
+        info: Dict[str, Any] = {}
 
         if not self.soup.head:
             return info
@@ -198,7 +198,7 @@ class HTMLAnalyzer(FileAnalyzer):
         if not self.template_type:
             return None
 
-        info = {'type': self.template_type}
+        info: Dict[str, Any] = {'type': self.template_type}
 
         # Extract template variables based on type
         if self.template_type == 'jinja2':
@@ -330,7 +330,7 @@ class HTMLAnalyzer(FileAnalyzer):
         Returns:
             Dict with title, meta tags, canonical, stylesheets, scripts
         """
-        metadata = {}
+        metadata: Dict[str, Any] = {}
 
         head = self.soup.head
         if not head:
@@ -537,7 +537,7 @@ class HTMLAnalyzer(FileAnalyzer):
         scripts = []
 
         for script in self.soup.find_all('script'):
-            script_info = {
+            script_info: Dict[str, Any] = {
                 'line': self._get_line_number(script),
             }
 
@@ -665,8 +665,8 @@ class HTMLAnalyzer(FileAnalyzer):
 
         return f"{start}-{end}"
 
-    def _extract_lines(self, head: int = None, tail: int = None,
-                      range: tuple = None) -> Dict[str, Any]:
+    def _extract_lines(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None) -> Dict[str, Any]:
         """Extract specific lines from HTML.
 
         Args:
