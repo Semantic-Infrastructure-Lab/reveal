@@ -157,7 +157,7 @@ class HelpAdapter(ResourceAdapter):
             ]
         }
 
-    def __init__(self, topic: str = None):
+    def __init__(self, topic: Optional[str] = None):
         """Initialize help adapter.
 
         Args:
@@ -174,11 +174,11 @@ class HelpAdapter(ResourceAdapter):
             'static_guides': list(self.STATIC_HELP.keys())
         }
 
-    def get_element(self, topic: str, **kwargs) -> Optional[Dict[str, Any]]:
+    def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get help for a specific topic.
 
         Args:
-            topic: Topic name (adapter scheme, 'adapters', 'agent', etc.)
+            element_name: Topic name (adapter scheme, 'adapters', 'agent', etc.)
                    Can also be 'adapter/section' for section extraction
                    Or 'schemas/adapter' for machine-readable schemas
                    Or 'examples/task' for canonical query recipes
@@ -186,6 +186,7 @@ class HelpAdapter(ResourceAdapter):
         Returns:
             Help content dict or None if not found
         """
+        topic = element_name  # Alias for readability
         # Check for schemas route: help://schemas/ssl
         if topic.startswith('schemas/'):
             adapter_name = topic.split('/', 1)[1]
@@ -271,7 +272,7 @@ class HelpAdapter(ResourceAdapter):
         }
 
         key = section_key_map.get(section)
-        content = help_data.get(key)
+        content = help_data.get(key) if key else None
 
         if not content:
             return {
@@ -324,7 +325,7 @@ class HelpAdapter(ResourceAdapter):
 
     def _list_topics(self) -> List[str]:
         """List all available help topics."""
-        topics = []
+        topics: List[str] = []
 
         # Add adapter schemes
         topics.extend(_ADAPTER_REGISTRY.keys())
@@ -337,7 +338,7 @@ class HelpAdapter(ResourceAdapter):
 
         return sorted(topics)
 
-    def _get_adapter_description(self, adapter_class: type) -> str:
+    def _get_adapter_description(self, adapter_class: type[Any]) -> str:
         """Get description from adapter's help method.
 
         Args:
@@ -349,7 +350,7 @@ class HelpAdapter(ResourceAdapter):
         try:
             help_data = adapter_class.get_help()
             if help_data:
-                return help_data.get('description', '')
+                return str(help_data.get('description', ''))
         except Exception:
             # If get_help() fails, return empty
             pass
@@ -387,7 +388,7 @@ class HelpAdapter(ResourceAdapter):
         Returns:
             Help dict or None if adapter has no help
         """
-        adapter_class = _ADAPTER_REGISTRY.get(scheme)
+        adapter_class: Optional[type[Any]] = _ADAPTER_REGISTRY.get(scheme)
         if not adapter_class:
             return None
 
@@ -405,7 +406,7 @@ class HelpAdapter(ResourceAdapter):
             help_data = adapter_class.get_help()
             if help_data:
                 help_data['scheme'] = scheme  # Ensure scheme is included
-            return help_data
+            return help_data  # type: ignore[no-any-return]
         except Exception as e:
             return {
                 'scheme': scheme,
@@ -415,7 +416,7 @@ class HelpAdapter(ResourceAdapter):
 
     def _get_all_adapter_help(self) -> Dict[str, Any]:
         """Get help for all adapters."""
-        all_help = {
+        all_help: Dict[str, Any] = {
             'type': 'adapter_summary',
             'count': len(_ADAPTER_REGISTRY),
             'adapters': {}
@@ -486,7 +487,7 @@ class HelpAdapter(ResourceAdapter):
         Returns:
             Schema dict or error dict if adapter not found or has no schema
         """
-        adapter_class = _ADAPTER_REGISTRY.get(adapter_name)
+        adapter_class: Optional[type[Any]] = _ADAPTER_REGISTRY.get(adapter_name)
         if not adapter_class:
             return {
                 'type': 'adapter_schema',
@@ -511,7 +512,7 @@ class HelpAdapter(ResourceAdapter):
             if schema_data:
                 schema_data['adapter'] = adapter_name  # Ensure adapter is included
                 schema_data['type'] = 'adapter_schema'
-            return schema_data
+            return schema_data  # type: ignore[no-any-return]
         except Exception as e:
             return {
                 'type': 'adapter_schema',
