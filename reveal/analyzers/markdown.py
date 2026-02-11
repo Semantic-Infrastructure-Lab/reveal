@@ -4,7 +4,7 @@ import re
 import yaml
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional, Set
+from typing import Dict, List, Any, Optional, Set, cast
 from urllib.parse import urlparse
 from pathlib import Path
 from ..registry import register
@@ -113,8 +113,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         # - Outline mode active (requires headings for hierarchy)
         return not specific_features_requested or navigation_mode or outline_mode
 
-    def _apply_slicing_to_results(self, result: Dict[str, List[Dict[str, Any]]],
-                                   head: int, tail: int, range: tuple) -> None:
+    def _apply_slicing_to_results(self, result: Dict[str, Any],
+                                   head: Optional[int], tail: Optional[int], range: Optional[tuple]) -> None:
         """Apply semantic slicing to all result categories except frontmatter.
 
         Args:
@@ -126,10 +126,10 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         for category in result:
             if category != 'frontmatter':
                 result[category] = self._apply_semantic_slice(
-                    result[category], head, tail, range
+                    result[category], head, tail, range  # type: ignore[arg-type]
                 )
 
-    def get_structure(self, options: Optional[StructureOptions] = None, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[str] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, options: Optional[StructureOptions] = None, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[str] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:  # type: ignore[override]
         """Extract markdown structure.
 
         Args:
@@ -172,7 +172,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
             options = StructureOptions.from_kwargs(**kwargs)
 
-        result = {}
+        result: Dict[str, Any] = {}
 
         # Extract front matter if requested (always first, not affected by slicing)
         if options.extract_frontmatter:
@@ -215,7 +215,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         This correctly ignores # comments inside code fences by using the AST.
         """
-        headings = []
+        headings: List[Dict[str, Any]] = []
 
         if not self.tree:
             # Fallback to regex if tree-sitter fails
@@ -312,7 +312,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         for child in node.children:
             if child.type == 'link_text':
                 # In inline grammar, link_text contains the text directly
-                return child.text.decode('utf-8')
+                return cast(str, child.text.decode('utf-8'))
         return None
 
     def _extract_link_destination(self, node) -> Optional[str]:
@@ -327,7 +327,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         for child in node.children:
             if child.type == 'link_destination':
                 # In inline grammar, link_destination contains the URL directly
-                return child.text.decode('utf-8')
+                return cast(str, child.text.decode('utf-8'))
         return None
 
     def _build_link_info(self, node, text: str, url: str) -> Dict[str, Any]:
@@ -524,7 +524,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             if child.type == 'info_string':
                 # Language tag (e.g., 'python', 'javascript')
                 # In new grammar, info_string directly contains the language text
-                lang = child.text.decode('utf-8').strip()
+                lang = cast(str, child.text.decode('utf-8').strip())
                 return lang if lang else 'text'
         return 'text'
 
@@ -539,7 +539,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         """
         for child in node.children:
             if child.type == 'code_fence_content':
-                return child.text.decode('utf-8')
+                return cast(str, child.text.decode('utf-8'))
         return ''
 
     def _build_fenced_block_info(self, node, block_lang: str, source: str) -> Dict[str, Any]:
@@ -616,7 +616,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         in_block = False
         block_start = None
         block_lang = None
-        block_lines = []
+        block_lines: List[str] = []
 
         for i, line in enumerate(self.lines, 1):
             # Start of code block
@@ -815,7 +815,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             # Try common path field names
             for field in ('uri', 'path', 'href', 'url', 'file'):
                 if field in entry and isinstance(entry[field], str):
-                    path = entry[field]
+                    path = cast(str, entry[field])
                     # Strip doc:// prefix if present
                     if path.startswith('doc://'):
                         path = path[6:]  # Remove 'doc://'
@@ -1004,7 +1004,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                     heading_level = len(match.group(1))
                     break
 
-        if not start_line:
+        if not start_line or heading_level is None:
             return super().extract_element(element_type, name)
 
         # Find the end of this section (next heading of same or higher level)
