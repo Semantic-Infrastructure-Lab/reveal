@@ -29,23 +29,23 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
     Returns:
         Formatted tree string
     """
-    path = Path(path)
+    root_path = Path(path)
 
-    if not path.is_dir():
-        return f"Error: {path} is not a directory"
+    if not root_path.is_dir():
+        return f"Error: {root_path} is not a directory"
 
     # Create path filter
     path_filter = PathFilter(
-        root_path=path,
+        root_path=root_path,
         respect_gitignore=respect_gitignore,
         exclude_patterns=exclude_patterns,
         include_defaults=True
     )
 
     # Count total entries first for warnings
-    total_entries = _count_entries(path, depth, show_hidden, path_filter)
+    total_entries = _count_entries(root_path, depth, show_hidden, path_filter)
 
-    lines = [f"{path.name or path}/\n"]
+    lines = [f"{root_path.name or root_path}/\n"]
 
     # Warn if directory is large and user hasn't disabled limits
     if total_entries > 500 and max_entries > 0:
@@ -56,7 +56,7 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
 
     # Track how many entries we've shown
     context = {'count': 0, 'max_entries': max_entries, 'truncated': 0, 'dir_limit': dir_limit}
-    _walk_directory(path, lines, depth=depth, show_hidden=show_hidden,
+    _walk_directory(root_path, lines, depth=depth, show_hidden=show_hidden,
                    fast=fast, context=context, path_filter=path_filter)
 
     # Show truncation message if we hit the limit
@@ -184,7 +184,7 @@ def _process_dir_entry(entry: Path, lines: List[str], prefix: str, connector: st
 
 
 def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int = 3,
-                   show_hidden: bool = False, fast: bool = False, context: dict = None,
+                   show_hidden: bool = False, fast: bool = False, context: Optional[dict] = None,
                    path_filter: Optional[PathFilter] = None):
     """Recursively walk directory and build tree.
 

@@ -19,11 +19,11 @@ from ...utils.query import (
 
 # Check if pygit2 is available
 try:
-    import pygit2
+    import pygit2  # type: ignore[import]
     PYGIT2_AVAILABLE = True
 except ImportError:
     PYGIT2_AVAILABLE = False
-    pygit2 = None
+    pygit2 = None  # type: ignore[assignment]
 
 
 class GitRenderer:
@@ -431,7 +431,7 @@ class GitAdapter(ResourceAdapter):
         path = '.'
         ref = 'HEAD'
         subpath = None
-        query = {}
+        query: Dict[str, Any] = {}
 
         # Handle empty resource
         if not resource or resource == '':
