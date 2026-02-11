@@ -44,7 +44,7 @@ class L003(BaseRule):
         Returns:
             List of detections for routing mismatches
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Set docs_root based on file path if not already set
         if self.docs_root is None:

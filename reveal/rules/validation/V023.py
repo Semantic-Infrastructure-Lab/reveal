@@ -84,7 +84,7 @@ class V023(BaseRule):
         Returns:
             List of detections for contract violations
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Only check Python files in adapters/ or analyzers/ directories
         if not file_path.endswith('.py'):
@@ -132,7 +132,7 @@ class V023(BaseRule):
 
     def _check_adapter_output(self, file_path: str, content: str) -> List[Detection]:
         """Check actual adapter output for contract compliance."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Extract adapter scheme from file path
         scheme = self._extract_scheme(file_path)
@@ -173,7 +173,7 @@ class V023(BaseRule):
         Looks for return statements in get_structure/get_element methods
         and validates they include required fields.
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Find the method definition
         method_start = content.find(f'def {method_name}(')

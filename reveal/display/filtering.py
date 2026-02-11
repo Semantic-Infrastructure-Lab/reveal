@@ -97,7 +97,7 @@ class GitignoreParser:
             gitignore_path: Path to .gitignore file
         """
         self.gitignore_dir = gitignore_path.parent
-        self.patterns = []
+        self.patterns: List[Dict[str, Any]] = []
         self._parse(gitignore_path)
 
     def _parse(self, gitignore_path: Path):

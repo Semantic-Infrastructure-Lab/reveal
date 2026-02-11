@@ -202,7 +202,7 @@ class QuerySyntaxError(RevealError):
             "Query reference: reveal --help operators"
         ]
 
-        context = {'query': query}
+        context: Dict[str, Any] = {'query': query}
         if position is not None:
             context['position'] = position
 

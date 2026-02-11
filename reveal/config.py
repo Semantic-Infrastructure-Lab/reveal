@@ -174,7 +174,7 @@ class Override:
     files_pattern: str
     config: Dict[str, Any]
 
-    def matches(self, file_path: Path, project_root: Path = None) -> bool:
+    def matches(self, file_path: Path, project_root: Optional[Path] = None) -> bool:
         """Check if this override matches the given file path.
 
         Args:
@@ -260,7 +260,7 @@ class RevealConfig:
     # Class-level cache: project_root -> config instance
     _cache: Dict[Path, 'RevealConfig'] = {}
 
-    def __init__(self, merged_config: Dict[str, Any], project_root: Path = None):
+    def __init__(self, merged_config: Dict[str, Any], project_root: Optional[Path] = None):
         """Initialize with merged configuration.
 
         Args:
@@ -283,8 +283,8 @@ class RevealConfig:
 
     @classmethod
     def get(cls,
-            start_path: Path = None,
-            cli_overrides: Dict[str, Any] = None,
+            start_path: Optional[Path] = None,
+            cli_overrides: Optional[Dict[str, Any]] = None,
             no_config: bool = False) -> 'RevealConfig':
         """Get or create config instance (singleton per project root).
 
@@ -365,7 +365,7 @@ class RevealConfig:
     @classmethod
     def _load_and_merge(cls,
                         start_path: Path,
-                        cli_overrides: Dict[str, Any] = None,
+                        cli_overrides: Optional[Dict[str, Any]] = None,
                         no_config: bool = False) -> Dict[str, Any]:
         """Load all configs and merge with precedence rules.
 
@@ -596,7 +596,7 @@ class RevealConfig:
 
         return FileConfig(effective, file_path)
 
-    def is_rule_enabled(self, rule_code: str, file_path: Path = None) -> bool:
+    def is_rule_enabled(self, rule_code: str, file_path: Optional[Path] = None) -> bool:
         """Check if a rule is globally enabled.
 
         Args:
@@ -682,7 +682,7 @@ class RevealConfig:
         arch = self._config.get('architecture', {})
         return arch.get('layers', [])
 
-    def get_adapter_config(self, adapter_name: str, section: str = None) -> Dict[str, Any]:
+    def get_adapter_config(self, adapter_name: str, section: Optional[str] = None) -> Dict[str, Any]:
         """Get adapter-specific configuration.
 
         Args:
@@ -819,7 +819,7 @@ def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]
 _config: Optional[RevealConfig] = None
 
 
-def get_config(start_path: Path = None, **kwargs) -> RevealConfig:
+def get_config(start_path: Optional[Path] = None, **kwargs) -> RevealConfig:
     """Get global config instance (convenience function).
 
     Args:

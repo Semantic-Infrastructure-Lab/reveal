@@ -20,7 +20,7 @@ Example:
     ...     print(f"Error: {result.error}")
 """
 
-from typing import Generic, TypeVar, Union, Callable, List, Optional
+from typing import Generic, TypeVar, Union, Callable, List, Optional, NoReturn
 from dataclasses import dataclass
 
 T = TypeVar('T')
@@ -81,7 +81,7 @@ class Failure(Generic[E]):
         """Check if this is a failed result."""
         return True
 
-    def unwrap(self) -> T:
+    def unwrap(self) -> NoReturn:
         """Get the success value (raises for Failure)."""
         raise ValueError(f"Called unwrap() on Failure: {self.error}")
 
@@ -134,9 +134,9 @@ def success(value: T) -> Success[T]:
 
 def failure(
     error: E,
-    details: str = None,
-    suggestions: List[str] = None,
-    context: dict = None
+    details: Optional[str] = None,
+    suggestions: Optional[List[str]] = None,
+    context: Optional[dict] = None
 ) -> Failure[E]:
     """Create a failed result with optional details and suggestions."""
     return Failure(
@@ -154,7 +154,7 @@ def from_optional(value: Optional[T], error: E) -> Result[T, E]:
     return Success(value)
 
 
-def from_exception(f: Callable[[], T], error_map: Callable[[Exception], E] = None) -> Result[T, E]:
+def from_exception(f: Callable[[], T], error_map: Optional[Callable[[Exception], E]] = None) -> Result[T, E]:
     """Execute function and convert exception to Result.
 
     Args:
@@ -169,4 +169,4 @@ def from_exception(f: Callable[[], T], error_map: Callable[[Exception], E] = Non
     except Exception as e:
         if error_map:
             return Failure(error_map(e))
-        return Failure(str(e))
+        return Failure(str(e))  # type: ignore[arg-type]

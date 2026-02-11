@@ -42,7 +42,7 @@ class C902(BaseRule):
         Returns:
             List of detections
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Need structure to work
         if not structure:

@@ -108,7 +108,7 @@ class B004(BaseRule):
         Returns:
             List of detections
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         if not structure or not content:
             return detections

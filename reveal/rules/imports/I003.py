@@ -70,7 +70,7 @@ class I003(BaseRule):
         Returns:
             List of detections for layer violations
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
         path = Path(file_path)
 
         # Load layer configuration and find project root

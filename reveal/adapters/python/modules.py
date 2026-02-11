@@ -89,8 +89,8 @@ def detect_cwd_shadowing(
     import_path: Optional[str]
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Detect if current working directory is shadowing the module."""
-    conflicts = []
-    recommendations = []
+    conflicts: List[Dict[str, Any]] = []
+    recommendations: List[Dict[str, Any]] = []
 
     if not import_path:
         return conflicts, recommendations

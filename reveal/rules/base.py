@@ -197,7 +197,7 @@ class BaseRule(ABC):
 
             def check(self, file_path, structure, content):
                 # Check ONLY bare except - nothing else!
-                detections = []
+                detections: List[Dict[str, Any]] = []
                 # ... analyze bare except only
                 return detections
 

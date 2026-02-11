@@ -58,11 +58,11 @@ def get_overview(messages: List[Dict], session_name: str, conversation_path: str
     base = contract_base.copy()
     base['type'] = 'claude_session_overview'
 
-    tools_used = defaultdict(int)
+    tools_used: Dict[str, int] = defaultdict(int)
     thinking_chars = 0
     user_messages = 0
     assistant_messages = 0
-    file_operations = defaultdict(int)
+    file_operations: Dict[str, int] = defaultdict(int)
 
     for msg in messages:
         msg_type = msg.get('type')

@@ -34,7 +34,7 @@ class V013(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check adapter count accuracy across documentation files."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Only run for reveal:// URIs
         if not file_path.startswith('reveal://'):
@@ -73,7 +73,7 @@ class V013(BaseRule):
 
     def _check_readme_adapter_count(self, readme_file: Path, actual_count: int, project_root: Path) -> List[Detection]:
         """Check all adapter count claims in README.md."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
         claims = self._extract_adapter_count_from_readme(readme_file)
 
         for line_num, claimed in claims:

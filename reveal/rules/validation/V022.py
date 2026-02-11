@@ -48,7 +48,7 @@ class V022(BaseRule):
             return []
 
         project_root = reveal_root.parent
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Run three independent validation checks
         detections.extend(self._check_cli_handler_paths(reveal_root))
@@ -59,7 +59,7 @@ class V022(BaseRule):
 
     def _check_cli_handler_paths(self, reveal_root: Path) -> List[Detection]:
         """Validate CLI handlers reference existing files."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
         handlers_file = reveal_root / 'cli' / 'handlers.py'
 
         if not handlers_file.exists():
@@ -95,7 +95,7 @@ class V022(BaseRule):
 
     def _check_manifest_paths(self, project_root: Path) -> List[Detection]:
         """Validate MANIFEST.in references existing paths."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
         manifest_file = project_root / 'MANIFEST.in'
 
         if not manifest_file.exists():
@@ -134,7 +134,7 @@ class V022(BaseRule):
 
     def _check_critical_files(self, project_root: Path) -> List[Detection]:
         """Validate critical files are included in package manifest."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
         manifest_file = project_root / 'MANIFEST.in'
 
         if not manifest_file.exists():

@@ -62,7 +62,7 @@ class N004(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for inconsistent ACME challenge paths."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Collect all ACME challenge configs: path -> [(server_name, line)]
         acme_paths: Dict[str, List[tuple]] = defaultdict(list)

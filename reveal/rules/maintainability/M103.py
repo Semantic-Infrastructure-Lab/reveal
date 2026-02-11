@@ -57,7 +57,7 @@ class M103(BaseRule):
         Returns:
             List of detections for version mismatches
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
         path = Path(file_path)
 
         # Only check __init__.py files

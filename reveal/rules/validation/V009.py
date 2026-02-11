@@ -32,7 +32,7 @@ class V009(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for broken documentation links."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Get file path context (early returns handled here)
         context = self._get_file_path_context(file_path)

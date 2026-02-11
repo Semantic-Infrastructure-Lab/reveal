@@ -38,7 +38,7 @@ class B005(BaseRule, ASTParsingMixin):
         Returns:
             List of detections for dead imports
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
         for alias in node.names:
             module_name = alias.name.split('.')[0]
             if not self._module_exists(module_name, file_dir):
@@ -66,7 +66,7 @@ class B005(BaseRule, ASTParsingMixin):
         Returns:
             List of detections for dead imports
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         if not node.module:
             return detections

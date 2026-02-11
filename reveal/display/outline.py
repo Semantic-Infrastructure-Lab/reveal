@@ -1,7 +1,7 @@
 """Outline and hierarchy building for file structure display."""
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 
 def build_hierarchy(structure: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
@@ -79,7 +79,7 @@ def build_heading_hierarchy(headings: List[Dict[str, Any]]) -> List[Dict[str, An
 
     # Build parent-child relationships based on level hierarchy
     root_items = []
-    stack = []  # Stack of (level, item) for finding parents
+    stack: List[Tuple[int, Dict[str, Any]]] = []  # Stack of (level, item) for finding parents
 
     for item in items:
         level = item.get('level', 1)

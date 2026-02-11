@@ -33,7 +33,7 @@ class V006(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for output format support."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Only run for reveal:// URIs
         if not file_path.startswith('reveal://'):

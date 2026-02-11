@@ -52,7 +52,7 @@ class V001(BaseRule):
         static_help = self._get_static_help(reveal_root)
 
         # Run validation checks
-        detections = []
+        detections: List[Dict[str, Any]] = []
         detections.extend(self._check_analyzers_have_help(analyzers, static_help))
         detections.extend(self._validate_help_files_exist(static_help, reveal_root))
 
@@ -62,7 +62,7 @@ class V001(BaseRule):
         self, analyzers: Dict[str, Path], static_help: Dict[str, str]
     ) -> List[Detection]:
         """Check that expected analyzers have help documentation."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         for analyzer_name, analyzer_path in analyzers.items():
             if analyzer_name in static_help:
@@ -85,7 +85,7 @@ class V001(BaseRule):
         self, static_help: Dict[str, str], reveal_root: Path
     ) -> List[Detection]:
         """Check that referenced help files actually exist."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Help docs are in reveal/docs/ subdirectory
         docs_dir = reveal_root / 'docs'

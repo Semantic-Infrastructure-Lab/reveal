@@ -69,7 +69,7 @@ class V020(BaseRule):
         except Exception:
             return []
 
-        detections = []
+        detections: List[Dict[str, Any]] = []
         schemes = list(sorted(list_supported_schemes()))
 
         for scheme in schemes:

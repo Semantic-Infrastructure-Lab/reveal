@@ -51,7 +51,7 @@ class M102(BaseRule):
         Returns:
             List of detections (0 or 1)
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
         path = Path(file_path)
 
         # Skip known entry points and special files

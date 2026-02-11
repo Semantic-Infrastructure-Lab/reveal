@@ -38,7 +38,7 @@ class L001(BaseRule):
         Returns:
             List of detections for broken links
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
         base_path = Path(file_path).parent
 
         # Get links from structure (analyzer already parsed them)

@@ -44,7 +44,7 @@ class F005(BaseRule):
         Returns:
             Detection for each failed validation rule
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Get validation schema
         schema = get_validation_schema()

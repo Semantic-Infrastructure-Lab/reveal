@@ -48,7 +48,7 @@ class N003(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for proxy locations missing recommended headers."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         for match in self.LOCATION_PATTERN.finditer(content):
             location_path = match.group(1).strip()

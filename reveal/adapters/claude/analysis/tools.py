@@ -262,7 +262,7 @@ def calculate_tool_success_rate(messages: List[Dict]) -> Dict[str, Dict[str, Any
     tool_use_map = _collect_tool_use_ids(messages)
 
     # Track success/failure per tool
-    tool_stats = defaultdict(lambda: {'success': 0, 'failure': 0, 'total': 0})
+    tool_stats: Dict[str, Dict[str, int]] = defaultdict(lambda: {'success': 0, 'failure': 0, 'total': 0})
     _track_tool_results(messages, tool_use_map, tool_stats)
 
     # Calculate final success rates
@@ -284,7 +284,7 @@ def get_files_touched(messages: List[Dict], session_name: str,
     base = contract_base.copy()
     base['type'] = 'claude_files'
 
-    files_by_op = {
+    files_by_op: Dict[str, Any] = {
         'Read': defaultdict(int),
         'Write': defaultdict(int),
         'Edit': defaultdict(int)
@@ -311,7 +311,7 @@ def get_files_touched(messages: List[Dict], session_name: str,
                             })
 
     # Calculate unique files
-    all_files = set()
+    all_files: set[str] = set()
     for op_files in files_by_op.values():
         all_files.update(op_files.keys())
 
@@ -343,7 +343,7 @@ def get_workflow(messages: List[Dict], session_name: str,
     base = contract_base.copy()
     base['type'] = 'claude_workflow'
 
-    workflow = []
+    workflow: List[Dict[str, Any]] = []
 
     for i, msg in enumerate(messages):
         if msg.get('type') == 'assistant':

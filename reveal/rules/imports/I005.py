@@ -63,7 +63,7 @@ class I005(BaseRule):
         Returns:
             List of detections for duplicate imports
         """
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Get imports from structure
         imports = structure.get('imports', [])

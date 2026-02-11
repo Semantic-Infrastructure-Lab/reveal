@@ -70,7 +70,7 @@ class V003(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for feature matrix coverage."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Only run for reveal:// URIs
         if not file_path.startswith('reveal://'):

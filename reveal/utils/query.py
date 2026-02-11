@@ -56,11 +56,10 @@ def parse_query_params(query: str, coerce: bool = False) -> Dict[str, Any]:
             continue
 
         if '=' in part:
-            key, value = part.split('=', 1)
+            key, value_str = part.split('=', 1)
             key = key.strip()
-            value = value.strip()
-            if coerce:
-                value = coerce_value(value)
+            value_str = value_str.strip()
+            value: Union[bool, int, float, str] = coerce_value(value_str) if coerce else value_str
             params[key] = value
         else:
             params[part] = True
@@ -75,11 +74,11 @@ class QueryFilter:
     Attributes:
         field: Field name to filter on
         op: Operator (>, <, >=, <=, =, !=, ~=, .., ?, !, *)
-        value: Target value for comparison
+        value: Target value for comparison (str or coerced type)
     """
     field: str
     op: str
-    value: str
+    value: Union[bool, int, float, str]
 
     VALID_OPERATORS = {'=', '>', '<', '>=', '<=', '!=', '~=', '!~', '..', '?', '!', '*', '=='}
 
@@ -121,12 +120,15 @@ def _try_parse_two_char_operators(part: str, coerce_numeric: bool) -> Optional[Q
     """
     for op in ['>=', '<=', '!=', '~=', '!~']:
         if op in part:
-            field, value = part.split(op, 1)
+            field, value_str = part.split(op, 1)
             field = field.strip()
-            value = value.strip()
+            value_str = value_str.strip()
 
+            value: Union[bool, int, float, str]
             if coerce_numeric and op not in ('~=', '!~'):
-                value = coerce_value(value)
+                value = coerce_value(value_str)
+            else:
+                value = value_str
 
             return QueryFilter(field, op, value)
     return None
@@ -176,10 +178,13 @@ def _try_parse_single_char_operators(part: str, coerce_numeric: bool) -> Optiona
                     return special_filter
 
             # Normal operator handling
+            final_value: Union[bool, int, float, str]
             if coerce_numeric:
-                value = coerce_value(value)
+                final_value = coerce_value(value)
+            else:
+                final_value = value
 
-            return QueryFilter(field, op, value)
+            return QueryFilter(field, op, final_value)
     return None
 
 
@@ -715,7 +720,7 @@ def _truncate_string_values(items: List[Dict[str, Any]], max_length: int) -> Lis
     """
     result = []
     for item in items:
-        truncated_item = {}
+        truncated_item: Dict[str, Any] = {}
         for key, value in item.items():
             if isinstance(value, str) and len(value) > max_length:
                 truncated_item[key] = value[:max_length] + '...'
@@ -744,7 +749,7 @@ def _truncate_dict_strings(d: Dict[str, Any], max_length: int) -> Dict[str, Any]
     Returns:
         Dictionary with truncated strings
     """
-    result = {}
+    result: Dict[str, Any] = {}
     for key, value in d.items():
         if isinstance(value, str) and len(value) > max_length:
             result[key] = value[:max_length] + '...'

@@ -45,7 +45,7 @@ class V004(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for missing test files."""
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Only run for reveal:// URIs
         if not file_path.startswith('reveal://'):
