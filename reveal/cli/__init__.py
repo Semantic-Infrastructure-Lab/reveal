@@ -30,6 +30,12 @@ from .handlers import (
     handle_decorator_stats,
 )
 
+from .handlers_scaffold import (
+    handle_scaffold_adapter,
+    handle_scaffold_analyzer,
+    handle_scaffold_rule,
+)
+
 from .routing import (
     handle_uri,
     handle_adapter,
@@ -58,6 +64,10 @@ __all__ = [
     'handle_list_schemas',
     'handle_stdin_mode',
     'handle_decorator_stats',
+    # Scaffolding
+    'handle_scaffold_adapter',
+    'handle_scaffold_analyzer',
+    'handle_scaffold_rule',
     # Routing
     'handle_uri',
     'handle_adapter',

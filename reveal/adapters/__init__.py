@@ -13,6 +13,7 @@ from .base import (
 from .env import EnvAdapter
 from .ast import AstAdapter
 from .claude import ClaudeAdapter
+from .demo import DemoAdapter
 from .diff import DiffAdapter
 from .domain import DomainAdapter
 from .help import HelpAdapter
