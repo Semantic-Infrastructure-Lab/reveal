@@ -20,27 +20,27 @@ import sys
 import logging
 import json
 import re
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, cast
 from dataclasses import dataclass
 import fnmatch
 
 try:
     import yaml
 except ImportError:
-    yaml = None
+    yaml = None  # type: ignore[assignment]
 
 try:
-    import tomllib  # Python 3.11+
+    import tomllib  # type: ignore[import-not-found]  # Python 3.11+
 except ImportError:
     try:
         import tomli as tomllib  # Backport
     except ImportError:
-        tomllib = None
+        tomllib = None  # type: ignore[assignment,unused-ignore]
 
 try:
-    import jsonschema
+    import jsonschema  # type: ignore[import-untyped]
 except ImportError:
-    jsonschema = None
+    jsonschema = None  # type: ignore[assignment,unused-ignore]
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +258,7 @@ class RevealConfig:
     """Unified configuration manager with multi-level precedence."""
 
     # Class-level cache: project_root -> config instance
-    _cache: Dict[Path, 'RevealConfig'] = {}
+    _cache: Dict[Any, 'RevealConfig'] = {}  # Cache key is tuple[Path, str]
 
     def __init__(self, merged_config: Dict[str, Any], project_root: Optional[Path] = None):
         """Initialize with merged configuration.
@@ -421,7 +421,7 @@ class RevealConfig:
             configs.append(cli_overrides)
 
         # Merge all configs (later configs override earlier)
-        merged = {}
+        merged: Dict[str, Any] = {}
         for config in configs:
             merged = deep_merge(merged, config)
 
@@ -495,7 +495,7 @@ class RevealConfig:
                         logger.warning(f"Invalid config in {path}: {e.message}")
                         # Continue anyway (don't fail on validation)
 
-                return config
+                return cast(Dict[str, Any], config)
             else:
                 logger.warning(f"PyYAML not installed, cannot load {path}")
                 return None
@@ -680,7 +680,7 @@ class RevealConfig:
             List of layer definitions
         """
         arch = self._config.get('architecture', {})
-        return arch.get('layers', [])
+        return cast(List[Dict[str, Any]], arch.get('layers', []))
 
     def get_adapter_config(self, adapter_name: str, section: Optional[str] = None) -> Dict[str, Any]:
         """Get adapter-specific configuration.
@@ -696,8 +696,8 @@ class RevealConfig:
         adapter_config = adapters.get(adapter_name, {})
 
         if section:
-            return adapter_config.get(section, {})
-        return adapter_config
+            return cast(Dict[str, Any], adapter_config.get(section, {}))
+        return cast(Dict[str, Any], adapter_config)
 
     def get_plugin_config(self, plugin_name: str) -> Dict[str, Any]:
         """Get plugin-specific configuration (namespace isolated).
@@ -709,7 +709,7 @@ class RevealConfig:
             Plugin configuration dict
         """
         plugins = self._config.get('plugins', {})
-        return plugins.get(plugin_name, {})
+        return cast(Dict[str, Any], plugins.get(plugin_name, {}))
 
     def dump(self) -> str:
         """Dump merged configuration as YAML for debugging.
@@ -767,7 +767,7 @@ class RevealConfig:
 
         # Explicit config always wins
         if 'breadcrumbs' in display_config:
-            return display_config['breadcrumbs']
+            return cast(bool, display_config['breadcrumbs'])
 
         # TTY detection: suppress breadcrumbs when output is piped
         if not sys.stdout.isatty():
@@ -864,7 +864,7 @@ def load_config(name: str, default: Optional[Dict[str, Any]] = None) -> Dict[str
                 with open(path) as f:
                     loaded = yaml.safe_load(f)
                     if loaded is not None:
-                        return loaded
+                        return cast(Dict[str, Any], loaded)
             except Exception:
                 continue
 
@@ -935,7 +935,7 @@ def disable_breadcrumbs_permanently() -> bool:
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Load existing config or start fresh
-    config = {}
+    config: Dict[str, Any] = {}
     if config_path.exists():
         try:
             with open(config_path) as f:
