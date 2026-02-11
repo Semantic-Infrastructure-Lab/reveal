@@ -3,6 +3,10 @@
 import sys
 import os
 import logging
+import io
+from typing import Optional, Tuple, Any, List
+from collections.abc import Callable
+
 from .base import FileAnalyzer
 from .registry import get_all_analyzers
 from . import __version__
@@ -35,7 +39,7 @@ from .cli import (
 )
 
 
-def _handle_scaffold_command():
+def _handle_scaffold_command() -> bool:
     """Handle 'reveal scaffold' subcommands.
 
     Returns:
@@ -89,7 +93,7 @@ def _handle_scaffold_command():
     return True
 
 
-def _setup_windows_console():
+def _setup_windows_console() -> None:
     """Configure Windows console for UTF-8/emoji support."""
     if sys.platform != 'win32':
         return
@@ -101,14 +105,13 @@ def _setup_windows_console():
         sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 
-def _setup_copy_mode():
+def _setup_copy_mode() -> Optional[Tuple[Any, io.StringIO, Any]]:
     """Setup output capture for copy mode.
 
     Returns:
-        tuple: (tee_writer, captured_output, original_stdout) or None if not copy mode
+        Optional[Tuple[Any, io.StringIO, Any]]: (tee_writer, captured_output, original_stdout)
+            or None if not copy mode
     """
-    import io
-
     copy_mode = '--copy' in sys.argv or '-c' in sys.argv
     if not copy_mode:
         return None
@@ -118,25 +121,30 @@ def _setup_copy_mode():
 
     class TeeWriter:
         """Write to both original stdout and capture buffer."""
-        def __init__(self, original, capture):
+        def __init__(self, original: Any, capture: io.StringIO) -> None:
             self.original = original
             self.capture = capture
 
-        def write(self, data):
+        def write(self, data: str) -> None:
             self.original.write(data)
             self.capture.write(data)
 
-        def flush(self):
+        def flush(self) -> None:
             self.original.flush()
 
-        def __getattr__(self, name):
+        def __getattr__(self, name: str) -> Any:
             return getattr(self.original, name)
 
     return TeeWriter(original_stdout, captured_output), captured_output, original_stdout
 
 
-def _handle_clipboard_copy(captured_output, original_stdout):
-    """Handle clipboard copy after command execution."""
+def _handle_clipboard_copy(captured_output: io.StringIO, original_stdout: Any) -> None:
+    """Handle clipboard copy after command execution.
+
+    Args:
+        captured_output: StringIO buffer containing captured stdout
+        original_stdout: Original stdout stream
+    """
     sys.stdout = original_stdout
     output_text = captured_output.getvalue()
     if not output_text:
@@ -150,7 +158,7 @@ def _handle_clipboard_copy(captured_output, original_stdout):
         print("   Install xclip, xsel (Linux), or use pbcopy (macOS)", file=sys.stderr)
 
 
-def main():
+def main() -> None:
     """Main CLI entry point."""
     _setup_windows_console()
 
@@ -177,8 +185,11 @@ def main():
             _handle_clipboard_copy(captured_output, original_stdout)
 
 
-def _handle_special_modes(args):
+def _handle_special_modes(args: Any) -> bool:
     """Handle special CLI modes that exit early.
+
+    Args:
+        args: Parsed command-line arguments
 
     Returns:
         bool: True if a special mode was handled (caller should exit)
@@ -262,7 +273,7 @@ def _handle_at_file(file_path: str, args):
     sys.exit(0)
 
 
-def _main_impl():
+def _main_impl() -> None:
     """Main CLI implementation."""
     # Parse and validate arguments
     parser = create_argument_parser(__version__)
@@ -293,7 +304,7 @@ def _main_impl():
         handle_file_or_directory(args.path, args)
 
 
-def _get_tree_sitter_fallbacks(registered_analyzers):
+def _get_tree_sitter_fallbacks(registered_analyzers: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Probe tree-sitter for additional language support.
 
     Args:
@@ -344,8 +355,12 @@ def _get_tree_sitter_fallbacks(registered_analyzers):
     return available_fallbacks
 
 
-def _print_fallback_languages(fallbacks):
-    """Print tree-sitter fallback languages."""
+def _print_fallback_languages(fallbacks: List[Tuple[str, str]]) -> None:
+    """Print tree-sitter fallback languages.
+
+    Args:
+        fallbacks: List of (display_name, extension) tuples
+    """
     if not fallbacks:
         return
 
@@ -357,7 +372,7 @@ def _print_fallback_languages(fallbacks):
     print("Note: Contributions for full analyzers welcome!")
 
 
-def list_supported_types():
+def list_supported_types() -> None:
     """List all supported file types."""
     analyzers = get_all_analyzers()
 
@@ -382,8 +397,13 @@ def list_supported_types():
     print("Help: reveal --help")
 
 
-def _format_detections_json(path, detections):
-    """Format detections as JSON."""
+def _format_detections_json(path: str, detections: List[Any]) -> None:
+    """Format detections as JSON.
+
+    Args:
+        path: File path
+        detections: List of Detection objects
+    """
     result = {
         'file': path,
         'detections': [d.to_dict() for d in detections],
@@ -392,14 +412,23 @@ def _format_detections_json(path, detections):
     print(safe_json_dumps(result))
 
 
-def _format_detections_grep(detections):
-    """Format detections as grep output."""
+def _format_detections_grep(detections: List[Any]) -> None:
+    """Format detections as grep output.
+
+    Args:
+        detections: List of Detection objects
+    """
     for d in detections:
         print(f"{d.file_path}:{d.line}:{d.column}:{d.rule_code}:{d.message}")
 
 
-def _format_detections_text(path, detections):
-    """Format detections as human-readable text."""
+def _format_detections_text(path: str, detections: List[Any]) -> None:
+    """Format detections as human-readable text.
+
+    Args:
+        path: File path
+        detections: List of Detection objects
+    """
     if not detections:
         print(f"{path}: ✅ No issues found")
         return
@@ -410,7 +439,13 @@ def _format_detections_text(path, detections):
         print()
 
 
-def run_pattern_detection(analyzer: FileAnalyzer, path: str, output_format: str, args, config=None):
+def run_pattern_detection(
+    analyzer: FileAnalyzer,
+    path: str,
+    output_format: str,
+    args: Any,
+    config: Optional[Any] = None
+) -> None:
     """Run pattern detection rules on a file.
 
     Args:
@@ -452,7 +487,13 @@ def run_pattern_detection(analyzer: FileAnalyzer, path: str, output_format: str,
                          detections=detections)
 
 
-def run_schema_validation(analyzer: FileAnalyzer, path: str, schema_name: str, output_format: str, args):
+def run_schema_validation(
+    analyzer: FileAnalyzer,
+    path: str,
+    schema_name: str,
+    output_format: str,
+    args: Any
+) -> None:
     """Run schema validation on front matter.
 
     Args:
