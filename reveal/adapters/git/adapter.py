@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, cast, Union
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.query import (
     parse_query_filters,
@@ -19,7 +19,7 @@ from ...utils.query import (
 
 # Check if pygit2 is available
 try:
-    import pygit2  # type: ignore[import]
+    import pygit2
     PYGIT2_AVAILABLE = True
 except ImportError:
     PYGIT2_AVAILABLE = False
@@ -402,7 +402,7 @@ class GitAdapter(ResourceAdapter):
         # Parse and initialize attributes
         self._parse_and_initialize_attributes(resource, ref, subpath, query)
 
-        self.repo = None
+        self.repo: Optional['pygit2.Repository'] = None
 
         # Parse query parameters
         result_control_parts, filter_parts = self._separate_query_parameters()
@@ -836,12 +836,13 @@ class GitAdapter(ResourceAdapter):
 
             # If it's a tag, peel to the commit
             while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-                obj = obj.peel(pygit2.Commit)
+                obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
 
             if isinstance(obj, pygit2.Commit):
+                commit_obj = cast('pygit2.Commit', obj)
                 # Get commit history from this point
                 limit = int(self.query.get('limit', 20))
-                commits = self._get_commit_history(repo, obj, limit=limit)
+                commits = self._get_commit_history(repo, commit_obj, limit=limit)
 
                 return {
                     'contract_version': '1.0',
@@ -849,7 +850,7 @@ class GitAdapter(ResourceAdapter):
                     'source': f"{repo.workdir or repo.path}@{self.ref}",
                     'source_type': 'directory',
                     'ref': self.ref,
-                    'commit': self._format_commit(obj, detailed=True),
+                    'commit': self._format_commit(commit_obj, detailed=True),
                     'history': commits,
                 }
             else:
@@ -864,19 +865,19 @@ class GitAdapter(ResourceAdapter):
             # Resolve the ref to a commit
             obj = repo.revparse_single(self.ref)
             while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-                obj = obj.peel(pygit2.Commit)
+                obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
 
             if not isinstance(obj, pygit2.Commit):
                 raise ValueError(f"Cannot resolve ref to commit: {self.ref}")
 
-            commit = obj
+            commit = cast('pygit2.Commit', obj)
 
             # Navigate to the file in the tree
             tree = commit.tree
             entry = tree[self.subpath]
 
             if entry.type_str == 'blob':
-                blob = repo[entry.id]
+                blob = cast('pygit2.Blob', repo[entry.id])
                 content = blob.data.decode('utf-8', errors='replace')
 
                 return {
@@ -906,10 +907,12 @@ class GitAdapter(ResourceAdapter):
             # Start from HEAD or specified ref
             obj = repo.revparse_single(self.ref)
             while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-                obj = obj.peel(pygit2.Commit)
+                obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
+
+            commit = cast('pygit2.Commit', obj)
 
             # Walk commit history
-            walker = repo.walk(obj.id, pygit2.GIT_SORT_TIME)
+            walker = repo.walk(commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
 
             for commit in walker:
                 # Check if this commit touched the file
@@ -950,9 +953,9 @@ class GitAdapter(ResourceAdapter):
             # Resolve ref to commit
             obj = repo.revparse_single(self.ref)
             while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-                obj = obj.peel(pygit2.Commit)
+                obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
 
-            commit = obj
+            commit = cast('pygit2.Commit', obj)
 
             # Get blame for the file
             blame = repo.blame(self.subpath, newest_commit=commit.id)
@@ -960,13 +963,16 @@ class GitAdapter(ResourceAdapter):
             # Get file contents to include with blame
             tree = commit.tree
             entry = tree[self.subpath]
-            blob = repo[entry.id]
+            blob = cast('pygit2.Blob', repo[entry.id])
             lines = blob.data.decode('utf-8', errors='replace').splitlines()
 
             # Format blame hunks
-            hunks = []
+            hunks: List[Dict[str, Any]] = []
             for hunk in blame:
-                commit_obj = repo[hunk.final_commit_id]
+                commit_obj = cast('pygit2.Commit', repo[hunk.final_commit_id])
+                committer = hunk.final_committer
+                if not committer:
+                    continue
                 hunks.append({
                     'lines': {
                         'start': hunk.final_start_line_number,
@@ -974,9 +980,9 @@ class GitAdapter(ResourceAdapter):
                     },
                     'commit': {
                         'hash': str(hunk.final_commit_id)[:7],
-                        'author': hunk.final_committer.name,
-                        'email': hunk.final_committer.email,
-                        'date': datetime.fromtimestamp(hunk.final_committer.time).strftime('%Y-%m-%d %H:%M:%S'),
+                        'author': committer.name,
+                        'email': committer.email,
+                        'date': datetime.fromtimestamp(committer.time).strftime('%Y-%m-%d %H:%M:%S'),
                         'message': commit_obj.message.split('\n')[0],
                     },
                 })
@@ -994,14 +1000,14 @@ class GitAdapter(ResourceAdapter):
                         'line_end': element_range['line_end'],
                     }
                     # Filter hunks to only those within the element's range
-                    filtered_hunks = []
-                    for hunk in hunks:
-                        hunk_start = hunk['lines']['start']
-                        hunk_end = hunk_start + hunk['lines']['count'] - 1
+                    filtered_hunks: List[Dict[str, Any]] = []
+                    for hunk_dict in hunks:
+                        hunk_start = hunk_dict['lines']['start']
+                        hunk_end = hunk_start + hunk_dict['lines']['count'] - 1
                         # Check if hunk overlaps with element range
                         if (hunk_start <= element_range['line_end'] and
                             hunk_end >= element_range['line']):
-                            filtered_hunks.append(hunk)
+                            filtered_hunks.append(hunk_dict)
                     hunks = filtered_hunks
                 else:
                     # Element was requested but not found - inform user
@@ -1133,7 +1139,7 @@ class GitAdapter(ResourceAdapter):
                     if not branch or not branch.target:
                         continue
 
-                    commit = repo[branch.target]
+                    commit = cast('pygit2.Commit', repo[branch.target])
                     branches.append({
                         'name': branch_name,
                         'commit': str(commit.id)[:7],
@@ -1147,7 +1153,7 @@ class GitAdapter(ResourceAdapter):
         except Exception:
             pass
 
-        return sorted(branches, key=lambda b: b.get('timestamp', 0), reverse=True)[:limit]
+        return sorted(branches, key=lambda b: cast(int, b.get('timestamp', 0)), reverse=True)[:limit]
 
     def _list_tags(self, repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, Any]]:
         """List repository tags."""
@@ -1168,32 +1174,33 @@ class GitAdapter(ResourceAdapter):
 
                     # Peel to commit
                     while hasattr(target, 'peel') and not isinstance(target, pygit2.Commit):
-                        target = target.peel(pygit2.Commit)
+                        target = target.peel(pygit2.Commit)  # type: ignore[assignment]
 
                     if isinstance(target, pygit2.Commit):
+                        commit_target = cast('pygit2.Commit', target)
                         tags.append({
                             'name': tag_name,
-                            'commit': str(target.id)[:7],
-                            'message': target.message.split('\n')[0][:80],
-                            'date': datetime.fromtimestamp(target.commit_time).strftime('%Y-%m-%d'),
-                            'timestamp': target.commit_time,
+                            'commit': str(commit_target.id)[:7],
+                            'message': commit_target.message.split('\n')[0][:80],
+                            'date': datetime.fromtimestamp(commit_target.commit_time).strftime('%Y-%m-%d'),
+                            'timestamp': commit_target.commit_time,
                         })
                 except (KeyError, pygit2.GitError, AttributeError):
                     continue
         except Exception:
             pass
 
-        return sorted(tags, key=lambda t: t.get('timestamp', 0), reverse=True)[:limit]
+        return sorted(tags, key=lambda t: cast(int, t.get('timestamp', 0)), reverse=True)[:limit]
 
     def _get_recent_commits(self, repo: 'pygit2.Repository', limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent commits from HEAD."""
-        commits = []
+        commits: List[Dict[str, Any]] = []
 
         try:
             if repo.is_empty:
                 return commits
 
-            walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)
+            walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
 
             for commit in walker:
                 commit_dict = self._format_commit(commit)
@@ -1219,7 +1226,7 @@ class GitAdapter(ResourceAdapter):
         commits = []
 
         try:
-            walker = repo.walk(start_commit.id, pygit2.GIT_SORT_TIME)
+            walker = repo.walk(start_commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
 
             for commit in walker:
                 commit_dict = self._format_commit(commit)
@@ -1239,7 +1246,7 @@ class GitAdapter(ResourceAdapter):
 
         return commits
 
-    def _compare(self, field_value: Any, operator: str, target_value: str) -> bool:
+    def _compare(self, field_value: Any, operator: str, target_value: Union[bool, int, float, str]) -> bool:
         """Compare field value against target using operator.
 
         Uses unified compare_values() from query.py to eliminate duplication.
