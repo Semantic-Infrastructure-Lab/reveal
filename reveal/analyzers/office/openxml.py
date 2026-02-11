@@ -11,6 +11,7 @@ All are ZIP archives containing XML files following the ECMA-376 standard.
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, List, Optional
 from ...registry import register
+from ...utils import format_size
 from .base import ZipXMLAnalyzer
 
 
@@ -64,8 +65,8 @@ class DocxAnalyzer(ZipXMLAnalyzer):
         # Remove None values
         self.metadata = {k: v for k, v in self.metadata.items() if v}
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract document structure: headings, paragraphs, tables."""
         if self.parse_error:
             return {'error': [{'message': self.parse_error}]}
@@ -134,7 +135,7 @@ class DocxAnalyzer(ZipXMLAnalyzer):
         media = self._get_embedded_media()
         if media:
             result['media'] = [{
-                'name': f"{m['name']} ({m['type']}, {self._format_size(m['size'])})",
+                'name': f"{m['name']} ({m['type']}, {format_size(m['size'])})",
                 'line': idx + 1,
             } for idx, m in enumerate(media)]
 
@@ -269,8 +270,8 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
         }
         self.metadata = {k: v for k, v in self.metadata.items() if v}
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract spreadsheet structure: sheets, dimensions, formulas."""
         if self.parse_error:
             return {'error': [{'message': self.parse_error}]}
@@ -452,8 +453,8 @@ class PptxAnalyzer(ZipXMLAnalyzer):
         }
         self.metadata = {k: v for k, v in self.metadata.items() if v}
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract presentation structure: slides with titles."""
         if self.parse_error:
             return {'error': [{'message': self.parse_error}]}
@@ -485,7 +486,7 @@ class PptxAnalyzer(ZipXMLAnalyzer):
         media = self._get_embedded_media()
         if media:
             result['media'] = [{
-                'name': f"{m['name']} ({m['type']}, {self._format_size(m['size'])})",
+                'name': f"{m['name']} ({m['type']}, {format_size(m['size'])})",
                 'line': idx + 1,
             } for idx, m in enumerate(media)]
 

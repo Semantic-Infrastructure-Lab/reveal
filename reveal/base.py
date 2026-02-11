@@ -90,8 +90,8 @@ class FileAnalyzer(ABC):
         pass  # Abstract method - must be implemented by subclasses
 
     def _apply_semantic_slice(self, items: List[Dict[str, Any]],
-                              head: int = None, tail: int = None,
-                              range: tuple = None) -> List[Dict[str, Any]]:
+                              head: Optional[int] = None, tail: Optional[int] = None,
+                              range: Optional[tuple] = None) -> List[Dict[str, Any]]:
         """Apply head/tail/range slicing to a list of semantic units.
 
         Args:
