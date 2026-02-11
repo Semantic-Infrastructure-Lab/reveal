@@ -10,27 +10,32 @@ from ..treesitter import TreeSitterAnalyzer
 class {class_name}Analyzer(TreeSitterAnalyzer):
     """{display_name} file analyzer.
 
-    Full {display_name} support via tree-sitter!
+    {display_name} support via tree-sitter!
 
-    Automatically extracts:
-    - Functions/methods
-    - Classes/structs
-    - Imports/modules
-    - Comments and docstrings
+    NOTE: TreeSitterAnalyzer uses generic extraction methods that may not
+    work for all languages out-of-the-box. If structure extraction returns
+    empty, you'll need to override extraction methods to match your language's
+    specific node types.
 
-    NOTE: This assumes tree-sitter-{language} is available.
-    Install it with: pip install tree-sitter-{language}
+    Prerequisites:
+    - tree-sitter-{language} must be installed: pip install tree-sitter-{language}
+    - If no tree-sitter grammar exists, use FileAnalyzer base class instead
 
-    If tree-sitter grammar doesn't exist, you'll need to:
-    1. Create a custom FileAnalyzer subclass instead
-    2. Implement get_structure() manually
-    3. See reveal/base.py for FileAnalyzer base class
+    See reveal/treesitter.py for extraction methods to override:
+    - _extract_functions()
+    - _extract_classes()
+    - _extract_imports()
+    - _extract_structs()
     """
     language = '{language}'
 
-    # Optional: Override these for custom behavior
-    # def get_structure(self):
-    #     structure = super().get_structure()
+    # Override these methods if generic extraction doesn't work:
+    # def _extract_functions(self):
+    #     # Custom function extraction for {display_name}
+    #     pass
+    #
+    # def get_structure(self, **kwargs):
+    #     structure = super().get_structure(**kwargs)
     #     # Add custom processing here
     #     return structure
 '''
@@ -56,7 +61,12 @@ class Test{class_name}AnalyzerStructure:
     """Test structure extraction."""
 
     def test_get_structure_sample_code(self, tmp_path):
-        """Test structure extraction on sample code."""
+        """Test structure extraction on sample code.
+
+        NOTE: TreeSitterAnalyzer's generic extraction may not work out-of-the-box
+        for all languages. If structure is empty, you may need to override
+        extraction methods to match language-specific node types.
+        """
         # TODO: Add sample {display_name} code for testing
         sample_code = """
         # Add sample {display_name} code here
@@ -66,12 +76,15 @@ class Test{class_name}AnalyzerStructure:
         test_file.write_text(sample_code)
 
         analyzer = {class_name}Analyzer(str(test_file))
-        structure = analyzer.get_structure()
 
-        # TODO: Add assertions based on expected structure
-        assert structure is not None
-        assert 'type' in structure
-        # assert structure['functions']  # Example assertion
+        # Verify analyzer initializes and parses correctly
+        assert analyzer is not None
+        assert analyzer.tree is not None, "Tree-sitter should parse code"
+
+        structure = analyzer.get_structure()
+        assert isinstance(structure, dict)
+        # TODO: Add specific assertions based on expected structure
+        # e.g., assert 'functions' in structure and len(structure['functions']) > 0
 
 
 class Test{class_name}AnalyzerRegistration:
@@ -79,10 +92,10 @@ class Test{class_name}AnalyzerRegistration:
 
     def test_analyzer_registered(self):
         """Test analyzer is registered for {extension} files."""
-        from reveal.registry import get_analyzer_for_file
+        from reveal.registry import get_analyzer
 
-        test_path = f"test{extension}"
-        analyzer_class = get_analyzer_for_file(test_path)
+        test_path = "test{extension}"
+        analyzer_class = get_analyzer(test_path)
 
         assert analyzer_class == {class_name}Analyzer
 '''

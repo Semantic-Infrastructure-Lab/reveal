@@ -46,6 +46,9 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
         # Find which ones have @register_adapter
         registered_in_code = set()
         for adapter_file in adapter_files:
+            # Skip test-only adapters not imported in __init__.py
+            if adapter_file.name == 'test.py':
+                continue
             content = adapter_file.read_text()
             # Look for @register_adapter('scheme')
             matches = re.findall(r'@register_adapter\([\'"](\w+)[\'"]\)', content)
@@ -78,8 +81,8 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
         # This is the expected count based on current adapters
         # Update this when you add new adapters
         expected_adapters = {
-            'ast', 'claude', 'diff', 'domain', 'env', 'git', 'help', 'imports', 'json',
-            'markdown', 'mysql', 'python', 'reveal', 'sqlite', 'ssl', 'stats'
+            'ast', 'claude', 'demo', 'diff', 'domain', 'env', 'git', 'help', 'imports',
+            'json', 'markdown', 'mysql', 'python', 'reveal', 'sqlite', 'ssl', 'stats'
         }
 
         actually_registered = set(list_supported_schemes())
