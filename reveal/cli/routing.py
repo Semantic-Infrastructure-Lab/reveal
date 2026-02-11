@@ -11,7 +11,7 @@ All URI adapters now use the renderer-based system (Phase 4 complete).
 import re
 import sys
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -60,7 +60,7 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
     handle_adapter(adapter_class, scheme, resource, element, args)
 
 
-def generic_adapter_handler(adapter_class: type, renderer_class: type,
+def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
                            scheme: str, resource: str, element: Optional[str],
                            args: 'Namespace') -> None:
     """Generic handler for adapters with registered renderers.
@@ -88,7 +88,7 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type,
     _handle_rendering(adapter, renderer_class, scheme, resource, element, args)
 
 
-def _try_no_args_init(adapter_class: type) -> tuple[any, Optional[Exception]]:
+def _try_no_args_init(adapter_class: type) -> tuple[Any, Optional[Exception]]:
     """Try no-argument initialization (env, python adapters)."""
     try:
         return adapter_class(), None
@@ -98,7 +98,7 @@ def _try_no_args_init(adapter_class: type) -> tuple[any, Optional[Exception]]:
         return None, e
 
 
-def _try_query_parsing_init(adapter_class: type, resource: str) -> tuple[any, Optional[Exception]]:
+def _try_query_parsing_init(adapter_class: type, resource: str) -> tuple[Any, Optional[Exception]]:
     """Try query-parsing initialization (ast, json with ?query)."""
     if '?' not in resource:
         return None, None
@@ -113,7 +113,7 @@ def _try_query_parsing_init(adapter_class: type, resource: str) -> tuple[any, Op
         return None, e
 
 
-def _try_keyword_args_init(adapter_class: type, resource: str) -> tuple[any, Optional[Exception]]:
+def _try_keyword_args_init(adapter_class: type, resource: str) -> tuple[Any, Optional[Exception]]:
     """Try keyword arguments initialization (markdown with base_path/query)."""
     try:
         if '?' in resource:
@@ -129,7 +129,7 @@ def _try_keyword_args_init(adapter_class: type, resource: str) -> tuple[any, Opt
         return None, e
 
 
-def _try_resource_arg_init(adapter_class: type, resource: str) -> tuple[any, Optional[Exception]]:
+def _try_resource_arg_init(adapter_class: type, resource: str) -> tuple[Any, Optional[Exception]]:
     """Try resource argument initialization (help, git, etc)."""
     if resource is None:
         return None, None
@@ -154,7 +154,7 @@ def _try_resource_arg_init(adapter_class: type, resource: str) -> tuple[any, Opt
 
 
 def _try_full_uri_init(adapter_class: type, scheme: str, resource: str,
-                       element: Optional[str]) -> tuple[any, Optional[Exception]]:
+                       element: Optional[str]) -> tuple[Any, Optional[Exception]]:
     """Try full URI initialization (mysql, sqlite)."""
     try:
         full_uri = f"{scheme}://{resource}"
@@ -168,7 +168,7 @@ def _try_full_uri_init(adapter_class: type, scheme: str, resource: str,
 
 
 def _try_initialize_adapter(adapter_class: type, scheme: str, resource: str,
-                            element: Optional[str], renderer_class: type):
+                            element: Optional[str], renderer_class: type[Any]):
     """Try multiple initialization patterns to instantiate adapter.
 
     Different adapters have different conventions:
@@ -256,7 +256,7 @@ def _build_check_kwargs(adapter, args: 'Namespace') -> dict:
     return kwargs
 
 
-def _build_render_opts(renderer_class: type, args: 'Namespace') -> dict:
+def _build_render_opts(renderer_class: type[Any], args: 'Namespace') -> dict:
     """Build render options by inspecting renderer signature.
 
     Args:
@@ -284,7 +284,7 @@ def _build_render_opts(renderer_class: type, args: 'Namespace') -> dict:
     return opts
 
 
-def _handle_check_mode(adapter, renderer_class: type, args: 'Namespace') -> None:
+def _handle_check_mode(adapter, renderer_class: type[Any], args: 'Namespace') -> None:
     """Execute check mode and exit.
 
     Args:
@@ -314,7 +314,7 @@ def _handle_check_mode(adapter, renderer_class: type, args: 'Namespace') -> None
     sys.exit(exit_code)
 
 
-def _handle_rendering(adapter, renderer_class: type, scheme: str,
+def _handle_rendering(adapter, renderer_class: type[Any], scheme: str,
                       resource: str, element: Optional[str], args: 'Namespace') -> None:
     """Render element or structure based on adapter capabilities.
 
@@ -344,7 +344,7 @@ def _handle_rendering(adapter, renderer_class: type, scheme: str,
         _render_structure(adapter, renderer_class, args, scheme=scheme, resource=resource)
 
 
-def _render_element(adapter, renderer_class: type, element: Optional[str],
+def _render_element(adapter, renderer_class: type[Any], element: Optional[str],
                     resource: str, args: 'Namespace') -> None:
     """Render a specific element from adapter.
 
@@ -369,7 +369,7 @@ def _render_element(adapter, renderer_class: type, element: Optional[str],
     renderer_class.render_element(result, args.format)
 
 
-def _build_adapter_kwargs(adapter, args: 'Namespace', scheme: str = None, resource: str = None) -> dict:
+def _build_adapter_kwargs(adapter, args: 'Namespace', scheme: Optional[str] = None, resource: Optional[str] = None) -> dict:
     """Build kwargs for adapter.get_structure() by inspecting signature.
 
     Args:
@@ -459,8 +459,8 @@ def _apply_budget_constraints(result: dict, args: 'Namespace') -> dict:
     return result
 
 
-def _render_structure(adapter, renderer_class: type, args: 'Namespace',
-                      scheme: str = None, resource: str = None) -> None:
+def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
+                      scheme: Optional[str] = None, resource: Optional[str] = None) -> None:
     """Render full structure from adapter.
 
     Args:
