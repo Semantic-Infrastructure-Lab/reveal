@@ -133,6 +133,13 @@ class RulePrefix(Enum):
     V = "V"  # Reveal internal validation rules
     # V001-V011: Completeness and consistency checks
 
+    # Type annotations (T) - type hint enforcement
+    T = "T"  # Type annotation rules (PEP 484, mypy compliance)
+    # T001: Missing return type annotations
+    # T002: Missing parameter type annotations
+    # T003: Overuse of Any type
+    # T004: Implicit Optional (PEP 484 violation)
+
 
 @dataclass
 class Detection:
@@ -401,3 +408,4 @@ class BaseRule(ABC):
     def set_current_file(self, file_path: str):
         """Set the current file being checked (called by registry)."""
         self._current_file = file_path
+T = 'T'
