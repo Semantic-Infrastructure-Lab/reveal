@@ -17,7 +17,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 try:
-    import tomllib
+    import tomllib  # type: ignore[import-not-found]
 except ImportError:
     import tomli as tomllib  # Python < 3.11 fallback
 
@@ -57,7 +57,7 @@ class M103(BaseRule):
         Returns:
             List of detections for version mismatches
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
         path = Path(file_path)
 
         # Only check __init__.py files
@@ -146,12 +146,12 @@ class M103(BaseRule):
             # Check [project] section (PEP 621)
             version = data.get('project', {}).get('version')
             if version:
-                return version
+                return str(version)
 
             # Check [tool.poetry] section (Poetry)
             version = data.get('tool', {}).get('poetry', {}).get('version')
             if version:
-                return version
+                return str(version)
 
             # Fallback: regex for version = "X.Y.Z"
             match = re.search(
