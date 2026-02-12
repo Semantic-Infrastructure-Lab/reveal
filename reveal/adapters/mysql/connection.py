@@ -1,7 +1,7 @@
 """MySQL connection management and credential resolution."""
 
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, cast
 
 try:
     import pymysql
@@ -36,12 +36,12 @@ class MySQLConnection:
             )
 
         self.connection_string = connection_string
-        self.host = None
-        self.port = None  # Don't default to 3306 - let pymysql read from .my.cnf
-        self.user = None
-        self.password = None
-        self.database = None
-        self.element = None
+        self.host: Optional[str] = None
+        self.port: Optional[int] = None  # Don't default to 3306 - let pymysql read from .my.cnf
+        self.user: Optional[str] = None
+        self.password: Optional[str] = None
+        self.database: Optional[str] = None
+        self.element: Optional[str] = None
         self._parse_connection_string(connection_string)
         self._resolve_credentials()
         self._connection = None
@@ -102,7 +102,8 @@ class MySQLConnection:
 
         # Try environment variables (but don't apply defaults yet)
         self.host = self.host or os.environ.get('MYSQL_HOST')
-        self.port = self.port or (int(os.environ.get('MYSQL_PORT')) if os.environ.get('MYSQL_PORT') else None)
+        port_env = os.environ.get('MYSQL_PORT')
+        self.port = self.port or (int(port_env) if port_env else None)
         self.user = self.user or os.environ.get('MYSQL_USER')
         self.password = self.password or os.environ.get('MYSQL_PASSWORD')
         self.database = self.database or os.environ.get('MYSQL_DATABASE')
@@ -120,7 +121,7 @@ class MySQLConnection:
             return self._connection
 
         # Always pass read_default_file so pymysql can read ~/.my.cnf
-        connection_params = {
+        connection_params: Dict[str, Any] = {
             'read_default_file': os.path.expanduser('~/.my.cnf'),
         }
 
@@ -129,7 +130,7 @@ class MySQLConnection:
         # If we don't pass them, pymysql reads from .my.cnf then defaults to localhost:3306
         if self.host:
             connection_params['host'] = self.host
-        if self.port:
+        if self.port is not None:
             connection_params['port'] = self.port
         if self.user:
             connection_params['user'] = self.user
@@ -153,7 +154,7 @@ class MySQLConnection:
                 f"Hint: Set MYSQL_* env vars or configure ~/.my.cnf"
             )
 
-    def convert_decimals(self, obj):
+    def convert_decimals(self, obj) -> Any:
         """Convert Decimal, datetime, and bytes objects for JSON serialization."""
         from decimal import Decimal
         from datetime import datetime, date, time, timedelta
@@ -174,7 +175,7 @@ class MySQLConnection:
             return [self.convert_decimals(item) for item in obj]
         return obj
 
-    def execute_query(self, query: str) -> list:
+    def execute_query(self, query: str) -> list[Any]:
         """Execute a SQL query and return results.
 
         Args:
@@ -188,7 +189,7 @@ class MySQLConnection:
         with conn.cursor(cursor_class) as cursor:
             cursor.execute(query)
             results = cursor.fetchall()
-            return self.convert_decimals(results)
+            return cast(list[Any], self.convert_decimals(results))
 
     def execute_single(self, query: str) -> Optional[Dict[str, Any]]:
         """Execute query and return first row.
@@ -219,6 +220,7 @@ class MySQLConnection:
 
         # Get MySQL's current timestamp (not local machine time)
         mysql_time = self.execute_single("SELECT UNIX_TIMESTAMP() as timestamp")
+        assert mysql_time is not None, "Failed to get MySQL timestamp"
         snapshot_timestamp = int(mysql_time['timestamp'])
         snapshot_time = datetime.fromtimestamp(snapshot_timestamp, timezone.utc)
 
@@ -260,6 +262,7 @@ class MySQLConnection:
             ps_status = self.execute_single(
                 "SELECT @@global.performance_schema as enabled"
             )
+            assert ps_status is not None, "Failed to query performance_schema status"
             ps_enabled = bool(ps_status['enabled'])
         except Exception:
             # If query fails, assume disabled
