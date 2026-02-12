@@ -289,9 +289,11 @@ class TestRevealAdapterElementExtraction:
         args = Namespace(format='text')
 
         # Extract a function from L001 rule
-        result = adapter.get_element('rules/links/L001.py', '_extract_anchors_from_markdown', args)
+        result = adapter.get_element('_extract_anchors_from_markdown',
+                                     resource='rules/links/L001.py',
+                                     args=args)
 
-        assert result is True
+        assert result == {'success': True}
         captured = capsys.readouterr()
         assert '_extract_anchors_from_markdown' in captured.out
         assert 'def _extract_anchors_from_markdown' in captured.out
@@ -303,9 +305,11 @@ class TestRevealAdapterElementExtraction:
         args = Namespace(format='text')
 
         # Extract MarkdownAnalyzer class
-        result = adapter.get_element('analyzers/markdown.py', 'MarkdownAnalyzer', args)
+        result = adapter.get_element('MarkdownAnalyzer',
+                                     resource='analyzers/markdown.py',
+                                     args=args)
 
-        assert result is True
+        assert result == {'success': True}
         captured = capsys.readouterr()
         assert 'MarkdownAnalyzer' in captured.out
         assert 'class MarkdownAnalyzer' in captured.out
@@ -316,7 +320,9 @@ class TestRevealAdapterElementExtraction:
         adapter = RevealAdapter()
         args = Namespace(format='text')
 
-        result = adapter.get_element('nonexistent/file.py', 'SomeElement', args)
+        result = adapter.get_element('SomeElement',
+                                     resource='nonexistent/file.py',
+                                     args=args)
 
         assert result is None
 
@@ -327,9 +333,11 @@ class TestRevealAdapterElementExtraction:
         args = Namespace(format='text')
 
         # Extract get_element method from RevealAdapter
-        result = adapter.get_element('adapters/reveal.py', 'get_element', args)
+        result = adapter.get_element('get_element',
+                                     resource='adapters/reveal.py',
+                                     args=args)
 
-        assert result is True
+        assert result == {'success': True}
         captured = capsys.readouterr()
         assert 'get_element' in captured.out
         assert 'def get_element' in captured.out
