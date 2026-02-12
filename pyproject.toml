@@ -104,6 +104,11 @@ markers = [
     "integration: integration tests (subprocess-based, slower)",
     "slow: tests taking > 1s each",
 ]
+filterwarnings = [
+    # Ignore warning about TestAdapter class in adapters/test.py having __init__
+    # This is not a test class, it's the test:// URI adapter implementation
+    "ignore:cannot collect test class 'TestAdapter' because it has a __init__ constructor:pytest.PytestCollectionWarning",
+]
 
 [tool.coverage.run]
 source = ["reveal"]

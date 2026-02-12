@@ -57,6 +57,10 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
         # Get actually registered schemes
         actually_registered = set(list_supported_schemes())
 
+        # Exclude 'test' adapter - it may be registered during test runs but is not a production adapter
+        # This prevents test pollution when test_test_adapter.py runs before these tests
+        actually_registered.discard('test')
+
         # They should match
         missing = registered_in_code - actually_registered
         extra = actually_registered - registered_in_code
@@ -76,8 +80,6 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
         Note: This test will fail if you add/remove adapters but don't update README.
         Run `reveal reveal:// --check` to validate documentation.
         """
-        actual_count = len(list_supported_schemes())
-
         # This is the expected count based on current adapters
         # Update this when you add new adapters
         expected_adapters = {
@@ -86,6 +88,10 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
         }
 
         actually_registered = set(list_supported_schemes())
+
+        # Exclude 'test' adapter - it may be registered during test runs but is not a production adapter
+        # This prevents test pollution when test_test_adapter.py runs before these tests
+        actually_registered.discard('test')
 
         self.assertEqual(
             actually_registered, expected_adapters,
@@ -129,6 +135,10 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
         """
         # Get all registered schemes
         registered_schemes = set(list_supported_schemes())
+
+        # Exclude 'test' adapter - it may be registered during test runs but is not a production adapter
+        # This prevents test pollution when test_test_adapter.py runs before these tests
+        registered_schemes.discard('test')
 
         # Read adapters/__init__.py
         init_file = Path(__file__).parent.parent / 'reveal' / 'adapters' / '__init__.py'
