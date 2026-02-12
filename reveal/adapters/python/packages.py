@@ -3,7 +3,7 @@
 from typing import Dict, Any, Iterator
 
 
-def get_packages() -> Iterator:
+def get_packages() -> Iterator[Any]:
     """Generator for installed packages.
 
     Yields:
@@ -20,7 +20,7 @@ def get_packages() -> Iterator:
         try:
             import pkg_resources
 
-            for dist in pkg_resources.working_set:
+            for dist in pkg_resources.working_set:  # type: ignore[assignment]
                 yield dist
         except ImportError:
             # No package metadata available
@@ -79,14 +79,14 @@ def get_package_details(package_name: str) -> Dict[str, Any]:
         metadata = dist.metadata
 
         return {
-            "name": metadata.get("Name"),
-            "version": metadata.get("Version"),
-            "summary": metadata.get("Summary"),
-            "author": metadata.get("Author"),
-            "license": metadata.get("License"),
+            "name": metadata.get("Name"),  # type: ignore[attr-defined]
+            "version": metadata.get("Version"),  # type: ignore[attr-defined]
+            "summary": metadata.get("Summary"),  # type: ignore[attr-defined]
+            "author": metadata.get("Author"),  # type: ignore[attr-defined]
+            "license": metadata.get("License"),  # type: ignore[attr-defined]
             "location": str(dist._path.parent) if hasattr(dist, "_path") else "unknown",
-            "requires_python": metadata.get("Requires-Python"),
-            "homepage": metadata.get("Home-page"),
+            "requires_python": metadata.get("Requires-Python"),  # type: ignore[attr-defined]
+            "homepage": metadata.get("Home-page"),  # type: ignore[attr-defined]
             "dependencies": dist.requires or [],
         }
     except Exception:
@@ -94,25 +94,25 @@ def get_package_details(package_name: str) -> Dict[str, Any]:
         try:
             import pkg_resources
 
-            dist = pkg_resources.get_distribution(package_name)
+            dist = pkg_resources.get_distribution(package_name)  # type: ignore[assignment]
 
             details = {
-                "name": dist.project_name,
+                "name": dist.project_name,  # type: ignore[attr-defined]
                 "version": dist.version,
-                "location": dist.location,
+                "location": dist.location,  # type: ignore[attr-defined]
                 "requires_python": None,
                 "dependencies": [],
             }
 
             # Get requirements
             try:
-                details["dependencies"] = [str(req) for req in dist.requires()]
+                details["dependencies"] = [str(req) for req in dist.requires()]  # type: ignore[operator,misc]
             except Exception:
                 pass
 
             # Check if editable install
             try:
-                details["editable"] = dist.has_metadata("direct_url.json")
+                details["editable"] = dist.has_metadata("direct_url.json")  # type: ignore[attr-defined]
             except Exception:
                 details["editable"] = False
 
