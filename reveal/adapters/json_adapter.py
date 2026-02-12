@@ -4,7 +4,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, cast
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils.query import (
     parse_query_filters,
@@ -359,7 +359,7 @@ class JsonAdapter(ResourceAdapter):
             ]
         }
 
-    def __init__(self, path: str, query_string: str = None):
+    def __init__(self, path: str, query_string: Optional[str] = None):
         """Initialize JSON adapter.
 
         Args:
@@ -367,8 +367,8 @@ class JsonAdapter(ResourceAdapter):
             query_string: Query parameters (schema, gron, type, keys, length, or filters)
         """
         self.query_string = query_string
-        self.json_path = []
-        self.slice_spec = None
+        self.json_path: List[str | int] = []
+        self.slice_spec: Optional[tuple[Optional[int], Optional[int]]] = None
         self.query_filters = []
         self.result_control = ResultControl()
 
@@ -439,7 +439,7 @@ class JsonAdapter(ResourceAdapter):
             # Convert [n] to path component
             nav_path = nav_path[:index_match.start()]
             if nav_path:
-                self.json_path = nav_path.split('/')
+                self.json_path = cast(List[str | int], nav_path.split('/'))
             self.json_path.append(int(index_match.group(1)))
             return
 
@@ -509,7 +509,7 @@ class JsonAdapter(ResourceAdapter):
 
         return current
 
-    def _compare(self, field_value: Any, operator: str, target_value: str) -> bool:
+    def _compare(self, field_value: Any, operator: str, target_value: Any) -> bool:
         """Compare field value against target using operator.
 
         Uses unified compare_values() from query.py to eliminate duplication.
@@ -517,7 +517,7 @@ class JsonAdapter(ResourceAdapter):
         Args:
             field_value: Value from JSON object
             operator: Comparison operator (=, >, <, >=, <=, !=, ~=, ..)
-            target_value: Target value to compare against
+            target_value: Target value to compare against (can be bool, int, float, or str)
 
         Returns:
             True if comparison passes, False otherwise
@@ -576,7 +576,7 @@ class JsonAdapter(ResourceAdapter):
         Returns:
             Tuple of (controlled array, metadata dict)
         """
-        metadata = {}
+        metadata: Dict[str, Any] = {}
         total_matches = len(arr)
         controlled = arr
 
@@ -684,7 +684,7 @@ class JsonAdapter(ResourceAdapter):
     def _is_legacy_query(self) -> bool:
         """Check if query uses legacy mode."""
         legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
-        return self.query_string and self.query_string.lower() in legacy_modes
+        return bool(self.query_string and self.query_string.lower() in legacy_modes)
 
     def _validate_query_syntax(self) -> Optional[Dict[str, Any]]:
         """Validate query syntax, return error dict if invalid."""
@@ -717,7 +717,7 @@ class JsonAdapter(ResourceAdapter):
 
     def _process_value(self, value: Any):
         """Process value with filters and result control."""
-        metadata = {}
+        metadata: Dict[str, Any] = {}
 
         # Only process arrays with filters or result control
         if not isinstance(value, list):
@@ -766,6 +766,7 @@ class JsonAdapter(ResourceAdapter):
 
     def _handle_query(self, value: Any) -> Dict[str, Any]:
         """Handle query parameters like ?schema, ?gron, ?type."""
+        assert self.query_string is not None
         query = self.query_string.lower()
 
         if query == 'schema':
@@ -853,7 +854,7 @@ class JsonAdapter(ResourceAdapter):
 
     def _get_flatten(self, value: Any) -> Dict[str, Any]:
         """Generate flattened (gron-style) output for grep-able searching."""
-        lines = []
+        lines: List[str] = []
         self._flatten_recursive(value, 'json', lines)
         return {
             'contract_version': '1.0',
