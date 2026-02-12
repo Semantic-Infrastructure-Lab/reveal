@@ -41,7 +41,7 @@ class ClaudeAdapter(ResourceAdapter):
 
     CONVERSATION_BASE = Path.home() / '.claude' / 'projects'
 
-    def __init__(self, resource: str, query: str = None):
+    def __init__(self, resource: str, query: Optional[str] = None):
         """Initialize Claude adapter.
 
         Args:
@@ -57,10 +57,10 @@ class ClaudeAdapter(ResourceAdapter):
             raise TypeError(f"resource must be a string, got {type(resource).__name__}")
         self.resource = resource
         self.query = query
-        self.query_params = parse_query_params(query)
-        self.session_name = self._parse_session_name(resource)
+        self.query_params = parse_query_params(query or "")
+        self.session_name = self._parse_session_name(resource) or "unknown"
         self.conversation_path = self._find_conversation()
-        self.messages = None  # Lazy load
+        self.messages: Optional[List[Dict]] = None  # Lazy load
 
     def _get_contract_base(self) -> Dict[str, Any]:
         """Get Output Contract v1.0 base fields.
@@ -90,7 +90,7 @@ class ClaudeAdapter(ResourceAdapter):
         """
         if resource.startswith('session/'):
             parts = resource.split('/')
-            return parts[1] if len(parts) > 1 else None
+            return parts[1] if len(parts) > 1 else ""
         return resource
 
     def _find_conversation(self) -> Optional[Path]:
@@ -278,7 +278,7 @@ class ClaudeAdapter(ResourceAdapter):
         Returns:
             Dictionary with session list and usage help
         """
-        base = {
+        base: Dict[str, Any] = {
             'contract_version': '1.0',
             'type': 'claude_session_list',
             'source': str(self.CONVERSATION_BASE),
@@ -310,7 +310,7 @@ class ClaudeAdapter(ResourceAdapter):
                     })
 
             # Sort by modified time, most recent first
-            sessions.sort(key=lambda x: x['modified'], reverse=True)
+            sessions.sort(key=lambda x: x['modified'], reverse=True)  # type: ignore[arg-type, return-value]
 
         except Exception as e:
             base['error'] = str(e)
