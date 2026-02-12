@@ -133,7 +133,7 @@ class L005(BaseRule):
         Returns:
             List of (filename, reason) tuples
         """
-        suggestions = []
+        suggestions: List[tuple] = []
 
         # Find docs directory
         docs_dir = None

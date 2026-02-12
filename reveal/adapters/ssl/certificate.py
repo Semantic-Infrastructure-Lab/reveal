@@ -115,7 +115,7 @@ class SSLFetcher:
                 leaf = self._parse_certificate(cert)
 
                 # Try to get the certificate chain
-                chain = []
+                chain: List[Dict[str, Any]] = []
                 # Note: Python's ssl module doesn't easily expose the full chain
                 # We'd need PyOpenSSL for that. For now, just return the leaf.
 

@@ -357,7 +357,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             List of (field, operator, value) tuples
             Operators: '=' (match), '!' (missing), '*' (wildcard)
         """
-        filters = []
+        filters: List[tuple] = []
         if not query:
             return filters
 
