@@ -3,7 +3,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, cast
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
@@ -342,7 +342,7 @@ class StatsAdapter(ResourceAdapter):
             ]
         }
 
-    def __init__(self, path: str, query_string: str = None):
+    def __init__(self, path: str, query_string: Optional[str] = None):
         """Initialize stats adapter.
 
         Args:
@@ -354,7 +354,7 @@ class StatsAdapter(ResourceAdapter):
             raise FileNotFoundError(f"Path not found: {path}")
 
         # Parse query string with type coercion (for legacy params)
-        self.query_params = parse_query_params(query_string, coerce=True)
+        self.query_params = parse_query_params(query_string or '', coerce=True)
 
         # Parse result control (sort, limit, offset) - extract from query string
         filter_query, self.result_control = parse_result_control(query_string or '')
@@ -397,17 +397,20 @@ class StatsAdapter(ResourceAdapter):
             for path in config_paths:
                 if path.exists():
                     with open(path) as f:
-                        loaded = yaml.safe_load(f)
-                        if loaded:
+                        loaded_raw = yaml.safe_load(f)
+                        if loaded_raw and isinstance(loaded_raw, dict):
+                            loaded: Dict[str, Any] = loaded_raw
                             # Deep merge loaded config into defaults
                             for key in ['thresholds', 'penalties']:
-                                if key in loaded:
+                                if key in loaded and isinstance(loaded[key], dict) and isinstance(config[key], dict):
+                                    loaded_section = cast(Dict[str, Any], loaded[key])
+                                    config_section = cast(Dict[str, Any], config[key])
                                     if key == 'penalties':
-                                        for subkey in loaded[key]:
-                                            if subkey in config[key]:
-                                                config[key][subkey].update(loaded[key][subkey])
+                                        for subkey in loaded_section:
+                                            if subkey in config_section:
+                                                config_section[subkey].update(loaded_section[subkey])
                                     else:
-                                        config[key].update(loaded[key])
+                                        config_section.update(loaded_section)
                             break
         except ImportError:
             pass  # yaml not available, use defaults
@@ -446,10 +449,14 @@ class StatsAdapter(ResourceAdapter):
         if not self.result_control.sort_field:
             return list(file_stats)
 
+        # Type narrowing: sort_field is guaranteed non-None after the check above
+        sort_field = self.result_control.sort_field
+        assert sort_field is not None
+
         try:
             sorted_stats = list(file_stats)
             sorted_stats.sort(
-                key=lambda x: self._field_value(x, self.result_control.sort_field) or 0,
+                key=lambda x: self._field_value(x, sort_field) or 0,
                 reverse=self.result_control.sort_descending
             )
             return sorted_stats
@@ -511,13 +518,13 @@ class StatsAdapter(ResourceAdapter):
             return self._aggregate_stats([file_stats] if file_stats else [])
 
         # Collect filtered directory statistics
-        file_stats = self._collect_filtered_stats(
+        dir_file_stats = self._collect_filtered_stats(
             code_only, min_lines, max_lines, min_complexity, max_complexity, min_functions
         )
-        total_filtered = len(file_stats)
+        total_filtered = len(dir_file_stats)
 
         # Apply sorting and pagination
-        controlled_stats = self._apply_sorting(file_stats)
+        controlled_stats = self._apply_sorting(dir_file_stats)
         controlled_stats = self._apply_pagination(controlled_stats)
 
         # Aggregate and build result

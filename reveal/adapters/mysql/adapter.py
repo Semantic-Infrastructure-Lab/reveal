@@ -259,23 +259,23 @@ class MySQLAdapter(ResourceAdapter):
         """Delegate to health module."""
         return self.health.calculate_resource_limits(status_vars)
 
-    def _get_performance(self):
+    def _get_performance(self) -> Dict[str, Any]:
         """Delegate to performance module."""
         return self.performance.get_performance()
 
-    def _get_innodb(self):
+    def _get_innodb(self) -> Dict[str, Any]:
         """Delegate to performance module."""
         return self.performance.get_innodb()
 
-    def _get_replication(self):
+    def _get_replication(self) -> Dict[str, Any]:
         """Delegate to replication module."""
         return self.replication.get_replication()
 
-    def _get_storage(self):
+    def _get_storage(self) -> Dict[str, Any]:
         """Delegate to storage module."""
         return self.storage.get_storage()
 
-    def _get_database_storage(self, db_name: str):
+    def _get_database_storage(self, db_name: str) -> Dict[str, Any]:
         """Delegate to storage module."""
         return self.storage.get_database_storage(db_name)
 
@@ -601,7 +601,7 @@ class MySQLAdapter(ResourceAdapter):
         processlist = self._execute_query("SHOW FULL PROCESSLIST")
 
         # Group by state
-        by_state = {}
+        by_state: Dict[str, int] = {}
         long_running = []
 
         for proc in processlist:

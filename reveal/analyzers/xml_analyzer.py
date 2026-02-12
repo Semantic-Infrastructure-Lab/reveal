@@ -124,7 +124,7 @@ class XmlAnalyzer(FileAnalyzer):
         Returns:
             Dict mapping namespace URI to usage count
         """
-        namespaces = {}
+        namespaces: Dict[str, int] = {}
 
         def visit(elem: ET.Element):
             ns = self._get_namespace(elem.tag)
@@ -147,7 +147,7 @@ class XmlAnalyzer(FileAnalyzer):
         Returns:
             Dict with element data
         """
-        result = {
+        result: Dict[str, Any] = {
             'tag': self._strip_namespace(element.tag),
             'namespace': self._get_namespace(element.tag),
         }
@@ -174,8 +174,8 @@ class XmlAnalyzer(FileAnalyzer):
 
         return result
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract XML document structure.
 
         Args:
@@ -214,7 +214,7 @@ class XmlAnalyzer(FileAnalyzer):
                 filtered_children = children[:10]
 
             # Convert root and children to dict
-            root_data = {
+            root_data: Dict[str, Any] = {
                 'tag': self._strip_namespace(root.tag),
                 'namespace': self._get_namespace(root.tag),
             }

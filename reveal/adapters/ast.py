@@ -399,7 +399,7 @@ class AstAdapter(ResourceAdapter):
             ]
         }
 
-    def __init__(self, path: str, query_string: str = None):
+    def __init__(self, path: str, query_string: Optional[str] = None):
         """Initialize AST adapter.
 
         Args:
@@ -417,7 +417,7 @@ class AstAdapter(ResourceAdapter):
             self.query = {}
             self.result_control = ResultControl()
 
-        self.results = []
+        self.results: List[Any] = []
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get filtered AST structure based on query.
@@ -512,7 +512,7 @@ class AstAdapter(ResourceAdapter):
         query_filters = parse_query_filters(query_string)
 
         # Convert to existing dict format for backward compatibility
-        filters = {}
+        filters: Dict[str, Dict[str, Any]] = {}
         for qf in query_filters:
             key = qf.field
             value = qf.value
@@ -579,7 +579,7 @@ class AstAdapter(ResourceAdapter):
         Returns:
             List of structure dicts with file metadata
         """
-        structures = []
+        structures: List[Dict[str, Any]] = []
         path_obj = Path(path)
 
         if path_obj.is_file():
@@ -672,7 +672,7 @@ class AstAdapter(ResourceAdapter):
                 return None
 
             # Flatten all elements from structure
-            result = {'file': file_path, 'elements': []}
+            result: Dict[str, Any] = {'file': file_path, 'elements': []}
 
             for category, items in structure.items():
                 for item in items:
@@ -701,7 +701,7 @@ class AstAdapter(ResourceAdapter):
         """
         # Fallback heuristic based on line count
         # Used only when tree-sitter complexity is not available
-        line_count = element.get('line_count', 0)
+        line_count: int = element.get('line_count', 0)
 
         # Very rough heuristic:
         # - Simple function (1-10 lines) = 1-2

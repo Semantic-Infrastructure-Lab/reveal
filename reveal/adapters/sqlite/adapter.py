@@ -161,9 +161,9 @@ class SQLiteAdapter(ResourceAdapter):
             )
 
         self.connection_string = connection_string
-        self.db_path = None
-        self.table = None
-        self._connection = None
+        self.db_path: Optional[str] = None
+        self.table: Optional[str] = None
+        self._connection: Optional[sqlite3.Connection] = None
         self._parse_connection_string(connection_string)
 
     def _parse_connection_string(self, uri: str):
@@ -275,18 +275,35 @@ class SQLiteAdapter(ResourceAdapter):
         # Validate connection first (checks file existence)
         self._get_connection()
 
+        # After successful connection, db_path is guaranteed to be non-None
+        assert self.db_path is not None
+
         # Get database file info
         db_size = os.path.getsize(self.db_path)
         db_size_mb = db_size / (1024 * 1024)
 
         # Get SQLite version and configuration
         version_info = self._execute_single("SELECT sqlite_version() as version")
+        assert version_info is not None, "SQLite version query should always return a result"
+
+        # PRAGMA queries always return results, so we can safely assert non-None
+        page_size_result = self._execute_single("PRAGMA page_size")
+        assert page_size_result is not None
+        page_count_result = self._execute_single("PRAGMA page_count")
+        assert page_count_result is not None
+        journal_mode_result = self._execute_single("PRAGMA journal_mode")
+        assert journal_mode_result is not None
+        encoding_result = self._execute_single("PRAGMA encoding")
+        assert encoding_result is not None
+        foreign_keys_result = self._execute_single("PRAGMA foreign_keys")
+        assert foreign_keys_result is not None
+
         pragma_info = {
-            'page_size': self._execute_single("PRAGMA page_size")['page_size'],
-            'page_count': self._execute_single("PRAGMA page_count")['page_count'],
-            'journal_mode': self._execute_single("PRAGMA journal_mode")['journal_mode'],
-            'encoding': self._execute_single("PRAGMA encoding")['encoding'],
-            'foreign_keys': self._execute_single("PRAGMA foreign_keys")['foreign_keys'],
+            'page_size': page_size_result['page_size'],
+            'page_count': page_count_result['page_count'],
+            'journal_mode': journal_mode_result['journal_mode'],
+            'encoding': encoding_result['encoding'],
+            'foreign_keys': foreign_keys_result['foreign_keys'],
         }
 
         # Get all tables

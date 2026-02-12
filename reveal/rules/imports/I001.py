@@ -111,7 +111,7 @@ class I001(BaseRule):
         Returns:
             List of detections for each unused import name (matches Ruff F401)
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         if not stmt.imported_names:
             return detections
@@ -180,7 +180,7 @@ class I001(BaseRule):
         Returns:
             List of detections for unused imports
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
         path = Path(file_path)
 
         # Get language-specific extractor
