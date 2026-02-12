@@ -1,6 +1,7 @@
 """Element extraction display."""
 
 import sys
+from typing import Optional, cast
 
 from reveal.base import FileAnalyzer
 from reveal.treesitter import (
@@ -76,6 +77,7 @@ def _parse_element_syntax(element: str):
                 'element_type': None
             }
         else:
+            assert typed_ordinal_match is not None
             return {
                 'type': 'ordinal',
                 'ordinal': int(typed_ordinal_match.group(2)),
@@ -379,7 +381,7 @@ def _extract_markdown_section_at_line(analyzer, target_line: int):
     import re
 
     # Find all headings with their line numbers and levels
-    headings = []
+    headings: list[dict[str, int | str]] = []
     for i, line in enumerate(analyzer.lines, 1):
         match = re.match(r'^(#{1,6})\s+(.+)$', line)
         if match:
@@ -396,7 +398,7 @@ def _extract_markdown_section_at_line(analyzer, target_line: int):
     # (last heading whose line <= target_line)
     containing_heading = None
     for h in headings:
-        if h['line'] <= target_line:
+        if cast(int, h['line']) <= target_line:
             containing_heading = h
         else:
             break
@@ -405,13 +407,13 @@ def _extract_markdown_section_at_line(analyzer, target_line: int):
         return None
 
     # Find the end of this section (next heading of same or higher level)
-    start_line = containing_heading['line']
-    heading_level = containing_heading['level']
+    start_line = cast(int, containing_heading['line'])
+    heading_level = cast(int, containing_heading['level'])
     end_line = len(analyzer.lines)
 
     for h in headings:
-        if h['line'] > start_line and h['level'] <= heading_level:
-            end_line = h['line'] - 1
+        if cast(int, h['line']) > start_line and cast(int, h['level']) <= heading_level:
+            end_line = cast(int, h['line']) - 1
             break
 
     # Extract the section content
@@ -458,7 +460,7 @@ def _extract_line_range(analyzer, start_line: int, end_line: int):
         return None
 
 
-def _extract_ordinal_element(analyzer, ordinal: int, element_type: str = None):
+def _extract_ordinal_element(analyzer, ordinal: int, element_type: Optional[str] = None):
     """Extract the Nth element of a given type (or dominant category).
 
     Args:
@@ -502,7 +504,7 @@ def _get_analyzer_structure(analyzer):
         return None
 
 
-def _determine_target_category(structure, element_type: str = None):
+def _determine_target_category(structure, element_type: Optional[str] = None):
     """Determine which category to extract from.
 
     Args:
