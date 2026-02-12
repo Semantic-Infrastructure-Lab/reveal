@@ -6,7 +6,7 @@ special modes that exit early without processing files.
 
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Dict, List, Any
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -53,7 +53,7 @@ def handle_adapters():
         description = ''
         example = ''
         try:
-            help_data = adapter_class.get_help()
+            help_data = adapter_class.get_help()  # type: ignore[attr-defined]
             if help_data:
                 description = help_data.get('description', '')
                 syntax = help_data.get('syntax', f'{scheme}://<resource>')
@@ -150,7 +150,7 @@ def handle_agent_help_full():
     sys.exit(0)
 
 
-def handle_schema(version: str = None):
+def handle_schema(version: Optional[str] = None):
     """Handle --schema flag to show Output Contract specification.
 
     Displays the v1.0 Output Contract schema that all adapters/analyzers
@@ -247,7 +247,7 @@ def handle_rules_list(version: str):
     print(f"Reveal v{version} - Pattern Detection Rules\n")
 
     # Group by category
-    by_category = {}
+    by_category: Dict[str, List[Dict[str, Any]]] = {}
     for rule in rules:
         cat = rule['category']
         if cat not in by_category:
@@ -383,9 +383,9 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
 
             # Legacy SSL-specific batch mode for backward compatibility
             if is_ssl_batch_check and target.startswith('ssl://'):
-                result = _collect_ssl_check_result(target, args)
-                if result:
-                    ssl_check_results.append(result)
+                ssl_result: Optional[Dict[str, Any]] = _collect_ssl_check_result(target, args)
+                if ssl_result:
+                    ssl_check_results.append(ssl_result)
                 continue
 
             # Non-batch URIs go through normal path
@@ -427,7 +427,7 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     sys.exit(0)
 
 
-def _collect_ssl_check_result(uri: str, args: 'Namespace') -> dict:
+def _collect_ssl_check_result(uri: str, args: 'Namespace') -> Optional[Dict[str, Any]]:
     """Collect SSL check result without rendering.
 
     Args:
@@ -446,7 +446,7 @@ def _collect_ssl_check_result(uri: str, args: 'Namespace') -> dict:
 
         adapter = adapter_class(uri)
         result = adapter.check()
-        return result
+        return result  # type: ignore[no-any-return]
     except Exception as e:
         # Return error result so it shows up in batch output
         host = uri.replace('ssl://', '')
@@ -597,7 +597,7 @@ def _group_results_by_scheme(results: list) -> dict:
     Returns:
         Dict mapping scheme to list of results
     """
-    by_scheme = {}
+    by_scheme: Dict[str, List[Any]] = {}
     for result in results:
         scheme = result.get('scheme', 'unknown')
         if scheme not in by_scheme:
@@ -779,7 +779,7 @@ def _extract_decorators_from_file(file_path: str):
         if not structure:
             return None
 
-        decorators_found = {}  # decorator_name -> count in this file
+        decorators_found: Dict[str, int] = {}  # decorator_name -> count in this file
 
         # Check functions and classes for decorators
         for category in ['functions', 'classes']:
@@ -876,8 +876,8 @@ def _scan_python_files(target_path):
     """
     from collections import defaultdict
 
-    decorator_counts = defaultdict(int)
-    decorator_files = defaultdict(set)
+    decorator_counts: Dict[str, int] = defaultdict(int)
+    decorator_files: Dict[str, set] = defaultdict(set)
     total_files = 0
     total_decorated = 0
 
