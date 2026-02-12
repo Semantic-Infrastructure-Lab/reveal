@@ -12,7 +12,7 @@ Example:
 
 import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, cast
 import logging
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ class SchemaLoader:
             # Cache and return
             cls._schema_cache[schema_name_or_path] = schema
             logger.debug(f"Schema '{schema_name_or_path}' loaded from {schema_path}")
-            return schema
+            return cast(Dict[str, Any], schema)
 
         except yaml.YAMLError as e:
             logger.error(f"Failed to parse YAML in {schema_path}: {e}")

@@ -7,7 +7,7 @@ Pattern follows reveal/schemas/frontmatter/ design.
 import yaml
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, cast
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class HelpDataLoader:
             # Cache and return
             cls._cache[adapter_name] = help_data
             logger.debug(f"Help data '{adapter_name}' loaded from {help_file}")
-            return help_data
+            return cast(Dict[str, Any], help_data)
 
         except yaml.YAMLError as e:
             logger.error(f"Failed to parse YAML in {help_file}: {e}")

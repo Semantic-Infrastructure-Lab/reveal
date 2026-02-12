@@ -251,7 +251,7 @@ class EnvAdapter(ResourceAdapter):
         """Initialize the environment adapter."""
         self.variables = dict(os.environ)
 
-    def get_structure(self, show_secrets: bool = False) -> Dict[str, Any]:
+    def get_structure(self, show_secrets: bool = False, **kwargs: Any) -> Dict[str, Any]:
         """Get all environment variables, grouped by category.
 
         Args:
@@ -260,7 +260,7 @@ class EnvAdapter(ResourceAdapter):
         Returns:
             Dict containing categorized environment variables
         """
-        categorized = {
+        categorized: Dict[str, list] = {
             'System': [],
             'Python': [],
             'Node': [],
@@ -290,25 +290,28 @@ class EnvAdapter(ResourceAdapter):
             'categories': categorized
         }
 
-    def get_element(self, var_name: str, show_secrets: bool = False) -> Optional[Dict[str, Any]]:
+    def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Get details about a specific environment variable.
 
         Args:
-            var_name: Name of the environment variable
-            show_secrets: If True, show actual value even if sensitive
+            element_name: Name of the environment variable
+            **kwargs: Optional keyword arguments:
+                - show_secrets: If True, show actual value even if sensitive (default: False)
 
         Returns:
             Dict with variable details, or None if not found
         """
-        if var_name not in self.variables:
+        show_secrets = kwargs.get('show_secrets', False)
+
+        if element_name not in self.variables:
             return None
 
-        value = self.variables[var_name]
+        value = self.variables[element_name]
         return {
-            'name': var_name,
-            'value': self._maybe_redact(var_name, value, show_secrets),
-            'category': self._categorize(var_name),
-            'sensitive': self._is_sensitive(var_name),
+            'name': element_name,
+            'value': self._maybe_redact(element_name, value, show_secrets),
+            'category': self._categorize(element_name),
+            'sensitive': self._is_sensitive(element_name),
             'length': len(value),
             'raw_value': value if show_secrets else None
         }

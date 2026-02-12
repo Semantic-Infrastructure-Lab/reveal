@@ -44,7 +44,7 @@ class HTMLAnalyzer(FileAnalyzer):
         # Detect template type
         self.template_type = self._detect_template_type()
 
-    def get_structure(self, options: Optional[StructureOptions] = None, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract HTML structure progressively.
 
         Args:
@@ -72,6 +72,7 @@ class HTMLAnalyzer(FileAnalyzer):
             Dict with HTML structure based on requested features
         """
         # Backward compatibility: convert kwargs to StructureOptions
+        options = kwargs.get('options')
         if options is None:
             # Merge explicit parameters into kwargs
             if head is not None:
@@ -692,15 +693,19 @@ class HTMLAnalyzer(FileAnalyzer):
             'content': content,
         }
 
-    def extract_element(self, selector: str) -> Optional[Dict[str, Any]]:
+    def extract_element(self, element_type: str, name: str = "") -> Optional[Dict[str, Any]]:
         """Extract specific element by CSS selector, ID, or tag.
 
         Args:
-            selector: CSS selector, #id, .class, or tag name
+            element_type: Element type or CSS selector (for backwards compat with 'selector' usage)
+            name: Element name (optional, can be empty for CSS selectors)
 
         Returns:
             Dict with element info or None if not found
         """
+        # If name is provided, combine with element_type, otherwise use element_type as selector
+        selector = f"{element_type} {name}".strip() if name else element_type
+
         element = None
 
         # Try as CSS selector first (if it looks like one)

@@ -222,7 +222,8 @@ class JavaScriptExtractor(LanguageExtractor):
             if child.type == 'arguments':
                 for arg in child.children:
                     if arg.type == 'string':
-                        return analyzer._get_node_text(arg).strip('"\'')
+                        text = analyzer._get_node_text(arg)
+                        return str(text).strip('"\'') if text is not None else None
         return None
 
     def _build_dynamic_import_statement(
@@ -388,7 +389,8 @@ class JavaScriptExtractor(LanguageExtractor):
 
         # Current should now be an identifier
         if current and current.type == 'identifier':
-            return analyzer._get_node_text(current)
+            result = analyzer._get_node_text(current)
+            return str(result) if result is not None else None
 
         return None
 

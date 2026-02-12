@@ -148,7 +148,7 @@ class GoExtractor(LanguageExtractor):
         file_path: Path,
         line_number: int,
         package_path: str,
-        alias: str = None
+        alias: Optional[str] = None
     ) -> ImportStatement:
         """Create ImportStatement for a Go import.
 

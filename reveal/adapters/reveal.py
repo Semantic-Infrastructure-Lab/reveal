@@ -330,7 +330,7 @@ class RevealAdapter(ResourceAdapter):
 
         return root
 
-    def get_structure(self) -> Dict[str, Any]:
+    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         """Get reveal's internal structure.
 
         Returns:
@@ -593,18 +593,27 @@ class RevealAdapter(ResourceAdapter):
             'total': len(detections)
         }
 
-    def get_element(self, resource: str, element_name: str, args) -> Optional[bool]:
+    def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Extract a specific element from a reveal source file.
 
         Args:
-            resource: File path within reveal (e.g., "rules/links/L001.py")
-            element_name: Element to extract (e.g., function name)
-            args: Command-line arguments
+            element_name: Element to extract (e.g., function name) or resource path
+            **kwargs: Optional keyword arguments:
+                - resource: File path within reveal (e.g., "rules/links/L001.py")
+                - args: Command-line arguments
 
         Returns:
-            True if successful (output is printed), None if failed
+            Dict with success status if successful, None if failed
         """
         from ..cli.routing import handle_file
+
+        # For backwards compatibility, support resource as kwarg
+        resource = kwargs.get('resource', element_name)
+        args = kwargs.get('args')
+
+        if not args:
+            # If no args provided, return None (cannot process)
+            return None
 
         # Resolve the file path within reveal
         file_path = self.reveal_root / resource
@@ -617,7 +626,7 @@ class RevealAdapter(ResourceAdapter):
         try:
             handle_file(str(file_path), element_name,
                        show_meta=False, output_format=args.format, args=args)
-            return True
+            return {'success': True}
         except Exception:
             return None
 

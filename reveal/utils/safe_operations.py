@@ -14,7 +14,7 @@ T = TypeVar('T')
 
 
 def safe_operation(
-    fallback: T = None,
+    fallback: Optional[T] = None,
     log_level: int = logging.DEBUG,
     exceptions: tuple = (Exception,)
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:

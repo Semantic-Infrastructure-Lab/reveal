@@ -37,7 +37,7 @@ class LayerRule:
     allow_imports: List[str]  # Module prefixes allowed
     deny_imports: List[str]  # Module prefixes denied
 
-    def matches_file(self, file_path: Path, project_root: Path = None) -> bool:
+    def matches_file(self, file_path: Path, project_root: Optional[Path] = None) -> bool:
         """Check if a file belongs to this layer.
 
         Args:
@@ -72,7 +72,7 @@ class LayerRule:
 
         return False
 
-    def is_violation(self, from_file: Path, to_file: Path, project_root: Path = None) -> Tuple[bool, Optional[str]]:
+    def is_violation(self, from_file: Path, to_file: Path, project_root: Optional[Path] = None) -> Tuple[bool, Optional[str]]:
         """Check if import violates layer boundary.
 
         Args:
@@ -174,7 +174,7 @@ class LayerConfig:
         return cls(layers=layers)
 
     def check_import(
-        self, from_file: Path, to_file: Path, project_root: Path = None
+        self, from_file: Path, to_file: Path, project_root: Optional[Path] = None
     ) -> Optional[Tuple[str, str]]:
         """Check if import violates any layer rules.
 

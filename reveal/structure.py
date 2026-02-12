@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Callable, Dict, Iterator, List, Optional, TYPE_CHECKING
+from typing import Callable, Dict, Iterator, List, Optional, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from .type_system import RevealType
@@ -150,7 +150,7 @@ def _create_element_from_item(
                 # Skip computed properties that can't be set
                 pass
 
-    return el
+    return cast(TypedElement, el)
 
 
 @dataclass

@@ -21,7 +21,7 @@ def show_metadata(analyzer: FileAnalyzer, output_format: str, config=None):
         print_breadcrumbs('metadata', meta['path'], config=config)
 
 
-def _print_file_header(path: Path, is_fallback: bool = False, fallback_lang: str = None) -> None:
+def _print_file_header(path: Path, is_fallback: bool = False, fallback_lang: Optional[str] = None) -> None:
     """Print file header with size metadata and optional fallback indicator."""
     header = f"File: {path.name}"
 

@@ -165,7 +165,7 @@ class DemoAdapter(ResourceAdapter):
         self.query_params = query_params
         # TODO: Initialize adapter-specific state
 
-    def get_structure(self) -> Dict[str, Any]:
+    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         """Get overview of demo resources.
 
         Returns:
@@ -186,7 +186,7 @@ class DemoAdapter(ResourceAdapter):
             }
         }
 
-    def get_element(self, element_name: str) -> Optional[Dict[str, Any]]:
+    def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Get details about a specific resource.
 
         Args:

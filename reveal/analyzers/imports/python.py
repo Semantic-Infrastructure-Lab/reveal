@@ -107,10 +107,10 @@ class PythonExtractor(LanguageExtractor):
     def _get_node_text_from_tree(self, node, analyzer_or_tree) -> str:
         """Helper to get node text when we have a tree reference."""
         if hasattr(analyzer_or_tree, '_get_node_text'):
-            return analyzer_or_tree._get_node_text(node)
+            return str(analyzer_or_tree._get_node_text(node))
         # Fallback: decode bytes
         if hasattr(node, 'text'):
-            return node.text.decode('utf-8')
+            return str(node.text.decode('utf-8'))
         return ""
 
     def _parse_import_statement(self, node, file_path: Path, analyzer, source_lines: List[str]) -> List[ImportStatement]:
@@ -344,7 +344,8 @@ class PythonExtractor(LanguageExtractor):
 
         # Current should now be an identifier
         if current and current.type == 'identifier':
-            return analyzer._get_node_text(current)
+            result = analyzer._get_node_text(current)
+            return str(result) if result is not None else None
 
         return None
 

@@ -6,7 +6,7 @@ import sys
 import yaml
 import fnmatch
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, cast
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..utils.query import (
     parse_query_filters,
@@ -458,7 +458,8 @@ class MarkdownQueryAdapter(ResourceAdapter):
         yaml_content = content[3:end_match.start() + 3]
 
         try:
-            return yaml.safe_load(yaml_content)
+            result = yaml.safe_load(yaml_content)
+            return cast(Dict[str, Any], result) if result is not None else None
         except yaml.YAMLError:
             return None
 

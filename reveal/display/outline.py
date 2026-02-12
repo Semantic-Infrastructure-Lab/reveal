@@ -143,7 +143,7 @@ def _build_item_display(item: Dict[str, Any]) -> str:
     elif name:
         return f"{name}{metrics}"
     else:
-        return item.get('content', '?')
+        return str(item.get('content', '?'))
 
 
 def _print_outline_item(item: Dict[str, Any], path: Path,

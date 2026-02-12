@@ -225,8 +225,8 @@ class RustExtractor(LanguageExtractor):
         file_path: Path,
         line_number: int,
         use_path: str,
-        alias: str = None,
-        imported_name: str = None
+        alias: Optional[str] = None,
+        imported_name: Optional[str] = None
     ) -> ImportStatement:
         """Create ImportStatement for a Rust use declaration.
 

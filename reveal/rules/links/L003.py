@@ -287,7 +287,7 @@ class L003(BaseRule):
             if len(parts) >= 4:
                 title = parts[3]
                 if title.lower() in path.lower():
-                    return post
+                    return Path(post)
 
         return None
 

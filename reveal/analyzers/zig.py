@@ -39,8 +39,8 @@ class ZigAnalyzer(TreeSitterAnalyzer):
 
     def _has_pub_visibility(self, decl_node) -> bool:
         """Check if declaration has pub keyword."""
-        return (decl_node.prev_sibling and
-                decl_node.prev_sibling.type == 'pub')
+        return bool(decl_node.prev_sibling and
+                    decl_node.prev_sibling.type == 'pub')
 
     def _find_fn_proto(self, decl_node):
         """Find FnProto child node in declaration."""
@@ -117,7 +117,7 @@ class ZigAnalyzer(TreeSitterAnalyzer):
 
     def _has_pub_keyword(self, node) -> bool:
         """Check if node has a pub keyword as previous sibling."""
-        return node.prev_sibling and node.prev_sibling.type == 'pub'
+        return bool(node.prev_sibling and node.prev_sibling.type == 'pub')
 
     def _find_var_decl_in_node(self, decl_node) -> Any:
         """Find VarDecl child node in a Decl node."""

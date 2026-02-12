@@ -150,7 +150,7 @@ class C901(BaseRule):
 
         if start_line == 0 or end_line == 0:
             # Fall back to line count heuristic
-            line_count = func.get('line_count', 0)
+            line_count = int(func.get('line_count', 0))
             return max(1, line_count // 10)
 
         # Extract function content

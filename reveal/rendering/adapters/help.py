@@ -149,7 +149,7 @@ def _render_static_guides_header() -> None:
 
 
 def _render_guide_category(category_name: str, topics: list, static: list,
-                            static_help_map: dict, special_handling: dict = None) -> None:
+                            static_help_map: dict, special_handling: Optional[dict] = None) -> None:
     """Render a category of guide topics.
 
     Args:
