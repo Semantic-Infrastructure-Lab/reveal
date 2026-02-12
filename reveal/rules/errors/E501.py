@@ -55,7 +55,7 @@ class E501(BaseRule):
         Returns:
             List of detections
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
         lines = content.splitlines()
 
         # Get configuration

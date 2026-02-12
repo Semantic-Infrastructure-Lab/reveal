@@ -43,7 +43,7 @@ class M101(BaseRule):
         Returns:
             List of detections (0 or 1 for file-level check)
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         try:
             path = Path(file_path)

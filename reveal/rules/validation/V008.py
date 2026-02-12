@@ -50,7 +50,7 @@ class V008(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check that analyzer get_structure methods accept **kwargs."""
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # Only run this check for reveal:// URIs
         if not file_path.startswith('reveal://'):
@@ -85,7 +85,7 @@ class V008(BaseRule):
         self, tree: ast.AST, analyzer_path: Path
     ) -> List[Detection]:
         """Find all get_structure signature violations in an AST."""
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):

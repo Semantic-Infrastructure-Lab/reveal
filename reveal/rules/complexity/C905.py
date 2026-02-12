@@ -40,7 +40,7 @@ class C905(BaseRule):
         Returns:
             List of detections
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # Need structure to work
         if not structure:

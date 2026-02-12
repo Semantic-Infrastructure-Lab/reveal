@@ -137,8 +137,8 @@ class CsvAnalyzer(FileAnalyzer):
             'sample_values': unique_values[:3]
         }
 
-    def _filter_sample_rows(self, rows: list, head: int = None,
-                           tail: int = None, range: tuple = None) -> list:
+    def _filter_sample_rows(self, rows: list, head: Optional[int] = None,
+                           tail: Optional[int] = None, range: Optional[tuple] = None) -> list:
         """Apply filtering to rows based on head/tail/range.
 
         Args:
@@ -160,8 +160,8 @@ class CsvAnalyzer(FileAnalyzer):
         else:
             return rows[:5]  # Default: show first 5 rows
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract CSV schema and statistics.
 
         Args:

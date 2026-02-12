@@ -45,7 +45,7 @@ class L005(BaseRule):
         Returns:
             List of detections if cross-references are insufficient
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
         path = Path(file_path)
 
         # Only check files in docs directories

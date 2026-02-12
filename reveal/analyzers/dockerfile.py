@@ -24,8 +24,8 @@ class DockerfileAnalyzer(TreeSitterAnalyzer):
 
     language = 'dockerfile'
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract Dockerfile directives using tree-sitter."""
         if not self.tree:
             return {}

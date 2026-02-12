@@ -107,7 +107,7 @@ class D002(BaseRule):
         candidates.sort(reverse=True, key=lambda x: x[0])
 
         # Generate detections for top candidates
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
         for interestingness, similarity, combined_size, func1, func2 in candidates[:self.MAX_CANDIDATES]:
             detections.append(Detection(
                 file_path=file_path,

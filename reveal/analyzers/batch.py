@@ -43,8 +43,8 @@ class BatchAnalyzer(FileAnalyzer):
     SETLOCAL_PATTERN = re.compile(r'\bsetlocal\b', re.IGNORECASE)
     REM_PATTERN = re.compile(r'^\s*(?:rem\s|::)', re.IGNORECASE)
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract batch file structure.
 
         Args:

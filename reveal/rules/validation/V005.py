@@ -30,7 +30,7 @@ class V005(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check that all static help files exist."""
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # Only run for reveal:// URIs
         if not file_path.startswith('reveal://'):

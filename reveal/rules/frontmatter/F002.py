@@ -45,7 +45,7 @@ class F002(BaseRule):
         Returns:
             Detection if front matter is empty, empty list otherwise
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # If structure is None, can't check
         if structure is None:

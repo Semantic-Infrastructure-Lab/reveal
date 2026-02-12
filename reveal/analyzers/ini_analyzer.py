@@ -68,8 +68,8 @@ class IniAnalyzer(FileAnalyzer):
 
         return 'string'
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract INI file structure.
 
         Args:

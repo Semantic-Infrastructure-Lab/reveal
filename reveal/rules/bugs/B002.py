@@ -41,7 +41,7 @@ class B002(BaseRule):
         Returns:
             List of detections
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         if not structure:
             return detections

@@ -46,7 +46,7 @@ class F003(BaseRule):
         Returns:
             Detection for each missing required field
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # Get validation schema (set by CLI handler)
         schema = get_validation_schema()

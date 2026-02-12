@@ -69,7 +69,7 @@ class V017(BaseRule):
         defined_types = self._extract_node_types(content)
 
         # Check coverage for critical node categories
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # Check function node types
         function_types = self._extract_function_types(content)

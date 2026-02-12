@@ -37,7 +37,7 @@ class N002(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for SSL servers missing certificate directives."""
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         for match in self.SERVER_BLOCK_PATTERN.finditer(content):
             server_body = match.group(1)

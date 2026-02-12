@@ -52,7 +52,7 @@ class V018(BaseRule):
             return []
 
         # Check for adapters without renderers
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
         missing_renderers = adapters - renderers
 
         for scheme in sorted(missing_renderers):

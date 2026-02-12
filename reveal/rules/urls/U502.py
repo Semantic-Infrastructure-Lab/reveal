@@ -49,7 +49,7 @@ class U502(BaseRule):
         Returns:
             List of detections
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
         path = Path(file_path)
 
         # Skip pyproject.toml itself (it's the source of truth)

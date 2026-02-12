@@ -44,7 +44,7 @@ class F004(BaseRule):
         Returns:
             Detection for each type mismatch
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # Get validation schema
         schema = get_validation_schema()

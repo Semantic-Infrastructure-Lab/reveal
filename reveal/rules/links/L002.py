@@ -47,7 +47,7 @@ class L002(BaseRule):
         Returns:
             List of detections for broken external links
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # Get links from structure (analyzer already parsed them)
         if structure and 'links' in structure:

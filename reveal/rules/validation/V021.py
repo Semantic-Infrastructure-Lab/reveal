@@ -91,7 +91,7 @@ class V021(BaseRule):
         if not analyzers_dir.exists():
             return []
 
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # Check all analyzer files
         for analyzer_file in analyzers_dir.rglob('*.py'):

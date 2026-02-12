@@ -125,8 +125,8 @@ class NginxAnalyzer(FileAnalyzer):
             if upstream_name:
                 upstreams.append({'line': line_num, 'name': upstream_name})
 
-    def get_structure(self, head: int = None, tail: int = None,
-                      range: tuple = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract nginx config structure."""
         servers = []
         locations = []

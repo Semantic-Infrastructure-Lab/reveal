@@ -54,7 +54,7 @@ class I002(BaseRule):
         Returns:
             List of detections for circular dependencies
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
         target_path = Path(file_path).resolve()
 
         try:

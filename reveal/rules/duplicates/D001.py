@@ -54,7 +54,7 @@ class D001(BaseRule):
             return []  # Need at least 2 functions to have duplicates
 
         hash_to_funcs = {}  # hash -> [(func_name, line, body_length), ...]
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # Build hash map
         for func in functions:

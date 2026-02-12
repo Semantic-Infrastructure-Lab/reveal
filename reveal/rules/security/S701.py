@@ -60,7 +60,7 @@ class S701(BaseRule):
 
     def _check_file(self, file_path: str, content: str) -> List[Detection]:
         """Check Dockerfile content for :latest usage."""
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
         lines = content.splitlines()
 
         for i, line in enumerate(lines, start=1):

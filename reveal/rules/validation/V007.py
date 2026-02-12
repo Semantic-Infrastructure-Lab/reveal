@@ -39,7 +39,7 @@ class V007(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for version consistency."""
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # Only run for reveal:// URIs
         if not file_path.startswith('reveal://'):

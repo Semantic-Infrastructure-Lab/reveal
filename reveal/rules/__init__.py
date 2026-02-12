@@ -458,7 +458,7 @@ class RuleRegistry:
 
         # Get base rules filtered by CLI select/ignore
         rules = cls.get_rules(select=select, ignore=ignore)
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         for rule_class in rules:
             # Check if rule applies to this file

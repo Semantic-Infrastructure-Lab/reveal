@@ -43,7 +43,7 @@ class F001(BaseRule):
         Returns:
             Detection if no front matter found, empty list otherwise
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # If structure is None, can't check (no markdown analysis done)
         if structure is None:

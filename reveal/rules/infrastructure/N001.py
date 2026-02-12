@@ -43,7 +43,7 @@ class N001(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check for duplicate backend servers across upstreams."""
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
 
         # Parse all upstreams and their servers
         backend_to_upstreams: Dict[str, List[tuple]] = defaultdict(list)

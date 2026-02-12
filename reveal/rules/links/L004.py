@@ -41,7 +41,7 @@ class L004(BaseRule):
         Returns:
             List of detections if index is missing
         """
-        detections: List[Dict[str, Any]] = []
+        detections: List[Detection] = []
         path = Path(file_path)
 
         # Check if this is in a docs/ directory
