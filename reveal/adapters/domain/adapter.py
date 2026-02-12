@@ -341,7 +341,7 @@ class DomainAdapter(ResourceAdapter):
             raise TypeError("DomainAdapter requires a domain name")
 
         self.connection_string = connection_string
-        self.domain = None
+        self.domain: Optional[str] = None
         self.element = kwargs.get('element')
 
         self._parse_connection_string(connection_string)
@@ -381,6 +381,7 @@ class DomainAdapter(ResourceAdapter):
             raise ValueError(f"Unknown element: {self.element}")
 
         # Get DNS summary
+        assert self.domain is not None
         dns_summary = get_dns_summary(self.domain)
 
         # Get SSL summary (delegate to ssl:// adapter)
@@ -459,6 +460,7 @@ class DomainAdapter(ResourceAdapter):
 
     def _get_dns_records(self) -> Dict[str, Any]:
         """Get all DNS records."""
+        assert self.domain is not None
         try:
             records = get_dns_records(self.domain)
             return {
@@ -494,6 +496,7 @@ class DomainAdapter(ResourceAdapter):
         """Get SSL certificate status (delegates to ssl:// adapter)."""
         from ..ssl.certificate import check_ssl_health
 
+        assert self.domain is not None
         try:
             ssl_check = check_ssl_health(self.domain, 443)
             return {
@@ -514,6 +517,7 @@ class DomainAdapter(ResourceAdapter):
 
     def _get_registrar_info(self) -> Dict[str, Any]:
         """Get registrar and nameserver information."""
+        assert self.domain is not None
         dns_summary = get_dns_summary(self.domain)
 
         return {
@@ -530,6 +534,7 @@ class DomainAdapter(ResourceAdapter):
         """Get summarized SSL information."""
         from ..ssl.certificate import check_ssl_health
 
+        assert self.domain is not None
         try:
             ssl_check = check_ssl_health(self.domain, 443)
             cert = ssl_check.get('certificate', {})
@@ -557,6 +562,7 @@ class DomainAdapter(ResourceAdapter):
         Returns:
             Health check result dict
         """
+        assert self.domain is not None
         advanced = kwargs.get('advanced', False)
         only_failures = kwargs.get('only_failures', False)
 
