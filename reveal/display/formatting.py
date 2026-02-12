@@ -60,7 +60,7 @@ def _extract_nested_value(obj: Dict[str, Any], field_path: str) -> Optional[Any]
         Extracted value, or None if not found
     """
     parts = field_path.split('.')
-    value = obj
+    value: Any = obj
     for part in parts:
         if isinstance(value, dict):
             value = value.get(part)
@@ -83,7 +83,7 @@ def _filter_single_item_fields(
     Returns:
         Filtered item dictionary
     """
-    filtered_item = {}
+    filtered_item: Dict[str, Any] = {}
     for field in fields:
         if '.' in field:  # Nested field
             value = _extract_nested_value(item, field)
@@ -144,7 +144,7 @@ def _filter_toplevel_structure(
     Returns:
         Filtered structure
     """
-    filtered = {}
+    filtered: Dict[str, Any] = {}
     for field in fields:
         if '.' in field:  # Nested field
             value = _extract_nested_value(structure, field)
@@ -257,7 +257,7 @@ def _format_links(
 ) -> None:
     """Format and display link items grouped by type."""
     # Group by type
-    by_type = {}
+    by_type: Dict[str, List[Dict[str, Any]]] = {}
     for item in items:
         link_type = item.get('type', 'unknown')
         by_type.setdefault(link_type, []).append(item)
@@ -332,7 +332,7 @@ def _format_code_blocks(
 ) -> None:
     """Format and display code block items grouped by language."""
     # Group by language
-    by_lang = {}
+    by_lang: Dict[str, List[Dict[str, Any]]] = {}
     for item in items:
         lang = item.get('language', 'unknown')
         by_lang.setdefault(lang, []).append(item)
@@ -818,7 +818,7 @@ def _build_analyzer_kwargs(analyzer: FileAnalyzer, args) -> Dict[str, Any]:
     Returns:
         Dict of kwargs for get_structure()
     """
-    kwargs = {}
+    kwargs: Dict[str, Any] = {}
 
     # Navigation/slicing arguments (apply to all analyzers)
     _add_navigation_kwargs(kwargs, args)
@@ -834,12 +834,12 @@ def _build_analyzer_kwargs(analyzer: FileAnalyzer, args) -> Dict[str, Any]:
         # Handle --related-all shorthand
         if getattr(args, 'related_all', False):
             kwargs['extract_related'] = True
-            kwargs['related_depth'] = 0  # unlimited
-            kwargs['related_limit'] = getattr(args, 'related_limit', 100)
+            kwargs['related_depth'] = int(0)  # unlimited
+            kwargs['related_limit'] = int(getattr(args, 'related_limit', 100))
         elif getattr(args, 'related', False):
             kwargs['extract_related'] = True
-            kwargs['related_depth'] = getattr(args, 'related_depth', 1)
-            kwargs['related_limit'] = getattr(args, 'related_limit', 100)
+            kwargs['related_depth'] = int(getattr(args, 'related_depth', 1))
+            kwargs['related_limit'] = int(getattr(args, 'related_limit', 100))
 
     # HTML-specific filters
     if args and hasattr(analyzer, '_extract_metadata'):
