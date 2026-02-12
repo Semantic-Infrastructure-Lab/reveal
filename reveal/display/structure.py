@@ -1,7 +1,7 @@
 """Structure display for file analysis results."""
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, cast
 
 from reveal.base import FileAnalyzer
 from reveal.utils import safe_json_dumps, get_file_type_from_analyzer, print_breadcrumbs
@@ -231,7 +231,7 @@ def _render_typed_structure_output(
     analyzer: FileAnalyzer,
     structure: Dict[str, List[Dict[str, Any]]],
     output_format: str = "text",
-    category_filter: str = None,
+    category_filter: Optional[str] = None,
     config=None,
 ) -> None:
     """Render structure using the new Type-First Architecture.
@@ -267,8 +267,8 @@ def _render_typed_structure_output(
 
     # Text output: show hierarchical structure with containment
     is_fallback = getattr(analyzer, "is_fallback", False)
-    fallback_lang = getattr(analyzer, "fallback_language", None)
-    _print_file_header(Path(file_path), is_fallback, fallback_lang)
+    fallback_lang = cast(Optional[str], getattr(analyzer, "fallback_language", None))
+    _print_file_header(Path(file_path), is_fallback, fallback_lang)  # type: ignore[arg-type]
 
     if not typed.elements:
         print("No structure available")
@@ -304,7 +304,7 @@ def _render_typed_structure_output(
     print_breadcrumbs("typed", file_path, file_type=file_type, config=config)
 
 
-def _get_element_name(item: Dict[str, Any]) -> str:
+def _get_element_name(item: Dict[str, Any]) -> Optional[str]:
     """Extract element name from item dict.
 
     Tries common name fields: name, text, title
@@ -328,7 +328,7 @@ def _build_extraction_examples(extractable: Dict[str, List[str]], file_path: str
     Returns:
         List of example commands like: reveal file.py function_name
     """
-    examples = []
+    examples: List[str] = []
     if not extractable:
         return examples
 
@@ -475,7 +475,8 @@ def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
 
         # Special handling for count (frontmatter is a dict, not a list)
         if category == 'frontmatter':
-            count = len(items.get('data', {})) if isinstance(items, dict) else 0
+            items_dict = cast(Dict[str, Any], items)
+            count = len(items_dict.get('data', {})) if isinstance(items_dict, dict) else 0
         else:
             count = len(items)
 
@@ -483,7 +484,7 @@ def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
 
         # Special handling for different categories
         if category == 'frontmatter':
-            _format_frontmatter(items)
+            _format_frontmatter(cast(Dict[str, Any], items))
         elif category == 'links':
             _format_links(items, path, output_format)
         elif category == 'code_blocks':
@@ -491,7 +492,7 @@ def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],
         elif category == 'related':
             _format_related(items, path, output_format)
         elif category == 'metadata':
-            _format_html_metadata(items, path, output_format)
+            _format_html_metadata(cast(Dict[str, Any], items), path, output_format)
         elif category in ['scripts', 'styles', 'semantic']:
             _format_html_elements(items, path, output_format, category)
         elif category == 'schema':
@@ -627,7 +628,7 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
 
     # Get fallback info
     is_fallback = getattr(analyzer, 'is_fallback', False)
-    fallback_lang = getattr(analyzer, 'fallback_language', None)
+    fallback_lang = cast(Optional[str], getattr(analyzer, 'fallback_language', None))
 
     # Handle --related-flat: output just paths, no decoration
     if args and getattr(args, 'related_flat', False) and 'related' in structure:
@@ -646,8 +647,8 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
 
     # Handle outline mode
     if args and getattr(args, 'outline', False):
-        _handle_outline_mode(structure, path, is_fallback, fallback_lang, config=config)
+        _handle_outline_mode(structure, path, is_fallback, fallback_lang, config=config)  # type: ignore[arg-type]
         return
 
     # Handle standard output (JSON or text)
-    _handle_standard_output(analyzer, structure, output_format, is_fallback, fallback_lang, config=config)
+    _handle_standard_output(analyzer, structure, output_format, is_fallback, fallback_lang, config=config)  # type: ignore[arg-type]
