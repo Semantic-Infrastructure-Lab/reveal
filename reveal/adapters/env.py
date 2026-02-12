@@ -392,7 +392,7 @@ class EnvAdapter(ResourceAdapter):
         Returns:
             Dict mapping category to count
         """
-        counts = {}
+        counts: Dict[str, int] = {}
         for name in self.variables:
             category = self._categorize(name)
             counts[category] = counts.get(category, 0) + 1

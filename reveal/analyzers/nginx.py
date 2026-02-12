@@ -128,10 +128,10 @@ class NginxAnalyzer(FileAnalyzer):
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract nginx config structure."""
-        servers = []
-        locations = []
-        upstreams = []
-        comments = []
+        servers: List[Dict[str, Any]] = []
+        locations: List[Dict[str, Any]] = []
+        upstreams: List[Dict[str, Any]] = []
+        comments: List[Dict[str, Any]] = []
 
         current_server = None
         in_server = False

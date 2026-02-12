@@ -127,7 +127,7 @@ def _get_fallback_languages() -> List[Tuple[str, List[str]]]:
         from tree_sitter_language_pack import get_parser
         for lang, exts in fallback_map.items():
             try:
-                get_parser(lang)
+                get_parser(lang)  # type: ignore[arg-type]  # language is validated at runtime
                 supported.append((lang, exts))
             except Exception:
                 # Language not available in this version

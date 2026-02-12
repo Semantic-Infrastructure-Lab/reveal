@@ -268,7 +268,7 @@ def _render_typed_structure_output(
     # Text output: show hierarchical structure with containment
     is_fallback = getattr(analyzer, "is_fallback", False)
     fallback_lang = cast(Optional[str], getattr(analyzer, "fallback_language", None))
-    _print_file_header(Path(file_path), is_fallback, fallback_lang)  # type: ignore[arg-type]
+    _print_file_header(Path(file_path), is_fallback, fallback_lang)
 
     if not typed.elements:
         print("No structure available")

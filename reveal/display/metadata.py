@@ -1,6 +1,7 @@
 """Metadata display for file structure."""
 
 from pathlib import Path
+from typing import Optional
 
 from reveal.base import FileAnalyzer
 from reveal.utils import safe_json_dumps, print_breadcrumbs

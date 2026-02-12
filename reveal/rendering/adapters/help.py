@@ -1,7 +1,7 @@
 """Renderer for help:// documentation adapter."""
 
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from reveal.utils import safe_json_dumps
 

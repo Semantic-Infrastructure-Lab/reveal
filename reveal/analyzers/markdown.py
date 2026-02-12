@@ -126,7 +126,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         for category in result:
             if category != 'frontmatter':
                 result[category] = self._apply_semantic_slice(
-                    result[category], head, tail, range  # type: ignore[arg-type]
+                    result[category], head, tail, range
                 )
 
     def get_structure(self, options: Optional[StructureOptions] = None, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[str] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:  # type: ignore[override]

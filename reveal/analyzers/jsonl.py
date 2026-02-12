@@ -99,7 +99,7 @@ class JsonlAnalyzer(FileAnalyzer):
 
         # First pass: parse all records and track metadata
         all_records = []
-        record_types = {}
+        record_types: Dict[str, int] = {}
         total_records = 0
 
         for i, line in enumerate(self.lines, 1):

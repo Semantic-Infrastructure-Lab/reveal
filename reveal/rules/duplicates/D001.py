@@ -53,7 +53,7 @@ class D001(BaseRule):
         if len(functions) < 2:
             return []  # Need at least 2 functions to have duplicates
 
-        hash_to_funcs = {}  # hash -> [(func_name, line, body_length), ...]
+        hash_to_funcs: Dict[str, List[tuple]] = {}  # hash -> [(func_name, line, body_length), ...]
         detections: List[Detection] = []
 
         # Build hash map

@@ -128,7 +128,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         suppress_treesitter_warnings() call at top of file.
         """
         try:
-            parser = get_parser(self.language)
+            parser = get_parser(self.language)  # type: ignore[arg-type]  # language is validated at runtime
             self.tree = parser.parse(self.content.encode('utf-8'))
         except Exception:
             # Parsing failed - fall back to text analysis

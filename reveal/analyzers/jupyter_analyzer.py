@@ -38,7 +38,7 @@ class JupyterAnalyzer(FileAnalyzer):
             }
 
         # Count cells by type
-        cell_counts = {}
+        cell_counts: Dict[str, int] = {}
         for cell in self.cells:
             cell_type = cell.get('cell_type', 'unknown')
             cell_counts[cell_type] = cell_counts.get(cell_type, 0) + 1
