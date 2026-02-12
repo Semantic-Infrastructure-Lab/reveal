@@ -86,7 +86,7 @@ def get_overview(messages: List[Dict], session_name: str, conversation_path: str
                     thinking_chars += len(content.get('thinking', ''))
 
     # Calculate duration
-    timestamps = [msg.get('timestamp') for msg in messages if msg.get('timestamp')]
+    timestamps = [ts for ts in (msg.get('timestamp') for msg in messages) if ts]
     duration = None
     if len(timestamps) >= 2:
         try:
