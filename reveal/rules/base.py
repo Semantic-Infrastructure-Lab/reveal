@@ -214,7 +214,7 @@ class BaseRule(ABC):
     # Metadata (override in subclass)
     code: str = "R000"              # e.g., "B001", "S701"
     message: str = ""               # Short description
-    category: RulePrefix = None     # E, S, C, B, etc.
+    category: Optional[RulePrefix] = None     # E, S, C, B, etc.
     severity: Severity = Severity.MEDIUM
     file_patterns: List[str] = ["*"]  # ['.py'] or ['*'] for universal
     uri_patterns: List[str] = []    # Optional URI regex patterns
@@ -223,7 +223,7 @@ class BaseRule(ABC):
 
     # For tracking current file during check (set by registry)
     _current_file: Optional[str] = None
-    _config = None  # Lazy-loaded config instance
+    _config: Optional[Any] = None  # Lazy-loaded config instance
 
     def get_config(self):
         """Get configuration instance (lazy-loaded).

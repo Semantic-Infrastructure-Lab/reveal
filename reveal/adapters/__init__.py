@@ -33,7 +33,7 @@ try:
     _git_available = True
 except ImportError:
     _git_available = False
-    GitAdapter = None
+    GitAdapter = None  # type: ignore[assignment,misc]
 
 __all__ = [
     # Base classes and registry functions
