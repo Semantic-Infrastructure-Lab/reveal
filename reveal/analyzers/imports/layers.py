@@ -175,7 +175,7 @@ class LayerConfig:
 
     def check_import(
         self, from_file: Path, to_file: Path, project_root: Optional[Path] = None
-    ) -> Optional[Tuple[str, str]]:
+    ) -> Optional[Tuple[str, Optional[str]]]:
         """Check if import violates any layer rules.
 
         Args:

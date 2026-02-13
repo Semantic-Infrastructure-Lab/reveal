@@ -133,7 +133,7 @@ class SSLFetcher:
         Returns:
             Tuple of (leaf cert, chain, verification_result)
         """
-        verification = {
+        verification: Dict[str, bool | str | None] = {
             'verified': False,
             'error': None,
             'hostname_match': False,

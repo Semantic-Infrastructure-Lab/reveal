@@ -56,7 +56,7 @@ class T004(BaseRule, ASTParsingMixin):
 
         return detections
 
-    def _check_function_params(self, func_node: ast.FunctionDef, file_path: str,
+    def _check_function_params(self, func_node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str,
                                content: str, detections: List[Detection]) -> None:
         """Check all parameters in a function definition."""
         args = func_node.args
