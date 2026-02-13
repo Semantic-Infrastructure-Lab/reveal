@@ -730,6 +730,61 @@ def _run_advanced_checks(host: str, port: int, cert: CertificateInfo) -> Dict[st
     }
 
 
+def _detect_ssl_issues(checks: List[Dict[str, Any]]) -> Dict[str, bool]:
+    """Detect SSL issues from check results.
+
+    Args:
+        checks: List of check results
+
+    Returns:
+        Dict of issue flags
+    """
+    return {
+        'expiry': any(c['name'] == 'certificate_expiry' and c['status'] in ('failure', 'warning') for c in checks),
+        'chain': any(c['name'] == 'chain_verification' and c['status'] != 'pass' for c in checks),
+        'hostname': any(c['name'] == 'hostname_match' and c['status'] == 'failure' for c in checks),
+        'self_signed': any(c['name'] == 'self_signed' and c['value'] == 'Self-signed' for c in checks),
+        'tls': any(c['name'] == 'tls_version' and c['status'] == 'warning' for c in checks)
+    }
+
+
+def _add_remediation_for_issues(issues: Dict[str, bool], host: str) -> List[str]:
+    """Add remediation steps for detected issues.
+
+    Args:
+        issues: Dict of issue flags
+        host: Hostname
+
+    Returns:
+        List of remediation steps
+    """
+    steps = []
+
+    if issues['expiry']:
+        steps.append("Renew certificate before expiry (use certbot for Let's Encrypt)")
+
+    if issues['chain']:
+        steps.append("Verify certificate chain includes intermediate certificates")
+        steps.append("Check server configuration includes full certificate chain")
+
+    if issues['hostname']:
+        steps.append(f"Verify certificate includes {host} in SANs")
+        steps.append("Consider obtaining a new certificate with correct hostname")
+
+    if issues['self_signed']:
+        steps.append("Replace self-signed certificate with CA-signed certificate (e.g., Let's Encrypt)")
+
+    if issues['tls']:
+        steps.append("Upgrade server to support TLS 1.2+ (disable TLS 1.0/1.1)")
+
+    # Add general inspection steps if any issues found
+    if steps:
+        steps.append(f"View full certificate: reveal ssl://{host}")
+        steps.append(f"Check certificate chain: reveal ssl://{host}/chain")
+
+    return steps
+
+
 def _generate_remediation_steps(checks: List[Dict[str, Any]], host: str) -> List[str]:
     """Generate remediation steps based on check results.
 
@@ -740,35 +795,5 @@ def _generate_remediation_steps(checks: List[Dict[str, Any]], host: str) -> List
     Returns:
         List of remediation steps
     """
-    steps = []
-
-    # Check for specific issues
-    has_expiry_issue = any(c['name'] == 'certificate_expiry' and c['status'] in ('failure', 'warning') for c in checks)
-    has_chain_issue = any(c['name'] == 'chain_verification' and c['status'] != 'pass' for c in checks)
-    has_hostname_issue = any(c['name'] == 'hostname_match' and c['status'] == 'failure' for c in checks)
-    is_self_signed = any(c['name'] == 'self_signed' and c['value'] == 'Self-signed' for c in checks)
-    has_tls_issue = any(c['name'] == 'tls_version' and c['status'] == 'warning' for c in checks)
-
-    if has_expiry_issue:
-        steps.append("Renew certificate before expiry (use certbot for Let's Encrypt)")
-
-    if has_chain_issue:
-        steps.append("Verify certificate chain includes intermediate certificates")
-        steps.append("Check server configuration includes full certificate chain")
-
-    if has_hostname_issue:
-        steps.append(f"Verify certificate includes {host} in SANs")
-        steps.append("Consider obtaining a new certificate with correct hostname")
-
-    if is_self_signed:
-        steps.append("Replace self-signed certificate with CA-signed certificate (e.g., Let's Encrypt)")
-
-    if has_tls_issue:
-        steps.append("Upgrade server to support TLS 1.2+ (disable TLS 1.0/1.1)")
-
-    # Add general inspection steps
-    if steps:
-        steps.append(f"View full certificate: reveal ssl://{host}")
-        steps.append(f"Check certificate chain: reveal ssl://{host}/chain")
-
-    return steps
+    issues = _detect_ssl_issues(checks)
+    return _add_remediation_for_issues(issues, host)

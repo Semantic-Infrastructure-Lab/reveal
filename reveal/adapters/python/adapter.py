@@ -46,32 +46,17 @@ class PythonAdapter(ResourceAdapter):
             "architecture": platform.machine(),
         }
 
-    def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
-        """Get specific element within the Python runtime.
+    def _route_element_handler(self, base: str, parts: List[str], **kwargs) -> Optional[Dict[str, Any]]:
+        """Route element request to appropriate handler.
 
         Args:
-            element_name: Element path (e.g., 'version', 'packages', 'debug/bytecode')
-
-        Supported elements:
-            - version: Python version details
-            - env: Python environment configuration
-            - venv: Virtual environment status
-            - packages: All installed packages
-            - packages/<name>: Specific package details
-            - module/<name>: Module import location and conflicts
-            - imports: Currently loaded modules
-            - syspath: sys.path analysis with conflict detection
-            - doctor: Auto-detect common environment issues
-            - debug/bytecode: Bytecode issues
+            base: Base element name
+            parts: Split element path parts
+            **kwargs: Additional arguments
 
         Returns:
-            Dict containing element details, or None if not found
+            Handler result or None
         """
-        # Handle nested paths
-        parts = element_name.split("/", 1)
-        base = parts[0]
-
-        # Route to handlers
         if base == "version":
             return self._get_version(**kwargs)
         elif base == "env":
@@ -100,8 +85,35 @@ class PythonAdapter(ResourceAdapter):
             if len(parts) > 1:
                 return self._handle_debug(parts[1], **kwargs)
             return {"error": "Specify debug type: bytecode"}
-
         return None
+
+    def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
+        """Get specific element within the Python runtime.
+
+        Args:
+            element_name: Element path (e.g., 'version', 'packages', 'debug/bytecode')
+
+        Supported elements:
+            - version: Python version details
+            - env: Python environment configuration
+            - venv: Virtual environment status
+            - packages: All installed packages
+            - packages/<name>: Specific package details
+            - module/<name>: Module import location and conflicts
+            - imports: Currently loaded modules
+            - syspath: sys.path analysis with conflict detection
+            - doctor: Auto-detect common environment issues
+            - debug/bytecode: Bytecode issues
+
+        Returns:
+            Dict containing element details, or None if not found
+        """
+        # Handle nested paths
+        parts = element_name.split("/", 1)
+        base = parts[0]
+
+        # Route to handler
+        return self._route_element_handler(base, parts, **kwargs)
 
     def get_available_elements(self) -> List[Dict[str, str]]:
         """Get list of available Python runtime elements.

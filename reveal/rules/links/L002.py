@@ -161,6 +161,49 @@ class L002(BaseRule):
         except Exception:
             return (True, "validation_error", None)
 
+    def _get_http_error_suggestion(self, status: int) -> str:
+        """Get suggestion for HTTP error status code.
+
+        Args:
+            status: HTTP status code
+
+        Returns:
+            Suggestion string
+        """
+        status_messages = {
+            404: "Page not found (404) - URL may have moved or been deleted",
+            403: "Access forbidden (403) - may require authentication",
+            401: "Authentication required (401)",
+            410: "Page permanently gone (410)",
+            500: "Server error (500) - temporary issue or broken server",
+            503: "Service unavailable (503) - may be temporary"
+        }
+        return status_messages.get(status, f"HTTP error {status}")
+
+    def _get_url_variant_suggestions(self, broken_url: str) -> List[str]:
+        """Get suggestions for URL variants (https, www).
+
+        Args:
+            broken_url: Broken URL
+
+        Returns:
+            List of suggestion strings
+        """
+        suggestions = []
+        parsed = urlparse(broken_url)
+
+        # Check for http vs https
+        if parsed.scheme == 'http':
+            https_url = broken_url.replace('http://', 'https://', 1)
+            suggestions.append(f"Try HTTPS: {https_url}")
+
+        # Check for missing www
+        if parsed.netloc and not parsed.netloc.startswith('www.'):
+            www_url = broken_url.replace(f'{parsed.scheme}://', f'{parsed.scheme}://www.', 1)
+            suggestions.append(f"Try with www: {www_url}")
+
+        return suggestions
+
     def _suggest_fix(self, broken_url: str, reason: str, status: Optional[int]) -> str:
         """Generate helpful suggestion for fixing broken link.
 
@@ -175,45 +218,18 @@ class L002(BaseRule):
         suggestions = []
 
         if reason == "http_error" and status:
-            if status == 404:
-                suggestions.append("Page not found (404) - URL may have moved or been deleted")
-            elif status == 403:
-                suggestions.append("Access forbidden (403) - may require authentication")
-            elif status == 401:
-                suggestions.append("Authentication required (401)")
-            elif status == 410:
-                suggestions.append("Page permanently gone (410)")
-            elif status == 500:
-                suggestions.append("Server error (500) - temporary issue or broken server")
-            elif status == 503:
-                suggestions.append("Service unavailable (503) - may be temporary")
-            else:
-                suggestions.append(f"HTTP error {status}")
-
+            suggestions.append(self._get_http_error_suggestion(status))
         elif reason == "timeout":
             suggestions.append(f"Request timed out after {self.TIMEOUT}s - server may be slow or down")
-
         elif reason == "connection_error":
             suggestions.append("Connection failed - check domain name and network")
-
         elif reason == "invalid_url":
             suggestions.append("URL format is invalid")
-
         elif reason == "validation_error":
             suggestions.append("Could not validate URL")
 
-        # Check for common issues
-        parsed = urlparse(broken_url)
-
-        # Check for http vs https
-        if parsed.scheme == 'http':
-            https_url = broken_url.replace('http://', 'https://', 1)
-            suggestions.append(f"Try HTTPS: {https_url}")
-
-        # Check for missing www
-        if parsed.netloc and not parsed.netloc.startswith('www.'):
-            www_url = broken_url.replace(f'{parsed.scheme}://', f'{parsed.scheme}://www.', 1)
-            suggestions.append(f"Try with www: {www_url}")
+        # Add URL variant suggestions
+        suggestions.extend(self._get_url_variant_suggestions(broken_url))
 
         if suggestions:
             return " | ".join(suggestions)

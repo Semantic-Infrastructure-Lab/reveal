@@ -49,6 +49,40 @@ class SqliteRenderer(TypeDispatchRenderer):
             print(f"  {step}")
 
     @staticmethod
+    def _render_table_columns(columns: list) -> None:
+        """Render table columns."""
+        print(f"Columns ({len(columns)}):")
+        for col in columns:
+            pk = " [PK]" if col['primary_key'] else ""
+            null = " NULL" if col['nullable'] else " NOT NULL"
+            default = f" DEFAULT {col['default']}" if col['default'] else ""
+            print(f"  • {col['name']}: {col['type']}{pk}{null}{default}")
+        print()
+
+    @staticmethod
+    def _render_table_indexes(indexes: list) -> None:
+        """Render table indexes."""
+        if not indexes:
+            return
+        print(f"Indexes ({len(indexes)}):")
+        for idx in indexes:
+            unique = " [UNIQUE]" if idx['unique'] else ""
+            cols = ', '.join(idx['columns'])
+            print(f"  • {idx['name']}{unique} ({cols})")
+        print()
+
+    @staticmethod
+    def _render_table_foreign_keys(foreign_keys: list) -> None:
+        """Render table foreign keys."""
+        if not foreign_keys:
+            return
+        print(f"Foreign Keys ({len(foreign_keys)}):")
+        for fk in foreign_keys:
+            print(f"  • {fk['column']} → {fk['references_table']}.{fk['references_column']}")
+            print(f"    ON DELETE {fk['on_delete']}, ON UPDATE {fk['on_update']}")
+        print()
+
+    @staticmethod
     def _render_sqlite_table(result: dict) -> None:
         """Render table details."""
         print(f"Table: {result['table']}")
@@ -56,28 +90,10 @@ class SqliteRenderer(TypeDispatchRenderer):
         print(f"Row Count: {result['row_count']:,}")
         print()
 
-        print(f"Columns ({len(result['columns'])}):")
-        for col in result['columns']:
-            pk = " [PK]" if col['primary_key'] else ""
-            null = " NULL" if col['nullable'] else " NOT NULL"
-            default = f" DEFAULT {col['default']}" if col['default'] else ""
-            print(f"  • {col['name']}: {col['type']}{pk}{null}{default}")
-        print()
-
-        if result['indexes']:
-            print(f"Indexes ({len(result['indexes'])}):")
-            for idx in result['indexes']:
-                unique = " [UNIQUE]" if idx['unique'] else ""
-                cols = ', '.join(idx['columns'])
-                print(f"  • {idx['name']}{unique} ({cols})")
-            print()
-
-        if result['foreign_keys']:
-            print(f"Foreign Keys ({len(result['foreign_keys'])}):")
-            for fk in result['foreign_keys']:
-                print(f"  • {fk['column']} → {fk['references_table']}.{fk['references_column']}")
-                print(f"    ON DELETE {fk['on_delete']}, ON UPDATE {fk['on_update']}")
-            print()
+        # Render sections
+        SqliteRenderer._render_table_columns(result['columns'])
+        SqliteRenderer._render_table_indexes(result['indexes'])
+        SqliteRenderer._render_table_foreign_keys(result['foreign_keys'])
 
         if result.get('create_statement'):
             print("CREATE Statement:")

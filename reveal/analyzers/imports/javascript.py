@@ -13,7 +13,7 @@ Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
 from pathlib import Path
-from typing import List, Set, Optional
+from typing import Any, List, Set, Optional
 
 from .types import ImportStatement
 from .base import LanguageExtractor, register_extractor
@@ -121,6 +121,78 @@ class JavaScriptExtractor(LanguageExtractor):
 
         return symbols
 
+    def _extract_module_path_from_import(self, node, analyzer) -> Optional[str]:
+        """Extract module path from import statement node.
+
+        Args:
+            node: Import statement node
+            analyzer: Analyzer instance for text extraction
+
+        Returns:
+            Module path or None
+        """
+        for child in node.children:
+            if child.type == 'string':
+                # Get string content, strip quotes
+                return analyzer._get_node_text(child).strip('"\'')
+        return None
+
+    def _find_import_clause_node(self, node) -> Optional[Any]:
+        """Find import_clause node in import statement.
+
+        Args:
+            node: Import statement node
+
+        Returns:
+            import_clause node or None
+        """
+        for child in node.children:
+            if child.type == 'import_clause':
+                return child
+        return None
+
+    def _parse_import_clause_data(self, import_clause, analyzer) -> tuple:
+        """Parse import_clause to extract names, type, and alias.
+
+        Args:
+            import_clause: import_clause node
+            analyzer: Analyzer instance
+
+        Returns:
+            Tuple of (imported_names, import_type, alias)
+        """
+        imported_names = []
+        import_type = 'es6_import'
+        alias = None
+
+        for child in import_clause.children:
+            if child.type == 'namespace_import':
+                # import * as foo from 'module'
+                import_type = 'namespace_import'
+                imported_names = ['*']
+                # Extract alias (identifier after 'as')
+                for subchild in child.children:
+                    if subchild.type == 'identifier':
+                        alias = analyzer._get_node_text(subchild)
+
+            elif child.type == 'named_imports':
+                # import { foo, bar } from 'module'
+                for subchild in child.children:
+                    if subchild.type == 'import_specifier':
+                        # Can be "foo" or "foo as bar"
+                        spec_children = list(subchild.children)
+                        if spec_children:
+                            # First identifier is the imported name
+                            imported_names.append(analyzer._get_node_text(spec_children[0]))
+
+            elif child.type == 'identifier':
+                # Default import: import foo from 'module'
+                imported_names.insert(0, analyzer._get_node_text(child))
+                if import_type == 'es6_import':
+                    import_type = 'default_import'
+
+        return imported_names, import_type, alias
+
     def _parse_import_statement(self, node, file_path: Path, analyzer) -> List[ImportStatement]:
         """Parse ES6 import statement using tree-sitter AST.
 
@@ -133,59 +205,21 @@ class JavaScriptExtractor(LanguageExtractor):
         """
         line_number = node.start_point[0] + 1
 
-        # Extract module path from string node
-        module_path = None
-        for child in node.children:
-            if child.type == 'string':
-                # Get string content, strip quotes
-                module_path = analyzer._get_node_text(child).strip('"\'')
-                break
-
+        # Extract module path
+        module_path = self._extract_module_path_from_import(node, analyzer)
         if not module_path:
             return []
 
-        # Determine import type and extract imported names
-        imported_names = []
-        import_type = 'es6_import'
-        alias = None
+        # Find and parse import_clause
+        import_clause = self._find_import_clause_node(node)
 
-        # Find import_clause node
-        import_clause = None
-        for child in node.children:
-            if child.type == 'import_clause':
-                import_clause = child
-                break
-
-        # Side-effect import: no import_clause
         if not import_clause:
+            # Side-effect import: no import_clause
             import_type = 'side_effect_import'
+            imported_names = []
+            alias = None
         else:
-            # Parse import_clause children
-            for child in import_clause.children:
-                if child.type == 'namespace_import':
-                    # import * as foo from 'module'
-                    import_type = 'namespace_import'
-                    imported_names = ['*']
-                    # Extract alias (identifier after 'as')
-                    for subchild in child.children:
-                        if subchild.type == 'identifier':
-                            alias = analyzer._get_node_text(subchild)
-
-                elif child.type == 'named_imports':
-                    # import { foo, bar } from 'module'
-                    for subchild in child.children:
-                        if subchild.type == 'import_specifier':
-                            # Can be "foo" or "foo as bar"
-                            spec_children = list(subchild.children)
-                            if spec_children:
-                                # First identifier is the imported name
-                                imported_names.append(analyzer._get_node_text(spec_children[0]))
-
-                elif child.type == 'identifier':
-                    # Default import: import foo from 'module'
-                    imported_names.insert(0, analyzer._get_node_text(child))
-                    if import_type == 'es6_import':
-                        import_type = 'default_import'
+            imported_names, import_type, alias = self._parse_import_clause_data(import_clause, analyzer)
 
         return [ImportStatement(
             file_path=file_path,

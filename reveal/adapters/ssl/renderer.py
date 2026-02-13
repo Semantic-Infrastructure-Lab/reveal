@@ -598,6 +598,25 @@ class SSLRenderer(TypeDispatchRenderer):
         print(f"Exit code: {result['exit_code']}")
 
     @staticmethod
+    def _render_nginx_validation_failures(failures: list) -> None:
+        """Render nginx validation failures."""
+        print("\u274c Failed Validations:")
+        for r in failures:
+            print(f"\n  Domain: {r['domain']}")
+            for issue in r['issues']:
+                severity_icon = '\u274c' if issue['severity'] == 'critical' else '\u26a0\ufe0f'
+                print(f"    {severity_icon} {issue['type']}: {issue['message']}")
+        print()
+
+    @staticmethod
+    def _render_nginx_validation_passes(passes: list) -> None:
+        """Render nginx validation passes."""
+        print("\u2705 All Validations Passed:")
+        for r in passes:
+            print(f"  • {r['domain']}")
+        print()
+
+    @staticmethod
     def _render_ssl_nginx_validation(result: dict) -> None:
         """Render nginx SSL validation results."""
         if 'error' in result:
@@ -616,24 +635,13 @@ class SSLRenderer(TypeDispatchRenderer):
         print(f"Summary: {summary['passed']} passed, {summary['failed']} failed")
         print()
 
-        # Show failures
+        # Show failures or passes
         failures = [r for r in result['results'] if r['status'] == 'failure']
         if failures:
-            print("\u274c Failed Validations:")
-            for r in failures:
-                print(f"\n  Domain: {r['domain']}")
-                for issue in r['issues']:
-                    severity_icon = '\u274c' if issue['severity'] == 'critical' else '\u26a0\ufe0f'
-                    print(f"    {severity_icon} {issue['type']}: {issue['message']}")
-            print()
-
-        # Show passes if no failures
-        if not failures:
+            SSLRenderer._render_nginx_validation_failures(failures)
+        else:
             passes = [r for r in result['results'] if r['status'] == 'pass']
-            print("\u2705 All Validations Passed:")
-            for r in passes:
-                print(f"  • {r['domain']}")
-            print()
+            SSLRenderer._render_nginx_validation_passes(passes)
 
         # Show next steps
         if result.get('next_steps'):
