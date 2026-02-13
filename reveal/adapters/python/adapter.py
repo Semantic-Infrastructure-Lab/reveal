@@ -46,6 +46,32 @@ class PythonAdapter(ResourceAdapter):
             "architecture": platform.machine(),
         }
 
+    def _handle_packages_route(self, parts: List[str]) -> Dict[str, Any]:
+        """Handle packages/* route."""
+        if len(parts) > 1:
+            return get_package_details(parts[1])
+        return get_packages_list()
+
+    def _handle_module_route(self, parts: List[str]) -> Dict[str, Any]:
+        """Handle module/* route."""
+        if len(parts) > 1:
+            return get_module_analysis(parts[1])
+        return {"error": "Specify module name: python://module/<name>"}
+
+    def _handle_imports_route(self, parts: List[str], **kwargs) -> Dict[str, Any]:
+        """Handle imports/* route."""
+        if len(parts) > 1 and parts[1] == "graph":
+            return {"error": "Use imports:// adapter for import graph analysis"}
+        elif len(parts) > 1 and parts[1] == "circular":
+            return {"error": "Use imports:// adapter for circular import detection"}
+        return self._get_imports(**kwargs)
+
+    def _handle_debug_route(self, parts: List[str], **kwargs) -> Dict[str, Any]:
+        """Handle debug/* route."""
+        if len(parts) > 1:
+            return self._handle_debug(parts[1], **kwargs)
+        return {"error": "Specify debug type: bytecode"}
+
     def _route_element_handler(self, base: str, parts: List[str], **kwargs) -> Optional[Dict[str, Any]]:
         """Route element request to appropriate handler.
 
@@ -64,27 +90,17 @@ class PythonAdapter(ResourceAdapter):
         elif base == "venv":
             return self._get_venv(**kwargs)
         elif base == "packages":
-            if len(parts) > 1:
-                return get_package_details(parts[1])
-            return get_packages_list()
+            return self._handle_packages_route(parts)
         elif base == "module":
-            if len(parts) > 1:
-                return get_module_analysis(parts[1])
-            return {"error": "Specify module name: python://module/<name>"}
+            return self._handle_module_route(parts)
         elif base == "imports":
-            if len(parts) > 1 and parts[1] == "graph":
-                return {"error": "Use imports:// adapter for import graph analysis"}
-            elif len(parts) > 1 and parts[1] == "circular":
-                return {"error": "Use imports:// adapter for circular import detection"}
-            return self._get_imports(**kwargs)
+            return self._handle_imports_route(parts, **kwargs)
         elif base == "syspath":
             return get_syspath_analysis()
         elif base == "doctor":
             return run_doctor(self._detect_venv)
         elif base == "debug":
-            if len(parts) > 1:
-                return self._handle_debug(parts[1], **kwargs)
-            return {"error": "Specify debug type: bytecode"}
+            return self._handle_debug_route(parts, **kwargs)
         return None
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
