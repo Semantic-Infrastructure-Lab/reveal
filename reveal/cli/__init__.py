@@ -40,8 +40,10 @@ from .routing import (
     handle_uri,
     handle_adapter,
     handle_file_or_directory,
-    handle_file,
 )
+
+# Import from file_handler to avoid circular dependency
+from ..file_handler import handle_file
 
 __all__ = [
     # Parser

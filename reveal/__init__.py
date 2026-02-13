@@ -3,13 +3,8 @@
 A clean, simple tool for progressive code exploration.
 """
 
-# Version is read from pyproject.toml at runtime
-try:
-    from importlib.metadata import version
-    __version__ = version("reveal-cli")
-except Exception:
-    # Fallback for development/editable installs
-    __version__ = "0.42.0-dev"
+# Import version from separate module to avoid circular dependencies
+from .version import __version__
 
 # Import base classes for external use
 from .base import FileAnalyzer

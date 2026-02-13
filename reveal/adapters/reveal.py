@@ -605,7 +605,7 @@ class RevealAdapter(ResourceAdapter):
         Returns:
             Dict with success status if successful, None if failed
         """
-        from ..cli.routing import handle_file
+        from ..file_handler import handle_file
 
         # For backwards compatibility, support resource as kwarg
         resource = kwargs.get('resource', element_name)

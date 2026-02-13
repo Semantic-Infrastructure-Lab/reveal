@@ -646,34 +646,31 @@ class StatsAdapter(ResourceAdapter):
             # Silently skip files that can't be analyzed
             return None
 
-    def _calculate_file_stats(self,
-                             file_path: Path,
-                             structure: Dict[str, Any],
-                             content: str) -> Dict[str, Any]:
-        """Calculate statistics for a file.
+    def _count_line_types(self, lines: list) -> tuple:
+        """Count different types of lines.
 
         Args:
-            file_path: Path to file
-            structure: Parsed structure from analyzer
+            lines: List of file lines
+
+        Returns:
+            Tuple of (empty_lines, comment_lines, code_lines)
+        """
+        empty_lines = sum(1 for line in lines if not line.strip())
+        comment_lines = sum(1 for line in lines if line.strip().startswith(('#', '//', '/*', '*')))
+        total_lines = len(lines)
+        code_lines = total_lines - empty_lines - comment_lines
+        return empty_lines, comment_lines, code_lines
+
+    def _extract_complexity_metrics(self, functions: list, content: str) -> dict:
+        """Extract complexity metrics from functions.
+
+        Args:
+            functions: List of function structures
             content: File content
 
         Returns:
-            Dict with file statistics
+            Dict with complexities, long functions, and deep nesting
         """
-        lines = content.splitlines()
-        total_lines = len(lines)
-
-        # Count empty and comment lines (simple heuristic)
-        empty_lines = sum(1 for line in lines if not line.strip())
-        comment_lines = sum(1 for line in lines if line.strip().startswith(('#', '//', '/*', '*')))
-        code_lines = total_lines - empty_lines - comment_lines
-
-        # Extract element counts
-        functions = structure.get('functions', [])
-        classes = structure.get('classes', [])
-        imports = structure.get('imports', [])
-
-        # Calculate complexity metrics
         complexities = []
         long_functions = []
         deep_nesting = []
@@ -705,19 +702,69 @@ class StatsAdapter(ResourceAdapter):
         avg_complexity = sum(complexities) / len(complexities) if complexities else 0
         avg_func_length = sum(f.get('line_count', 0) for f in functions) / len(functions) if functions else 0
 
-        # Calculate quality score (0-100, higher is better)
+        return {
+            'complexities': complexities,
+            'long_functions': long_functions,
+            'deep_nesting': deep_nesting,
+            'avg_complexity': avg_complexity,
+            'avg_func_length': avg_func_length,
+        }
+
+    def _get_file_display_path(self, file_path: Path) -> str:
+        """Get display path for a file.
+
+        Args:
+            file_path: Path to file
+
+        Returns:
+            Display-friendly path string
+        """
+        if self.path.is_file() and file_path == self.path:
+            return file_path.name
+        elif file_path.is_relative_to(self.path):
+            return str(file_path.relative_to(self.path))
+        else:
+            return str(file_path)
+
+    def _calculate_file_stats(self,
+                             file_path: Path,
+                             structure: Dict[str, Any],
+                             content: str) -> Dict[str, Any]:
+        """Calculate statistics for a file.
+
+        Args:
+            file_path: Path to file
+            structure: Parsed structure from analyzer
+            content: File content
+
+        Returns:
+            Dict with file statistics
+        """
+        lines = content.splitlines()
+        total_lines = len(lines)
+
+        # Count different line types
+        empty_lines, comment_lines, code_lines = self._count_line_types(lines)
+
+        # Extract element counts
+        functions = structure.get('functions', [])
+        classes = structure.get('classes', [])
+        imports = structure.get('imports', [])
+
+        # Extract complexity metrics
+        metrics = self._extract_complexity_metrics(functions, content)
+
+        # Calculate quality score
         quality_score = self._calculate_quality_score(
-            avg_complexity, avg_func_length, len(long_functions), len(deep_nesting), len(functions)
+            metrics['avg_complexity'],
+            metrics['avg_func_length'],
+            len(metrics['long_functions']),
+            len(metrics['deep_nesting']),
+            len(functions)
         )
 
-        # For single file analysis, self.path is the file itself
-        # Use the file name instead of trying to get relative path
-        if self.path.is_file() and file_path == self.path:
-            file_display = file_path.name
-        elif file_path.is_relative_to(self.path):
-            file_display = str(file_path.relative_to(self.path))
-        else:
-            file_display = str(file_path)
+        # Get display path
+        file_display = self._get_file_display_path(file_path)
 
         return {
             'file': file_display,
@@ -733,19 +780,19 @@ class StatsAdapter(ResourceAdapter):
                 'imports': len(imports),
             },
             'complexity': {
-                'average': round(avg_complexity, 2),
-                'max': max(complexities) if complexities else 0,
-                'min': min(complexities) if complexities else 0,
+                'average': round(metrics['avg_complexity'], 2),
+                'max': max(metrics['complexities']) if metrics['complexities'] else 0,
+                'min': min(metrics['complexities']) if metrics['complexities'] else 0,
             },
             'quality': {
                 'score': round(quality_score, 1),
-                'long_functions': len(long_functions),
-                'deep_nesting': len(deep_nesting),
-                'avg_function_length': round(avg_func_length, 1),
+                'long_functions': len(metrics['long_functions']),
+                'deep_nesting': len(metrics['deep_nesting']),
+                'avg_function_length': round(metrics['avg_func_length'], 1),
             },
             'issues': {
-                'long_functions': long_functions,
-                'deep_nesting': deep_nesting,
+                'long_functions': metrics['long_functions'],
+                'deep_nesting': metrics['deep_nesting'],
             }
         }
 

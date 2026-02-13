@@ -58,7 +58,7 @@ class TestCheckForUpdates:
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
     @patch('urllib.request.urlopen')
-    @patch('reveal.__version__', '0.48.0')
+    @patch('reveal.version.__version__', '0.48.0')
     def test_makes_request_when_cache_old(self, mock_urlopen, mock_cache_path, tmp_path):
         """Should make network request when cache is older than 1 day."""
         cache_file = tmp_path / "cache"
@@ -85,7 +85,7 @@ class TestCheckForUpdates:
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
     @patch('urllib.request.urlopen')
-    @patch('reveal.__version__', '0.48.0')
+    @patch('reveal.version.__version__', '0.48.0')
     def test_makes_request_when_no_cache(self, mock_urlopen, mock_cache_path, tmp_path):
         """Should make network request when no cache file exists."""
         cache_file = tmp_path / "nonexistent_cache"
@@ -108,7 +108,7 @@ class TestCheckForUpdates:
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
     @patch('urllib.request.urlopen')
-    @patch('reveal.__version__', '0.48.0')
+    @patch('reveal.version.__version__', '0.48.0')
     def test_handles_invalid_cache_content(self, mock_urlopen, mock_cache_path, tmp_path):
         """Should handle invalid cache content gracefully."""
         cache_file = tmp_path / "cache"
@@ -135,7 +135,7 @@ class TestCheckForUpdates:
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
     @patch('urllib.request.urlopen')
-    @patch('reveal.__version__', '0.47.0')
+    @patch('reveal.version.__version__', '0.47.0')
     def test_shows_message_when_newer_version_available(self, mock_urlopen, mock_cache_path, tmp_path, capsys):
         """Should print message when newer version is available."""
         cache_file = tmp_path / "cache"
@@ -161,7 +161,7 @@ class TestCheckForUpdates:
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
     @patch('urllib.request.urlopen')
-    @patch('reveal.__version__', '0.48.0')
+    @patch('reveal.version.__version__', '0.48.0')
     def test_no_message_when_same_version(self, mock_urlopen, mock_cache_path, tmp_path, capsys):
         """Should not print message when on latest version."""
         cache_file = tmp_path / "cache"
@@ -185,7 +185,7 @@ class TestCheckForUpdates:
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
     @patch('urllib.request.urlopen')
-    @patch('reveal.__version__', '0.49.0')
+    @patch('reveal.version.__version__', '0.49.0')
     def test_no_message_when_current_version_newer(self, mock_urlopen, mock_cache_path, tmp_path, capsys):
         """Should not print message when current version is newer (e.g., dev version)."""
         cache_file = tmp_path / "cache"
@@ -209,7 +209,7 @@ class TestCheckForUpdates:
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
     @patch('urllib.request.urlopen')
-    @patch('reveal.__version__', '0.48.0')
+    @patch('reveal.version.__version__', '0.48.0')
     def test_updates_cache_after_successful_check(self, mock_urlopen, mock_cache_path, tmp_path):
         """Should update cache file with current timestamp after check."""
         cache_file = tmp_path / "cache"
@@ -250,7 +250,7 @@ class TestCheckForUpdates:
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
     @patch('urllib.request.urlopen')
-    @patch('reveal.__version__', '0.48.0')
+    @patch('reveal.version.__version__', '0.48.0')
     def test_fails_silently_on_json_parse_error(self, mock_urlopen, mock_cache_path, tmp_path):
         """Should fail silently when JSON response is invalid."""
         cache_file = tmp_path / "cache"
@@ -269,7 +269,7 @@ class TestCheckForUpdates:
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
     @patch('urllib.request.urlopen')
-    @patch('reveal.__version__', 'not.a.valid.version')
+    @patch('reveal.version.__version__', 'not.a.valid.version')
     def test_handles_invalid_version_comparison(self, mock_urlopen, mock_cache_path, tmp_path, capsys):
         """Should handle invalid version strings gracefully."""
         cache_file = tmp_path / "cache"
@@ -294,7 +294,7 @@ class TestCheckForUpdates:
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
     @patch('urllib.request.urlopen')
-    @patch('reveal.__version__', '0.48.0')
+    @patch('reveal.version.__version__', '0.48.0')
     def test_uses_correct_pypi_url(self, mock_urlopen, mock_cache_path, tmp_path):
         """Should make request to correct PyPI URL."""
         cache_file = tmp_path / "cache"
@@ -320,7 +320,7 @@ class TestCheckForUpdates:
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
     @patch('urllib.request.urlopen')
-    @patch('reveal.__version__', '0.48.0')
+    @patch('reveal.version.__version__', '0.48.0')
     def test_uses_1_second_timeout(self, mock_urlopen, mock_cache_path, tmp_path):
         """Should use 1-second timeout for network request."""
         cache_file = tmp_path / "cache"
@@ -344,7 +344,7 @@ class TestCheckForUpdates:
     @patch.dict(os.environ, {}, clear=True)
     @patch('reveal.config.get_cache_path')
     @patch('urllib.request.urlopen')
-    @patch('reveal.__version__', '0.10.0')
+    @patch('reveal.version.__version__', '0.10.0')
     def test_handles_multi_digit_version_numbers(self, mock_urlopen, mock_cache_path, tmp_path, capsys):
         """Should correctly compare versions with multi-digit numbers."""
         cache_file = tmp_path / "cache"

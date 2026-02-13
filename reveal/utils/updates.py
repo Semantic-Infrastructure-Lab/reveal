@@ -12,8 +12,8 @@ def check_for_updates():
     - Fails silently (no errors shown to user)
     - Opt-out: Set REVEAL_NO_UPDATE_CHECK=1 environment variable
     """
-    # Import here to avoid circular dependencies
-    from .. import __version__
+    # Import from version module (separate to avoid circular dependencies)
+    from ..version import __version__
     from ..config import get_cache_path
 
     # Opt-out check

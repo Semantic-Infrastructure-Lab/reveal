@@ -1043,8 +1043,8 @@ class TestHandleFile(unittest.TestCase):
     def test_validate_schema_flag(self):
         """Verify --validate-schema flag calls run_schema_validation."""
         import tempfile
-        from reveal.cli.routing import handle_file
-        from reveal import main
+        from reveal.file_handler import handle_file
+        from reveal import checks
 
         with tempfile.NamedTemporaryFile(delete=False, suffix='.py', mode='w') as f:
             f.write("x = 1\n")
@@ -1053,10 +1053,13 @@ class TestHandleFile(unittest.TestCase):
         try:
             mock_args = Namespace(
                 validate_schema='schema.json',
-                no_breadcrumbs=False
+                no_breadcrumbs=False,
+                no_fallback=False,
+                extract=None,
+                check=False
             )
 
-            with patch.object(main, 'run_schema_validation') as mock_validate:
+            with patch.object(checks, 'run_schema_validation') as mock_validate:
                 handle_file(temp_path, None, False, 'text', mock_args)
                 mock_validate.assert_called_once()
         finally:
@@ -1065,8 +1068,8 @@ class TestHandleFile(unittest.TestCase):
     def test_check_flag(self):
         """Verify --check flag calls run_pattern_detection."""
         import tempfile
-        from reveal.cli.routing import handle_file
-        from reveal import main
+        from reveal.file_handler import handle_file
+        from reveal import checks
 
         with tempfile.NamedTemporaryFile(delete=False, suffix='.py', mode='w') as f:
             f.write("x = 1\n")
@@ -1076,10 +1079,14 @@ class TestHandleFile(unittest.TestCase):
             mock_args = Namespace(
                 check=True,
                 validate_schema=None,
-                no_breadcrumbs=False
+                no_breadcrumbs=False,
+                no_fallback=False,
+                extract=None,
+                select=None,
+                ignore=None
             )
 
-            with patch.object(main, 'run_pattern_detection') as mock_check:
+            with patch.object(checks, 'run_pattern_detection') as mock_check:
                 handle_file(temp_path, None, False, 'text', mock_args)
                 mock_check.assert_called_once()
         finally:

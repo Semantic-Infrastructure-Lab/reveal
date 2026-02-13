@@ -702,68 +702,58 @@ class SSLAdapter(ResourceAdapter):
             'exit_code': 0 if summary['failures'] == 0 else 2,
         }
 
-    def validate_nginx_ssl(self, **kwargs) -> Dict[str, Any]:
-        """Validate nginx SSL configuration matches actual certificates.
+    def _validate_single_domain(self, domain: str) -> Dict[str, Any]:
+        """Validate SSL configuration for a single domain.
 
-        Cross-validates:
-        - Nginx cert paths exist
-        - Nginx cert matches served cert
-        - All SAN domains have nginx configs
+        Args:
+            domain: Domain to validate
 
         Returns:
-            Validation results with issues and remediation steps
+            Validation result with status and issues
         """
-        if not self._nginx_path:
+        issues = []
+
+        # Get SSL cert for this domain
+        try:
+            cert_result = check_ssl_health(domain, 443)
+            cert = cert_result.get('certificate', {})
+        except Exception as e:
             return {
-                'type': 'ssl_nginx_validation',
-                'error': 'No nginx path specified (use ssl://nginx:///path/to/config)',
-                'exit_code': 2,
+                'domain': domain,
+                'status': 'failure',
+                'issues': [{
+                    'type': 'connection_error',
+                    'message': f'Could not connect to {domain}: {e}',
+                    'severity': 'critical',
+                }],
             }
 
+        # TODO: Parse nginx config to get cert path and validate
+        # For now, just validate that the cert is accessible
+        if cert_result['status'] in ('failure', 'warning'):
+            for check in cert_result.get('checks', []):
+                if check['status'] in ('failure', 'warning'):
+                    issues.append({
+                        'type': 'ssl_check_failed',
+                        'message': f"{check['name']}: {check['message']}",
+                        'severity': 'high' if check['status'] == 'failure' else 'medium',
+                    })
 
-        # Get domains from nginx config
-        domain_info = self._get_nginx_domains()
-        domains = domain_info['domains']
+        return {
+            'domain': domain,
+            'status': 'pass' if not issues else 'failure',
+            'issues': issues,
+        }
 
-        # Validate each domain
-        validation_results = []
-        for domain in domains:
-            issues = []
+    def _build_validation_summary(self, validation_results: list) -> Dict[str, Any]:
+        """Build summary from validation results.
 
-            # Get SSL cert for this domain
-            try:
-                cert_result = check_ssl_health(domain, 443)
-                cert = cert_result.get('certificate', {})
-            except Exception as e:
-                validation_results.append({
-                    'domain': domain,
-                    'status': 'failure',
-                    'issues': [{
-                        'type': 'connection_error',
-                        'message': f'Could not connect to {domain}: {e}',
-                        'severity': 'critical',
-                    }],
-                })
-                continue
+        Args:
+            validation_results: List of domain validation results
 
-            # TODO: Parse nginx config to get cert path and validate
-            # For now, just validate that the cert is accessible
-            if cert_result['status'] in ('failure', 'warning'):
-                for check in cert_result.get('checks', []):
-                    if check['status'] in ('failure', 'warning'):
-                        issues.append({
-                            'type': 'ssl_check_failed',
-                            'message': f"{check['name']}: {check['message']}",
-                            'severity': 'high' if check['status'] == 'failure' else 'medium',
-                        })
-
-            validation_results.append({
-                'domain': domain,
-                'status': 'pass' if not issues else 'failure',
-                'issues': issues,
-            })
-
-        # Summary
+        Returns:
+            Complete validation summary with statistics and next steps
+        """
         total = len(validation_results)
         passed = sum(1 for r in validation_results if r['status'] == 'pass')
         failed = sum(1 for r in validation_results if r['status'] == 'failure')
@@ -790,6 +780,97 @@ class SSLAdapter(ResourceAdapter):
             'exit_code': 0 if failed == 0 else 2,
         }
 
+    def validate_nginx_ssl(self, **kwargs) -> Dict[str, Any]:
+        """Validate nginx SSL configuration matches actual certificates.
+
+        Cross-validates:
+        - Nginx cert paths exist
+        - Nginx cert matches served cert
+        - All SAN domains have nginx configs
+
+        Returns:
+            Validation results with issues and remediation steps
+        """
+        if not self._nginx_path:
+            return {
+                'type': 'ssl_nginx_validation',
+                'error': 'No nginx path specified (use ssl://nginx:///path/to/config)',
+                'exit_code': 2,
+            }
+
+        # Get domains from nginx config
+        domain_info = self._get_nginx_domains()
+        domains = domain_info['domains']
+
+        # Validate each domain
+        validation_results = [self._validate_single_domain(d) for d in domains]
+
+        # Build and return summary
+        return self._build_validation_summary(validation_results)
+
+
+def _extract_ssl_domains_from_nginx(structure: Dict[str, Any]) -> set:
+    """Extract SSL-enabled domains from nginx structure.
+
+    Args:
+        structure: Parsed nginx structure
+
+    Returns:
+        Set of domain names
+    """
+    domains = set()
+    servers = structure.get('servers', [])
+
+    for server in servers:
+        signature = server.get('signature', '')
+        # Look for SSL servers (port 443 or SSL indicator)
+        if '443' in signature or 'SSL' in signature:
+            # Extract domain from signature (format: "domain.com [443 (SSL)]")
+            domain = signature.split()[0] if signature else None
+            if domain and domain != '_':  # Skip default server
+                domains.add(domain)
+
+    return domains
+
+
+def _build_batch_summary(results: list, nginx_path: str) -> Dict[str, Any]:
+    """Build batch check summary from results.
+
+    Args:
+        results: List of SSL check results
+        nginx_path: Source nginx config path
+
+    Returns:
+        Complete batch check summary
+    """
+    total = len(results)
+    passed = sum(1 for r in results if r['status'] == 'pass')
+    warnings = sum(1 for r in results if r['status'] == 'warning')
+    failures = sum(1 for r in results if r['status'] == 'failure')
+
+    # Determine overall status
+    if failures == 0 and warnings == 0:
+        status = 'pass'
+    elif failures == 0:
+        status = 'warning'
+    else:
+        status = 'failure'
+
+    return {
+        'type': 'ssl_batch_check',
+        'source': nginx_path,
+        'domains_checked': total,
+        'status': status,
+        'summary': {
+            'total': total,
+            'passed': passed,
+            'warnings': warnings,
+            'failures': failures,
+        },
+        'results': results,
+        'exit_code': 0 if failures == 0 else 2,
+    }
+
 
 def batch_check_from_nginx(
     nginx_path: str, warn_days: int = 30, critical_days: int = 7
@@ -811,43 +892,13 @@ def batch_check_from_nginx(
     structure = analyzer.get_structure()
 
     # Extract domains from SSL server blocks
-    domains = set()
-    servers = structure.get('servers', [])
-
-    for server in servers:
-        signature = server.get('signature', '')
-        # Look for SSL servers (port 443 or SSL indicator)
-        if '443' in signature or 'SSL' in signature:
-            # Extract domain from signature (format: "domain.com [443 (SSL)]")
-            domain = signature.split()[0] if signature else None
-            if domain and domain != '_':  # Skip default server
-                domains.add(domain)
+    domains = _extract_ssl_domains_from_nginx(structure)
 
     # Check each domain
-    results = []
-    for domain in sorted(domains):
-        result = check_ssl_health(domain, 443, warn_days, critical_days)
-        results.append(result)
+    results = [
+        check_ssl_health(domain, 443, warn_days, critical_days)
+        for domain in sorted(domains)
+    ]
 
-    # Summary
-    total = len(results)
-    passed = sum(1 for r in results if r['status'] == 'pass')
-    warnings = sum(1 for r in results if r['status'] == 'warning')
-    failures = sum(1 for r in results if r['status'] == 'failure')
-
-    return {
-        'type': 'ssl_batch_check',
-        'source': nginx_path,
-        'domains_checked': total,
-        'status': 'pass' if failures == 0 and warnings == 0 else (
-            'warning' if failures == 0 else 'failure'
-        ),
-        'summary': {
-            'total': total,
-            'passed': passed,
-            'warnings': warnings,
-            'failures': failures,
-        },
-        'results': results,
-        'exit_code': 0 if failures == 0 else 2,
-    }
+    # Build and return summary
+    return _build_batch_summary(results, nginx_path)
