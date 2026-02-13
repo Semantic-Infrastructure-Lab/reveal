@@ -15,6 +15,7 @@ import tempfile
 import shutil
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 import pytest
 
 # Check if pygit2 is available
@@ -117,14 +118,13 @@ class TestGitAdapterBasics:
 
     def test_adapter_without_pygit2(self):
         """Test error message when pygit2 is not available."""
-        if PYGIT2_AVAILABLE:
-            pytest.skip("pygit2 is available")
+        # Mock PYGIT2_AVAILABLE to False to test the error case
+        with patch('reveal.adapters.git.adapter.PYGIT2_AVAILABLE', False):
+            adapter = GitAdapter(path='.')
+            with pytest.raises(ImportError) as exc_info:
+                adapter.get_structure()
 
-        adapter = GitAdapter(path='.')
-        with pytest.raises(ImportError) as exc_info:
-            adapter.get_structure()
-
-        assert "pip install reveal-cli[git]" in str(exc_info.value)
+            assert "pip install reveal-cli[git]" in str(exc_info.value)
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_adapter_with_invalid_path(self):
