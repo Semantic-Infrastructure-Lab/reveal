@@ -54,7 +54,7 @@ class DomainRenderer(TypeDispatchRenderer):
             print(f"  Error: {ssl['error']}")
         elif ssl.get('has_certificate'):
             # Use shared status icons
-            ssl_icon = DomainRenderer._STATUS_ICONS.get(ssl.get('health_status'), '\u2753')
+            ssl_icon = DomainRenderer._STATUS_ICONS.get(str(ssl.get('health_status', 'unknown')), '\u2753')
             status_label = ssl.get('health_status', 'unknown').upper()
             print(f"  Status:      {ssl_icon} {status_label}")
 
@@ -291,7 +291,7 @@ class DomainRenderer(TypeDispatchRenderer):
             DomainRenderer._print_check_group("All Checks Passed", "\u2705", grouped['passes'])
 
         # Print remediation and exit code
-        DomainRenderer._print_remediation_steps(result.get('next_steps'))
+        DomainRenderer._print_remediation_steps(result.get('next_steps', []))
         print(f"Exit code: {result['exit_code']}")
 
     @staticmethod

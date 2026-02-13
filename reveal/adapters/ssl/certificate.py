@@ -234,7 +234,7 @@ class SSLFetcher:
                 san_ext = cert.extensions.get_extension_for_oid(
                     x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME
                 )
-                for name in san_ext.value:
+                for name in san_ext.value:  # type: ignore[attr-defined]
                     if isinstance(name, x509.DNSName):
                         san.append(('DNS', name.value))
                     elif isinstance(name, x509.IPAddress):
