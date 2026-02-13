@@ -104,7 +104,7 @@ class T004(BaseRule, ASTParsingMixin):
         # Type hint with None default but no Optional - PEP 484 violation!
         return True
 
-    def _add_detection(self, func_node: ast.FunctionDef, arg: ast.arg,
+    def _add_detection(self, func_node: ast.FunctionDef | ast.AsyncFunctionDef, arg: ast.arg,
                       file_path: str, content: str, detections: List[Detection]) -> None:
         """Add detection for implicit Optional parameter."""
         type_str = ast.unparse(arg.annotation) if arg.annotation else "Any"

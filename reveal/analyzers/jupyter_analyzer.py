@@ -203,7 +203,7 @@ class JupyterAnalyzer(FileAnalyzer):
         if structure['cells']:
             lines.append("Cells:")
             for cell in structure['cells']:
-                loc = self.format_location(cell['line'])
+                loc = f"Line {cell['line']}" if cell.get('line') else ""
                 cell_info = f"[{cell['index'] + 1}] {cell['type']}"
 
                 if cell['execution_count'] is not None:

@@ -385,7 +385,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
         return filters
 
-    def _compare(self, field_value: Any, operator: str, target_value: str) -> bool:
+    def _compare(self, field_value: Any, operator: str, target_value: bool | int | float | str) -> bool:
         """Compare field value against target using operator.
 
         Uses unified compare_values() from query.py to eliminate duplication.
