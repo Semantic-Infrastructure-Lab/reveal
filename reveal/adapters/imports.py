@@ -210,7 +210,7 @@ class ImportsAdapter(ResourceAdapter):
             path_str = '.'
 
         # Parse query params - support both flag-style (?circular) and key-value (?circular=true)
-        query_params = {}
+        query_params: Dict[str, str | bool] = {}
         if parsed.query:
             for param in parsed.query.split('&'):
                 if '=' in param:
@@ -526,7 +526,7 @@ class ImportsAdapter(ResourceAdapter):
         Returns:
             Standardized response dict with contract_version, type, source, etc.
         """
-        response = {
+        response: Dict[str, Any] = {
             'contract_version': '1.0',
             'type': response_type,
             'source': str(self._target_path),

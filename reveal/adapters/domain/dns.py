@@ -203,7 +203,7 @@ def check_dns_propagation(domain: str) -> Dict[str, Any]:
             }
 
         # Query each nameserver for A record
-        a_record_responses = {}
+        a_record_responses: Dict[str, List[str] | str] = {}
         for nameserver in nameservers:
             resolver = dns.resolver.Resolver()
             try:
