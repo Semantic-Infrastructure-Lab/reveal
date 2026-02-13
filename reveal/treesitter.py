@@ -455,7 +455,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # Fall back to grep
         return super().extract_element(element_type, name)
 
-    def _find_nodes_by_type(self, node_type: str) -> List:
+    def _find_nodes_by_type(self, node_type: str) -> List[Any]:
         """Find all nodes of a given type in the tree.
 
         Uses single-pass caching: first call walks entire tree once and caches
@@ -467,7 +467,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         # Build cache on first access (lazy initialization)
         if not hasattr(self, '_node_cache'):
-            self._node_cache = {}
+            self._node_cache: Dict[str, List[Any]] = {}
             stack = [self.tree.root_node]
             while stack:
                 node = stack.pop()

@@ -72,8 +72,12 @@ class T004(BaseRule, ASTParsingMixin):
             if default and self._is_implicit_optional(arg, default):
                 self._add_detection(func_node, arg, file_path, content, detections)
 
-    def _is_implicit_optional(self, arg: ast.arg, default: ast.expr) -> bool:
+    def _is_implicit_optional(self, arg: ast.arg, default: ast.expr | None) -> bool:
         """Check if parameter has type hint with None default but no Optional."""
+        # Default must exist
+        if default is None:
+            return False
+
         # Must have a type annotation
         if not arg.annotation:
             return False

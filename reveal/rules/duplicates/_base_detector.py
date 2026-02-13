@@ -136,7 +136,7 @@ class DuplicateFeatureExtractor(ABC):
         - Branching (if/for/while patterns)
         - Complexity estimates
         """
-        features = {}
+        features: Dict[str, float] = {}
 
         lines = chunk.splitlines()
         features['line_count'] = len(lines)
