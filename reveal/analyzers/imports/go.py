@@ -109,7 +109,7 @@ class GoExtractor(LanguageExtractor):
 
         return symbols
 
-    def _parse_import_spec(self, spec_node, file_path: Path, analyzer) -> ImportStatement:
+    def _parse_import_spec(self, spec_node, file_path: Path, analyzer) -> ImportStatement | None:
         """Parse a Go import_spec node using tree-sitter AST.
 
         Tree-sitter provides structured nodes:

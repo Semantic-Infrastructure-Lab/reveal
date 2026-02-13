@@ -450,9 +450,10 @@ class L003(BaseRule):
         suggestions = [f"Expected file not found: {expected_path}"]
 
         # Add similar files if found
-        similar = self._find_similar_files(expected_path)
-        if similar:
-            suggestions.append(f"Similar files: {', '.join(similar)}")
+        if expected_path:
+            similar = self._find_similar_files(expected_path)
+            if similar:
+                suggestions.append(f"Similar files: {', '.join(similar)}")
 
         # Add framework-specific suggestion
         framework_suggestion = self._get_framework_suggestion()

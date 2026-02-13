@@ -367,13 +367,13 @@ def get_language_info_detailed(language: str) -> str:
     # Normalize input and find extension
     if not language.startswith('.'):
         ext, info, error = _find_language_by_name(language)
-        if error:
-            return error
+        if error or not info or not ext:
+            return error or "Language not found"
     else:
         ext = language.lower()
         info, error = _validate_extension(ext)
-        if error:
-            return error
+        if error or not info:
+            return error or "Extension not found"
 
     # Build detailed information
     lines = _build_language_header(info, ext)
