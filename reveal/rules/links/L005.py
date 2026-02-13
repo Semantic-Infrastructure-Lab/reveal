@@ -183,8 +183,8 @@ class L005(BaseRule):
         # Match patterns and collect suggestions
         for pattern_name, pattern_info in patterns.items():
             # Check if keywords appear in content
-            if any(kw in content_lower for kw in pattern_info['keywords']):
-                for doc_name, reason in pattern_info['suggests']:
+            if any(kw in content_lower for kw in pattern_info['keywords']):  # type: ignore[attr-defined]
+                for doc_name, reason in pattern_info['suggests']:  # type: ignore[attr-defined]
                     # Only suggest docs that exist
                     if (docs_dir / doc_name).exists():
                         # Don't suggest current file
