@@ -44,7 +44,7 @@ class HTMLAnalyzer(FileAnalyzer):
         # Detect template type
         self.template_type = self._detect_template_type()
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract HTML structure progressively.
 
         Args:
@@ -405,7 +405,9 @@ class HTMLAnalyzer(FileAnalyzer):
         links = []
 
         for a_tag in self.soup.find_all('a'):
-            href = a_tag.get('href', '')
+            href_raw = a_tag.get('href', '')
+            # Ensure href is a string (BeautifulSoup can return AttributeValueList for multi-valued attributes)
+            href = str(href_raw) if href_raw else ''
             text = a_tag.get_text(separator=' ', strip=True)  # Preserve spaces between nested elements
             line = self._get_line_number(a_tag)
 
@@ -568,7 +570,7 @@ class HTMLAnalyzer(FileAnalyzer):
         Returns:
             List of stylesheets
         """
-        styles = []
+        styles: List[Dict[str, Any]] = []
 
         # External stylesheets (link tags)
         for link in self.soup.find_all('link', rel='stylesheet'):

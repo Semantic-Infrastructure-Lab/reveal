@@ -51,7 +51,7 @@ def safe_operation(
                     log_level,
                     f"{func.__name__} failed gracefully: {e}"
                 )
-                return fallback
+                return fallback  # type: ignore[return-value]
         return wrapper
     return decorator
 

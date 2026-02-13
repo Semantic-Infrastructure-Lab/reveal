@@ -115,7 +115,7 @@ class SSLFetcher:
                 leaf = self._parse_certificate(cert)
 
                 # Try to get the certificate chain
-                chain: List[Dict[str, Any]] = []
+                chain: List[CertificateInfo] = []
                 # Note: Python's ssl module doesn't easily expose the full chain
                 # We'd need PyOpenSSL for that. For now, just return the leaf.
 
@@ -147,7 +147,7 @@ class SSLFetcher:
                     cert = ssock.getpeercert()
                     verification['verified'] = True
                     verification['hostname_match'] = True
-                    leaf = self._parse_certificate(cert)
+                    leaf = self._parse_certificate(cert)  # type: ignore[arg-type]
                     return leaf, [], verification
         except ssl.CertificateError as e:
             verification['error'] = str(e)
