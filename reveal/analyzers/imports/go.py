@@ -12,7 +12,7 @@ Benefits:
 from pathlib import Path
 from typing import List, Set, Optional
 
-from . import ImportStatement
+from .types import ImportStatement
 from .base import LanguageExtractor, register_extractor
 from ...registry import get_analyzer
 

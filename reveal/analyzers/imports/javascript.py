@@ -15,7 +15,7 @@ Uses tree-sitter for consistent parsing across all language analyzers.
 from pathlib import Path
 from typing import List, Set, Optional
 
-from . import ImportStatement
+from .types import ImportStatement
 from .base import LanguageExtractor, register_extractor
 from ...registry import get_analyzer
 

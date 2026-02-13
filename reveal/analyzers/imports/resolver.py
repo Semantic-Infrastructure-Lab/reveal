@@ -10,7 +10,7 @@ Handles Python's import resolution logic:
 from pathlib import Path
 from typing import List, Optional
 
-from . import ImportStatement
+from .types import ImportStatement
 
 
 def resolve_python_import(

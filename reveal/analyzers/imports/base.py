@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Set, ClassVar, Optional, Type, Dict
 
-from . import ImportStatement
+from .types import ImportStatement
 
 # Registry for auto-discovery of language extractors
 _EXTRACTOR_REGISTRY: Dict[str, Type['LanguageExtractor']] = {}
