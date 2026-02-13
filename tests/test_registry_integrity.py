@@ -22,6 +22,17 @@ from reveal.registry import get_all_analyzers
 class TestAdapterRegistryIntegrity(unittest.TestCase):
     """Test that all adapters are properly registered and importable."""
 
+    @staticmethod
+    def _get_production_adapters():
+        """Get registered production adapters, excluding test-only adapters.
+
+        The 'test' adapter is registered during test runs but is not a production
+        adapter (not imported in adapters/__init__.py, not documented).
+        """
+        adapters = set(list_supported_schemes())
+        adapters.discard('test')
+        return adapters
+
     def test_all_adapter_files_are_registered(self):
         """All files with @register_adapter should appear in list_supported_schemes().
 
@@ -54,12 +65,8 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
             matches = re.findall(r'@register_adapter\([\'"](\w+)[\'"]\)', content)
             registered_in_code.update(matches)
 
-        # Get actually registered schemes
-        actually_registered = set(list_supported_schemes())
-
-        # Exclude 'test' adapter - it may be registered during test runs but is not a production adapter
-        # This prevents test pollution when test_test_adapter.py runs before these tests
-        actually_registered.discard('test')
+        # Get actually registered production adapters (excludes test-only adapters)
+        actually_registered = self._get_production_adapters()
 
         # They should match
         missing = registered_in_code - actually_registered
@@ -72,38 +79,6 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
             f"  In registry but no @register_adapter found: {extra}\n"
             f"  Expected: {sorted(registered_in_code)}\n"
             f"  Got: {sorted(actually_registered)}"
-        )
-
-    def test_adapter_count_matches_documentation(self):
-        """Adapter count in code should match what README claims.
-
-        Note: This test will fail if you add/remove adapters but don't update README.
-        Run `reveal reveal:// --check` to validate documentation.
-        """
-        # This is the expected count based on current adapters
-        # Update this when you add new adapters
-        expected_adapters = {
-            'ast', 'claude', 'demo', 'diff', 'domain', 'env', 'git', 'help', 'imports',
-            'json', 'markdown', 'mysql', 'python', 'reveal', 'sqlite', 'ssl', 'stats'
-        }
-
-        actually_registered = set(list_supported_schemes())
-
-        # Exclude 'test' adapter - it may be registered during test runs but is not a production adapter
-        # This prevents test pollution when test_test_adapter.py runs before these tests
-        actually_registered.discard('test')
-
-        self.assertEqual(
-            actually_registered, expected_adapters,
-            f"Adapter count changed!\n"
-            f"  Expected: {sorted(expected_adapters)}\n"
-            f"  Got: {sorted(actually_registered)}\n"
-            f"  Missing: {expected_adapters - actually_registered}\n"
-            f"  Extra: {actually_registered - expected_adapters}\n"
-            f"\nIf you added/removed adapters:\n"
-            f"  1. Update this test's expected_adapters set\n"
-            f"  2. Update README.md adapter count\n"
-            f"  3. Run `reveal reveal:// --check` to validate"
         )
 
     def test_all_registered_adapters_are_importable(self):
@@ -133,12 +108,8 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
 
         This ensures that adapters are loaded on import, not just via lazy loading.
         """
-        # Get all registered schemes
-        registered_schemes = set(list_supported_schemes())
-
-        # Exclude 'test' adapter - it may be registered during test runs but is not a production adapter
-        # This prevents test pollution when test_test_adapter.py runs before these tests
-        registered_schemes.discard('test')
+        # Get all registered production adapters (excludes test-only adapters)
+        registered_schemes = self._get_production_adapters()
 
         # Read adapters/__init__.py
         init_file = Path(__file__).parent.parent / 'reveal' / 'adapters' / '__init__.py'
@@ -230,7 +201,10 @@ class TestRevealAdapterOutputIntegrity(unittest.TestCase):
     """
 
     def test_reveal_adapter_shows_all_adapters(self):
-        """reveal:// should list all registered adapters."""
+        """reveal:// should list all registered adapters.
+
+        Note: This includes test-only adapters if they are registered during test runs.
+        """
         from reveal.adapters.reveal import RevealAdapter
 
         adapter = RevealAdapter()
@@ -241,7 +215,7 @@ class TestRevealAdapterOutputIntegrity(unittest.TestCase):
         # Extract scheme from each adapter dict
         listed_adapters = set(a['scheme'] for a in adapter_info)
 
-        # Get actually registered adapters
+        # Get all actually registered adapters (including test adapters during test runs)
         registered_adapters = set(list_supported_schemes())
 
         # They should match exactly
@@ -305,7 +279,8 @@ class TestDocumentationAccuracy(unittest.TestCase):
 
         This is what V013 validation rule checks, but as a test it runs in CI.
         """
-        actual_count = len(list_supported_schemes())
+        # Count production adapters only (excludes test-only adapters)
+        actual_count = len(TestAdapterRegistryIntegrity._get_production_adapters())
 
         # Read README
         readme_file = Path(__file__).parent.parent / 'README.md'
