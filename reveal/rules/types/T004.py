@@ -68,9 +68,8 @@ class T004(BaseRule, ASTParsingMixin):
                 self._add_detection(func_node, arg, file_path, content, detections)
 
         # Check keyword-only args with defaults
-        default: ast.expr | None
-        for arg, default in zip(args.kwonlyargs, args.kw_defaults):
-            if default and self._is_implicit_optional(arg, default):
+        for arg, kw_default in zip(args.kwonlyargs, args.kw_defaults):
+            if kw_default and self._is_implicit_optional(arg, kw_default):
                 self._add_detection(func_node, arg, file_path, content, detections)
 
     def _is_implicit_optional(self, arg: ast.arg, default: ast.expr | None) -> bool:

@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 try:
-    import tomllib
+    import tomllib  # type: ignore[import-not-found]
 except ImportError:
     import tomli as tomllib  # Python < 3.11 fallback
 

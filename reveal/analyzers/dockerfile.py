@@ -30,7 +30,7 @@ class DockerfileAnalyzer(TreeSitterAnalyzer):
         if not self.tree:
             return {}
 
-        structure = {}
+        structure: Dict[str, List[Dict[str, Any]]] = {}
 
         # Map instruction types to structure keys
         instruction_map = {

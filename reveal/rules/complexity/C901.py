@@ -9,7 +9,7 @@ import ast
 import logging
 from typing import List, Dict, Any, Optional
 
-from mccabe import PathGraphingAstVisitor
+from mccabe import PathGraphingAstVisitor  # type: ignore[import-untyped]
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 
