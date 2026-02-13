@@ -146,7 +146,7 @@ class RustExtractor(LanguageExtractor):
 
     def _parse_scoped_use_list(self, node, file_path: Path, line_number: int, analyzer) -> List[ImportStatement]:
         """Parse scoped_use_list node: std::{fs, io}"""
-        imports = []
+        imports: List[ImportStatement] = []
 
         # Extract base path (before ::)
         base_path = None

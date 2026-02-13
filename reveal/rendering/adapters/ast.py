@@ -44,7 +44,7 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
         return
 
     # Group by file
-    by_file = {}
+    by_file: Dict[str, List[Dict[str, Any]]] = {}
     for result in results:
         file_path = result.get('file', '')
         if file_path not in by_file:

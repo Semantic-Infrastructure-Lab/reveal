@@ -416,7 +416,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
         Returns:
             List of Path objects to markdown files
         """
-        files = []
+        files: List[Path] = []
         if not self.base_path.exists():
             return files
 

@@ -164,7 +164,7 @@ class V003(BaseRule):
         Returns:
             Dict mapping analyzer name to info dict
         """
-        analyzers = {}
+        analyzers: Dict[str, Dict[str, Any]] = {}
         analyzers_dir = reveal_root / 'analyzers'
 
         if not analyzers_dir.exists():

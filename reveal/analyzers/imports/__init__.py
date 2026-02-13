@@ -72,7 +72,7 @@ class ImportGraph:
         cycles = []
         visited = set()
         rec_stack = set()
-        current_path = []
+        current_path: List[Path] = []
 
         def dfs(node: Path) -> None:
             """DFS helper to detect cycles."""

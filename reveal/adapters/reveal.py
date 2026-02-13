@@ -412,7 +412,7 @@ class RevealAdapter(ResourceAdapter):
 
     def _get_analyzers(self) -> List[Dict[str, Any]]:
         """Get all registered analyzers."""
-        analyzers = []
+        analyzers: List[Dict[str, Any]] = []
         analyzers_dir = self.reveal_root / 'analyzers'
 
         if not analyzers_dir.exists():
@@ -446,7 +446,7 @@ class RevealAdapter(ResourceAdapter):
 
     def _get_rules(self) -> List[Dict[str, Any]]:
         """Get all available rules."""
-        rules = []
+        rules: List[Dict[str, Any]] = []
         rules_dir = self.reveal_root / 'rules'
 
         if not rules_dir.exists():
@@ -677,7 +677,7 @@ class RevealAdapter(ResourceAdapter):
         # Rules
         if structure['rules']:
             lines.append("## Rules by Category\n")
-            by_category = {}
+            by_category: Dict[str, List[Dict[str, Any]]] = {}
             for rule in structure['rules']:
                 cat = rule['category']
                 if cat not in by_category:
