@@ -99,16 +99,33 @@ def test_json_parsing(sample_json_data):
 
 ### Real Example: Registry Pollution
 
-**Issue**: `test_test_adapter.py` imported `TestAdapter`, which executed `@register_adapter('test')`, adding an adapter to the global registry. Later tests (`test_registry_integrity.py`) expected 17 adapters but saw 18.
+**Issue**: `test_test_adapter.py` imported `TestAdapter`, which executed `@register_adapter('test')`, adding an adapter to the global registry. Later tests (`test_registry_integrity.py`) expected 17 production adapters but saw 18.
 
-**Solution**: Registry integrity tests now explicitly exclude the 'test' adapter:
+**Solution**: Centralized pollution handling via helper method:
 ```python
-# Get registered schemes
-actually_registered = set(list_supported_schemes())
+class TestAdapterRegistryIntegrity(unittest.TestCase):
+    @staticmethod
+    def _get_production_adapters():
+        """Get registered production adapters, excluding test-only adapters.
 
-# Exclude 'test' adapter - prevents test pollution
-actually_registered.discard('test')
+        The 'test' adapter is registered during test runs but is not a production
+        adapter (not imported in adapters/__init__.py, not documented).
+        """
+        adapters = set(list_supported_schemes())
+        adapters.discard('test')
+        return adapters
+
+    def test_all_adapter_files_are_registered(self):
+        # ... scan filesystem for adapters ...
+        actually_registered = self._get_production_adapters()
+        self.assertEqual(registered_in_code, actually_registered)
 ```
+
+**Benefits**:
+- Centralizes pollution handling in one place
+- Clear documentation of why 'test' is excluded
+- Multiple tests can use the same helper
+- Easy to extend if more test-only adapters are added
 
 ### Best Practices
 
@@ -317,10 +334,13 @@ filterwarnings = [
 
 **Problem**: Tests that import adapters modify global registry.
 
-**Solution**: Exclude test-only adapters from integrity checks:
+**Solution**: Use helper method to get production adapters:
 ```python
-actually_registered.discard('test')  # Exclude test adapter
+# Use the centralized helper from TestAdapterRegistryIntegrity
+production_adapters = TestAdapterRegistryIntegrity._get_production_adapters()
 ```
+
+See "Test Pollution Prevention" section above for full example.
 
 ### 3. Hardcoded Paths
 
