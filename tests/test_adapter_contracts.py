@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from reveal.adapters.base import get_adapter_class, get_renderer_class, list_supported_schemes, list_renderer_schemes
 from reveal.adapters import (
-    env, ast, help, python, json_adapter, git, mysql, sqlite,
+    env, ast, help, python, json, git, mysql, sqlite,
     imports, diff, reveal, stats, markdown, claude
 )
 

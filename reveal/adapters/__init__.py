@@ -18,7 +18,7 @@ from .diff import DiffAdapter
 from .domain import DomainAdapter
 from .help import HelpAdapter
 from .imports import ImportsAdapter
-from .json_adapter import JsonAdapter
+from .json import JsonAdapter
 from .markdown import MarkdownQueryAdapter
 from .mysql import MySQLAdapter
 from .python import PythonAdapter

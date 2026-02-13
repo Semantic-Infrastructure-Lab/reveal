@@ -6,7 +6,7 @@ import tempfile
 import os
 from pathlib import Path
 
-from reveal.adapters.json_adapter import JsonAdapter
+from reveal.adapters.json import JsonAdapter
 
 
 class TestJsonAdapter(unittest.TestCase):
