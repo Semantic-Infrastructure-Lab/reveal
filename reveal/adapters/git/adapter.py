@@ -3,18 +3,18 @@
 Progressive disclosure for Git repositories with token-efficient output.
 """
 
-import json
-import os
-import sys
-from datetime import datetime
-from typing import Dict, Any, Optional, List, cast, Union
+from typing import Dict, Any, Optional, cast
+
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.query import (
     parse_query_filters,
     parse_result_control,
-    compare_values,
     ResultControl
 )
+
+# Import modular components
+from .renderer import GitRenderer
+from . import refs, commits, files, queries
 
 
 # Check if pygit2 is available
@@ -24,194 +24,6 @@ try:
 except ImportError:
     PYGIT2_AVAILABLE = False
     pygit2 = None  # type: ignore[assignment]
-
-
-class GitRenderer:
-    """Renderer for git repository inspection results."""
-
-    @staticmethod
-    def render_structure(result: dict, format: str = 'text') -> None:
-        """Render git repository structure.
-
-        Args:
-            result: Git structure from adapter
-            format: Output format (text, json)
-        """
-        if format == 'json':
-            print(json.dumps(result, indent=2))
-            return
-
-        # Text rendering based on result type
-        result_type = result.get('type', 'unknown')
-
-        if result_type in ('repository', 'git_repository'):
-            GitRenderer._render_repository_overview(result)
-        elif result_type in ('ref', 'git_ref'):
-            GitRenderer._render_ref_structure(result)
-        elif result_type in ('file', 'git_file'):
-            GitRenderer._render_file(result)
-        elif result_type in ('file_history', 'git_file_history'):
-            GitRenderer._render_file_history(result)
-        elif result_type in ('file_blame', 'git_file_blame'):
-            GitRenderer._render_file_blame(result)
-        else:
-            print(json.dumps(result, indent=2))
-
-    @staticmethod
-    def _render_repository_overview(result: dict) -> None:
-        """Render repository overview."""
-        print(f"Repository: {result['path']}")
-        print()
-
-        head = result['head']
-        if head['branch']:
-            print(f"HEAD: {head['branch']} @ {head['commit']}")
-        elif head['detached']:
-            print(f"HEAD: (detached) @ {head['commit']}")
-        print()
-
-        print(f"Branches: {result['branches']['count']}")
-        for branch in result['branches']['recent']:
-            print(f"  • {branch['name']:<20} {branch['commit']} {branch['date']} {branch['message']}")
-        print()
-
-        print(f"Tags: {result['tags']['count']}")
-        for tag in result['tags']['recent']:
-            print(f"  • {tag['name']:<20} {tag['commit']} {tag['date']} {tag['message']}")
-        print()
-
-        print("Recent Commits:")
-        for commit in result['commits']['recent']:
-            print(f"  {commit['hash']} {commit['date']} {commit['author']}")
-            print(f"    {commit['message']}")
-
-    @staticmethod
-    def _render_ref_structure(result: dict) -> None:
-        """Render ref/commit history."""
-        print(f"Ref: {result['ref']}")
-        print()
-
-        commit = result['commit']
-        print(f"Commit: {commit['full_hash']}")
-        print(f"Author: {commit['author']} <{commit['email']}>")
-        print(f"Date:   {commit['date']}")
-        print()
-        print(commit['full_message'])
-        print()
-
-        print("History:")
-        for c in result['history']:
-            print(f"  {c['hash']} {c['date']} {c['author']}")
-            print(f"    {c['message']}")
-
-    @staticmethod
-    def _render_file(result: dict) -> None:
-        """Render file contents."""
-        print(f"File: {result['path']} @ {result['ref']}")
-        print(f"Commit: {result['commit']}")
-        print(f"Size: {result['size']} bytes, {result['lines']} lines")
-        print()
-        print(result['content'])
-
-    @staticmethod
-    def _render_file_history(result: dict) -> None:
-        """Render file history."""
-        print(f"File History: {result['path']} @ {result['ref']}")
-        print(f"Commits: {result['count']}")
-        print()
-
-        for commit in result['commits']:
-            print(f"  {commit['hash']} {commit['date']} {commit['author']}")
-            print(f"    {commit['message']}")
-
-    @staticmethod
-    def _render_file_blame(result: dict) -> None:
-        """Render file blame with progressive disclosure."""
-        # Check if detail mode is requested
-        detail_mode = result.get('detail', False)
-
-        if detail_mode:
-            # Detailed view: show all hunks (original behavior)
-            print(f"File Blame (Detailed): {result['path']} @ {result['ref']}")
-            print(f"Lines: {result['lines']}")
-            print()
-
-            for hunk in result['hunks']:
-                lines_info = hunk['lines']
-                commit_info = hunk['commit']
-                print(f"Lines {lines_info['start']}-{lines_info['start'] + lines_info['count'] - 1}:")
-                print(f"  {commit_info['hash']} {commit_info['date']} {commit_info['author']}")
-                print(f"  {commit_info['message']}")
-                print()
-        else:
-            # Summary view: show contributors and key hunks
-            GitRenderer._render_file_blame_summary(result)
-
-    @staticmethod
-    def _render_file_blame_summary(result: dict) -> None:
-        """Render blame summary (default view)."""
-        # Check if this is semantic blame (element-specific)
-        element = result.get('element')
-        if element:
-            print(f"Element Blame: {result['path']} → {element['name']}")
-            print(f"Lines {element['line_start']}-{element['line_end']} ({len(result['hunks'])} hunks)")
-        else:
-            print(f"File Blame Summary: {result['path']} ({result['lines']} lines, {len(result['hunks'])} hunks)")
-        print()
-
-        # Calculate contributor stats
-        contributors = {}
-        for hunk in result['hunks']:
-            author = hunk['commit']['author']
-            lines = hunk['lines']['count']
-            if author not in contributors:
-                contributors[author] = {'lines': 0, 'hunks': 0, 'latest_date': hunk['commit']['date']}
-            contributors[author]['lines'] += lines
-            contributors[author]['hunks'] += 1
-            # Track latest commit date
-            if hunk['commit']['date'] > contributors[author]['latest_date']:
-                contributors[author]['latest_date'] = hunk['commit']['date']
-
-        # Sort by lines contributed (descending)
-        sorted_contributors = sorted(contributors.items(), key=lambda x: x[1]['lines'], reverse=True)
-
-        print("Contributors (by lines owned):")
-        total_lines = result['lines']
-        for author, stats in sorted_contributors[:5]:  # Top 5 contributors
-            pct = (stats['lines'] / total_lines * 100) if total_lines > 0 else 0
-            print(f"  {author:30} {stats['lines']:4} lines ({pct:5.1f}%)  Last: {stats['latest_date']}")
-
-        if len(sorted_contributors) > 5:
-            print(f"  ... and {len(sorted_contributors) - 5} more contributors")
-        print()
-
-        # Find key hunks (largest continuous blocks)
-        key_hunks = sorted(result['hunks'], key=lambda h: h['lines']['count'], reverse=True)[:5]
-
-        print("Key hunks (largest continuous blocks):")
-        for hunk in key_hunks:
-            lines_info = hunk['lines']
-            commit_info = hunk['commit']
-            start = lines_info['start']
-            end = start + lines_info['count'] - 1
-            print(f"  Lines {start:3}-{end:3} ({lines_info['count']:3} lines)  {commit_info['hash']} {commit_info['date']} {commit_info['author'][:20]}")
-            print(f"    {commit_info['message'][:70]}")
-        print()
-
-        print(f"Use: reveal git://{result['path']}?type=blame&detail=full for line-by-line view")
-
-    @staticmethod
-    def render_error(error: Exception) -> None:
-        """Render error message."""
-        print(f"Error: {error}", file=sys.stderr)
-        if isinstance(error, ImportError):
-            # pygit2 not installed
-            print(file=sys.stderr)
-            print("The git:// adapter requires pygit2.", file=sys.stderr)
-            print("Install with: pip install reveal-cli[git]", file=sys.stderr)
-            print("Alternative: pip install pygit2>=1.14.0", file=sys.stderr)
-            print(file=sys.stderr)
-            print("For more info: reveal help://git", file=sys.stderr)
 
 
 @register_adapter('git')
@@ -505,15 +317,48 @@ class GitAdapter(ResourceAdapter):
 
         if self.subpath:
             if query_type == 'history':
-                return self._get_file_history(repo)
+                return files.get_file_history(
+                    repo, self.ref, self.subpath, self.query,
+                    self.result_control, self.query_filters,
+                    commits.format_commit,
+                    lambda cd: queries.matches_all_filters(cd, self.query_filters),
+                    files.commit_touches_file
+                )
             elif query_type == 'blame':
-                return self._get_file_blame(repo)
+                return files.get_file_blame(
+                    repo, self.ref, self.subpath, self.query, self.path,
+                    lambda en: files.get_element_line_range(en, self.path, self.subpath)
+                )
             else:
-                return self._get_file_at_ref(repo)
+                return files.get_file_at_ref(repo, self.ref, self.subpath)
         elif self.ref != 'HEAD' or query_type:
-            return self._get_ref_structure(repo)
+            return refs.get_ref_structure(
+                repo, self.ref, self.query, self.query_filters,
+                self.result_control,
+                commits.format_commit,
+                lambda cd: queries.matches_all_filters(cd, self.query_filters),
+                lambda repo, start_commit, limit: commits.get_commit_history(
+                    repo, start_commit, limit,
+                    commits.format_commit,
+                    lambda cd: queries.matches_all_filters(cd, self.query_filters),
+                    self.result_control,
+                    self.query_filters
+                )
+            )
         else:
-            return self._get_repository_overview(repo)
+            return commits.get_repository_overview(
+                repo,
+                refs.get_head_info,
+                refs.list_branches,
+                refs.list_tags,
+                lambda repo, limit: commits.get_recent_commits(
+                    repo, limit,
+                    commits.format_commit,
+                    lambda cd: queries.matches_all_filters(cd, self.query_filters),
+                    self.result_control,
+                    self.query_filters
+                )
+            )
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """
@@ -528,7 +373,7 @@ class GitAdapter(ResourceAdapter):
         try:
             commit = repo.revparse_single(element_name)
             if isinstance(commit, pygit2.Commit):
-                return self._format_commit(commit, detailed=True)
+                return commits.format_commit(commit, detailed=True)
         except (KeyError, pygit2.GitError):
             pass
 
@@ -537,7 +382,7 @@ class GitAdapter(ResourceAdapter):
             old_subpath = self.subpath
             self.subpath = element_name
             try:
-                result = self._get_file_at_ref(repo)
+                result = files.get_file_at_ref(repo, self.ref, self.subpath)
                 return result
             except Exception:
                 pass
@@ -794,524 +639,6 @@ class GitAdapter(ResourceAdapter):
                 'reveal help://stats - Analyze codebase metrics and hotspots',
             ]
         }
-
-    # Private implementation methods
-
-    def _get_repository_overview(self, repo: 'pygit2.Repository') -> Dict[str, Any]:
-        """Generate repository overview structure."""
-        head_info = self._get_head_info(repo)
-        branches = self._list_branches(repo)
-        tags = self._list_tags(repo)
-        recent_commits = self._get_recent_commits(repo, limit=10)
-
-        return {
-            'contract_version': '1.0',
-            'type': 'git_repository',
-            'source': repo.workdir or repo.path,
-            'source_type': 'directory',
-            'path': repo.workdir or repo.path,
-            'head': head_info,
-            'branches': {
-                'count': len(list(repo.branches.local)),
-                'recent': branches[:10],
-            },
-            'tags': {
-                'count': len([ref for ref in repo.references if ref.startswith('refs/tags/')]),
-                'recent': tags[:10],
-            },
-            'commits': {
-                'recent': recent_commits,
-            },
-            'stats': {
-                'is_bare': repo.is_bare,
-                'is_empty': repo.is_empty,
-                'head_detached': repo.head_is_detached if not repo.is_empty else False,
-            }
-        }
-
-    def _get_ref_structure(self, repo: 'pygit2.Repository') -> Dict[str, Any]:
-        """Get structure for specific ref (commit/branch/tag)."""
-        try:
-            obj = repo.revparse_single(self.ref)
-
-            # If it's a tag, peel to the commit
-            while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-                obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
-
-            if isinstance(obj, pygit2.Commit):
-                commit_obj = cast('pygit2.Commit', obj)
-                # Get commit history from this point
-                limit = int(self.query.get('limit', 20))
-                commits = self._get_commit_history(repo, commit_obj, limit=limit)
-
-                return {
-                    'contract_version': '1.0',
-                    'type': 'git_ref',
-                    'source': f"{repo.workdir or repo.path}@{self.ref}",
-                    'source_type': 'directory',
-                    'ref': self.ref,
-                    'commit': self._format_commit(commit_obj, detailed=True),
-                    'history': commits,
-                }
-            else:
-                raise ValueError(f"Cannot resolve ref to commit: {self.ref}")
-
-        except (KeyError, pygit2.GitError) as e:
-            raise ValueError(f"Invalid ref: {self.ref}") from e
-
-    def _get_file_at_ref(self, repo: 'pygit2.Repository') -> Dict[str, Any]:
-        """Get file contents at specific ref."""
-        try:
-            # Resolve the ref to a commit
-            obj = repo.revparse_single(self.ref)
-            while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-                obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
-
-            if not isinstance(obj, pygit2.Commit):
-                raise ValueError(f"Cannot resolve ref to commit: {self.ref}")
-
-            commit = cast('pygit2.Commit', obj)
-
-            # Navigate to the file in the tree
-            tree = commit.tree
-            entry = tree[self.subpath]
-
-            if entry.type_str == 'blob':
-                blob = cast('pygit2.Blob', repo[entry.id])
-                content = blob.data.decode('utf-8', errors='replace')
-
-                return {
-                    'contract_version': '1.0',
-                    'type': 'git_file',
-                    'source': f"{self.subpath}@{self.ref}",
-                    'source_type': 'file',
-                    'path': self.subpath,
-                    'ref': self.ref,
-                    'commit': str(commit.id)[:7],
-                    'size': blob.size,
-                    'content': content,
-                    'lines': len(content.splitlines()),
-                }
-            else:
-                raise ValueError(f"Path is not a file: {self.subpath}")
-
-        except (KeyError, pygit2.GitError) as e:
-            raise ValueError(f"File not found at {self.ref}: {self.subpath}") from e
-
-    def _get_file_history(self, repo: 'pygit2.Repository') -> Dict[str, Any]:
-        """Get commit history for a specific file."""
-        try:
-            limit = int(self.query.get('limit', 50))
-            commits = []
-
-            # Start from HEAD or specified ref
-            obj = repo.revparse_single(self.ref)
-            while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-                obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
-
-            commit = cast('pygit2.Commit', obj)
-
-            # Walk commit history
-            walker = repo.walk(commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
-
-            for commit in walker:
-                # Check if this commit touched the file
-                if self._commit_touches_file(repo, commit, self.subpath):
-                    commit_dict = self._format_commit(commit)
-                    # Apply query filters
-                    if self._matches_all_filters(commit_dict):
-                        commits.append(commit_dict)
-
-                        # Legacy limit parameter support (for backward compatibility)
-                        # Note: Prefer using ?limit=N in query string for result control
-                        if len(commits) >= limit:
-                            break
-
-            # Apply result control (sort, limit, offset) from query params
-            from ...utils.query import apply_result_control
-            total_matches = len(commits)
-            controlled_commits = apply_result_control(commits, self.result_control)
-
-            return {
-                'contract_version': '1.0',
-                'type': 'git_file_history',
-                'source': f"{self.subpath}@{self.ref}",
-                'source_type': 'file',
-                'path': self.subpath,
-                'ref': self.ref,
-                'commits': controlled_commits,
-                'count': len(controlled_commits),
-                'total_matches': total_matches if total_matches != len(controlled_commits) else None,
-            }
-
-        except (KeyError, pygit2.GitError) as e:
-            raise ValueError(f"Failed to get file history: {self.subpath}") from e
-
-    def _get_file_blame(self, repo: 'pygit2.Repository') -> Dict[str, Any]:
-        """Get blame information for a file or specific element."""
-        try:
-            # Resolve ref to commit
-            obj = repo.revparse_single(self.ref)
-            while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
-                obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
-
-            commit = cast('pygit2.Commit', obj)
-
-            # Get blame for the file
-            blame = repo.blame(self.subpath, newest_commit=commit.id)
-
-            # Get file contents to include with blame
-            tree = commit.tree
-            entry = tree[self.subpath]
-            blob = cast('pygit2.Blob', repo[entry.id])
-            lines = blob.data.decode('utf-8', errors='replace').splitlines()
-
-            # Format blame hunks
-            hunks: List[Dict[str, Any]] = []
-            for hunk in blame:
-                commit_obj = cast('pygit2.Commit', repo[hunk.final_commit_id])
-                committer = hunk.final_committer
-                if not committer:
-                    continue
-                hunks.append({
-                    'lines': {
-                        'start': hunk.final_start_line_number,
-                        'count': hunk.lines_in_hunk,
-                    },
-                    'commit': {
-                        'hash': str(hunk.final_commit_id)[:7],
-                        'author': committer.name,
-                        'email': committer.email,
-                        'date': datetime.fromtimestamp(committer.time).strftime('%Y-%m-%d %H:%M:%S'),
-                        'message': commit_obj.message.split('\n')[0],
-                    },
-                })
-
-            # Check if semantic blame (element-specific) is requested
-            element_name = self.query.get('element')
-            element_info = None
-            if element_name:
-                # Get line range for the element
-                element_range = self._get_element_line_range(element_name)
-                if element_range:
-                    element_info = {
-                        'name': element_name,
-                        'line_start': element_range['line'],
-                        'line_end': element_range['line_end'],
-                    }
-                    # Filter hunks to only those within the element's range
-                    filtered_hunks: List[Dict[str, Any]] = []
-                    for hunk_dict in hunks:
-                        hunk_start = hunk_dict['lines']['start']
-                        hunk_end = hunk_start + hunk_dict['lines']['count'] - 1
-                        # Check if hunk overlaps with element range
-                        if (hunk_start <= element_range['line_end'] and
-                            hunk_end >= element_range['line']):
-                            filtered_hunks.append(hunk_dict)
-                    hunks = filtered_hunks
-                else:
-                    # Element was requested but not found - inform user
-                    print(f"Note: Element '{element_name}' not found in {self.subpath}, showing full file blame", file=sys.stderr)
-
-            # Check if detail mode is requested
-            detail_mode = self.query.get('detail') == 'full'
-
-            result = {
-                'contract_version': '1.0',
-                'type': 'git_file_blame',
-                'source': f"{self.subpath}@{self.ref}",
-                'source_type': 'file',
-                'path': self.subpath,
-                'ref': self.ref,
-                'commit': str(commit.id)[:7],
-                'lines': len(lines),
-                'hunks': hunks,
-                'file_content': lines,
-                'detail': detail_mode,
-            }
-
-            if element_info:
-                result['element'] = element_info
-
-            return result
-
-        except (KeyError, pygit2.GitError) as e:
-            raise ValueError(f"Failed to get file blame: {self.subpath}") from e
-
-    def _get_element_line_range(self, element_name: str) -> Optional[Dict[str, int]]:
-        """Get line range for a specific element (function/class) in the file."""
-        try:
-            # Use reveal's registry to analyze the file
-            from reveal.registry import get_analyzer
-
-            # Build absolute path if needed
-            if self.path and self.path != '.':
-                file_path = os.path.join(self.path, self.subpath)
-            else:
-                file_path = self.subpath
-
-            # Make path absolute for analyzer
-            if not os.path.isabs(file_path):
-                file_path = os.path.abspath(file_path)
-
-            analyzer_class = get_analyzer(file_path)
-            if not analyzer_class:
-                return None
-
-            analyzer = analyzer_class(file_path)
-            structure = analyzer.get_structure()
-
-            # Search for the element in functions and classes
-            for func in structure.get('functions', []):
-                if func.get('name') == element_name:
-                    return {'line': func['line'], 'line_end': func.get('line_end', func['line'])}
-
-            for cls in structure.get('classes', []):
-                if cls.get('name') == element_name:
-                    return {'line': cls['line'], 'line_end': cls.get('line_end', cls['line'])}
-
-            return None
-
-        except Exception as e:
-            # Log error for debugging but don't fail the whole blame operation
-            print(f"Warning: Failed to get element range: {e}", file=sys.stderr)
-            return None
-
-    def _commit_touches_file(self, repo: 'pygit2.Repository',
-                            commit: 'pygit2.Commit', filepath: str) -> bool:
-        """Check if a commit modified a specific file."""
-        try:
-            # Get file at this commit
-            tree = commit.tree
-            try:
-                entry = tree[filepath]
-                current_oid = entry.id
-            except KeyError:
-                # File doesn't exist in this commit
-                return False
-
-            # Check parents
-            if not commit.parents:
-                # Initial commit - file exists, so it was added
-                return True
-
-            # Check if file changed from any parent
-            for parent in commit.parents:
-                try:
-                    parent_tree = parent.tree
-                    parent_entry = parent_tree[filepath]
-                    parent_oid = parent_entry.id
-
-                    # If OID changed, file was modified
-                    if current_oid != parent_oid:
-                        return True
-                except KeyError:
-                    # File didn't exist in parent - it was added
-                    return True
-
-            return False
-
-        except Exception:
-            return False
-
-    def _get_head_info(self, repo: 'pygit2.Repository') -> Dict[str, Any]:
-        """Get HEAD information."""
-        if repo.is_empty or repo.head_is_unborn:
-            return {'branch': None, 'commit': None, 'detached': False}
-
-        try:
-            return {
-                'branch': repo.head.shorthand if not repo.head_is_detached else None,
-                'commit': str(repo.head.target)[:7],
-                'detached': repo.head_is_detached,
-            }
-        except Exception:
-            return {'branch': None, 'commit': None, 'detached': False}
-
-    def _list_branches(self, repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, Any]]:
-        """List repository branches."""
-        branches = []
-
-        try:
-            for branch_name in repo.branches.local:
-                try:
-                    branch = repo.branches.get(branch_name)
-                    if not branch or not branch.target:
-                        continue
-
-                    commit = cast('pygit2.Commit', repo[branch.target])
-                    branches.append({
-                        'name': branch_name,
-                        'commit': str(commit.id)[:7],
-                        'message': commit.message.split('\n')[0][:80],
-                        'author': commit.author.name,
-                        'date': datetime.fromtimestamp(commit.commit_time).strftime('%Y-%m-%d'),
-                        'timestamp': commit.commit_time,
-                    })
-                except (KeyError, pygit2.GitError):
-                    continue
-        except Exception:
-            pass
-
-        return sorted(branches, key=lambda b: cast(int, b.get('timestamp', 0)), reverse=True)[:limit]
-
-    def _list_tags(self, repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, Any]]:
-        """List repository tags."""
-        tags = []
-
-        try:
-            for ref_name in repo.references:
-                if not ref_name.startswith('refs/tags/'):
-                    continue
-
-                try:
-                    ref = repo.references.get(ref_name)
-                    if not ref:
-                        continue
-
-                    tag_name = ref_name.replace('refs/tags/', '')
-                    target = repo[ref.target]
-
-                    # Peel to commit
-                    while hasattr(target, 'peel') and not isinstance(target, pygit2.Commit):
-                        target = target.peel(pygit2.Commit)  # type: ignore[assignment]
-
-                    if isinstance(target, pygit2.Commit):
-                        commit_target = cast('pygit2.Commit', target)
-                        tags.append({
-                            'name': tag_name,
-                            'commit': str(commit_target.id)[:7],
-                            'message': commit_target.message.split('\n')[0][:80],
-                            'date': datetime.fromtimestamp(commit_target.commit_time).strftime('%Y-%m-%d'),
-                            'timestamp': commit_target.commit_time,
-                        })
-                except (KeyError, pygit2.GitError, AttributeError):
-                    continue
-        except Exception:
-            pass
-
-        return sorted(tags, key=lambda t: cast(int, t.get('timestamp', 0)), reverse=True)[:limit]
-
-    def _get_recent_commits(self, repo: 'pygit2.Repository', limit: int = 10) -> List[Dict[str, Any]]:
-        """Get recent commits from HEAD."""
-        commits: List[Dict[str, Any]] = []
-
-        try:
-            if repo.is_empty:
-                return commits
-
-            walker = repo.walk(repo.head.target, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
-
-            for commit in walker:
-                commit_dict = self._format_commit(commit)
-                # Apply query filters
-                if self._matches_all_filters(commit_dict):
-                    commits.append(commit_dict)
-                    # Legacy limit for backward compatibility
-                    if len(commits) >= limit:
-                        break
-        except Exception:
-            pass
-
-        # Apply result control if specified in query
-        if self.result_control.limit or self.result_control.sort_field or self.result_control.offset:
-            from ...utils.query import apply_result_control
-            commits = apply_result_control(commits, self.result_control)
-
-        return commits
-
-    def _get_commit_history(self, repo: 'pygit2.Repository',
-                           start_commit: 'pygit2.Commit', limit: int = 20) -> List[Dict[str, Any]]:
-        """Get commit history from a starting commit."""
-        commits = []
-
-        try:
-            walker = repo.walk(start_commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
-
-            for commit in walker:
-                commit_dict = self._format_commit(commit)
-                # Apply query filters
-                if self._matches_all_filters(commit_dict):
-                    commits.append(commit_dict)
-                    # Legacy limit for backward compatibility
-                    if len(commits) >= limit:
-                        break
-        except Exception:
-            pass
-
-        # Apply result control if specified in query
-        if self.result_control.limit or self.result_control.sort_field or self.result_control.offset:
-            from ...utils.query import apply_result_control
-            commits = apply_result_control(commits, self.result_control)
-
-        return commits
-
-    def _compare(self, field_value: Any, operator: str, target_value: Union[bool, int, float, str]) -> bool:
-        """Compare field value against target using operator.
-
-        Uses unified compare_values() from query.py to eliminate duplication.
-
-        Args:
-            field_value: Value from commit dict
-            operator: Comparison operator (=, >, <, >=, <=, !=, ~=, ..)
-            target_value: Target value to compare against
-
-        Returns:
-            True if comparison passes, False otherwise
-        """
-        return compare_values(
-            field_value,
-            operator,
-            target_value,
-            options={
-                'allow_list_any': False,  # Git commits don't have list fields
-                'case_sensitive': False,  # Author/email/message searches case-insensitive
-                'coerce_numeric': True,   # For timestamp comparisons
-                'none_matches_not_equal': True
-            }
-        )
-
-    def _matches_all_filters(self, commit_dict: Dict[str, Any]) -> bool:
-        """Check if commit matches all query filters.
-
-        Args:
-            commit_dict: Formatted commit dict from _format_commit()
-
-        Returns:
-            True if matches all filters, False otherwise
-        """
-        if not self.query_filters:
-            return True
-
-        for qf in self.query_filters:
-            # Get field value from commit dict
-            field_value = commit_dict.get(qf.field)
-            if not self._compare(field_value, qf.op, qf.value):
-                return False
-
-        return True
-
-    def _format_commit(self, commit: 'pygit2.Commit', detailed: bool = False) -> Dict[str, Any]:
-        """Format commit information."""
-        basic_info = {
-            'hash': str(commit.id)[:7],
-            'author': commit.author.name,
-            'email': commit.author.email,
-            'date': datetime.fromtimestamp(commit.commit_time).strftime('%Y-%m-%d %H:%M:%S'),
-            'timestamp': commit.commit_time,
-            'message': commit.message.split('\n')[0][:100],
-        }
-
-        if detailed:
-            basic_info.update({
-                'full_hash': str(commit.id),
-                'full_message': commit.message,
-                'parents': [str(p.id)[:7] for p in commit.parents],
-                'committer': commit.committer.name,
-                'committer_email': commit.committer.email,
-            })
-
-        return basic_info
 
     def get_metadata(self) -> Dict[str, Any]:
         """Get metadata about the resource."""
