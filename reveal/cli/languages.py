@@ -55,7 +55,7 @@ def list_supported_languages() -> str:
     lines.append("Full analysis with language-specific features\n")
 
     # Group by extension
-    explicit_sorted = sorted(explicit_extensions.items(), key=lambda x: x[1]['name'].lower())
+    explicit_sorted = sorted(explicit_extensions.items(), key=lambda x: str(x[1]['name']).lower())
     for ext, info in explicit_sorted:
         name = info['name']
         icon = info['icon']

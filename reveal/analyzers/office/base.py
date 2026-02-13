@@ -128,6 +128,9 @@ class ZipXMLAnalyzer(FileAnalyzer):
 
     def _get_embedded_media(self) -> List[Dict[str, Any]]:
         """Get list of embedded media files (images, etc.)."""
+        if not self.archive:
+            return []
+
         media = []
         media_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.svg', '.emf', '.wmf'}
 

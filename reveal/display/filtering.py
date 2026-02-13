@@ -22,7 +22,7 @@ Usage:
 
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import fnmatch
 
 

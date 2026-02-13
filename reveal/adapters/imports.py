@@ -530,7 +530,7 @@ class ImportsAdapter(ResourceAdapter):
             'contract_version': '1.0',
             'type': response_type,
             'source': str(self._target_path),
-            'source_type': 'directory' if self._target_path.is_dir() else 'file',
+            'source_type': 'directory' if self._target_path and self._target_path.is_dir() else 'file',
         }
         response.update(data_fields)
         response['metadata'] = self.get_metadata()

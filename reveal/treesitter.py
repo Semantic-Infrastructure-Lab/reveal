@@ -112,11 +112,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
             # Done! Full support in 3 lines.
     """
 
-    language: str = None  # Set in subclass
+    language: Optional[str] = None  # Set in subclass
 
     def __init__(self, path: str):
         super().__init__(path)
-        self.tree = None
+        self.tree: Optional[Any] = None
 
         if self.language:
             self._parse_tree()

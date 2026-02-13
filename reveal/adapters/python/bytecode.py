@@ -1,7 +1,7 @@
 """Bytecode checking utilities for Python adapter."""
 
 from pathlib import Path
-from typing import Dict, Any, Set
+from typing import Any, Dict, List, Set
 
 
 # Directories to skip by default in bytecode checking
@@ -43,7 +43,7 @@ def check_bytecode(root_path: str = ".") -> Dict[str, Any]:
     Returns:
         Dict with issues found
     """
-    issues = []
+    issues: List[Dict[str, Any]] = []
     root = Path(root_path)
 
     def should_skip(path: Path) -> bool:

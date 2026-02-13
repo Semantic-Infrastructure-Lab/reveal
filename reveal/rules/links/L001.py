@@ -137,6 +137,7 @@ class L001(BaseRule):
             Tuple of (is_broken, reason)
         """
         # Handle anchor-only links (#heading)
+        anchor: Optional[str] = None
         if url.startswith('#'):
             # Validate anchor exists in current file
             anchor = url[1:]  # Remove # prefix
