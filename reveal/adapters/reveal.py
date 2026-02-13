@@ -692,21 +692,9 @@ class RevealAdapter(ResourceAdapter):
 
         return '\n'.join(lines)
 
-    def _format_config_output(self, structure: Dict[str, Any]) -> str:
-        """Format configuration structure for text display.
-
-        Args:
-            structure: Config structure from _get_config()
-
-        Returns:
-            Formatted text output
-        """
-        lines = []
-        lines.append("# Reveal Configuration\n")
-
-        # Metadata section
-        meta = structure['metadata']
-        lines.append("## Overview\n")
+    def _format_metadata_section(self, meta: Dict[str, Any]) -> List[str]:
+        """Format metadata/overview section."""
+        lines = ["## Overview\n"]
         lines.append(f"**Project Root**: {meta['project_root']}")
         lines.append(f"**Working Directory**: {meta['working_directory']}")
         lines.append(f"**No-Config Mode**: {meta['no_config_mode']}")
@@ -715,10 +703,11 @@ class RevealAdapter(ResourceAdapter):
         if meta['custom_config_used']:
             lines.append(f"**Custom Config**: Used (REVEAL_CONFIG)")
         lines.append("")
+        return lines
 
-        # Sources section
-        sources = structure['sources']
-        lines.append("## Configuration Sources\n")
+    def _format_sources_section(self, sources: Dict[str, Any]) -> List[str]:
+        """Format configuration sources section."""
+        lines = ["## Configuration Sources\n"]
 
         # Environment variables
         if sources['env_vars']:
@@ -753,9 +742,11 @@ class RevealAdapter(ResourceAdapter):
             lines.append(f"  • {sources['system_config']}")
             lines.append("")
 
-        # Active configuration
-        active = structure['active_config']
-        lines.append("## Active Configuration\n")
+        return lines
+
+    def _format_active_config_section(self, active: Dict[str, Any]) -> List[str]:
+        """Format active configuration section."""
+        lines = ["## Active Configuration\n"]
 
         # Rules
         if active['rules']:
@@ -782,6 +773,24 @@ class RevealAdapter(ResourceAdapter):
             lines.append("### File Overrides")
             lines.append(f"  • {len(active['overrides'])} override(s) defined")
             lines.append("")
+
+        return lines
+
+    def _format_config_output(self, structure: Dict[str, Any]) -> str:
+        """Format configuration structure for text display.
+
+        Args:
+            structure: Config structure from _get_config()
+
+        Returns:
+            Formatted text output
+        """
+        lines = ["# Reveal Configuration\n"]
+
+        # Add sections
+        lines.extend(self._format_metadata_section(structure['metadata']))
+        lines.extend(self._format_sources_section(structure['sources']))
+        lines.extend(self._format_active_config_section(structure['active_config']))
 
         # Precedence order
         lines.append("## Configuration Precedence\n")

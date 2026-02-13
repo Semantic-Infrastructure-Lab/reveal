@@ -339,6 +339,68 @@ def handle_list_schemas():
     sys.exit(0)
 
 
+def _process_stdin_uri(target: str, args: 'Namespace', is_batch_mode: bool,
+                       is_ssl_batch_check: bool, batch_results: list,
+                       ssl_check_results: list) -> None:
+    """Process a URI from stdin.
+
+    Args:
+        target: URI to process
+        args: Parsed arguments
+        is_batch_mode: Whether in generic batch mode
+        is_ssl_batch_check: Whether in SSL batch check mode
+        batch_results: List to collect batch results
+        ssl_check_results: List to collect SSL check results
+    """
+    from .routing import handle_uri
+
+    # Generic batch mode - collect results from any adapter
+    if is_batch_mode:
+        result = _collect_batch_result(target, args)
+        batch_results.append(result)
+        return
+
+    # Legacy SSL-specific batch mode for backward compatibility
+    if is_ssl_batch_check and target.startswith('ssl://'):
+        ssl_result: Optional[Dict[str, Any]] = _collect_ssl_check_result(target, args)
+        if ssl_result:
+            ssl_check_results.append(ssl_result)
+        return
+
+    # Non-batch URIs go through normal path
+    try:
+        handle_uri(target, None, args)
+    except SystemExit as e:
+        # Only warn for actual failures (non-zero exit codes)
+        if e.code != 0:
+            print(f"Warning: {target} failed, skipping", file=sys.stderr)
+
+
+def _process_stdin_file(target: str, args: 'Namespace', handle_file_func) -> None:
+    """Process a file path from stdin.
+
+    Args:
+        target: File path to process
+        args: Parsed arguments
+        handle_file_func: Function to handle individual files
+    """
+    path = Path(target)
+
+    # Skip if path doesn't exist (graceful degradation)
+    if not path.exists():
+        print(f"Warning: {target} not found, skipping", file=sys.stderr)
+        return
+
+    # Skip directories (only process files)
+    if path.is_dir():
+        print(f"Warning: {target} is a directory, skipping (use reveal {target}/ directly)", file=sys.stderr)
+        return
+
+    # Process the file
+    if path.is_file():
+        handle_file_func(str(path), None, args.meta, args.format, args)
+
+
 def handle_stdin_mode(args: 'Namespace', handle_file_func):
     """Handle --stdin mode to process files/URIs from stdin.
 
@@ -357,8 +419,6 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
         print("Error: Cannot use element extraction with --stdin", file=sys.stderr)
         sys.exit(1)
 
-    from .routing import handle_uri
-
     # Check if we're in batch mode (explicit --batch or SSL batch checks)
     is_batch_mode = getattr(args, 'batch', False)
     is_ssl_batch_check = getattr(args, 'check', False) and not is_batch_mode
@@ -375,44 +435,10 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
 
         # Check if this is a URI (scheme://resource)
         if '://' in target:
-            # Generic batch mode - collect results from any adapter
-            if is_batch_mode:
-                result = _collect_batch_result(target, args)
-                batch_results.append(result)
-                continue
-
-            # Legacy SSL-specific batch mode for backward compatibility
-            if is_ssl_batch_check and target.startswith('ssl://'):
-                ssl_result: Optional[Dict[str, Any]] = _collect_ssl_check_result(target, args)
-                if ssl_result:
-                    ssl_check_results.append(ssl_result)
-                continue
-
-            # Non-batch URIs go through normal path
-            try:
-                handle_uri(target, None, args)
-            except SystemExit as e:
-                # Only warn for actual failures (non-zero exit codes)
-                if e.code != 0:
-                    print(f"Warning: {target} failed, skipping", file=sys.stderr)
-            continue
-
-        # Handle as file path
-        path = Path(target)
-
-        # Skip if path doesn't exist (graceful degradation)
-        if not path.exists():
-            print(f"Warning: {target} not found, skipping", file=sys.stderr)
-            continue
-
-        # Skip directories (only process files)
-        if path.is_dir():
-            print(f"Warning: {target} is a directory, skipping (use reveal {target}/ directly)", file=sys.stderr)
-            continue
-
-        # Process the file
-        if path.is_file():
-            handle_file_func(str(path), None, args.meta, args.format, args)
+            _process_stdin_uri(target, args, is_batch_mode, is_ssl_batch_check,
+                             batch_results, ssl_check_results)
+        else:
+            _process_stdin_file(target, args, handle_file_func)
 
     # Render aggregated batch results
     if batch_results:

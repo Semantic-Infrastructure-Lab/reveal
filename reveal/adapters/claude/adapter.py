@@ -154,6 +154,50 @@ class ClaudeAdapter(ResourceAdapter):
         self.messages = messages
         return messages
 
+    def _route_query_handler(self, messages: List[Dict], conversation_path_str: str,
+                           contract_base: Dict[str, Any]) -> Dict[str, Any]:
+        """Route to appropriate handler based on resource path and query.
+
+        Args:
+            messages: Loaded messages
+            conversation_path_str: Conversation path as string
+            contract_base: Contract base metadata
+
+        Returns:
+            Handler result dictionary
+        """
+        # Route based on query parameters
+        if self.query == 'summary':
+            return get_summary(messages, self.session_name, conversation_path_str, contract_base)
+        elif self.query == 'timeline':
+            return get_timeline(messages, self.session_name, contract_base)
+        elif self.query == 'errors':
+            return get_errors(messages, self.session_name, contract_base)
+        elif self.query and self.query.startswith('tools='):
+            tool_name = self.query.split('=')[1]
+            return get_tool_calls(messages, tool_name, self.session_name, contract_base)
+
+        # Route based on resource path
+        if '/thinking' in self.resource:
+            return get_thinking_blocks(messages, self.session_name, contract_base)
+        elif '/tools' in self.resource:
+            return get_all_tools(messages, self.session_name, contract_base)
+        elif '/files' in self.resource:
+            return get_files_touched(messages, self.session_name, contract_base)
+        elif '/workflow' in self.resource:
+            return get_workflow(messages, self.session_name, contract_base)
+        elif '/context' in self.resource:
+            return get_context_changes(messages, self.session_name, contract_base)
+        elif '/user' in self.resource:
+            return filter_by_role(messages, 'user', self.session_name, contract_base)
+        elif '/assistant' in self.resource:
+            return filter_by_role(messages, 'assistant', self.session_name, contract_base)
+        elif '/message/' in self.resource:
+            msg_id = int(self.resource.split('/message/')[1])
+            return get_message(messages, msg_id, self.session_name, contract_base)
+        else:
+            return get_overview(messages, self.session_name, conversation_path_str, contract_base)
+
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Return session structure based on query.
 
@@ -183,35 +227,8 @@ class ClaudeAdapter(ResourceAdapter):
         if self._is_composite_query():
             return self._handle_composite_query(messages)
 
-        # Route based on resource path and query (legacy single-query behavior)
-        if self.query == 'summary':
-            return get_summary(messages, self.session_name, conversation_path_str, contract_base)
-        elif self.query == 'timeline':
-            return get_timeline(messages, self.session_name, contract_base)
-        elif self.query == 'errors':
-            return get_errors(messages, self.session_name, contract_base)
-        elif self.query and self.query.startswith('tools='):
-            tool_name = self.query.split('=')[1]
-            return get_tool_calls(messages, tool_name, self.session_name, contract_base)
-        elif '/thinking' in self.resource:
-            return get_thinking_blocks(messages, self.session_name, contract_base)
-        elif '/tools' in self.resource:
-            return get_all_tools(messages, self.session_name, contract_base)
-        elif '/files' in self.resource:
-            return get_files_touched(messages, self.session_name, contract_base)
-        elif '/workflow' in self.resource:
-            return get_workflow(messages, self.session_name, contract_base)
-        elif '/context' in self.resource:
-            return get_context_changes(messages, self.session_name, contract_base)
-        elif '/user' in self.resource:
-            return filter_by_role(messages, 'user', self.session_name, contract_base)
-        elif '/assistant' in self.resource:
-            return filter_by_role(messages, 'assistant', self.session_name, contract_base)
-        elif '/message/' in self.resource:
-            msg_id = int(self.resource.split('/message/')[1])
-            return get_message(messages, msg_id, self.session_name, contract_base)
-        else:
-            return get_overview(messages, self.session_name, conversation_path_str, contract_base)
+        # Route to appropriate handler
+        return self._route_query_handler(messages, conversation_path_str, contract_base)
 
     def _is_composite_query(self) -> bool:
         """Check if query has multiple filter parameters.

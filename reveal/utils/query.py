@@ -347,6 +347,50 @@ def _handle_numeric_operator(field_value: Any, operator: str, target_value: Any,
     return False
 
 
+def _handle_none_comparison(operator: str, target_value: Any, opts: Dict[str, bool]) -> Optional[bool]:
+    """Handle comparison when field_value is None.
+
+    Args:
+        operator: Comparison operator
+        target_value: Target value
+        opts: Comparison options
+
+    Returns:
+        True/False if comparison handled, None to continue with other checks
+    """
+    if opts['none_matches_not_equal'] and operator in ('!=', '!~'):
+        return True
+    if operator == '=' and isinstance(target_value, str) and target_value.lower() == 'null':
+        return True
+    return False
+
+
+def _dispatch_comparison(field_value: Any, operator: str, target_value: Any,
+                        opts: Dict[str, bool]) -> bool:
+    """Dispatch comparison to appropriate operator handler.
+
+    Args:
+        field_value: Value to compare
+        operator: Comparison operator
+        target_value: Target value
+        opts: Comparison options
+
+    Returns:
+        Comparison result
+    """
+    if operator == '..':
+        return _handle_range_operator(field_value, target_value, opts)
+    elif operator == '*':
+        return _handle_wildcard_operator(field_value, target_value, opts)
+    elif operator in ('~=', '!~'):
+        return _handle_regex_operator(field_value, operator, target_value)
+    elif operator in ('=', '!='):
+        return _handle_equality_operator(field_value, operator, target_value, opts)
+    elif operator in ('>', '<', '>=', '<='):
+        return _handle_numeric_operator(field_value, operator, target_value, opts)
+    return False
+
+
 def compare_values(
     field_value: Any,
     operator: str,
@@ -397,29 +441,14 @@ def compare_values(
 
     # Handle None/null values
     if field_value is None:
-        if opts['none_matches_not_equal'] and operator in ('!=', '!~'):
-            return True
-        if operator == '=' and isinstance(target_value, str) and target_value.lower() == 'null':
-            return True
-        return False
+        return _handle_none_comparison(operator, target_value, opts)
 
     # Handle list fields - check if any element matches
     if opts['allow_list_any'] and isinstance(field_value, list):
         return any(compare_values(item, operator, target_value, options) for item in field_value)
 
     # Dispatch to specific operator handlers
-    if operator == '..':
-        return _handle_range_operator(field_value, target_value, opts)
-    elif operator == '*':
-        return _handle_wildcard_operator(field_value, target_value, opts)
-    elif operator in ('~=', '!~'):
-        return _handle_regex_operator(field_value, operator, target_value)
-    elif operator in ('=', '!='):
-        return _handle_equality_operator(field_value, operator, target_value, opts)
-    elif operator in ('>', '<', '>=', '<='):
-        return _handle_numeric_operator(field_value, operator, target_value, opts)
-
-    return False
+    return _dispatch_comparison(field_value, operator, target_value, opts)
 
 
 def apply_filter(item: Dict[str, Any], filter: QueryFilter) -> bool:

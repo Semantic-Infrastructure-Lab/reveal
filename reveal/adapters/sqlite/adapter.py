@@ -259,33 +259,12 @@ class SQLiteAdapter(ResourceAdapter):
         if hasattr(self, '_connection') and self._connection:
             self._connection.close()
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
-        """Get SQLite database overview.
+    def _get_pragma_info(self) -> Dict[str, Any]:
+        """Get SQLite PRAGMA information.
 
         Returns:
-            Dict containing database structure and statistics
+            Dict with page_size, page_count, journal_mode, encoding, foreign_keys
         """
-        # If table specified, delegate to get_element
-        if self.table:
-            element_data = self.get_element(self.table)
-            if element_data:
-                return element_data
-            raise ValueError(f"Table not found: {self.table}")
-
-        # Validate connection first (checks file existence)
-        self._get_connection()
-
-        # After successful connection, db_path is guaranteed to be non-None
-        assert self.db_path is not None
-
-        # Get database file info
-        db_size = os.path.getsize(self.db_path)
-        db_size_mb = db_size / (1024 * 1024)
-
-        # Get SQLite version and configuration
-        version_info = self._execute_single("SELECT sqlite_version() as version")
-        assert version_info is not None, "SQLite version query should always return a result"
-
         # PRAGMA queries always return results, so we can safely assert non-None
         page_size_result = self._execute_single("PRAGMA page_size")
         assert page_size_result is not None
@@ -298,7 +277,7 @@ class SQLiteAdapter(ResourceAdapter):
         foreign_keys_result = self._execute_single("PRAGMA foreign_keys")
         assert foreign_keys_result is not None
 
-        pragma_info = {
+        return {
             'page_size': page_size_result['page_size'],
             'page_count': page_count_result['page_count'],
             'journal_mode': journal_mode_result['journal_mode'],
@@ -306,17 +285,15 @@ class SQLiteAdapter(ResourceAdapter):
             'foreign_keys': foreign_keys_result['foreign_keys'],
         }
 
-        # Get all tables
-        tables_query = """
-            SELECT name, type
-            FROM sqlite_master
-            WHERE type IN ('table', 'view')
-            AND name NOT LIKE 'sqlite_%'
-            ORDER BY type, name
-        """
-        tables = self._execute_query(tables_query)
+    def _get_table_stats(self, tables: list) -> list:
+        """Get statistics for all tables and views.
 
-        # Get table statistics
+        Args:
+            tables: List of table/view dicts with 'name' and 'type'
+
+        Returns:
+            List of table statistics
+        """
         table_stats = []
         for table in tables:
             if table['type'] == 'table':
@@ -352,13 +329,69 @@ class SQLiteAdapter(ResourceAdapter):
                     'type': 'view',
                     'columns': len(columns)
                 })
+        return table_stats
 
-        # Check for foreign keys
+    def _count_foreign_keys(self, tables: list) -> int:
+        """Count foreign keys across all tables.
+
+        Args:
+            tables: List of table dicts
+
+        Returns:
+            Total count of foreign keys
+        """
         fk_count = 0
         for table in tables:
             if table['type'] == 'table':
                 fks = self._execute_query(f"PRAGMA foreign_key_list(\"{table['name']}\")")
                 fk_count += len(fks)
+        return fk_count
+
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
+        """Get SQLite database overview.
+
+        Returns:
+            Dict containing database structure and statistics
+        """
+        # If table specified, delegate to get_element
+        if self.table:
+            element_data = self.get_element(self.table)
+            if element_data:
+                return element_data
+            raise ValueError(f"Table not found: {self.table}")
+
+        # Validate connection first (checks file existence)
+        self._get_connection()
+
+        # After successful connection, db_path is guaranteed to be non-None
+        assert self.db_path is not None
+
+        # Get database file info
+        db_size = os.path.getsize(self.db_path)
+        db_size_mb = db_size / (1024 * 1024)
+
+        # Get SQLite version
+        version_info = self._execute_single("SELECT sqlite_version() as version")
+        assert version_info is not None, "SQLite version query should always return a result"
+
+        # Get PRAGMA information
+        pragma_info = self._get_pragma_info()
+
+        # Get all tables
+        tables_query = """
+            SELECT name, type
+            FROM sqlite_master
+            WHERE type IN ('table', 'view')
+            AND name NOT LIKE 'sqlite_%'
+            ORDER BY type, name
+        """
+        tables = self._execute_query(tables_query)
+
+        # Get table statistics
+        table_stats = self._get_table_stats(tables)
+
+        # Count foreign keys
+        fk_count = self._count_foreign_keys(tables)
 
         return {
             'contract_version': '1.0',

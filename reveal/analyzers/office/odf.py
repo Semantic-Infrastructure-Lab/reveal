@@ -73,65 +73,69 @@ class OdtAnalyzer(OdfAnalyzer):
     # ODF heading outline levels
     HEADING_STYLES = {'Heading': True}  # ODF uses outline-level attribute
 
-    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
-        """Extract document structure: headings, paragraphs, tables."""
-        if self.parse_error:
-            return {'error': [{'message': self.parse_error}]}
+    def _process_odf_element(self, elem: ET.Element, idx: int,
+                            sections: List[Dict[str, Any]],
+                            tables: List[Dict[str, Any]]) -> tuple[int, int]:
+        """Process a single ODF element.
 
-        if self.content_tree is None:
-            return {'error': [{'message': 'No content found'}]}
+        Args:
+            elem: Element to process
+            idx: Element index
+            sections: List to collect sections
+            tables: List to collect tables
 
+        Returns:
+            Tuple of (paragraph_count, word_count) increments
+        """
         ns = self.NAMESPACES
         text_ns = ns['text']
         table_ns = ns['table']
-        office_ns = ns['office']
+        tag = elem.tag.split('}')[-1]
 
-        # Find body/text
-        body = self.content_tree.find(f'.//{{{office_ns}}}body')
-        if body is None:
-            return {'error': [{'message': 'No document body found'}]}
+        if tag == 'p':  # Paragraph
+            text = self._get_element_text(elem)
+            return 1, len(text.split())
 
-        text_body = body.find(f'{{{office_ns}}}text')
-        if text_body is None:
-            # Try spreadsheet or presentation body
-            text_body = body
+        elif tag == 'h':  # Heading
+            text = self._get_element_text(elem)
+            level = int(elem.get(f'{{{text_ns}}}outline-level', '1'))
+            sections.append({
+                'name': text[:80] + ('...' if len(text) > 80 else '') if text else f'[Heading {level}]',
+                'level': level,
+                'line': idx + 1,
+            })
+            return 0, len(text.split())
 
-        sections: List[Dict[str, Any]] = []
-        tables: List[Dict[str, Any]] = []
-        para_count = 0
-        word_count = 0
+        elif tag == 'table':  # Table
+            rows, cols = self._get_table_dimensions(elem)
+            name = elem.get(f'{{{table_ns}}}name', f'Table {len(tables) + 1}')
+            tables.append({
+                'name': f'{name} ({rows}×{cols})',
+                'rows': rows,
+                'cols': cols,
+                'line': idx + 1,
+            })
 
-        for idx, elem in enumerate(text_body):
-            tag = elem.tag.split('}')[-1]
+        return 0, 0
 
-            if tag == 'p':  # Paragraph
-                para_count += 1
-                text = self._get_element_text(elem)
-                word_count += len(text.split())
+    def _build_odf_result(self, sections: List[Dict[str, Any]], tables: List[Dict[str, Any]],
+                         para_count: int, word_count: int,
+                         head: Optional[int], tail: Optional[int],
+                         range: Optional[tuple]) -> Dict[str, List[Dict[str, Any]]]:
+        """Build the final ODF structure result.
 
-            elif tag == 'h':  # Heading
-                text = self._get_element_text(elem)
-                level = int(elem.get(f'{{{text_ns}}}outline-level', '1'))
-                word_count += len(text.split())
+        Args:
+            sections: List of sections
+            tables: List of tables
+            para_count: Total paragraph count
+            word_count: Total word count
+            head: Head limit
+            tail: Tail limit
+            range: Range tuple
 
-                sections.append({
-                    'name': text[:80] + ('...' if len(text) > 80 else '') if text else f'[Heading {level}]',
-                    'level': level,
-                    'line': idx + 1,
-                })
-
-            elif tag == 'table':  # Table
-                rows, cols = self._get_table_dimensions(elem)
-                name = elem.get(f'{{{table_ns}}}name', f'Table {len(tables) + 1}')
-                tables.append({
-                    'name': f'{name} ({rows}×{cols})',
-                    'rows': rows,
-                    'cols': cols,
-                    'line': idx + 1,
-                })
-
-        # Build result
+        Returns:
+            Result dictionary
+        """
         result: Dict[str, List[Dict[str, Any]]] = {}
 
         if sections:
@@ -156,6 +160,41 @@ class OdtAnalyzer(OdfAnalyzer):
             } for idx, m in enumerate(media)]
 
         return result
+
+    def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+        """Extract document structure: headings, paragraphs, tables."""
+        if self.parse_error:
+            return {'error': [{'message': self.parse_error}]}
+
+        if self.content_tree is None:
+            return {'error': [{'message': 'No content found'}]}
+
+        ns = self.NAMESPACES
+        office_ns = ns['office']
+
+        # Find body/text
+        body = self.content_tree.find(f'.//{{{office_ns}}}body')
+        if body is None:
+            return {'error': [{'message': 'No document body found'}]}
+
+        text_body = body.find(f'{{{office_ns}}}text')
+        if text_body is None:
+            # Try spreadsheet or presentation body
+            text_body = body
+
+        sections: List[Dict[str, Any]] = []
+        tables: List[Dict[str, Any]] = []
+        para_count = 0
+        word_count = 0
+
+        # Process all elements
+        for idx, elem in enumerate(text_body):
+            para_inc, word_inc = self._process_odf_element(elem, idx, sections, tables)
+            para_count += para_inc
+            word_count += word_inc
+
+        return self._build_odf_result(sections, tables, para_count, word_count, head, tail, range)
 
     def _get_element_text(self, elem: ET.Element) -> str:
         """Extract all text from an element and its children."""

@@ -34,6 +34,52 @@ def pyc_to_source(pyc_file: Path) -> Path:
     return pyc_file.with_suffix(".py")
 
 
+def _check_old_style_pyc(pyc_file: Path) -> Dict[str, Any]:
+    """Check if pyc file is old Python 2 style (not in __pycache__)."""
+    return {
+        "type": "old_style_pyc",
+        "severity": "info",
+        "file": str(pyc_file),
+        "problem": "Python 2 style .pyc file (should be in __pycache__)",
+        "fix": f"rm {pyc_file}",
+    }
+
+
+def _check_orphaned_bytecode(pyc_file: Path) -> Dict[str, Any]:
+    """Check if pyc file has no corresponding .py file."""
+    return {
+        "type": "orphaned_bytecode",
+        "severity": "info",
+        "pyc_file": str(pyc_file),
+        "problem": "No matching .py file found",
+        "fix": f"rm {pyc_file}",
+    }
+
+
+def _check_stale_bytecode(py_file: Path, pyc_file: Path) -> Dict[str, Any]:
+    """Check if pyc file is newer than source (stale bytecode)."""
+    return {
+        "type": "stale_bytecode",
+        "severity": "warning",
+        "file": str(py_file),
+        "pyc_file": str(pyc_file),
+        "problem": ".pyc file is NEWER than source (stale bytecode)",
+        "source_mtime": py_file.stat().st_mtime,
+        "pyc_mtime": pyc_file.stat().st_mtime,
+        "fix": f"rm {pyc_file}",
+    }
+
+
+def _build_bytecode_summary(issues: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Build summary statistics for bytecode issues."""
+    return {
+        "total": len(issues),
+        "warnings": len([i for i in issues if i["severity"] == "warning"]),
+        "info": len([i for i in issues if i["severity"] == "info"]),
+        "errors": len([i for i in issues if i["severity"] == "error"]),
+    }
+
+
 def check_bytecode(root_path: str = ".") -> Dict[str, Any]:
     """Check for bytecode issues (stale .pyc files, orphaned bytecode, etc.).
 
@@ -70,43 +116,16 @@ def check_bytecode(root_path: str = ".") -> Dict[str, Any]:
 
             # Skip if not in __pycache__ (old Python 2 style)
             if "__pycache__" not in pyc_file.parts:
-                issues.append(
-                    {
-                        "type": "old_style_pyc",
-                        "severity": "info",
-                        "file": str(pyc_file),
-                        "problem": "Python 2 style .pyc file (should be in __pycache__)",
-                        "fix": f"rm {pyc_file}",
-                    }
-                )
+                issues.append(_check_old_style_pyc(pyc_file))
                 continue
 
             # Get corresponding .py file
             py_file = pyc_to_source(pyc_file)
 
             if not py_file.exists():
-                issues.append(
-                    {
-                        "type": "orphaned_bytecode",
-                        "severity": "info",
-                        "pyc_file": str(pyc_file),
-                        "problem": "No matching .py file found",
-                        "fix": f"rm {pyc_file}",
-                    }
-                )
+                issues.append(_check_orphaned_bytecode(pyc_file))
             elif pyc_file.stat().st_mtime > py_file.stat().st_mtime:
-                issues.append(
-                    {
-                        "type": "stale_bytecode",
-                        "severity": "warning",
-                        "file": str(py_file),
-                        "pyc_file": str(pyc_file),
-                        "problem": ".pyc file is NEWER than source (stale bytecode)",
-                        "source_mtime": py_file.stat().st_mtime,
-                        "pyc_mtime": pyc_file.stat().st_mtime,
-                        "fix": f"rm {pyc_file}",
-                    }
-                )
+                issues.append(_check_stale_bytecode(py_file, pyc_file))
 
     except Exception as e:
         return {"error": f"Failed to scan for bytecode issues: {str(e)}", "status": "error"}
@@ -114,10 +133,5 @@ def check_bytecode(root_path: str = ".") -> Dict[str, Any]:
     return {
         "status": "issues_found" if issues else "clean",
         "issues": issues,
-        "summary": {
-            "total": len(issues),
-            "warnings": len([i for i in issues if i["severity"] == "warning"]),
-            "info": len([i for i in issues if i["severity"] == "info"]),
-            "errors": len([i for i in issues if i["severity"] == "error"]),
-        },
+        "summary": _build_bytecode_summary(issues),
     }

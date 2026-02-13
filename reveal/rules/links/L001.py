@@ -125,6 +125,81 @@ class L001(BaseRule):
 
         return anchors
 
+    def _validate_anchor_only_link(self, url: str, source_file: str) -> Tuple[bool, str]:
+        """Validate anchor-only link (#heading).
+
+        Args:
+            url: Anchor-only URL (starts with #)
+            source_file: Path to source file
+
+        Returns:
+            Tuple of (is_broken, reason)
+        """
+        anchor = url[1:]  # Remove # prefix
+        if source_file:
+            source_path = Path(source_file)
+            valid_anchors = self._extract_anchors_from_markdown(source_path)
+            if anchor not in valid_anchors:
+                return (True, "anchor_not_found")
+        return (False, "")
+
+    def _check_file_case_mismatch(self, target: Path) -> Tuple[bool, str]:
+        """Check for case mismatch in file path.
+
+        Args:
+            target: Target file path
+
+        Returns:
+            Tuple of (is_broken, reason)
+        """
+        try:
+            # Get actual filename from parent directory by comparing lowercase names
+            if target.parent.exists():
+                for actual_file in target.parent.iterdir():
+                    # Compare lowercase names (works on case-insensitive filesystems)
+                    if actual_file.name.lower() == target.name.lower():
+                        # Found the file - check if case matches exactly
+                        if actual_file.name != target.name:
+                            return (True, "case_mismatch")
+                        break
+        except Exception:
+            pass  # If we can't check, assume it's ok
+        return (False, "")
+
+    def _validate_target_file(self, target: Path, anchor: Optional[str]) -> Tuple[bool, str]:
+        """Validate target file exists and anchor is valid.
+
+        Args:
+            target: Target file path
+            anchor: Optional anchor
+
+        Returns:
+            Tuple of (is_broken, reason)
+        """
+        if not target.exists():
+            # Try with .md extension if not already present
+            if not target.suffix:
+                md_target = target.parent / f"{target.name}.md"
+                if md_target.exists():
+                    return (False, "")  # Would work with .md extension
+            return (True, "file_not_found")
+
+        if target.is_dir():
+            return (True, "target_is_directory")
+
+        # Check for case mismatch
+        is_broken, reason = self._check_file_case_mismatch(target)
+        if is_broken:
+            return (is_broken, reason)
+
+        # Validate anchor if present
+        if anchor:
+            valid_anchors = self._extract_anchors_from_markdown(target)
+            if anchor not in valid_anchors:
+                return (True, "anchor_not_found")
+
+        return (False, "")
+
     def _is_broken_link(self, base_dir: Path, url: str, source_file: str = "") -> Tuple[bool, str]:
         """Check if an internal link is broken.
 
@@ -137,16 +212,8 @@ class L001(BaseRule):
             Tuple of (is_broken, reason)
         """
         # Handle anchor-only links (#heading)
-        anchor: Optional[str] = None
         if url.startswith('#'):
-            # Validate anchor exists in current file
-            anchor = url[1:]  # Remove # prefix
-            if source_file:
-                source_path = Path(source_file)
-                valid_anchors = self._extract_anchors_from_markdown(source_path)
-                if anchor not in valid_anchors:
-                    return (True, "anchor_not_found")
-            return (False, "")
+            return self._validate_anchor_only_link(url, source_file)
 
         # Split file path and anchor
         if '#' in url:
@@ -160,42 +227,9 @@ class L001(BaseRule):
             # TODO: Handle in L003 with framework routing
             return (False, "")
 
-        # Resolve relative path
+        # Resolve relative path and validate
         target = base_dir / file_part
-
-        # Try both as-is and with common extensions
-        if target.exists():
-            if target.is_dir():
-                return (True, "target_is_directory")
-
-            # Check for case mismatch (important on case-insensitive filesystems like macOS)
-            try:
-                # Get actual filename from parent directory by comparing lowercase names
-                if target.parent.exists():
-                    for actual_file in target.parent.iterdir():
-                        # Compare lowercase names (works on case-insensitive filesystems)
-                        if actual_file.name.lower() == target.name.lower():
-                            # Found the file - check if case matches exactly
-                            if actual_file.name != target.name:
-                                return (True, "case_mismatch")
-                            break
-            except Exception:
-                pass  # If we can't check, assume it's ok
-
-            # Validate anchor if present
-            if anchor:
-                valid_anchors = self._extract_anchors_from_markdown(target)
-                if anchor not in valid_anchors:
-                    return (True, "anchor_not_found")
-            return (False, "")
-
-        # Try with .md extension if not already present
-        if not target.suffix:
-            md_target = target.parent / f"{target.name}.md"
-            if md_target.exists():
-                return (False, "")  # Would work with .md extension
-
-        return (True, "file_not_found")
+        return self._validate_target_file(target, anchor)
 
     def _find_case_mismatch(self, target_path: Path) -> Optional[str]:
         """Find file with case-insensitive match.

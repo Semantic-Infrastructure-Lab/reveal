@@ -78,6 +78,49 @@ class MySQLRenderer(TypeDispatchRenderer):
                 example = result['available_elements'][0]['example']
                 print(f"💡 Try: {example}")
 
+    @staticmethod
+    def _get_status_icon(status: str) -> str:
+        """Get icon for check status."""
+        if status == 'pass':
+            return '✅'
+        elif status == 'warning':
+            return '⚠️'
+        else:
+            return '❌'
+
+    @staticmethod
+    def _group_checks_by_status(checks: list) -> tuple:
+        """Group checks into failures, warnings, and passes.
+
+        Returns:
+            Tuple of (failures, warnings, passes)
+        """
+        failures = [c for c in checks if c['status'] == 'failure']
+        warnings = [c for c in checks if c['status'] == 'warning']
+        passes = [c for c in checks if c['status'] == 'pass']
+        return failures, warnings, passes
+
+    @staticmethod
+    def _render_check_group(checks: list, title: str, icon: str, show_severity: bool = False) -> None:
+        """Render a group of checks.
+
+        Args:
+            checks: List of checks to render
+            title: Group title
+            icon: Icon for the group
+            show_severity: Whether to show severity in output
+        """
+        if not checks:
+            return
+
+        print(f"{icon} {title}:")
+        for check in checks:
+            if show_severity:
+                print(f"  • {check['name']}: {check['value']} (threshold: {check['threshold']}, severity: {check['severity']})")
+            else:
+                print(f"  • {check['name']}: {check['value']} (threshold: {check['threshold']})")
+        print()
+
     @classmethod
     def render_check(cls, result: dict, format: str = 'text',
                      only_failures: bool = False, **kwargs) -> None:
@@ -97,36 +140,20 @@ class MySQLRenderer(TypeDispatchRenderer):
         summary = result['summary']
 
         # Header with overall status
-        status_icon = '✅' if status == 'pass' else '⚠️' if status == 'warning' else '❌'
+        status_icon = cls._get_status_icon(status)
         print(f"\nMySQL Health Check: {status_icon} {status.upper()}")
         print(f"\nSummary: {summary['passed']}/{summary['total']} passed, {summary['warnings']} warnings, {summary['failures']} failures")
         print()
 
-        # Group checks by status for better readability
-        failures = [c for c in result['checks'] if c['status'] == 'failure']
-        warnings = [c for c in result['checks'] if c['status'] == 'warning']
-        passes = [c for c in result['checks'] if c['status'] == 'pass']
+        # Group checks by status
+        failures, warnings, passes = cls._group_checks_by_status(result['checks'])
 
-        # Show failures first
-        if failures:
-            print("❌ Failures:")
-            for check in failures:
-                print(f"  • {check['name']}: {check['value']} (threshold: {check['threshold']}, severity: {check['severity']})")
-            print()
+        # Render each group
+        cls._render_check_group(failures, "Failures", "❌", show_severity=True)
+        cls._render_check_group(warnings, "Warnings", "⚠️", show_severity=True)
 
-        # Then warnings
-        if warnings:
-            print("⚠️  Warnings:")
-            for check in warnings:
-                print(f"  • {check['name']}: {check['value']} (threshold: {check['threshold']}, severity: {check['severity']})")
-            print()
-
-        # Finally passes (if not filtering to only failures, or no issues at all)
-        if passes and not only_failures:
-            print("✅ Passed:")
-            for check in passes:
-                print(f"  • {check['name']}: {check['value']} (threshold: {check['threshold']})")
-            print()
+        if not only_failures:
+            cls._render_check_group(passes, "Passed", "✅")
 
         # Exit code hint
         print(f"Exit code: {result['exit_code']}")

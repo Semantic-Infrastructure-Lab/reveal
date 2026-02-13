@@ -24,6 +24,72 @@ class JupyterAnalyzer(FileAnalyzer):
         except Exception as e:
             self.parse_error = str(e)
 
+    def _get_cell_first_line(self, source: Any) -> str:
+        """Extract and truncate first line from cell source.
+
+        Args:
+            source: Cell source (string or list)
+
+        Returns:
+            First line (truncated to 50 chars if needed)
+        """
+        if not source:
+            return ""
+
+        first_line = (source[0] if isinstance(source, list) else source).strip()
+        if len(first_line) > 50:
+            first_line = first_line[:50] + "..."
+        return first_line
+
+    def _get_cell_display_name(self, cell_type: str, first_line: str,
+                              execution_count: Optional[int], idx: int) -> str:
+        """Get display name for a cell.
+
+        Args:
+            cell_type: Type of cell (markdown, code, etc.)
+            first_line: First line of cell content
+            execution_count: Execution count for code cells
+            idx: Cell index
+
+        Returns:
+            Display name
+        """
+        if cell_type == 'markdown':
+            return first_line if first_line else f"Markdown cell #{idx + 1}"
+        elif cell_type == 'code':
+            exec_info = f"[{execution_count}]" if execution_count else "[not executed]"
+            return f"Code {exec_info}: {first_line}" if first_line else f"Code cell #{idx + 1}"
+        else:
+            return f"{cell_type} cell #{idx + 1}"
+
+    def _create_cell_summary(self, cell: Dict[str, Any], idx: int) -> Dict[str, Any]:
+        """Create summary for a single cell.
+
+        Args:
+            cell: Cell data
+            idx: Cell index
+
+        Returns:
+            Cell summary dict
+        """
+        cell_type = cell.get('cell_type', 'unknown')
+        source = cell.get('source', [])
+        cell_line = self._find_cell_line(idx)
+
+        first_line = self._get_cell_first_line(source)
+        execution_count = cell.get('execution_count', None)
+        outputs_count = len(cell.get('outputs', []))
+
+        name = self._get_cell_display_name(cell_type, first_line, execution_count, idx)
+
+        return {
+            'line': cell_line,
+            'name': name,
+            'type': cell_type,
+            'execution_count': execution_count,
+            'outputs_count': outputs_count,
+        }
+
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Analyze Jupyter notebook structure."""
@@ -37,55 +103,11 @@ class JupyterAnalyzer(FileAnalyzer):
                 'total_cells': 0
             }
 
-        # Count cells by type
-        cell_counts: Dict[str, int] = {}
-        for cell in self.cells:
-            cell_type = cell.get('cell_type', 'unknown')
-            cell_counts[cell_type] = cell_counts.get(cell_type, 0) + 1
-
-        # Get cell summaries with line numbers
-        cell_summaries = []
-
-        # Navigate through JSON to find approximate line numbers
-        # This is approximate since JSON formatting varies
-        for idx, cell in enumerate(self.cells):
-            cell_type = cell.get('cell_type', 'unknown')
-            source = cell.get('source', [])
-
-            # Calculate approximate line in source file
-            # Look for cell marker in original lines
-            cell_line = self._find_cell_line(idx)
-
-            # Get first line of content
-            first_line = ""
-            if source:
-                first_line = (source[0] if isinstance(source, list) else source).strip()
-                if len(first_line) > 50:
-                    first_line = first_line[:50] + "..."
-
-            # Count execution info for code cells
-            execution_count = cell.get('execution_count', None)
-            outputs_count = len(cell.get('outputs', []))
-
-            # Create a descriptive name for the cell
-            if cell_type == 'markdown':
-                name = first_line if first_line else f"Markdown cell #{idx + 1}"
-            elif cell_type == 'code':
-                exec_info = f"[{execution_count}]" if execution_count else "[not executed]"
-                name = f"Code {exec_info}: {first_line}" if first_line else f"Code cell #{idx + 1}"
-            else:
-                name = f"{cell_type} cell #{idx + 1}"
-
-            cell_summaries.append({
-                'line': cell_line,
-                'name': name,
-                'type': cell_type,
-                'execution_count': execution_count,
-                'outputs_count': outputs_count,
-            })
+        # Get cell summaries
+        cell_summaries = [self._create_cell_summary(cell, idx)
+                         for idx, cell in enumerate(self.cells)]
 
         # Return only the cells list for display
-        # The structure format expects dict[str, List[Dict]]
         result = {}
         if cell_summaries:
             result['cells'] = cell_summaries
