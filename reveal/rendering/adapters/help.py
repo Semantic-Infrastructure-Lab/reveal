@@ -8,7 +8,7 @@ from reveal.utils import safe_json_dumps
 
 # Module constants for help list mode
 STABLE_ADAPTERS = {'help', 'env', 'ast', 'python'}
-BETA_ADAPTERS = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git'}
+BETA_ADAPTERS = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git', 'ssl', 'domain', 'xlsx'}
 PROJECT_ADAPTERS = {'reveal', 'claude'}
 
 GUIDE_CATEGORIES = {
