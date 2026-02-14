@@ -15,13 +15,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.49.2] - 2026-02-14
 
 ### Added
-- **Test coverage** - Added comprehensive tests for core utilities (45% → 46% overall)
-  - `reveal/result.py`: 0% → 100% (51 tests, 67 lines) - Success/Failure monads, chaining, error handling
-  - `reveal/utils/uri.py`: 0% → 97.7% (76 tests, 86 lines) - URI parsing (all schemes), auth, IPv4/IPv6
-  - `reveal/utils/validation.py`: 28.2% → 100% (65 tests, 56 lines) - Path, type, range, port validators
-  - `reveal/errors.py`: 55.6% → 100% (57 tests, 36 lines) - Custom exceptions, suggestions, context
-  - Total: 249 tests added, 245 lines covered, 3440 tests passing (was 3191)
-  - Session: yoxumema-0214
+- **Test coverage** - Added comprehensive tests for utility modules (45% → 46%+ overall)
+  - **Phase 1** (session yoxumema-0214):
+    - `reveal/result.py`: 0% → 100% (51 tests, 67 lines) - Success/Failure monads, chaining, error handling
+    - `reveal/utils/uri.py`: 0% → 97.7% (76 tests, 86 lines) - URI parsing (all schemes), auth, IPv4/IPv6
+    - `reveal/utils/validation.py`: 28.2% → 100% (65 tests, 56 lines) - Path, type, range, port validators
+    - `reveal/errors.py`: 55.6% → 100% (57 tests, 36 lines) - Custom exceptions, suggestions, context
+    - Subtotal: 249 tests, 245 lines, 3440 tests passing (was 3191)
+
+  - **Phase 2** (session viral-zenith-0214):
+    - `reveal/utils/results.py`: 0% → 100% (41 tests, 59 lines) - Output Contract v1.x result builders
+    - `reveal/utils/formatting.py`: 14% → 100% (10 tests, 7 lines) - Human-readable file sizes
+    - `reveal/utils/clipboard.py`: 21% → 100% (13 tests, 14 lines) - Cross-platform clipboard (xclip/xsel/pbcopy/clip)
+    - `reveal/utils/json_utils.py`: 45% → 100% (15 tests, 11 lines) - DateTime JSON serialization
+    - `reveal/utils/path_utils.py`: 17% → 100% (32 tests, 36 lines) - Directory traversal, project root detection
+    - `reveal/utils/safe_operations.py`: 25% → 100% (43 tests, 52 lines) - Graceful failure decorators/context managers
+    - `reveal/utils/updates.py`: 9% → 100% (14 tests, 35 lines) - PyPI update checking with caching
+    - Subtotal: 168 tests, 214 lines, 7 modules at 100%
+
+  - **Total**: 417 tests added, 459 lines covered, 11 modules at 95-100% coverage
 
 ### Fixed
 - **Documentation link validation** - Fixed 33 broken internal links in adapter guides
