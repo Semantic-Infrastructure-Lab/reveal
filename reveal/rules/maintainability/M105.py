@@ -58,7 +58,7 @@ class M105(BaseRule):
         Returns:
             List of detections for orphaned handlers
         """
-        detections = []
+        detections: List[Detection] = []
 
         # Only check handler files
         if not file_path.endswith('.py') or '/handlers_' not in file_path:

@@ -1,12 +1,12 @@
 """Structure retrieval for reveal adapter."""
 
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 from ..base import _ADAPTER_REGISTRY
 
 
-def get_structure(reveal_root: Path, component: str = None, **kwargs: Any) -> Dict[str, Any]:
+def get_structure(reveal_root: Path, component: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
     """Get reveal's internal structure.
 
     Args:

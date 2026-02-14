@@ -395,6 +395,12 @@ class XlsxAdapter(ResourceAdapter):
 
     def _get_workbook_overview(self) -> Dict[str, Any]:
         """Get overview of all sheets in workbook."""
+        if self.analyzer is None:
+            return ResultBuilder.create_error(
+                result_type='xlsx_workbook',
+                source=self.file_path or Path('unknown'),
+                error="Analyzer not initialized"
+            )
         structure = self.analyzer.get_structure()
         sheets_data = structure.get('sheets', [])
 
@@ -441,7 +447,7 @@ class XlsxAdapter(ResourceAdapter):
 
         return ResultBuilder.create(
             result_type='xlsx_workbook',
-            source=self.file_path,
+            source=self.file_path or Path('unknown'),
             data=result_data
         )
 
@@ -460,6 +466,8 @@ class XlsxAdapter(ResourceAdapter):
             raise ValueError(f"Sheet not found: {sheet_identifier}")
 
         # Extract sheet using analyzer
+        if self.analyzer is None:
+            raise ValueError("Analyzer not initialized")
         sheet_result = self.analyzer.extract_element('sheet', sheet_name)
         if not sheet_result:
             raise ValueError(f"Failed to extract sheet: {sheet_name}")
@@ -502,7 +510,7 @@ class XlsxAdapter(ResourceAdapter):
 
         return ResultBuilder.create(
             result_type='xlsx_sheet',
-            source=self.file_path,
+            source=self.file_path or Path('unknown'),
             data=result_data
         )
 
@@ -515,6 +523,8 @@ class XlsxAdapter(ResourceAdapter):
         Returns:
             Sheet name, or None if not found
         """
+        if self.analyzer is None:
+            return None
         structure = self.analyzer.get_structure()
         sheets = structure.get('sheets', [])
 
@@ -533,9 +543,9 @@ class XlsxAdapter(ResourceAdapter):
         identifier_lower = identifier.lower()
         for sheet in sheets:
             name = sheet.get('name', '')
-            sheet_name = re.match(r'([^(]+)', name)
-            if sheet_name:
-                sheet_name = sheet_name.group(1).strip()
+            match = re.match(r'([^(]+)', name)
+            if match:
+                sheet_name = match.group(1).strip()
                 if sheet_name.lower() == identifier_lower or identifier_lower in sheet_name.lower():
                     return sheet_name
 
@@ -550,6 +560,8 @@ class XlsxAdapter(ResourceAdapter):
         Returns:
             Dict with sheet metadata
         """
+        if self.analyzer is None:
+            return {'name': sheet_name}
         structure = self.analyzer.get_structure()
         sheets = structure.get('sheets', [])
 

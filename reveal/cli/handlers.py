@@ -424,8 +424,8 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     is_ssl_batch_check = getattr(args, 'check', False) and not is_batch_mode
 
     # Collect results for batch aggregation
-    ssl_check_results = []
-    batch_results = []
+    ssl_check_results: List[Dict[str, Any]] = []
+    batch_results: List[dict] = []
 
     # Read paths/URIs from stdin (one per line)
     for line in sys.stdin:

@@ -78,7 +78,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
         """
         return operations.get_structure(
             self.base_path,
-            self.query,
+            self.query or '',
             self.filters,
             self.query_filters,
             self.result_control
