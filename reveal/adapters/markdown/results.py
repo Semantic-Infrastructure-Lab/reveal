@@ -3,6 +3,8 @@
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
+from ...utils.results import ResultBuilder
+
 
 def build_result_item(path: Path, frontmatter: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """Build result item dict with path and frontmatter fields.
@@ -119,21 +121,21 @@ def build_response_dict(
     Returns:
         Complete response dict
     """
-    return {
-        'contract_version': '1.0',
-        'type': 'markdown_query',
-        'source': str(base_path),
-        'source_type': 'directory' if base_path.is_dir() else 'file',
-        'base_path': str(base_path),
-        'query': query,
-        'filters': [
-            {'field': f, 'operator': o, 'value': v}
-            for f, o, v in filters
-        ],
-        'total_files': len(files),
-        'matched_files': total_matches,
-        'results': controlled_results,
-    }
+    return ResultBuilder.create(
+        result_type='markdown_query',
+        source=base_path,
+        data={
+            'base_path': str(base_path),
+            'query': query,
+            'filters': [
+                {'field': f, 'operator': o, 'value': v}
+                for f, o, v in filters
+            ],
+            'total_files': len(files),
+            'matched_files': total_matches,
+            'results': controlled_results,
+        }
+    )
 
 
 def add_truncation_warning(

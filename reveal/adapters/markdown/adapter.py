@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.query import parse_query_filters, parse_result_control, ResultControl
+from ...utils.validation import require_directory
 
 from .renderer import MarkdownRenderer
 from .help import get_schema, get_help
@@ -41,7 +42,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             base_path: Directory to search for markdown files
             query: Query string (e.g., 'topics=reveal', '!status', 'lines>100')
         """
-        self.base_path = Path(base_path).resolve()
+        self.base_path = require_directory(Path(base_path).resolve())
         self.query = query
 
         # Parse result control (sort, limit, offset) and get cleaned query

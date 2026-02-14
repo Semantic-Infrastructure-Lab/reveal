@@ -16,6 +16,7 @@ from ...utils.query import (
     apply_result_control,
     ResultControl
 )
+from ...utils.results import ResultBuilder
 
 # Suppress tree-sitter warnings (centralized in core module)
 suppress_treesitter_warnings()
@@ -120,16 +121,19 @@ class AstAdapter(ResourceAdapter):
                     'message': f'Results truncated: showing {len(controlled)} of {len(filtered)} total matches'
                 })
 
-        return {
-            'contract_version': '1.1',
-            'type': 'ast_query',
-            'source': self.path,
-            'source_type': 'directory' if Path(self.path).is_dir() else 'file',
-            'meta': meta,
-            'path': self.path,
-            'query': format_query(self.query),
-            'total_files': len(structures),
-            'total_results': len(filtered),
-            'displayed_results': len(controlled),
-            'results': controlled
-        }
+        # Build result using ResultBuilder (automatically handles contract_version, source, source_type)
+        result = ResultBuilder.create(
+            result_type='ast_query',
+            source=self.path,
+            contract_version='1.1',
+            data={
+                'path': self.path,
+                'query': format_query(self.query),
+                'total_files': len(structures),
+                'total_results': len(filtered),
+                'displayed_results': len(controlled),
+                'results': controlled
+            }
+        )
+        result['meta'] = meta
+        return result

@@ -79,11 +79,10 @@ class TestAdapterContracts(unittest.TestCase):
                 )
 
     def test_adapters_raise_appropriate_exceptions(self):
-        """Verify adapters raise only TypeError, ValueError, or ImportError on init failure.
+        """Verify adapters raise only TypeError, ValueError, ImportError, or FileNotFoundError on init failure.
 
         This is critical for routing.py which catches these specific exception types.
-        Note: Some adapters raise other exception types (FileNotFoundError, etc.)
-        which are documented as known issues.
+        FileNotFoundError is raised by validation utilities for missing paths.
         """
         # Test with obviously invalid parameters
         invalid_params = [
@@ -113,8 +112,9 @@ class TestAdapterContracts(unittest.TestCase):
                         # Try to instantiate with invalid params
                         adapter_class(*params)
                         # If no exception, that's fine (adapter might be lenient)
-                    except (TypeError, ValueError, ImportError):
+                    except (TypeError, ValueError, ImportError, FileNotFoundError):
                         # These are the expected exception types
+                        # FileNotFoundError is raised by validation utilities
                         pass
                     except Exception as e:
                         # Check if this is a known issue

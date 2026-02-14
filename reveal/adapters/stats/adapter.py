@@ -10,6 +10,7 @@ from ...utils.query import (
     parse_query_filters,
     parse_result_control,
 )
+from ...utils.validation import require_path_exists
 
 # Import modular functions
 from .renderer import StatsRenderer
@@ -228,9 +229,7 @@ class StatsAdapter(ResourceAdapter):
             path: File or directory path to analyze
             query_string: Query parameters (e.g., "hotspots=true&min_lines=50" or "lines>50&complexity<10")
         """
-        self.path = Path(path).resolve()
-        if not self.path.exists():
-            raise FileNotFoundError(f"Path not found: {path}")
+        self.path = require_path_exists(Path(path).resolve())
 
         # Parse query string with type coercion (for legacy params)
         self.query_params = parse_query_params(query_string or '', coerce=True)

@@ -3,6 +3,8 @@
 from pathlib import Path
 from typing import Dict, Any, List
 
+from ...utils.results import ResultBuilder
+
 
 def aggregate_stats(file_stats: List[Dict[str, Any]], source_path: Path) -> Dict[str, Any]:
     """Aggregate statistics from multiple files.
@@ -15,22 +17,22 @@ def aggregate_stats(file_stats: List[Dict[str, Any]], source_path: Path) -> Dict
         Dict with aggregated statistics
     """
     if not file_stats:
-        return {
-            'contract_version': '1.0',
-            'type': 'stats_summary',
-            'source': str(source_path),
-            'source_type': 'directory' if source_path.is_dir() else 'file',
-            'summary': {
-                'total_files': 0,
-                'total_lines': 0,
-                'total_code_lines': 0,
-                'total_functions': 0,
-                'total_classes': 0,
-                'avg_complexity': 0,
-                'avg_quality_score': 0,
-            },
-            'files': []
-        }
+        return ResultBuilder.create(
+            result_type='stats_summary',
+            source=source_path,
+            data={
+                'summary': {
+                    'total_files': 0,
+                    'total_lines': 0,
+                    'total_code_lines': 0,
+                    'total_functions': 0,
+                    'total_classes': 0,
+                    'avg_complexity': 0,
+                    'avg_quality_score': 0,
+                },
+                'files': []
+            }
+        )
 
     total_lines = sum(s['lines']['total'] for s in file_stats)
     total_code = sum(s['lines']['code'] for s in file_stats)
@@ -43,22 +45,22 @@ def aggregate_stats(file_stats: List[Dict[str, Any]], source_path: Path) -> Dict
 
     avg_quality = sum(s['quality']['score'] for s in file_stats) / len(file_stats)
 
-    return {
-        'contract_version': '1.0',
-        'type': 'stats_summary',
-        'source': str(source_path),
-        'source_type': 'directory' if source_path.is_dir() else 'file',
-        'summary': {
-            'total_files': len(file_stats),
-            'total_lines': total_lines,
-            'total_code_lines': total_code,
-            'total_functions': total_functions,
-            'total_classes': total_classes,
-            'avg_complexity': round(avg_complexity, 2),
-            'avg_quality_score': round(avg_quality, 1),
-        },
-        'files': file_stats
-    }
+    return ResultBuilder.create(
+        result_type='stats_summary',
+        source=source_path,
+        data={
+            'summary': {
+                'total_files': len(file_stats),
+                'total_lines': total_lines,
+                'total_code_lines': total_code,
+                'total_functions': total_functions,
+                'total_classes': total_classes,
+                'avg_complexity': round(avg_complexity, 2),
+                'avg_quality_score': round(avg_quality, 1),
+            },
+            'files': file_stats
+        }
+    )
 
 
 def identify_hotspots(file_stats: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
