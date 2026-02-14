@@ -12,6 +12,17 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.49.2] - 2026-02-14
+
+### Fixed
+- **Windows CI compatibility** - Fixed all remaining Windows test failures (100% pass rate)
+  - Path separators: Use `.as_posix()` for MANIFEST.in paths (V022 rule)
+  - Permission tests: Skip chmod-based tests on Windows (not supported)
+  - Test directory detection: Use `Path.parts` for platform-independent path matching (I004 rule)
+  - Error messages: Normalize diff adapter error messages for Windows drive letter handling
+  - Result: 3177/3177 tests passing on Windows (previously 3170/3177)
+  - Sessions: celestial-galaxy-0213 (48→7 failures), flooding-thunder-0213 (7→0 failures)
+
 ## [0.49.1] - 2026-02-13
 
 ### Fixed
