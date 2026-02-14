@@ -57,7 +57,7 @@ def parse_diff_uris(resource: str) -> Tuple[str, str]:
         # Simple case: "file1:file2" or Windows paths "C:\file1:D:\file2"
         sep_idx = _find_separator_colon(resource)
         if sep_idx == -1:
-            raise ValueError("diff:// requires format: left:right")
+            raise ValueError("DiffAdapter requires 'left:right' format")
         left = resource[:sep_idx]
         right = resource[sep_idx+1:]
         return left, right

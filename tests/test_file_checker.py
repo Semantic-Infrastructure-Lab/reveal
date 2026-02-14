@@ -1,5 +1,6 @@
 """Tests for reveal/cli/file_checker.py module."""
 
+import sys
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
@@ -59,6 +60,7 @@ class TestLoadGitignorePatterns:
         assert '.env  # Not a comment' in patterns  # Simple parser doesn't strip inline
         assert '# Full line comment' not in patterns
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod doesn't work the same on Windows")
     def test_gitignore_read_error(self, tmp_path):
         """Test handling of read errors."""
         gitignore = tmp_path / '.gitignore'

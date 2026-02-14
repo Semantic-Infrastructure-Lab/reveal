@@ -1,5 +1,6 @@
 """Tests for reveal.utils.safe_operations module."""
 
+import sys
 import json
 import logging
 import pytest
@@ -159,6 +160,7 @@ class TestSafeReadFile:
         result = safe_read_file(str(test_file), encoding="utf-16")
         assert result == "UTF-16 content"
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod doesn't work the same on Windows")
     def test_permission_error_returns_fallback(self, tmp_path):
         """Should return fallback on permission errors."""
         import os

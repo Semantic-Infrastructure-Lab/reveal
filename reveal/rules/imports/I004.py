@@ -54,15 +54,16 @@ class I004(BaseRule):
         Returns:
             True if shadowing is likely intentional (test files, etc.)
         """
-        path_lower = file_path.lower()
-        name = Path(file_path).stem.lower()
+        path = Path(file_path)
+        name = path.stem.lower()
 
         # Test files are allowed to shadow (test_json.py, json_test.py)
         if name.startswith('test_') or name.endswith('_test'):
             return True
 
-        # Files in test directories
-        if '/tests/' in path_lower or '/test/' in path_lower:
+        # Files in test directories (platform-independent check)
+        path_parts_lower = [part.lower() for part in path.parts]
+        if 'tests' in path_parts_lower or 'test' in path_parts_lower:
             return True
 
         # Conftest files

@@ -154,7 +154,7 @@ class V022(BaseRule):
 
             # Check if file is covered by manifest
             # Look for either direct include or recursive-include
-            file_dir = str(Path(critical).parent)
+            file_dir = Path(critical).parent.as_posix()
             file_ext = Path(critical).suffix
 
             covered = (
