@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `reveal/result.py`: 0% → 100% (51 tests, 67 lines) - Success/Failure monads, chaining, error handling
   - `reveal/utils/uri.py`: 0% → 97.7% (76 tests, 86 lines) - URI parsing (all schemes), auth, IPv4/IPv6
   - `reveal/utils/validation.py`: 28.2% → 100% (65 tests, 56 lines) - Path, type, range, port validators
-  - Total: 192 tests added, 209 lines covered, 3383 tests passing (was 3191)
+  - `reveal/errors.py`: 55.6% → 100% (57 tests, 36 lines) - Custom exceptions, suggestions, context
+  - Total: 249 tests added, 245 lines covered, 3440 tests passing (was 3191)
   - Session: yoxumema-0214
 
 ### Fixed
