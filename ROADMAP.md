@@ -1,11 +1,19 @@
 # Reveal Roadmap
-> **Last updated**: 2026-02-08 (Phase 3 complete, coverage data corrected)
+> **Last updated**: 2026-02-13 (v0.49.0 - xlsx:// adapter released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.49.0
+- ✅ **xlsx:// adapter** — Complete Excel spreadsheet inspection and data extraction
+- ✅ **Sheet extraction** — By name (case-insensitive) or 0-based index
+- ✅ **Cell range extraction** — A1 notation support (A1:Z100, supports AA-ZZ columns)
+- ✅ **CSV export** — `?format=csv` query parameter for data extraction
+- ✅ **40 comprehensive tests** — 100% passing, performance tested up to 20K+ rows
+- ✅ **Complete documentation** — Help system, demo docs, examples
 
 ### v0.48.0
 - ✅ **Phase 3: Query Operator Standardization** — Universal query operators (`=`, `!=`, `>`, `<`, `>=`, `<=`, `~=`, `..`) across all adapters
