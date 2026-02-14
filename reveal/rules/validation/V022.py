@@ -65,7 +65,7 @@ class V022(BaseRule):
         if not handlers_file.exists():
             return detections
 
-        handler_content = handlers_file.read_text()
+        handler_content = handlers_file.read_text(encoding='utf-8')
 
         # Find Path(...) / 'docs' / 'AGENT_HELP*.md' patterns
         path_patterns = re.findall(
@@ -101,7 +101,7 @@ class V022(BaseRule):
         if not manifest_file.exists():
             return detections
 
-        manifest_content = manifest_file.read_text()
+        manifest_content = manifest_file.read_text(encoding='utf-8')
 
         for line_num, line in enumerate(manifest_content.split('\n'), 1):
             line = line.strip()
@@ -145,7 +145,7 @@ class V022(BaseRule):
             'reveal/docs/AGENT_HELP_FULL.md',
         ]
 
-        manifest_content = manifest_file.read_text()
+        manifest_content = manifest_file.read_text(encoding='utf-8')
 
         for critical in critical_files:
             file_exists = (project_root / critical).exists()

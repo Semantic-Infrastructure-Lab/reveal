@@ -230,7 +230,7 @@ class TestCheckForUpdates:
 
         # Cache file should exist and contain recent timestamp
         assert cache_file.exists()
-        cached_time = datetime.fromisoformat(cache_file.read_text())
+        cached_time = datetime.fromisoformat(cache_file.read_text(encoding='utf-8'))
         assert before_time <= cached_time <= after_time
 
     @patch.dict(os.environ, {}, clear=True)

@@ -99,7 +99,7 @@ class V013(BaseRule):
         - "**10 Built-in Adapters:**"
         """
         try:
-            content = readme_file.read_text()
+            content = readme_file.read_text(encoding='utf-8')
             lines = content.split('\n')
 
             claims = []

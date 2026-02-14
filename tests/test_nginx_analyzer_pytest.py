@@ -2,8 +2,25 @@
 
 import tempfile
 import os
+import time
 import pytest
 from reveal.analyzers.nginx import NginxAnalyzer
+
+
+def safe_unlink(filepath, retries=3, delay=0.1):
+    """Safely remove a file, with retries for Windows file locking issues."""
+    for attempt in range(retries):
+        try:
+            if os.path.exists(filepath):
+                os.unlink(filepath)
+            return
+        except PermissionError:
+            if attempt < retries - 1:
+                time.sleep(delay)
+            else:
+                # Last attempt failed, just pass
+                # (CI will clean up temp files eventually)
+                pass
 
 
 @pytest.fixture
@@ -27,7 +44,7 @@ upstream backend {
         f.write(config)
         f.flush()
         yield f.name
-    os.unlink(f.name)
+    safe_unlink(f.name)
 
 
 @pytest.fixture
@@ -72,7 +89,7 @@ upstream cache_backend {
         f.write(config)
         f.flush()
         yield f.name
-    os.unlink(f.name)
+    safe_unlink(f.name)
 
 
 class TestNginxAnalyzer:
@@ -214,7 +231,7 @@ class TestNginxAnalyzer:
                 assert len(structure['upstreams']) == 0
                 assert len(structure['comments']) == 0
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_malformed_server_block(self):
         """Test handling malformed server blocks gracefully."""
@@ -235,7 +252,7 @@ server {
                 # Should still detect the server block
                 assert len(structure['servers']) == 1
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_nested_location_blocks(self):
         """Test handling nested location blocks."""
@@ -271,7 +288,7 @@ server {
                 assert '/admin' in paths
                 assert '/api' in paths
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
 
 class TestNginxSSLDomainExtraction:
@@ -300,7 +317,7 @@ server {
 
                 assert 'secure.example.com' in domains
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_extract_ssl_domains_multiple(self):
         """Extract multiple domains from server_name directive."""
@@ -324,7 +341,7 @@ server {
                 assert 'www.example.com' in domains
                 assert 'example.com' in domains
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_extract_ssl_domains_excludes_non_ssl(self):
         """Non-SSL server blocks should be excluded."""
@@ -351,7 +368,7 @@ server {
                 assert 'secure.example.com' in domains
                 assert 'http-only.example.com' not in domains
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_extract_ssl_domains_filters_localhost(self):
         """localhost should be filtered out."""
@@ -373,7 +390,7 @@ server {
                 assert 'valid.example.com' in domains
                 assert 'localhost' not in domains
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_extract_ssl_domains_filters_underscore(self):
         """Catch-all _ server should be filtered out."""
@@ -401,7 +418,7 @@ server {
                 assert 'valid.example.com' in domains
                 assert '_' not in domains
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_extract_ssl_domains_filters_wildcards(self):
         """Wildcard domains should be filtered out."""
@@ -423,7 +440,7 @@ server {
                 assert 'specific.example.com' in domains
                 assert '*.example.com' not in domains
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_extract_ssl_domains_filters_ips(self):
         """IP addresses should be filtered out."""
@@ -446,7 +463,7 @@ server {
                 assert '192.168.1.100' not in domains
                 assert '10.0.0.1' not in domains
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_extract_ssl_domains_filters_non_fqdn(self):
         """Non-FQDN names (no dot) should be filtered out."""
@@ -469,7 +486,7 @@ server {
                 assert 'intranet' not in domains
                 assert 'internal' not in domains
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_extract_ssl_domains_detects_ssl_keyword(self):
         """SSL detection via 'ssl' keyword in listen directive."""
@@ -490,7 +507,7 @@ server {
 
                 assert 'custom-port.example.com' in domains
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_extract_ssl_domains_detects_ssl_certificate(self):
         """SSL detection via ssl_certificate directive."""
@@ -512,7 +529,7 @@ server {
 
                 assert 'cert-only.example.com' in domains
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_extract_ssl_domains_unique(self):
         """Duplicate domains across server blocks should be deduplicated."""
@@ -540,7 +557,7 @@ server {
                 # Should only appear once
                 assert domains.count('shared.example.com') == 1
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_extract_ssl_domains_sorted(self):
         """Extracted domains should be sorted."""
@@ -561,7 +578,7 @@ server {
 
                 assert domains == sorted(domains)
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_extract_ssl_domains_empty_config(self):
         """Empty config should return empty list."""
@@ -577,4 +594,4 @@ server {
 
                 assert domains == []
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)

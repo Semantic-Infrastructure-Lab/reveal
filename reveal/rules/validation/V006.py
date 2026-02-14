@@ -55,7 +55,7 @@ class V006(BaseRule):
                 continue
 
             try:
-                content = analyzer_file.read_text()
+                content = analyzer_file.read_text(encoding='utf-8')
 
                 # Check for get_structure method
                 # Can be either direct implementation OR inherited from base classes

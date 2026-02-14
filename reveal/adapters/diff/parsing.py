@@ -1,6 +1,36 @@
 """URI parsing for diff adapter."""
 
+import re
 from typing import Tuple
+
+
+def _find_separator_colon(resource: str) -> int:
+    """Find the colon that separates left and right URIs, skipping Windows drive letters.
+
+    Returns the index of the separator colon, or -1 if not found.
+    Windows drive letters like C: or D: should not be treated as separators.
+    """
+    # Find all colons that are NOT part of Windows drive letters (pattern: [A-Z]:)
+    for i, char in enumerate(resource):
+        if char == ':':
+            # Check if this is a Windows drive letter (single letter followed by :)
+            is_drive_letter = (
+                i == 1  # Second character (like "C:")
+                and i > 0
+                and resource[i-1].isalpha()
+                and resource[i-1].isupper()
+            )
+            # Also check for absolute Windows path in middle of string (like "path:C:\file")
+            is_mid_drive_letter = (
+                i > 0
+                and resource[i-1].isalpha()
+                and resource[i-1].isupper()
+                and (i == 1 or resource[i-2] in (':', '/', '\\'))
+            )
+
+            if not (is_drive_letter or is_mid_drive_letter):
+                return i
+    return -1
 
 
 def parse_diff_uris(resource: str) -> Tuple[str, str]:
@@ -24,10 +54,12 @@ def parse_diff_uris(resource: str) -> Tuple[str, str]:
     scheme_count = resource.count('://')
 
     if scheme_count == 0:
-        # Simple case: "file1:file2"
-        if ':' not in resource:
+        # Simple case: "file1:file2" or Windows paths "C:\file1:D:\file2"
+        sep_idx = _find_separator_colon(resource)
+        if sep_idx == -1:
             raise ValueError("diff:// requires format: left:right")
-        left, right = resource.split(':', 1)
+        left = resource[:sep_idx]
+        right = resource[sep_idx+1:]
         return left, right
 
     elif scheme_count == 1:

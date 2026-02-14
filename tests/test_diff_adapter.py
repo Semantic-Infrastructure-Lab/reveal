@@ -6,8 +6,25 @@ import os
 import sys
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from reveal.adapters.diff import DiffAdapter
+
+
+def safe_rmtree(dirpath, retries=3, delay=0.1):
+    """Safely remove a directory tree, with retries for Windows file locking issues."""
+    for attempt in range(retries):
+        try:
+            if os.path.exists(dirpath):
+                shutil.rmtree(dirpath)
+            return
+        except (PermissionError, OSError):
+            if attempt < retries - 1:
+                time.sleep(delay)
+            else:
+                # Last attempt failed, just pass
+                # (CI will clean up temp directories eventually)
+                pass
 
 
 class TestDiffAdapter(unittest.TestCase):
@@ -24,7 +41,7 @@ class TestDiffAdapter(unittest.TestCase):
         # Restore original working directory
         os.chdir(self.original_cwd)
         try:
-            shutil.rmtree(self.temp_dir)
+            safe_rmtree(self.temp_dir)
         except Exception:
             pass
 
@@ -402,7 +419,7 @@ class TestDirectoryDiff(unittest.TestCase):
         # Restore original working directory
         os.chdir(self.original_cwd)
         if os.path.exists(self.temp_dir):
-            shutil.rmtree(self.temp_dir)
+            safe_rmtree(self.temp_dir)
 
     def test_directory_diff_basic(self):
         """Test basic directory diff with files in both directories."""
@@ -569,7 +586,7 @@ class TestGitDiff(unittest.TestCase):
         # Restore original working directory
         os.chdir(self.original_cwd)
         if os.path.exists(self.temp_dir):
-            shutil.rmtree(self.temp_dir)
+            safe_rmtree(self.temp_dir)
 
     def test_git_file_diff(self):
         """Test diffing files across git commits."""
@@ -648,7 +665,7 @@ class TestGitDiff(unittest.TestCase):
                 adapter.get_structure()
             self.assertIn("Not in a git repository", str(ctx.exception))
         finally:
-            shutil.rmtree(temp_not_git)
+            safe_rmtree(temp_not_git)
 
     def test_git_file_not_found_error(self):
         """Test error when file not found in git ref."""
@@ -691,7 +708,7 @@ class TestDiffAdapterInit(unittest.TestCase):
         import shutil
         os.chdir(self.original_cwd)
         try:
-            shutil.rmtree(self.temp_dir)
+            safe_rmtree(self.temp_dir)
         except Exception:
             pass
 
@@ -830,7 +847,7 @@ class TestDiffRenderer(unittest.TestCase):
         import shutil
         os.chdir(self.original_cwd)
         try:
-            shutil.rmtree(self.temp_dir)
+            safe_rmtree(self.temp_dir)
         except Exception:
             pass
 
@@ -954,7 +971,7 @@ class TestDiffAdapterEdgeCases(unittest.TestCase):
         import shutil
         os.chdir(self.original_cwd)
         try:
-            shutil.rmtree(self.temp_dir)
+            safe_rmtree(self.temp_dir)
         except Exception:
             pass
 
@@ -1069,7 +1086,7 @@ class TestDiffMetadata(unittest.TestCase):
         # Restore original working directory
         os.chdir(self.original_cwd)
         try:
-            shutil.rmtree(self.temp_dir)
+            safe_rmtree(self.temp_dir)
         except Exception:
             pass
 

@@ -182,7 +182,7 @@ class V007(BaseRule):
     def _extract_version_from_pyproject(self, pyproject_file: Path) -> Optional[str]:
         """Extract version from pyproject.toml."""
         try:
-            content = pyproject_file.read_text()
+            content = pyproject_file.read_text(encoding='utf-8')
             # Match: version = "X.Y.Z"
             pattern = r'^version\s*=\s*["\']([0-9]+\.[0-9]+\.[0-9]+)["\']'
             match = re.search(pattern, content, re.MULTILINE)
@@ -195,7 +195,7 @@ class V007(BaseRule):
     def _check_changelog(self, changelog_file: Path, version: str) -> bool:
         """Check if CHANGELOG.md has a section for the given version."""
         try:
-            content = changelog_file.read_text()
+            content = changelog_file.read_text(encoding='utf-8')
             # Match: ## [X.Y.Z] - YYYY-MM-DD or ## [X.Y.Z] (unreleased)
             pattern = rf'##\s*\[{re.escape(version)}\]'
             return bool(re.search(pattern, content, re.IGNORECASE))
@@ -210,7 +210,7 @@ class V007(BaseRule):
         version numbers in code examples.
         """
         try:
-            content = md_file.read_text()
+            content = md_file.read_text(encoding='utf-8')
             # Match only: **Version:** X.Y.Z (bold format, not plain text)
             match = re.search(r'\*\*Version:\*\*\s*([0-9]+\.[0-9]+\.[0-9]+)', content)
             if match:
@@ -228,7 +228,7 @@ class V007(BaseRule):
         - [![Version](https://img.shields.io/pypi/v/reveal-cli.svg)]
         """
         try:
-            content = readme_file.read_text()
+            content = readme_file.read_text(encoding='utf-8')
             # Match shield.io badge with version
             match = re.search(r'badge/version-v?([0-9]+\.[0-9]+\.[0-9]+)', content)
             if match:

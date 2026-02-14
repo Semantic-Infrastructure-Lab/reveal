@@ -133,7 +133,7 @@ class V001(BaseRule):
             return {}
 
         try:
-            content = help_file.read_text()
+            content = help_file.read_text(encoding='utf-8')
             dict_content = self._find_static_help_dict(content)
             if not dict_content:
                 return {}

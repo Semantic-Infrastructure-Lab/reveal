@@ -97,7 +97,7 @@ class V003(BaseRule):
             )
 
             try:
-                content = analyzer_path.read_text()
+                content = analyzer_path.read_text(encoding='utf-8')
 
                 # Check for get_structure (required for all)
                 has_get_structure = (

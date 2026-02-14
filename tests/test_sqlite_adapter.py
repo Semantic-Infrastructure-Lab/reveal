@@ -14,8 +14,26 @@ import unittest
 import sqlite3
 import tempfile
 import os
+import time
 from pathlib import Path
 import sys
+
+
+def safe_unlink(filepath, retries=3, delay=0.1):
+    """Safely remove a file, with retries for Windows file locking issues."""
+    for attempt in range(retries):
+        try:
+            if os.path.exists(filepath):
+                os.unlink(filepath)
+            return
+        except PermissionError:
+            if attempt < retries - 1:
+                time.sleep(delay)
+            else:
+                # Last attempt failed, just pass
+                # (CI will clean up temp files eventually)
+                pass
+
 
 # Add parent directory to path to import reveal
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -121,7 +139,7 @@ class TestSQLiteAdapterStructure(unittest.TestCase):
     def tearDown(self):
         """Remove temporary database."""
         if os.path.exists(self.db_path):
-            os.unlink(self.db_path)
+            safe_unlink(self.db_path)
 
     def test_get_structure_basic(self):
         """Should return database overview with basic info."""
@@ -240,7 +258,7 @@ class TestSQLiteAdapterElement(unittest.TestCase):
     def tearDown(self):
         """Remove temporary database."""
         if os.path.exists(self.db_path):
-            os.unlink(self.db_path)
+            safe_unlink(self.db_path)
 
     def test_get_element_basic(self):
         """Should return table structure."""
@@ -379,7 +397,7 @@ class TestSQLiteAdapterErrors(unittest.TestCase):
                 adapter.get_structure()
         finally:
             if os.path.exists(db_path):
-                os.unlink(db_path)
+                safe_unlink(db_path)
 
 
 class TestSQLiteAdapterHelp(unittest.TestCase):
@@ -483,7 +501,7 @@ class TestSQLiteAdapterQuery(unittest.TestCase):
     def tearDown(self):
         """Clean up temporary database."""
         if os.path.exists(self.db_path):
-            os.unlink(self.db_path)
+            safe_unlink(self.db_path)
 
     def test_execute_query_multiple_results(self):
         """_execute_query should return list of dicts."""
@@ -553,7 +571,7 @@ class TestSQLiteRenderer(unittest.TestCase):
     def tearDown(self):
         """Clean up."""
         if os.path.exists(self.db_path):
-            os.unlink(self.db_path)
+            safe_unlink(self.db_path)
 
     def test_renderer_database_overview(self):
         """Renderer should format database overview correctly."""
@@ -645,7 +663,7 @@ class TestSQLiteAdapterEdgeCases(unittest.TestCase):
             self.assertEqual(result['statistics']['total_rows'], 0)
             self.assertEqual(len(result['tables']), 0)
         finally:
-            os.unlink(db_path)
+            safe_unlink(db_path)
 
     def test_table_with_no_indexes(self):
         """Should handle table without indexes."""
@@ -668,7 +686,7 @@ class TestSQLiteAdapterEdgeCases(unittest.TestCase):
             self.assertEqual(len(result['indexes']), 0)
             self.assertEqual(result['row_count'], 1)
         finally:
-            os.unlink(db_path)
+            safe_unlink(db_path)
 
     def test_view_inspection(self):
         """Should handle views correctly."""
@@ -696,7 +714,7 @@ class TestSQLiteAdapterEdgeCases(unittest.TestCase):
             view = next(t for t in result['tables'] if t['name'] == 'test_view')
             self.assertEqual(view['type'], 'view')
         finally:
-            os.unlink(db_path)
+            safe_unlink(db_path)
 
     def test_special_characters_in_table_name(self):
         """Should handle tables with special characters in names."""
@@ -724,7 +742,7 @@ class TestSQLiteAdapterEdgeCases(unittest.TestCase):
             self.assertIsNotNone(element)
             self.assertEqual(element['table'], 'table-with-dashes')
         finally:
-            os.unlink(db_path)
+            safe_unlink(db_path)
 
     def test_connection_cleanup(self):
         """Should clean up connection properly."""
@@ -744,11 +762,11 @@ class TestSQLiteAdapterEdgeCases(unittest.TestCase):
             del adapter
 
             # Should be able to delete database file (connection closed)
-            os.unlink(db_path)
+            safe_unlink(db_path)
             self.assertFalse(os.path.exists(db_path))
         except:
             if os.path.exists(db_path):
-                os.unlink(db_path)
+                safe_unlink(db_path)
             raise
 
 

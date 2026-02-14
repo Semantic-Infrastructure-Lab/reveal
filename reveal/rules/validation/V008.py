@@ -74,7 +74,7 @@ class V008(BaseRule):
     def _check_analyzer_file(self, analyzer_path: Path) -> List[Detection]:
         """Check a single analyzer file for get_structure signature issues."""
         try:
-            content = analyzer_path.read_text()
+            content = analyzer_path.read_text(encoding='utf-8')
             tree = ast.parse(content)
             return self._find_get_structure_violations(tree, analyzer_path)
         except Exception:

@@ -80,7 +80,7 @@ class V005(BaseRule):
             return {}
 
         try:
-            content = help_file.read_text()
+            content = help_file.read_text(encoding='utf-8')
 
             # Find STATIC_HELP dict
             pattern = r"STATIC_HELP\s*=\s*\{([^}]+)\}"
@@ -115,7 +115,7 @@ class V005(BaseRule):
             return 1
 
         try:
-            lines = help_file.read_text().split('\n')
+            lines = help_file.read_text(encoding='utf-8').split('\n')
             for i, line in enumerate(lines, 1):
                 if f"'{topic}':" in line:
                     return i

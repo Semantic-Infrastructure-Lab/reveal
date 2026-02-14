@@ -67,7 +67,7 @@ class V002(BaseRule):
         Returns Detection if unregistered, None otherwise.
         """
         try:
-            content = analyzer_file.read_text()
+            content = analyzer_file.read_text(encoding='utf-8')
         except Exception:
             # Skip files we can't read
             return None

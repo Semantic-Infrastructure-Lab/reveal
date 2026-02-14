@@ -26,7 +26,7 @@ def check_for_updates():
 
         # Check if we should update (once per day)
         if cache_file.exists():
-            last_check_str = cache_file.read_text().strip()
+            last_check_str = cache_file.read_text(encoding='utf-8').strip()
             try:
                 last_check = datetime.fromisoformat(last_check_str)
                 if datetime.now() - last_check < timedelta(days=1):

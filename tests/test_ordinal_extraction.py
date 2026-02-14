@@ -8,8 +8,25 @@ Tests the ability to extract elements by their ordinal position:
 import pytest
 import tempfile
 import os
+import time
 
 from reveal.registry import get_analyzer
+
+
+def safe_unlink(filepath, retries=3, delay=0.1):
+    """Safely remove a file, with retries for Windows file locking issues."""
+    for attempt in range(retries):
+        try:
+            if os.path.exists(filepath):
+                os.unlink(filepath)
+            return
+        except PermissionError:
+            if attempt < retries - 1:
+                time.sleep(delay)
+            else:
+                # Last attempt failed, just pass
+                # (CI will clean up temp files eventually)
+                pass
 from reveal.display.element import (
     _extract_ordinal_element,
     _extract_element_at_line,
@@ -59,7 +76,7 @@ class AnotherClass:
         f.write(content)
         f.flush()
         yield f.name
-    os.unlink(f.name)
+    safe_unlink(f.name)
 
 
 @pytest.fixture
@@ -85,7 +102,7 @@ Final content.
         f.write(content)
         f.flush()
         yield f.name
-    os.unlink(f.name)
+    safe_unlink(f.name)
 
 
 # === Tests for @N Ordinal Extraction ===
@@ -224,7 +241,7 @@ class TestOrdinalEdgeCases:
                 result = _extract_ordinal_element(analyzer, 1)
                 assert result is None
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
     def test_file_with_only_imports(self):
         """File with only imports has no dominant category functions."""
@@ -239,7 +256,7 @@ class TestOrdinalEdgeCases:
                 # The important thing is it doesn't crash
                 assert result is None or 'import' in str(result.get('source', ''))
             finally:
-                os.unlink(f.name)
+                safe_unlink(f.name)
 
 
 class TestReadLines:

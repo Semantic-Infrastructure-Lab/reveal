@@ -109,7 +109,7 @@ class V012(BaseRule):
         - "Zero config. 38 languages"
         """
         try:
-            content = readme_file.read_text()
+            content = readme_file.read_text(encoding='utf-8')
             lines = content.split('\n')
 
             claims = []

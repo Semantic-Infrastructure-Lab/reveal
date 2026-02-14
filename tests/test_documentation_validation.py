@@ -143,7 +143,7 @@ class TestDocumentationStructure:
                 continue  # Index is expected to have many refs
 
             total_docs += 1
-            content = doc_file.read_text()
+            content = doc_file.read_text(encoding='utf-8')
 
             # Find internal .md links
             internal_links = re.findall(r'\[([^\]]+)\]\(([^)]+\.md)\)', content)
@@ -238,7 +238,7 @@ class TestDocumentationCompleteness:
         if not pyproject.exists():
             pytest.skip("pyproject.toml not found")
 
-        pyproject_content = pyproject.read_text()
+        pyproject_content = pyproject.read_text(encoding='utf-8')
         import re
         version_match = re.search(r'version\s*=\s*"([^"]+)"', pyproject_content)
 
@@ -246,7 +246,7 @@ class TestDocumentationCompleteness:
             pytest.skip("Could not find version in pyproject.toml")
 
         current_version = version_match.group(1)
-        agent_help_content = agent_help.read_text()
+        agent_help_content = agent_help.read_text(encoding='utf-8')
 
         # Check if version is mentioned in agent help
         if current_version not in agent_help_content:

@@ -125,7 +125,7 @@ class V011(BaseRule):
             self, pyproject_file: Path) -> Optional[str]:
         """Extract version from pyproject.toml."""
         try:
-            content = pyproject_file.read_text()
+            content = pyproject_file.read_text(encoding='utf-8')
             # Match: version = "X.Y.Z"
             pattern = (
                 r'^version\s*=\s*["\']([0-9]+\.[0-9]+\.[0-9]+)["\']'
@@ -149,7 +149,7 @@ class V011(BaseRule):
         - Section exists with a date: ## [X.Y.Z] - YYYY-MM-DD
         """
         try:
-            content = changelog_file.read_text()
+            content = changelog_file.read_text(encoding='utf-8')
 
             # Match: ## [X.Y.Z] - YYYY-MM-DD
             # Must have a date, not "Unreleased"
@@ -181,7 +181,7 @@ class V011(BaseRule):
         2. Within that section, a heading with the version number
         """
         try:
-            content = roadmap_file.read_text()
+            content = roadmap_file.read_text(encoding='utf-8')
 
             # Find "What We've Shipped" section
             shipped_match = re.search(

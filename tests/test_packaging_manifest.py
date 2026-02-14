@@ -115,8 +115,8 @@ class TestPackagingManifest(unittest.TestCase):
         if not manifest_file.exists():
             self.skipTest("MANIFEST.in not found")
         
-        content = manifest_file.read_text()
-        
+        content = manifest_file.read_text(encoding='utf-8')
+
         # Parse include directives (simplified - doesn't handle all MANIFEST.in syntax)
         issues = []
         for line in content.split('\n'):

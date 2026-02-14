@@ -116,7 +116,7 @@ class L003(BaseRule):
         # Check for FastHTML imports in Python files
         for py_file in cwd.glob("*.py"):
             try:
-                content = py_file.read_text()
+                content = py_file.read_text(encoding='utf-8')
                 if 'fasthtml' in content.lower():
                     return True
             except Exception:

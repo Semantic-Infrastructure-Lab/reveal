@@ -60,7 +60,7 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
             # Skip test-only adapters not imported in __init__.py
             if adapter_file.name == 'test.py':
                 continue
-            content = adapter_file.read_text()
+            content = adapter_file.read_text(encoding='utf-8')
             # Look for @register_adapter('scheme')
             matches = re.findall(r'@register_adapter\([\'"](\w+)[\'"]\)', content)
             registered_in_code.update(matches)
@@ -113,7 +113,7 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
 
         # Read adapters/__init__.py
         init_file = Path(__file__).parent.parent / 'reveal' / 'adapters' / '__init__.py'
-        init_content = init_file.read_text()
+        init_content = init_file.read_text(encoding='utf-8')
 
         # Find all imports (from .xyz import XyzAdapter)
         import_pattern = r'from \.\w+ import \w+Adapter'
@@ -287,7 +287,7 @@ class TestDocumentationAccuracy(unittest.TestCase):
         if not readme_file.exists():
             self.skipTest("README.md not found")
 
-        readme_content = readme_file.read_text()
+        readme_content = readme_file.read_text(encoding='utf-8')
 
         # Look for "N adapters" or "N built-in adapters" claim
         match = re.search(r'(\d+)\s+(?:built-in\s+)?adapters', readme_content, re.IGNORECASE)
@@ -324,7 +324,7 @@ class TestDocumentationAccuracy(unittest.TestCase):
         if not readme_file.exists():
             self.skipTest("README.md not found")
 
-        readme_content = readme_file.read_text()
+        readme_content = readme_file.read_text(encoding='utf-8')
 
         # Look for "N languages" or "N+ languages" claim
         match = re.search(r'(\d+)(\+)?\s+languages?\s+built-in', readme_content, re.IGNORECASE)

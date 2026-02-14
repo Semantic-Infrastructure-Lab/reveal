@@ -337,7 +337,7 @@ class GoExtractor(LanguageExtractor):
             return None
 
         try:
-            content = go_mod.read_text()
+            content = go_mod.read_text(encoding='utf-8')
             # Parse "module name" from first line
             for line in content.split('\n'):
                 line = line.strip()
