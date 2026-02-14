@@ -51,9 +51,12 @@ internal-docs/
 
 | Document | Description | Date |
 |----------|-------------|------|
-| [CURRENT_PRIORITIES_2026-02.md](planning/CURRENT_PRIORITIES_2026-02.md) | **Active** - Current project priorities and status (Phases 1-5 complete) | 2026-02-08 |
-| [ADAPTER_UX_CONSISTENCY_2026-02-06.md](planning/ADAPTER_UX_CONSISTENCY_2026-02-06.md) | Long-term roadmap for adapter consistency (3-tier model, 5 phases) | 2026-02-06 |
+| [CURRENT_PRIORITIES_2026-02.md](planning/CURRENT_PRIORITIES_2026-02.md) | **Active** - Current project priorities and status (Phases 1-8 complete, xlsx adapter, Windows CI) | 2026-02-14 |
+| [ARCHITECTURE_IMPROVEMENTS_2026-02.md](planning/ARCHITECTURE_IMPROVEMENTS_2026-02.md) | **Active** - Developer experience improvements roadmap (config introspection, scaffolding) | 2026-02-10 |
+| [ADAPTER_UX_CONSISTENCY_2026-02-06.md](planning/ADAPTER_UX_CONSISTENCY_2026-02-06.md) | Long-term roadmap for adapter consistency (3-tier model, 8 phases) - ✅ **COMPLETE** | 2026-02-06 |
 | [TECHNICAL_DEBT_RESOLUTION.md](planning/TECHNICAL_DEBT_RESOLUTION.md) | TreeSitter architecture audit response (~90% complete) | 2026-01-13 |
+
+**Archived**: See [archived/planning/](archived/planning/) for completed strategic analyses
 
 ### Refactoring
 

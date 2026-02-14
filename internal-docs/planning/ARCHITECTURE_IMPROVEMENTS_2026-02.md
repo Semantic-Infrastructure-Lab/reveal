@@ -23,7 +23,7 @@ This document captures architecture improvement recommendations from the compreh
 - Enhanced error classes with actionable suggestions (`reveal/errors.py`)
 - Improved CLI error messages with context
 - Type hints added to core modules (treesitter.py, etc.)
-- All 3,090 tests passing with zero regressions
+- All **3,177 tests passing** with zero regressions (as of 2026-02-14)
 
 **Architecture Assessment**:
 - Grade: **A- (4.5/5)**

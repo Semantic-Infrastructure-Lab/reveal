@@ -1,17 +1,17 @@
 ---
-date: 2026-02-08
-session: vilalo-0208
+date: 2026-02-14
+session: astral-voyage-0214
 type: current-priorities
 status: active
-updated_from: cooling-frost-0208
+updated_from: vilalo-0208
 ---
 
 # Reveal Current Priorities - February 2026
 
-**Last Updated**: 2026-02-08 (Session: vilalo-0208)
-**Previous Update**: 2026-02-08 (Session: cooling-frost-0208)
-**Project Version**: v0.47.2 (Phases 3-5 complete)
-**Overall Status**: Core UX consistency complete (Phases 1-5), documentation consolidation in progress
+**Last Updated**: 2026-02-14 (Session: astral-voyage-0214)
+**Previous Update**: 2026-02-08 (Session: vilalo-0208)
+**Project Version**: v0.49.2 (Phases 1-8 complete, xlsx adapter added, Windows CI complete)
+**Overall Status**: Core UX consistency complete (Phases 1-8), Windows compatibility 100%, adapter documentation 89% complete
 
 ---
 
@@ -29,19 +29,44 @@ updated_from: cooling-frost-0208
 - sapphire-spark-0207: Phase 1 format consistency + test expansion (domain, claude, imports)
 - zibeta-0207: Phase 2 batch processing + Phase 6/7 verification + quality audit
 
-**Test Suite**:
-- 2912 tests passing ✅
-- 73% overall coverage
-- Test runtime: 110 seconds
+**Test Suite** (as of 2026-02-14):
+- **3,177 tests passing** ✅ (+265 tests since 2026-02-08)
+- 75% overall coverage
+- Test runtime: ~110 seconds
 
 ### ✅ Recently Completed (February 2026)
 
-**UX Consistency Phases 3-5**:
+**UX Consistency Phases 3-5, 8**:
 - ✅ Phase 3: Query operator standardization (Complete 2026-02-08)
 - ✅ Phase 4: Field selection + budget awareness (Complete 2026-02-08)
 - ✅ Phase 5: Element discovery (Complete 2026-02-08)
+- ✅ Phase 8: Convenience flags (Complete 2026-02-08)
 
-**Result**: Core UX consistency effort (Phases 1-5) complete. Reveal now provides universal format consistency, batch processing, query operators, field selection, and element discovery.
+**Result**: Core UX consistency effort (Phases 1-8) complete. Reveal now provides universal format consistency, batch processing, query operators, field selection, element discovery, and convenience flags.
+
+### ✅ Recently Completed (February 14, 2026)
+
+**xlsx:// Adapter** (v0.49.0, 2026-02-13):
+- ✅ Complete Excel spreadsheet inspection and data extraction
+- ✅ Sheet extraction by name (case-insensitive) or 0-based index
+- ✅ Cell range extraction using A1 notation (A1:Z100, supports AA-ZZ columns)
+- ✅ CSV export via `?format=csv` query parameter
+- ✅ 40 comprehensive tests (100% passing)
+- ✅ Performance validated up to 20K+ rows
+
+**Windows CI Compatibility** (v0.49.2, 2026-02-14):
+- ✅ 100% test pass rate on Windows (3,177/3,177 tests)
+- ✅ Path separator normalization for cross-platform compatibility
+- ✅ Platform-independent test detection using Path.parts
+- ✅ Permission test handling (skip chmod-based tests on Windows)
+
+**Help System Badges** (v0.49.1, 2026-02-13):
+- ✅ Marked xlsx, ssl, and domain adapters as 🟡 Beta (production-ready)
+
+**Adapter Documentation Sprint** (Sessions: cooling-monsoon, blazing-shine, awakened-titan, whistling-mist, timeless-horizon):
+- ✅ 16/18 adapters documented (89% coverage)
+- ✅ 19,850 lines of comprehensive adapter guides
+- ✅ Domain, Claude, Diff adapter guides completed (6,404 lines)
 
 ---
 
