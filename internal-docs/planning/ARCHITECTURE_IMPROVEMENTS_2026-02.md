@@ -1,12 +1,18 @@
 ---
-date: 2026-02-10
-session: bright-slayer-0210
+date: 2026-02-14
+session: astral-voyage-0214
 type: planning
 source: nebular-droid-0209 architecture review
 status: active
+updated: 2026-02-14 (astral-voyage-0214 - Priority 1 & 2 status revised)
 ---
 
 # Architecture Improvements Roadmap
+
+**⚠️ UPDATE (2026-02-14)**: Priorities 1 and 2 have been revised based on implementation discovery:
+- **Priority 1 (Config Introspection)**: ✅ **COMPLETE** - Already implemented via `reveal://config`
+- **Priority 2 (Scaffolding)**: ⚠️ **90% COMPLETE** - Implementation done, needs CLI wiring (2-4 hours)
+- See detailed findings: `/home/scottsen/src/tia/sessions/astral-voyage-0214/CONFIG_AND_SCAFFOLDING_FINDINGS.md`
 
 **Source**: Comprehensive architecture review from nebular-droid-0209 (2026-02-09)
 **Context**: After "pit of success" improvements (Result type, enhanced errors, type hints)
@@ -32,7 +38,9 @@ This document captures architecture improvement recommendations from the compreh
 
 ---
 
-## Priority 1: Config Introspection Tools (1-2 days)
+## Priority 1: Config Introspection Tools ✅ **COMPLETE** (2026-02-14)
+
+**Status**: Implemented via `reveal://config` adapter
 
 ### Problem
 Configuration system is powerful but opaque:
@@ -40,9 +48,9 @@ Configuration system is powerful but opaque:
 - Users struggle with "where did this value come from?"
 - Debugging config issues is trial-and-error
 
-### Solution: Config Introspection Commands
+### Solution: Config Introspection via reveal:// Adapter ✅
 
-**Implementation**:
+**Implemented**:
 ```bash
 reveal config explain file.py
 # Output:
