@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.49.2] - 2026-02-14
 
+### Added
+- **Test coverage** - Added comprehensive tests for previously untested core utilities
+  - `reveal/result.py`: 0% → 100% coverage (51 tests, 67/67 lines)
+  - `reveal/utils/uri.py`: 0% → 97.7% coverage (76 tests, 86/88 lines)
+  - Total: 127 new tests, 153 lines covered, overall coverage 45% → 46%
+  - Tests: Success/Failure monads, URI parsing (all schemes), auth, query params, IPv4/IPv6
+  - All 3318 tests passing (was 3191)
+  - Session: yoxumema-0214
+
 ### Fixed
 - **Documentation link validation** - Fixed 33 broken internal links in adapter guides
   - Corrected double-dash anchor formatting (GitHub slug compatibility)
