@@ -314,15 +314,20 @@ reveal nginx.conf --check              # Nginx validation (N001-N004)
 ```
 
 **Available rule categories:**
-- **B** (bugs) - Common code bugs and anti-patterns (B001-B005)
-- **S** (security) - Security vulnerabilities (S001, S701)
-- **C** (complexity) - Code complexity metrics (C001-C003)
-- **E** (errors) - Syntax errors and issues (E001)
+- **B** (bugs) - Common code bugs and anti-patterns (B001-B006)
+- **C** (complexity) - Code complexity metrics (C901, C902, C905)
 - **D** (duplicates) - Duplicate code detection (D001, D002)
-- **N** (nginx) - Nginx configuration issues (N001-N004)
-- **V** (validation) - General validation rules (V001-V006)
-- **R** (refactoring) - Refactoring opportunities (R001-R003)
-- **U** (urls) - URL and link issues (U001-U003)
+- **E** (errors) - Line length and formatting (E501)
+- **F** (frontmatter) - Markdown front matter validation (F001-F005)
+- **I** (imports) - Import analysis and dependencies (I001-I005)
+- **L** (links) - Link validation and documentation (L001-L005)
+- **M** (maintainability) - Code maintainability checks (M101-M104)
+- **N** (nginx) - Nginx configuration validation (N001-N004)
+- **R** (refactoring) - Refactoring opportunities (R913)
+- **S** (security) - Security vulnerabilities (S701)
+- **T** (types) - Type annotation issues (T004)
+- **U** (urls) - URL consistency and security (U501, U502)
+- **V** (validation) - Internal validation rules (V001-V023)
 
 **List all rules:** `reveal --rules`
 **Explain specific rule:** `reveal --explain B001`
@@ -1136,13 +1141,13 @@ exit 0
 
 **reveal auto-detects and provides structure for:**
 
-### Programming Languages (16)
-Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, GDScript, Bash, SQL, PHP, Ruby, Lua
+### Programming Languages (20+)
+Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, Swift, Kotlin, Dart, Elixir, Zig, GDScript, Bash, PowerShell, SQL, PHP, Ruby, Lua
 
 **Structure provided:** Functions, classes, methods, imports, decorators, complexity
 
-### Configuration Formats
-Nginx, Dockerfile, TOML, YAML, JSON
+### Configuration & Data Formats (15+)
+Nginx, Dockerfile, TOML, YAML, JSON, JSONL, CSV, XML, INI, HCL (Terraform), GraphQL, Protocol Buffers, Batch scripts
 
 **Validation:** Format-specific rules (N-series for Nginx, S701 for Docker)
 
