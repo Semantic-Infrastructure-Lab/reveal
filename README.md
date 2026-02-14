@@ -42,7 +42,7 @@ reveal 'ast://src?complexity>30'
 - 🔍 **Unified Query Syntax**: Filter and sort across all adapters
 - 🤖 **AI-Optimized**: Token-efficient output for LLM consumption
 - 📊 **Quality Metrics**: Complexity, maintainability, test coverage
-- 🔌 **Extensible**: 17 built-in adapters, 42+ languages built-in, easy to add custom ones
+- 🔌 **Extensible**: 18 built-in adapters, 42+ languages built-in, easy to add custom ones
 
 ## License
 

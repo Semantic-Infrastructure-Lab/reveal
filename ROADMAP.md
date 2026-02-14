@@ -25,7 +25,7 @@ This document outlines reveal's development priorities and future direction. For
 - ✅ **Phase 1: Universal Operation Flags** — `--advanced`, `--only-failures` across all adapters
 - ✅ **Phase 2: Stdin Batch Processing** — Universal `--batch` flag with result aggregation
 - ✅ **Batch mode** — Works with any adapter, mixed adapter batches supported
-- ✅ **Format consistency** — All 16 adapters support `--format json|text`
+- ✅ **Format consistency** — All 18 adapters support `--format json|text`
 
 ### v0.44.2
 - ✅ **SSL certificate parsing fix** — TLS 1.3 connections properly handled (cryptography dependency)

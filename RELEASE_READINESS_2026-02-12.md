@@ -221,7 +221,7 @@ From CURRENT_PRIORITIES_2026-02.md:
 
 | Phase | Status | Notes |
 |-------|--------|-------|
-| Phase 1: Format Consistency | ✅ Complete | All 17 adapters |
+| Phase 1: Format Consistency | ✅ Complete | All 18 adapters |
 | Phase 2: Batch Processing | ✅ Complete | Universal --batch |
 | Phase 3: Query Operators | ✅ Complete | 5 adapters, unified |
 | Phase 4: Field Selection | ✅ Complete | Token reduction |

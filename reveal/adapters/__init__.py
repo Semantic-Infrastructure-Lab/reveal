@@ -26,6 +26,7 @@ from .reveal import RevealAdapter
 from .sqlite import SQLiteAdapter
 from .ssl import SSLAdapter
 from .stats import StatsAdapter
+from .xlsx import XlsxAdapter
 
 # Optional adapters (require extra dependencies)
 try:
@@ -60,6 +61,7 @@ __all__ = [
     'SQLiteAdapter',
     'SSLAdapter',
     'StatsAdapter',
+    'XlsxAdapter',
 ]
 if _git_available:
     __all__.append('GitAdapter')

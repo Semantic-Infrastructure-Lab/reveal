@@ -1,0 +1,157 @@
+# Xlsx Adapter Help Data
+# Excel spreadsheet inspection and data extraction
+
+name: xlsx
+description: 'Extract and analyze Excel spreadsheet data from xlsx files'
+syntax: 'xlsx:///<path/to/file.xlsx>[?<query>]'
+
+examples:
+  # Basic workbook inspection
+  - uri: 'reveal xlsx:///data/sales.xlsx'
+    description: 'Show workbook overview with all sheets (dimensions, row/col counts)'
+
+  - uri: 'reveal xlsx:///data/sales.xlsx --meta'
+    description: 'Show Excel file metadata (creator, created date, modified date, parts count)'
+
+  # Sheet extraction
+  - uri: 'reveal xlsx:///data/sales.xlsx?sheet=0'
+    description: 'Extract first sheet by index (0-based)'
+
+  - uri: 'reveal xlsx:///data/sales.xlsx?sheet=Q1Sales'
+    description: 'Extract sheet by name (case-insensitive matching)'
+
+  - uri: 'reveal xlsx:///data/sales.xlsx?sheet=Summary&limit=50'
+    description: 'Extract first 50 rows from Summary sheet'
+
+  # Cell range extraction
+  - uri: 'reveal xlsx:///data/sales.xlsx?sheet=Q1Sales&range=A1:D10'
+    description: 'Extract cell range A1:D10 from Q1Sales sheet (A1 notation)'
+
+  - uri: 'reveal xlsx:///data/sales.xlsx?sheet=0&range=B5:F100'
+    description: 'Extract cell range B5:F100 from first sheet'
+
+  # Data export
+  - uri: 'reveal xlsx:///data/sales.xlsx?sheet=Q1Sales&format=csv'
+    description: 'Export Q1Sales sheet as CSV (proper escaping, ready for piping)'
+
+  - uri: 'reveal xlsx:///data/sales.xlsx?sheet=0&format=csv > output.csv'
+    description: 'Export first sheet to CSV file'
+
+  - uri: 'reveal xlsx:///data/sales.xlsx?sheet=Summary --format json'
+    description: 'Export sheet data as JSON for programmatic processing'
+
+  # Combined queries
+  - uri: 'reveal xlsx:///data/sales.xlsx?sheet=Q1Sales&range=A1:Z100&limit=50&format=csv'
+    description: 'Extract first 50 rows of range A1:Z100 from Q1Sales, export as CSV'
+
+elements:
+  sheet: 'Individual worksheet within Excel workbook'
+  workbook: 'Complete Excel file with all sheets'
+  range: 'Rectangular region of cells (A1 notation)'
+
+query_parameters:
+  sheet: 'Sheet to extract (name or 0-based index) - default: show all sheets'
+  range: 'Cell range in A1 notation (e.g., A1:C10) - default: all cells'
+  limit: 'Maximum number of rows to return - default: all rows'
+  format: 'Output format (csv, json) - default: text table'
+  search: 'Search for text across all sheets (NOT YET IMPLEMENTED)'
+  formulas: 'Show formulas instead of calculated values (NOT YET IMPLEMENTED)'
+
+flags:
+  --meta: 'Show Excel file metadata (creator, dates, parts count)'
+  --format: 'Output format (text, json, typed, grep)'
+
+features:
+  - 'Workbook overview with sheet dimensions and metadata'
+  - 'Sheet extraction by name or index (0-based)'
+  - 'Cell range extraction using A1 notation (A1:Z100)'
+  - 'CSV export with proper escaping (pipe to files or tools)'
+  - 'JSON output for programmatic processing'
+  - 'Row limiting for large sheets'
+  - 'Case-insensitive sheet name matching'
+  - 'Metadata display (creator, dates, parts count)'
+  - 'Works with .xlsx and .xlsm files'
+
+workflows:
+  - name: 'Export Excel Sheet to CSV'
+    scenario: 'Convert Excel data to CSV for processing in other tools'
+    steps:
+      - 'reveal xlsx:///data/sales.xlsx              # See all sheets'
+      - 'reveal xlsx:///data/sales.xlsx?sheet=Q1Sales&format=csv > q1_sales.csv'
+      - 'Process CSV with standard tools (awk, csvkit, pandas, etc.)'
+
+  - name: 'Quick Data Inspection'
+    scenario: 'Preview large Excel file without opening Excel'
+    steps:
+      - 'reveal xlsx:///data/huge.xlsx              # List all sheets'
+      - 'reveal xlsx:///data/huge.xlsx?sheet=Summary&limit=20  # Preview first 20 rows'
+      - 'reveal xlsx:///data/huge.xlsx?sheet=Summary&range=A1:E10  # Inspect header region'
+
+  - name: 'Extract Specific Data Range'
+    scenario: 'Get specific cells from Excel sheet for analysis'
+    steps:
+      - 'reveal xlsx:///data/budget.xlsx?sheet=Q1&range=B5:F50 --format json'
+      - 'Process JSON data with jq or other tools'
+
+  - name: 'Batch CSV Export'
+    scenario: 'Export multiple sheets to CSV files'
+    steps:
+      - 'reveal xlsx:///data/annual_report.xlsx      # List all sheets'
+      - 'for sheet in Q1 Q2 Q3 Q4; do'
+      - '  reveal xlsx:///data/annual_report.xlsx?sheet=$sheet&format=csv > ${sheet}.csv'
+      - 'done'
+
+  - name: 'Data Quality Check'
+    scenario: 'Verify Excel data before processing'
+    steps:
+      - 'reveal xlsx:///data/input.xlsx             # Check sheet names and dimensions'
+      - 'reveal xlsx:///data/input.xlsx?sheet=Data&limit=5  # Preview headers'
+      - 'reveal xlsx:///data/input.xlsx --meta      # Check file metadata'
+      - 'Process with confidence'
+
+tips:
+  - 'Use ?sheet=0 for first sheet (0-based indexing like Python)'
+  - 'Sheet names are case-insensitive (Q1Sales matches q1sales)'
+  - 'A1 notation: A=col 1, Z=col 26, AA=col 27, etc.'
+  - 'Cell ranges are inclusive: A1:C5 includes rows 1-5, columns A-C'
+  - '?format=csv exports to CSV, --format json exports to JSON'
+  - 'Combine with standard tools: | csvcut, | jq, | grep, etc.'
+  - 'For automation, use --format json for machine-readable output'
+  - 'Preview large sheets with ?limit=N to avoid overwhelming output'
+
+try_now:
+  - 'reveal xlsx:///path/to/file.xlsx'
+  - 'reveal xlsx:///path/to/file.xlsx?sheet=0'
+  - 'reveal xlsx:///path/to/file.xlsx?sheet=0&limit=10'
+
+output_formats:
+  - text
+  - json
+  - csv
+
+see_also:
+  - 'stats://'
+  - 'json://'
+  - 'csv (external tool)'
+  - 'jq (external tool)'
+  - 'csvkit (external tool)'
+
+limitations:
+  - 'Search across sheets not yet implemented (?search parameter)'
+  - 'Formula display not yet implemented (?formulas parameter)'
+  - 'Only supports .xlsx and .xlsm formats (not legacy .xls)'
+  - 'Large sheets (50K+ rows) may be slow to load'
+  - 'Formatting (colors, fonts) not preserved in text/CSV output'
+
+performance:
+  - 'Workbook overview: Fast (<100ms for most files)'
+  - 'Sheet extraction: Fast for small sheets (<10K rows)'
+  - 'Cell ranges: Very fast (only loads requested cells)'
+  - 'Large sheets: Use ?limit=N to preview before full extraction'
+
+future_features:
+  - 'Cross-sheet search (?search=pattern)'
+  - 'Formula display (?formulas=true)'
+  - 'Multiple sheet export in one command'
+  - 'Streaming for very large files'
+  - 'Chart and pivot table inspection'

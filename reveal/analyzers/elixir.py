@@ -27,7 +27,7 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
     language = 'elixir'
 
     # Optional: Override these for custom behavior
-    # def get_structure(self):
+    # def get_structure(self) -> Dict[str, Any]:
     #     structure = super().get_structure()
     #     # Add custom processing here
     #     return structure

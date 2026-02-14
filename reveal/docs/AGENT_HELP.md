@@ -27,7 +27,7 @@
 AI agents can now query reveal's capabilities via machine-readable schemas:
 
 ```bash
-# Discover adapter schemas (ALL 16 adapters now supported)
+# Discover adapter schemas (ALL 18 adapters now supported)
 reveal help://schemas/<adapter> --format=json
 
 # File & Analysis Adapters

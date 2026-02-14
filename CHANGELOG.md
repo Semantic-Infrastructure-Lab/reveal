@@ -14,6 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **xlsx:// adapter** - Complete Excel spreadsheet inspection and data extraction
+  - Workbook overview with sheet list and dimensions
+  - Sheet extraction by name (case-insensitive) or 0-based index
+  - Cell range extraction using A1 notation (A1:Z100, supports AA-ZZ columns)
+  - Row limiting for large sheet preview (?limit=N)
+  - CSV export via ?format=csv query parameter
+  - JSON and text output formats
+  - Performance validated up to 20K+ rows
+  - 40 comprehensive tests (100% passing)
+  - Complete help documentation and examples
+  - Example: `reveal xlsx:///data/sales.xlsx?sheet=Q1&range=A1:D10&format=csv`
+  - Session: distant-nebula-0213, timeless-energy-0213
+
+### Fixed
+- **xlsx adapter error messages** - Enhanced ValueError messages with examples
+- **elixir analyzer** - Added return type hint to example override method
+
 ## [0.48.0] - 2026-02-08
 
 ### Added
