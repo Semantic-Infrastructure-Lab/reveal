@@ -1,11 +1,14 @@
 # Reveal Roadmap
-> **Last updated**: 2026-02-13 (v0.49.0 - xlsx:// adapter released)
+> **Last updated**: 2026-02-13 (v0.49.1 - help system badges fixed)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.49.1
+- ✅ **Help system badges** — Mark xlsx, ssl, and domain as 🟡 Beta (production-ready)
 
 ### v0.49.0
 - ✅ **xlsx:// adapter** — Complete Excel spreadsheet inspection and data extraction

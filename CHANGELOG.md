@@ -12,6 +12,15 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.49.1] - 2026-02-13
+
+### Fixed
+- **Help system badges** - Mark xlsx, ssl, and domain adapters as 🟡 Beta instead of 🔴 Experimental
+  - These adapters are production-ready with comprehensive tests
+  - xlsx: 40 tests, complete CSV/JSON export
+  - ssl: 52 tests, certificate inspection
+  - domain: Full DNS/health status checks
+
 ## [0.49.0] - 2026-02-13
 
 ### Added
