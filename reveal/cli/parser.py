@@ -95,6 +95,9 @@ def _build_adapter_examples() -> str:
   reveal env://                               # Show all environment variables
   reveal env://PATH                           # Get specific variable
 
+  reveal reveal://config                      # Show configuration sources and values
+  reveal reveal://config --format json        # Config as JSON for scripts
+
   reveal 'ast://./src?complexity>10'          # Find complex functions
   reveal 'ast://app.py?lines>50'              # Find long functions
   reveal 'ast://.?type=function' --format=json  # All functions as JSON
@@ -113,7 +116,7 @@ File-type specific features:
   • Markdown: --links, --code, --frontmatter (extract links/code/metadata)
   • HTML: --metadata, --semantic, --scripts, --styles (extract SEO/elements/scripts)
   • Code files: --check, --outline, --typed (quality checks, hierarchy, containment)
-  • URI adapters: help:// (documentation), env:// (environment), ast:// (code queries)
+  • URI adapters: help:// (docs), env:// (env vars), reveal://config (config), ast:// (code queries)
 
   # Type-aware output (shows parent/child relationships!)
   reveal app.py --typed            # See containment hierarchy
