@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.49.2] - 2026-02-14
 
 ### Fixed
+- **Documentation link validation** - Fixed 33 broken internal links in adapter guides
+  - Corrected double-dash anchor formatting (GitHub slug compatibility)
+  - Replaced references to non-existent files with actual documentation
+  - Updated AGENT_HELP.md anchor references
+  - Result: All documentation validation tests passing
+  - Session: boundless-cosmos-0214
 - **Windows CI compatibility** - Fixed all remaining Windows test failures (100% pass rate)
   - Path separators: Use `.as_posix()` for MANIFEST.in paths (V022 rule)
   - Permission tests: Skip chmod-based tests on Windows (not supported)
