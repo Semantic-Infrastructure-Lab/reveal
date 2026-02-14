@@ -136,6 +136,31 @@ class PostgresAdapter(ResourceAdapter):
 - **Documentation** - Improve guides, add examples
 - **Pattern detection** - Add new `--check` rules
 
+### 4. Add New CLI Commands
+
+**Note**: Most components (adapters, analyzers, rules) use auto-registration and don't need CLI wiring!
+
+**Only needed for**: Top-level commands like `reveal scaffold`, `reveal stats`, etc.
+
+```bash
+# New top-level command example
+reveal mycommand subcommand --flag
+```
+
+**See [CLI_INTEGRATION_GUIDE.md](docs/CLI_INTEGRATION_GUIDE.md) for complete guide:**
+- When CLI wiring is needed (vs auto-registration)
+- Step-by-step integration instructions
+- Patterns and examples
+- Testing checklist
+- Pit of success safeguards (M105 rule)
+
+**Quick pattern**:
+1. Create handlers in `reveal/cli/handlers_*.py`
+2. Import in `reveal/main.py`
+3. Create `_handle_*_command()` function
+4. Wire into `main()` early
+5. Add integration tests
+
 ---
 
 ## Architecture
