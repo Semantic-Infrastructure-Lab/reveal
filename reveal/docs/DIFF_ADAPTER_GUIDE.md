@@ -21,7 +21,7 @@
 11. [Performance Considerations](#performance-considerations)
 12. [Limitations](#limitations)
 13. [Error Messages](#error-messages)
-14. [Tips & Best Practices](#tips--best-practices)
+14. [Tips & Best Practices](#tips-best-practices)
 15. [Integration Examples](#integration-examples)
 16. [Related Documentation](#related-documentation)
 17. [FAQ](#faq)
@@ -1747,8 +1747,8 @@ echo "Release notes saved: RELEASE_NOTES_$TO_TAG.md"
 
 ### Reveal Core Documentation
 
-- **[REVEAL_GUIDE.md](REVEAL_GUIDE.md)** - Complete reveal system guide
-- **[ADAPTER_OVERVIEW.md](ADAPTER_OVERVIEW.md)** - All adapters reference
+- **[REVEAL_ADAPTER_GUIDE.md](REVEAL_ADAPTER_GUIDE.md)** - Reveal adapter reference
+- **[ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md)** - How to create adapters
 
 ---
 

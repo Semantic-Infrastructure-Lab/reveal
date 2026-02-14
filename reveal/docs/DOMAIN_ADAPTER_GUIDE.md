@@ -21,7 +21,7 @@
 11. [Performance Considerations](#performance-considerations)
 12. [Limitations](#limitations)
 13. [Error Messages](#error-messages)
-14. [Tips & Best Practices](#tips--best-practices)
+14. [Tips & Best Practices](#tips-best-practices)
 15. [Integration Examples](#integration-examples)
 16. [Related Documentation](#related-documentation)
 17. [FAQ](#faq)
@@ -2018,10 +2018,9 @@ docker run --rm domain-checker reveal domain://example.com --check
 
 ### Reveal Core Documentation
 
-- **[REVEAL_GUIDE.md](REVEAL_GUIDE.md)** - Complete reveal system guide
-- **[PROGRESSIVE_DISCLOSURE.md](PROGRESSIVE_DISCLOSURE.md)** - Token-efficient pattern documentation
-- **[ADAPTER_OVERVIEW.md](ADAPTER_OVERVIEW.md)** - All adapters reference
-- **[HEALTH_CHECKS.md](HEALTH_CHECKS.md)** - Health check system documentation
+- **[REVEAL_ADAPTER_GUIDE.md](REVEAL_ADAPTER_GUIDE.md)** - Reveal adapter reference
+- **[ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md)** - How to create adapters
+- **[SSL_ADAPTER_GUIDE.md](SSL_ADAPTER_GUIDE.md)** - SSL adapter with health check examples
 
 ### External Tools
 

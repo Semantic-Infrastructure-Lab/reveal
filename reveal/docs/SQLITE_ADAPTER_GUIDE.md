@@ -19,7 +19,7 @@
 - [Performance](#performance)
 - [Limitations](#limitations)
 - [Error Messages](#error-messages)
-- [Tips & Best Practices](#tips--best-practices)
+- [Tips & Best Practices](#tips-best-practices)
 - [Integration with Other Tools](#integration-with-other-tools)
 - [Related Documentation](#related-documentation)
 - [Version History](#version-history)

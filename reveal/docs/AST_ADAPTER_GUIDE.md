@@ -19,7 +19,7 @@
 - [Performance](#performance)
 - [Limitations](#limitations)
 - [Error Messages](#error-messages)
-- [Tips & Best Practices](#tips--best-practices)
+- [Tips & Best Practices](#tips-best-practices)
 - [Integration with Other Tools](#integration-with-other-tools)
 - [Related Documentation](#related-documentation)
 - [Version History](#version-history)
@@ -1111,8 +1111,8 @@ sqlite3 code.db "SELECT file, symbol, complexity
 
 **Related adapters:**
 - [PYTHON_ADAPTER_GUIDE.md](PYTHON_ADAPTER_GUIDE.md) - Python runtime inspection
-- [imports:// adapter](AGENT_HELP.md#imports-adapter) - Dependency analysis
-- [stats:// adapter](AGENT_HELP.md#stats-adapter) - Codebase statistics
+- [imports:// adapter](IMPORTS_ADAPTER_GUIDE.md) - Dependency analysis
+- [stats:// adapter](STATS_ADAPTER_GUIDE.md) - Codebase statistics
 
 **Workflow guides:**
 - [RECIPES.md](RECIPES.md) - Reveal recipes and patterns

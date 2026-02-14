@@ -19,10 +19,10 @@
 8. [Workflows](#workflows)
 9. [Integration Examples](#integration-examples)
 10. [Security Considerations](#security-considerations)
-11. [Performance & Best Practices](#performance--best-practices)
+11. [Performance & Best Practices](#performance-best-practices)
 12. [Limitations](#limitations)
 13. [Troubleshooting](#troubleshooting)
-14. [Tips & Tricks](#tips--tricks)
+14. [Tips & Tricks](#tips-tricks)
 15. [Related Documentation](#related-documentation)
 16. [FAQ](#faq)
 17. [Version History](#version-history)
@@ -1343,8 +1343,8 @@ fi
 
 ### Reveal Core
 - **[Quick Start](QUICK_START.md)** - Getting started with reveal
-- **[Progressive Disclosure Guide](PROGRESSIVE_DISCLOSURE.md)** - Token optimization patterns
-- **[Batch Processing Guide](BATCH_PROCESSING.md)** - Batch mode usage
+- **[Field Selection Guide](FIELD_SELECTION_GUIDE.md)** - Token reduction with --fields
+- **[Agent Help](AGENT_HELP.md)** - AI agent usage patterns
 - **[Output Contract](OUTPUT_CONTRACT.md)** - Result structure standards
 
 ---

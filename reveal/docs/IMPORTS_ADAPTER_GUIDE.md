@@ -19,10 +19,10 @@
 10. [Output Types](#output-types)
 11. [Workflows](#workflows)
 12. [Integration Examples](#integration-examples)
-13. [Performance & Best Practices](#performance--best-practices)
+13. [Performance & Best Practices](#performance-best-practices)
 14. [Troubleshooting](#troubleshooting)
 15. [Limitations](#limitations)
-16. [Tips & Best Practices](#tips--best-practices)
+16. [Tips & Best Practices](#tips-best-practices)
 17. [Related Documentation](#related-documentation)
 18. [FAQ](#faq)
 

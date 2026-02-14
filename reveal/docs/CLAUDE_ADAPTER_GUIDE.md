@@ -23,7 +23,7 @@
 13. [Performance Considerations](#performance-considerations)
 14. [Limitations](#limitations)
 15. [Error Messages](#error-messages)
-16. [Tips & Best Practices](#tips--best-practices)
+16. [Tips & Best Practices](#tips-best-practices)
 17. [Integration Examples](#integration-examples)
 18. [Related Documentation](#related-documentation)
 19. [FAQ](#faq)
@@ -1960,9 +1960,9 @@ fi
 
 ### Reveal Core Documentation
 
-- **[REVEAL_GUIDE.md](REVEAL_GUIDE.md)** - Complete reveal system guide
-- **[PROGRESSIVE_DISCLOSURE.md](PROGRESSIVE_DISCLOSURE.md)** - Token-efficient patterns
-- **[ADAPTER_OVERVIEW.md](ADAPTER_OVERVIEW.md)** - All adapters reference
+- **[REVEAL_ADAPTER_GUIDE.md](REVEAL_ADAPTER_GUIDE.md)** - Reveal adapter reference
+- **[ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md)** - How to create adapters
+- **[ADAPTER_CONSISTENCY.md](ADAPTER_CONSISTENCY.md)** - Adapter patterns and consistency
 
 ---
 
