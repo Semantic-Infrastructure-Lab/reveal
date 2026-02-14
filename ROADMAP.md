@@ -7,6 +7,12 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.49.2
+- ✅ **Windows CI compatibility** — 100% test pass rate on Windows (3177/3177 tests)
+- ✅ **Path separator normalization** — Cross-platform MANIFEST.in validation
+- ✅ **Platform-independent test detection** — Use Path.parts for Windows compatibility
+- ✅ **Permission test handling** — Skip chmod-based tests on Windows
+
 ### v0.49.1
 - ✅ **Help system badges** — Mark xlsx, ssl, and domain as 🟡 Beta (production-ready)
 
