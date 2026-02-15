@@ -33,7 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `reveal/utils/updates.py`: 9% → 100% (14 tests, 35 lines) - PyPI update checking with caching
     - Subtotal: 168 tests, 214 lines, 7 modules at 100%
 
-  - **Total**: 417 tests added, 459 lines covered, 11 modules at 95-100% coverage
+  - **Phase 3** (session cunning-wizard-0214):
+    - `reveal/cli/handlers.py`: 11% → 73% (20 tests, 254 lines) - CLI handlers for special modes
+      - Simple handlers: list_supported, adapters, explain_file, capabilities, show_ast, language_info
+      - Agent help: agent_help, agent_help_full (success and missing file cases)
+      - Schema: handle_schema, _get_schema_v1 (default, explicit, unknown versions)
+      - Batch helpers: aggregate_stats, group_by_scheme, filter_display, status_indicator, exit_code
+      - Stdin processing: process_stdin_file (not found, directory, success)
+    - Subtotal: 20 tests, 254 lines, 62pp coverage improvement
+
+  - **Total**: 437 tests added, 713 lines covered, 12 modules with major coverage improvements
 
 ### Fixed
 - **Documentation link validation** - Fixed 33 broken internal links in adapter guides
