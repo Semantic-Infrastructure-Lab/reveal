@@ -192,7 +192,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - Detection creation: _create_missing_structure_detection, _create_missing_outline_detection
     - Subtotal: 68 tests, 418 lines, 4 modules improved (1 to 100%, 3 to 96-97%)
 
-  - **Total**: 862 tests added, 2259 lines covered, 36 modules with major coverage improvements
+  - **Phase 9** (session expanding-station-0215):
+    - `reveal/rules/validation/V006.py`: 74% → 98% (14 tests, 62 lines) - Output format support validation
+      - No reveal root detection (returns empty)
+      - No analyzers directory (returns empty)
+      - Missing get_structure: detects analyzers with @register but no get_structure(), no detection when present/inherited
+      - Missing return type hint: detects local get_structure without Dict return type, no detection with proper types
+      - File handling: skips underscore files, skips base.py, handles read exceptions gracefully
+      - _find_reveal_root: finds from rule location, returns None when not found
+    - `reveal/rules/validation/V007.py`: 76% → 98% (21 tests, 103 lines) - Version consistency validation
+      - No reveal root detection (returns empty)
+      - Not dev checkout (returns empty for installed packages)
+      - Pyproject handling: missing file creates detection, invalid version creates detection, exception handling
+      - Changelog validation: missing file = no detection, missing dated entry creates detection, exception handling
+      - README validation: missing file = no detection, version badge mismatch creates detection, PyPI badge extraction
+      - Agent help validation: version mismatch creates detection, exception handling
+      - Version extraction helpers: pyproject.toml (double/single quotes), changelog detection, markdown extraction, README badges
+    - `reveal/rules/validation/V019.py`: 76% → 97% (18 tests, 71 lines) - Adapter initialization pattern compliance
+      - No reveal root detection (returns empty)
+      - Import exception handling (graceful failure)
+      - Adapter not found: skips when adapter class None, skips when adapter file None
+      - No-arg init violations: ValueError instead of TypeError creates detection, crashes create detection, TypeError = expected, success = no detection
+      - Resource init violations: ImportError = no detection (optional deps), ValueError with format keywords = acceptable, unexpected ValueError creates MEDIUM severity detection, AttributeError creates detection
+      - Initialization contract validation: ensures TypeError (not ValueError) for signature mismatches
+    - `reveal/rules/validation/V011.py`: 78% → 99% (17 tests, 87 lines) - Release readiness validation
+      - No reveal root detection (returns empty)
+      - Not dev checkout (returns empty)
+      - Pyproject handling: missing file = no detections, no version = no detections, exception handling
+      - Changelog validation: missing file = no detection, missing dated entry creates detection, section without date = false, exception handling
+      - Roadmap validation: missing file = no detection, missing shipped section creates detection, no "What We've Shipped" = false, exception handling
+      - Version extraction helpers: pyproject.toml extraction, changelog dated entry detection, roadmap shipped section detection
+    - `reveal/rules/validation/V015.py`: 79% → 99% (10 tests, 68 lines) - Rules count accuracy validation
+      - No reveal root detection (returns empty)
+      - Missing files: missing README = no detection, no rules directory = no detection
+      - Count mismatches: minimum claim below actual creates detection, exact claim mismatch creates detection, minimum at actual = no detection
+      - Counting logic: skips utils.py/__init__.py/_private.py/*_utils.py files, exception handling
+      - README extraction: multiple claims (minimum "50+" and exact "50"), exception handling
+    - `reveal/rules/validation/V002.py`: 80% → 100% (10 tests, 45 lines) - Analyzer registration validation [PERFECT 100%]
+      - No reveal root detection (returns empty)
+      - No analyzers directory (returns empty)
+      - Analyzer registration: with @register = no detection, without @register creates detection, no classes = no detection, exception handling, skips underscore files
+      - Has register decorator: detects @register decorator, detects register import, no register = false
+    - Subtotal: 90 tests, 436 lines, 6 modules improved (1 to 100%, 2 to 99%, 3 to 97-98%)
+
+  - **Total**: 952 tests added, 2695 lines covered, 42 modules with major coverage improvements
 
 ### Fixed
 - **Documentation link validation** - Fixed 33 broken internal links in adapter guides
