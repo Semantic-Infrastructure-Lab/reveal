@@ -930,6 +930,32 @@ class TestDiffRenderer(unittest.TestCase):
         self.assertIn('Error', output)
         self.assertIn('File not found', output)
 
+    def test_renderer_error_valueerror_shows_examples(self):
+        """Renderer should show examples for ValueError."""
+        from reveal.adapters.diff import DiffRenderer
+        from io import StringIO
+
+        # Capture stderr (render_error outputs to stderr)
+        old_stderr = sys.stderr
+        sys.stderr = captured_output = StringIO()
+
+        error = ValueError("Invalid diff syntax")
+        DiffRenderer.render_error(error)
+
+        sys.stderr = old_stderr
+        output = captured_output.getvalue()
+
+        # Should show error message
+        self.assertIn('Error', output)
+        self.assertIn('Invalid diff syntax', output)
+
+        # Should show examples section (lines 40-46)
+        self.assertIn('Examples:', output)
+        self.assertIn('reveal diff://app.py:backup/app.py', output)
+        self.assertIn('reveal diff://env://:env://production', output)
+        self.assertIn('reveal diff://mysql://prod/db:mysql://staging/db', output)
+        self.assertIn('Learn more: reveal help://diff', output)
+
     def test_renderer_json_format(self):
         """Renderer should support JSON output."""
         import json
