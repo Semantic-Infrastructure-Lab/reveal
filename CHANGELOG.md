@@ -128,7 +128,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - Element rendering (content field, key-value, JSON format), error rendering (stderr)
     - Subtotal: 212 tests, 795 lines, 7 modules improved (3 to 100%, 2 to 98%, 1 to 97%, 1 to 71%)
 
-  - **Total**: 702 tests added, 1588 lines covered, 28 modules with major coverage improvements
+  - **Phase 6 Total**: 702 tests added, 1588 lines covered, 28 modules with major coverage improvements
+
+  - **Phase 7** (session rofuvoke-0215):
+    - `reveal/rules/validation/adapter_utils.py`: 38% → 100% (35 tests, 52 lines) - Adapter utility functions
+      - find_adapter_file (4 patterns: scheme.py, scheme_adapter.py, scheme/adapter.py, scheme/__init__.py)
+      - get_adapter_schemes, get_adapter_class, get_renderer_class, get_adapter_and_renderer
+      - Line finding utilities: find_class_definition_line, find_method_definition_line, find_init_definition_line
+      - Pattern precedence testing, exception handling, edge cases
+    - `reveal/rules/validation/utils.py`: 57% → 100% (15 tests, 28 lines) - Reveal root finding utilities
+      - find_reveal_root: REVEAL_DEV_ROOT env var, git checkout discovery, installed package fallback
+      - dev_only flag behavior (excludes installed, allows dev checkout)
+      - is_dev_checkout: pyproject.toml detection in parent directory
+      - Search depth limit (10 levels), nested directory handling
+    - `reveal/rules/validation/V009.py`: 65% → 99% (22 tests, 84 lines) - Documentation cross-reference validation
+      - Link extraction (markdown, filters for external/anchor/mailto)
+      - External link detection (http/https), anchor fragment removal
+      - Link validation (broken/valid detection with line numbers)
+      - URI to path conversion (reveal:// → file path, project root vs reveal root precedence)
+      - Link resolution (absolute, relative, parent relative, outside project rejection)
+      - Exception handling for invalid paths
+    - `reveal/rules/validation/V020.py`: 65% → 96% (20 tests, 89 lines) - Adapter element/structure contract validation
+      - Contract validation (missing get_element/get_structure detection)
+      - Adapter instantiation testing (no args, TypeError handling)
+      - get_element error handling (crashes vs returns None)
+      - Helper methods: find_class_line, find_method_line, find_adapter_file
+      - Edge cases: no reveal root, missing adapter/renderer class, missing adapter file
+    - Subtotal: 92 tests, 253 lines, 4 modules improved (2 to 100%, 1 to 99%, 1 to 96%)
+
+  - **Total**: 794 tests added, 1841 lines covered, 32 modules with major coverage improvements
 
 ### Fixed
 - **Documentation link validation** - Fixed 33 broken internal links in adapter guides
