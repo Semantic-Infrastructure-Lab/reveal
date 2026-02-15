@@ -80,7 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - Missing **kwargs and base params detection
     - Subtotal: 25 tests, 40 lines, 5 modules at 100%
 
-  - **Phase 6** (session defixo-0215):
+  - **Phase 6** (sessions defixo-0215, crackling-thunder-0215):
     - `reveal/display/element.py`: 48% → 100% (43 tests, 133 lines) - Element extraction display
       - Syntax parsing: ordinal (@N, type:N), line (:N, :N-M), hierarchical (Class.method)
       - Extraction routing: ordinal, line range, single line, hierarchical, name-based
@@ -91,16 +91,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - Markdown section extraction: no headings, target before first heading, section middle, end calculation
       - Ordinal edge cases: structure exception, category no match, invalid items, non-TreeSitter source
       - Output formats: JSON, grep, human (with line numbers)
-    - `reveal/display/formatting.py`: 35% → 46% (23 tests, 45 lines) - Formatting utilities
-      - set_nested: single-level, nested keys, existing keys
-      - _find_list_field: finds results/items, handles non-lists, no list field
-      - _extract_nested_value: flat/nested/deep fields, missing fields, non-dict intermediates
-      - _filter_single_item_fields: flat, nested, mixed fields, missing fields skipped
-      - _preserve_metadata: contract_version, type, meta, multiple fields, missing fields
-      - filter_fields: list items, toplevel structure, metadata preservation
-    - Subtotal: 66 tests, 178 lines, 2 modules improved (1 to 100%, 1 +11pp)
+    - `reveal/display/formatting.py`: 35% → 71% (81 tests, 220 lines) - Formatting output & utilities
+      - **Utility functions** (23 tests, 45 lines): set_nested, _find_list_field, _extract_nested_value, _filter_single_item_fields, _preserve_metadata, filter_fields
+      - **Frontmatter formatting** (6 tests): None/empty, scalar/list/dict values display
+      - **Link formatting** (5 tests): Normal/broken/domain links, grep format, grouping by type
+      - **Code block formatting** (8 tests): Fenced blocks, inline code, grep format, grouping by language
+      - **Related document formatting** (12 tests): Exists/error states, nested docs (recursive), stats counting, flat paths, various output modes
+      - **CSV schema formatting** (3 tests): Basic info, sample values, truncation
+      - **XML children formatting** (7 tests): Tags, attributes, text/children, nesting (recursive), truncation
+      - **Kwargs builders** (17 tests): Navigation, markdown links/code, HTML extraction args
+    - Subtotal: 124 tests, 353 lines, 2 modules improved (1 to 100%, 1 to 71% from 35%)
 
-  - **Total**: 556 tests added, 971 lines covered, 23 modules with major coverage improvements
+  - **Total**: 614 tests added, 1146 lines covered, 23 modules with major coverage improvements
 
 ### Fixed
 - **Documentation link validation** - Fixed 33 broken internal links in adapter guides
