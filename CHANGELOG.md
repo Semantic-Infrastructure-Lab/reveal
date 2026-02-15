@@ -235,7 +235,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - Has register decorator: detects @register decorator, detects register import, no register = false
     - Subtotal: 90 tests, 436 lines, 6 modules improved (1 to 100%, 2 to 99%, 3 to 97-98%)
 
-  - **Total**: 952 tests added, 2695 lines covered, 42 modules with major coverage improvements
+  - **Phase 10** (session ascending-observatory-0215):
+    - `reveal/utils/query.py`: 77% → 95% (37 tests, 63 lines) - Query parsing and filtering utilities
+      - CoerceValueEdgeCases: non-string input handling (returns unchanged)
+      - QueryFilterNormalization: operator normalization (== → =)
+      - ParseQueryFiltersEdgeCases: empty part skipping in filter parsing
+      - ComparisonExceptionHandling: range operator invalid format, wildcard operator edge cases, equality operator range special case, numeric operator string fallback, dispatch comparison default return
+      - NoneComparison: None equals 'null' string (case insensitive)
+      - ResultControlInvalidInput: empty parts skipped, invalid limit/offset values ignored
+      - SortingMixedTypes: _safe_numeric with None/numbers/strings, mixed-type sorting, None value handling, TypeError fallback
+      - BudgetLimits: max_items truncation, max_bytes truncation, truncate_strings, next_cursor metadata, within limits
+      - StringTruncation: basic truncation, nested dicts, lists, list of dicts, recursive truncation (_truncate_dict_strings)
+    - `reveal/adapters/stats/adapter.py`: 95% → 100% (3 tests, 4 lines) - Stats adapter [PERFECT 100%]
+      - query_filter_parsing_exception_fallback: parse_query_filters exception handling (falls back to empty filters)
+      - sorting_type_error_fallback: TypeError exception in sorting (returns unsorted list)
+      - sorting_key_error_fallback: KeyError exception in sorting (returns unsorted list)
+    - Subtotal: 40 tests, 67 lines, 2 modules improved (1 to 100%, 1 to 95%)
+
+  - **Total**: 992 tests added, 2762 lines covered, 44 modules with major coverage improvements
 
 ### Fixed
 - **Documentation link validation** - Fixed 33 broken internal links in adapter guides
