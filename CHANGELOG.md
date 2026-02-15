@@ -112,9 +112,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - Basic scaffolding (rule, test, doc files), code/category normalization
       - Prefix/severity mapping (B=HIGH, E=LOW, F/C/D/M/V=MEDIUM, S=HIGH, N=LOW, unknown=MEDIUM)
       - __init__.py creation/preservation, RulePrefix enum for known prefixes
-    - Subtotal: 157 tests, 499 lines, 5 modules improved (2 to 100%, 2 to 98%, 1 to 71%)
+    - `reveal/adapters/domain/dns.py`: 14% → 97% (22 tests, 74 lines) - DNS resolution and validation
+      - get_dns_records (all record types: A, AAAA, MX, TXT, NS, CNAME, SOA), exception handling
+      - get_dns_summary (nameservers, a_records, has_mx, error handling)
+      - check_dns_resolution (IP resolution via socket, pass/failure status)
+      - check_nameserver_response (authoritative NS queries, status/severity)
+      - check_dns_propagation (consistency across NSs, partial/complete/failed)
+      - Comprehensive mocking (dnspython, socket.getaddrinfo)
+    - `reveal/adapters/claude/renderer.py`: 27% → 100% (33 tests, 222 lines) - Claude output rendering
+      - Session overview (messages, tools, duration), tool calls (Bash, Read, Edit, Write, Grep, Glob, generic)
+      - Tool summary (counts, success rates), errors (context, truncation, "N more")
+      - Files touched (Read/Write/Edit operations, truncation), workflow (steps, detail)
+      - Context changes (cwd, branch), filtered results (query, filters, error indicators)
+      - Rendering dispatch (_render_text routes to _render_{type}), fallback (unknown types)
+      - Element rendering (content field, key-value, JSON format), error rendering (stderr)
+    - Subtotal: 212 tests, 795 lines, 7 modules improved (3 to 100%, 2 to 98%, 1 to 97%, 1 to 71%)
 
-  - **Total**: 647 tests added, 1292 lines covered, 26 modules with major coverage improvements
+  - **Total**: 702 tests added, 1588 lines covered, 28 modules with major coverage improvements
 
 ### Fixed
 - **Documentation link validation** - Fixed 33 broken internal links in adapter guides
