@@ -95,6 +95,109 @@ class TestV001HelpDocumentation(unittest.TestCase):
             self.assertIsInstance(static_help, dict)
             # May or may not have entries depending on implementation
 
+    @patch('reveal.rules.validation.V001.find_reveal_root')
+    def test_no_reveal_root_returns_empty(self, mock_find_root):
+        """Test that when reveal root can't be found, no detections are returned."""
+        mock_find_root.return_value = None
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_analyzer_missing_expected_help(self):
+        """Test detection when analyzer is in EXPECTED_HELP_TOPICS but not in static_help."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reveal_root = Path(tmpdir)
+            analyzers_dir = reveal_root / 'analyzers'
+            analyzers_dir.mkdir()
+
+            # Create markdown analyzer file (which is in EXPECTED_HELP_TOPICS)
+            (analyzers_dir / 'markdown.py').write_text('# markdown analyzer')
+
+            # Mock methods to return controlled data
+            analyzers = {'markdown': analyzers_dir / 'markdown.py'}
+            static_help = {}  # Empty - no help for markdown
+
+            detections = self.rule._check_analyzers_have_help(analyzers, static_help)
+
+            self.assertEqual(len(detections), 1)
+            self.assertIn('markdown', detections[0].message)
+            self.assertIn('missing from help system', detections[0].message.lower())
+
+    def test_referenced_help_file_missing(self):
+        """Test detection when static_help references a file that doesn't exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reveal_root = Path(tmpdir)
+            docs_dir = reveal_root / 'docs'
+            docs_dir.mkdir()
+
+            # Reference a help file that doesn't exist
+            static_help = {'markdown': 'MISSING_FILE.md'}
+
+            detections = self.rule._validate_help_files_exist(static_help, reveal_root)
+
+            self.assertEqual(len(detections), 1)
+            self.assertIn('MISSING_FILE.md', detections[0].message)
+            self.assertIn('does not exist', detections[0].message.lower())
+
+    def test_get_analyzers_no_directory(self):
+        """Test _get_analyzers returns empty dict when analyzers/ doesn't exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reveal_root = Path(tmpdir)
+            # Don't create analyzers directory
+
+            analyzers = self.rule._get_analyzers(reveal_root)
+
+            self.assertEqual(len(analyzers), 0)
+            self.assertIsInstance(analyzers, dict)
+
+    def test_get_static_help_no_file(self):
+        """Test _get_static_help returns empty dict when help.py doesn't exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reveal_root = Path(tmpdir)
+            # Don't create help.py
+
+            static_help = self.rule._get_static_help(reveal_root)
+
+            self.assertEqual(len(static_help), 0)
+            self.assertIsInstance(static_help, dict)
+
+    def test_get_static_help_no_dict_found(self):
+        """Test _get_static_help returns empty when STATIC_HELP dict not found."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reveal_root = Path(tmpdir)
+            adapters_dir = reveal_root / 'adapters'
+            adapters_dir.mkdir()
+            help_file = adapters_dir / 'help.py'
+
+            # Write help.py without STATIC_HELP dict
+            help_file.write_text('# Help adapter\n# No STATIC_HELP dict here\n')
+
+            static_help = self.rule._get_static_help(reveal_root)
+
+            self.assertEqual(len(static_help), 0)
+
+    def test_get_static_help_exception_handling(self):
+        """Test _get_static_help handles exceptions gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reveal_root = Path(tmpdir)
+            adapters_dir = reveal_root / 'adapters'
+            adapters_dir.mkdir()
+            help_file = adapters_dir / 'help.py'
+
+            # Create file but make it unreadable to trigger exception
+            help_file.write_text('STATIC_HELP = {}')
+
+            # Mock read_text to raise an exception
+            with patch.object(Path, 'read_text', side_effect=IOError('Permission denied')):
+                static_help = self.rule._get_static_help(reveal_root)
+
+                # Should return empty dict on exception
+                self.assertEqual(len(static_help), 0)
+                self.assertIsInstance(static_help, dict)
+
 
 class TestV002AnalyzerRegistration(unittest.TestCase):
     """Test V002: Analyzer registration validation."""
@@ -624,6 +727,74 @@ class TestV008AnalyzerSignature(unittest.TestCase):
                 detections = self.rule._check_analyzer_file(analyzers[0])
                 self.assertIsInstance(detections, list)
                 # May or may not have detections depending on implementation
+
+    @patch('reveal.rules.validation.V008.find_reveal_root')
+    def test_no_reveal_root_returns_empty(self, mock_find_root):
+        """Test that when reveal root can't be found, no detections are returned."""
+        mock_find_root.return_value = None
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_check_analyzer_file_parse_error(self):
+        """Test _check_analyzer_file handles parse errors gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a file with invalid Python syntax
+            analyzer_path = Path(tmpdir) / "bad_analyzer.py"
+            analyzer_path.write_text("this is not valid Python syntax {{{")
+
+            # Should return empty list, not raise exception
+            detections = self.rule._check_analyzer_file(analyzer_path)
+            self.assertEqual(len(detections), 0)
+            self.assertIsInstance(detections, list)
+
+    def test_detects_missing_kwargs(self):
+        """Test detection of get_structure without **kwargs."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            analyzer_path = Path(tmpdir) / "test_analyzer.py"
+            # Create analyzer with get_structure missing **kwargs
+            analyzer_path.write_text("""
+class TestAnalyzer:
+    def get_structure(self):
+        return {}
+""")
+
+            detections = self.rule._check_analyzer_file(analyzer_path)
+            self.assertEqual(len(detections), 1)
+            self.assertIn('kwargs', detections[0].message.lower())
+
+    def test_detects_missing_base_params(self):
+        """Test detection of get_structure with **kwargs but missing base params."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            analyzer_path = Path(tmpdir) / "test_analyzer.py"
+            # Create analyzer with **kwargs but missing head/tail/range
+            analyzer_path.write_text("""
+class TestAnalyzer:
+    def get_structure(self, **kwargs):
+        return {}
+""")
+
+            detections = self.rule._check_analyzer_file(analyzer_path)
+            self.assertEqual(len(detections), 1)
+            self.assertIn('missing base parameters', detections[0].message.lower())
+            # Should mention at least one of: head, tail, range
+            self.assertTrue(
+                any(param in detections[0].message for param in ['head', 'tail', 'range'])
+            )
+
+    def test_get_analyzer_files_no_directory(self):
+        """Test _get_analyzer_files returns empty list when analyzers/ doesn't exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reveal_root = Path(tmpdir)
+            # Don't create analyzers directory
+
+            analyzers = self.rule._get_analyzer_files(reveal_root)
+
+            self.assertEqual(len(analyzers), 0)
+            self.assertIsInstance(analyzers, list)
 
 
 class TestV009DocumentationCrossReferences(unittest.TestCase):
