@@ -40,9 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - Schema: handle_schema, _get_schema_v1 (default, explicit, unknown versions)
       - Batch helpers: aggregate_stats, group_by_scheme, filter_display, status_indicator, exit_code
       - Stdin processing: process_stdin_file (not found, directory, success)
-    - Subtotal: 20 tests, 254 lines, 62pp coverage improvement
+    - `reveal/adapters/diff/renderer.py`: 67% → 100% (1 test, 7 lines) - Diff adapter error rendering
+      - ValueError error handling with usage examples
+    - Subtotal: 21 tests, 261 lines, 2 modules improved
 
-  - **Total**: 437 tests added, 713 lines covered, 12 modules with major coverage improvements
+  - **Total**: 438 tests added, 720 lines covered, 13 modules with major coverage improvements
 
 ### Fixed
 - **Documentation link validation** - Fixed 33 broken internal links in adapter guides
