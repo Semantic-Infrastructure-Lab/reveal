@@ -156,7 +156,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - Edge cases: no reveal root, missing adapter/renderer class, missing adapter file
     - Subtotal: 92 tests, 253 lines, 4 modules improved (2 to 100%, 1 to 99%, 1 to 96%)
 
-  - **Total**: 794 tests added, 1841 lines covered, 32 modules with major coverage improvements
+  - **Phase 8** (session valley-whirlwind-0215):
+    - `reveal/rules/validation/V005.py`: 69% → 97% (18 tests, bug fix, 114 lines) - Static help file synchronization
+      - No reveal root detection (returns empty)
+      - STATIC_HELP parsing: detection when not parseable, help.py missing, pattern not found, exception handling
+      - Missing help files: detection when referenced files don't exist, no detection when files exist
+      - _find_line_in_static_help: help.py missing, topic found/not found, exception handling
+      - Unregistered guides: docs_dir missing, unregistered guide detected, registered guide not detected, test files skipped
+      - _find_reveal_root: find from rule location, alternative parent search, not found returns None
+      - Bug fixed: Line 154 incomplete condition `or '/.':` → `or '/.' in relative_path:` (unregistered guide detection non-functional)
+    - `reveal/rules/validation/V018.py`: 70% → 96% (13 tests, 86 lines) - Adapter renderer registration completeness
+      - No reveal root detection (returns empty)
+      - Import failure handling (exceptions during adapter/renderer imports)
+      - Missing renderer: detects adapters without renderers, no crash when adapter file not found
+      - Orphaned renderer: detects renderers without adapters (LOW severity)
+      - _find_adapter_file: adapters_dir missing, 4 patterns (scheme.py, scheme_adapter.py, scheme/adapter.py, scheme/__init__.py), not found, pattern precedence
+      - get_description: returns meaningful description
+    - `reveal/rules/validation/V021.py`: 71% → 100% (15 tests, 112 lines) - Detect inappropriate regex when tree-sitter available
+      - No reveal root detection (returns empty)
+      - No analyzers directory (returns empty)
+      - File reading error handling (exceptions during read)
+      - _imports_re_module: detects `import re`, `from re import`, no import, syntax error fallback
+      - _uses_treesitter_analyzer: detects TreeSitterAnalyzer usage vs non-usage
+      - Regex detection: regex-based analyzer when tree-sitter available, ignores TreeSitterAnalyzer with supplemental regex, ignores languages without tree-sitter, ignores whitelisted files
+      - _create_violation: effort estimation (small/medium/large based on regex count)
+    - `reveal/rules/validation/V003.py`: 73% → 96% (22 tests, 106 lines) - Feature matrix coverage
+      - AnalyzerContext.relative_path property calculation
+      - No reveal root detection (returns empty)
+      - No analyzers directory (returns empty dict)
+      - Missing get_structure: detects analyzers without get_structure(), no detection when present
+      - Missing outline: detects structured analyzers without outline, no detection when outline keywords present, non-structured not checked
+      - _check_hierarchy_support: detects hierarchy/outline/tree/nested/parent/children keywords, false when no keywords
+      - _find_class_line: finds class definition, returns 1 when not found
+      - _find_reveal_root: find from location, alternative search, not found returns None
+      - Detection creation: _create_missing_structure_detection, _create_missing_outline_detection
+    - Subtotal: 68 tests, 418 lines, 4 modules improved (1 to 100%, 3 to 96-97%)
+
+  - **Total**: 862 tests added, 2259 lines covered, 36 modules with major coverage improvements
 
 ### Fixed
 - **Documentation link validation** - Fixed 33 broken internal links in adapter guides
