@@ -100,9 +100,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - **CSV schema formatting** (3 tests): Basic info, sample values, truncation
       - **XML children formatting** (7 tests): Tags, attributes, text/children, nesting (recursive), truncation
       - **Kwargs builders** (17 tests): Navigation, markdown links/code, HTML extraction args
-    - Subtotal: 124 tests, 353 lines, 2 modules improved (1 to 100%, 1 to 71% from 35%)
+    - `reveal/cli/scaffold/adapter.py`: 14% → 100% (11 tests, 42 lines) - Adapter scaffolding commands
+      - Basic scaffolding (adapter, test, doc files), name/class/scheme normalization
+      - Existing files handling (error without force, overwrite with force)
+      - Directory creation, reveal root finding (found/not found)
+    - `reveal/cli/scaffold/analyzer.py`: 12% → 98% (11 tests, 48 lines) - Analyzer scaffolding commands
+      - Basic scaffolding (analyzer, test, doc files), extension/name/class normalization
+      - Helper functions (_to_class_name, _to_module_name)
+      - Existing files handling, reveal root finding via __init__.py
+    - `reveal/cli/scaffold/rule.py`: 9% → 98% (11 tests, 52 lines) - Rule scaffolding commands
+      - Basic scaffolding (rule, test, doc files), code/category normalization
+      - Prefix/severity mapping (B=HIGH, E=LOW, F/C/D/M/V=MEDIUM, S=HIGH, N=LOW, unknown=MEDIUM)
+      - __init__.py creation/preservation, RulePrefix enum for known prefixes
+    - Subtotal: 157 tests, 499 lines, 5 modules improved (2 to 100%, 2 to 98%, 1 to 71%)
 
-  - **Total**: 614 tests added, 1146 lines covered, 23 modules with major coverage improvements
+  - **Total**: 647 tests added, 1292 lines covered, 26 modules with major coverage improvements
 
 ### Fixed
 - **Documentation link validation** - Fixed 33 broken internal links in adapter guides
