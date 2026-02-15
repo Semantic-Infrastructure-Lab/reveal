@@ -59,7 +59,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - to_dict() conversion, filtering, and roundtrip
     - Subtotal: 27 tests, 33 lines, 3 modules improved (2 to 100%, 1 to 98%)
 
-  - **Total**: 465 tests added, 753 lines covered, 16 modules with major coverage improvements
+  - **Phase 5** (session howling-ice-0214):
+    - `reveal/rules/infrastructure/N004.py`: 88% → 100% (5 tests, 7 lines) - ACME path consistency
+      - SSL server without ACME location tracking
+      - _get_server_name edge cases (no directive, empty value)
+      - _find_listen_line with/without listen directive
+    - `reveal/rules/validation/V004.py`: 85% → 100% (5 tests, 6 lines) - Test coverage gaps
+      - find_reveal_root returning None, non-dev checkout detection
+      - Missing tests/ and analyzers/ directory handling
+      - Analyzer without test file detection
+    - `reveal/rules/links/L005.py`: 86% → 100% (3 tests, 9 lines) - Cross-reference density
+      - Suggestions included when related docs exist
+      - Current file excluded from suggestions, duplicate removal
+    - `reveal/rules/validation/V001.py`: 88% → 100% (7 tests, 9 lines) - Help documentation completeness
+      - find_reveal_root None, analyzer missing expected help
+      - Referenced help file doesn't exist, no analyzers/help.py
+      - STATIC_HELP dict not found, exception handling
+    - `reveal/rules/validation/V008.py`: 89% → 100% (5 tests, 9 lines) - Analyzer signatures
+      - find_reveal_root None, parse error handling
+      - Missing **kwargs and base params detection
+    - Subtotal: 25 tests, 40 lines, 5 modules at 100%
+
+  - **Total**: 490 tests added, 793 lines covered, 21 modules with major coverage improvements
 
 ### Fixed
 - **Documentation link validation** - Fixed 33 broken internal links in adapter guides
