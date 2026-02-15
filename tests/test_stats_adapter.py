@@ -986,3 +986,174 @@ class TestStatsRenderer:
 
         # Should contain file statistics
         assert 'test.py' in output
+
+
+class TestStatsAnalysisFunctions:
+    """Test stats/analysis.py helper functions."""
+
+    def test_find_analyzable_files_code_only_excludes_data_files(self, tmp_path):
+        """Test that code_only=True excludes data files (XML, CSV, SQL)."""
+        from reveal.adapters.stats.analysis import find_analyzable_files
+
+        # Create test files
+        (tmp_path / "code.py").write_text("def foo(): pass")
+        (tmp_path / "data.xml").write_text("<root></root>")
+        (tmp_path / "data.csv").write_text("a,b,c\n1,2,3")
+        (tmp_path / "query.sql").write_text("SELECT * FROM users;")
+
+        # Without code_only - should find all analyzable files
+        all_files = find_analyzable_files(tmp_path, code_only=False)
+        all_names = {f.name for f in all_files}
+        assert 'code.py' in all_names
+        assert 'data.xml' in all_names
+        assert 'data.csv' in all_names
+        assert 'query.sql' in all_names
+
+        # With code_only - should exclude data files
+        code_files = find_analyzable_files(tmp_path, code_only=True)
+        code_names = {f.name for f in code_files}
+        assert 'code.py' in code_names
+        assert 'data.xml' not in code_names
+        assert 'data.csv' not in code_names
+        assert 'query.sql' not in code_names
+
+    def test_find_analyzable_files_code_only_excludes_config_files(self, tmp_path):
+        """Test that code_only=True excludes config files (YAML, TOML)."""
+        from reveal.adapters.stats.analysis import find_analyzable_files
+
+        # Create test files
+        (tmp_path / "code.py").write_text("def foo(): pass")
+        (tmp_path / "config.yaml").write_text("key: value")
+        (tmp_path / "config.yml").write_text("key: value")
+        (tmp_path / "pyproject.toml").write_text("[tool.pytest]")
+
+        # Without code_only
+        all_files = find_analyzable_files(tmp_path, code_only=False)
+        all_names = {f.name for f in all_files}
+        assert 'code.py' in all_names
+        assert 'config.yaml' in all_names
+        assert 'config.yml' in all_names
+        assert 'pyproject.toml' in all_names
+
+        # With code_only - should exclude config files
+        code_files = find_analyzable_files(tmp_path, code_only=True)
+        code_names = {f.name for f in code_files}
+        assert 'code.py' in code_names
+        assert 'config.yaml' not in code_names
+        assert 'config.yml' not in code_names
+        assert 'pyproject.toml' not in code_names
+
+    def test_find_analyzable_files_code_only_excludes_large_json(self, tmp_path):
+        """Test that code_only=True excludes large JSON files (>10KB)."""
+        from reveal.adapters.stats.analysis import find_analyzable_files
+
+        # Create small JSON (included)
+        small_json = tmp_path / "small.json"
+        small_json.write_text('{"key": "value"}')  # < 10KB
+
+        # Create large JSON (excluded)
+        large_json = tmp_path / "large.json"
+        large_json.write_text('{"data": "' + 'x' * 12000 + '"}')  # > 10KB
+
+        # Create Python file
+        (tmp_path / "code.py").write_text("def foo(): pass")
+
+        # Without code_only - both JSONs included
+        all_files = find_analyzable_files(tmp_path, code_only=False)
+        all_names = {f.name for f in all_files}
+        assert 'small.json' in all_names
+        assert 'large.json' in all_names
+        assert 'code.py' in all_names
+
+        # With code_only - large JSON excluded
+        code_files = find_analyzable_files(tmp_path, code_only=True)
+        code_names = {f.name for f in code_files}
+        assert 'small.json' in code_names
+        assert 'large.json' not in code_names
+        assert 'code.py' in code_names
+
+    def test_find_analyzable_files_code_only_handles_stat_errors(self, tmp_path):
+        """Test that code_only handles stat errors gracefully (includes file)."""
+        from reveal.adapters.stats.analysis import find_analyzable_files
+        from unittest.mock import patch
+
+        # Create test JSON file
+        test_json = tmp_path / "test.json"
+        test_json.write_text('{"key": "value"}')
+
+        # Mock stat to raise OSError
+        with patch.object(Path, 'stat', side_effect=OSError("Permission denied")):
+            # Should include file despite stat error
+            files = find_analyzable_files(tmp_path, code_only=True)
+            file_names = {f.name for f in files}
+            assert 'test.json' in file_names
+
+    def test_analyze_file_returns_none_when_no_analyzer(self, tmp_path):
+        """Test that analyze_file returns None when no analyzer is available."""
+        from reveal.adapters.stats.analysis import analyze_file
+
+        # Create unsupported file type
+        unsupported = tmp_path / "test.unknown"
+        unsupported.write_text("some content")
+
+        def mock_calculate(path, structure, content):
+            return {'lines': 10}
+
+        result = analyze_file(unsupported, mock_calculate)
+        assert result is None
+
+    def test_analyze_file_returns_none_on_exception(self, tmp_path):
+        """Test that analyze_file returns None when analysis raises exception."""
+        from reveal.adapters.stats.analysis import analyze_file
+
+        # Create valid Python file
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def foo(): pass")
+
+        # Mock calculate function that raises exception
+        def failing_calculate(path, structure, content):
+            raise ValueError("Calculation failed")
+
+        result = analyze_file(test_file, failing_calculate)
+        assert result is None
+
+    def test_get_file_display_path_single_file(self, tmp_path):
+        """Test display path when base_path is a file (shows just filename)."""
+        from reveal.adapters.stats.analysis import get_file_display_path
+
+        test_file = tmp_path / "test.py"
+        test_file.write_text("def foo(): pass")
+
+        # When base_path is the file itself, show just the name
+        display = get_file_display_path(test_file, test_file)
+        assert display == "test.py"
+
+    def test_get_file_display_path_relative(self, tmp_path):
+        """Test display path when file is relative to base (shows relative path)."""
+        from reveal.adapters.stats.analysis import get_file_display_path
+
+        subdir = tmp_path / "subdir"
+        subdir.mkdir()
+        test_file = subdir / "test.py"
+        test_file.write_text("def foo(): pass")
+
+        # When file is inside base, show relative path
+        display = get_file_display_path(test_file, tmp_path)
+        assert display == "subdir/test.py"
+
+    def test_get_file_display_path_absolute(self, tmp_path):
+        """Test display path when file is not relative to base (shows absolute)."""
+        from reveal.adapters.stats.analysis import get_file_display_path
+        import tempfile
+
+        # Create file in different location
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            other_file = Path(f.name)
+            f.write("def foo(): pass")
+
+        try:
+            # When file is outside base, show absolute path
+            display = get_file_display_path(other_file, tmp_path)
+            assert str(other_file) == display
+        finally:
+            other_file.unlink()  # Clean up
