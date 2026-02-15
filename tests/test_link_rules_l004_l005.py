@@ -213,6 +213,100 @@ One real ref: [Other](./OTHER.md)
             suggestion = detections[0].suggestion
             assert "See Also" in suggestion or "Related" in suggestion
 
+    def test_l005_includes_suggestions_when_available(self, tmp_path):
+        """L005 includes specific doc suggestions when related files exist."""
+        rule = L005()
+
+        # Create a docs directory with related files
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir()
+
+        # Create related documentation that should be suggested
+        (docs_dir / "ANTI_PATTERNS.md").write_text("# Anti Patterns Guide")
+        (docs_dir / "COOL_TRICKS.md").write_text("# Cool Tricks")
+
+        # Create the file we're checking (contains keywords that trigger suggestions)
+        guide_file = docs_dir / "AGENT_HELP.md"
+        content = "# Agent Help\nThis guide covers AI agents and LLMs.\nNo cross-references yet."
+
+        detections = rule.check(str(guide_file), None, content)
+
+        # Should detect low cross-refs and include suggestions
+        assert len(detections) == 1
+        suggestion = detections[0].suggestion
+        # Should suggest the related docs that exist
+        assert "ANTI_PATTERNS.md" in suggestion or "COOL_TRICKS.md" in suggestion
+        assert "Consider adding references to:" in suggestion
+
+    def test_l005_excludes_current_file_from_suggestions(self, tmp_path):
+        """L005 doesn't suggest the current file as a reference."""
+        rule = L005()
+
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir()
+
+        # Create the file we're checking
+        guide_file = docs_dir / "ANTI_PATTERNS.md"
+
+        # Create related files, including one with same name (shouldn't be suggested)
+        (docs_dir / "AGENT_HELP.md").write_text("# Agent Help")
+        (docs_dir / "COOL_TRICKS.md").write_text("# Cool Tricks")
+
+        # Content with keywords that would trigger suggestions
+        content = "# Anti Patterns\nCommon anti-patterns to avoid in AI agents.\nNo cross-references yet."
+
+        detections = rule.check(str(guide_file), None, content)
+
+        if detections:
+            suggestion = detections[0].suggestion
+            # Should NOT suggest itself (ANTI_PATTERNS.md)
+            # The suggestion should include other files but not ANTI_PATTERNS.md
+            lines = suggestion.split('\n')
+            for line in lines:
+                if 'ANTI_PATTERNS.md' in line and line.strip().startswith('- ['):
+                    # Found a suggestion line with current file name - this is wrong
+                    assert False, f"Should not suggest current file, but found: {line}"
+
+    def test_l005_removes_duplicate_suggestions(self, tmp_path):
+        """L005 removes duplicate suggestions while preserving order."""
+        rule = L005()
+
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir()
+
+        # Create files that multiple patterns would suggest
+        (docs_dir / "AGENT_HELP.md").write_text("# Agent Help")
+        (docs_dir / "COOL_TRICKS.md").write_text("# Cool Tricks")
+        (docs_dir / "ANTI_PATTERNS.md").write_text("# Anti Patterns")
+
+        guide_file = docs_dir / "MIXED_GUIDE.md"
+
+        # Content with keywords from multiple patterns that suggest the same docs
+        content = """# Mixed Guide
+This is a guide about agents and AI.
+It also covers anti-patterns and things to avoid.
+Tutorial on best practices.
+"""
+
+        detections = rule.check(str(guide_file), None, content)
+
+        if detections:
+            suggestion = detections[0].suggestion
+            # Extract just the "Consider adding references to:" section
+            if "Consider adding references to:" in suggestion:
+                start = suggestion.index("Consider adding references to:")
+                # Find the end of the suggestion list (before "Add a 'See Also'" section)
+                end = suggestion.index("Add a 'See Also'") if "Add a 'See Also'" in suggestion else len(suggestion)
+                suggestion_section = suggestion[start:end]
+
+                # Count how many times each file appears in the actual suggestions
+                # (not in the example template)
+                for filename in ["AGENT_HELP.md", "COOL_TRICKS.md", "ANTI_PATTERNS.md"]:
+                    # Count the lines that start with "  - [filename]"
+                    pattern = f"- [{filename}]"
+                    count = suggestion_section.count(pattern)
+                    assert count <= 1, f"{filename} appears {count} times in suggestions (expected <= 1)"
+
 
 class TestL004L005Integration:
     """Integration tests for L004 and L005 together."""

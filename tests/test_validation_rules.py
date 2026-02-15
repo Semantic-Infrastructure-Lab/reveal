@@ -7,6 +7,7 @@ They only run on reveal:// URIs to check reveal's internal structure.
 import unittest
 import tempfile
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 from reveal.rules.validation.V001 import V001
 from reveal.rules.validation.V002 import V002
 from reveal.rules.validation.V003 import V003
@@ -270,6 +271,102 @@ class TestV004TestCoverage(unittest.TestCase):
         root = find_reveal_root()
         self.assertIsNotNone(root)
         self.assertTrue((root / 'analyzers').exists())
+
+    @patch('reveal.rules.validation.V004.find_reveal_root')
+    def test_no_reveal_root_returns_empty(self, mock_find_root):
+        """Test that when reveal root can't be found, no detections are returned."""
+        mock_find_root.return_value = None
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        self.assertEqual(len(detections), 0)
+
+    @patch('reveal.rules.validation.V004.is_dev_checkout')
+    @patch('reveal.rules.validation.V004.find_reveal_root')
+    def test_non_dev_checkout_returns_empty(self, mock_find_root, mock_is_dev):
+        """Test that non-dev checkouts don't get test coverage checks."""
+        mock_find_root.return_value = Path('/fake/reveal')
+        mock_is_dev.return_value = False
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        self.assertEqual(len(detections), 0)
+
+    @patch('reveal.rules.validation.V004.is_dev_checkout')
+    @patch('reveal.rules.validation.V004.find_reveal_root')
+    def test_no_tests_directory_reports_detection(self, mock_find_root, mock_is_dev):
+        """Test that missing tests/ directory is reported."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            reveal_root = project_root / 'reveal'
+            reveal_root.mkdir()
+
+            mock_find_root.return_value = reveal_root
+            mock_is_dev.return_value = True
+
+            detections = self.rule.check(
+                file_path="reveal://",
+                structure=None,
+                content=""
+            )
+
+            self.assertEqual(len(detections), 1)
+            self.assertIn("No tests/ directory", detections[0].message)
+
+    @patch('reveal.rules.validation.V004.is_dev_checkout')
+    @patch('reveal.rules.validation.V004.find_reveal_root')
+    def test_no_analyzers_directory_returns_empty(self, mock_find_root, mock_is_dev):
+        """Test that when analyzers/ directory doesn't exist, no detections are returned."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            reveal_root = project_root / 'reveal'
+            reveal_root.mkdir()
+            tests_dir = project_root / 'tests'
+            tests_dir.mkdir()
+
+            mock_find_root.return_value = reveal_root
+            mock_is_dev.return_value = True
+
+            detections = self.rule.check(
+                file_path="reveal://",
+                structure=None,
+                content=""
+            )
+
+            self.assertEqual(len(detections), 0)
+
+    @patch('reveal.rules.validation.V004.is_dev_checkout')
+    @patch('reveal.rules.validation.V004.find_reveal_root')
+    def test_analyzer_missing_test_file(self, mock_find_root, mock_is_dev):
+        """Test that analyzers without test files are reported."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            reveal_root = project_root / 'reveal'
+            analyzers_dir = reveal_root / 'analyzers'
+            analyzers_dir.mkdir(parents=True)
+            tests_dir = project_root / 'tests'
+            tests_dir.mkdir()
+
+            # Create an analyzer without a test
+            analyzer_file = analyzers_dir / 'newanalyzer.py'
+            analyzer_file.write_text('# analyzer code')
+
+            mock_find_root.return_value = reveal_root
+            mock_is_dev.return_value = True
+
+            detections = self.rule.check(
+                file_path="reveal://",
+                structure=None,
+                content=""
+            )
+
+            self.assertEqual(len(detections), 1)
+            self.assertIn("newanalyzer", detections[0].message)
+            self.assertIn("no test file", detections[0].message.lower())
 
 
 class TestV005StaticHelpSync(unittest.TestCase):

@@ -534,6 +534,74 @@ server {
         from reveal.rules.infrastructure import NGINX_FILE_PATTERNS
         self.assertEqual(self.rule.file_patterns, NGINX_FILE_PATTERNS)
 
+    def test_handles_ssl_server_without_acme(self):
+        """Should track SSL servers without ACME locations (no detections by default)."""
+        content = '''
+server {
+    server_name secure.example.com;
+    listen 443 ssl;
+    ssl_certificate /etc/ssl/cert.pem;
+    ssl_certificate_key /etc/ssl/key.pem;
+    location / {
+        proxy_pass http://backend;
+    }
+}
+server {
+    server_name other.example.com;
+    listen 443 ssl;
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+}
+'''
+        # SSL servers without ACME are tracked internally but don't generate detections
+        # (This is intentional - see lines 119-129 in N004.py)
+        detections = self.rule.check('test.conf', None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_get_server_name_no_directive(self):
+        """Should return None when server block has no server_name directive."""
+        server_body = '''
+    listen 80;
+    location / {
+        proxy_pass http://backend;
+    }
+'''
+        result = self.rule._get_server_name(server_body)
+        self.assertIsNone(result)
+
+    def test_get_server_name_empty_value(self):
+        """Should return None when server_name directive has no values."""
+        server_body = '''
+    server_name ;
+    listen 80;
+'''
+        result = self.rule._get_server_name(server_body)
+        self.assertIsNone(result)
+
+    def test_find_listen_line_with_listen(self):
+        """Should find the line number of the listen directive."""
+        server_body = '''listen 80;
+    server_name example.com;
+    location / {
+        root /var/www;
+    }
+'''
+        # server_start=10 means the server block starts at line 10
+        line = self.rule._find_listen_line(server_body, server_start=10)
+        # listen is on the first line of the body (line 10)
+        self.assertEqual(line, 10)
+
+    def test_find_listen_line_no_listen(self):
+        """Should return server_start when no listen directive found."""
+        server_body = '''server_name example.com;
+    location / {
+        root /var/www;
+    }
+'''
+        line = self.rule._find_listen_line(server_body, server_start=20)
+        self.assertEqual(line, 20)
+
 
 if __name__ == '__main__':
     unittest.main()
