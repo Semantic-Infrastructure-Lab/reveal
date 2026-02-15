@@ -151,7 +151,7 @@ class V005(BaseRule):
                     continue
 
                 # Skip test files or hidden directories
-                if '/test' in relative_path or '/.':
+                if '/test' in relative_path or '/.' in relative_path:
                     continue
 
                 # Suggest registration
