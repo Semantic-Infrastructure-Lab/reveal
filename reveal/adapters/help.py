@@ -164,6 +164,50 @@ class HelpAdapter(ResourceAdapter):
             topic: Specific help topic to display (None = list all)
         """
         self.topic = topic
+        # Merge auto-discovered guides with manual STATIC_HELP entries
+        # STATIC_HELP takes precedence (allows aliases and special mappings)
+        self.help_topics = self._discover_and_merge_guides()
+
+    def _discover_and_merge_guides(self) -> Dict[str, str]:
+        """Auto-discover guide files and merge with STATIC_HELP.
+
+        Automatically discovers *_GUIDE.md files in reveal/docs/ and makes them
+        accessible via help:// URIs. Manual STATIC_HELP entries take precedence,
+        allowing for aliases and custom topic names.
+
+        Returns:
+            Dict mapping topic names to guide filenames
+        """
+        discovered = {}
+
+        # Find reveal/docs directory
+        docs_dir = Path(__file__).parent.parent / 'docs'
+
+        if docs_dir.exists():
+            # Auto-discover *_GUIDE.md files (e.g., AST_ADAPTER_GUIDE.md)
+            for guide in docs_dir.glob('*_GUIDE.md'):
+                # Convert filename to topic name
+                # AST_ADAPTER_GUIDE.md -> ast-adapter
+                # QUERY_SYNTAX_GUIDE.md -> query-syntax
+                topic = guide.stem.lower().replace('_guide', '').replace('_', '-')
+                discovered[topic] = guide.name
+
+            # Also check for *GUIDE.md pattern (without underscore before GUIDE)
+            for guide in docs_dir.glob('*GUIDE.md'):
+                # Skip if already discovered via *_GUIDE.md pattern
+                if guide.name not in discovered.values():
+                    # Convert filename to topic name
+                    # HTMLGUIDE.md -> html (unlikely but handle it)
+                    topic = guide.stem.lower().replace('guide', '').replace('_', '-').strip('-')
+                    if topic:  # Only add non-empty topics
+                        discovered[topic] = guide.name
+
+        # Merge: discovered guides + STATIC_HELP (STATIC_HELP takes precedence)
+        # This allows STATIC_HELP to:
+        #   - Define aliases (e.g., 'tricks' -> 'RECIPES.md')
+        #   - Override auto-discovered names (e.g., 'python' -> 'PYTHON_ADAPTER_GUIDE.md')
+        #   - Reference non-guide files (e.g., 'agent' -> 'AGENT_HELP.md')
+        return {**discovered, **self.STATIC_HELP}
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get help structure (list of available topics)."""
@@ -171,7 +215,7 @@ class HelpAdapter(ResourceAdapter):
             'type': 'help',
             'available_topics': self._list_topics(),
             'adapters': self._list_adapters(),
-            'static_guides': list(self.STATIC_HELP.keys())
+            'static_guides': list(self.help_topics.keys())
         }
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
@@ -202,8 +246,8 @@ class HelpAdapter(ResourceAdapter):
             adapter_name, section = topic.split('/', 1)
             return self._get_adapter_section(adapter_name, section)
 
-        # Check if it's a static guide
-        if topic in self.STATIC_HELP:
+        # Check if it's a static guide (includes auto-discovered + manual)
+        if topic in self.help_topics:
             return self._load_static_help(topic)
 
         # Check if it's 'adapters' (list all)
@@ -333,8 +377,8 @@ class HelpAdapter(ResourceAdapter):
         # Add meta topics
         topics.append('adapters')
 
-        # Add static guides
-        topics.extend(self.STATIC_HELP.keys())
+        # Add static guides (auto-discovered + manual)
+        topics.extend(self.help_topics.keys())
 
         return sorted(topics)
 
@@ -441,12 +485,12 @@ class HelpAdapter(ResourceAdapter):
         """Load help from static markdown file.
 
         Args:
-            topic: Topic name ('agent', 'agent-full')
+            topic: Topic name ('agent', 'agent-full', 'ast-adapter', etc.)
 
         Returns:
             Help content dict or None if file not found
         """
-        filename = self.STATIC_HELP.get(topic)
+        filename = self.help_topics.get(topic)
         if not filename:
             return None
 

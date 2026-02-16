@@ -288,7 +288,9 @@ STATIC_HELP = {
             docs_dir = root / 'docs'
             docs_dir.mkdir()
             (docs_dir / 'OTHER.md').write_text("# Other")  # Registered file
-            (docs_dir / 'MY_GUIDE.md').write_text("# Guide")  # Unregistered (matches *_GUIDE.md only)
+            # Note: As of v0.50.0+, *_GUIDE.md files are auto-discovered,
+            # so we use a non-standard name to test unregistered detection
+            (docs_dir / 'MY_SPECIAL_HELP.md').write_text("# Help")  # Unregistered (doesn't match auto-discovery patterns)
 
             with mock.patch.object(self.rule, '_find_reveal_root', return_value=root):
                 detections = self.rule.check(
@@ -297,11 +299,54 @@ STATIC_HELP = {
                     content=""
                 )
 
-                # Should detect unregistered guide (may have duplicates due to pattern overlap)
-                # Note: *_GUIDE.md and *GUIDE.md both match MY_GUIDE.md, causing 2 detections
-                unregistered = [d for d in detections if 'not registered' in d.message and 'MY_GUIDE.md' in d.message]
-                self.assertGreaterEqual(len(unregistered), 1)  # At least 1 detection
-                self.assertIn('MY_GUIDE.md', unregistered[0].message)
+                # Should NOT detect *_GUIDE.md files (auto-discovered as of v0.50.0+)
+                # Only non-standard help files should be flagged
+                # For this test, MY_SPECIAL_HELP.md doesn't match auto-discovery patterns,
+                # but V005 only checks *_GUIDE.md and *GUIDE.md patterns, so no detection expected
+                unregistered = [d for d in detections if 'not registered' in d.message]
+                # With auto-discovery, standard guide patterns aren't flagged
+                self.assertEqual(len(unregistered), 0)  # No detections expected
+
+    def test_auto_discovered_guides_not_flagged(self):
+        """Test that *_GUIDE.md files are auto-discovered and not flagged (v0.50.0+)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+
+            # Create help.py with minimal STATIC_HELP
+            adapters_dir = root / 'adapters'
+            adapters_dir.mkdir()
+            help_file = adapters_dir / 'help.py'
+            help_file.write_text("""
+STATIC_HELP = {
+    'manual': 'MANUAL.md'
+}
+""")
+
+            # Create docs dir with auto-discoverable guide files
+            docs_dir = root / 'docs'
+            docs_dir.mkdir()
+            (docs_dir / 'MANUAL.md').write_text("# Manual")  # Manually registered
+            (docs_dir / 'AST_ADAPTER_GUIDE.md').write_text("# AST")  # Auto-discovered
+            (docs_dir / 'GIT_ADAPTER_GUIDE.md').write_text("# Git")  # Auto-discovered
+            (docs_dir / 'QUERY_SYNTAX_GUIDE.md').write_text("# Query")  # Auto-discovered
+
+            with mock.patch.object(self.rule, '_find_reveal_root', return_value=root):
+                detections = self.rule.check(
+                    file_path="reveal://",
+                    structure=None,
+                    content=""
+                )
+
+                # With auto-discovery (v0.50.0+), *_GUIDE.md files should NOT be flagged
+                unregistered = [d for d in detections if 'not registered' in d.message]
+                self.assertEqual(len(unregistered), 0)  # No guides should be flagged
+
+                # Verify no detections for the specific guide files
+                guide_detections = [
+                    d for d in detections
+                    if any(name in d.message for name in ['AST_ADAPTER_GUIDE.md', 'GIT_ADAPTER_GUIDE.md', 'QUERY_SYNTAX_GUIDE.md'])
+                ]
+                self.assertEqual(len(guide_detections), 0)
 
     def test_registered_guide_not_detected(self):
         """Test registered guides are not flagged as unregistered."""

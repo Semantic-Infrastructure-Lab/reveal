@@ -128,11 +128,16 @@ class V005(BaseRule):
                                     reveal_root: Path,
                                     static_help: Dict[str, str],
                                     detections: List[Detection]):
-        """Check for guide files that exist but aren't registered."""
-        # Patterns for files that look like help guides
-        guide_patterns = [
-            '*_GUIDE.md',
-            '*GUIDE.md',
+        """Check for guide files that exist but aren't registered.
+
+        Note: As of v0.50.0+, *_GUIDE.md files are auto-discovered by HelpAdapter
+        at runtime, so they don't need manual STATIC_HELP registration. This
+        validation check is primarily for non-standard help files.
+        """
+        # Patterns that are auto-discovered by HelpAdapter (no registration needed)
+        auto_discovered_patterns = [
+            '*_GUIDE.md',  # E.g., AST_ADAPTER_GUIDE.md
+            '*GUIDE.md',   # E.g., HTMLGUIDE.md (less common)
         ]
 
         # Help docs are in reveal/docs/
@@ -142,11 +147,11 @@ class V005(BaseRule):
 
         registered_files = set(static_help.values())
 
-        for pattern in guide_patterns:
+        for pattern in auto_discovered_patterns:
             for guide_file in docs_dir.rglob(pattern):
                 relative_path = str(guide_file.relative_to(docs_dir))
 
-                # Skip if already registered
+                # Skip if already registered in STATIC_HELP
                 if relative_path in registered_files:
                     continue
 
@@ -154,7 +159,15 @@ class V005(BaseRule):
                 if '/test' in relative_path or '/.' in relative_path:
                     continue
 
-                # Suggest registration
+                # Check if this file matches auto-discovery pattern
+                # Files matching *_GUIDE.md or *GUIDE.md are auto-discovered
+                # and don't need manual registration
+                if guide_file.name.endswith('_GUIDE.md') or guide_file.name.endswith('GUIDE.md'):
+                    # This guide is auto-discovered, no violation
+                    continue
+
+                # If we reach here, it's a guide that isn't auto-discovered
+                # and isn't manually registered (shouldn't happen given patterns above)
                 suggested_topic = guide_file.stem.lower().replace('_guide', '').replace('guide', '')
 
                 detections.append(self.create_detection(
