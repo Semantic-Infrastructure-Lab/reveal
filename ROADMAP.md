@@ -1,11 +1,18 @@
 # Reveal Roadmap
-> **Last updated**: 2026-02-13 (v0.49.1 - help system badges fixed)
+> **Last updated**: 2026-02-16 (v0.50.0 - MySQL table I/O statistics + Windows CI fixes)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.50.0
+- ✅ **MySQL table I/O statistics** — `mysql:///tables` endpoint for table hotspot detection
+- ✅ **Automatic alerts** — Extreme read ratios (>10K:1), high volume (>1B reads), long-running (>1h)
+- ✅ **Token efficiency** — 300-500 tokens vs 2000+ for raw SQL queries
+- ✅ **Windows CI fixes** — 19 of 22 test failures resolved (86% success rate)
+- ✅ **UTF-8 encoding** — Cross-platform file handling with explicit encoding
 
 ### v0.49.2
 - ✅ **Windows CI compatibility** — 100% test pass rate on Windows (3177/3177 tests)
