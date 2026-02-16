@@ -1,7 +1,7 @@
 # Internal Documentation
 
 **Last Updated**: 2026-02-15
-**Session**: onyx-brush-0215
+**Session**: receding-journey-0215
 
 This directory contains internal documentation for Reveal maintainers, including architecture decisions, research findings, planning documents, case studies, and technical debt tracking.
 
@@ -27,13 +27,14 @@ This directory contains internal documentation for Reveal maintainers, including
 
 | Directory | Purpose | File Count | Examples |
 |-----------|---------|------------|----------|
-| **planning/** | Current roadmaps, strategies, designs | ~12 | PRIORITIES.md, CLAUDE_ADAPTER_DESIGN.md |
+| **design/** | Completed architecture designs | ~3 | CLAUDE_ADAPTER_DESIGN.md, GIT_ADAPTER_DESIGN.md |
+| **planning/** | Current roadmaps and forward plans | ~6 | PRIORITIES.md, VALIDATION_ROADMAP.md |
 | **research/** | Analysis, investigations, findings | ~15 | ARCHITECTURAL_DILIGENCE.md, OUTPUT_CONTRACT_ANALYSIS.md |
-| **case-studies/** | Real-world usage and integration studies | ~4 | VEINBORN_CASE_STUDY.md, BUG_PREVENTION.md |
-| **refactoring/** | Refactoring plans and technical debt | ~1 | REFACTORING_ACTION_PLAN.md |
+| **case-studies/** | Real-world usage and integration studies | ~5 | VEINBORN_CASE_STUDY.md, CLAUDE_ADAPTER_POSTMORTEM.md |
+| **refactoring/** | Refactoring plans and technical debt | ~3 | TECHNICAL_DEBT_RESOLUTION.md, REFACTORING_ACTION_PLAN.md |
 | **feedback/** | User and integration feedback | ~1 | IMMUNITY_CODE_RAG_FEEDBACK.md |
 | **releasing/** | Release process and checklists | ~1 | PROCESS_NOTES.md |
-| **archived/** | Historical docs and dated snapshots | ~20 | archived/research/, archived/planning/ |
+| **archived/** | Historical docs and dated snapshots | ~32 | archived/research/, archived/planning/ |
 
 ---
 
@@ -42,26 +43,34 @@ This directory contains internal documentation for Reveal maintainers, including
 ### 🏗️ Architecture & Design
 | Document | Lines | Description |
 |----------|-------|-------------|
-| [CLAUDE_ADAPTER_DESIGN.md](planning/CLAUDE_ADAPTER_DESIGN.md) | 1539 | Claude adapter architecture, patterns, implementation details |
-| [GIT_ADAPTER_DESIGN.md](planning/GIT_ADAPTER_DESIGN.md) | 1380 | Git adapter architecture, query system, performance |
+| [CLAUDE_ADAPTER_DESIGN.md](design/CLAUDE_ADAPTER_DESIGN.md) | 1539 | Claude adapter architecture, patterns, implementation details |
+| [GIT_ADAPTER_DESIGN.md](design/GIT_ADAPTER_DESIGN.md) | 1380 | Git adapter architecture, query system, performance |
+| [CLAUDE_ADAPTER_INTEGRATION_ANALYSIS.md](design/CLAUDE_ADAPTER_INTEGRATION_ANALYSIS.md) | 925 | Claude adapter integration analysis |
 | [ARCHITECTURAL_DILIGENCE.md](research/ARCHITECTURAL_DILIGENCE.md) | 974 | Overall architectural analysis and decisions |
-| [AST_QUERY_PATTERNS.md](planning/AST_QUERY_PATTERNS.md) | 299 | AST query patterns and best practices |
 
 ### 📋 Planning & Strategy
 | Document | Lines | Description |
 |----------|-------|-------------|
 | [PRIORITIES.md](planning/PRIORITIES.md) | 920 | **Current project priorities and roadmap** ⭐ |
-| [POSITIONING_STRATEGY.md](planning/POSITIONING_STRATEGY.md) | 534 | Product positioning and market strategy |
 | [VALIDATION_ROADMAP.md](planning/VALIDATION_ROADMAP.md) | 613 | Validation rules roadmap and plans |
-| [TECHNICAL_DEBT_RESOLUTION.md](planning/TECHNICAL_DEBT_RESOLUTION.md) | 688 | Ongoing technical debt tracking |
+| [MYPY_CLEANUP_STRATEGY.md](planning/MYPY_CLEANUP_STRATEGY.md) | 394 | Type checking cleanup strategy |
+| [REGEX_TO_TREESITTER_MIGRATION.md](planning/REGEX_TO_TREESITTER_MIGRATION.md) | 322 | Migration strategy and status |
 
 ### 🔬 Research & Analysis
 | Document | Lines | Description |
 |----------|-------|-------------|
 | [OUTPUT_CONTRACT_ANALYSIS.md](research/OUTPUT_CONTRACT_ANALYSIS.md) | 972 | Output consistency analysis across adapters |
-| [PRACTICAL_UTILITY_ANALYSIS.md](research/PRACTICAL_UTILITY_ANALYSIS.md) | 629 | Value and utility analysis |
-| [MARKDOWN_SUPPORT_ISSUES.md](research/MARKDOWN_SUPPORT_ISSUES.md) | 507 | Markdown support issues and gaps |
 | [MYSQL_VALIDATION_REPORT.md](research/MYSQL_VALIDATION_REPORT.md) | 699 | MySQL adapter comprehensive validation |
+| [PRACTICAL_UTILITY_ANALYSIS.md](research/PRACTICAL_UTILITY_ANALYSIS.md) | 629 | Value and utility analysis |
+| [POSITIONING_STRATEGY.md](research/POSITIONING_STRATEGY.md) | 534 | Product positioning and market strategy |
+| [MARKDOWN_SUPPORT_ISSUES.md](research/MARKDOWN_SUPPORT_ISSUES.md) | 507 | Markdown support issues and gaps |
+
+### 🔧 Refactoring & Technical Debt
+| Document | Lines | Description |
+|----------|-------|-------------|
+| [TECHNICAL_DEBT_RESOLUTION.md](refactoring/TECHNICAL_DEBT_RESOLUTION.md) | 688 | Ongoing technical debt tracking |
+| [REFACTORING_ACTION_PLAN.md](refactoring/REFACTORING_ACTION_PLAN.md) | 295 | Current refactoring action plan |
+| [TODO_TRACKING.md](refactoring/TODO_TRACKING.md) | 248 | Internal task tracking |
 
 ### 📚 Guides & References
 | Document | Lines | Description |
@@ -76,7 +85,9 @@ This directory contains internal documentation for Reveal maintainers, including
 |----------|-------|-------------|
 | [VEINBORN_CASE_STUDY.md](case-studies/VEINBORN_CASE_STUDY.md) | 439 | Veinborn integration case study and lessons |
 | [VEINBORN_FEEDBACK.md](case-studies/VEINBORN_FEEDBACK.md) | 380 | Detailed feedback from Veinborn integration |
+| [XLSX_DEMO.md](case-studies/XLSX_DEMO.md) | 366 | Excel/XLSX demo and usage |
 | [BUG_PREVENTION.md](case-studies/BUG_PREVENTION.md) | 310 | Bug prevention strategies and patterns |
+| [CLAUDE_ADAPTER_POSTMORTEM.md](case-studies/CLAUDE_ADAPTER_POSTMORTEM.md) | 169 | Claude adapter postmortem |
 
 ---
 
@@ -149,10 +160,11 @@ Update INDEX.md to move entry to archived section.
 ## 🔍 Finding Information
 
 ### By Topic
-- **Architecture** → planning/ (CLAUDE_ADAPTER_DESIGN, GIT_ADAPTER_DESIGN)
+- **Architecture** → design/ (CLAUDE_ADAPTER_DESIGN, GIT_ADAPTER_DESIGN)
 - **Priorities** → planning/PRIORITIES.md
 - **Research** → research/ (OUTPUT_CONTRACT_ANALYSIS, ARCHITECTURAL_DILIGENCE)
-- **Integration** → case-studies/ (VEINBORN_CASE_STUDY)
+- **Technical Debt** → refactoring/ (TECHNICAL_DEBT_RESOLUTION)
+- **Integration** → case-studies/ (VEINBORN_CASE_STUDY, CLAUDE_ADAPTER_POSTMORTEM)
 - **History** → archived/
 
 ### By Date
@@ -169,13 +181,13 @@ Update INDEX.md to move entry to archived section.
 ## 📊 Documentation Stats
 
 **Current (Living) Documents**:
-- Total files: ~45
+- Total files: ~40
 - Total lines: ~25,000
-- Categories: Planning (12), Research (15), Case Studies (4), Guides (4)
+- Categories: Design (3), Planning (6), Research (15), Case Studies (5), Refactoring (3), Guides (6)
 
 **Archived Documents**:
-- Total files: ~20
-- Categories: Planning (15), Research (10), Case Studies (1), Marketing (1), Refactoring (2)
+- Total files: ~32
+- Categories: Planning (16), Research (11), Case Studies (1), Marketing (1), Refactoring (2)
 
 **Last Consolidation**: 2026-02-15 (Session: onyx-brush-0215)
 - Consolidated from dual internal-docs locations
@@ -183,18 +195,26 @@ Update INDEX.md to move entry to archived section.
 - Created INDEX.md navigation
 - Cleaned root directory (removed 7 internal docs)
 
+**Last Cleanup**: 2026-02-15 (Session: receding-journey-0215)
+- Created design/ for completed architectures (3 huge docs)
+- Cleaned planning/ from 13 → 6 docs (now only forward plans)
+- Moved tracking docs to refactoring/ (2 docs)
+- Moved postmortem to case-studies/ (1 doc)
+- Archived dated session summary (1 doc)
+- Removed empty marketing/ directory
+
 ---
 
 ## 🎯 Common Tasks
 
 ### "I need to understand the current architecture"
 1. Start with [research/ARCHITECTURAL_DILIGENCE.md](research/ARCHITECTURAL_DILIGENCE.md)
-2. Deep dive: [planning/CLAUDE_ADAPTER_DESIGN.md](planning/CLAUDE_ADAPTER_DESIGN.md)
-3. See patterns: [planning/AST_QUERY_PATTERNS.md](planning/AST_QUERY_PATTERNS.md)
+2. Deep dive: [design/CLAUDE_ADAPTER_DESIGN.md](design/CLAUDE_ADAPTER_DESIGN.md)
+3. See patterns: [research/AST_QUERY_PATTERNS.md](research/AST_QUERY_PATTERNS.md)
 
 ### "What are we working on now?"
 1. Read [planning/PRIORITIES.md](planning/PRIORITIES.md) - Current roadmap
-2. Check [planning/TECHNICAL_DEBT_RESOLUTION.md](planning/TECHNICAL_DEBT_RESOLUTION.md) - Active debt tracking
+2. Check [refactoring/TECHNICAL_DEBT_RESOLUTION.md](refactoring/TECHNICAL_DEBT_RESOLUTION.md) - Active debt tracking
 3. Review [planning/](planning/) - Other current plans
 
 ### "How did we solve X in the past?"
