@@ -19,11 +19,21 @@ from pathlib import Path
 import sys
 
 
-def safe_unlink(filepath, retries=3, delay=0.1):
+def safe_unlink(filepath, retries=5, delay=0.5):
     """Safely remove a file, with retries for Windows file locking issues."""
+    import gc
+    import stat
+
     for attempt in range(retries):
         try:
             if os.path.exists(filepath):
+                # Force garbage collection to release file handles
+                gc.collect()
+                # Make file writable on Windows
+                try:
+                    os.chmod(filepath, stat.S_IWRITE)
+                except Exception:
+                    pass
                 os.unlink(filepath)
             return
         except PermissionError:

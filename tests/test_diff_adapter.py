@@ -11,12 +11,24 @@ from pathlib import Path
 from reveal.adapters.diff import DiffAdapter
 
 
-def safe_rmtree(dirpath, retries=3, delay=0.1):
+def safe_rmtree(dirpath, retries=5, delay=0.5):
     """Safely remove a directory tree, with retries for Windows file locking issues."""
+    import gc
+    import stat
+
+    def handle_remove_readonly(func, path, exc):
+        """Error handler for Windows readonly files."""
+        if os.path.exists(path):
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+
     for attempt in range(retries):
         try:
             if os.path.exists(dirpath):
-                shutil.rmtree(dirpath)
+                # Force garbage collection to release file handles
+                gc.collect()
+                # Remove with readonly handler for Windows
+                shutil.rmtree(dirpath, onerror=handle_remove_readonly)
             return
         except (PermissionError, OSError):
             if attempt < retries - 1:

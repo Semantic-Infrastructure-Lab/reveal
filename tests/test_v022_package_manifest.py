@@ -371,7 +371,8 @@ class TestV022CriticalFiles(unittest.TestCase):
         detections = self.rule._check_critical_files(self.project_root)
         self.assertEqual(len(detections), 1)
         self.assertIn("recursive-include", detections[0].suggestion)
-        self.assertIn("reveal/docs", detections[0].suggestion)
+        # Path separator agnostic check (Windows uses \\ instead of /)
+        self.assertTrue("reveal/docs" in detections[0].suggestion or "reveal\\docs" in detections[0].suggestion)
 
     def test_no_manifest_file(self):
         """Missing MANIFEST.in should return empty detections."""
