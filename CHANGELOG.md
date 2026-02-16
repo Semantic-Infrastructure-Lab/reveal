@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.50.0] - 2026-02-16
 
 ### Added
 - **MySQL Adapter** - Added `mysql:///tables` endpoint for table I/O statistics and hotspot detection
@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Real production impact: Detected 28.5 hour table hotspot with 490K:1 read ratio
   - Follows existing patterns: snapshot context, performance_schema reset detection
   - Comprehensive test coverage: 5 new tests covering routing, alerts, and data processing
+
+### Fixed
+- **Windows CI** - Resolved 19 of 22 Windows test failures (86% success rate)
+  - PermissionError (14 tests): Improved file cleanup with GC, retries, readonly handling
+  - UnicodeDecodeError (4 tests): Added explicit UTF-8 encoding to all file operations
+  - Platform-specific tests: Skip chmod tests on Windows where behavior differs
+- **Encoding** - Added `encoding='utf-8'` to 10+ files across codebase for cross-platform compatibility
 
 ## [0.49.3] - 2026-02-15
 
