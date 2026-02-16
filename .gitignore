@@ -93,3 +93,6 @@ GITHUB_ISSUE_*.md
 *_COMPARISON.md
 GITHUB_INTEGRATION_GUIDE.md
 coverage.json
+
+# Internal maintainer documentation (not public)
+internal-docs/
