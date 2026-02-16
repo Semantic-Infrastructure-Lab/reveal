@@ -2,7 +2,7 @@
 
 **Audience**: Users and adapter authors
 **Last Updated**: 2026-02-07 (Phase 3: Unified Query Infrastructure)
-**See Also**: [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md), [../../internal-docs/UNIFIED_OPERATOR_REFERENCE.md](../../internal-docs/UNIFIED_OPERATOR_REFERENCE.md)
+**See Also**: [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md), [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md)
 
 ---
 
@@ -188,7 +188,7 @@ All adapters support result manipulation:
 - **File**: `reveal/utils/query.py` (`compare_values()` function)
 - **Code reduction**: 299 lines → 163 lines (-45.5%)
 - **Test coverage**: 179/182 tests passing (98.4%)
-- **Documentation**: See `internal-docs/UNIFIED_OPERATOR_REFERENCE.md` for comprehensive details
+- **Documentation**: See [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md) for comprehensive details
 
 ### Adapter Support Matrix
 
@@ -346,7 +346,7 @@ git://repo?type=history     # Query by type
 
 ## Future Enhancements
 
-Planned improvements (see [ADAPTER_UX_CONSISTENCY_2026-02-06.md](../../internal-docs/planning/ADAPTER_UX_CONSISTENCY_2026-02-06.md)):
+Planned improvements:
 
 1. **Universal --batch flag** - Explicit batch mode with aggregation
 2. **Standardized query operators** - Same syntax across all adapters
@@ -381,5 +381,4 @@ reveal help://tricks
 
 ---
 
-**For Maintainers**: See internal planning doc for implementation details:
-`internal-docs/planning/ADAPTER_UX_CONSISTENCY_2026-02-06.md`
+**For Contributors**: See [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) for implementation details.
