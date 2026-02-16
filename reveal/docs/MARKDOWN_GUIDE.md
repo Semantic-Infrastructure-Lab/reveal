@@ -40,7 +40,7 @@ reveal README.md --links --format json
 | Domain Filtering | `reveal doc.md --links --domain github.com` | Links to specific domain |
 | Code Block Extraction | `reveal doc.md --code` | Extract code examples |
 | Language Filtering | `reveal doc.md --code --language python` | Python code only |
-| **Front Matter Extraction** | `reveal doc.md --frontmatter` | **Extract YAML metadata** |
+| **Front Matter Extraction** | `reveal doc.md --frontmatter --format json` | **Extract YAML metadata (requires JSON)** |
 | Broken Link Detection | `reveal doc.md --links` | **Find broken internal links** |
 | Progressive Disclosure | `reveal doc.md --head 5` | First 5 headings |
 
@@ -362,29 +362,50 @@ tags: [tag1, tag2]
 
 ### Basic Front Matter Extraction
 
+**Important**: Frontmatter extraction requires `--format json` to display the parsed YAML data. Text format shows document structure only.
+
 ```bash
-reveal README.md --frontmatter
+# Get frontmatter data (requires JSON format)
+reveal README.md --frontmatter --format json
 ```
 
 **Output**:
-```
-Frontmatter (5):
-  Lines 1-8:
-    title: Document Title
-    author: Author Name
-    date: 2025-12-13
-    topics:
-      - topic1
-      - topic2
-    tags:
-      - tag1
-      - tag2
+```json
+{
+  "structure": {
+    "frontmatter": {
+      "data": {
+        "title": "Document Title",
+        "author": "Author Name",
+        "date": "2025-12-13",
+        "topics": ["topic1", "topic2"],
+        "tags": ["tag1", "tag2"]
+      },
+      "line_start": 1,
+      "line_end": 8,
+      "raw": "title: Document Title\nauthor: Author Name\n..."
+    }
+  }
+}
 ```
 
-### JSON Output
+**Text format behavior**:
+```bash
+# Text format shows document structure, not frontmatter data
+reveal README.md --frontmatter
+
+# Output:
+# Headings (4):
+#   :7      Main Title
+#   ...
+```
+
+### JSON Output (Required for Frontmatter Data)
+
+**Note**: JSON format is required to access parsed frontmatter data programmatically.
 
 ```bash
-reveal README.md --frontmatter --format=json
+reveal README.md --frontmatter --format json
 ```
 
 **Output**:

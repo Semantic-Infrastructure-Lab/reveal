@@ -12,7 +12,7 @@
 - **New users** → [QUICK_START.md](QUICK_START.md) → [RECIPES.md](RECIPES.md)
 - **Adapters** → See [Adapter Guides](#adapter-guides-16-files) below
 - **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2079 lines)
-- **Developers** → [Development Guides](#development-3-files)
+- **Developers** → [Development Guides](#development-guides-3-files)
 
 ---
 
