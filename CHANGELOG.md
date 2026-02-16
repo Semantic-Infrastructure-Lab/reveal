@@ -12,6 +12,50 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.49.3] - 2026-02-15
+
+### Added
+- **Documentation** - Added 12 comprehensive adapter guides with real-world examples
+  - `AST_ADAPTER_GUIDE.md` - Abstract Syntax Tree introspection and structure analysis
+  - `CLAUDE_ADAPTER_GUIDE.md` - AI session analysis (messages, tools, workflows, files touched)
+  - `DIFF_ADAPTER_GUIDE.md` - Git diff analysis and structural change comparison
+  - `DOMAIN_ADAPTER_GUIDE.md` - Domain infrastructure validation (SSL, DNS, WHOIS)
+  - `ENV_ADAPTER_GUIDE.md` - Environment variable analysis and tracking
+  - `GIT_ADAPTER_GUIDE.md` - Git repository introspection and history analysis
+  - `IMPORTS_ADAPTER_GUIDE.md` - Import dependency analysis and visualization
+  - `JSON_ADAPTER_GUIDE.md` - JSON data structure exploration with querying
+  - `MYSQL_ADAPTER_GUIDE.md` - MySQL schema and query analysis
+  - `SQLITE_ADAPTER_GUIDE.md` - SQLite schema and data exploration
+  - `SSL_ADAPTER_GUIDE.md` - SSL/TLS certificate validation and server configuration
+  - `STATS_ADAPTER_GUIDE.md` - Codebase statistics and project metrics
+- **Validation** - Added M105 rule for detecting orphaned CLI handlers (CLI_INTEGRATION_GUIDE.md)
+- **Help System** - Implemented hybrid auto-discovery for guide files (improved help output)
+
+### Fixed
+- **Documentation Accuracy** - Fixed 33 broken internal links across adapter guides
+  - Corrected markdown anchor formatting for GitHub compatibility
+  - Replaced references to moved/reorganized files
+  - Updated cross-references in ADAPTER_CONSISTENCY.md
+- **Type Safety** - Fixed 15 mypy type errors (improved static analysis)
+- **Test Suite** - Fixed failing documentation validation test (ADAPTER_CONSISTENCY.md links)
+
+### Changed
+- **Documentation Organization** - Improved structure and navigation
+  - Moved internal-docs outside public git repo (cleaner separation)
+  - Reorganized planning and design documents by function
+  - Enhanced frontmatter documentation (clarified JSON format support)
+- **Code Quality** - Internal improvements for maintainability
+  - Reduced complexity in Claude adapter analysis tools
+  - Converted wildcard imports to explicit imports
+  - Documented production TODOs for tracking
+
+### Internal
+- **Test Coverage** - Continued expansion of test suite (Phase 10 completion)
+  - `reveal/utils/query.py`: 77% → 95% (+37 tests) - Query parsing, filtering, budgets
+  - `reveal/adapters/stats/adapter.py`: 95% → 100% (+3 tests) - Perfect coverage
+  - `reveal/rules/validation/V002.py`: 80% → 100% (+10 tests) - Analyzer registration
+  - Sessions: ascending-observatory-0215, expanding-station-0215, valley-whirlwind-0215, rofuvoke-0215, and 6 more (10 phases total)
+
 ## [0.49.2] - 2026-02-14
 
 ### Added
