@@ -39,14 +39,44 @@ Comprehensive guides for users, developers, and AI agents.
 | [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) | Configuration options |
 | [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) | Complete codebase review workflows |
 
-### Format-Specific Guides
+### Adapter Guides
+
+Complete guides for all URI adapters:
+
+| Adapter | Purpose | Lines |
+|---------|---------|-------|
+| [AST_ADAPTER_GUIDE.md](AST_ADAPTER_GUIDE.md) | AST-based code analysis with complexity/size filtering | 1188 |
+| [CLAUDE_ADAPTER_GUIDE.md](CLAUDE_ADAPTER_GUIDE.md) | Claude CLI session analysis and tool usage | 2182 |
+| [DIFF_ADAPTER_GUIDE.md](DIFF_ADAPTER_GUIDE.md) | Git diff analysis and structure comparison | 1928 |
+| [DOMAIN_ADAPTER_GUIDE.md](DOMAIN_ADAPTER_GUIDE.md) | Domain/DNS/WHOIS analysis | 2293 |
+| [ENV_ADAPTER_GUIDE.md](ENV_ADAPTER_GUIDE.md) | Environment variable analysis | 1347 |
+| [GIT_ADAPTER_GUIDE.md](GIT_ADAPTER_GUIDE.md) | Git repository analysis (commits, branches, tags) | 1870 |
+| [IMPORTS_ADAPTER_GUIDE.md](IMPORTS_ADAPTER_GUIDE.md) | Import dependency analysis | 1630 |
+| [JSON_ADAPTER_GUIDE.md](JSON_ADAPTER_GUIDE.md) | JSON/JSONL data analysis with JMESPath | 1323 |
+| [MYSQL_ADAPTER_GUIDE.md](MYSQL_ADAPTER_GUIDE.md) | MySQL database introspection | 2107 |
+| [PYTHON_ADAPTER_GUIDE.md](PYTHON_ADAPTER_GUIDE.md) | Python runtime introspection | 460 |
+| [REVEAL_ADAPTER_GUIDE.md](REVEAL_ADAPTER_GUIDE.md) | Reveal introspection (analyzers, adapters) | 532 |
+| [SQLITE_ADAPTER_GUIDE.md](SQLITE_ADAPTER_GUIDE.md) | SQLite database introspection | 1157 |
+| [SSL_ADAPTER_GUIDE.md](SSL_ADAPTER_GUIDE.md) | SSL/TLS certificate analysis | 1449 |
+| [STATS_ADAPTER_GUIDE.md](STATS_ADAPTER_GUIDE.md) | Codebase statistics and metrics | 1864 |
+| [XLSX_ADAPTER_GUIDE.md](XLSX_ADAPTER_GUIDE.md) | Excel/XLSX file analysis | 564 |
+
+### Analyzer Guides
 
 | Guide | Purpose |
 |-------|---------|
-| [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) | Markdown analysis and extraction |
+| [ANALYZER_PATTERNS.md](ANALYZER_PATTERNS.md) | Code analysis patterns and best practices |
+| [ELIXIR_ANALYZER_GUIDE.md](ELIXIR_ANALYZER_GUIDE.md) | Elixir language analyzer |
 | [HTML_GUIDE.md](HTML_GUIDE.md) | HTML analysis and templates |
+| [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) | Markdown analysis and extraction |
+
+### Format & Validation
+
+| Guide | Purpose |
+|-------|---------|
 | [SCHEMA_VALIDATION_HELP.md](SCHEMA_VALIDATION_HELP.md) | Frontmatter schema validation |
 | [OUTPUT_CONTRACT.md](OUTPUT_CONTRACT.md) | JSON output specification |
+| [DUPLICATE_DETECTION_GUIDE.md](DUPLICATE_DETECTION_GUIDE.md) | Duplicate detection algorithms |
 
 ### Development Guides
 
@@ -100,12 +130,12 @@ reveal help://ast                # Adapter-specific help
 
 ## For Contributors
 
-**Internal documentation** (planning, research, architecture):
-- [internal-docs/README.md](../../internal-docs/README.md) - Development planning and architectural decisions
-- [internal-docs/LIFECYCLE.md](../../internal-docs/LIFECYCLE.md) - Documentation lifecycle policy
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) in the project root for contribution guidelines.
+
+Internal maintainer documentation (planning, research, architecture) is maintained separately outside the public repository.
 
 ---
 
-**Last updated:** 2026-02-08
+**Last updated:** 2026-02-15
 
 [← Project README](../../README.md)
