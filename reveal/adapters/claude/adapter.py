@@ -555,6 +555,77 @@ class ClaudeAdapter(ResourceAdapter):
         }
 
     @staticmethod
+    def _get_help_examples() -> List[Dict[str, str]]:
+        """Get example URIs for help documentation."""
+        return [
+            {
+                'uri': 'claude://session/infernal-earth-0118',
+                'description': 'Session overview (messages, tools, duration)'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118/workflow',
+                'description': 'Chronological sequence of tool operations'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118/files',
+                'description': 'All files read, written, or edited'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118/tools',
+                'description': 'All tool usage with success rates'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118?errors',
+                'description': 'Find errors with context'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118/context',
+                'description': 'Track directory and branch changes'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118/thinking',
+                'description': 'Extract all thinking blocks with token estimates'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118?tools=Bash',
+                'description': 'Filter to specific tool calls'
+            }
+        ]
+
+    @staticmethod
+    def _get_help_workflows() -> List[Dict[str, Any]]:
+        """Get workflow examples for help documentation."""
+        return [
+            {
+                'name': 'Post-Session Review',
+                'scenario': 'Understand what happened in a completed session',
+                'steps': [
+                    'reveal claude://session/session-name',
+                    'reveal claude://session/session-name?summary',
+                    'reveal claude://session/session-name/tools'
+                ]
+            },
+            {
+                'name': 'Debug Failed Session',
+                'scenario': 'Find why a session failed',
+                'steps': [
+                    'reveal claude://session/failed-build?errors',
+                    'reveal claude://session/failed-build/message/67',
+                    'reveal claude://session/failed-build?tools=Bash'
+                ]
+            },
+            {
+                'name': 'Token Optimization',
+                'scenario': 'Identify token waste',
+                'steps': [
+                    'reveal claude://session/current?summary',
+                    'reveal claude://session/current/thinking',
+                    'reveal claude://session/current?tools=Read'
+                ]
+            }
+        ]
+
+    @staticmethod
     def get_help() -> Dict[str, Any]:
         """Get help documentation for claude:// adapter.
 
@@ -565,40 +636,7 @@ class ClaudeAdapter(ResourceAdapter):
             'name': 'claude',
             'description': 'Navigate and analyze Claude Code conversations - progressive session exploration',
             'syntax': 'claude://session/{name}[/resource][?query]',
-            'examples': [
-                {
-                    'uri': 'claude://session/infernal-earth-0118',
-                    'description': 'Session overview (messages, tools, duration)'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/workflow',
-                    'description': 'Chronological sequence of tool operations'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/files',
-                    'description': 'All files read, written, or edited'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/tools',
-                    'description': 'All tool usage with success rates'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118?errors',
-                    'description': 'Find errors with context'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/context',
-                    'description': 'Track directory and branch changes'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/thinking',
-                    'description': 'Extract all thinking blocks with token estimates'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118?tools=Bash',
-                    'description': 'Filter to specific tool calls'
-                }
-            ],
+            'examples': ClaudeAdapter._get_help_examples(),
             'features': [
                 'Progressive disclosure (overview → details → specifics)',
                 'Tool usage analytics with success rates',
@@ -609,35 +647,7 @@ class ClaudeAdapter(ResourceAdapter):
                 'Thinking block extraction and analysis',
                 'Token usage estimates and optimization insights'
             ],
-            'workflows': [
-                {
-                    'name': 'Post-Session Review',
-                    'scenario': 'Understand what happened in a completed session',
-                    'steps': [
-                        'reveal claude://session/session-name',
-                        'reveal claude://session/session-name?summary',
-                        'reveal claude://session/session-name/tools'
-                    ]
-                },
-                {
-                    'name': 'Debug Failed Session',
-                    'scenario': 'Find why a session failed',
-                    'steps': [
-                        'reveal claude://session/failed-build?errors',
-                        'reveal claude://session/failed-build/message/67',
-                        'reveal claude://session/failed-build?tools=Bash'
-                    ]
-                },
-                {
-                    'name': 'Token Optimization',
-                    'scenario': 'Identify token waste',
-                    'steps': [
-                        'reveal claude://session/current?summary',
-                        'reveal claude://session/current/thinking',
-                        'reveal claude://session/current?tools=Read'
-                    ]
-                }
-            ],
+            'workflows': ClaudeAdapter._get_help_workflows(),
             'try_now': [
                 'reveal claude://session/$(basename $PWD)',
                 'reveal claude://session/$(basename $PWD)?summary',

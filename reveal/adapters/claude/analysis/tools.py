@@ -1,6 +1,6 @@
 """Tool analysis functions for Claude sessions."""
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from collections import defaultdict
 
 from ....utils.patterns import Patterns
@@ -269,6 +269,37 @@ def calculate_tool_success_rate(messages: List[Dict]) -> Dict[str, Dict[str, Any
     return _build_success_rate_report(tool_stats)
 
 
+def _extract_file_operation(content: Dict[str, Any], msg_index: int,
+                           timestamp: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Extract file operation from tool use content.
+
+    Args:
+        content: Content dictionary from message
+        msg_index: Message index in conversation
+        timestamp: Message timestamp
+
+    Returns:
+        Operation dict or None if not a file operation
+    """
+    if content.get('type') != 'tool_use':
+        return None
+
+    tool_name = content.get('name')
+    if tool_name not in ('Read', 'Write', 'Edit'):
+        return None
+
+    file_path = content.get('input', {}).get('file_path')
+    if not file_path:
+        return None
+
+    return {
+        'message_index': msg_index,
+        'operation': tool_name,
+        'file_path': file_path,
+        'timestamp': timestamp
+    }
+
+
 def get_files_touched(messages: List[Dict], session_name: str,
                       contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Get all files that were Read, Written, or Edited.
@@ -289,26 +320,21 @@ def get_files_touched(messages: List[Dict], session_name: str,
         'Write': defaultdict(int),
         'Edit': defaultdict(int)
     }
-
-    # Track all file operations in order
     operations = []
 
     for i, msg in enumerate(messages):
-        if msg.get('type') == 'assistant':
-            for content in msg.get('message', {}).get('content', []):
-                if content.get('type') == 'tool_use':
-                    tool_name = content.get('name')
-                    if tool_name in ('Read', 'Write', 'Edit'):
-                        inp = content.get('input', {})
-                        file_path = inp.get('file_path')
-                        if file_path:
-                            files_by_op[tool_name][file_path] += 1
-                            operations.append({
-                                'message_index': i,
-                                'operation': tool_name,
-                                'file_path': file_path,
-                                'timestamp': msg.get('timestamp')
-                            })
+        # Skip non-assistant messages
+        if msg.get('type') != 'assistant':
+            continue
+
+        # Process each content block in assistant message
+        for content in msg.get('message', {}).get('content', []):
+            operation = _extract_file_operation(content, i, msg.get('timestamp'))
+            if operation:
+                tool_name = operation['operation']
+                file_path = operation['file_path']
+                files_by_op[tool_name][file_path] += 1
+                operations.append(operation)
 
     # Calculate unique files
     all_files: set[str] = set()
@@ -326,6 +352,31 @@ def get_files_touched(messages: List[Dict], session_name: str,
     })
 
     return base
+
+
+def _extract_tool_detail(tool_name: str, tool_input: Dict[str, Any]) -> Optional[str]:
+    """Extract meaningful detail from tool input based on tool type.
+
+    Args:
+        tool_name: Name of the tool
+        tool_input: Input parameters for the tool
+
+    Returns:
+        Detail string or None
+    """
+    if tool_name == 'Bash':
+        return tool_input.get('description') or tool_input.get('command', '')[:60]
+    elif tool_name in ('Read', 'Write', 'Edit'):
+        return tool_input.get('file_path', '')
+    elif tool_name == 'Grep':
+        pattern = tool_input.get('pattern')
+        path = tool_input.get('path', '.')
+        return f"'{pattern}' in {path}"
+    elif tool_name == 'Glob':
+        return tool_input.get('pattern')
+    elif tool_name in ('TaskCreate', 'TaskUpdate'):
+        return tool_input.get('subject') or tool_input.get('taskId')
+    return None
 
 
 def get_workflow(messages: List[Dict], session_name: str,
@@ -346,32 +397,25 @@ def get_workflow(messages: List[Dict], session_name: str,
     workflow: List[Dict[str, Any]] = []
 
     for i, msg in enumerate(messages):
-        if msg.get('type') == 'assistant':
-            for content in msg.get('message', {}).get('content', []):
-                if content.get('type') == 'tool_use':
-                    tool_name = content.get('name')
-                    inp = content.get('input', {})
+        # Skip non-assistant messages
+        if msg.get('type') != 'assistant':
+            continue
 
-                    # Extract key info based on tool type
-                    detail = None
-                    if tool_name == 'Bash':
-                        detail = inp.get('description') or inp.get('command', '')[:60]
-                    elif tool_name in ('Read', 'Write', 'Edit'):
-                        detail = inp.get('file_path', '')
-                    elif tool_name == 'Grep':
-                        detail = f"'{inp.get('pattern')}' in {inp.get('path', '.')}"
-                    elif tool_name == 'Glob':
-                        detail = inp.get('pattern')
-                    elif tool_name in ('TaskCreate', 'TaskUpdate'):
-                        detail = inp.get('subject') or inp.get('taskId')
+        # Process tool uses in assistant message
+        for content in msg.get('message', {}).get('content', []):
+            if content.get('type') != 'tool_use':
+                continue
 
-                    workflow.append({
-                        'step': len(workflow) + 1,
-                        'message_index': i,
-                        'tool': tool_name,
-                        'detail': detail,
-                        'timestamp': msg.get('timestamp')
-                    })
+            tool_name = content.get('name')
+            detail = _extract_tool_detail(tool_name, content.get('input', {}))
+
+            workflow.append({
+                'step': len(workflow) + 1,
+                'message_index': i,
+                'tool': tool_name,
+                'detail': detail,
+                'timestamp': msg.get('timestamp')
+            })
 
     base.update({
         'session': session_name,
