@@ -54,7 +54,7 @@ def get_pip_package_metadata(module_name: str) -> Optional[Dict[str, Any]]:
                 if direct_url_path.exists():
                     import json
 
-                    with open(direct_url_path) as f:
+                    with open(direct_url_path, encoding='utf-8') as f:
                         direct_url = json.load(f)
                         editable = direct_url.get("dir_info", {}).get("editable", False)
                         pip_package["editable"] = editable

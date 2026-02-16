@@ -144,7 +144,7 @@ class I003(BaseRule):
             if config_file.exists():
                 try:
                     from ...analyzers.imports import LayerConfig
-                    with open(config_file) as f:
+                    with open(config_file, encoding='utf-8') as f:
                         config_dict = yaml.safe_load(f)
                     if config_dict:
                         return LayerConfig.from_dict(config_dict), current

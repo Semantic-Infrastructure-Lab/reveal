@@ -63,7 +63,7 @@ class SchemaLoader:
 
         # Load YAML
         try:
-            with open(schema_path, 'r') as f:
+            with open(schema_path, 'r', encoding='utf-8') as f:
                 schema = yaml.safe_load(f)
 
             if not schema:

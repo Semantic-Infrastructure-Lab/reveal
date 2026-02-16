@@ -349,7 +349,7 @@ def require_readable_file(path: Path, file_type: Optional[str] = None) -> Path:
 
     # Check read permission
     try:
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             pass
     except PermissionError:
         type_desc = file_type or "File"

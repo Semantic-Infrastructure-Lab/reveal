@@ -233,7 +233,7 @@ def load_layer_config(start_path: Path) -> Optional[LayerConfig]:
             config_file = current / ".reveal.yaml"
             if config_file.exists():
                 try:
-                    with open(config_file) as f:
+                    with open(config_file, encoding='utf-8') as f:
                         config_dict = yaml.safe_load(f)
                     if config_dict:
                         return LayerConfig.from_dict(config_dict)

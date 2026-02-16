@@ -29,7 +29,7 @@ def load_gitignore_patterns(directory: Path) -> List[str]:
         return []
 
     try:
-        with open(gitignore_file) as f:
+        with open(gitignore_file, encoding='utf-8') as f:
             return [
                 line.strip() for line in f
                 if line.strip() and not line.startswith('#')

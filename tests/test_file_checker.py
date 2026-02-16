@@ -61,6 +61,7 @@ class TestLoadGitignorePatterns:
         assert '# Full line comment' not in patterns
 
     @pytest.mark.skipif(sys.platform == 'win32', reason="chmod doesn't work the same on Windows")
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod doesn't work the same way on Windows")
     def test_gitignore_read_error(self, tmp_path):
         """Test handling of read errors."""
         gitignore = tmp_path / '.gitignore'

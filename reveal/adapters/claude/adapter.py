@@ -144,7 +144,7 @@ class ClaudeAdapter(ResourceAdapter):
             )
 
         messages = []
-        with open(self.conversation_path, 'r') as f:
+        with open(self.conversation_path, 'r', encoding='utf-8') as f:
             for line in f:
                 try:
                     messages.append(json.loads(line))

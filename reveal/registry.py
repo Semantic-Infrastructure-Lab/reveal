@@ -61,7 +61,7 @@ def _is_nginx_content(path: str) -> bool:
         True if file contains nginx config patterns
     """
     try:
-        with open(path, 'r', errors='ignore') as f:
+        with open(path, 'r', encoding='utf-8', errors='ignore') as f:
             # Read first 4KB for detection
             content = f.read(4096)
 

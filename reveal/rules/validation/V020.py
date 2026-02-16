@@ -224,7 +224,7 @@ class V020(BaseRule):
             Line number of class, or 1 if not found
         """
         try:
-            with open(adapter_file, 'r') as f:
+            with open(adapter_file, 'r', encoding='utf-8') as f:
                 for i, line in enumerate(f, start=1):
                     if f'class {class_name}' in line:
                         return i
@@ -243,7 +243,7 @@ class V020(BaseRule):
             Line number of method, or 1 if not found
         """
         try:
-            with open(adapter_file, 'r') as f:
+            with open(adapter_file, 'r', encoding='utf-8') as f:
                 for i, line in enumerate(f, start=1):
                     if f'def {method_name}' in line:
                         return i
