@@ -18,6 +18,8 @@ examples:
     description: 'Replication status and lag'
   - uri: 'mysql://localhost/storage'
     description: 'Storage usage by database'
+  - uri: 'mysql://localhost/tables'
+    description: 'Table I/O statistics and hotspot detection'
   - uri: 'mysql://localhost --check'
     description: 'Run health checks with thresholds'
   - uri: 'mysql://localhost --check --only-failures'
@@ -37,6 +39,7 @@ elements:
   health: 'Comprehensive health check'
   databases: 'Database list'
   indexes: 'Index usage statistics with reset detection'
+  tables: 'Table I/O statistics and performance hotspots'
 
 flags:
   --check: 'Run health checks with pass/warn/fail thresholds'
@@ -51,6 +54,7 @@ features:
   - 'Time context accuracy (uses MySQL clock, not local machine)'
   - 'Snapshot timestamps on ALL endpoints (snapshot_time, server_start_time, uptime_seconds, measurement_window)'
   - 'Index usage analysis (most used, unused) with performance_schema reset detection'
+  - 'Table I/O hotspot detection with automatic alerts (extreme read ratios, high volume, long-running)'
   - 'Automatic detection of performance_schema counter resets (removes metric ambiguity)'
   - 'Definitive measurement basis for index metrics (since_server_start or since_reset)'
   - 'Health checks with pass/warn/fail thresholds'
@@ -96,6 +100,14 @@ workflows:
       - "# If false: metrics since server start (measurement_start_time shows when)"
       - "# If true: metrics since performance_schema reset (measurement_start_time shows reset time)"
       - "# measurement_basis field clarifies: 'since_server_start' or 'since_reset'"
+  - name: 'Table I/O Hotspot Detection'
+    scenario: 'Find tables consuming excessive database time or with extreme read ratios'
+    steps:
+      - "reveal mysql://localhost/tables"
+      - "# Look for alerts: extreme_read_ratio (>10K:1), high_read_volume (>1B reads), long_running (>1 hour)"
+      - "# Check read_write_ratio field to identify read-heavy tables"
+      - "# Review total_time_hours to find time-consuming tables"
+      - "# Example alert: 'Missing LIMIT clause' for 490K:1 read ratio tables"
 
 anti_patterns:
   - bad: "mysql -e 'SHOW STATUS' | grep -i innodb"

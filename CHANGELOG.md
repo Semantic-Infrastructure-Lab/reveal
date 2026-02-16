@@ -12,6 +12,18 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **MySQL Adapter** - Added `mysql:///tables` endpoint for table I/O statistics and hotspot detection
+  - Reveals table-level read/write counts, timing, and read:write ratios
+  - Automatic alerts: extreme_read_ratio (>10K:1), high_read_volume (>1B reads), long_running (>1 hour)
+  - Progressive disclosure pattern: `/tables` overview → `/tables/{name}` detail (future)
+  - Token-efficient (~300-500 tokens vs 2000+ for raw SQL)
+  - Real production impact: Detected 28.5 hour table hotspot with 490K:1 read ratio
+  - Follows existing patterns: snapshot context, performance_schema reset detection
+  - Comprehensive test coverage: 5 new tests covering routing, alerts, and data processing
+
 ## [0.49.3] - 2026-02-15
 
 ### Added

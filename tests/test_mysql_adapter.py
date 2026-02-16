@@ -356,6 +356,12 @@ class TestElementRouting(unittest.TestCase):
             result = self.adapter.get_element('slow-queries')  # Uses hyphen, not underscore
             self.assertEqual(result['test'], 'data')
 
+    def test_get_element_routes_to_tables(self):
+        """Should route 'tables' to _get_tables."""
+        with patch.object(self.adapter, '_get_tables', return_value={'test': 'data'}):
+            result = self.adapter.get_element('tables')
+            self.assertEqual(result['test'], 'data')
+
     def test_get_element_invalid_returns_none(self):
         """Should return None for invalid element name."""
         result = self.adapter.get_element('invalid_element')
@@ -1193,6 +1199,174 @@ class TestMySQLConnectionPerformanceSchemaStatus(unittest.TestCase):
         # Should detect reset since gap > 3600
         self.assertEqual(result['enabled'], True)
         self.assertEqual(result['counters_reset_detected'], True)
+
+
+class TestGetTables(unittest.TestCase):
+    """Test _get_tables() method for table I/O statistics."""
+
+    def setUp(self):
+        """Create adapter with mocked connection."""
+        self.adapter = MySQLAdapter("mysql://test:test@localhost/test")
+        self.adapter._connection = MagicMock()
+        self.adapter._cursor = MagicMock()
+
+    def test_get_tables_basic_output(self):
+        """Should return properly formatted table I/O statistics."""
+        # Mock snapshot context
+        mock_timing = {
+            'snapshot_time': '2026-02-16T13:00:00+00:00',
+            'server_start_time': '2026-01-17T08:00:00+00:00',
+            'uptime_seconds': 2592000,
+            'measurement_window': '30d 0h (since server start)',
+        }
+
+        # Mock performance schema status
+        mock_ps_status = {
+            'enabled': True,
+            'counters_reset_detected': False,
+            'likely_reset_time': None,
+        }
+
+        # Mock table I/O data (simulating the asset_library case from issue)
+        mock_tables = [
+            {
+                'table_name': 'asset_library',
+                'reads': 80039744536,  # 80B reads
+                'writes': 163460,
+                'read_time_ps': 98234000000000000,  # ~27.3 hours
+                'write_time_ps': 4305000000000000,  # ~1.2 hours
+                'total_time_ps': 102539000000000000,  # ~28.5 hours
+            },
+            {
+                'table_name': 'normal_table',
+                'reads': 1000,
+                'writes': 500,
+                'read_time_ps': 100000000000,  # ~0.0001 seconds
+                'write_time_ps': 50000000000,
+                'total_time_ps': 150000000000,
+            }
+        ]
+
+        # Setup mocks
+        self.adapter.conn = MagicMock()
+        self.adapter.conn.get_snapshot_context = Mock(return_value=mock_timing)
+        self.adapter.conn.get_performance_schema_status = Mock(return_value=mock_ps_status)
+        self.adapter._execute_query = Mock(return_value=mock_tables)
+
+        # Execute
+        result = self.adapter._get_tables()
+
+        # Verify structure
+        self.assertEqual(result['type'], 'tables')
+        self.assertEqual(result['snapshot_time'], mock_timing['snapshot_time'])
+        self.assertEqual(result['measurement_basis'], 'since_server_start')
+        self.assertIn('tables', result)
+        self.assertIn('alerts', result)
+        self.assertEqual(result['table_count'], 2)
+
+        # Verify asset_library calculations
+        asset_lib = result['tables'][0]
+        self.assertEqual(asset_lib['table_name'], 'asset_library')
+        self.assertEqual(asset_lib['reads'], 80039744536)
+        self.assertEqual(asset_lib['writes'], 163460)
+        self.assertIsNotNone(asset_lib['read_write_ratio'])
+        self.assertGreater(asset_lib['read_write_ratio'], 10000)  # Should trigger alert
+        self.assertEqual(asset_lib['total_time_hours'], 28.48)  # ~28.5 hours
+        self.assertEqual(asset_lib['alert'], 'extreme_read_ratio')
+
+        # Verify normal_table
+        normal = result['tables'][1]
+        self.assertEqual(normal['table_name'], 'normal_table')
+        self.assertIsNone(normal['alert'])
+
+    def test_get_tables_alerts_extreme_read_ratio(self):
+        """Should alert on extreme read:write ratios (>10K:1)."""
+        mock_tables = [{
+            'table_name': 'read_heavy',
+            'reads': 500000,
+            'writes': 10,  # 50K:1 ratio
+            'read_time_ps': 1000000000000,
+            'write_time_ps': 1000000000000,
+            'total_time_ps': 2000000000000,
+        }]
+
+        self._setup_mocks(mock_tables)
+        result = self.adapter._get_tables()
+
+        self.assertEqual(result['alert_count'], 1)
+        self.assertEqual(result['alerts'][0]['type'], 'extreme_read_ratio')
+        self.assertEqual(result['alerts'][0]['table'], 'read_heavy')
+        self.assertIn('LIMIT', result['alerts'][0]['recommendation'])
+
+    def test_get_tables_alerts_high_read_volume(self):
+        """Should alert on high read volume (>1B reads)."""
+        mock_tables = [{
+            'table_name': 'high_volume',
+            'reads': 2000000000,  # 2B reads
+            'writes': 2000000,  # 1K:1 ratio (not extreme)
+            'read_time_ps': 1000000000000,
+            'write_time_ps': 1000000000000,
+            'total_time_ps': 2000000000000,
+        }]
+
+        self._setup_mocks(mock_tables)
+        result = self.adapter._get_tables()
+
+        self.assertEqual(result['alert_count'], 1)
+        self.assertEqual(result['alerts'][0]['type'], 'high_read_volume')
+
+    def test_get_tables_alerts_long_running(self):
+        """Should alert on long-running queries (>1 hour)."""
+        mock_tables = [{
+            'table_name': 'slow_table',
+            'reads': 1000,
+            'writes': 1000,
+            'read_time_ps': 7200000000000000,  # 2 hours
+            'write_time_ps': 0,
+            'total_time_ps': 7200000000000000,
+        }]
+
+        self._setup_mocks(mock_tables)
+        result = self.adapter._get_tables()
+
+        self.assertEqual(result['alert_count'], 1)
+        self.assertEqual(result['alerts'][0]['type'], 'long_running')
+        self.assertEqual(result['alerts'][0]['total_hours'], 2.0)
+
+    def test_get_tables_handles_reset_detection(self):
+        """Should use reset time when counters were reset."""
+        mock_ps_status = {
+            'enabled': True,
+            'counters_reset_detected': True,
+            'likely_reset_time': '2026-02-01T00:00:00+00:00',
+        }
+
+        self._setup_mocks([], ps_status=mock_ps_status)
+        result = self.adapter._get_tables()
+
+        self.assertEqual(result['measurement_basis'], 'since_reset')
+        self.assertEqual(result['measurement_start_time'], '2026-02-01T00:00:00+00:00')
+
+    def _setup_mocks(self, mock_tables, ps_status=None):
+        """Helper to setup common mocks."""
+        mock_timing = {
+            'snapshot_time': '2026-02-16T13:00:00+00:00',
+            'server_start_time': '2026-01-17T08:00:00+00:00',
+            'uptime_seconds': 2592000,
+            'measurement_window': '30d 0h (since server start)',
+        }
+
+        if ps_status is None:
+            ps_status = {
+                'enabled': True,
+                'counters_reset_detected': False,
+                'likely_reset_time': None,
+            }
+
+        self.adapter.conn = MagicMock()
+        self.adapter.conn.get_snapshot_context = Mock(return_value=mock_timing)
+        self.adapter.conn.get_performance_schema_status = Mock(return_value=ps_status)
+        self.adapter._execute_query = Mock(return_value=mock_tables)
 
 
 if __name__ == '__main__':

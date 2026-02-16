@@ -511,6 +511,7 @@ class MySQLAdapter(ResourceAdapter):
             'databases': self._get_databases,
             'indexes': self._get_indexes,
             'slow-queries': self._get_slow_queries,
+            'tables': self._get_tables,
         }
 
         # Handle storage/<db_name> pattern
@@ -583,6 +584,11 @@ class MySQLAdapter(ResourceAdapter):
                 'name': 'indexes',
                 'description': 'Index usage analysis',
                 'example': f'reveal {connection_string}/indexes'
+            },
+            {
+                'name': 'tables',
+                'description': 'Table I/O statistics and hotspots',
+                'example': f'reveal {connection_string}/tables'
             },
             {
                 'name': 'slow-queries',
@@ -775,6 +781,113 @@ class MySQLAdapter(ResourceAdapter):
                 'error': str(e),
                 'message': 'Slow query log may not be enabled or accessible',
             }
+
+    def _get_tables(self) -> Dict[str, Any]:
+        """Get table I/O statistics from performance_schema."""
+        timing = self.conn.get_snapshot_context()
+        ps_status = self.conn.get_performance_schema_status()
+
+        # Determine actual measurement basis
+        if ps_status['counters_reset_detected']:
+            measurement_basis = "since_reset"
+            measurement_start_time = ps_status['likely_reset_time']
+        else:
+            measurement_basis = "since_server_start"
+            measurement_start_time = timing['server_start_time']
+
+        # Get table I/O statistics
+        tables = self._execute_query("""
+            SELECT
+                OBJECT_NAME AS table_name,
+                COUNT_READ AS reads,
+                COUNT_WRITE AS writes,
+                SUM_TIMER_READ AS read_time_ps,
+                SUM_TIMER_WRITE AS write_time_ps,
+                SUM_TIMER_WAIT AS total_time_ps
+            FROM performance_schema.table_io_waits_summary_by_table
+            WHERE OBJECT_SCHEMA = DATABASE()
+              AND (COUNT_READ > 0 OR COUNT_WRITE > 0)
+            ORDER BY COUNT_READ DESC
+            LIMIT 50
+        """)
+
+        # Process tables and add calculated fields
+        alerts = []
+        processed_tables = []
+
+        for table in tables:
+            table_name = table['table_name']
+            reads = int(table['reads'])
+            writes = int(table['writes'])
+
+            # Calculate read:write ratio
+            if writes > 0:
+                read_write_ratio = reads / writes
+            else:
+                read_write_ratio = float('inf') if reads > 0 else 0
+
+            # Convert picoseconds to seconds/hours
+            total_time_sec = int(table['total_time_ps']) / 1_000_000_000_000
+            read_time_sec = int(table['read_time_ps']) / 1_000_000_000_000
+            write_time_sec = int(table['write_time_ps']) / 1_000_000_000_000
+
+            # Check for alerts
+            alert_type = None
+            recommendation = None
+
+            # Check for alerts (priority order: extreme_read_ratio > high_read_volume > long_running)
+            if read_write_ratio > 10_000:
+                alert_type = "extreme_read_ratio"
+                recommendation = "add_limit_clause"
+                alerts.append({
+                    'table': table_name,
+                    'type': 'extreme_read_ratio',
+                    'ratio': read_write_ratio,
+                    'recommendation': 'Review queries for missing LIMIT clauses or excessive reads'
+                })
+            elif reads > 1_000_000_000:
+                alert_type = "high_read_volume"
+                recommendation = "optimize_queries"
+                alerts.append({
+                    'table': table_name,
+                    'type': 'high_read_volume',
+                    'reads': reads,
+                    'recommendation': 'Review query patterns and consider caching'
+                })
+            elif total_time_sec > 3600:  # > 1 hour
+                alert_type = "long_running"
+                recommendation = "performance_review"
+                alerts.append({
+                    'table': table_name,
+                    'type': 'long_running',
+                    'total_hours': round(total_time_sec / 3600, 1),
+                    'recommendation': 'Review table for performance bottlenecks'
+                })
+
+            processed_tables.append({
+                'table_name': table_name,
+                'reads': reads,
+                'writes': writes,
+                'read_write_ratio': round(read_write_ratio, 1) if read_write_ratio != float('inf') else None,
+                'total_time_sec': round(total_time_sec, 2),
+                'total_time_hours': round(total_time_sec / 3600, 2),
+                'read_time_sec': round(read_time_sec, 2),
+                'write_time_sec': round(write_time_sec, 2),
+                'alert': alert_type,
+                'recommendation': recommendation,
+            })
+
+        return {
+            'type': 'tables',
+            **timing,
+            'measurement_basis': measurement_basis,
+            'measurement_start_time': measurement_start_time,
+            'performance_schema_status': ps_status,
+            'tables': processed_tables,
+            'table_count': len(processed_tables),
+            'alerts': alerts,
+            'alert_count': len(alerts),
+        }
 
     def _load_health_check_config(self) -> Dict[str, Any]:
         """Load health check configuration from file or use defaults.
