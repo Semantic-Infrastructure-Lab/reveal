@@ -553,7 +553,7 @@ def check_ssl_health(
 
         # Add advanced checks if requested
         if advanced:
-            advanced_checks = _run_advanced_checks(host, port, leaf)
+            advanced_checks = _run_advanced_checks(host, port, leaf, timeout=fetcher.timeout)
             checks.extend(advanced_checks['checks'])
 
         # Calculate overall status and summary
@@ -575,13 +575,16 @@ def check_ssl_health(
         return _build_ssl_health_error_result(host, port, e, advanced)
 
 
-def _run_advanced_checks(host: str, port: int, cert: CertificateInfo) -> Dict[str, Any]:
+def _run_advanced_checks(
+    host: str, port: int, cert: CertificateInfo, timeout: float = 10.0
+) -> Dict[str, Any]:
     """Run advanced SSL health checks.
 
     Args:
         host: Hostname
         port: Port number
         cert: Certificate info
+        timeout: Connection timeout in seconds
 
     Returns:
         Dict with checks list and has_failures flag
@@ -592,7 +595,7 @@ def _run_advanced_checks(host: str, port: int, cert: CertificateInfo) -> Dict[st
     # Check 1: TLS protocol version
     try:
         context = ssl.create_default_context()
-        with socket.create_connection((host, port), timeout=10) as sock:
+        with socket.create_connection((host, port), timeout=timeout) as sock:
             with context.wrap_socket(sock, server_hostname=host) as ssock:
                 tls_version = ssock.version()
 

@@ -346,7 +346,7 @@ class RevealConfig:
             if config_file.exists():
                 try:
                     if yaml:
-                        with open(config_file) as f:
+                        with open(config_file, encoding='utf-8') as f:
                             config = yaml.safe_load(f) or {}
                         if config.get('root'):
                             return current.resolve()
@@ -481,7 +481,7 @@ class RevealConfig:
 
         try:
             if yaml:
-                with open(path) as f:
+                with open(path, encoding='utf-8') as f:
                     config = yaml.safe_load(f)
 
                 if config is None:
@@ -861,7 +861,7 @@ def load_config(name: str, default: Optional[Dict[str, Any]] = None) -> Dict[str
     for path in config_paths:
         if path.exists() and yaml:
             try:
-                with open(path) as f:
+                with open(path, encoding='utf-8') as f:
                     loaded = yaml.safe_load(f)
                     if loaded is not None:
                         return cast(Dict[str, Any], loaded)
@@ -938,7 +938,7 @@ def disable_breadcrumbs_permanently() -> bool:
     config: Dict[str, Any] = {}
     if config_path.exists():
         try:
-            with open(config_path) as f:
+            with open(config_path, encoding='utf-8') as f:
                 config = yaml.safe_load(f) or {}
         except Exception:
             pass
@@ -948,7 +948,7 @@ def disable_breadcrumbs_permanently() -> bool:
 
     # Write back
     try:
-        with open(config_path, 'w') as f:
+        with open(config_path, 'w', encoding='utf-8') as f:
             yaml.dump(config, f, default_flow_style=False)
         print(f"Breadcrumbs disabled in {config_path}")
         return True

@@ -8,10 +8,13 @@ This module handles dispatching to the correct handler based on:
 All URI adapters now use the renderer-based system (Phase 4 complete).
 """
 
+import logging
 import re
 import sys
 from pathlib import Path
 from typing import Any, Optional, TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from argparse import Namespace
@@ -313,7 +316,11 @@ def _handle_check_mode(adapter, renderer_class: type[Any], args: 'Namespace') ->
             print(result)
 
     # Exit with appropriate code
-    exit_code = result.get('exit_code', 0) if isinstance(result, dict) else 0
+    if isinstance(result, dict):
+        exit_code = result.get('exit_code', 0)
+    else:
+        logger.warning("check() returned non-dict result; treating as pass (exit 0)")
+        exit_code = 0
     sys.exit(exit_code)
 
 

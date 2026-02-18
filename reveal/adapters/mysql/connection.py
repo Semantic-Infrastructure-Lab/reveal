@@ -2,6 +2,7 @@
 
 import os
 from typing import Dict, Any, Optional, cast
+from urllib.parse import urlparse, unquote
 
 try:
     import pymysql
@@ -51,39 +52,29 @@ class MySQLConnection:
 
         Args:
             uri: Connection URI (mysql://[user:pass@]host[:port][/element])
+
+        Uses urlparse so passwords containing '@' or ':' are handled correctly
+        when percent-encoded (e.g. mysql://user:p%40ssword@host/db).
         """
         if not uri or uri == "mysql://":
             # Don't set host here - let _resolve_credentials handle defaults
             # This allows MYSQL_HOST env var and ~/.my.cnf to take effect
             return
 
-        # Remove mysql:// prefix
-        if uri.startswith("mysql://"):
-            uri = uri[8:]
+        parsed = urlparse(uri)
 
-        # Parse user:pass@host:port/element
-        if '@' in uri:
-            auth, rest = uri.split('@', 1)
-            if ':' in auth:
-                self.user, self.password = auth.split(':', 1)
-            else:
-                self.user = auth
-            uri = rest
+        if parsed.username:
+            self.user = unquote(parsed.username)
+        if parsed.password:
+            self.password = unquote(parsed.password)
+        if parsed.hostname:
+            self.host = parsed.hostname
+        if parsed.port:
+            self.port = parsed.port
 
-        # Parse host:port/element
-        if '/' in uri:
-            host_port, element = uri.split('/', 1)
-            self.element = element
-        else:
-            host_port = uri
-
-        # Parse host:port
-        if ':' in host_port:
-            self.host, port_str = host_port.split(':', 1)
-            self.port = int(port_str)
-        else:
-            # Don't default to localhost - let _resolve_credentials handle it
-            self.host = host_port or None
+        # Path starts with '/', strip it to get the element (e.g. /tables → tables)
+        if parsed.path and parsed.path.lstrip('/'):
+            self.element = parsed.path.lstrip('/')
 
     def _resolve_credentials(self):
         """Resolve credentials from multiple sources.

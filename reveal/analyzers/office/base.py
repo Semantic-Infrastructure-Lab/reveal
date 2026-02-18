@@ -18,6 +18,10 @@ from ...base import FileAnalyzer
 from ...utils import format_size
 
 
+MAX_XML_PART_SIZE = 50 * 1024 * 1024  # 50 MB per XML part
+MAX_COMPRESSION_RATIO = 1000  # Flag suspicious compression ratios
+
+
 class ZipXMLAnalyzer(FileAnalyzer):
     """Base analyzer for ZIP archives containing XML documents.
 
@@ -45,6 +49,20 @@ class ZipXMLAnalyzer(FileAnalyzer):
 
         self._open_archive()
 
+    def _safe_read(self, part_path: str) -> bytes:
+        """Read a part from the archive with decompressed-size guard."""
+        info = self.archive.getinfo(part_path)  # type: ignore[union-attr]
+        if info.file_size > MAX_XML_PART_SIZE:
+            raise ValueError(
+                f"Part {part_path} too large: {info.file_size} bytes (limit {MAX_XML_PART_SIZE})"
+            )
+        if info.compress_size > 0 and info.file_size / info.compress_size > MAX_COMPRESSION_RATIO:
+            raise ValueError(
+                f"Part {part_path} has suspicious compression ratio "
+                f"({info.file_size}/{info.compress_size}), possible zip bomb"
+            )
+        return self.archive.read(part_path)  # type: ignore[union-attr]
+
     def _open_archive(self) -> None:
         """Open ZIP archive and parse structure."""
         try:
@@ -53,7 +71,7 @@ class ZipXMLAnalyzer(FileAnalyzer):
 
             # Parse main content if available
             if self.CONTENT_PATH and self.CONTENT_PATH in self.parts:
-                xml_content = self.archive.read(self.CONTENT_PATH)
+                xml_content = self._safe_read(self.CONTENT_PATH)
                 self.content_tree = ET.fromstring(xml_content)
 
             # Parse metadata
@@ -75,7 +93,7 @@ class ZipXMLAnalyzer(FileAnalyzer):
         if not self.archive or part_path not in self.parts:
             return None
         try:
-            xml_content = self.archive.read(part_path)
+            xml_content = self._safe_read(part_path)
             return ET.fromstring(xml_content)
         except Exception as e:
             logging.debug(f"Failed to read/parse XML part {part_path}: {e}")
@@ -86,7 +104,7 @@ class ZipXMLAnalyzer(FileAnalyzer):
         if not self.archive or part_path not in self.parts:
             return None
         try:
-            return self.archive.read(part_path)
+            return self._safe_read(part_path)
         except Exception as e:
             logging.debug(f"Failed to read part {part_path}: {e}")
             return None

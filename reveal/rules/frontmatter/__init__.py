@@ -112,8 +112,11 @@ def safe_eval_validation(check: str, context: Dict[str, Any]) -> bool:
     }
 
     try:
-        # Merge safe builtins with context
-        eval_context = {**safe_builtins, **context}
+        if len(check) > 200:
+            logger.warning(f"Validation check expression too long ({len(check)} chars), skipping")
+            return False
+        # Merge: context first, then safe_builtins so builtins cannot be shadowed by field values
+        eval_context = {**context, **safe_builtins}
         result = eval(check, {"__builtins__": {}}, eval_context)
         return bool(result)
     except Exception as e:

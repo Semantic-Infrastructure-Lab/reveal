@@ -35,8 +35,17 @@ class FileAnalyzer(ABC):
         self.lines = self._read_file()
         self.content = '\n'.join(self.lines)
 
+    MAX_INPUT_SIZE = 100 * 1024 * 1024  # 100 MB
+
     def _read_file(self) -> List[str]:
         """Read file with automatic encoding detection."""
+        stat = os.stat(self.path)
+        if stat.st_size > self.MAX_INPUT_SIZE:
+            raise ValueError(
+                f"File too large ({stat.st_size:,} bytes); "
+                f"limit is {self.MAX_INPUT_SIZE:,} bytes. Use --max-bytes to truncate output."
+            )
+
         encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
 
         for encoding in encodings:

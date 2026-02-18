@@ -439,7 +439,7 @@ def _extract_line_range(analyzer, start_line: int, end_line: int):
         Element dict with name, line_start, line_end, source
     """
     try:
-        with open(analyzer.path, 'r') as f:
+        with open(analyzer.path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
 
         # Validate range
@@ -602,7 +602,7 @@ def _get_source_for_item(analyzer, item, line_start, line_end):
 def _read_lines(path, start_line, end_line):
     """Read lines from a file."""
     try:
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
         if start_line < 1 or end_line > len(lines):
             return None
