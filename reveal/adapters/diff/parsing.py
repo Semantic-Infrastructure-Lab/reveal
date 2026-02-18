@@ -57,7 +57,11 @@ def parse_diff_uris(resource: str) -> Tuple[str, str]:
         # Simple case: "file1:file2" or Windows paths "C:\file1:D:\file2"
         sep_idx = _find_separator_colon(resource)
         if sep_idx == -1:
-            raise ValueError("DiffAdapter requires 'left:right' format")
+            raise ValueError(
+                f"Invalid diff format: {resource!r}. "
+                "Expected: diff://left-resource:right-resource  "
+                "(e.g. diff://app.py:backup/app.py  or  diff://git://HEAD~1/.:. )"
+            )
         left = resource[:sep_idx]
         right = resource[sep_idx+1:]
         return left, right
@@ -70,7 +74,11 @@ def parse_diff_uris(resource: str) -> Tuple[str, str]:
             scheme = parts[0]
             rest = parts[1]
             if ':' not in rest:
-                raise ValueError(f"Invalid diff format: {resource}")
+                raise ValueError(
+                    f"Invalid diff format: {resource!r}. "
+                    "Expected: diff://left-resource:right-resource  "
+                    "(e.g. diff://app.py:backup/app.py  or  diff://git://HEAD~1/.:. )"
+                )
             resource_part, right = rest.rsplit(':', 1)
             left = f"{scheme}://{resource_part}"
             return left, right

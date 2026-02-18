@@ -428,10 +428,23 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     batch_results: List[dict] = []
 
     # Read paths/URIs from stdin (one per line)
+    first_line_checked = False
     for line in sys.stdin:
         target = line.strip()
         if not target:
             continue  # Skip empty lines
+
+        # Detect common mistake: piping a git diff patch instead of file names
+        if not first_line_checked:
+            first_line_checked = True
+            if target.startswith('diff --git ') or target.startswith('--- a/'):
+                print(
+                    "Error: stdin looks like a git diff patch, not a list of file paths.\n"
+                    "Use 'git diff --name-only' to get file names:\n"
+                    "  git diff --name-only | reveal --stdin",
+                    file=sys.stderr
+                )
+                sys.exit(1)
 
         # Check if this is a URI (scheme://resource)
         if '://' in target:

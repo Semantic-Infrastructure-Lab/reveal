@@ -42,7 +42,17 @@ class MarkdownQueryAdapter(ResourceAdapter):
             base_path: Directory to search for markdown files
             query: Query string (e.g., 'topics=reveal', '!status', 'lines>100')
         """
-        self.base_path = require_directory(Path(base_path).resolve())
+        # Strip scheme prefix if the full URI was passed (e.g. "markdown://path/to/file")
+        clean_path = base_path
+        if '://' in base_path:
+            clean_path = base_path.split('://', 1)[1]
+        resolved = Path(clean_path).resolve()
+        if resolved.is_file():
+            raise ValueError(
+                f"markdown:// queries a directory of markdown files, not a single file.\n"
+                f"To read a single markdown file, use: reveal {clean_path}"
+            )
+        self.base_path = require_directory(resolved)
         self.query = query
 
         # Parse result control (sort, limit, offset) and get cleaned query
