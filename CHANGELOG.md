@@ -12,6 +12,17 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Element extraction** - `[0.50.0]` and `v1.2.3` in element position no longer trigger confusing "Looking for '0]' within '[0.50'" hierarchical error. Regex now requires both sides of `.` to start with `[A-Za-z_]` (commit d3c2307)
+- **diff:// errors** - Error messages now include expected format and examples when separator colon is missing (commit 2d9b7b8)
+- **--stdin patch detection** - Piping `git diff` (not `--name-only`) to `reveal --stdin` now emits a single clear error with the correct command, instead of N "not found, skipping" warnings (commit 2d9b7b8)
+- **markdown:// single-file** - Passing a file path to `markdown://` now shows a helpful error directing to `reveal <path>` instead of a garbled "Directory not found" message (commit 2d9b7b8)
+
+### Tests
+- Added 4 regression tests for element syntax parsing covering `[0.50.0]`, `v1.2.3`, `1.2.3.4` (not hierarchical) and `FileAnalyzer._read_file` (still hierarchical) (commit a72dc25)
+
 ## [0.50.0] - 2026-02-16
 
 ### Added
