@@ -75,6 +75,26 @@ class TestParseSyntax:
         result = _parse_element_syntax('MyClass.my_method')
         assert result == {'type': 'hierarchical'}
 
+    def test_hierarchical_with_underscore_method(self):
+        """Test Class._private_method is treated as hierarchical."""
+        result = _parse_element_syntax('FileAnalyzer._read_file')
+        assert result == {'type': 'hierarchical'}
+
+    def test_version_string_not_hierarchical(self):
+        """Test [0.50.0] version strings are NOT treated as hierarchical."""
+        result = _parse_element_syntax('[0.50.0]')
+        assert result == {'type': 'name'}
+
+    def test_semver_tag_not_hierarchical(self):
+        """Test v1.2.3 version tags are NOT treated as hierarchical."""
+        result = _parse_element_syntax('v1.2.3')
+        assert result == {'type': 'name'}
+
+    def test_ip_address_not_hierarchical(self):
+        """Test IP addresses like 1.2.3.4 are NOT treated as hierarchical."""
+        result = _parse_element_syntax('1.2.3.4')
+        assert result == {'type': 'name'}
+
     def test_name_syntax_default(self):
         """Test plain name defaults to name-based extraction."""
         result = _parse_element_syntax('my_function')
