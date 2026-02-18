@@ -94,7 +94,9 @@ def _parse_element_syntax(element: str):
         }
 
     # Check for hierarchical extraction (Class.method syntax)
-    if '.' in element:
+    # Require identifier.identifier: both parts must start with letter/underscore,
+    # not version strings like [0.50.0] or v1.2.3
+    if '.' in element and re.match(r'^[A-Za-z_]\w*\.[A-Za-z_]', element):
         return {'type': 'hierarchical'}
 
     # Default: name-based extraction
