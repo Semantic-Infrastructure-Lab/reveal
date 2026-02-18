@@ -95,6 +95,21 @@ class TestParseSyntax:
         result = _parse_element_syntax('1.2.3.4')
         assert result == {'type': 'name'}
 
+    def test_bare_integer_is_line_ref(self):
+        """Test bare integer is treated as line reference (editor convention)."""
+        result = _parse_element_syntax('200')
+        assert result == {'type': 'line', 'start_line': 200, 'end_line': None}
+
+    def test_bare_integer_single_digit(self):
+        """Test single-digit bare integer is treated as line reference."""
+        result = _parse_element_syntax('1')
+        assert result == {'type': 'line', 'start_line': 1, 'end_line': None}
+
+    def test_bare_integer_large(self):
+        """Test large bare integer is treated as line reference."""
+        result = _parse_element_syntax('9999')
+        assert result == {'type': 'line', 'start_line': 9999, 'end_line': None}
+
     def test_name_syntax_default(self):
         """Test plain name defaults to name-based extraction."""
         result = _parse_element_syntax('my_function')

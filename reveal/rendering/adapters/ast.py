@@ -1,8 +1,20 @@
 """Renderer for ast:// code query adapter."""
 
+import sys
 from typing import Any, Dict, List
 
 from reveal.utils import safe_json_dumps
+
+# Maps bare shorthand names users commonly try to the correct filter syntax
+_FILTER_SHORTHANDS = {
+    'functions': '?type=function',
+    'function': '?type=function',
+    'classes': '?type=class',
+    'class': '?type=class',
+    'methods': '?type=method',
+    'method': '?type=method',
+    'imports': '?type=import',
+}
 
 
 def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -41,6 +53,8 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
 
     if not results:
         print("No matches found.")
+        # Detect common shorthand filters and suggest corrections
+        _suggest_filter_correction(query)
         return
 
     # Group by file
@@ -67,3 +81,19 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
                 print(f"  :{line:>4}  {name} [{line_count} lines]")
 
         print()
+
+
+def _suggest_filter_correction(query: str) -> None:
+    """If the query looks like a known shorthand, suggest the correct syntax."""
+    if not query or query == 'none':
+        return
+    import re
+    # format_query produces "field op value" — bare existence filters look like "field??"
+    fields = re.findall(r'^(\w+)', query)
+    for field in fields:
+        correction = _FILTER_SHORTHANDS.get(field.lower())
+        if correction:
+            print()
+            print(f"Hint: '{field}' is not a valid filter. Did you mean '{correction}'?")
+            print(f"  reveal 'ast://path/{correction}'")
+            return

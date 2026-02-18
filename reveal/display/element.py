@@ -93,6 +93,14 @@ def _parse_element_syntax(element: str):
             'end_line': int(line_match.group(2)) if line_match.group(2) else None
         }
 
+    # Check for bare integer (treat as line reference — editor/grep convention)
+    if re.match(r'^\d+$', element):
+        return {
+            'type': 'line',
+            'start_line': int(element),
+            'end_line': None
+        }
+
     # Check for hierarchical extraction (Class.method syntax)
     # Require identifier.identifier: both parts must start with letter/underscore,
     # not version strings like [0.50.0] or v1.2.3

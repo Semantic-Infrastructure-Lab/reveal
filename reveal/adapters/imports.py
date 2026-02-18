@@ -102,7 +102,10 @@ class ImportsRenderer:
         print(f"{'='*60}\n")
         print(f"  Total Files:   {total_files}")
         print(f"  Total Imports: {total_imports}")
-        print(f"  Cycles Found:  {'❌ Yes' if has_cycles else '✅ No'}")
+        if total_files <= 1:
+            print(f"  Cycles Found:  N/A (single-file scan — use imports://dir/ to detect cycles)")
+        else:
+            print(f"  Cycles Found:  {'❌ Yes' if has_cycles else '✅ No'}")
         print()
         print(f"Query options:")
         print(f"  reveal 'imports://{resource}?unused'    - Find unused imports")

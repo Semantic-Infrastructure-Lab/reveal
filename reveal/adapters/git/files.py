@@ -49,7 +49,11 @@ def get_file_at_ref(
                 'lines': len(content.splitlines()),
             }
         else:
-            raise ValueError(f"Path is not a file: {subpath}")
+            raise ValueError(
+                f"Path is not a file: {subpath}\n"
+                f"  git:// requires a file path or no path.\n"
+                f"  For repo overview use: reveal git://"
+            )
 
     except (KeyError, pygit2.GitError) as e:
         raise ValueError(f"File not found at {ref}: {subpath}") from e
