@@ -19,9 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **diff:// errors** - Error messages now include expected format and examples when separator colon is missing (commit 2d9b7b8)
 - **--stdin patch detection** - Piping `git diff` (not `--name-only`) to `reveal --stdin` now emits a single clear error with the correct command, instead of N "not found, skipping" warnings (commit 2d9b7b8)
 - **markdown:// single-file** - Passing a file path to `markdown://` now shows a helpful error directing to `reveal <path>` instead of a garbled "Directory not found" message (commit 2d9b7b8)
+- **Bare integer line reference** - `reveal file.py 200` now jumps to line 200, matching editor/grep convention; the `:` prefix is no longer required (commit 309ecab)
+- **--check dir/ false negative** - `reveal --check dir/` previously exited 0 and showed the tree, masking a no-op. Now exits 1 with guidance to use `--recursive` or `find | --stdin --check` (commit 309ecab)
+- **imports:// single-file cycles** - `imports://single-file.py` now shows "N/A (single-file scan)" for Cycles Found instead of a misleading "✅ No" (commit 309ecab)
+- **ast:// unknown shorthand filter** - `?functions`, `?classes`, etc. now print a hint suggesting the correct syntax (`?type=function`) instead of silently returning 0 results (commit 309ecab)
+- **git:// directory path** - `reveal git://dir/` now includes guidance ("For repo overview use: reveal git://") in the error message (commit 309ecab)
+
+### Removed
+- Deleted 6 stale `.old` adapter files (`ast.py.old`, `diff.py.old`, `json_adapter.py.old`, `markdown.py.old`, `reveal.py.old`, `stats.py.old`) — pre-refactor monoliths, ~5400 lines of dead weight (commit 309ecab)
 
 ### Tests
 - Added 4 regression tests for element syntax parsing covering `[0.50.0]`, `v1.2.3`, `1.2.3.4` (not hierarchical) and `FileAnalyzer._read_file` (still hierarchical) (commit a72dc25)
+- Added 3 regression tests for bare integer line reference parsing (`200`, `1`, `9999`) (commit 309ecab)
 
 ## [0.50.0] - 2026-02-16
 
