@@ -268,8 +268,8 @@ class TestV020ExtendedCoverage(unittest.TestCase):
             # Should return None (can't test)
             self.assertIsNone(result)
 
-    def test_find_class_line_found(self):
-        """Should find class definition line."""
+    def test_find_line_matching_class_found(self):
+        """Should find class definition line via _find_line_matching."""
         with tempfile.TemporaryDirectory() as tmpdir:
             adapter_file = Path(tmpdir) / 'test.py'
             adapter_file.write_text('''# Header
@@ -279,25 +279,25 @@ class TestAdapter:
     pass
 ''')
 
-            result = self.rule._find_class_line(adapter_file, 'TestAdapter')
+            result = self.rule._find_line_matching(adapter_file, 'class TestAdapter')
             self.assertEqual(result, 4)
 
-    def test_find_class_line_not_found(self):
-        """Should return 1 when class not found."""
+    def test_find_line_matching_class_not_found(self):
+        """Should return 1 when pattern not found."""
         with tempfile.TemporaryDirectory() as tmpdir:
             adapter_file = Path(tmpdir) / 'test.py'
             adapter_file.write_text('# No class here\n')
 
-            result = self.rule._find_class_line(adapter_file, 'TestAdapter')
+            result = self.rule._find_line_matching(adapter_file, 'class TestAdapter')
             self.assertEqual(result, 1)
 
-    def test_find_class_line_file_not_exists(self):
+    def test_find_line_matching_file_not_exists(self):
         """Should return 1 when file doesn't exist."""
-        result = self.rule._find_class_line(Path('/nonexistent.py'), 'TestAdapter')
+        result = self.rule._find_line_matching(Path('/nonexistent.py'), 'class TestAdapter')
         self.assertEqual(result, 1)
 
-    def test_find_method_line_found(self):
-        """Should find method definition line."""
+    def test_find_line_matching_method_found(self):
+        """Should find method definition line via _find_line_matching."""
         with tempfile.TemporaryDirectory() as tmpdir:
             adapter_file = Path(tmpdir) / 'test.py'
             adapter_file.write_text('''class TestAdapter:
@@ -305,21 +305,21 @@ class TestAdapter:
         pass
 ''')
 
-            result = self.rule._find_method_line(adapter_file, 'get_element')
+            result = self.rule._find_line_matching(adapter_file, 'def get_element')
             self.assertEqual(result, 2)
 
-    def test_find_method_line_not_found(self):
+    def test_find_line_matching_method_not_found(self):
         """Should return 1 when method not found."""
         with tempfile.TemporaryDirectory() as tmpdir:
             adapter_file = Path(tmpdir) / 'test.py'
             adapter_file.write_text('class TestAdapter:\n    pass\n')
 
-            result = self.rule._find_method_line(adapter_file, 'get_element')
+            result = self.rule._find_line_matching(adapter_file, 'def get_element')
             self.assertEqual(result, 1)
 
-    def test_find_method_line_file_not_exists(self):
+    def test_find_line_matching_nonexistent_file(self):
         """Should return 1 when file doesn't exist."""
-        result = self.rule._find_method_line(Path('/nonexistent.py'), 'get_element')
+        result = self.rule._find_line_matching(Path('/nonexistent.py'), 'def get_element')
         self.assertEqual(result, 1)
 
     def test_find_adapter_file_direct_pattern(self):

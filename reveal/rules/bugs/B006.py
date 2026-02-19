@@ -50,36 +50,48 @@ class B006(BaseRule, ASTParsingMixin):
         # Walk the AST looking for problematic exception handlers
         for node in self._ast_walk(tree):
             if isinstance(node, ast.ExceptHandler):
-                # Check if catching Exception (broad catch)
-                if self._is_broad_exception(node):
-                    # Check if body is just pass (silent failure)
-                    if self._is_silent_pass(node):
-                        # Check if there's an explanatory comment
-                        if not self._has_explanatory_comment(node, lines):
-                            # Get context for the detection
-                            try:
-                                context = ast.get_source_segment(content, node)
-                                if context:
-                                    # Show first 2 lines (except line + pass)
-                                    context = '\n'.join(context.split('\n')[:2])
-                            except Exception:
-                                context = None
-
-                            detections.append(self.create_detection(
-                                file_path=file_path,
-                                line=node.lineno,
-                                column=node.col_offset + 1,
-                                suggestion=(
-                                    "Consider:\n"
-                                    "  1. Use specific exception types (ValueError, KeyError, etc.)\n"
-                                    "  2. Add logging: logger.debug(f'Ignoring error: {e}')\n"
-                                    "  3. Add comment explaining why silence is intentional\n"
-                                    "  4. Re-raise if you can't handle: raise"
-                                ),
-                                context=context
-                            ))
+                detection = self._check_handler(node, file_path, content, lines)
+                if detection:
+                    detections.append(detection)
 
         return detections
+
+    def _check_handler(
+        self,
+        node: ast.ExceptHandler,
+        file_path: str,
+        content: str,
+        lines: List[str],
+    ) -> Optional[Detection]:
+        """Check a single exception handler for silent broad exception swallowing."""
+        if not self._is_broad_exception(node):
+            return None
+        if not self._is_silent_pass(node):
+            return None
+        if self._has_explanatory_comment(node, lines):
+            return None
+
+        context = None
+        try:
+            segment = ast.get_source_segment(content, node)
+            if segment:
+                context = '\n'.join(segment.split('\n')[:2])
+        except Exception:  # noqa: BLE001 - ast.get_source_segment can raise unexpectedly
+            context = None
+
+        return self.create_detection(
+            file_path=file_path,
+            line=node.lineno,
+            column=node.col_offset + 1,
+            suggestion=(
+                "Consider:\n"
+                "  1. Use specific exception types (ValueError, KeyError, etc.)\n"
+                "  2. Add logging: logger.debug(f'Ignoring error: {e}')\n"
+                "  3. Add comment explaining why silence is intentional\n"
+                "  4. Re-raise if you can't handle: raise"
+            ),
+            context=context
+        )
 
     def _is_broad_exception(self, node: ast.ExceptHandler) -> bool:
         """Check if exception handler catches Exception (broad catch).

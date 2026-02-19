@@ -119,7 +119,7 @@ class V005(BaseRule):
             for i, line in enumerate(lines, 1):
                 if f"'{topic}':" in line:
                     return i
-        except OSError:
+        except Exception:  # noqa: BLE001 - read_text can raise encoding errors, etc.
             pass
 
         return 1

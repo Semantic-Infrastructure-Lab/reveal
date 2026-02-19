@@ -113,50 +113,46 @@ class I002(BaseRule):
         if directory in _graph_cache:
             return _graph_cache[directory]
 
+        all_imports = self._collect_raw_imports(directory)
+        graph = ImportGraph.from_imports(all_imports)
+        self._resolve_graph_dependencies(graph)
+
+        _graph_cache[directory] = graph
+        return graph
+
+    def _collect_raw_imports(self, directory: Path) -> list:
+        """Phase 1: Walk directory and extract raw import statements from all files."""
         all_imports = []
         supported_extensions = get_all_extensions()
 
-        # Recursively find all files with supported extensions
         for file_path in directory.rglob("*"):
             if not file_path.is_file():
                 continue
-
-            # Check if file has a supported extension
             if file_path.suffix not in supported_extensions:
                 continue
-
-            # Get extractor for this file type
             extractor = get_extractor(file_path)
             if not extractor:
                 continue
-
             try:
-                imports = extractor.extract_imports(file_path)
-                all_imports.extend(imports)
+                all_imports.extend(extractor.extract_imports(file_path))
             except Exception as e:
                 logger.debug(f"Failed to extract imports from {file_path}: {e}")
 
-        # Build graph from all imports
-        graph = ImportGraph.from_imports(all_imports)
+        return all_imports
 
-        # Resolve imports to build dependency edges
+    def _resolve_graph_dependencies(self, graph: ImportGraph) -> None:
+        """Phase 2: Resolve import statements to actual file paths and add edges."""
         for file_path, imports in graph.files.items():
-            base_path = file_path.parent
-
-            # Get extractor for this file type
             extractor = get_extractor(file_path)
             if not extractor:
                 continue
-
+            base_path = file_path.parent
             for stmt in imports:
                 resolved = extractor.resolve_import(stmt, base_path)
                 # Skip self-references (e.g., logging.py importing stdlib logging
                 # should not create logging.py → logging.py dependency)
                 if resolved and resolved != file_path:
                     graph.add_dependency(file_path, resolved)
-
-        _graph_cache[directory] = graph
-        return graph
 
     def _format_cycle(self, cycle: List[Path]) -> str:
         """Format a cycle for human-readable display.

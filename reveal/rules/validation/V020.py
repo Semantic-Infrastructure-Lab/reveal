@@ -70,182 +70,144 @@ class V020(BaseRule):
             return []
 
         detections: List[Detection] = []
-        schemes = list(sorted(list_supported_schemes()))
-
-        for scheme in schemes:
+        for scheme in sorted(list_supported_schemes()):
             adapter_class = get_adapter_class(scheme)
             renderer_class = get_renderer_class(scheme)
-
             if not adapter_class or not renderer_class:
                 continue
-
-            # Find adapter file for error reporting
             adapter_file = self._find_adapter_file(reveal_root, scheme)
             if not adapter_file:
                 continue
+            detections.extend(
+                self._check_scheme(scheme, adapter_class, renderer_class, adapter_file)
+            )
+        return detections
 
-            # Check if renderer supports elements
-            supports_elements = hasattr(renderer_class, 'render_element')
+    def _check_scheme(
+        self,
+        scheme: str,
+        adapter_class: type,
+        renderer_class: type,
+        adapter_file: Path,
+    ) -> List[Detection]:
+        """Check a single adapter/renderer pair for contract compliance."""
+        detections: List[Detection] = []
+        supports_elements = hasattr(renderer_class, 'render_element')
+        has_get_element = hasattr(adapter_class, 'get_element')
+        has_get_structure = hasattr(adapter_class, 'get_structure')
+        class_line = self._find_line_matching(adapter_file, f'class {adapter_class.__name__}')
 
-            # Check if adapter implements required methods
-            has_get_element = hasattr(adapter_class, 'get_element')
-            has_get_structure = hasattr(adapter_class, 'get_structure')
+        # Validation 1: If renderer has render_element, adapter must have get_element
+        if supports_elements and not has_get_element:
+            detections.append(Detection(
+                file_path=str(adapter_file),
+                line=class_line,
+                rule_code=self.code,
+                message=f"Adapter '{scheme}' missing get_element() but renderer has render_element()",
+                suggestion=(
+                    f"Add get_element() method to adapter:\n"
+                    f"  def get_element(self, element_name: str) -> Optional[Dict[str, Any]]:\n"
+                    f"      \"\"\"Get specific element by name.\"\"\"\n"
+                    f"      # Return element data or None if not found\n"
+                    f"      return None\n"
+                    f"\n"
+                    f"Renderer has render_element, so generic handler expects get_element."
+                ),
+                context="Renderer supports elements but adapter doesn't implement get_element",
+                severity=Severity.HIGH,
+                category=self.category
+            ))
 
-            # Validation 1: If renderer has render_element, adapter must have get_element
-            if supports_elements and not has_get_element:
-                detections.append(Detection(
-                    file_path=str(adapter_file),
-                    line=self._find_class_line(adapter_file, adapter_class.__name__),
-                    rule_code=self.code,
-                    message=f"Adapter '{scheme}' missing get_element() but renderer has render_element()",
-                    suggestion=(
-                        f"Add get_element() method to adapter:\n"
-                        f"  def get_element(self, element_name: str) -> Optional[Dict[str, Any]]:\n"
-                        f"      \"\"\"Get specific element by name.\"\"\"\n"
-                        f"      # Return element data or None if not found\n"
-                        f"      return None\n"
-                        f"\n"
-                        f"Renderer has render_element, so generic handler expects get_element."
-                    ),
-                    context="Renderer supports elements but adapter doesn't implement get_element",
-                    severity=Severity.HIGH,
-                    category=self.category
-                ))
+        # Validation 2: All adapters should have get_structure
+        if not has_get_structure:
+            detections.append(Detection(
+                file_path=str(adapter_file),
+                line=class_line,
+                rule_code=self.code,
+                message=f"Adapter '{scheme}' missing get_structure() method",
+                suggestion=(
+                    f"Add get_structure() method to adapter:\n"
+                    f"  def get_structure(self) -> Dict[str, Any]:\n"
+                    f"      \"\"\"Get complete structure.\"\"\"\n"
+                    f"      return {{}}\n"
+                    f"\n"
+                    f"All adapters should implement get_structure()."
+                ),
+                context="Adapter missing required get_structure() method",
+                severity=Severity.HIGH,
+                category=self.category
+            ))
 
-            # Validation 2: All adapters should have get_structure
-            if not has_get_structure:
-                detections.append(Detection(
-                    file_path=str(adapter_file),
-                    line=self._find_class_line(adapter_file, adapter_class.__name__),
-                    rule_code=self.code,
-                    message=f"Adapter '{scheme}' missing get_structure() method",
-                    suggestion=(
-                        f"Add get_structure() method to adapter:\n"
-                        f"  def get_structure(self) -> Dict[str, Any]:\n"
-                        f"      \"\"\"Get complete structure.\"\"\"\n"
-                        f"      return {{}}\n"
-                        f"\n"
-                        f"All adapters should implement get_structure()."
-                    ),
-                    context="Adapter missing required get_structure() method",
-                    severity=Severity.HIGH,
-                    category=self.category
-                ))
-
-            # Validation 3: Test get_element error handling (if it exists)
-            if supports_elements and has_get_element:
-                detection = self._test_get_element_error_handling(
-                    scheme, adapter_class, adapter_file
-                )
-                if detection:
-                    detections.append(detection)
+        # Validation 3: Test get_element error handling (if it exists)
+        if supports_elements and has_get_element:
+            detection = self._test_get_element_error_handling(scheme, adapter_class, adapter_file)
+            if detection:
+                detections.append(detection)
 
         return detections
 
     def _test_get_element_error_handling(self, scheme: str, adapter_class: type,
                                         adapter_file: Path) -> Optional[Detection]:
-        """Test that get_element returns None for missing elements (doesn't crash).
-
-        Args:
-            scheme: URI scheme
-            adapter_class: Adapter class to test
-            adapter_file: Path to adapter file
-
-        Returns:
-            Detection if violation found, None otherwise
-        """
-        # Try to instantiate adapter with minimal args
-        try:
-            # Try no-arg first
-            try:
-                adapter = adapter_class()
-            except TypeError:
-                # Try with safe resource arg
-                try:
-                    adapter = adapter_class('.')
-                except (TypeError, ValueError, ImportError):
-                    # Can't instantiate - skip this test
-                    return None
-            except (ValueError, ImportError):
-                # Can't instantiate - skip this test
-                return None
-
-            # Test get_element with non-existent element
-            test_element = "_nonexistent_test_element_xyz_"
-            try:
-                result = adapter.get_element(test_element)
-
-                # get_element should return None for missing elements
-                if result is not None:
-                    # This might be OK if adapter has this element
-                    # Can't reliably test without knowing adapter's elements
-                    return None
-
-                return None  # Correct behavior
-
-            except Exception as e:
-                # VIOLATION: get_element should return None, not crash
-                exception_type = type(e).__name__
-
-                return Detection(
-                    file_path=str(adapter_file),
-                    line=self._find_method_line(adapter_file, 'get_element'),
-                    rule_code=self.code,
-                    message=f"Adapter '{scheme}' get_element() crashes with {exception_type} for missing element",
-                    suggestion=(
-                        f"Fix get_element() to return None for missing elements:\n"
-                        f"  def get_element(self, element_name: str) -> Optional[Dict[str, Any]]:\n"
-                        f"      try:\n"
-                        f"          # ... find element ...\n"
-                        f"          return element_data\n"
-                        f"      except (KeyError, ValueError):\n"
-                        f"          return None  # Element not found\n"
-                        f"\n"
-                        f"Don't let exceptions propagate - return None instead.\n"
-                        f"Error: {str(e)}"
-                    ),
-                    context=f"get_element crashes with {exception_type} instead of returning None",
-                    severity=Severity.MEDIUM,
-                    category=self.category
-                )
-
-        except Exception:
-            # Can't test this adapter - skip
+        """Test that get_element returns None for missing elements (doesn't crash)."""
+        adapter = self._try_instantiate(adapter_class)
+        if adapter is None:
             return None
 
-    def _find_class_line(self, adapter_file: Path, class_name: str) -> int:
-        """Find line number of class definition.
-
-        Args:
-            adapter_file: Path to adapter file
-            class_name: Name of class to find
-
-        Returns:
-            Line number of class, or 1 if not found
-        """
+        test_element = "_nonexistent_test_element_xyz_"
         try:
-            with open(adapter_file, 'r', encoding='utf-8') as f:
-                for i, line in enumerate(f, start=1):
-                    if f'class {class_name}' in line:
-                        return i
-        except OSError:
+            result = adapter.get_element(test_element)
+            # Correct behavior: return None for missing element.
+            # If result is not None the adapter found something — can't judge without
+            # knowing its elements, so skip.
+            _ = result
+            return None
+        except Exception as e:
+            exception_type = type(e).__name__
+            return Detection(
+                file_path=str(adapter_file),
+                line=self._find_line_matching(adapter_file, 'def get_element'),
+                rule_code=self.code,
+                message=(
+                    f"Adapter '{scheme}' get_element() crashes with "
+                    f"{exception_type} for missing element"
+                ),
+                suggestion=(
+                    f"Fix get_element() to return None for missing elements:\n"
+                    f"  def get_element(self, element_name: str) -> Optional[Dict[str, Any]]:\n"
+                    f"      try:\n"
+                    f"          # ... find element ...\n"
+                    f"          return element_data\n"
+                    f"      except (KeyError, ValueError):\n"
+                    f"          return None  # Element not found\n"
+                    f"\n"
+                    f"Don't let exceptions propagate - return None instead.\n"
+                    f"Error: {str(e)}"
+                ),
+                context=f"get_element crashes with {exception_type} instead of returning None",
+                severity=Severity.MEDIUM,
+                category=self.category
+            )
+
+    @staticmethod
+    def _try_instantiate(adapter_class: type) -> Optional[object]:
+        """Attempt to instantiate adapter with minimal arguments; return None if impossible."""
+        try:
+            return adapter_class()
+        except TypeError:
             pass
-        return 1
-
-    def _find_method_line(self, adapter_file: Path, method_name: str) -> int:
-        """Find line number of method definition.
-
-        Args:
-            adapter_file: Path to adapter file
-            method_name: Name of method to find
-
-        Returns:
-            Line number of method, or 1 if not found
-        """
+        except (ValueError, ImportError, Exception):  # noqa: BLE001
+            return None
         try:
-            with open(adapter_file, 'r', encoding='utf-8') as f:
+            return adapter_class('.')
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _find_line_matching(self, file_path: Path, pattern: str) -> int:
+        """Find the first line number (1-indexed) containing *pattern*, or 1."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
                 for i, line in enumerate(f, start=1):
-                    if f'def {method_name}' in line:
+                    if pattern in line:
                         return i
         except OSError:
             pass
