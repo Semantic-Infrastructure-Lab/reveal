@@ -243,9 +243,11 @@ class BaseRule(ABC):
             except Exception as e:
                 logger.debug(f"Failed to load config: {e}")
                 # Return a mock config that always uses defaults
+
                 class MockConfig:
                     def get_rule_config(self, code, key, default=None):
                         return default
+
                     def is_rule_enabled(self, code, path=None):
                         return True
                 self._config = MockConfig()
@@ -413,4 +415,6 @@ class BaseRule(ABC):
     def set_current_file(self, file_path: str):
         """Set the current file being checked (called by registry)."""
         self._current_file = file_path
+
+
 T = 'T'

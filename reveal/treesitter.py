@@ -8,7 +8,7 @@ from .core import suppress_treesitter_warnings
 # Suppress tree-sitter deprecation warnings (centralized in core module)
 suppress_treesitter_warnings()
 
-from tree_sitter_language_pack import get_parser
+from tree_sitter_language_pack import get_parser  # noqa: E402
 
 
 # Module-level cache: (path_str, mtime_ns) -> {'tree': ..., 'node_cache': ...}
@@ -39,7 +39,7 @@ FUNCTION_NODE_TYPES = (
     'function',              # Generic
     'method',                # Ruby
     'function_definition_statement',       # Lua (global functions)
-    'local_function_definition_statement', # Lua (local functions)
+    'local_function_definition_statement',  # Lua (local functions)
 )
 
 # Node types for class extraction
@@ -64,7 +64,7 @@ IMPORT_NODE_TYPES = (
     'import_declaration',    # Go, Java
     'use_declaration',       # Rust
     'using_directive',       # C#
-    'import_from_statement', # Python
+    'import_from_statement',  # Python
     'preproc_include',       # C/C++
 )
 

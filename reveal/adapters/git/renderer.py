@@ -4,7 +4,6 @@ import json
 import sys
 
 
-
 class GitRenderer:
     """Renderer for git repository inspection results."""
 

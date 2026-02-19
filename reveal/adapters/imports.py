@@ -171,7 +171,7 @@ class ImportsRenderer:
         print(f"Error analyzing imports: {error}", file=sys.stderr)
 
 
-from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages
+from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supported_languages  # noqa: E402
 
 
 @register_adapter('imports')

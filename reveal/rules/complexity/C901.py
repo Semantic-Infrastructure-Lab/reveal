@@ -169,13 +169,13 @@ class C901(BaseRule, ASTParsingMixin):
         # These are language-agnostic patterns
         patterns = [
             ' if ', ' if(',       # conditionals
-            ' else if ', 'elif ', # else-if chains
+            ' else if ', 'elif ',  # else-if chains
             ' for ', ' for(',     # loops
             ' while ', ' while(',
             ' && ', ' and ',      # boolean operators
             ' || ', ' or ',
             ' case ',             # switch/match cases
-            ' catch ', ' catch(', # exception handling
+            ' catch ', ' catch(',  # exception handling
             ' except ',
             ' ? ',                # ternary operator
         ]

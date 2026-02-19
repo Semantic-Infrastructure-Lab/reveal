@@ -224,8 +224,8 @@ class OdtAnalyzer(OdfAnalyzer):
             return len(rows), len(cols)
         return 0, 0
 
-    def _process_odf_element(self, elem, tag, text_ns, name, in_section,
-                              section_level, start_idx, idx, section_text):
+    def _process_odf_section_element(self, elem, tag, text_ns, name, in_section,
+                                      section_level, start_idx, idx, section_text):
         """Process one ODF body element during section extraction.
 
         Returns (in_section, section_level, start_idx, done).
@@ -274,7 +274,7 @@ class OdtAnalyzer(OdfAnalyzer):
 
         for idx, elem in enumerate(text_body):
             tag = elem.tag.split('}')[-1]
-            in_section, section_level, start_idx, done = self._process_odf_element(
+            in_section, section_level, start_idx, done = self._process_odf_section_element(
                 elem, tag, text_ns, name, in_section, section_level, start_idx, idx, section_text
             )
             if done:

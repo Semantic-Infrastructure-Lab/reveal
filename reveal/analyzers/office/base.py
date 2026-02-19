@@ -99,7 +99,9 @@ class ZipXMLAnalyzer(FileAnalyzer):
             return
 
         ns = self.NAMESPACES
-        get = lambda tag, pfx: self._get_xml_text(core, tag, pfx, ns)
+
+        def get(tag, pfx):
+            return self._get_xml_text(core, tag, pfx, ns)
         self.metadata = {k: v for k, v in {
             'title': get('title', 'dc'),
             'creator': get('creator', 'dc'),

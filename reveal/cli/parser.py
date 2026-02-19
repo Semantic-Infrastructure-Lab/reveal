@@ -431,5 +431,8 @@ def validate_navigation_args(args):
 
 # Backward compatibility aliases (private names)
 _build_help_epilog = build_help_epilog
-_create_argument_parser = lambda: create_argument_parser('')  # Will be overridden
+def _create_argument_parser():  # noqa: E302 (backward compat alias)
+    return create_argument_parser('')  # Will be overridden
+
+
 _validate_navigation_args = validate_navigation_args

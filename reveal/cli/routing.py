@@ -24,12 +24,12 @@ if TYPE_CHECKING:
 # File checking functions
 # ============================================================================
 
-from .file_checker import (
+from .file_checker import (  # noqa: E402
     handle_recursive_check,
 )
 
 # Import file handling from shared module to avoid circular dependency
-from ..file_handler import handle_file
+from ..file_handler import handle_file  # noqa: E402
 
 
 # ============================================================================

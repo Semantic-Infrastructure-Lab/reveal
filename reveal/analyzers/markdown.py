@@ -824,9 +824,9 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             return entry
         if isinstance(entry, dict):
             # Try common path field names
-            for field in ('uri', 'path', 'href', 'url', 'file'):
-                if field in entry and isinstance(entry[field], str):
-                    path = cast(str, entry[field])
+            for fname in ('uri', 'path', 'href', 'url', 'file'):
+                if fname in entry and isinstance(entry[fname], str):
+                    path = cast(str, entry[fname])
                     # Strip doc:// prefix if present
                     if path.startswith('doc://'):
                         path = path[6:]  # Remove 'doc://'
@@ -910,8 +910,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         related_fields = ['related', 'related_docs', 'see_also', 'references']
         related_paths = []
 
-        for field in related_fields:
-            value = frontmatter_data.get(field)
+        for fname in related_fields:
+            value = frontmatter_data.get(fname)
             if value:
                 if isinstance(value, list):
                     for item in value:
