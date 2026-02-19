@@ -12,6 +12,11 @@ from ..base import BaseRule, Detection, RulePrefix, Severity
 
 logger = logging.getLogger(__name__)
 
+# Module-level cache: file_path → list of anchor slugs.
+# _extract_anchors_from_markdown re-runs the full tree-sitter markdown parse;
+# without caching it is called once per anchor link in a file (O(n) parses per file).
+_anchor_cache: Dict[Path, List[str]] = {}
+
 
 class L001(BaseRule):
     """Detect broken internal links in Markdown files."""
@@ -54,6 +59,13 @@ class L001(BaseRule):
             else:
                 return detections
 
+        # Pre-compute anchor slugs from structure headings once, so that
+        # _validate_anchor_only_link doesn't need to re-parse the file per link.
+        if structure and 'headings' in structure:
+            source_path = Path(file_path)
+            anchors = self._headings_to_anchors(structure['headings'])
+            _anchor_cache[source_path] = anchors
+
         # Check each link for issues
         for link in links:
             text = link.get('text', '')
@@ -85,8 +97,29 @@ class L001(BaseRule):
 
         return detections
 
+    def _headings_to_anchors(self, headings: List[Dict[str, Any]]) -> List[str]:
+        """Convert heading dicts to GitHub-Flavored Markdown anchor slugs."""
+        anchors = []
+        for heading in headings:
+            heading_text = heading.get('name', '').strip()
+            if not heading_text:
+                continue
+            anchor = heading_text.lower()
+            anchor = re.sub(r'[^\w\s-]', '', anchor)
+            anchor = re.sub(r'[\s_]+', '-', anchor)
+            anchor = re.sub(r'-+', '-', anchor)
+            anchor = anchor.strip('-')
+            if anchor:
+                anchors.append(anchor)
+        return anchors
+
     def _extract_anchors_from_markdown(self, file_path: Path) -> List[str]:
         """Extract valid anchor IDs from markdown headings.
+
+        Results are cached by file path so the tree-sitter parse runs once per
+        file per process rather than once per anchor link in the file.
+        When check() pre-populates the cache from structure['headings'], this
+        fallback is never reached for files processed via --check.
 
         Args:
             file_path: Path to markdown file
@@ -94,8 +127,10 @@ class L001(BaseRule):
         Returns:
             List of anchor IDs (e.g., ['my-heading', 'another-section'])
         """
+        if file_path in _anchor_cache:
+            return _anchor_cache[file_path]
+
         try:
-            # Use analyzer to extract headings (uses AST, not regex)
             from ...registry import get_analyzer
             analyzer_class = get_analyzer(str(file_path))
             if not analyzer_class:
@@ -107,22 +142,8 @@ class L001(BaseRule):
             logger.debug(f"Failed to extract headings from {file_path}: {e}")
             return []
 
-        # Convert headings to anchor slugs (GitHub Flavored Markdown style)
-        anchors = []
-        for heading in headings:
-            heading_text = heading.get('name', '').strip()
-            if not heading_text:
-                continue
-
-            # Convert heading to anchor slug
-            anchor = heading_text.lower()
-            anchor = re.sub(r'[^\w\s-]', '', anchor)  # Remove special chars except spaces and hyphens
-            anchor = re.sub(r'[\s_]+', '-', anchor)   # Replace spaces/underscores with hyphens
-            anchor = re.sub(r'-+', '-', anchor)       # Collapse multiple hyphens
-            anchor = anchor.strip('-')                # Remove leading/trailing hyphens
-            if anchor:
-                anchors.append(anchor)
-
+        anchors = self._headings_to_anchors(headings)
+        _anchor_cache[file_path] = anchors
         return anchors
 
     def _validate_anchor_only_link(self, url: str, source_file: str) -> Tuple[bool, str]:

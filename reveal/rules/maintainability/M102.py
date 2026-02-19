@@ -13,6 +13,10 @@ from ..base import BaseRule, Detection, RulePrefix, Severity
 
 logger = logging.getLogger(__name__)
 
+# Module-level cache: package_root → set of imported names.
+# Built once per package per process; safe because files don't change mid-run.
+_import_cache: Dict[Path, Set[str]] = {}
+
 
 class M102(BaseRule):
     """Detect Python files not imported anywhere in the package."""
@@ -173,7 +177,14 @@ class M102(BaseRule):
             return None
 
     def _collect_all_imports(self, package_root: Path) -> Set[str]:
-        """Collect all imports from all Python files in the package."""
+        """Collect all imports from all Python files in the package.
+
+        Results are cached by package_root so the O(n) AST scan runs once per
+        package per process instead of once per file checked (was O(n²)).
+        """
+        if package_root in _import_cache:
+            return _import_cache[package_root]
+
         imports = set()
 
         for py_file in package_root.rglob('*.py'):
@@ -197,10 +208,17 @@ class M102(BaseRule):
                             parts = node.module.split('.')
                             for i in range(len(parts)):
                                 imports.add('.'.join(parts[:i+1]))
+                            # Record 'X.Y' for each 'from X import Y' so that a
+                            # module imported via attribute access is not falsely
+                            # flagged as an orphan (e.g. 'from pkg import mod').
+                            for alias in node.names:
+                                if alias.name != '*':
+                                    imports.add(node.module + '.' + alias.name)
 
             except (SyntaxError, UnicodeDecodeError, OSError):
                 continue
 
+        _import_cache[package_root] = imports
         return imports
 
     def _is_imported(self, module_name: str, all_imports: Set[str],
@@ -210,9 +228,12 @@ class M102(BaseRule):
         if module_name in all_imports:
             return True
 
-        # Check partial matches (e.g., 'reveal.types' when looking for 'reveal.types.python')
+        # If a submodule of this file is imported (e.g. 'reveal.types.python' is
+        # imported while we're checking 'reveal.types'), treat the parent as used.
+        # The inverse — parent imported therefore child is used — is NOT valid:
+        # `import testpkg` does not make `testpkg.orphan` available.
         for imp in all_imports:
-            if imp.startswith(module_name + '.') or module_name.startswith(imp + '.'):
+            if imp.startswith(module_name + '.'):
                 return True
 
         # Check if referenced in __init__.py __all__

@@ -117,7 +117,9 @@ def check_and_report_file(
             return 0
 
         analyzer = analyzer_class(str(file_path))
-        structure = analyzer.get_structure()
+        # Always request links so link-checking rules (L001, L002) can reuse
+        # this parse instead of creating a second analyzer for each file.
+        structure = analyzer.get_structure(extract_links=True)
         content = analyzer.content
 
         detections = RuleRegistry.check_file(
@@ -183,7 +185,9 @@ def check_and_collect_file(
             return 0, []
 
         analyzer = analyzer_class(str(file_path))
-        structure = analyzer.get_structure()
+        # Always request links so link-checking rules (L001, L002) can reuse
+        # this parse instead of creating a second analyzer for each file.
+        structure = analyzer.get_structure(extract_links=True)
         content = analyzer.content
 
         detections = RuleRegistry.check_file(

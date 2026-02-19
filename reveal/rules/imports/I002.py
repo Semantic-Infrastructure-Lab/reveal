@@ -14,6 +14,11 @@ from ...analyzers.imports.base import get_extractor, get_all_extensions
 
 logger = logging.getLogger(__name__)
 
+# Module-level cache: directory → ImportGraph.
+# _build_import_graph scans every source file in a directory via tree-sitter;
+# caching by directory makes the O(n) scan happen once per directory per run.
+_graph_cache: Dict[Path, 'ImportGraph'] = {}
+
 
 # Initialize file patterns from all registered extractors at module load time
 def _initialize_file_patterns():
@@ -96,6 +101,8 @@ class I002(BaseRule):
         """Build import graph for all source files in directory and subdirs.
 
         Analyzes files in all supported languages (Python, JavaScript, Go, Rust).
+        Results are cached by directory so the tree-sitter scan runs once per
+        directory per process instead of once per file (was O(n²)).
 
         Args:
             directory: Directory to analyze
@@ -103,6 +110,9 @@ class I002(BaseRule):
         Returns:
             ImportGraph with all imports and resolved dependencies
         """
+        if directory in _graph_cache:
+            return _graph_cache[directory]
+
         all_imports = []
         supported_extensions = get_all_extensions()
 
@@ -145,6 +155,7 @@ class I002(BaseRule):
                 if resolved and resolved != file_path:
                     graph.add_dependency(file_path, resolved)
 
+        _graph_cache[directory] = graph
         return graph
 
     def _format_cycle(self, cycle: List[Path]) -> str:

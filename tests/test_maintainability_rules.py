@@ -111,6 +111,11 @@ class TestM101FileTooLarge(unittest.TestCase):
 class TestM102OrphanFile(unittest.TestCase):
     """Test M102: Orphan file detector."""
 
+    def setUp(self):
+        """Clear the module-level import cache between tests."""
+        import reveal.rules.maintainability.M102 as m
+        m._import_cache.clear()
+
     def create_temp_directory_structure(self, files: dict) -> Path:
         """Helper: Create temp directory with multiple files.
 
@@ -203,6 +208,63 @@ class TestM102OrphanFile(unittest.TestCase):
                 self.assertEqual(len(detections), 0, f"{test_file} should not be flagged")
             finally:
                 self.teardown_directory(temp_dir)
+
+    def test_cache_populated_and_reused(self):
+        """Cache is built on first check and reused for subsequent checks in same package."""
+        import reveal.rules.maintainability.M102 as m
+
+        files = {
+            "pyproject.toml": "[project]\nname = 'testpkg'\n",
+            "testpkg/__init__.py": "",
+            "testpkg/used.py": "def helper(): pass\n",
+            "testpkg/consumer.py": "from testpkg.used import helper\n",
+            "testpkg/orphan.py": "def unused(): pass\n",
+        }
+        temp_dir = self.create_temp_directory_structure(files)
+        try:
+            rule = M102()
+            # Cache starts empty
+            self.assertEqual(len(m._import_cache), 0)
+
+            # First check — builds cache
+            rule.check(str(temp_dir / "testpkg" / "used.py"), None, files["testpkg/used.py"])
+            self.assertEqual(len(m._import_cache), 1)
+            first_cache_value = list(m._import_cache.values())[0]
+
+            # Second check with same package root — cache must not grow
+            rule.check(str(temp_dir / "testpkg" / "orphan.py"), None, files["testpkg/orphan.py"])
+            self.assertEqual(len(m._import_cache), 1, "Cache grew; second check re-scanned package")
+            self.assertIs(list(m._import_cache.values())[0], first_cache_value,
+                          "Cache entry was replaced instead of reused")
+        finally:
+            self.teardown_directory(temp_dir)
+
+    def test_cache_is_correct(self):
+        """Cached results still produce correct detections."""
+        import reveal.rules.maintainability.M102 as m
+
+        # consumer.py imports from stdlib only so 'testpkg' never ends up in
+        # all_imports (which would trigger the parent-prefix false-negative).
+        files = {
+            "pyproject.toml": "[project]\nname = 'testpkg'\n",
+            "testpkg/__init__.py": "",
+            "testpkg/used.py": "def helper(): pass\n",
+            "testpkg/consumer.py": "import os\nfrom testpkg import used\n",
+            "testpkg/orphan.py": "def unused(): pass\n",
+        }
+        temp_dir = self.create_temp_directory_structure(files)
+        try:
+            rule = M102()
+            # First call builds cache; used.py IS imported by consumer
+            d1 = rule.check(str(temp_dir / "testpkg" / "used.py"), None, files["testpkg/used.py"])
+            self.assertEqual(len(d1), 0, "used.py is imported, should not be flagged")
+
+            # Second call uses cache — orphan must still be detected
+            d2 = rule.check(str(temp_dir / "testpkg" / "orphan.py"), None, files["testpkg/orphan.py"])
+            self.assertEqual(len(d2), 1, "orphan.py should be flagged even via cache")
+            self.assertEqual(d2[0].rule_code, "M102")
+        finally:
+            self.teardown_directory(temp_dir)
 
 
 class TestM103VersionConsistency(unittest.TestCase):

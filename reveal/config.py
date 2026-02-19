@@ -260,6 +260,12 @@ class RevealConfig:
     # Class-level cache: project_root -> config instance
     _cache: Dict[Any, 'RevealConfig'] = {}  # Cache key is tuple[Path, str]
 
+    # Path-level cache: start_path -> project_root.
+    # _find_project_root traverses the filesystem; this avoids repeating that
+    # traversal for files in the same directory (called once per file, O(n) total
+    # without caching; reduced to once per unique directory with caching).
+    _root_cache: Dict[Path, Path] = {}
+
     def __init__(self, merged_config: Dict[str, Any], project_root: Optional[Path] = None):
         """Initialize with merged configuration.
 
@@ -337,7 +343,21 @@ class RevealConfig:
 
     @classmethod
     def _find_project_root(cls, start_path: Path) -> Path:
-        """Find project root (where root:true config lives or git root)."""
+        """Find project root (where root:true config lives or git root).
+
+        Results are cached by start_path so filesystem traversal runs once per
+        unique directory instead of once per file checked.
+        """
+        if start_path in cls._root_cache:
+            return cls._root_cache[start_path]
+
+        result = cls._find_project_root_uncached(start_path)
+        cls._root_cache[start_path] = result
+        return result
+
+    @classmethod
+    def _find_project_root_uncached(cls, start_path: Path) -> Path:
+        """Filesystem traversal for _find_project_root (no caching)."""
         current = start_path
 
         while current != current.parent:
