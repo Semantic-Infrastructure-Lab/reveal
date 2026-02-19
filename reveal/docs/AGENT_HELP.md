@@ -334,9 +334,10 @@ File: src/auth.py (234 lines, Python)
 
 Quality Issues (3):
 
-  B003: Mutable default argument (line 45)
-    def process_items(items=[]):  # ❌ Mutable default
-    Suggestion: Use None and initialize inside function
+  B003: @property 'headers' is 17 lines (max 15) (line 45)
+    @property
+    def headers(self): ...  # ❌ Too complex for a property
+    Suggestion: Consider converting to a regular method: def get_headers(self)
 
   C002: High cyclomatic complexity (line 67)
     Function: authenticate_user (complexity: 12)
@@ -1196,11 +1197,12 @@ reveal src/auth/handler.py authenticate_user
 reveal src/auth/handler.py --check --select B,S
 
 # Output:
-# B003: Mutable default argument (line 52)
-#   def authenticate(user, options={}):  # ❌
+# B003: @property 'options' is 18 lines (max 15) (line 52)
+#   @property
+#   def options(self): ...  # ❌ Too complex for a property
 ```
 
-**Result:** Found mutable default argument causing shared state bug.
+**Result:** Found overly complex @property causing hard-to-trace side effects.
 
 ### Example 2: "Need to refactor complex code"
 
@@ -1291,7 +1293,7 @@ git diff --name-only main | grep "\.py$" | reveal --stdin --check
 reveal src/auth.py --check
 
 # Output:
-# B003: Mutable default argument
+# B003: @property too complex (>15 lines)
 # S001: Potential SQL injection
 # C002: High complexity
 
@@ -1568,19 +1570,30 @@ except ValueError:
 - Detects directories with .py files but no __init__.py
 - Important for proper Python package structure
 
-**B003: Mutable default argument**
+**B003: @property with complex body**
+Properties should be simple getters. Threshold: 15 lines (configurable via `.reveal.yaml`).
 ```python
-# ❌ Bad - Shared across calls!
-def append_to(item, list=[]):
-    list.append(item)
-    return list
+# ❌ Bad - 20-line property with logic
+@property
+def headers(self):
+    result = {}
+    if self._override:
+        result = self._override.copy()
+    for k, v in self._base.items():
+        if k not in result:
+            result[k] = v
+    # ... more logic ...
+    return result
 
-# ✅ Good
-def append_to(item, list=None):
-    if list is None:
-        list = []
-    list.append(item)
-    return list
+# ✅ Good - simple getter
+@property
+def headers(self) -> dict:
+    return self._headers  # trivial accessor
+
+# ✅ Also good - logic moved to a regular method
+def get_headers(self) -> dict:
+    # complex logic lives here instead
+    ...
 ```
 
 **B004: @property decorator on class method**

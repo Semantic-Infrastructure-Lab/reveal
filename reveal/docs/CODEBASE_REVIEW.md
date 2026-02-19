@@ -3,7 +3,8 @@
 **Author**: TIA (The Intelligent Agent)
 **Created**: 2026-01-16
 **Session**: yafimi-0116
-**Version**: 1.0
+**Updated**: 2026-02-18 (iridescent-aurora-0218)
+**Version**: 1.1
 
 ---
 
@@ -49,10 +50,15 @@ reveal 'ast://.?name=test_*&type=function'
 # Find complex properties (code smell)
 reveal 'ast://.?decorator=property&complexity>5'
 
+# Find where a symbol is imported (type=import required — name= glob excludes imports by default)
+reveal 'ast://./src?name=*Popen*&type=import'
+
 # Find functions with too many parameters
 reveal 'ast://./src?type=function' --format=json | \
   jq '.results[] | select(.signature | split(",") | length > 5)'
 ```
+
+**Note on `name=` glob and imports**: When using a wildcard pattern like `name=*Popen*`, import declarations are excluded from results by default — you get defs and call-site elements only. To explicitly find import declarations, add `type=import`: `name=*Popen*&type=import`.
 
 **Review Insight**: `ast://` reveals **structural debt** - complex functions, god objects, naming patterns, and architectural decisions made concrete.
 
@@ -500,6 +506,11 @@ git diff --name-only origin/main | grep '\.py$' | reveal --stdin --check
 git diff --name-only origin/main | grep '\.py$' | while read f; do
   reveal "ast://$f?complexity>10"
 done
+
+# Step 5b: Understand any unfamiliar rule codes in the output
+reveal --explain B003   # Shows: threshold (15 lines), .reveal.yaml config, compliant example
+reveal --explain C901   # Shows: threshold (10 complexity), how to raise it
+reveal --rules          # List all rules if you need to look something up
 
 # Step 6: Semantic diff (what actually changed?)
 for file in $(git diff --name-only origin/main | grep '\.py$'); do
@@ -1305,6 +1316,7 @@ reveal stats://./src --format=json > perf_after.json
 | **N** | Nginx | N001-N003 (config issues) |
 | **R** | Refactoring | R913 (too many args) |
 | **S** | Security | S701 (Docker :latest) |
+| **T** | Types | T004 (missing Optional[] annotations) |
 | **U** | URLs | U501 (insecure http://) |
 | **V** | Validation | V001-V007 (schema validation) |
 
