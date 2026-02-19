@@ -1086,7 +1086,6 @@ class MySQLAdapter(ResourceAdapter):
                 }
             }
         """
-        advanced = kwargs.get('advanced', False)
         only_failures = kwargs.get('only_failures', False)
 
         # Collect all health metrics using extracted helper

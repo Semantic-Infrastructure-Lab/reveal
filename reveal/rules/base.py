@@ -80,7 +80,7 @@ class RulePrefix(Enum):
     # M5xx: TODO/FIXME comments
 
     # Infrastructure (I) - custom
-    I = "I"  # Infrastructure/config files
+    I = "I"  # Infrastructure/config files  # noqa: E741
     # I1xx: Dockerfile
     # I2xx: Docker Compose
     # I3xx: Kubernetes

@@ -237,8 +237,6 @@ class M104(BaseRule, ASTParsingMixin):
         if not values:
             return 'OTHER'
 
-        name_lower = (name or '').lower()
-
         # File extensions
         if any(str(v).startswith('.') and len(str(v)) <= 6 for v in values[:5]):
             return 'FILE_EXTENSIONS'

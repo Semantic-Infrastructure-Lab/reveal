@@ -84,7 +84,7 @@ def format_metadata_section(meta: Dict[str, Any]) -> List[str]:
     lines.append(f"**Config Files Found**: {meta['config_files_count']}")
     lines.append(f"**Environment Variables Set**: {meta['env_vars_count']}")
     if meta['custom_config_used']:
-        lines.append(f"**Custom Config**: Used (REVEAL_CONFIG)")
+        lines.append("**Custom Config**: Used (REVEAL_CONFIG)")
     lines.append("")
     return lines
 

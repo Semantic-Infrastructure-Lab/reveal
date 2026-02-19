@@ -107,7 +107,7 @@ class U502(BaseRule):
                         suggestion=(
                             f"Update to canonical URL: https://github.com/{canonical_suggestion}"
                             if canonical_suggestion else
-                            f"Check if this URL should match pyproject.toml URLs"
+                            "Check if this URL should match pyproject.toml URLs"
                         ),
                         context=line.strip()[:100]
                     ))

@@ -396,7 +396,7 @@ def _render_help_section(data: Dict[str, Any]) -> None:
     # Breadcrumbs for section views
     print("---")
     print()
-    print(f"## See Full Help")
+    print("## See Full Help")
     print(f"  -> reveal help://{adapter}")
     print()
 
@@ -413,7 +413,7 @@ def _render_help_detail_header(scheme: str, data: Dict[str, Any]) -> None:
     print(f"# {scheme}:// - {data.get('description', '')}")
     print()
     print(f"**Source:** {scheme}.py adapter (dynamic)")
-    print(f"**Type:** URI Adapter")
+    print("**Type:** URI Adapter")
     print(f"**Stability:** {stability}")
     print(f"**Access:** reveal help://{scheme}")
     print()

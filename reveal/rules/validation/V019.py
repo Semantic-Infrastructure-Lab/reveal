@@ -191,9 +191,6 @@ class V019(BaseRule):
             detection.severity = Severity.MEDIUM
             return detection
         except Exception as e:
-            # Check for common mistakes
-            exception_type = type(e).__name__
-
             # AttributeError suggests adapter is accessing attributes that don't exist
             if isinstance(e, AttributeError):
                 return self.create_detection(
@@ -208,7 +205,7 @@ class V019(BaseRule):
                         f"\n"
                         f"Error: {str(e)}"
                     ),
-                    context=f"Resource initialization crashes with AttributeError"
+                    context="Resource initialization crashes with AttributeError"
                 )
 
             # Other exceptions might be OK (e.g., file not found, database connection)

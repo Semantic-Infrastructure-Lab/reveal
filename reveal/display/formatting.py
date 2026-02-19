@@ -503,7 +503,7 @@ def _format_script_summary(script: Dict[str, Any]) -> None:
     if preview:
         print(f"    [inline] {preview[:60]}...")
     else:
-        print(f"    [inline]")
+        print("    [inline]")
 
 
 def _format_html_metadata(

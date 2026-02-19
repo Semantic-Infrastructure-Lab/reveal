@@ -18,7 +18,7 @@ def render_python_structure(data: Dict[str, Any], output_format: str) -> None:
         return
 
     # Text format
-    print(f"Python Environment")
+    print("Python Environment")
     print()
     print(f"Version:        {data['version']} ({data['implementation']})")
     print(f"Executable:     {data['executable']}")
@@ -28,11 +28,11 @@ def render_python_structure(data: Dict[str, Any], output_format: str) -> None:
     # Virtual environment
     venv = data['virtual_env']
     if venv['active']:
-        print(f"Virtual Env:    * Active")
+        print("Virtual Env:    * Active")
         print(f"  Path:         {venv['path']}")
         print(f"  Type:         {venv.get('type', 'venv')}")
     else:
-        print(f"Virtual Env:    X Not active")
+        print("Virtual Env:    X Not active")
     print()
 
     print(f"Packages:       {data['packages_count']} installed")
@@ -137,11 +137,11 @@ def _render_python_env_config(data: Dict[str, Any]) -> None:
 
     venv = data['virtual_env']
     if venv['active']:
-        print(f"Virtual Environment: * Active")
+        print("Virtual Environment: * Active")
         print(f"  Path: {venv['path']}")
         print(f"  Type: {venv.get('type', 'venv')}")
     else:
-        print(f"Virtual Environment: X Not active")
+        print("Virtual Environment: X Not active")
     print()
 
     print(f"sys.path ({data['sys_path_count']} entries):")
@@ -173,7 +173,7 @@ def _render_python_venv_status(data: Dict[str, Any]) -> None:
     print("Virtual Environment Status")
     print()
     if data['active']:
-        print(f"Status:    * Active")
+        print("Status:    * Active")
         print(f"Path:      {data['path']}")
         print(f"Type:      {data.get('type', 'venv')}")
         if 'prompt' in data:
@@ -181,7 +181,7 @@ def _render_python_venv_status(data: Dict[str, Any]) -> None:
         if 'python_version' in data:
             print(f"Python:    {data['python_version']}")
     else:
-        print(f"Status:    X Not active")
+        print("Status:    X Not active")
         print()
         print("No virtual environment detected.")
         print("Checked: VIRTUAL_ENV, sys.prefix, CONDA_DEFAULT_ENV")

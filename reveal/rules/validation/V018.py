@@ -71,7 +71,7 @@ class V018(BaseRule):
                         f"     - render_element(result, format) [if adapter supports elements]\n"
                         f"  2. Add @register_renderer({scheme.title()}Renderer) above @register_adapter('{scheme}')"
                     ),
-                    context=f"Adapter registered but unusable without renderer"
+                    context="Adapter registered but unusable without renderer"
                 ))
 
         # Also check for renderers without adapters (less critical)

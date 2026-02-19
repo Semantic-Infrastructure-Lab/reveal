@@ -61,7 +61,6 @@ class XlsxRenderer:
     @staticmethod
     def _render_sheet_data(result: dict, format: str) -> None:
         """Render sheet data as table or CSV."""
-        sheet_name = result.get('sheet_name', 'Sheet')
         rows_data = result.get('rows', [])
 
         if format == 'csv':

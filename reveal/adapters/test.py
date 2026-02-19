@@ -23,7 +23,7 @@ class TestRenderer:
             print(safe_json_dumps(result))
         else:
             # TODO: Implement text rendering
-            print(f"Test Structure:")
+            print("Test Structure:")
             print(f"  Type: {result.get('type', 'unknown')}")
             print(f"  Items: {len(result.get('items', []))}")
 

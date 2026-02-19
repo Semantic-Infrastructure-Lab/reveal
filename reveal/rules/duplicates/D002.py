@@ -178,7 +178,7 @@ class D002(BaseRule):
 
         # 3. Structural features (normalized to 0-1 range)
         features['line_count_norm'] = min(line_count / 100.0, 1.0)  # Cap at 100 lines
-        avg_len = sum(len(l) for l in normalized.splitlines()) / line_count_safe
+        avg_len = sum(len(line) for line in normalized.splitlines()) / line_count_safe
         features['avg_line_length_norm'] = min(avg_len / 80.0, 1.0)  # Cap at 80 chars
 
         # 4. Operator features (normalized by line count)

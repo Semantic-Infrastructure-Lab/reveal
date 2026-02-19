@@ -1,4 +1,4 @@
-"""V021: Detect inappropriate regex usage when tree-sitter is available.
+r"""V021: Detect inappropriate regex usage when tree-sitter is available.
 
 Validates that analyzers use tree-sitter for code parsing instead of regex.
 Regex is brittle for parsing structured code and fails on edge cases like:

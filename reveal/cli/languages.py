@@ -78,10 +78,10 @@ def list_supported_languages() -> str:
     lines.append(f"Total: {total} languages supported")
 
     # Usage hints
-    lines.append(f"\n💡 Usage:")
-    lines.append(f"  reveal file.ext                  # Analyze file")
-    lines.append(f"  reveal file.ext --explain        # See how file is analyzed (coming soon)")
-    lines.append(f"  reveal --language-info python    # Language details (coming soon)")
+    lines.append("\n💡 Usage:")
+    lines.append("  reveal file.ext                  # Analyze file")
+    lines.append("  reveal file.ext --explain        # See how file is analyzed (coming soon)")
+    lines.append("  reveal --language-info python    # Language details (coming soon)")
 
     return '\n'.join(lines)
 

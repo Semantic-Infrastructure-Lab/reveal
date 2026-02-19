@@ -22,11 +22,11 @@ def handle_scaffold_adapter(name: str, uri: str, force: bool = False) -> None:
         sys.exit(1)
 
     print(f"✓ Created adapter scaffolding for '{name}'")
-    print(f"\nFiles created:")
+    print("\nFiles created:")
     print(f"  • {result['adapter_file']}")
     print(f"  • {result['test_file']}")
     print(f"  • {result['doc_file']}")
-    print(f"\nNext steps:")
+    print("\nNext steps:")
     for step in result['next_steps']:
         print(f"  {step}")
 
@@ -48,11 +48,11 @@ def handle_scaffold_analyzer(name: str, extension: str, force: bool = False) -> 
         sys.exit(1)
 
     print(f"✓ Created analyzer scaffolding for '{name}'")
-    print(f"\nFiles created:")
+    print("\nFiles created:")
     print(f"  • {result['analyzer_file']}")
     print(f"  • {result['test_file']}")
     print(f"  • {result['doc_file']}")
-    print(f"\nNext steps:")
+    print("\nNext steps:")
     for step in result['next_steps']:
         print(f"  {step}")
 
@@ -75,10 +75,10 @@ def handle_scaffold_rule(code: str, name: str, category: str = 'custom', force: 
         sys.exit(1)
 
     print(f"✓ Created rule scaffolding for '{code}'")
-    print(f"\nFiles created:")
+    print("\nFiles created:")
     print(f"  • {result['rule_file']}")
     print(f"  • {result['test_file']}")
     print(f"  • {result['doc_file']}")
-    print(f"\nNext steps:")
+    print("\nNext steps:")
     for step in result['next_steps']:
         print(f"  {step}")

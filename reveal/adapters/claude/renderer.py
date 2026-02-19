@@ -403,7 +403,7 @@ class ClaudeRenderer(TypeDispatchRenderer):
                 else:
                     print(text)
             elif tool_use_names:
-                print(f"  (tool calls only, no text)")
+                print("  (tool calls only, no text)")
 
             print()
 

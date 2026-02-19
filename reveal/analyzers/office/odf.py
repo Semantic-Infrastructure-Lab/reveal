@@ -455,7 +455,6 @@ class OdpAnalyzer(OdfAnalyzer):
         ns = self.NAMESPACES
         office_ns = ns['office']
         draw_ns = ns['draw']
-        presentation_ns = ns['presentation']
 
         # Find presentation body
         body = self.content_tree.find(f'.//{{{office_ns}}}body')

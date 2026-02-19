@@ -23,7 +23,7 @@ class DemoRenderer:
             print(safe_json_dumps(result))
         else:
             # TODO: Implement text rendering
-            print(f"Demo Structure:")
+            print("Demo Structure:")
             print(f"  Type: {result.get('type', 'unknown')}")
             print(f"  Items: {len(result.get('items', []))}")
 

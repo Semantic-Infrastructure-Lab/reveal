@@ -180,7 +180,7 @@ class I003(BaseRule):
             Suggestion string
         """
         # Find the layer definition
-        layer = next((l for l in config.layers if l.name == layer_name), None)
+        layer = next((lyr for lyr in config.layers if lyr.name == layer_name), None)
 
         if not layer:
             return "Review architectural layer constraints in .reveal.yaml"

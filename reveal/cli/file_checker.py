@@ -360,7 +360,7 @@ def _print_text_summary(
     if total_issues > 0:
         print(f"Found {total_issues} issue{'s' if total_issues != 1 else ''} in {files_with_issues} file{'s' if files_with_issues != 1 else ''}")
     else:
-        print(f"✅ No issues found")
+        print("✅ No issues found")
 
     # Print workflow breadcrumbs
     from ..utils.breadcrumbs import print_breadcrumbs

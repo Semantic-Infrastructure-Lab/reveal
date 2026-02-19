@@ -56,7 +56,6 @@ def handle_adapters():
             help_data = adapter_class.get_help()  # type: ignore[attr-defined]
             if help_data:
                 description = help_data.get('description', '')
-                syntax = help_data.get('syntax', f'{scheme}://<resource>')
                 examples = help_data.get('examples', [])
                 example = examples[0]['uri'] if examples else ''
         except (AttributeError, TypeError):
@@ -72,9 +71,9 @@ def handle_adapters():
         lines.append("")
 
     lines.append("=" * 70)
-    lines.append(f"\n💡 Usage:")
-    lines.append(f"  reveal help://adapters          # Detailed adapter help")
-    lines.append(f"  reveal help://<adapter>         # Help for specific adapter")
+    lines.append("\n💡 Usage:")
+    lines.append("  reveal help://adapters          # Detailed adapter help")
+    lines.append("  reveal help://<adapter>         # Help for specific adapter")
 
     print('\n'.join(lines))
     sys.exit(0)
@@ -303,7 +302,7 @@ def handle_explain_rule(rule_code: str):
         for key, default in thresholds.items():
             print(f"  {key}: {default} (default)")
         print("\nConfigure in .reveal.yaml:")
-        print(f"  rules:")
+        print("  rules:")
         print(f"    {rule.code}:")
         for key, default in thresholds.items():
             print(f"      {key}: {default}  # change to suit your project")
@@ -347,7 +346,7 @@ def handle_list_schemas():
             if required:
                 print(f"    Required fields: {', '.join(required)}")
             else:
-                print(f"    Required fields: (none)")
+                print("    Required fields: (none)")
             print()
 
     print(f"Total: {len(schemas)} schemas")
@@ -720,7 +719,7 @@ def _render_batch_text_output(stats: dict, overall_status: str,
         display_results: Filtered results to display
     """
     print(f"\n{'='*60}")
-    print(f"BATCH CHECK RESULTS")
+    print("BATCH CHECK RESULTS")
     print(f"{'='*60}")
     print(f"Total URIs: {stats['total']}")
     print(f"Successful: {stats['successful']} ✓")

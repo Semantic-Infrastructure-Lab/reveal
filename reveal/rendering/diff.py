@@ -140,7 +140,7 @@ def _render_function_change(func: Dict[str, Any]) -> None:
     elif change_type == 'removed':
         print(f"  - {name}")
         _render_function_metadata(func)
-        print(f"      [REMOVED]")
+        print("      [REMOVED]")
         print()
 
     elif change_type == 'modified':
@@ -162,7 +162,7 @@ def _render_function_metadata(func: Dict[str, Any]) -> None:
 def _render_function_modifications(changes: Dict[str, Any]) -> None:
     """Render function modifications."""
     if 'signature' in changes:
-        print(f"      Signature:")
+        print("      Signature:")
         print(f"        - {changes['signature']['old']}")
         print(f"        + {changes['signature']['new']}")
 
@@ -210,7 +210,7 @@ def _render_class_change(cls: Dict[str, Any]) -> None:
         line = cls.get('line')
         if line:
             print(f"      Line {line}")
-        print(f"      [REMOVED]")
+        print("      [REMOVED]")
         print()
 
     elif change_type == 'modified':
@@ -239,7 +239,7 @@ def _render_class_modifications(changes: Dict[str, Any]) -> None:
     if 'bases' in changes:
         old_bases = changes['bases']['old']
         new_bases = changes['bases']['new']
-        print(f"      Bases:")
+        print("      Bases:")
         print(f"        - {', '.join(old_bases) if old_bases else '(none)'}")
         print(f"        + {', '.join(new_bases) if new_bases else '(none)'}")
 
@@ -380,12 +380,12 @@ def _render_diff_breadcrumbs(left: Dict[str, Any], right: Dict[str, Any],
 
     if is_code_review:
         print(f"  2. reveal stats://{path}            # Check complexity trends")
-        print(f"  3. reveal imports://. --circular    # Check for new cycles")
+        print("  3. reveal imports://. --circular    # Check for new cycles")
         print(f"  4. reveal {path} --check            # Quality check")
     else:
         print(f"Next: reveal stats://{path}      # Analyze complexity trends")
         print(f"      reveal {path} --check      # Check quality after changes")
-        print(f"      reveal help://diff         # Learn more about diff adapter")
+        print("      reveal help://diff         # Learn more about diff adapter")
 
 
 def render_diff_json(diff_result: Dict[str, Any]) -> None:

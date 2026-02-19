@@ -355,7 +355,7 @@ def _handle_quality_check(path, file_type, **kwargs):
         print(f"Next: reveal {path}              # See structure")
 
     print(f"      reveal stats://{path}      # Analyze complexity trends")
-    print(f"      reveal help://rules        # Learn about rules")
+    print("      reveal help://rules        # Learn about rules")
 
 
 def _extract_complex_elements(detections):
@@ -382,12 +382,12 @@ def _handle_directory_check(path, file_type, **kwargs):
 
     if total_issues > 0:
         print(f"  1. Fix the {total_issues} issues above")
-        print(f"  2. reveal diff://git://HEAD/.:.     # Review all changes")
+        print("  2. reveal diff://git://HEAD/.:.     # Review all changes")
         print(f"  3. reveal stats://{path}            # Check complexity trends")
     else:
         print(f"  ✅ All {files_checked} files clean")
-        print(f"  1. reveal diff://git://HEAD/.:.     # Review staged changes")
-        print(f"  2. git commit                       # Ready to commit")
+        print("  1. reveal diff://git://HEAD/.:.     # Review staged changes")
+        print("  2. git commit                       # Ready to commit")
 
 
 def _handle_code_review(path, file_type, **kwargs):
@@ -395,7 +395,7 @@ def _handle_code_review(path, file_type, **kwargs):
     print()
     print("Code Review Workflow:")
     print(f"  1. reveal stats://{path}            # Check complexity trends")
-    print(f"  2. reveal imports://. --circular    # Check for new cycles")
+    print("  2. reveal imports://. --circular    # Check for new cycles")
     print(f"  3. reveal {path} --check            # Quality check changed files")
 
 

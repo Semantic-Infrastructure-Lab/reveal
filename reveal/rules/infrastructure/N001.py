@@ -73,7 +73,7 @@ class N001(BaseRule):
                         file_path=file_path,
                         line=line,
                         message=f"Upstream '{upstream_name}' shares backend {backend} with '{first_upstream}'",
-                        suggestion=f"Verify this is intentional. Different upstreams usually need different backends.",
+                        suggestion="Verify this is intentional. Different upstreams usually need different backends.",
                         context=f"Both '{first_upstream}' and '{upstream_name}' → {backend}"
                     ))
 

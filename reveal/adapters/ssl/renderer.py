@@ -159,7 +159,7 @@ class SSLRenderer(TypeDispatchRenderer):
     @staticmethod
     def _render_ssl_nginx_domains(result: dict) -> None:
         """Render SSL domains extracted from nginx config."""
-        print(f"SSL Domains from Nginx Config")
+        print("SSL Domains from Nginx Config")
         print(f"Source: {result['source']}")
         print(f"Files Processed: {result['files_processed']}")
         print(f"Domains Found: {result['domain_count']}")

@@ -84,10 +84,10 @@ class V022(BaseRule):
             # Check if it exists (file or directory)
             if not check_path.exists():
                 detections.append(self.create_detection(
-                    file_path=f"reveal/cli/handlers.py",
+                    file_path="reveal/cli/handlers.py",
                     line=1,
                     message=f"CLI handler references non-existent path: {path_part}",
-                    suggestion=f"Update handler path or create file/directory",
+                    suggestion="Update handler path or create file/directory",
                     context=f"Path: reveal/{path_part}"
                 ))
 
@@ -126,7 +126,7 @@ class V022(BaseRule):
                     file_path="MANIFEST.in",
                     line=line_num,
                     message=f"MANIFEST.in references non-existent file: {path}",
-                    suggestion=f"Update path to correct location or remove line",
+                    suggestion="Update path to correct location or remove line",
                     context=f"Line: {line}"
                 ))
 

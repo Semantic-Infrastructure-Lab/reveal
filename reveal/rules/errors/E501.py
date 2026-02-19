@@ -80,7 +80,7 @@ class E501(BaseRule):
                     rule_code=self.code,
                     message=f"{self.message} ({line_length} > {max_length} characters, {excess} over)",
                     column=max_length + 1,
-                    suggestion=f"Break line into multiple lines or refactor",
+                    suggestion="Break line into multiple lines or refactor",
                     context=line[:80] + '...' if len(line) > 80 else line,
                     severity=self.severity,
                     category=self.category

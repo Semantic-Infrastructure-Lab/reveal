@@ -46,7 +46,7 @@ def _render_config_overview(meta: Dict[str, Any]) -> None:
     print(f"  Config Files Found: {meta['config_files_count']}")
     print(f"  Environment Variables Set: {meta['env_vars_count']}")
     if meta['custom_config_used']:
-        print(f"  Custom Config: Used (REVEAL_CONFIG)")
+        print("  Custom Config: Used (REVEAL_CONFIG)")
     print()
 
 
@@ -180,7 +180,7 @@ def _render_rules_section(data: Dict[str, Any]) -> None:
 def _render_metadata_section(data: Dict[str, Any]) -> None:
     """Render metadata section of reveal structure."""
     metadata = data.get('metadata', {})
-    print(f"\nMetadata:")
+    print("\nMetadata:")
     print(f"  Root: {metadata.get('root')}")
 
     # Build total summary dynamically

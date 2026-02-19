@@ -114,7 +114,7 @@ class M105(BaseRule):
                     context={
                         'handler': handler,
                         'issue': 'not_called',
-                        'fix': f"Call in main.py or remove import",
+                        'fix': "Call in main.py or remove import",
                         'guide': 'reveal/docs/CLI_INTEGRATION_GUIDE.md'
                     }
                 ))

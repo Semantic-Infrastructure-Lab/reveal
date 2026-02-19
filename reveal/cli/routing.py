@@ -528,7 +528,7 @@ def handle_adapter(adapter_class: type, scheme: str, resource: str,
     if not renderer_class:
         # This shouldn't happen if adapter is properly registered
         print(f"Error: No renderer registered for scheme '{scheme}'", file=sys.stderr)
-        print(f"This is a bug - adapter is registered but renderer is not.", file=sys.stderr)
+        print("This is a bug - adapter is registered but renderer is not.", file=sys.stderr)
         sys.exit(1)
 
     # Use generic handler for all adapters
@@ -644,7 +644,7 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
                 if path.suffix.lower() in ('.md', '.markdown'):
                     element = args.section
                 else:
-                    print(f"Error: --section only works with markdown files (.md, .markdown)", file=sys.stderr)
+                    print("Error: --section only works with markdown files (.md, .markdown)", file=sys.stderr)
                     print(f"For other files, use: reveal {path_str} \"element_name\"", file=sys.stderr)
                     sys.exit(1)
             handle_file(str(path), element, args.meta, args.format, args)

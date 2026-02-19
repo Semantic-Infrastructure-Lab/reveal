@@ -105,13 +105,13 @@ class V020(BaseRule):
                 rule_code=self.code,
                 message=f"Adapter '{scheme}' missing get_element() but renderer has render_element()",
                 suggestion=(
-                    f"Add get_element() method to adapter:\n"
-                    f"  def get_element(self, element_name: str) -> Optional[Dict[str, Any]]:\n"
-                    f"      \"\"\"Get specific element by name.\"\"\"\n"
-                    f"      # Return element data or None if not found\n"
-                    f"      return None\n"
-                    f"\n"
-                    f"Renderer has render_element, so generic handler expects get_element."
+                    "Add get_element() method to adapter:\n"
+                    "  def get_element(self, element_name: str) -> Optional[Dict[str, Any]]:\n"
+                    "      \"\"\"Get specific element by name.\"\"\"\n"
+                    "      # Return element data or None if not found\n"
+                    "      return None\n"
+                    "\n"
+                    "Renderer has render_element, so generic handler expects get_element."
                 ),
                 context="Renderer supports elements but adapter doesn't implement get_element",
                 severity=Severity.HIGH,
@@ -126,12 +126,12 @@ class V020(BaseRule):
                 rule_code=self.code,
                 message=f"Adapter '{scheme}' missing get_structure() method",
                 suggestion=(
-                    f"Add get_structure() method to adapter:\n"
-                    f"  def get_structure(self) -> Dict[str, Any]:\n"
-                    f"      \"\"\"Get complete structure.\"\"\"\n"
-                    f"      return {{}}\n"
-                    f"\n"
-                    f"All adapters should implement get_structure()."
+                    "Add get_structure() method to adapter:\n"
+                    "  def get_structure(self) -> Dict[str, Any]:\n"
+                    "      \"\"\"Get complete structure.\"\"\"\n"
+                    "      return {}\n"
+                    "\n"
+                    "All adapters should implement get_structure()."
                 ),
                 context="Adapter missing required get_structure() method",
                 severity=Severity.HIGH,

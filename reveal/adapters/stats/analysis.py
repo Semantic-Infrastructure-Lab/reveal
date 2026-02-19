@@ -89,7 +89,7 @@ def analyze_file(file_path: Path, calculate_file_stats_func) -> Optional[Dict[st
         stats = calculate_file_stats_func(file_path, structure_dict, analyzer.content)
         return stats
 
-    except Exception as e:
+    except Exception:
         # Silently skip files that can't be analyzed
         return None
 

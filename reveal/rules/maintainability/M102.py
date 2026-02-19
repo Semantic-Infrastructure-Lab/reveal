@@ -200,9 +200,9 @@ class M102(BaseRule):
                     line=1,
                     message=f"Module '{module_name}' is not imported anywhere in the package",
                     suggestion=(
-                        f"This file may be dead code. If intentional (entry point, plugin), "
-                        f"add to __all__ in __init__.py or rename to indicate purpose. "
-                        f"Otherwise, consider removing this orphaned module."
+                        "This file may be dead code. If intentional (entry point, plugin), "
+                        "add to __all__ in __init__.py or rename to indicate purpose. "
+                        "Otherwise, consider removing this orphaned module."
                     ),
                     context=f"Module: {module_name}"
                 ))

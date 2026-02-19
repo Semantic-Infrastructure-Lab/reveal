@@ -142,10 +142,10 @@ class DuplicateFeatureExtractor(ABC):
         features['line_count'] = len(lines)
 
         if lines:
-            features['avg_line_length'] = sum(len(l) for l in lines) / len(lines)
+            features['avg_line_length'] = sum(len(ln) for ln in lines) / len(lines)
 
             # Nesting depth (indentation-based, universal)
-            indents = [len(l) - len(l.lstrip()) for l in lines if l.strip()]
+            indents = [len(ln) - len(ln.lstrip()) for ln in lines if ln.strip()]
             features['max_nesting'] = max(indents) if indents else 0
             features['avg_nesting'] = sum(indents) / len(indents) if indents else 0
 
@@ -392,7 +392,7 @@ class DuplicateDetectionFeedback:
         if abs(suggested - self.config.threshold) < 0.05:
             return self.config.threshold, "Current threshold is optimal"
 
-        return suggested, f"Based on 80th percentile of distribution"
+        return suggested, "Based on 80th percentile of distribution"
 
     def generate_report(self) -> str:
         """Generate comprehensive feedback report."""

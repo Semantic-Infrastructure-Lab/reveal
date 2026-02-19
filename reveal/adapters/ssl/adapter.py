@@ -273,7 +273,7 @@ class SSLAdapter(ResourceAdapter):
                 domains = analyzer.extract_ssl_domains()
                 all_domains.update(domains)
                 files_processed.append(path)
-            except Exception as e:
+            except Exception:
                 # Skip files that can't be parsed
                 pass
 
@@ -365,7 +365,6 @@ class SSLAdapter(ResourceAdapter):
             Element data or None if not found
         """
         self._fetch_certificate()
-        cert = self._certificate
 
         element_handlers = {
             'san': self._get_san,
@@ -721,7 +720,6 @@ class SSLAdapter(ResourceAdapter):
         # Get SSL cert for this domain
         try:
             cert_result = check_ssl_health(domain, 443)
-            cert = cert_result.get('certificate', {})
         except Exception as e:
             return {
                 'domain': domain,

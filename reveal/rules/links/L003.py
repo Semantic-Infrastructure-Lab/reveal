@@ -183,10 +183,9 @@ class L003(BaseRule):
         """
         # Split path and anchor
         if '#' in url:
-            path_part, anchor = url.split('#', 1)
+            path_part = url.split('#', 1)[0]
         else:
             path_part = url
-            anchor = None
 
         # Remove leading slash
         relative_path = path_part.lstrip('/')

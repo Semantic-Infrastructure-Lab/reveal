@@ -65,9 +65,6 @@ class V017(BaseRule):
         if 'treesitter.py' not in file_path:
             return []
 
-        # Extract defined node types
-        defined_types = self._extract_node_types(content)
-
         # Check coverage for critical node categories
         detections: List[Detection] = []
 

@@ -56,6 +56,6 @@ def render_env_variable(data: Dict[str, Any], output_format: str) -> None:
     print(f"Category: {data['category']}")
     print(f"Value: {data['value']}")
     if data['sensitive']:
-        print(f"Warning: Sensitive - This variable appears to contain sensitive data")
-        print(f"    Use --show-secrets to display actual value")
+        print("Warning: Sensitive - This variable appears to contain sensitive data")
+        print("    Use --show-secrets to display actual value")
     print(f"Length: {data['length']} characters")

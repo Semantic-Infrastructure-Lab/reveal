@@ -122,9 +122,9 @@ def run_schema_validation(
 
     # Check if file is markdown (schema validation is for markdown front matter)
     if not path.lower().endswith(('.md', '.markdown')):
-        print(f"Warning: Schema validation is designed for markdown files", file=sys.stderr)
+        print("Warning: Schema validation is designed for markdown files", file=sys.stderr)
         print(f"         File '{path}' does not appear to be markdown", file=sys.stderr)
-        print(f"         Continuing anyway...\n", file=sys.stderr)
+        print("         Continuing anyway...\n", file=sys.stderr)
 
     # Load schema
     schema = load_schema(schema_name)
