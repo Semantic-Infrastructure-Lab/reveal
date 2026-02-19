@@ -83,43 +83,42 @@ class LayerRule:
         Returns:
             Tuple of (is_violation, reason). If no violation, reason is None.
         """
-        # Only check if source file is in this layer
         if not self.matches_file(from_file, project_root):
             return False, None
 
-        # Normalize target path relative to project root if provided
-        if project_root:
-            try:
-                # Make path relative to project root
-                to_relative = to_file.relative_to(project_root)
-                to_module = str(to_relative) + "/"  # Add trailing slash for prefix matching
-            except ValueError:
-                # to_file is not under project_root, skip it
-                return False, None
-        else:
-            to_module = str(to_file) + "/"
+        to_module = self._normalize_to_module(to_file, project_root)
+        if to_module is None:
+            return False, None
 
         # Check deny list first (explicit denials take precedence)
         for deny_pattern in self.deny_imports:
-            # Normalize pattern by ensuring it ends with /
             pattern = deny_pattern if deny_pattern.endswith("/") else deny_pattern + "/"
             if to_module.startswith(pattern):
                 return True, f"{self.name} layer cannot import from {deny_pattern}"
 
         # If allow_imports is specified, target must match one of them
-        if self.allow_imports:
-            allowed = False
-            for allow_pattern in self.allow_imports:
-                pattern = allow_pattern if allow_pattern.endswith("/") else allow_pattern + "/"
-                if to_module.startswith(pattern):
-                    allowed = True
-                    break
-
-            if not allowed:
-                allowed_str = ", ".join(self.allow_imports)
-                return True, f"{self.name} layer can only import from: {allowed_str}"
+        if self.allow_imports and not self._is_target_allowed(to_module):
+            allowed_str = ", ".join(self.allow_imports)
+            return True, f"{self.name} layer can only import from: {allowed_str}"
 
         return False, None
+
+    def _normalize_to_module(self, to_file: Path, project_root: Optional[Path]) -> Optional[str]:
+        """Return *to_file* as a slash-terminated module path, or None if outside project root."""
+        if project_root:
+            try:
+                return str(to_file.relative_to(project_root)) + "/"
+            except ValueError:
+                return None
+        return str(to_file) + "/"
+
+    def _is_target_allowed(self, to_module: str) -> bool:
+        """Return True if *to_module* matches at least one pattern in allow_imports."""
+        for allow_pattern in self.allow_imports:
+            pattern = allow_pattern if allow_pattern.endswith("/") else allow_pattern + "/"
+            if to_module.startswith(pattern):
+                return True
+        return False
 
 
 @dataclass

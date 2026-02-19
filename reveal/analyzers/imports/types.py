@@ -110,48 +110,44 @@ class ImportGraph:
             List of unused import statements
         """
         unused = []
-
         for file_path, imports in self.files.items():
             symbols_used = symbols_by_file.get(file_path, set())
-
             for stmt in imports:
-                # Skip imports explicitly marked as intentional (# noqa comment)
-                if '# noqa' in stmt.source_line or '# type: ignore' in stmt.source_line:
+                if self._should_skip_import(stmt):
                     continue
-
-                # Skip TYPE_CHECKING imports - they're type-checking only
-                if stmt.is_type_checking:
-                    continue
-
-                # Check if any imported name is used
-                if stmt.import_type == 'star_import':
-                    # Can't reliably detect unused star imports
-                    continue
-
-                if stmt.imported_names:
-                    # from X import Y, Z - check if Y or Z (or their aliases) are used
-                    # Handle "from X import Y as Z" by extracting alias if present
-                    used_names = []
-                    for name in stmt.imported_names:
-                        # Handle "Name as Alias" format
-                        if ' as ' in name:
-                            _, alias = name.split(' as ', 1)
-                            check_name = alias.strip()
-                        else:
-                            check_name = name
-
-                        if check_name in symbols_used:
-                            used_names.append(check_name)
-
-                    if not used_names:
-                        unused.append(stmt)
-                else:
-                    # import X - check if X (or its alias) is used
-                    check_name = stmt.alias or stmt.module_name.split('.')[0]
-                    if check_name not in symbols_used:
-                        unused.append(stmt)
-
+                if not self._is_import_used(stmt, symbols_used):
+                    unused.append(stmt)
         return unused
+
+    @staticmethod
+    def _should_skip_import(stmt: 'ImportStatement') -> bool:
+        """Return True for imports that should never be flagged as unused."""
+        return (
+            '# noqa' in stmt.source_line
+            or '# type: ignore' in stmt.source_line
+            or stmt.is_type_checking
+            or stmt.import_type == 'star_import'  # can't reliably detect
+        )
+
+    @staticmethod
+    def _resolve_import_alias(name: str) -> str:
+        """Return the effective name for a possibly aliased import ('X as Y' → 'Y')."""
+        if ' as ' in name:
+            _, alias = name.split(' as ', 1)
+            return alias.strip()
+        return name
+
+    def _is_import_used(self, stmt: 'ImportStatement', symbols_used: Set[str]) -> bool:
+        """Return True if at least one name from *stmt* appears in *symbols_used*."""
+        if stmt.imported_names:
+            # from X import Y, Z — check Y or Z (or their aliases)
+            return any(
+                self._resolve_import_alias(name) in symbols_used
+                for name in stmt.imported_names
+            )
+        # import X — check X (or its alias)
+        check_name = stmt.alias or stmt.module_name.split('.')[0]
+        return check_name in symbols_used
 
     def get_import_count(self) -> int:
         """Get total number of import statements."""
