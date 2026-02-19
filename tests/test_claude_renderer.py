@@ -691,5 +691,545 @@ class TestClaudeRenderer:
         assert 'Error: Test error message' in captured.err
 
 
+class TestClaudeThinkingRenderer:
+    """Tests for _render_claude_thinking."""
+
+    def test_basic_output(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'my-session',
+            'thinking_block_count': 2,
+            'total_tokens_estimate': 150,
+            'blocks': [
+                {
+                    'message_index': 1,
+                    'char_count': 300,
+                    'token_estimate': 75,
+                    'timestamp': '2026-01-01T10:00:00.000Z',
+                    'content': 'I am thinking about the problem...',
+                },
+                {
+                    'message_index': 3,
+                    'char_count': 300,
+                    'token_estimate': 75,
+                    'timestamp': '2026-01-01T10:01:00.000Z',
+                    'content': 'Further analysis needed...',
+                },
+            ],
+        }
+        ClaudeRenderer._render_claude_thinking(result)
+        out = capsys.readouterr().out
+
+        assert 'my-session' in out
+        assert 'Blocks: 2' in out
+        assert '~150 tokens' in out
+        assert 'I am thinking about the problem' in out
+        assert 'Further analysis needed' in out
+
+    def test_long_content_truncated(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        long_content = 'x' * 1000
+        result = {
+            'session': 'sess',
+            'thinking_block_count': 1,
+            'total_tokens_estimate': 250,
+            'blocks': [{
+                'message_index': 0,
+                'char_count': 1000,
+                'token_estimate': 250,
+                'timestamp': None,
+                'content': long_content,
+            }],
+        }
+        ClaudeRenderer._render_claude_thinking(result)
+        out = capsys.readouterr().out
+
+        assert '200 more chars' in out
+        assert '--format=json' in out
+
+    def test_no_blocks(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'sess',
+            'thinking_block_count': 0,
+            'total_tokens_estimate': 0,
+            'blocks': [],
+        }
+        ClaudeRenderer._render_claude_thinking(result)
+        out = capsys.readouterr().out
+
+        assert 'Blocks: 0' in out
+
+    def test_timestamp_formatted(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'sess',
+            'thinking_block_count': 1,
+            'total_tokens_estimate': 10,
+            'blocks': [{
+                'message_index': 0,
+                'char_count': 4,
+                'token_estimate': 1,
+                'timestamp': '2026-01-15T09:30:00.000Z',
+                'content': 'ok',
+            }],
+        }
+        ClaudeRenderer._render_claude_thinking(result)
+        out = capsys.readouterr().out
+        # Timestamp should show 2026-01-15 09:30
+        assert '2026-01-15' in out
+
+
+class TestClaudeUserMessagesRenderer:
+    """Tests for _render_claude_user_messages."""
+
+    def test_basic_output(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'my-session',
+            'message_count': 2,
+            'messages': [
+                {
+                    'message_index': 0,
+                    'timestamp': '2026-01-01T10:00:00.000Z',
+                    'content': [{'type': 'text', 'text': 'Hello, help me with this.'}],
+                },
+                {
+                    'message_index': 2,
+                    'timestamp': '2026-01-01T10:02:00.000Z',
+                    'content': [
+                        {'type': 'tool_result', 'tool_use_id': 't1', 'content': 'result'},
+                    ],
+                },
+            ],
+        }
+        ClaudeRenderer._render_claude_user_messages(result)
+        out = capsys.readouterr().out
+
+        assert 'my-session' in out
+        assert '2 total' in out
+        assert 'Hello, help me with this.' in out
+        assert '[1 tool result(s)]' in out
+
+    def test_first_message_full_text(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        long_text = 'A' * 1300
+        result = {
+            'session': 's',
+            'message_count': 1,
+            'messages': [{
+                'message_index': 0,
+                'timestamp': None,
+                'content': [{'type': 'text', 'text': long_text}],
+            }],
+        }
+        ClaudeRenderer._render_claude_user_messages(result)
+        out = capsys.readouterr().out
+
+        # 1300 chars > 1200 limit — should show truncation hint
+        assert '100 more chars' in out
+
+    def test_subsequent_messages_shorter_limit(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        long_text = 'B' * 400
+        result = {
+            'session': 's',
+            'message_count': 2,
+            'messages': [
+                {
+                    'message_index': 0,
+                    'timestamp': None,
+                    'content': [{'type': 'text', 'text': 'first msg'}],
+                },
+                {
+                    'message_index': 2,
+                    'timestamp': None,
+                    'content': [{'type': 'text', 'text': long_text}],
+                },
+            ],
+        }
+        ClaudeRenderer._render_claude_user_messages(result)
+        out = capsys.readouterr().out
+
+        # 400 chars > 300 limit for subsequent messages
+        assert '100 more chars' in out
+
+    def test_no_content_message(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 's',
+            'message_count': 1,
+            'messages': [{
+                'message_index': 0,
+                'timestamp': None,
+                'content': [],
+            }],
+        }
+        ClaudeRenderer._render_claude_user_messages(result)
+        out = capsys.readouterr().out
+
+        assert '[no text content]' in out
+
+    def test_multiple_tool_results_counted(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 's',
+            'message_count': 1,
+            'messages': [{
+                'message_index': 2,
+                'timestamp': None,
+                'content': [
+                    {'type': 'tool_result', 'tool_use_id': 't1', 'content': 'r1'},
+                    {'type': 'tool_result', 'tool_use_id': 't2', 'content': 'r2'},
+                    {'type': 'tool_result', 'tool_use_id': 't3', 'content': 'r3'},
+                ],
+            }],
+        }
+        ClaudeRenderer._render_claude_user_messages(result)
+        out = capsys.readouterr().out
+
+        assert '[3 tool result(s)]' in out
+
+
+class TestClaudeAssistantMessagesRenderer:
+    """Tests for _render_claude_assistant_messages."""
+
+    def test_basic_text_output(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'my-session',
+            'message_count': 1,
+            'messages': [{
+                'message_index': 1,
+                'timestamp': '2026-01-01T10:01:00.000Z',
+                'content': [{'type': 'text', 'text': 'Here is my answer.'}],
+            }],
+        }
+        ClaudeRenderer._render_claude_assistant_messages(result)
+        out = capsys.readouterr().out
+
+        assert 'my-session' in out
+        assert 'Here is my answer.' in out
+
+    def test_thinking_metadata_shown(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 's',
+            'message_count': 1,
+            'messages': [{
+                'message_index': 1,
+                'timestamp': None,
+                'content': [
+                    {'type': 'thinking', 'thinking': 'internal thought'},
+                    {'type': 'text', 'text': 'response text'},
+                ],
+            }],
+        }
+        ClaudeRenderer._render_claude_assistant_messages(result)
+        out = capsys.readouterr().out
+
+        assert '[thinking' in out
+        assert 'response text' in out
+
+    def test_tool_use_metadata_shown(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 's',
+            'message_count': 1,
+            'messages': [{
+                'message_index': 1,
+                'timestamp': None,
+                'content': [
+                    {'type': 'tool_use', 'name': 'Bash', 'id': 't1', 'input': {}},
+                ],
+            }],
+        }
+        ClaudeRenderer._render_claude_assistant_messages(result)
+        out = capsys.readouterr().out
+
+        assert 'tools: Bash' in out
+
+    def test_long_text_truncated(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        long_text = 'C' * 700
+        result = {
+            'session': 's',
+            'message_count': 1,
+            'messages': [{
+                'message_index': 1,
+                'timestamp': None,
+                'content': [{'type': 'text', 'text': long_text}],
+            }],
+        }
+        ClaudeRenderer._render_claude_assistant_messages(result)
+        out = capsys.readouterr().out
+
+        assert '100 more chars' in out
+        assert '/message/1' in out
+
+    def test_empty_messages_skipped(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 's',
+            'message_count': 1,
+            'messages': [{
+                'message_index': 1,
+                'timestamp': None,
+                'content': [],
+            }],
+        }
+        ClaudeRenderer._render_claude_assistant_messages(result)
+        out = capsys.readouterr().out
+
+        # Empty message should be silently skipped
+        assert 'msg 1' not in out
+
+    def test_tool_only_message_shows_hint(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 's',
+            'message_count': 1,
+            'messages': [{
+                'message_index': 1,
+                'timestamp': None,
+                'content': [
+                    {'type': 'tool_use', 'name': 'Read', 'id': 't1', 'input': {}},
+                ],
+            }],
+        }
+        ClaudeRenderer._render_claude_assistant_messages(result)
+        out = capsys.readouterr().out
+
+        assert 'tool calls only' in out
+
+
+class TestClaudeMessageRenderer:
+    """Tests for _render_claude_message."""
+
+    def test_renders_text_content(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'sess',
+            'message_index': 5,
+            'message_type': 'user',
+            'timestamp': '2026-01-01T10:00:00.000Z',
+            'text': 'this is the message text',
+            'message': {},
+        }
+        ClaudeRenderer._render_claude_message(result)
+        out = capsys.readouterr().out
+
+        assert 'Message 5' in out
+        assert 'user' in out
+        assert 'this is the message text' in out
+
+    def test_renders_error(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'sess',
+            'error': 'Message index 999 out of range (0-12)',
+            'message_index': 999,
+        }
+        ClaudeRenderer._render_claude_message(result)
+        out = capsys.readouterr().out
+
+        assert 'Error:' in out
+        assert 'out of range' in out
+
+    def test_fallback_to_block_summary(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'sess',
+            'message_index': 1,
+            'message_type': 'assistant',
+            'timestamp': None,
+            'text': '',
+            'message': {
+                'content': [
+                    {'type': 'tool_use', 'name': 'Bash'},
+                    {'type': 'thinking', 'thinking': 'I am thinking...'},
+                ]
+            },
+        }
+        ClaudeRenderer._render_claude_message(result)
+        out = capsys.readouterr().out
+
+        assert '[tool_use: Bash]' in out
+        assert '[thinking:' in out
+
+    def test_str_content_fallback(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'sess',
+            'message_index': 0,
+            'message_type': 'user',
+            'timestamp': None,
+            'text': '',
+            'message': {'content': 'bare string content'},
+        }
+        ClaudeRenderer._render_claude_message(result)
+        out = capsys.readouterr().out
+
+        assert 'bare string content' in out
+
+    def test_timestamp_formatted(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'sess',
+            'message_index': 0,
+            'message_type': 'user',
+            'timestamp': '2026-01-15T09:30:00.000Z',
+            'text': 'hi',
+            'message': {},
+        }
+        ClaudeRenderer._render_claude_message(result)
+        out = capsys.readouterr().out
+
+        assert '2026-01-15' in out
+
+
+class TestClaudeSearchResultsRenderer:
+    """Tests for _render_claude_search_results."""
+
+    def test_basic_output(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'my-session',
+            'term': 'path traversal',
+            'match_count': 2,
+            'matches': [
+                {
+                    'message_index': 1,
+                    'role': 'user',
+                    'block_type': 'text',
+                    'timestamp': '2026-01-01 10:00',
+                    'excerpt': '...vulnerable to path traversal via the upload...',
+                },
+                {
+                    'message_index': 3,
+                    'role': 'assistant',
+                    'block_type': 'thinking',
+                    'timestamp': '2026-01-01 10:01',
+                    'excerpt': 'path traversal is a serious issue',
+                },
+            ],
+        }
+        ClaudeRenderer._render_claude_search_results(result)
+        out = capsys.readouterr().out
+
+        assert '"path traversal"' in out
+        assert 'my-session' in out
+        assert 'Matches: 2' in out
+        assert 'user' in out
+        assert 'assistant' in out
+        assert 'path traversal' in out
+
+    def test_no_matches(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'sess',
+            'term': 'xyzzy',
+            'match_count': 0,
+            'matches': [],
+        }
+        ClaudeRenderer._render_claude_search_results(result)
+        out = capsys.readouterr().out
+
+        assert 'Matches: 0' in out
+        assert '"xyzzy"' in out
+
+    def test_long_excerpt_truncated(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        long_excerpt = 'word ' * 60  # >200 chars
+        result = {
+            'session': 'sess',
+            'term': 'word',
+            'match_count': 1,
+            'matches': [{
+                'message_index': 0,
+                'role': 'user',
+                'block_type': 'text',
+                'timestamp': '',
+                'excerpt': long_excerpt,
+            }],
+        }
+        ClaudeRenderer._render_claude_search_results(result)
+        out = capsys.readouterr().out
+
+        assert '...' in out
+
+    def test_more_than_30_shown(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        matches = [
+            {
+                'message_index': i,
+                'role': 'user',
+                'block_type': 'text',
+                'timestamp': '',
+                'excerpt': f'match {i}',
+            }
+            for i in range(35)
+        ]
+        result = {
+            'session': 'sess',
+            'term': 'match',
+            'match_count': 35,
+            'matches': matches,
+        }
+        ClaudeRenderer._render_claude_search_results(result)
+        out = capsys.readouterr().out
+
+        assert '... and 5 more matches' in out
+
+    def test_newlines_in_excerpt_cleaned(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+
+        result = {
+            'session': 'sess',
+            'term': 'bug',
+            'match_count': 1,
+            'matches': [{
+                'message_index': 0,
+                'role': 'assistant',
+                'block_type': 'text',
+                'timestamp': '',
+                'excerpt': 'line one\nline two\nbug found\nline four',
+            }],
+        }
+        ClaudeRenderer._render_claude_search_results(result)
+        out = capsys.readouterr().out
+
+        # Newlines in excerpt should be replaced with spaces for compact display
+        # The excerpt line should not have embedded newlines causing multi-line output
+        # within a single match entry
+        lines = [l for l in out.split('\n') if 'line one' in l or 'line two' in l]
+        # Should all be on the same line
+        assert len(lines) == 1
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

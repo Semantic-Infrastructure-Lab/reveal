@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **claude:// content views** - `/user`, `/assistant`, `/thinking`, `/message/<n>` routes now render actual content instead of falling through to the fallback `[list with N items]` renderer (commit 78505b2)
+  - `/user` — first message as full prompt text (1200 char limit), subsequent turns as `[N tool result(s)]`
+  - `/assistant` — text blocks only with `[thinking]`/`[tools: Bash]` metadata per message; truncates at 600 chars with `/message/<n>` pointer
+  - `/thinking` — all thinking blocks with content preview (800 chars), char count, token estimate
+  - `/message/<n>` — single message by index, full text with block-level fallback for non-text content
+- **claude:// ?search=** - `reveal "claude://session/name?search=term"` searches all content: text blocks, thinking blocks, tool inputs; returns matches with role/block_type/timestamp/excerpt context windows (commit 78505b2)
+- **String content normalization** - fixed char-iteration bug where initial user prompt stored as bare `str` would produce one output block per character in `/user`, `/assistant`, and `?search=` routes; content is now normalized to `[{type:text, text:...}]` before iteration (commit 78505b2)
+- **claude:// adapter guides** - Quick Start, Elements Reference, and Query Params sections updated in `CLAUDE_ADAPTER_GUIDE.md`; inline `_get_help_examples` and `_get_help_workflows` updated with new examples (commit f9ae167)
+
+### Tests
+- Added 67 unit tests for `analysis/messages.py` covering `_extract_text`, `_content_to_blocks`, `_find_excerpt`, `search_messages`, `filter_by_role` str-content fix, `get_thinking_blocks`, `get_message` (new file: `tests/adapters/test_claude_analysis.py`)
+- Added 27 renderer tests for 5 new renderers: `_render_claude_thinking`, `_render_claude_user_messages`, `_render_claude_assistant_messages`, `_render_claude_message`, `_render_claude_search_results`
+
 ### Fixed
 - **ast:// OR logic** - `name=*run*|*process*` now returns the union of matches for all fields (was only `type=` field) (commit 0f861b2)
 - **ast:// import noise** - `name=*X*` glob no longer returns import declarations; use explicit `type=import` to find imports (commit 0f861b2)

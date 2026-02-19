@@ -401,16 +401,24 @@ class ClaudeAdapter(ResourceAdapter):
                     'description': 'Filter by message role',
                     'values': ['user', 'assistant'],
                     'examples': ['?role=user']
+                },
+                'search': {
+                    'type': 'string',
+                    'description': 'Search all message content (text, thinking, tool inputs) for a term (case-insensitive)',
+                    'examples': ['?search=path traversal', '?search=FileNotFoundError']
                 }
             },
             'elements': {
                 'workflow': 'Chronological sequence of tool operations',
                 'files': 'All files read, written, or edited',
                 'tools': 'All tool usage with success rates',
-                'thinking': 'All thinking blocks',
+                'thinking': 'All thinking blocks with content previews and token estimates',
                 'errors': 'All errors and exceptions',
                 'timeline': 'Chronological message timeline',
-                'context': 'Context window changes over session'
+                'context': 'Context window changes over session',
+                'user': 'User messages: initial prompt full text + tool-result turn summaries',
+                'assistant': 'Assistant messages: text blocks only (skips thinking/tool_use)',
+                'message/<n>': 'Single message by zero-based index with full content'
             },
             'cli_flags': [],
             'supports_batch': False,
@@ -544,6 +552,36 @@ class ClaudeAdapter(ResourceAdapter):
                     'description': 'Session summary with key events',
                     'query_param': '?summary',
                     'output_type': 'claude_overview'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118/user',
+                    'description': 'User messages: initial prompt + tool-result turn summaries',
+                    'element': 'user',
+                    'output_type': 'claude_user_messages'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118/assistant',
+                    'description': 'Assistant messages: text responses (thinking/tools hidden)',
+                    'element': 'assistant',
+                    'output_type': 'claude_assistant_messages'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118/thinking',
+                    'description': 'All thinking blocks with content and token estimates',
+                    'element': 'thinking',
+                    'output_type': 'claude_thinking'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118/message/5',
+                    'description': 'Read a specific message by zero-based index',
+                    'element': 'message/<n>',
+                    'output_type': 'claude_message'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118?search=path traversal',
+                    'description': 'Search all content (text, thinking, tool inputs) for a term',
+                    'query_param': '?search=<term>',
+                    'output_type': 'claude_search_results'
                 }
             ],
             'notes': [
