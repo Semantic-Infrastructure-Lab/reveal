@@ -590,7 +590,23 @@ class ClaudeAdapter(ResourceAdapter):
             {
                 'uri': 'claude://session/infernal-earth-0118?tools=Bash',
                 'description': 'Filter to specific tool calls'
-            }
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118/user',
+                'description': 'User messages: initial prompt + tool-result turns'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118/assistant',
+                'description': 'Assistant messages: text responses only (skip thinking/tools)'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118/message/5',
+                'description': 'Read a specific message by index'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118?search=verify',
+                'description': 'Search all content (text, thinking, tool inputs) for a term'
+            },
         ]
 
     @staticmethod
@@ -622,6 +638,25 @@ class ClaudeAdapter(ResourceAdapter):
                     'reveal claude://session/current?summary',
                     'reveal claude://session/current/thinking',
                     'reveal claude://session/current?tools=Read'
+                ]
+            },
+            {
+                'name': 'Read Session Content',
+                'scenario': 'Extract the prompt and findings from a session',
+                'steps': [
+                    'reveal claude://session/session-name/user',
+                    'reveal claude://session/session-name/assistant',
+                    'reveal claude://session/session-name/thinking',
+                ]
+            },
+            {
+                'name': 'Prompt Comparison',
+                'scenario': 'Compare what two sessions found on the same codebase',
+                'steps': [
+                    'reveal claude://session/session-a/user',
+                    'reveal claude://session/session-b/user',
+                    'reveal claude://session/session-a?search=<finding>',
+                    'reveal claude://session/session-b?search=<finding>',
                 ]
             }
         ]

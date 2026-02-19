@@ -145,6 +145,37 @@ reveal claude://session/infernal-earth-0118?tools=Read
 
 **Returns**: Filtered messages/operations for specified tool
 
+### 9. Read User Messages (the Prompt)
+
+See what the user sent — initial prompt as full text, later turns compact:
+
+```bash
+reveal claude://session/infernal-earth-0118/user
+```
+
+**Returns**: Initial prompt text in full, subsequent tool-result turns summarized
+
+### 10. Read Assistant Responses (the Findings)
+
+See what the assistant said — text blocks only, thinking and tool calls stripped:
+
+```bash
+reveal claude://session/infernal-earth-0118/assistant
+```
+
+**Returns**: Assistant text per message with metadata header (thinking/tools used)
+
+### 11. Search Session Content
+
+Find a term across all text, thinking blocks, and tool inputs:
+
+```bash
+reveal claude://session/infernal-earth-0118?search=verify
+reveal claude://session/infernal-earth-0118?search=path traversal
+```
+
+**Returns**: Matches with message index, role, block type, and excerpt
+
 ---
 
 ## Core Features
@@ -472,7 +503,7 @@ reveal claude://session/my-session?summary&errors
 
 ## Elements Reference
 
-The claude:// adapter supports seven elements for progressive disclosure:
+The claude:// adapter supports ten elements for progressive disclosure:
 
 ### 1. workflow
 
@@ -614,6 +645,68 @@ reveal claude://session/infernal-earth-0118/context
 
 ---
 
+### 8. user
+
+**Description**: User messages with normalized content — initial prompt as full text, subsequent tool-result turns summarized
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>/user
+```
+
+**Example**:
+```bash
+reveal claude://session/infernal-earth-0118/user
+```
+
+**Output**: Each user turn with timestamp; first message shown in full (the prompt), tool-result turns shown as `[N tool result(s)]`
+
+**Use when**: Extract the original prompt, compare prompts across sessions, understand what the user asked
+
+**Note**: User message content in Claude Code JSONL can be a bare string (initial prompt) or a list of tool_result blocks. This view normalizes both.
+
+---
+
+### 9. assistant
+
+**Description**: Assistant text responses only — thinking blocks and tool calls stripped, with metadata header per message
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>/assistant
+```
+
+**Example**:
+```bash
+reveal claude://session/infernal-earth-0118/assistant
+```
+
+**Output**: Each assistant turn's text content (first 600 chars), with `[thinking]` / `[tools: Bash, Read]` metadata. Use `/message/<n>` for full text of a specific message.
+
+**Use when**: Read the actual findings or report, compare outputs between sessions, understand what the agent concluded
+
+---
+
+### 10. message/\<n\>
+
+**Description**: Read a single message by index with full text content
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>/message/<index>
+```
+
+**Example**:
+```bash
+reveal claude://session/infernal-earth-0118/message/334
+```
+
+**Output**: Full message content including all text blocks, role, timestamp
+
+**Use when**: Read a long assistant response in full (e.g. final report), inspect a specific tool call result
+
+---
+
 ## Query Parameters
 
 ### ?summary
@@ -675,6 +768,28 @@ reveal claude://session/infernal-earth-0118?tools=Edit
 **Output**: Only messages/operations involving specified tool
 
 **Use when**: Analyze specific tool behavior, debug tool-specific issues
+
+---
+
+### ?search=\<term\>
+
+**Description**: Case-insensitive search across all session content — text blocks, thinking blocks, and tool inputs/descriptions
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>?search=<term>
+```
+
+**Examples**:
+```bash
+reveal claude://session/infernal-earth-0118?search=verify=False
+reveal claude://session/infernal-earth-0118?search=path traversal
+reveal claude://session/infernal-earth-0118?search=credential
+```
+
+**Output**: Matching messages with role, block type (`text`, `thinking`, `tool_use:Bash`), timestamp, and a 120-char excerpt centered on the match
+
+**Use when**: Find where a specific topic was discussed, compare findings across sessions, locate the message containing a key conclusion
 
 ---
 
