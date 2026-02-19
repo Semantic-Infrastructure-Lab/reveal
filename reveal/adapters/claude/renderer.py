@@ -11,6 +11,29 @@ class ClaudeRenderer(TypeDispatchRenderer):
     """
 
     @staticmethod
+    def _render_claude_session_list(result: dict) -> None:
+        """Render recent sessions list."""
+        total = result.get('session_count', 0)
+        recent = result.get('recent_sessions', [])
+        print(f"Claude Sessions: {total} total | {len(recent)} most recent\n")
+        print(f"  {'SESSION':<36} {'MODIFIED':<17} {'SIZE':>7}")
+        print(f"  {'-'*36} {'-'*17} {'-'*7}")
+        for s in recent:
+            name = s.get('session', '?')
+            if len(name) > 36:
+                name = name[-36:]
+            mod = s.get('modified', '')[:16].replace('T', ' ')
+            kb = s.get('size_kb', 0)
+            print(f"  {name:<36} {mod:<17} {kb:>5}kb")
+        print()
+        usage = result.get('usage', {})
+        if usage:
+            print("Usage:")
+            for key, cmd in list(usage.items())[:3]:
+                print(f"  {cmd}")
+            print("  ...")
+
+    @staticmethod
     def _render_claude_session_overview(result: dict) -> None:
         """Render session overview."""
         print(f"Claude Session: {result.get('session', 'unknown')}")
