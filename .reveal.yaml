@@ -91,3 +91,7 @@ overrides:
     rules:
       disable:
         - V023  # Contract fields added by ResultBuilder in helper methods
+  - files: "reveal/result.py"
+    rules:
+      disable:
+        - D001  # Result monad: Success/Failure intentionally have same-body methods (is_success/is_failure)

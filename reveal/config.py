@@ -167,6 +167,14 @@ CONFIG_SCHEMA = {
 }
 
 
+def _lookup_rule_config(config: Dict[str, Any], rule_code: str, key: str,
+                        default: Optional[Any] = None) -> Any:
+    """Get configuration value for a rule from a config dict."""
+    rules = config.get('rules', {})
+    rule_config = rules.get(rule_code, {})
+    return rule_config.get(key, default)
+
+
 @dataclass
 class Override:
     """Per-directory configuration override."""
@@ -249,9 +257,7 @@ class FileConfig:
         Returns:
             Config value or default
         """
-        rules = self._config.get('rules', {})
-        rule_config = rules.get(rule_code, {})
-        return rule_config.get(key, default)
+        return _lookup_rule_config(self._config, rule_code, key, default)
 
 
 class RevealConfig:
@@ -659,9 +665,7 @@ class RevealConfig:
         Returns:
             Configuration value or default
         """
-        rules = self._config.get('rules', {})
-        rule_config = rules.get(rule_code, {})
-        return rule_config.get(key, default)
+        return _lookup_rule_config(self._config, rule_code, key, default)
 
     def should_ignore(self, path: Path) -> bool:
         """Check if a path should be ignored.

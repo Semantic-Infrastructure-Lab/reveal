@@ -84,9 +84,28 @@ class ZipXMLAnalyzer(FileAnalyzer):
         except Exception as e:
             self.parse_error = f"Error opening document: {e}"
 
+    @staticmethod
+    def _get_xml_text(xml_tree: ET.Element, tag: str, prefix: str,
+                      namespaces: Dict[str, str]) -> Optional[str]:
+        """Extract text from an XML element by tag and namespace prefix."""
+        ns_uri = namespaces.get(prefix, '')
+        elem = xml_tree.find(f'.//{{{ns_uri}}}{tag}')
+        return elem.text if elem is not None and elem.text else None
+
     def _parse_metadata(self) -> None:
-        """Parse document metadata. Override in subclass for format-specific metadata."""
-        pass
+        """Parse document metadata from core.xml (title, creator, dates)."""
+        core = self._read_xml('docProps/core.xml')
+        if core is None:
+            return
+
+        ns = self.NAMESPACES
+        get = lambda tag, pfx: self._get_xml_text(core, tag, pfx, ns)
+        self.metadata = {k: v for k, v in {
+            'title': get('title', 'dc'),
+            'creator': get('creator', 'dc'),
+            'created': get('created', 'dcterms'),
+            'modified': get('modified', 'dcterms'),
+        }.items() if v}
 
     def _read_xml(self, part_path: str) -> Optional[ET.Element]:
         """Read and parse an XML part from the archive."""

@@ -43,27 +43,14 @@ class DocxAnalyzer(ZipXMLAnalyzer):
     }
 
     def _parse_metadata(self) -> None:
-        """Parse Word document metadata from core.xml."""
+        """Parse Word document metadata from core.xml (adds 'subject' field)."""
+        super()._parse_metadata()
         core = self._read_xml('docProps/core.xml')
         if core is None:
             return
-
-        ns = self.NAMESPACES
-
-        def get_text(tag: str, prefix: str) -> Optional[str]:
-            ns_uri = ns.get(prefix, '')
-            elem = core.find(f'.//{{{ns_uri}}}{tag}')
-            return elem.text if elem is not None and elem.text else None
-
-        self.metadata = {
-            'title': get_text('title', 'dc'),
-            'creator': get_text('creator', 'dc'),
-            'subject': get_text('subject', 'dc'),
-            'created': get_text('created', 'dcterms'),
-            'modified': get_text('modified', 'dcterms'),
-        }
-        # Remove None values
-        self.metadata = {k: v for k, v in self.metadata.items() if v}
+        subject = self._get_xml_text(core, 'subject', 'dc', self.NAMESPACES)
+        if subject:
+            self.metadata['subject'] = subject
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
@@ -254,27 +241,6 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
                     text_parts.append(t.text)
             self.shared_strings.append(''.join(text_parts))
 
-    def _parse_metadata(self) -> None:
-        """Parse Excel workbook metadata."""
-        core = self._read_xml('docProps/core.xml')
-        if core is None:
-            return
-
-        ns = self.NAMESPACES
-
-        def get_text(tag: str, prefix: str) -> Optional[str]:
-            ns_uri = ns.get(prefix, '')
-            elem = core.find(f'.//{{{ns_uri}}}{tag}')
-            return elem.text if elem is not None and elem.text else None
-
-        self.metadata = {
-            'title': get_text('title', 'dc'),
-            'creator': get_text('creator', 'dc'),
-            'created': get_text('created', 'dcterms'),
-            'modified': get_text('modified', 'dcterms'),
-        }
-        self.metadata = {k: v for k, v in self.metadata.items() if v}
-
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract spreadsheet structure: sheets, dimensions, formulas."""
@@ -441,27 +407,6 @@ class PptxAnalyzer(ZipXMLAnalyzer):
 
     CONTENT_PATH = 'ppt/presentation.xml'
     NAMESPACES = OPENXML_NS
-
-    def _parse_metadata(self) -> None:
-        """Parse PowerPoint metadata."""
-        core = self._read_xml('docProps/core.xml')
-        if core is None:
-            return
-
-        ns = self.NAMESPACES
-
-        def get_text(tag: str, prefix: str) -> Optional[str]:
-            ns_uri = ns.get(prefix, '')
-            elem = core.find(f'.//{{{ns_uri}}}{tag}')
-            return elem.text if elem is not None and elem.text else None
-
-        self.metadata = {
-            'title': get_text('title', 'dc'),
-            'creator': get_text('creator', 'dc'),
-            'created': get_text('created', 'dcterms'),
-            'modified': get_text('modified', 'dcterms'),
-        }
-        self.metadata = {k: v for k, v in self.metadata.items() if v}
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
