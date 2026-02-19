@@ -151,6 +151,16 @@ class JavaScriptExtractor(LanguageExtractor):
                 return child
         return None
 
+    def _parse_named_imports_child(self, child, analyzer) -> list:
+        """Extract imported names from a named_imports node."""
+        names = []
+        for subchild in child.children:
+            if subchild.type == 'import_specifier':
+                spec_children = list(subchild.children)
+                if spec_children:
+                    names.append(analyzer._get_node_text(spec_children[0]))
+        return names
+
     def _parse_import_clause_data(self, import_clause, analyzer) -> tuple:
         """Parse import_clause to extract names, type, and alias.
 
@@ -170,20 +180,13 @@ class JavaScriptExtractor(LanguageExtractor):
                 # import * as foo from 'module'
                 import_type = 'namespace_import'
                 imported_names = ['*']
-                # Extract alias (identifier after 'as')
                 for subchild in child.children:
                     if subchild.type == 'identifier':
                         alias = analyzer._get_node_text(subchild)
 
             elif child.type == 'named_imports':
                 # import { foo, bar } from 'module'
-                for subchild in child.children:
-                    if subchild.type == 'import_specifier':
-                        # Can be "foo" or "foo as bar"
-                        spec_children = list(subchild.children)
-                        if spec_children:
-                            # First identifier is the imported name
-                            imported_names.append(analyzer._get_node_text(spec_children[0]))
+                imported_names.extend(self._parse_named_imports_child(child, analyzer))
 
             elif child.type == 'identifier':
                 # Default import: import foo from 'module'

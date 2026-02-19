@@ -45,6 +45,17 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def _apply_int_rule_env(config: dict, env_var: str, rule_key: str, field_key: str) -> None:
+    """Read an integer from an env var and set config['rules'][rule_key][field_key]."""
+    value = os.getenv(env_var)
+    if not value:
+        return
+    try:
+        config.setdefault('rules', {})[rule_key] = {field_key: int(value)}
+    except ValueError:
+        logger.warning(f"Invalid {env_var} value: {value}")
+
+
 def glob_match(path: Path, pattern: str) -> bool:
     """Match a path against a glob pattern with ** support (gitignore-style).
 
@@ -578,20 +589,8 @@ class RevealConfig:
         if ignore := os.getenv('REVEAL_IGNORE'):
             config['ignore'] = [p.strip() for p in ignore.split(',')]
 
-        # Rule-specific configuration via environment variables
-        # REVEAL_C901_THRESHOLD=20
-        if threshold := os.getenv('REVEAL_C901_THRESHOLD'):
-            try:
-                config.setdefault('rules', {})['C901'] = {'threshold': int(threshold)}
-            except ValueError:
-                logger.warning(f"Invalid REVEAL_C901_THRESHOLD value: {threshold}")
-
-        # REVEAL_E501_MAX_LENGTH=120
-        if max_length := os.getenv('REVEAL_E501_MAX_LENGTH'):
-            try:
-                config.setdefault('rules', {})['E501'] = {'max_length': int(max_length)}
-            except ValueError:
-                logger.warning(f"Invalid REVEAL_E501_MAX_LENGTH value: {max_length}")
+        _apply_int_rule_env(config, 'REVEAL_C901_THRESHOLD', 'C901', 'threshold')
+        _apply_int_rule_env(config, 'REVEAL_E501_MAX_LENGTH', 'E501', 'max_length')
 
         # REVEAL_BREADCRUMBS=0 (or 1, false, true, no, yes)
         if breadcrumbs_env := os.getenv('REVEAL_BREADCRUMBS'):

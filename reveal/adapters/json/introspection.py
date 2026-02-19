@@ -38,6 +38,9 @@ def get_type_str(value: Any) -> str:
     return type(value).__name__
 
 
+_SCALAR_SCHEMAS = {type(None): 'null', bool: 'bool', int: 'int', float: 'float', str: 'str'}
+
+
 def infer_schema(value: Any, max_depth: int = 4, depth: int = 0) -> Any:
     """Recursively infer schema from value.
 
@@ -52,17 +55,10 @@ def infer_schema(value: Any, max_depth: int = 4, depth: int = 0) -> Any:
     if depth > max_depth:
         return '...'
 
-    if value is None:
-        return 'null'
-    elif isinstance(value, bool):
-        return 'bool'
-    elif isinstance(value, int):
-        return 'int'
-    elif isinstance(value, float):
-        return 'float'
-    elif isinstance(value, str):
-        return 'str'
-    elif isinstance(value, list):
+    scalar = _SCALAR_SCHEMAS.get(type(value))
+    if scalar is not None:
+        return scalar
+    if isinstance(value, list):
         if not value:
             return 'Array[empty]'
         # Sample first few elements to infer schema

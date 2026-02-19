@@ -23,54 +23,40 @@ class TomlAnalyzer(TreeSitterAnalyzer):
 
     language = 'toml'
 
+    def _process_toml_pair_node(self, node, keys: list) -> None:
+        """Extract a top-level key-value pair node into the keys list."""
+        if node.children and node.children[0].type in ['bare_key', 'dotted_key', 'quoted_key']:
+            key_node = node.children[0]
+            keys.append({
+                'line_start': node.start_point[0] + 1,
+                'name': self.content[key_node.start_byte:key_node.end_byte],
+            })
+
+    def _process_toml_table_node(self, node, outline: bool, sections: list) -> None:
+        """Extract a table/table_array node into the sections list."""
+        section_name = self._extract_table_name(node)
+        section_info: Dict[str, Any] = {
+            'line_start': node.start_point[0] + 1,
+            'name': section_name,
+        }
+        if outline:
+            section_info['level'] = section_name.count('.') + 1
+        sections.append(section_info)
+
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
                       range: Optional[tuple] = None, outline: bool = False, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
         """Extract TOML sections and top-level keys using tree-sitter."""
         if not self.tree:
             return {}
 
-        sections = []
-        keys = []
+        sections: list = []
+        keys: list = []
 
-        # Walk the document root
         for node in self.tree.root_node.children:
-            # Top-level key-value pairs (before any section)
             if node.type == 'pair':
-                # The first child is the key (bare_key, dotted_key, or quoted_key)
-                if node.children and node.children[0].type in ['bare_key', 'dotted_key', 'quoted_key']:
-                    key_node = node.children[0]
-                    key_name = self.content[key_node.start_byte:key_node.end_byte]
-                    keys.append({
-                        'line_start': node.start_point[0] + 1,
-                        'name': key_name,
-                    })
-
-            # Section headers: [section] or [section.subsection]
-            elif node.type == 'table':
-                section_name = self._extract_table_name(node)
-                section_info = {
-                    'line_start': node.start_point[0] + 1,
-                    'name': section_name,
-                }
-
-                # Add level for outline mode (based on dot notation depth)
-                if outline:
-                    section_info['level'] = section_name.count('.') + 1
-
-                sections.append(section_info)
-
-            # Array of tables: [[array]]
-            elif node.type == 'table_array_element':
-                section_name = self._extract_table_name(node)
-                section_info = {
-                    'line_start': node.start_point[0] + 1,
-                    'name': section_name,
-                }
-
-                if outline:
-                    section_info['level'] = section_name.count('.') + 1
-
-                sections.append(section_info)
+                self._process_toml_pair_node(node, keys)
+            elif node.type in ('table', 'table_array_element'):
+                self._process_toml_table_node(node, outline, sections)
 
         result = {}
         if sections:

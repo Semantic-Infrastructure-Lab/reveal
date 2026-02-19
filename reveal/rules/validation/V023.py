@@ -192,56 +192,59 @@ class V023(BaseRule):
         # Calculate line number for detections
         line_num = content[:method_start].count('\n') + 1
 
-        # Check for required fields being set in return dict
+        detections.extend(self._check_required_contract_fields(
+            method_body, method_name, file_path, line_num
+        ))
+        detections.extend(self._check_deprecated_line_field(method_body, file_path, line_num))
+        detections.extend(self._check_hyphenated_type_values(method_body, file_path, line_num))
+        return detections
+
+    def _check_required_contract_fields(self, method_body, method_name, file_path, line_num):
+        """Check that required contract fields appear in the method body."""
         required_fields = ['contract_version', 'type', 'source', 'source_type']
-        missing_fields = []
+        missing_fields = [
+            f for f in required_fields
+            if not any(p in method_body for p in [f"'{f}':", f'"{f}":', f"'{f}' :", f'"{f}" :'])
+        ]
+        if not missing_fields:
+            return []
+        return [self.create_detection(
+            file_path, line_num,
+            message=f"Output missing required contract fields: {', '.join(missing_fields)}",
+            suggestion=(
+                f"Add required fields to return dict in {method_name}():\n"
+                f"  return {{\n"
+                f"    'contract_version': '1.0',\n"
+                f"    'type': 'your_adapter_type',  # snake_case\n"
+                f"    'source': self.source_path,\n"
+                f"    'source_type': 'file',  # or 'directory', 'database', 'runtime', 'network'\n"
+                f"    # ... rest of output\n"
+                f"  }}\n"
+                f"See docs/OUTPUT_CONTRACT.md for full specification"
+            )
+        )]
 
-        for field in required_fields:
-            # Look for field assignment in dict (loose check)
-            patterns = [
-                f"'{field}':",      # 'contract_version': ...
-                f'"{field}":',      # "contract_version": ...
-                f"'{field}' :",     # With space
-                f'"{field}" :',     # With space
-            ]
-            if not any(pattern in method_body for pattern in patterns):
-                missing_fields.append(field)
+    def _check_deprecated_line_field(self, method_body, file_path, line_num):
+        """Check for use of deprecated 'line' field instead of 'line_start'/'line_end'."""
+        if ("'line':" not in method_body and '"line":' not in method_body):
+            return []
+        if "'line_start'" in method_body or '"line_start"' in method_body:
+            return []
+        return [self.create_detection(
+            file_path, line_num,
+            message="Output uses deprecated 'line' field (use 'line_start'/'line_end')",
+            suggestion=(
+                "Replace 'line' field with 'line_start' and 'line_end':\n"
+                "  'line_start': start_line,  # 1-indexed\n"
+                "  'line_end': end_line,      # 1-indexed, inclusive\n"
+                "See docs/OUTPUT_CONTRACT.md section 'Line Number Fields'"
+            )
+        )]
 
-        if missing_fields:
-            detections.append(self.create_detection(
-                file_path, line_num,
-                message=f"Output missing required contract fields: {', '.join(missing_fields)}",
-                suggestion=(
-                    f"Add required fields to return dict in {method_name}():\n"
-                    f"  return {{\n"
-                    f"    'contract_version': '1.0',\n"
-                    f"    'type': 'your_adapter_type',  # snake_case\n"
-                    f"    'source': self.source_path,\n"
-                    f"    'source_type': 'file',  # or 'directory', 'database', 'runtime', 'network'\n"
-                    f"    # ... rest of output\n"
-                    f"  }}\n"
-                    f"See docs/OUTPUT_CONTRACT.md for full specification"
-                )
-            ))
-
-        # Check for deprecated 'line' field (should be 'line_start')
-        if "'line':" in method_body or '"line":' in method_body:
-            # Check it's not 'line_start' or 'line_end'
-            if "'line_start'" not in method_body and '"line_start"' not in method_body:
-                detections.append(self.create_detection(
-                    file_path, line_num,
-                    message="Output uses deprecated 'line' field (use 'line_start'/'line_end')",
-                    suggestion=(
-                        "Replace 'line' field with 'line_start' and 'line_end':\n"
-                        "  'line_start': start_line,  # 1-indexed\n"
-                        "  'line_end': end_line,      # 1-indexed, inclusive\n"
-                        "See docs/OUTPUT_CONTRACT.md section 'Line Number Fields'"
-                    )
-                ))
-
-        # Check for hyphenated type values (e.g., 'ast-query' should be 'ast_query')
-        type_patterns = re.findall(r"'type'\s*:\s*['\"]([^'\"]+)['\"]", method_body)
-        for type_val in type_patterns:
+    def _check_hyphenated_type_values(self, method_body, file_path, line_num):
+        """Check for hyphenated type values that should be snake_case."""
+        detections = []
+        for type_val in re.findall(r"'type'\s*:\s*['\"]([^'\"]+)['\"]", method_body):
             if '-' in type_val:
                 detections.append(self.create_detection(
                     file_path, line_num,
@@ -252,7 +255,6 @@ class V023(BaseRule):
                         f"Examples: 'ast_query', 'mysql_server', 'environment'"
                     )
                 ))
-
         return detections
 
     def _extract_scheme(self, file_path: str) -> Optional[str]:

@@ -123,6 +123,14 @@ class L005(BaseRule):
 
         return count
 
+    def _collect_pattern_suggestions(self, suggests: list, docs_dir: Path, current_file: Path) -> list:
+        """Return (doc_name, reason) tuples for existing, non-self docs in suggests list."""
+        result = []
+        for doc_name, reason in suggests:
+            if (docs_dir / doc_name).exists() and doc_name != current_file.name:
+                result.append((doc_name, reason))
+        return result
+
     def _suggest_related_docs(self, current_file: Path, content: str) -> List[tuple]:
         """Suggest related documentation files based on content.
 
@@ -182,14 +190,10 @@ class L005(BaseRule):
 
         # Match patterns and collect suggestions
         for pattern_name, pattern_info in patterns.items():
-            # Check if keywords appear in content
             if any(kw in content_lower for kw in pattern_info['keywords']):  # type: ignore[attr-defined]
-                for doc_name, reason in pattern_info['suggests']:  # type: ignore[attr-defined]
-                    # Only suggest docs that exist
-                    if (docs_dir / doc_name).exists():
-                        # Don't suggest current file
-                        if doc_name != current_file.name:
-                            suggestions.append((doc_name, reason))
+                suggestions.extend(self._collect_pattern_suggestions(
+                    pattern_info['suggests'], docs_dir, current_file  # type: ignore[arg-type]
+                ))
 
         # Remove duplicates while preserving order
         seen = set()

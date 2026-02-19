@@ -201,6 +201,15 @@ class IniAnalyzer(FileAnalyzer):
             'format': 'properties'
         }
 
+    def _get_ini_key_value(self, config, section: str, key: str):
+        """Get a value from a section, handling DEFAULT specially. Returns value or None."""
+        if section == 'DEFAULT':
+            return config.defaults().get(key)
+        try:
+            return config.get(section, key)
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            return None
+
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get a specific section or key value.
 
@@ -222,15 +231,7 @@ class IniAnalyzer(FileAnalyzer):
         # Check if requesting specific key (section.key format)
         if '.' in element_name:
             section, key = element_name.split('.', 1)
-
-            if section == 'DEFAULT':
-                value = config.defaults().get(key)
-            else:
-                try:
-                    value = config.get(section, key)
-                except (configparser.NoSectionError, configparser.NoOptionError):
-                    return None
-
+            value = self._get_ini_key_value(config, section, key)
             if value is not None:
                 return {
                     'section': section,
@@ -238,7 +239,6 @@ class IniAnalyzer(FileAnalyzer):
                     'value': value,
                     'type': self._infer_type(value)
                 }
-
             return None
 
         # Get entire section

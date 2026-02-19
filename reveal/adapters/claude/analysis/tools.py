@@ -38,6 +38,20 @@ def is_tool_error(content: Dict) -> bool:
     return False
 
 
+def _collect_tool_use_map(messages: List[Dict]) -> Dict[str, str]:
+    """Build tool_use_id → tool_name mapping from assistant messages."""
+    tool_use_map: Dict[str, str] = {}
+    for msg in messages:
+        if msg.get('type') == 'assistant':
+            for content in msg.get('message', {}).get('content', []):
+                if isinstance(content, dict) and content.get('type') == 'tool_use':
+                    tool_id = content.get('id')
+                    tool_name = content.get('name')
+                    if tool_id and tool_name:
+                        tool_use_map[tool_id] = tool_name
+    return tool_use_map
+
+
 def extract_all_tool_results(messages: List[Dict]) -> List[Dict]:
     """Extract all tool results with metadata for filtering.
 
@@ -49,15 +63,7 @@ def extract_all_tool_results(messages: List[Dict]) -> List[Dict]:
         - message_index, tool_use_id, tool_name, content, is_error, timestamp
     """
     # First pass: collect tool_use_id -> tool_name mapping from assistant messages
-    tool_use_map = {}
-    for msg in messages:
-        if msg.get('type') == 'assistant':
-            for content in msg.get('message', {}).get('content', []):
-                if isinstance(content, dict) and content.get('type') == 'tool_use':
-                    tool_id = content.get('id')
-                    tool_name = content.get('name')
-                    if tool_id and tool_name:
-                        tool_use_map[tool_id] = tool_name
+    tool_use_map = _collect_tool_use_map(messages)
 
     # Second pass: extract tool results from user messages
     results = []

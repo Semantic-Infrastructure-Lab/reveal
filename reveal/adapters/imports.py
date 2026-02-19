@@ -456,6 +456,15 @@ class ImportsAdapter(ResourceAdapter):
             help_data['supported_languages'] = get_supported_languages()
         return help_data
 
+    def _extract_file_imports_and_symbols(self, file_path, extractor):
+        """Extract imports and symbols from a single file using its extractor."""
+        imports = extractor.extract_imports(file_path)
+        symbols = extractor.extract_symbols(file_path)
+        if hasattr(extractor, 'extract_exports'):
+            exports = extractor.extract_exports(file_path)
+            symbols = symbols | exports
+        return imports, symbols
+
     def _build_graph(self, target_path: Path) -> None:
         """Build import graph from target path (multi-language).
 
@@ -479,20 +488,8 @@ class ImportsAdapter(ResourceAdapter):
         for file_path in files:
             extractor = get_extractor(file_path)
             if not extractor:
-                # Unknown file type, skip
                 continue
-
-            # Extract imports and symbols using language-specific extractor
-            imports = extractor.extract_imports(file_path)
-            symbols = extractor.extract_symbols(file_path)
-
-            # Also extract exports (__all__) - imports listed in __all__ are re-exports
-            # and should not be flagged as unused
-            if hasattr(extractor, 'extract_exports'):
-                exports = extractor.extract_exports(file_path)
-                # Merge exports into symbols to prevent false positives
-                symbols = symbols | exports
-
+            imports, symbols = self._extract_file_imports_and_symbols(file_path, extractor)
             self._symbols_by_file[file_path] = symbols
             all_imports.extend(imports)
 

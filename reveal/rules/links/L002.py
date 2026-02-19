@@ -105,6 +105,19 @@ class L002(BaseRule):
 
         return detections
 
+    def _try_head_request(self, url: str, request) -> Tuple[bool, str, Optional[int]]:
+        """Execute HEAD request and return (is_broken, reason, status_code)."""
+        try:
+            with urllib.request.urlopen(request, timeout=self.TIMEOUT) as response:
+                status = response.getcode()
+                if status and 200 <= status < 400:
+                    return (False, "", status)
+                return (True, "http_error", status)
+        except HTTPError as e:
+            if e.code == 405:  # Method Not Allowed - fall back to GET
+                return self._try_get_request(url)
+            return (True, "http_error", e.code)
+
     def _is_broken_link(self, url: str) -> Tuple[bool, str, Optional[int]]:
         """Check if an external link is broken using HTTP HEAD request.
 
@@ -120,23 +133,9 @@ class L002(BaseRule):
             if not parsed.scheme or not parsed.netloc:
                 return (True, "invalid_url", None)
 
-            # Create HEAD request with user agent
             request = urllib.request.Request(url, method='HEAD')
             request.add_header('User-Agent', self.USER_AGENT)
-
-            # Try HEAD request first
-            try:
-                with urllib.request.urlopen(request, timeout=self.TIMEOUT) as response:
-                    status = response.getcode()
-                    if status and 200 <= status < 400:
-                        return (False, "", status)
-                    return (True, "http_error", status)
-
-            except HTTPError as e:
-                # Some servers don't support HEAD, try GET with range header
-                if e.code == 405:  # Method Not Allowed
-                    return self._try_get_request(url)
-                return (True, "http_error", e.code)
+            return self._try_head_request(url, request)
 
         except socket.timeout:
             return (True, "timeout", None)

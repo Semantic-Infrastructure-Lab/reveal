@@ -69,18 +69,20 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
     for file_path, elements in sorted(by_file.items()):
         print(f"File: {file_path}")
         for elem in elements:
-            name = elem.get('name', '')
-            line = elem.get('line', 0)
-            line_count = elem.get('line_count', 0)
-            complexity = elem.get('complexity')
-
-            # Format output - path already shown in "File:" header above
-            if complexity:
-                print(f"  :{line:>4}  {name} [{line_count} lines, complexity: {complexity}]")
-            else:
-                print(f"  :{line:>4}  {name} [{line_count} lines]")
-
+            _render_ast_element(elem)
         print()
+
+
+def _render_ast_element(elem: Dict[str, Any]) -> None:
+    """Render a single AST element line."""
+    name = elem.get('name', '')
+    line = elem.get('line', 0)
+    line_count = elem.get('line_count', 0)
+    complexity = elem.get('complexity')
+    if complexity:
+        print(f"  :{line:>4}  {name} [{line_count} lines, complexity: {complexity}]")
+    else:
+        print(f"  :{line:>4}  {name} [{line_count} lines]")
 
 
 def _suggest_filter_correction(query: str) -> None:

@@ -99,36 +99,11 @@ class I003(BaseRule):
 
         # Check each import against layer rules
         for import_stmt in imports:
-            try:
-                # Resolve import to actual file path (include project root in search paths)
-                search_paths = [project_root] if project_root else []
-                resolved = resolve_python_import(import_stmt, path.parent, search_paths=search_paths)
-
-                if not resolved:
-                    # Can't resolve - might be stdlib or external package
-                    continue
-
-                # Check if this import violates any layer rules
-                violation = layer_config.check_import(path, resolved, project_root)
-
-                if violation:
-                    layer_name, reason = violation
-                    suggestion = self._create_suggestion(layer_name, layer_config)
-
-                    detection = self.create_detection(
-                        file_path=file_path,
-                        line=import_stmt.line_number,
-                        message=reason,
-                        suggestion=suggestion,
-                        context=f"Import: {import_stmt.module_name}",
-                    )
-                    detections.append(detection)
-
-            except Exception as e:
-                logger.debug(
-                    f"Error checking import {import_stmt.module_name} in {file_path}: {e}"
-                )
-                continue
+            detection = self._check_import_violation(
+                import_stmt, file_path, path, layer_config, project_root
+            )
+            if detection:
+                detections.append(detection)
 
         return detections
 
@@ -171,6 +146,28 @@ class I003(BaseRule):
 
         _config_cache[cache_key] = result
         return result
+
+    def _check_import_violation(self, import_stmt, file_path, path, layer_config, project_root):
+        """Check a single import statement for layer violations. Returns Detection or None."""
+        try:
+            search_paths = [project_root] if project_root else []
+            resolved = resolve_python_import(import_stmt, path.parent, search_paths=search_paths)
+            if not resolved:
+                return None
+            violation = layer_config.check_import(path, resolved, project_root)
+            if not violation:
+                return None
+            layer_name, reason = violation
+            return self.create_detection(
+                file_path=file_path,
+                line=import_stmt.line_number,
+                message=reason,
+                suggestion=self._create_suggestion(layer_name, layer_config),
+                context=f"Import: {import_stmt.module_name}",
+            )
+        except Exception as e:
+            logger.debug(f"Error checking import {import_stmt.module_name} in {file_path}: {e}")
+            return None
 
     def _create_suggestion(self, layer_name: str, config) -> str:
         """Create helpful suggestion for fixing layer violation.

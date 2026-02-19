@@ -129,6 +129,19 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                     result[category], head, tail, range
                 )
 
+    @staticmethod
+    def _build_md_options(options, head, tail, range, kwargs) -> 'StructureOptions':
+        """Build StructureOptions from explicit params and kwargs."""
+        if options is not None:
+            return options
+        if head is not None:
+            kwargs['head'] = head
+        if tail is not None:
+            kwargs['tail'] = tail
+        if range is not None:
+            kwargs['range'] = range
+        return StructureOptions.from_kwargs(**kwargs)
+
     def get_structure(self, options: Optional[StructureOptions] = None, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[str] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:  # type: ignore[override]
         """Extract markdown structure.
 
@@ -160,17 +173,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         Note: Slicing applies to each category independently
         (e.g., --head 5 shows first 5 headings AND first 5 links)
         """
-        # Backward compatibility: convert kwargs to StructureOptions
-        if options is None:
-            # Merge explicit parameters into kwargs
-            if head is not None:
-                kwargs['head'] = head
-            if tail is not None:
-                kwargs['tail'] = tail
-            if range is not None:
-                kwargs['range'] = range
-
-            options = StructureOptions.from_kwargs(**kwargs)
+        options = self._build_md_options(options, head, tail, range, kwargs)
 
         result: Dict[str, Any] = {
             'contract_version': '1.0',

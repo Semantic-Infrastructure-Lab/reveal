@@ -224,6 +224,31 @@ class OdtAnalyzer(OdfAnalyzer):
             return len(rows), len(cols)
         return 0, 0
 
+    def _process_odf_element(self, elem, tag, text_ns, name, in_section,
+                              section_level, start_idx, idx, section_text):
+        """Process one ODF body element during section extraction.
+
+        Returns (in_section, section_level, start_idx, done).
+        done=True means the for loop should break.
+        """
+        done = False
+        if tag == 'h':
+            text = self._get_element_text(elem)
+            level = int(elem.get(f'{{{text_ns}}}outline-level', '1'))
+            if in_section:
+                if level <= section_level:
+                    done = True
+                else:
+                    section_text.append(f"{'#' * level} {text}")
+            elif name.lower() in text.lower():
+                in_section = True
+                section_level = level
+                start_idx = idx + 1
+                section_text.append(f"{'#' * level} {text}")
+        elif tag == 'p' and in_section:
+            section_text.append(self._get_element_text(elem))
+        return in_section, section_level, start_idx, done
+
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a section by heading name."""
         if self.content_tree is None:
@@ -249,25 +274,11 @@ class OdtAnalyzer(OdfAnalyzer):
 
         for idx, elem in enumerate(text_body):
             tag = elem.tag.split('}')[-1]
-
-            if tag == 'h':
-                text = self._get_element_text(elem)
-                level = int(elem.get(f'{{{text_ns}}}outline-level', '1'))
-
-                if in_section:
-                    if level <= section_level:
-                        break  # End of section
-                    section_text.append(f"{'#' * level} {text}")
-                else:
-                    if name.lower() in text.lower():
-                        in_section = True
-                        section_level = level
-                        start_idx = idx + 1
-                        section_text.append(f"{'#' * level} {text}")
-
-            elif tag == 'p' and in_section:
-                text = self._get_element_text(elem)
-                section_text.append(text)
+            in_section, section_level, start_idx, done = self._process_odf_element(
+                elem, tag, text_ns, name, in_section, section_level, start_idx, idx, section_text
+            )
+            if done:
+                break
 
         if section_text:
             return {

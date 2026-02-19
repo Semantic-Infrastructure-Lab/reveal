@@ -69,38 +69,7 @@ class DocxAnalyzer(ZipXMLAnalyzer):
         if body is None:
             return {'error': [{'message': 'No document body found'}]}
 
-        sections: List[Dict[str, Any]] = []
-        tables: List[Dict[str, Any]] = []
-        para_count = 0
-        word_count = 0
-
-        for idx, elem in enumerate(body):
-            tag = elem.tag.split('}')[-1]  # Remove namespace
-
-            if tag == 'p':  # Paragraph
-                para_count += 1
-                style = self._get_paragraph_style(elem)
-                text = self._get_paragraph_text(elem)
-                word_count += len(text.split())
-
-                # Check if it's a heading
-                if style in self.HEADING_STYLES:
-                    level = self.HEADING_STYLES[style]
-                    sections.append({
-                        'name': text[:80] + ('...' if len(text) > 80 else '') if text else f'[{style}]',
-                        'level': level,
-                        'style': style,
-                        'line_start': idx + 1,
-                    })
-
-            elif tag == 'tbl':  # Table
-                rows, cols = self._get_table_dimensions(elem)
-                tables.append({
-                    'name': f'Table ({rows}×{cols})',
-                    'rows': rows,
-                    'cols': cols,
-                    'line_start': idx + 1,
-                })
+        sections, tables, para_count, word_count = self._collect_body_stats(body)
 
         # Build result
         result: Dict[str, List[Dict[str, Any]]] = {
@@ -133,6 +102,38 @@ class DocxAnalyzer(ZipXMLAnalyzer):
 
         return result
 
+    def _collect_body_stats(self, body):
+        """Extract sections, tables, paragraph count, and word count from document body."""
+        sections: List[Dict[str, Any]] = []
+        tables: List[Dict[str, Any]] = []
+        para_count = 0
+        word_count = 0
+        for idx, elem in enumerate(body):
+            tag = elem.tag.split('}')[-1]
+            if tag == 'p':
+                para_count += 1
+                style = self._get_paragraph_style(elem)
+                text = self._get_paragraph_text(elem)
+                word_count += len(text.split())
+                if style in self.HEADING_STYLES:
+                    level = self.HEADING_STYLES[style]
+                    heading_name = (text[:80] + '...' if len(text) > 80 else text) if text else f'[{style}]'
+                    sections.append({
+                        'name': heading_name,
+                        'level': level,
+                        'style': style,
+                        'line_start': idx + 1,
+                    })
+            elif tag == 'tbl':
+                rows, cols = self._get_table_dimensions(elem)
+                tables.append({
+                    'name': f'Table ({rows}×{cols})',
+                    'rows': rows,
+                    'cols': cols,
+                    'line_start': idx + 1,
+                })
+        return sections, tables, para_count, word_count
+
     def _get_paragraph_style(self, para: ET.Element) -> Optional[str]:
         """Get paragraph style name."""
         w = self.NAMESPACES['w']
@@ -162,6 +163,26 @@ class DocxAnalyzer(ZipXMLAnalyzer):
             return len(rows), len(cols)
         return 0, 0
 
+    def _process_docx_paragraph(self, style, text, target_name, in_section,
+                                 section_level, start_idx, end_idx, idx, section_text):
+        """Process a single paragraph element during section extraction.
+
+        Returns (in_section, section_level, start_idx, end_idx, stop).
+        stop=True means the for loop should break.
+        """
+        if in_section:
+            if style in self.HEADING_STYLES and self.HEADING_STYLES[style] <= section_level:
+                return in_section, section_level, start_idx, end_idx, True
+            section_text.append(text)
+            end_idx = idx + 1
+        elif style in self.HEADING_STYLES and target_name.lower() in text.lower():
+            in_section = True
+            section_level = self.HEADING_STYLES[style]
+            start_idx = idx + 1
+            end_idx = idx + 1
+            section_text.append(f"# {text}")
+        return in_section, section_level, start_idx, end_idx, False
+
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a section by heading name."""
         if self.content_tree is None:
@@ -182,28 +203,15 @@ class DocxAnalyzer(ZipXMLAnalyzer):
 
         for idx, elem in enumerate(body):
             tag = elem.tag.split('}')[-1]
-
-            if tag == 'p':
-                style = self._get_paragraph_style(elem)
-                text = self._get_paragraph_text(elem)
-
-                if in_section:
-                    # Check if we've hit another heading of same or higher level
-                    if style in self.HEADING_STYLES:
-                        other_level = self.HEADING_STYLES[style]
-                        if other_level <= section_level:
-                            break  # End of section
-                    section_text.append(text)
-                    end_idx = idx + 1
-                else:
-                    # Check if this is our target section
-                    if style in self.HEADING_STYLES:
-                        if name.lower() in text.lower():
-                            in_section = True
-                            section_level = self.HEADING_STYLES[style]
-                            start_idx = idx + 1
-                            end_idx = idx + 1
-                            section_text.append(f"# {text}")
+            if tag != 'p':
+                continue
+            style = self._get_paragraph_style(elem)
+            text = self._get_paragraph_text(elem)
+            in_section, section_level, start_idx, end_idx, stop = self._process_docx_paragraph(
+                style, text, name, in_section, section_level, start_idx, end_idx, idx, section_text
+            )
+            if stop:
+                break
 
         if section_text:
             return {

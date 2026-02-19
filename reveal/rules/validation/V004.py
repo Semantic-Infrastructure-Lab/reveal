@@ -82,34 +82,30 @@ class V004(BaseRule):
             return detections
 
         for analyzer_file in analyzers_dir.glob('*.py'):
-            analyzer_name = analyzer_file.stem
-
-            # Skip exempt analyzers
-            if analyzer_name in self.EXEMPT_ANALYZERS:
-                continue
-
-            # Check for shared test file first
-            if analyzer_name in self.SHARED_TEST_FILES:
-                shared_test = tests_dir / self.SHARED_TEST_FILES[analyzer_name]
-                if shared_test.exists():
-                    continue  # Test exists in shared file
-
-            # Expected test file patterns
-            expected_test_files = [
-                tests_dir / f'test_{analyzer_name}.py',
-                tests_dir / f'test_{analyzer_name}_analyzer.py',
-            ]
-
-            # Check if any expected test file exists
-            test_exists = any(tf.exists() for tf in expected_test_files)
-
-            if not test_exists:
-                detections.append(self.create_detection(
-                    file_path=str(analyzer_file.relative_to(reveal_root)),
-                    line=1,
-                    message=f"Analyzer '{analyzer_name}' has no test file",
-                    suggestion=f"Create tests/test_{analyzer_name}.py or add to shared test suite",
-                    context=f"Analyzer: {analyzer_file.name}"
-                ))
+            detection = self._check_analyzer_test_coverage(analyzer_file, tests_dir, reveal_root)
+            if detection:
+                detections.append(detection)
 
         return detections
+
+    def _check_analyzer_test_coverage(self, analyzer_file, tests_dir, reveal_root):
+        """Check if a single analyzer file has test coverage. Returns Detection or None."""
+        analyzer_name = analyzer_file.stem
+        if analyzer_name in self.EXEMPT_ANALYZERS:
+            return None
+        if analyzer_name in self.SHARED_TEST_FILES:
+            if (tests_dir / self.SHARED_TEST_FILES[analyzer_name]).exists():
+                return None
+        expected = [
+            tests_dir / f'test_{analyzer_name}.py',
+            tests_dir / f'test_{analyzer_name}_analyzer.py',
+        ]
+        if any(tf.exists() for tf in expected):
+            return None
+        return self.create_detection(
+            file_path=str(analyzer_file.relative_to(reveal_root)),
+            line=1,
+            message=f"Analyzer '{analyzer_name}' has no test file",
+            suggestion=f"Create tests/test_{analyzer_name}.py or add to shared test suite",
+            context=f"Analyzer: {analyzer_file.name}"
+        )

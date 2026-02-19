@@ -632,48 +632,51 @@ def _format_html_elements(
             _format_semantic_element(elem, path, line)
 
 
+def _build_item_metrics(item: Dict[str, Any]) -> str:
+    """Build the metrics display string for an item (line_count, depth)."""
+    parts = []
+    if 'line_count' in item:
+        parts.append(f"{item['line_count']} lines")
+    if 'depth' in item:
+        parts.append(f"depth:{item['depth']}")
+    return f" [{', '.join(parts)}]" if parts else ''
+
+
+def _print_item_line(line, name: str, signature: str, content: str,
+                     target_suffix: str, metrics: str, path: Path, output_format: str) -> None:
+    """Print a single item in the appropriate output format."""
+    if signature and name:
+        if output_format == 'grep':
+            print(f"{path}:{line}:{name}{signature}")
+        else:
+            print(f"  :{line:<6} {name}{signature}{metrics}")
+    elif name:
+        if output_format == 'grep':
+            print(f"{path}:{line}:{name}{target_suffix.replace(' → ', ':')}")
+        else:
+            print(f"  :{line:<6} {name}{target_suffix}{metrics}")
+    elif content:
+        if output_format == 'grep':
+            print(f"{path}:{line}:{content}")
+        else:
+            print(f"  :{line:<6} {content}")
+
+
 def _format_standard_items(
     items: List[Dict[str, Any]], path: Path, output_format: str
 ) -> None:
     """Format and display standard items (functions, classes, etc.)."""
     for item in items:
-        line = item.get('line', '?')
-        name = item.get('name', '')
-        signature = item.get('signature', '')
-        content = item.get('content', '')
-        target = item.get('target', '')  # For nginx locations (proxy_pass or root)
-
-        # Build metrics display (if available)
-        metrics = ''
-        if 'line_count' in item or 'depth' in item:
-            parts = []
-            if 'line_count' in item:
-                parts.append(f"{item['line_count']} lines")
-            if 'depth' in item:
-                parts.append(f"depth:{item['depth']}")
-            if parts:
-                metrics = f" [{', '.join(parts)}]"
-
-        # Build target suffix (for nginx locations)
-        target_suffix = f" → {target}" if target else ""
-
-        # Format based on what's available
-        # Note: path is already shown in file header, so text format omits it
-        if signature and name:
-            if output_format == 'grep':
-                print(f"{path}:{line}:{name}{signature}")
-            else:
-                print(f"  :{line:<6} {name}{signature}{metrics}")
-        elif name:
-            if output_format == 'grep':
-                print(f"{path}:{line}:{name}{target_suffix.replace(' → ', ':')}")
-            else:
-                print(f"  :{line:<6} {name}{target_suffix}{metrics}")
-        elif content:
-            if output_format == 'grep':
-                print(f"{path}:{line}:{content}")
-            else:
-                print(f"  :{line:<6} {content}")
+        _print_item_line(
+            line=item.get('line', '?'),
+            name=item.get('name', ''),
+            signature=item.get('signature', ''),
+            content=item.get('content', ''),
+            target_suffix=f" → {item['target']}" if item.get('target') else '',
+            metrics=_build_item_metrics(item),
+            path=path,
+            output_format=output_format,
+        )
 
 
 def _format_csv_schema(items: List[Dict[str, Any]]) -> None:

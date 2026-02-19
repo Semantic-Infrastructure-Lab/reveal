@@ -44,6 +44,23 @@ class HTMLAnalyzer(FileAnalyzer):
         # Detect template type
         self.template_type = self._detect_template_type()
 
+    @staticmethod
+    def _build_structure_options(head, tail, range, kwargs) -> 'StructureOptions':
+        """Build StructureOptions from explicit params and kwargs."""
+        options = kwargs.get('options')
+        if options is not None:
+            return options
+        if head is not None:
+            kwargs['head'] = head
+        if tail is not None:
+            kwargs['tail'] = tail
+        if range is not None:
+            kwargs['range'] = range
+        options = StructureOptions.from_kwargs(**kwargs)
+        if 'links' in kwargs:
+            options.extract_links = kwargs['links']
+        return options
+
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract HTML structure progressively.
 
@@ -71,21 +88,7 @@ class HTMLAnalyzer(FileAnalyzer):
         Returns:
             Dict with HTML structure based on requested features
         """
-        # Backward compatibility: convert kwargs to StructureOptions
-        options = kwargs.get('options')
-        if options is None:
-            # Merge explicit parameters into kwargs
-            if head is not None:
-                kwargs['head'] = head
-            if tail is not None:
-                kwargs['tail'] = tail
-            if range is not None:
-                kwargs['range'] = range
-
-            options = StructureOptions.from_kwargs(**kwargs)
-            # Handle 'links' kwarg mapping to 'extract_links'
-            if 'links' in kwargs:
-                options.extract_links = kwargs['links']
+        options = self._build_structure_options(head, tail, range, kwargs)
 
         # Handle line extraction (head/tail/range)
         if options.head or options.tail or options.range:
@@ -334,6 +337,19 @@ class HTMLAnalyzer(FileAnalyzer):
 
         return blocks
 
+    @staticmethod
+    def _parse_meta_tags(head) -> dict:
+        """Parse all <meta> elements from head into a flat dict."""
+        meta_tags = {}
+        for meta in head.find_all('meta'):
+            if name := meta.get('name'):
+                meta_tags[name] = meta.get('content', '')
+            elif prop := meta.get('property'):
+                meta_tags[prop] = meta.get('content', '')
+            elif charset := meta.get('charset'):
+                meta_tags['charset'] = charset
+        return meta_tags
+
     def _extract_metadata(self) -> Dict[str, Any]:
         """Extract head metadata (SEO, social, etc.).
 
@@ -351,18 +367,7 @@ class HTMLAnalyzer(FileAnalyzer):
             metadata['title'] = head.title.string
 
         # Meta tags
-        meta_tags = {}
-        for meta in head.find_all('meta'):
-            # Standard meta tags (name attribute)
-            if name := meta.get('name'):
-                meta_tags[name] = meta.get('content', '')
-            # OpenGraph / Twitter (property attribute)
-            elif prop := meta.get('property'):
-                meta_tags[prop] = meta.get('content', '')
-            # Charset
-            elif charset := meta.get('charset'):
-                meta_tags['charset'] = charset
-
+        meta_tags = self._parse_meta_tags(head)
         if meta_tags:
             metadata['meta'] = meta_tags
 

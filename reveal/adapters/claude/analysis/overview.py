@@ -37,6 +37,51 @@ def analyze_message_sizes(messages: List[Dict]) -> Dict[str, Any]:
     }
 
 
+def _calculate_session_duration(messages: List[Dict]) -> Any:
+    """Calculate session duration from message timestamps."""
+    timestamps = [ts for ts in (msg.get('timestamp') for msg in messages) if ts]
+    if len(timestamps) >= 2:
+        try:
+            start = datetime.fromisoformat(timestamps[0].replace('Z', '+00:00'))
+            end = datetime.fromisoformat(timestamps[-1].replace('Z', '+00:00'))
+            return str(end - start)
+        except (ValueError, AttributeError):
+            pass
+    return None
+
+
+def _collect_message_stats(messages: List[Dict]) -> Dict[str, Any]:
+    """Collect tool usage, file operations, and thinking stats from messages."""
+    tools_used: Dict[str, int] = defaultdict(int)
+    thinking_chars = 0
+    user_messages = 0
+    assistant_messages = 0
+    file_operations: Dict[str, int] = defaultdict(int)
+
+    for msg in messages:
+        msg_type = msg.get('type')
+        if msg_type == 'user':
+            user_messages += 1
+        elif msg_type == 'assistant':
+            assistant_messages += 1
+            for content in msg.get('message', {}).get('content', []):
+                if content.get('type') == 'tool_use':
+                    tool_name = content.get('name')
+                    tools_used[tool_name] += 1
+                    if tool_name in ('Read', 'Write', 'Edit'):
+                        file_operations[tool_name] += 1
+                elif content.get('type') == 'thinking':
+                    thinking_chars += len(content.get('thinking', ''))
+
+    return {
+        'tools_used': dict(tools_used),
+        'thinking_chars': thinking_chars,
+        'user_messages': user_messages,
+        'assistant_messages': assistant_messages,
+        'file_operations': dict(file_operations),
+    }
+
+
 def get_overview(messages: List[Dict], session_name: str, conversation_path: str,
                  contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Generate session overview with key metrics.
@@ -58,53 +103,18 @@ def get_overview(messages: List[Dict], session_name: str, conversation_path: str
     base = contract_base.copy()
     base['type'] = 'claude_session_overview'
 
-    tools_used: Dict[str, int] = defaultdict(int)
-    thinking_chars = 0
-    user_messages = 0
-    assistant_messages = 0
-    file_operations: Dict[str, int] = defaultdict(int)
-
-    for msg in messages:
-        msg_type = msg.get('type')
-
-        if msg_type == 'user':
-            user_messages += 1
-        elif msg_type == 'assistant':
-            assistant_messages += 1
-
-            # Parse content blocks
-            for content in msg.get('message', {}).get('content', []):
-                if content.get('type') == 'tool_use':
-                    tool_name = content.get('name')
-                    tools_used[tool_name] += 1
-
-                    # Track file operations
-                    if tool_name in ('Read', 'Write', 'Edit'):
-                        file_operations[tool_name] += 1
-
-                elif content.get('type') == 'thinking':
-                    thinking_chars += len(content.get('thinking', ''))
-
-    # Calculate duration
-    timestamps = [ts for ts in (msg.get('timestamp') for msg in messages) if ts]
-    duration = None
-    if len(timestamps) >= 2:
-        try:
-            start = datetime.fromisoformat(timestamps[0].replace('Z', '+00:00'))
-            end = datetime.fromisoformat(timestamps[-1].replace('Z', '+00:00'))
-            duration = str(end - start)
-        except (ValueError, AttributeError):
-            pass
+    stats = _collect_message_stats(messages)
+    duration = _calculate_session_duration(messages)
 
     base.update({
         'session': session_name,
         'message_count': len(messages),
-        'user_messages': user_messages,
-        'assistant_messages': assistant_messages,
-        'tools_used': dict(tools_used),
-        'file_operations': dict(file_operations),
-        'thinking_chars_approx': thinking_chars,
-        'thinking_tokens_approx': thinking_chars // 4,  # Rough estimate
+        'user_messages': stats['user_messages'],
+        'assistant_messages': stats['assistant_messages'],
+        'tools_used': stats['tools_used'],
+        'file_operations': stats['file_operations'],
+        'thinking_chars_approx': stats['thinking_chars'],
+        'thinking_tokens_approx': stats['thinking_chars'] // 4,  # Rough estimate
         'duration': duration,
         'conversation_file': conversation_path
     })

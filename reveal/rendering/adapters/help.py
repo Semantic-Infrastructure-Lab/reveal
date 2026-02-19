@@ -338,6 +338,44 @@ def _render_help_adapter_summary(data: Dict[str, Any]) -> None:
         print()
 
 
+def _render_workflows(content: list) -> None:
+    """Render workflows section."""
+    for workflow in content:
+        print(f"## {workflow['name']}")
+        if workflow.get('scenario'):
+            print(f"Scenario: {workflow['scenario']}")
+        print()
+        for step in workflow.get('steps', []):
+            print(f"  {step}")
+        print()
+
+
+def _render_try_now(content: list) -> None:
+    """Render try-now section."""
+    print("Run these in your current directory:")
+    print()
+    for cmd in content:
+        print(f"  {cmd}")
+    print()
+
+
+def _render_anti_patterns(content: list) -> None:
+    """Render anti-patterns section."""
+    for ap in content:
+        print(f"X {ap['bad']}")
+        print(f"* {ap['good']}")
+        if ap.get('why'):
+            print(f"   Why: {ap['why']}")
+        print()
+
+
+_SECTION_RENDERERS = {
+    'workflows': _render_workflows,
+    'try-now': _render_try_now,
+    'anti-patterns': _render_anti_patterns,
+}
+
+
 def _render_help_section(data: Dict[str, Any]) -> None:
     """Render specific help section (help://ast/workflows)."""
     if 'error' in data:
@@ -351,28 +389,9 @@ def _render_help_section(data: Dict[str, Any]) -> None:
     print(f"# {adapter}:// - {section}")
     print()
 
-    if section == 'workflows':
-        for workflow in content:
-            print(f"## {workflow['name']}")
-            if workflow.get('scenario'):
-                print(f"Scenario: {workflow['scenario']}")
-            print()
-            for step in workflow.get('steps', []):
-                print(f"  {step}")
-            print()
-    elif section == 'try-now':
-        print("Run these in your current directory:")
-        print()
-        for cmd in content:
-            print(f"  {cmd}")
-        print()
-    elif section == 'anti-patterns':
-        for ap in content:
-            print(f"X {ap['bad']}")
-            print(f"* {ap['good']}")
-            if ap.get('why'):
-                print(f"   Why: {ap['why']}")
-            print()
+    renderer = _SECTION_RENDERERS.get(section)
+    if renderer:
+        renderer(content)
 
     # Breadcrumbs for section views
     print("---")

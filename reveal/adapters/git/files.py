@@ -121,6 +121,30 @@ def get_file_history(
         raise ValueError(f"Failed to get file history: {subpath}") from e
 
 
+def _apply_element_blame_filter(element_name, hunks, path, subpath, get_range_func):
+    """Filter blame hunks to the line range of a named element.
+
+    Returns (element_info, filtered_hunks). If element not found, returns (None, original_hunks).
+    """
+    element_range = get_range_func(element_name, path, subpath)
+    if not element_range:
+        print(f"Note: Element '{element_name}' not found in {subpath}, showing full file blame",
+              file=sys.stderr)
+        return None, hunks
+
+    element_info = {
+        'name': element_name,
+        'line_start': element_range['line'],
+        'line_end': element_range['line_end'],
+    }
+    filtered = [
+        h for h in hunks
+        if h['lines']['start'] <= element_range['line_end']
+        and h['lines']['start'] + h['lines']['count'] - 1 >= element_range['line']
+    ]
+    return element_info, filtered
+
+
 def get_file_blame(
     repo: 'pygit2.Repository',
     ref: str,
@@ -174,27 +198,9 @@ def get_file_blame(
         element_name = query.get('element')
         element_info = None
         if element_name:
-            # Get line range for the element
-            element_range = get_element_line_range_func(element_name, path, subpath)
-            if element_range:
-                element_info = {
-                    'name': element_name,
-                    'line_start': element_range['line'],
-                    'line_end': element_range['line_end'],
-                }
-                # Filter hunks to only those within the element's range
-                filtered_hunks: List[Dict[str, Any]] = []
-                for hunk_dict in hunks:
-                    hunk_start = hunk_dict['lines']['start']
-                    hunk_end = hunk_start + hunk_dict['lines']['count'] - 1
-                    # Check if hunk overlaps with element range
-                    if (hunk_start <= element_range['line_end'] and
-                        hunk_end >= element_range['line']):
-                        filtered_hunks.append(hunk_dict)
-                hunks = filtered_hunks
-            else:
-                # Element was requested but not found - inform user
-                print(f"Note: Element '{element_name}' not found in {subpath}, showing full file blame", file=sys.stderr)
+            element_info, hunks = _apply_element_blame_filter(
+                element_name, hunks, path, subpath, get_element_line_range_func
+            )
 
         # Check if detail mode is requested
         detail_mode = query.get('detail') == 'full'

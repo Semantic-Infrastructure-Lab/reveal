@@ -13,6 +13,20 @@ from ..registry import register
 logger = logging.getLogger(__name__)
 
 
+def _filter_xml_children(children, head, tail, range, child_count):
+    """Apply head/tail/range filtering to a list of XML children."""
+    if head is not None:
+        return children[:head]
+    if tail is not None:
+        return children[-tail:]
+    if range is not None:
+        start, end = range
+        return children[start-1:end]
+    if child_count > 10:
+        return children[:10]
+    return children
+
+
 @register('.xml', name='XML', icon='📄')
 class XmlAnalyzer(FileAnalyzer):
     """XML file analyzer.
@@ -201,17 +215,7 @@ class XmlAnalyzer(FileAnalyzer):
             child_count = len(children)
 
             # Apply filtering if requested
-            filtered_children = children
-            if head is not None:
-                filtered_children = children[:head]
-            elif tail is not None:
-                filtered_children = children[-tail:]
-            elif range is not None:
-                start, end = range
-                filtered_children = children[start-1:end]
-            elif child_count > 10:
-                # Default: show first 10 children if more than 10
-                filtered_children = children[:10]
+            filtered_children = _filter_xml_children(children, head, tail, range, child_count)
 
             # Convert root and children to dict
             root_data: Dict[str, Any] = {
