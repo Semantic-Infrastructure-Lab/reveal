@@ -295,8 +295,29 @@ def handle_explain_rule(rule_code: str):
         print(f"URI Patterns: {', '.join(rule.uri_patterns)}")
     print(f"Version: {rule.version}")
     print(f"Enabled: {'Yes' if rule.enabled else 'No'}")
+
+    # Show thresholds and config guidance
+    thresholds = getattr(rule, 'thresholds', {})
+    if thresholds:
+        print("\nThresholds:")
+        for key, default in thresholds.items():
+            print(f"  {key}: {default} (default)")
+        print("\nConfigure in .reveal.yaml:")
+        print(f"  rules:")
+        print(f"    {rule.code}:")
+        for key, default in thresholds.items():
+            print(f"      {key}: {default}  # change to suit your project")
+
     print("\nDescription:")
     print(f"  {rule.__doc__ or 'No description available.'}")
+
+    # Show compliant example if provided
+    compliant_example = getattr(rule, 'compliant_example', '')
+    if compliant_example:
+        print("\nCompliant Example:")
+        for line in compliant_example.strip().splitlines():
+            print(f"  {line}")
+
     sys.exit(0)
 
 

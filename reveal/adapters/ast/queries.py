@@ -57,14 +57,20 @@ def parse_query(query_string: str) -> Dict[str, Any]:
         op = qf.op
 
         # Handle special cases from old _parse_equality_value logic
-        if qf.op == '=' and key == 'type' and ('|' in str(value) or ',' in str(value)):
-            # OR logic for type filters: type=class|function
+        if qf.op == '=' and ('|' in str(value) or ',' in str(value)):
+            # OR logic for any field: type=class|function, name=main|init
             separator = '|' if '|' in str(value) else ','
-            types = [t.strip() for t in str(value).split(separator)]
-            filters[key] = {'op': 'in', 'value': types}
+            items = [t.strip() for t in str(value).split(separator)]
+            filters[key] = {'op': 'in', 'value': items}
         elif qf.op == '*':
             # Wildcard becomes glob operator
-            filters[key] = {'op': 'glob', 'value': value}
+            # Support OR logic: name=*run*|*process* → match any pattern
+            if '|' in str(value) or ',' in str(value):
+                separator = '|' if '|' in str(value) else ','
+                patterns = [p.strip() for p in str(value).split(separator)]
+                filters[key] = {'op': 'glob', 'value': patterns}
+            else:
+                filters[key] = {'op': 'glob', 'value': value}
         elif qf.op == '=':
             # Check if value contains range operator (..)
             # Unified parser may have parsed "lines=10..100" as op='=' with value='10..100'

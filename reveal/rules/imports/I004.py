@@ -98,6 +98,14 @@ class I004(BaseRule):
         if self._is_allowed_context(file_path):
             return []
 
+        # Files nested inside subpackages are not problematic in Python 3.
+        # Absolute imports (the default) always resolve to stdlib regardless
+        # of nesting depth. Only top-level files (depth=1 from package root,
+        # e.g. myapp/json.py) create genuine shadowing risk.
+        # e.g. myapp/output/formatters/json.py is safe; myapp/json.py is not.
+        if self._is_nested_in_subpackage(path):
+            return []
+
         # Check for noqa comment at file level (first few lines)
         lines = content.split('\n')[:5] if content else []
         for line in lines:
@@ -114,6 +122,28 @@ class I004(BaseRule):
             suggestion=suggestion,
             context=f"File '{path.name}' shadows 'import {file_stem}' from stdlib"
         )]
+
+    def _is_nested_in_subpackage(self, path: Path) -> bool:
+        """Return True if this file is more than one level deep inside a package.
+
+        Files at package/subpackage/json.py are safe in Python 3 because
+        absolute imports resolve to stdlib, not to sibling files. Only files
+        at package/json.py (depth=1) create genuine shadowing risk for callers.
+        """
+        # Count how many __init__.py-bearing ancestor directories exist
+        # between the file and the nearest non-package ancestor.
+        depth = 0
+        current = path.parent
+        for _ in range(20):
+            if not (current / '__init__.py').exists():
+                break
+            depth += 1
+            current = current.parent
+
+        # depth=0 → standalone module (not inside any package) → risk
+        # depth=1 → directly inside one package dir (e.g. myapp/json.py) → risk
+        # depth≥2 → nested in subpackage (e.g. myapp/sub/json.py) → safe
+        return depth >= 2
 
     def _build_suggestion(self, module_name: str, file_path: Path) -> str:
         """Build a helpful suggestion for renaming the file.

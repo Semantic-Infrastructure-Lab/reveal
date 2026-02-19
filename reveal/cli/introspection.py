@@ -410,7 +410,7 @@ def get_capabilities(path: str) -> Dict[str, Any]:
             },
             "quality": {
                 "available": true,
-                "rule_categories": ["B", "C", "I", "M", "R", "S"]
+                "rule_categories": ["B", "C", "I", "M", "R", "S", "T"]
             },
             "flags": {
                 "supported": ["--check", "--outline", "--head", "--tail"],
@@ -608,7 +608,7 @@ def _get_applicable_rule_categories(ext: str) -> list:
 
     # Python-specific rules
     if ext in ['.py', '.pyi']:
-        categories.extend(['B', 'C', 'I', 'M', 'R', 'S'])  # Bugs, Complexity, Imports, Maintainability, Refactoring, Security
+        categories.extend(['B', 'C', 'I', 'M', 'R', 'S', 'T'])  # Bugs, Complexity, Imports, Maintainability, Refactoring, Security, Types
 
     # Markdown rules
     if ext in ['.md', '.markdown']:

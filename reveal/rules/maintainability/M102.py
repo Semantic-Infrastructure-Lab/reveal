@@ -125,17 +125,28 @@ class M102(BaseRule):
         return False
 
     def _find_package_root(self, path: Path) -> Optional[Path]:
-        """Find the root of the Python package."""
+        """Find the root of the Python package.
+
+        Prefers project-level markers (pyproject.toml, setup.py) over
+        __init__.py boundaries to correctly resolve module names for packages
+        that live inside a project directory (e.g. httpie/ inside httpie-cli/).
+        """
         current = path.parent
 
-        # Walk up looking for package markers
-        for _ in range(10):  # Max 10 levels up
-            if (current / 'pyproject.toml').exists():
+        # Pass 1: walk up looking for project-level markers
+        sentinel = current
+        for _ in range(10):
+            if (current / 'pyproject.toml').exists() or (current / 'setup.py').exists():
                 return current
-            if (current / 'setup.py').exists():
-                return current
+            parent = current.parent
+            if parent == current:  # filesystem root
+                break
+            current = parent
+
+        # Pass 2: fall back to topmost __init__.py boundary
+        current = sentinel
+        for _ in range(10):
             if (current / '__init__.py').exists():
-                # Keep going up while we're in a package
                 parent = current.parent
                 if not (parent / '__init__.py').exists():
                     return current

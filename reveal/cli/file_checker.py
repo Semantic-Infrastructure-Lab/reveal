@@ -128,7 +128,13 @@ def check_and_report_file(
             return 0
 
         # Print file header and detections
-        relative = file_path.relative_to(directory)
+        # Always use CWD-relative paths so editor "click to jump" works regardless
+        # of where the target argument points (matches ruff/mypy/flake8 behavior).
+        cwd = Path.cwd()
+        try:
+            relative = file_path.relative_to(cwd)
+        except ValueError:
+            relative = file_path.relative_to(directory)
         issue_count = len(detections)
         print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
 
@@ -257,8 +263,13 @@ def _check_files_json(
         if issue_count > 0:
             total_issues += issue_count
             files_with_issues += 1
+            cwd = Path.cwd()
+            try:
+                rel_path = file_path.relative_to(cwd)
+            except ValueError:
+                rel_path = file_path.relative_to(directory)
             file_results.append({
-                "file": str(file_path.relative_to(directory)),
+                "file": str(rel_path),
                 "issues": issue_count,
                 "detections": [
                     {
@@ -366,6 +377,10 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         directory: Directory to check recursively
         args: Parsed arguments
     """
+    # Resolve to absolute so all downstream paths are absolute and can be
+    # expressed relative to CWD (matching ruff/mypy/flake8 path behavior).
+    directory = directory.resolve()
+
     # Build CLI overrides and initialize config
     cli_overrides = _build_cli_overrides(args)
     from reveal.config import RevealConfig

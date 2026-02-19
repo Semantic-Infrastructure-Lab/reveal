@@ -8,6 +8,9 @@ from ...utils.query import compare_values
 def apply_filters(structures: List[Dict[str, Any]], query: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Apply query filters to collected structures.
 
+    When a name= glob filter is used without an explicit type= filter, import
+    declarations are excluded from results. Use type=import to find imports.
+
     Args:
         structures: List of file structures
         query: Query dict with filter conditions
@@ -15,10 +18,21 @@ def apply_filters(structures: List[Dict[str, Any]], query: Dict[str, Any]) -> Li
     Returns:
         Filtered list of matching elements
     """
+    # If name= glob is active but no type= filter, skip imports by default.
+    # This avoids cluttering results with import declarations when the user
+    # is searching for defs/calls (the common case).
+    exclude_imports = (
+        'name' in query
+        and query['name'].get('op') == 'glob'
+        and 'type' not in query
+    )
+
     results = []
 
     for structure in structures:
         for element in structure.get('elements', []):
+            if exclude_imports and element.get('category') == 'imports':
+                continue
             if matches_filters(element, query):
                 results.append(element)
 
@@ -154,7 +168,9 @@ def compare_value(value: Any, condition: Dict[str, Any]) -> bool:
 
     # Special case: 'glob' operator (AST-specific, not in unified parser)
     if op == 'glob':
-        # Wildcard pattern matching (case-sensitive)
+        # Support single pattern or OR list: name=*run*|*process*
+        if isinstance(target, list):
+            return any(fnmatch(str(value), str(p)) for p in target)
         return fnmatch(str(value), str(target))
 
     # Special case: 'in' operator (list membership, AST-specific)

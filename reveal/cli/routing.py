@@ -614,14 +614,10 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
         if getattr(args, 'recursive', False) and getattr(args, 'check', False):
             handle_recursive_check(path, args)
         elif getattr(args, 'check', False):
-            # --check on a directory without --recursive is a silent false negative.
-            # Exit with a clear error rather than showing the tree and exiting 0.
-            print(f"Error: --check requires a file path, not a directory.", file=sys.stderr)
-            print(file=sys.stderr)
-            print(f"To check all files recursively:", file=sys.stderr)
-            print(f"  reveal --check --recursive {path_str}", file=sys.stderr)
-            print(f"  find {path_str} -name '*.py' | reveal --stdin --check", file=sys.stderr)
-            sys.exit(1)
+            # --check on a directory: implicitly recursive, matching linter convention
+            # (ruff check src/, mypy src/ — both recurse without an explicit flag)
+            args.recursive = True
+            handle_recursive_check(path, args)
         else:
             output = show_directory_tree(str(path), depth=args.depth,
                                          max_entries=args.max_entries, fast=args.fast,

@@ -26,7 +26,7 @@ class T004(BaseRule, ASTParsingMixin):
     code = "T004"
     message = "Parameter has type hint with None default but missing Optional[]"
     category = RulePrefix.T
-    severity = Severity.HIGH  # PEP 484 violation, causes mypy errors
+    severity = Severity.MEDIUM  # Style/compat issue; doesn't affect runtime correctness
     file_patterns = ['.py']
     version = "1.0.0"
 

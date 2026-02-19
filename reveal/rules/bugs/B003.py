@@ -23,7 +23,19 @@ class B003(BaseRule):
     version = "1.0.0"
 
     # Properties over this line count are flagged
-    MAX_PROPERTY_LINES = 8
+    MAX_PROPERTY_LINES = 15
+
+    thresholds = {"max_lines": 15}
+    compliant_example = """\
+@property
+def status(self) -> str:
+    return self._status  # Simple getter - good
+
+# If logic is needed, use a regular method:
+def compute_status(self) -> str:
+    if self._error:
+        return "error"
+    return self._status"""
 
     def check(self,
              file_path: str,

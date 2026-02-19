@@ -223,14 +223,14 @@ class TestB003ComplexProperty:
                     'name': 'complex_prop',
                     'decorators': ['@property'],
                     'line': 1,
-                    'line_count': 15  # Over threshold
+                    'line_count': 16  # Over threshold (max is 15)
                 }
             ]
         }
 
         detections = rule.check('test.py', structure, '')
         assert len(detections) == 1
-        assert '15 lines' in detections[0].message
+        assert '16 lines' in detections[0].message
 
     def test_ignores_simple_property(self):
         """B003 should not flag simple properties."""

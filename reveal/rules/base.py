@@ -220,6 +220,11 @@ class BaseRule(ABC):
     uri_patterns: List[str] = []    # Optional URI regex patterns
     version: str = "1.0.0"
     enabled: bool = True
+    # Optional: thresholds exposed via --explain (key → default value)
+    # e.g. {"max_lines": 15, "threshold": 10}
+    thresholds: Dict[str, Any] = {}
+    # Optional: brief compliant code example shown via --explain
+    compliant_example: str = ""
 
     # For tracking current file during check (set by registry)
     _current_file: Optional[str] = None

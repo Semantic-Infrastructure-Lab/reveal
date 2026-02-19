@@ -97,32 +97,29 @@ class ClaudeAdapter(ResourceAdapter):
         """Find conversation JSONL file for session.
 
         Uses two strategies:
-        1. Direct lookup in TIA-style project directory
-        2. Fuzzy search across all project directories
+        1. Session name matches project directory suffix (named sessions, e.g. TIA-style)
+        2. Session name is a UUID matching a JSONL filename inside any project directory
 
         Returns:
             Path to conversation JSONL file, or None if not found
         """
-        if not self.session_name:
+        if not self.session_name or not self.CONVERSATION_BASE.exists():
             return None
 
-        # Strategy 1: Check TIA-style project directory
-        tia_prefix = "-home-scottsen-src-tia-sessions-"
-        session_dir = self.CONVERSATION_BASE / f"{tia_prefix}{self.session_name}"
-        if session_dir.exists():
-            jsonl_files = list(session_dir.glob('*.jsonl'))
-            if jsonl_files:
-                return jsonl_files[0]
+        for project_dir in self.CONVERSATION_BASE.iterdir():
+            if not project_dir.is_dir():
+                continue
 
-        # Strategy 2: Fuzzy search across all project dirs
-        if self.CONVERSATION_BASE.exists():
-            for project_dir in self.CONVERSATION_BASE.iterdir():
-                if not project_dir.is_dir():
-                    continue
-                if self.session_name in project_dir.name:
-                    jsonl_files = list(project_dir.glob('*.jsonl'))
-                    if jsonl_files:
-                        return jsonl_files[0]
+            # Strategy 1: session name appears in project dir name (named sessions)
+            if self.session_name in project_dir.name:
+                jsonl_files = list(project_dir.glob('*.jsonl'))
+                if jsonl_files:
+                    return jsonl_files[0]
+
+            # Strategy 2: session name is a UUID matching a JSONL filename
+            jsonl_file = project_dir / f"{self.session_name}.jsonl"
+            if jsonl_file.exists():
+                return jsonl_file
 
         return None
 

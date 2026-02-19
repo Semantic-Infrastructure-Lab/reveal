@@ -23,7 +23,7 @@ Examples:
 
   # Code quality checks (pattern detectors)
   reveal main.py --check         # Run all quality checks
-  reveal main.py --check --select=B,S  # Select specific categories
+  reveal main.py --check --select=B,S,I,C,M,T  # Select specific categories (B=Bugs, S=Security, I=Imports, C=Complexity, M=Maintainability, T=Types, R=Refactoring)
   reveal Dockerfile --check      # Docker best practices
 
   # Hierarchical outline (see structure as a tree!)
@@ -229,7 +229,7 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--config', type=str, metavar='FILE',
                         help='Configuration file to use (.reveal.yaml or pyproject.toml)')
     parser.add_argument('--select', type=str, metavar='RULES',
-                        help='Select specific rules or categories (e.g., "B,S" or "B001,S701")')
+                        help='Select specific rules or categories (e.g., "B,S,T" or "B001,S701"). Categories: B=Bugs, C=Complexity, I=Imports, M=Maintainability, R=Refactoring, S=Security, T=Types')
     parser.add_argument('--ignore', type=str, metavar='RULES',
                         help='Ignore specific rules or categories (e.g., "E501" or "C")')
     parser.add_argument('--recursive', '-r', action='store_true',
