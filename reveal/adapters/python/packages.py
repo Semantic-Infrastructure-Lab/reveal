@@ -108,7 +108,7 @@ def get_package_details(package_name: str) -> Dict[str, Any]:
             try:
                 details["dependencies"] = [str(req) for req in dist.requires()]  # type: ignore[operator,misc]
             except Exception:
-                pass
+                pass  # malformed package metadata; leave dependencies as []
 
             # Check if editable install
             try:

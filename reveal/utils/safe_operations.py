@@ -134,7 +134,7 @@ class SafeContext:
             use_result(ctx.value)
     """
 
-    def __init__(self, fallback: Any = None, log_level: int = logging.DEBUG):
+    def __init__(self, fallback: Optional[Any] = None, log_level: int = logging.DEBUG):
         self.fallback = fallback
         self.log_level = log_level
         self.value = fallback

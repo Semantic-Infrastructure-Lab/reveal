@@ -49,6 +49,7 @@ __all__ = [
     'EnvAdapter',
     'AstAdapter',
     'ClaudeAdapter',
+    'DemoAdapter',
     'DiffAdapter',
     'DomainAdapter',
     'HelpAdapter',

@@ -1,7 +1,7 @@
 """Core AST query adapter."""
 
 import os
-from pathlib import Path
+
 from typing import Dict, List, Any, Optional
 
 from .queries import parse_query, format_query

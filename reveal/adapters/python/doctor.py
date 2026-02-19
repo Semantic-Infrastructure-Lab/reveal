@@ -139,7 +139,7 @@ def check_editable_installs() -> List[Dict[str, Any]]:
                 }
             )
     except Exception:
-        pass
+        pass  # package introspection is best-effort; return whatever was collected
 
     return info
 
@@ -218,7 +218,7 @@ def check_editable_conflicts() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any
                         }
                     )
     except Exception:
-        pass
+        pass  # package introspection is best-effort; return whatever was collected
 
     return issues, warnings, recommendations
 

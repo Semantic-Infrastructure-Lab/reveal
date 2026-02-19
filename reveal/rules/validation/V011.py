@@ -133,7 +133,7 @@ class V011(BaseRule):
             match = re.search(pattern, content, re.MULTILINE)
             if match:
                 return match.group(1)
-        except Exception:
+        except OSError:
             pass
         return None
 
@@ -168,7 +168,7 @@ class V011(BaseRule):
             # Section doesn't exist at all - not ready
             return False
 
-        except Exception:
+        except OSError:
             pass
         return False
 
@@ -210,6 +210,6 @@ class V011(BaseRule):
 
             return False
 
-        except Exception:
+        except OSError:
             pass
         return False

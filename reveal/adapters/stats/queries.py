@@ -2,7 +2,7 @@
 
 import copy
 from pathlib import Path
-from typing import Dict, Any, Optional, List, cast
+from typing import Dict, Any, Optional, cast
 
 from ...utils.query import compare_values
 

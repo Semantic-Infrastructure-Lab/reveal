@@ -26,6 +26,7 @@ class L002(BaseRule):
     severity = Severity.LOW  # Lower severity - external links can be transient
     file_patterns = ['.md', '.markdown']
     version = "1.0.0"
+    enabled = False  # Network rule: opt-in via .reveal.yaml rules.select: [L002]
 
     # HTTP request timeout (seconds)
     TIMEOUT = 5

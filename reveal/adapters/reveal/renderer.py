@@ -1,7 +1,6 @@
 """Renderer for reveal self-inspection results."""
 
 import sys
-from typing import Dict, Any
 
 
 class RevealRenderer:

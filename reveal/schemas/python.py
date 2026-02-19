@@ -11,6 +11,7 @@ Auto-registers on import.
 from ..type_system import EntityDef, RevealType, TypeRegistry
 from ..elements import PythonElement
 
+
 # Python type definition
 PythonType = RevealType(
     name="python",

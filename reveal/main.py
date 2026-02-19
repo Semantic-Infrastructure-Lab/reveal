@@ -7,12 +7,12 @@ import io
 from typing import Optional, Tuple, Any, List
 from collections.abc import Callable
 
-from .base import FileAnalyzer
+
 from .registry import get_all_analyzers
 from . import __version__
-from .utils import copy_to_clipboard, safe_json_dumps, check_for_updates, print_breadcrumbs, get_file_type_from_analyzer
+from .utils import copy_to_clipboard, check_for_updates
 from .config import disable_breadcrumbs_permanently
-from .checks import run_pattern_detection, run_schema_validation, _format_detections_json, _format_detections_grep, _format_detections_text
+
 from .cli import (
     create_argument_parser,
     validate_navigation_args,

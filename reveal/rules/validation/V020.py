@@ -228,7 +228,7 @@ class V020(BaseRule):
                 for i, line in enumerate(f, start=1):
                     if f'class {class_name}' in line:
                         return i
-        except Exception:
+        except OSError:
             pass
         return 1
 
@@ -247,7 +247,7 @@ class V020(BaseRule):
                 for i, line in enumerate(f, start=1):
                     if f'def {method_name}' in line:
                         return i
-        except Exception:
+        except OSError:
             pass
         return 1
 

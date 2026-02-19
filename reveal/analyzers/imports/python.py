@@ -334,8 +334,7 @@ class PythonExtractor(LanguageExtractor):
         # import_from_name covers `from x import NAME` identifiers;
         # dotted_name covers module path identifiers; aliased_import covers aliases.
         if parent_type in ('function_definition', 'class_definition', 'parameters',
-                           'keyword_argument', 'dotted_name', 'aliased_import',
-                           'import_from_name'):
+                           'dotted_name', 'aliased_import', 'import_from_name'):
             return False
 
         # Check for import statement ancestor. Import identifiers are at most
@@ -348,8 +347,9 @@ class PythonExtractor(LanguageExtractor):
             if current is None:
                 break
 
-        # For assignments, check if this is the target (left side)
-        if parent_type == 'assignment':
+        # For assignments and keyword args, only filter the target/key (left side),
+        # not the value (right side) which is a genuine usage context.
+        if parent_type in ('assignment', 'keyword_argument'):
             if node.parent.children and node.parent.children[0] == node:
                 return False
 
@@ -404,34 +404,30 @@ class PythonExtractor(LanguageExtractor):
 
         exports = set()
 
-        # Find assignment nodes
+        def extract_strings(node):
+            """Recursively extract string content from AST nodes."""
+            strings = []
+            if node.type == 'string':
+                text = analyzer._get_node_text(node)
+                text = text.strip('"\'')
+                strings.append(text)
+            for child in node.children:
+                strings.extend(extract_strings(child))
+            return strings
+
+        # Find __all__ = [...] and __all__ += [...] assignments
         assignment_nodes = analyzer._find_nodes_by_type('assignment')
-
         for node in assignment_nodes:
-            # Get assignment text
             assignment_text = analyzer._get_node_text(node)
+            if assignment_text.strip().startswith('__all__'):
+                exports.update(extract_strings(node))
 
-            # Check if this is __all__ assignment
-            if not assignment_text.strip().startswith('__all__'):
-                continue
-
-            # Extract string literals from the assignment using tree-sitter
-            # Handles: __all__ = ["a", "b"] and __all__ += ["c"]
-            # Find all string nodes in the assignment
-            def extract_strings(node):
-                """Recursively extract string content from AST nodes."""
-                strings = []
-                if node.type == 'string':
-                    # Get string content, strip quotes
-                    text = analyzer._get_node_text(node)
-                    # Remove quotes (handles both " and ')
-                    text = text.strip('"\'')
-                    strings.append(text)
-                for child in node.children:
-                    strings.extend(extract_strings(child))
-                return strings
-
-            exports.update(extract_strings(node))
+        # Also find __all__.append('X') and __all__.extend([...]) call patterns
+        call_nodes = analyzer._find_nodes_by_type('call')
+        for node in call_nodes:
+            call_text = analyzer._get_node_text(node)
+            if call_text.startswith('__all__.append(') or call_text.startswith('__all__.extend('):
+                exports.update(extract_strings(node))
 
         return exports
 

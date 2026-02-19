@@ -119,7 +119,7 @@ class V005(BaseRule):
             for i, line in enumerate(lines, 1):
                 if f"'{topic}':" in line:
                     return i
-        except Exception:
+        except OSError:
             pass
 
         return 1

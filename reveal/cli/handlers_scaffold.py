@@ -1,7 +1,7 @@
 """CLI handlers for scaffolding commands."""
 
 import sys
-from pathlib import Path
+
 from ..cli.scaffold import scaffold_adapter, scaffold_analyzer, scaffold_rule
 
 

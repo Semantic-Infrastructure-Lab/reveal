@@ -1,7 +1,7 @@
 """Statistics adapter (stats://) for codebase metrics and hotspots."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data

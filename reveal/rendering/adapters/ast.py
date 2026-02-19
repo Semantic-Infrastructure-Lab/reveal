@@ -1,6 +1,6 @@
 """Renderer for ast:// code query adapter."""
 
-import sys
+
 from typing import Any, Dict, List
 
 from reveal.utils import safe_json_dumps

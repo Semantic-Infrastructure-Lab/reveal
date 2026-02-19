@@ -238,7 +238,7 @@ class FileConfig:
 
         return True
 
-    def get_rule_config(self, rule_code: str, key: str, default: Any = None) -> Any:
+    def get_rule_config(self, rule_code: str, key: str, default: Optional[Any] = None) -> Any:
         """Get configuration value for a specific rule.
 
         Args:
@@ -370,7 +370,7 @@ class RevealConfig:
                             config = yaml.safe_load(f) or {}
                         if config.get('root'):
                             return current.resolve()
-                except Exception:
+                except (OSError, yaml.YAMLError):
                     pass
 
             # Check for .git (common project root marker)
@@ -648,7 +648,7 @@ class RevealConfig:
 
         return True
 
-    def get_rule_config(self, rule_code: str, key: str, default: Any = None) -> Any:
+    def get_rule_config(self, rule_code: str, key: str, default: Optional[Any] = None) -> Any:
         """Get configuration for a specific rule.
 
         Args:
@@ -960,7 +960,7 @@ def disable_breadcrumbs_permanently() -> bool:
         try:
             with open(config_path, encoding='utf-8') as f:
                 config = yaml.safe_load(f) or {}
-        except Exception:
+        except (OSError, yaml.YAMLError):
             pass
 
     # Update display.breadcrumbs

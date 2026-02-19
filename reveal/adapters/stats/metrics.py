@@ -1,7 +1,7 @@
 """Metrics calculation functions for stats adapter."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 
 
 def count_line_types(lines: list) -> tuple:

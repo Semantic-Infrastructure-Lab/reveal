@@ -1,7 +1,6 @@
 """JSON navigation adapter (json://) - Core adapter logic."""
 
-from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.query import (
@@ -17,7 +16,6 @@ from .parsing import parse_path, load_json
 from .queries import (
     get_field_value,
     compare,
-    matches_all_filters,
     filter_array,
     apply_result_control,
     navigate_to_path
@@ -127,7 +125,7 @@ class JsonAdapter(ResourceAdapter):
                     'type': get_type_str(self.data[element_name])
                 }
         except Exception:
-            pass
+            pass  # unexpected data shape; key lookup falls back to None
         return None
 
     def get_metadata(self) -> Dict[str, Any]:

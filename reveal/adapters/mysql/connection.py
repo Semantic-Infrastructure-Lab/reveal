@@ -326,5 +326,5 @@ class MySQLConnection:
             try:
                 self._connection.close()
             except Exception:
-                pass
+                pass  # best-effort close; ignore already-closed or broken socket
             self._connection = None

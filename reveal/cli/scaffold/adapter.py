@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 from typing import Optional
-from ...templates.adapter_template import ADAPTER_TEMPLATE, RENDERER_TEMPLATE, TEST_TEMPLATE
+from ...templates.adapter_template import ADAPTER_TEMPLATE, TEST_TEMPLATE
 
 
 def scaffold_adapter(

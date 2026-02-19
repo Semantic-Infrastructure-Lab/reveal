@@ -1,7 +1,6 @@
 """Renderer for statistics adapter results."""
 
 import sys
-from typing import Dict, Any
 
 
 class StatsRenderer:

@@ -1,7 +1,7 @@
 """Git commit operations and formatting."""
 
 from datetime import datetime
-from typing import Dict, Any, List, cast, TYPE_CHECKING
+from typing import Dict, Any, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     import pygit2
@@ -74,7 +74,7 @@ def get_recent_commits(
                 if len(commits) >= limit:
                     break
     except Exception:
-        pass
+        pass  # return whatever commits were collected before the error
 
     # Apply result control if specified in query
     if result_control.limit or result_control.sort_field or result_control.offset:
@@ -110,7 +110,7 @@ def get_commit_history(
                 if len(commits) >= limit:
                     break
     except Exception:
-        pass
+        pass  # return whatever commits were collected before the error
 
     # Apply result control if specified in query
     if result_control.limit or result_control.sort_field or result_control.offset:

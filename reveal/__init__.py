@@ -62,6 +62,7 @@ from .analyzers import (  # noqa: F401
 from .schemas import python  # noqa: F401
 
 __all__ = [
+    '__version__',
     'FileAnalyzer',
     'TreeSitterAnalyzer',
     'register',

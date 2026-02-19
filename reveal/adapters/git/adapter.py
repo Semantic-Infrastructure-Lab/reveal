@@ -3,7 +3,7 @@
 Progressive disclosure for Git repositories with token-efficient output.
 """
 
-from typing import Dict, Any, Optional, cast
+from typing import Dict, Any, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.query import (
@@ -385,7 +385,7 @@ class GitAdapter(ResourceAdapter):
                 result = files.get_file_at_ref(repo, self.ref, self.subpath)
                 return result
             except Exception:
-                pass
+                pass  # not a valid file path at this ref; fall through to return None
             finally:
                 self.subpath = old_subpath
 

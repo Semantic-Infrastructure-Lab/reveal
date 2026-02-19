@@ -1,6 +1,6 @@
 """URI parsing for diff adapter."""
 
-import re
+
 from typing import Tuple
 
 

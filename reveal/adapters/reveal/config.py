@@ -47,7 +47,7 @@ def get_config(reveal_root: Path) -> Dict[str, Any]:
                     'root': cfg.get('root', False)
                 })
     except Exception:
-        pass
+        pass  # config discovery is best-effort; proceed with empty project_configs
 
     # Check user and system configs
     user_config_path = RevealConfig._get_user_config_path()

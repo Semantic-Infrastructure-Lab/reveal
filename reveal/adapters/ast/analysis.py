@@ -1,6 +1,6 @@
 """File analysis and structure extraction for AST adapter."""
 
-import os
+
 import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional

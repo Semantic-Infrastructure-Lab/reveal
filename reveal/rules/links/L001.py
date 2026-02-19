@@ -269,7 +269,7 @@ class L001(BaseRule):
             for file in target_dir.iterdir():
                 if file.name.lower() == target_path.name.lower() and file.name != target_path.name:
                     return file.name
-        except Exception:
+        except OSError:
             pass
         return None
 

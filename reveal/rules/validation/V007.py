@@ -188,7 +188,7 @@ class V007(BaseRule):
             match = re.search(pattern, content, re.MULTILINE)
             if match:
                 return match.group(1)
-        except Exception:
+        except OSError:
             pass
         return None
 
@@ -199,7 +199,7 @@ class V007(BaseRule):
             # Match: ## [X.Y.Z] - YYYY-MM-DD or ## [X.Y.Z] (unreleased)
             pattern = rf'##\s*\[{re.escape(version)}\]'
             return bool(re.search(pattern, content, re.IGNORECASE))
-        except Exception:
+        except OSError:
             pass
         return False
 
@@ -215,7 +215,7 @@ class V007(BaseRule):
             match = re.search(r'\*\*Version:\*\*\s*([0-9]+\.[0-9]+\.[0-9]+)', content)
             if match:
                 return match.group(1)
-        except Exception:
+        except OSError:
             pass
         return None
 
@@ -237,6 +237,6 @@ class V007(BaseRule):
             match = re.search(r'pypi/v/reveal-cli.*?([0-9]+\.[0-9]+\.[0-9]+)', content)
             if match:
                 return match.group(1)
-        except Exception:
+        except OSError:
             pass
         return None

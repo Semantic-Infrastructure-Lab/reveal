@@ -89,7 +89,7 @@ def list_branches(repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, 
             except (KeyError, pygit2.GitError):
                 continue
     except Exception:
-        pass
+        pass  # return whatever branches were collected before the error
 
     return sorted(branches, key=lambda b: cast(int, b.get('timestamp', 0)), reverse=True)[:limit]
 
@@ -129,6 +129,6 @@ def list_tags(repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, Any]
             except (KeyError, pygit2.GitError, AttributeError):
                 continue
     except Exception:
-        pass
+        pass  # return whatever tags were collected before the error
 
     return sorted(tags, key=lambda t: cast(int, t.get('timestamp', 0)), reverse=True)[:limit]
