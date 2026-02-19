@@ -152,52 +152,50 @@ class ClaudeAdapter(ResourceAdapter):
         self.messages = messages
         return messages
 
-    def _route_query_handler(self, messages: List[Dict], conversation_path_str: str,
-                           contract_base: Dict[str, Any]) -> Dict[str, Any]:
-        """Route to appropriate handler based on resource path and query.
-
-        Args:
-            messages: Loaded messages
-            conversation_path_str: Conversation path as string
-            contract_base: Contract base metadata
-
-        Returns:
-            Handler result dictionary
-        """
-        # Route based on query parameters
+    def _route_by_query(self, messages: List[Dict], conversation_path_str: str,
+                        contract_base: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Route to handler by query parameter. Returns None if no query matches."""
         if self.query == 'summary':
             return get_summary(messages, self.session_name, conversation_path_str, contract_base)
-        elif self.query == 'timeline':
+        if self.query == 'timeline':
             return get_timeline(messages, self.session_name, contract_base)
-        elif self.query == 'errors':
+        if self.query == 'errors':
             return get_errors(messages, self.session_name, contract_base)
-        elif self.query and self.query.startswith('tools='):
-            tool_name = self.query.split('=')[1]
-            return get_tool_calls(messages, tool_name, self.session_name, contract_base)
-        elif self.query and self.query.startswith('search='):
-            term = self.query.split('=', 1)[1]
-            return search_messages(messages, term, self.session_name, contract_base)
+        if self.query and self.query.startswith('tools='):
+            return get_tool_calls(messages, self.query.split('=')[1], self.session_name, contract_base)
+        if self.query and self.query.startswith('search='):
+            return search_messages(messages, self.query.split('=', 1)[1], self.session_name, contract_base)
+        return None
 
-        # Route based on resource path
+    def _route_by_resource(self, messages: List[Dict], conversation_path_str: str,
+                           contract_base: Dict[str, Any]) -> Dict[str, Any]:
+        """Route to handler by resource path segment."""
         if '/thinking' in self.resource:
             return get_thinking_blocks(messages, self.session_name, contract_base)
-        elif '/tools' in self.resource:
+        if '/tools' in self.resource:
             return get_all_tools(messages, self.session_name, contract_base)
-        elif '/files' in self.resource:
+        if '/files' in self.resource:
             return get_files_touched(messages, self.session_name, contract_base)
-        elif '/workflow' in self.resource:
+        if '/workflow' in self.resource:
             return get_workflow(messages, self.session_name, contract_base)
-        elif '/context' in self.resource:
+        if '/context' in self.resource:
             return get_context_changes(messages, self.session_name, contract_base)
-        elif '/user' in self.resource:
+        if '/user' in self.resource:
             return filter_by_role(messages, 'user', self.session_name, contract_base)
-        elif '/assistant' in self.resource:
+        if '/assistant' in self.resource:
             return filter_by_role(messages, 'assistant', self.session_name, contract_base)
-        elif '/message/' in self.resource:
+        if '/message/' in self.resource:
             msg_id = int(self.resource.split('/message/')[1])
             return get_message(messages, msg_id, self.session_name, contract_base)
-        else:
-            return get_overview(messages, self.session_name, conversation_path_str, contract_base)
+        return get_overview(messages, self.session_name, conversation_path_str, contract_base)
+
+    def _route_query_handler(self, messages: List[Dict], conversation_path_str: str,
+                             contract_base: Dict[str, Any]) -> Dict[str, Any]:
+        """Route to appropriate handler based on resource path and query."""
+        result = self._route_by_query(messages, conversation_path_str, contract_base)
+        if result is not None:
+            return result
+        return self._route_by_resource(messages, conversation_path_str, contract_base)
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Return session structure based on query.

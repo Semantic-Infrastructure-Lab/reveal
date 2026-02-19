@@ -315,36 +315,29 @@ def _handle_equality_operator(field_value: Any, operator: str, target_value: Any
     return strings_equal if operator == '=' else not strings_equal
 
 
+_ORDERED_OPS = {
+    '>': lambda a, b: a > b,
+    '<': lambda a, b: a < b,
+    '>=': lambda a, b: a >= b,
+    '<=': lambda a, b: a <= b,
+}
+
+
+def _apply_ordered_op(a, b, operator: str) -> bool:
+    """Apply an ordered comparison operator to two comparable values."""
+    fn = _ORDERED_OPS.get(operator)
+    return fn(a, b) if fn else False
+
+
 def _handle_numeric_operator(field_value: Any, operator: str, target_value: Any, opts: dict) -> bool:
     """Handle numeric comparison operators (>, <, >=, <=)."""
     try:
         field_num = field_value if isinstance(field_value, (int, float)) else float(field_value)
-        target_num = float(target_value)
-
-        if operator == '>':
-            return field_num > target_num
-        elif operator == '<':
-            return field_num < target_num
-        elif operator == '>=':
-            return field_num >= target_num
-        elif operator == '<=':
-            return field_num <= target_num
+        return _apply_ordered_op(field_num, float(target_value), operator)
     except (ValueError, TypeError):
-        # Fall back to string comparison if coercion disabled or failed
         if not opts['coerce_numeric']:
-            field_str = str(field_value)
-            target_str = str(target_value)
-            if operator == '>':
-                return field_str > target_str
-            elif operator == '<':
-                return field_str < target_str
-            elif operator == '>=':
-                return field_str >= target_str
-            elif operator == '<=':
-                return field_str <= target_str
+            return _apply_ordered_op(str(field_value), str(target_value), operator)
         return False
-
-    return False
 
 
 def _handle_none_comparison(operator: str, target_value: Any, opts: Dict[str, bool]) -> Optional[bool]:
@@ -504,7 +497,36 @@ class ResultControl:
     offset: int = 0
 
 
-def parse_result_control(query: str) -> Tuple[str, ResultControl]:
+def _apply_sort_param(control: 'ResultControl', sort_field: str) -> None:
+    """Apply a sort=field or sort=-field value to the control object."""
+    if sort_field.startswith('-'):
+        control.sort_descending = True
+        control.sort_field = sort_field[1:]
+    else:
+        control.sort_descending = False
+        control.sort_field = sort_field
+
+
+def _apply_control_param(control: 'ResultControl', part: str) -> bool:
+    """Apply one query control parameter to control object. Returns True if consumed."""
+    if part.startswith('sort='):
+        _apply_sort_param(control, part[5:])
+    elif part.startswith('limit='):
+        try:
+            control.limit = int(part[6:])
+        except ValueError:
+            pass
+    elif part.startswith('offset='):
+        try:
+            control.offset = int(part[7:])
+        except ValueError:
+            pass
+    else:
+        return False
+    return True
+
+
+def parse_result_control(query: str) -> Tuple[str, 'ResultControl']:
     """Parse result control parameters from query string.
 
     Extracts sort=field, sort=-field, limit=N, offset=M parameters.
@@ -525,39 +547,10 @@ def parse_result_control(query: str) -> Tuple[str, ResultControl]:
 
     for part in query.split('&'):
         part = part.strip()
-        if not part:
-            continue
-
-        # Check for control parameters
-        if part.startswith('sort='):
-            sort_field = part[5:]  # Remove "sort="
-            if sort_field.startswith('-'):
-                control.sort_descending = True
-                control.sort_field = sort_field[1:]
-            else:
-                control.sort_descending = False
-                control.sort_field = sort_field
-
-        elif part.startswith('limit='):
-            try:
-                control.limit = int(part[6:])
-            except ValueError:
-                pass
-
-        elif part.startswith('offset='):
-            try:
-                control.offset = int(part[7:])
-            except ValueError:
-                pass
-
-        else:
-            # Not a control parameter, keep it
+        if part and not _apply_control_param(control, part):
             remaining_parts.append(part)
 
-    # Reconstruct query without control parameters
-    cleaned_query = '&'.join(remaining_parts)
-
-    return cleaned_query, control
+    return '&'.join(remaining_parts), control
 
 
 def _safe_numeric(v):

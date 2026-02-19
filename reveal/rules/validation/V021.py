@@ -73,16 +73,35 @@ class V021(BaseRule):
         'imports/base.py',  # String literal extraction from imports
     }
 
+    def _check_analyzer_file(self, analyzer_file: Path, analyzers_dir: Path) -> Optional[Detection]:
+        """Check a single analyzer file for regex usage when tree-sitter is available.
+
+        Returns a Detection if a violation is found, None otherwise.
+        """
+        relative = analyzer_file.relative_to(analyzers_dir)
+        if str(relative) in self.REGEX_WHITELIST:
+            return None
+        try:
+            file_content = analyzer_file.read_text(encoding='utf-8')
+        except Exception:
+            return None
+        if not self._imports_re_module(file_content):
+            return None
+        language_name = self._infer_language(analyzer_file, file_content)
+        if not language_name or language_name not in self.TREE_SITTER_LANGUAGES:
+            return None
+        if self._uses_treesitter_analyzer(file_content):
+            return None
+        return self._create_violation(analyzer_file, language_name, file_content)
+
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         """Check that analyzers use tree-sitter instead of regex."""
-        # Only run this check for reveal:// URIs
         if not file_path.startswith('reveal://'):
             return []
 
-        # Find reveal root
         reveal_root = find_reveal_root()
         if not reveal_root:
             return []
@@ -91,51 +110,13 @@ class V021(BaseRule):
         if not analyzers_dir.exists():
             return []
 
-        detections: List[Detection] = []
-
-        # Check all analyzer files
+        detections = []
         for analyzer_file in analyzers_dir.rglob('*.py'):
             if analyzer_file.name == '__init__.py':
                 continue
-
-            # Skip whitelisted files
-            relative = analyzer_file.relative_to(analyzers_dir)
-            if str(relative) in self.REGEX_WHITELIST:
-                continue
-
-            try:
-                file_content = analyzer_file.read_text(encoding='utf-8')
-            except Exception:
-                continue
-
-            # Check if file imports 're' module
-            if not self._imports_re_module(file_content):
-                continue
-
-            # Check if this analyzer could use tree-sitter
-            language_name = self._infer_language(analyzer_file, file_content)
-            if not language_name:
-                continue
-
-            # Check if tree-sitter is available for this language
-            if language_name not in self.TREE_SITTER_LANGUAGES:
-                continue
-
-            # Check if already using TreeSitterAnalyzer
-            if self._uses_treesitter_analyzer(file_content):
-                # Using tree-sitter as primary but regex for supplemental text patterns
-                # This is okay (e.g., markdown.py does this)
-                continue
-
-            # Found violation: regex-based analyzer when tree-sitter is available
-            detection = self._create_violation(
-                analyzer_file,
-                language_name,
-                file_content
-            )
+            detection = self._check_analyzer_file(analyzer_file, analyzers_dir)
             if detection:
                 detections.append(detection)
-
         return detections
 
     def _imports_re_module(self, content: str) -> bool:

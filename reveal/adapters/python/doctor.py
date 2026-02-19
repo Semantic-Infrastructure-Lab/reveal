@@ -144,81 +144,78 @@ def check_editable_installs() -> List[Dict[str, Any]]:
     return info
 
 
-def check_editable_conflicts() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Check for duplicate/conflicting editable .pth files."""
+def _find_editable_packages(site_packages_dirs):
+    """Return (pth_by_package dict, issues list, recommendations list) for editable conflicts."""
+    from collections import defaultdict
+    pth_by_package = defaultdict(list)
     issues = []
-    warnings = []
     recommendations = []
 
+    for sp_dir in site_packages_dirs:
+        sp_path = Path(sp_dir)
+        if not sp_path.exists():
+            continue
+        for pth_file in sp_path.glob("__editable__.*.pth"):
+            name = pth_file.stem
+            parts = name.replace("__editable__.", "").rsplit("-", 1)
+            if len(parts) == 2:
+                pkg_name, version = parts
+                pth_by_package[pkg_name].append({"version": version, "path": str(pth_file)})
+
+    for pkg_name, versions in pth_by_package.items():
+        if len(versions) > 1:
+            issues.append({
+                "category": "editable_conflict",
+                "message": f"Multiple editable .pth files for '{pkg_name}'",
+                "impact": "Version conflicts - imports may load unexpected version",
+                "severity": "high",
+                "details": versions,
+            })
+            recommendations.append({
+                "action": "clean_editable",
+                "message": f"Remove stale editable .pth files for {pkg_name}",
+                "commands": [
+                    f"rm ~/.local/lib/python*/site-packages/__editable__.*{pkg_name}*",
+                    f"pip install {pkg_name} --force-reinstall",
+                ],
+            })
+
+    return issues, recommendations
+
+
+def _find_editable_shadows(site_packages_dirs):
+    """Return warnings list for editable installs shadowing PyPI dist-info."""
+    warnings = []
+    for sp_dir in site_packages_dirs:
+        sp_path = Path(sp_dir)
+        if not sp_path.exists():
+            continue
+        for pth_file in sp_path.glob("__editable__.*.pth"):
+            name = pth_file.stem.replace("__editable__.", "").rsplit("-", 1)[0]
+            non_editable = [
+                d for d in sp_path.glob(f"{name}-*.dist-info")
+                if not (d / "direct_url.json").exists()
+            ]
+            if non_editable:
+                warnings.append({
+                    "category": "editable_shadow",
+                    "message": f"Editable '{name}' may shadow PyPI install",
+                    "impact": "pip install from PyPI won't take effect",
+                    "editable_pth": str(pth_file),
+                    "pypi_dist_info": [str(d) for d in non_editable],
+                })
+    return warnings
+
+
+def check_editable_conflicts() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Check for duplicate/conflicting editable .pth files."""
     try:
         import site
-        from collections import defaultdict
-
         site_packages_dirs = site.getsitepackages() + [site.getusersitepackages()]
-        pth_by_package = defaultdict(list)
-
-        # Find all editable .pth files
-        for sp_dir in site_packages_dirs:
-            sp_path = Path(sp_dir)
-            if not sp_path.exists():
-                continue
-
-            for pth_file in sp_path.glob("__editable__.*.pth"):
-                name = pth_file.stem
-                parts = name.replace("__editable__.", "").rsplit("-", 1)
-                if len(parts) == 2:
-                    pkg_name, version = parts
-                    pth_by_package[pkg_name].append(
-                        {"version": version, "path": str(pth_file)}
-                    )
-
-        # Check for packages with multiple .pth files
-        for pkg_name, versions in pth_by_package.items():
-            if len(versions) > 1:
-                issues.append(
-                    {
-                        "category": "editable_conflict",
-                        "message": f"Multiple editable .pth files for '{pkg_name}'",
-                        "impact": "Version conflicts - imports may load unexpected version",
-                        "severity": "high",
-                        "details": versions,
-                    }
-                )
-                recommendations.append(
-                    {
-                        "action": "clean_editable",
-                        "message": f"Remove stale editable .pth files for {pkg_name}",
-                        "commands": [
-                            f"rm ~/.local/lib/python*/site-packages/__editable__.*{pkg_name}*",
-                            f"pip install {pkg_name} --force-reinstall",
-                        ],
-                    }
-                )
-
-        # Check for editable installs shadowing PyPI dist-info
-        for sp_dir in site_packages_dirs:
-            sp_path = Path(sp_dir)
-            if not sp_path.exists():
-                continue
-
-            for pth_file in sp_path.glob("__editable__.*.pth"):
-                name = pth_file.stem.replace("__editable__.", "").rsplit("-", 1)[0]
-                dist_infos = list(sp_path.glob(f"{name}-*.dist-info"))
-                non_editable = [
-                    d for d in dist_infos if not (d / "direct_url.json").exists()
-                ]
-                if non_editable:
-                    warnings.append(
-                        {
-                            "category": "editable_shadow",
-                            "message": f"Editable '{name}' may shadow PyPI install",
-                            "impact": "pip install from PyPI won't take effect",
-                            "editable_pth": str(pth_file),
-                            "pypi_dist_info": [str(d) for d in non_editable],
-                        }
-                    )
+        issues, recommendations = _find_editable_packages(site_packages_dirs)
+        warnings = _find_editable_shadows(site_packages_dirs)
     except Exception:
-        pass  # package introspection is best-effort; return whatever was collected
+        return [], [], []  # package introspection is best-effort
 
     return issues, warnings, recommendations
 

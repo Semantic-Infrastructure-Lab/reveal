@@ -22,6 +22,32 @@ logger = logging.getLogger(__name__)
 # Global validation schema context (set by CLI handler)
 _validation_schema_context: Optional[Dict[str, Any]] = None
 
+# Simple type validators: expected_type → predicate
+_SIMPLE_TYPE_VALIDATORS = {
+    "string": lambda v: isinstance(v, str),
+    "list": lambda v: isinstance(v, list),
+    "dict": lambda v: isinstance(v, dict),
+    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "boolean": lambda v: isinstance(v, bool),
+}
+
+_DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}')
+
+
+def _validate_date(value: Any) -> bool:
+    """Validate a date value (date object or YYYY-MM-DD string)."""
+    if isinstance(value, (date, datetime)):
+        return True
+    if isinstance(value, str):
+        if not _DATE_RE.match(value):
+            return False
+        try:
+            datetime.strptime(value[:10], "%Y-%m-%d")
+            return True
+        except ValueError:
+            return False
+    return False
+
 
 def validate_type(value: Any, expected_type: str) -> bool:
     """Validate that value matches expected type.
@@ -43,35 +69,13 @@ def validate_type(value: Any, expected_type: str) -> bool:
         >>> validate_type("hello", "integer")
         False
     """
-    if expected_type == "string":
-        return isinstance(value, str)
-    elif expected_type == "list":
-        return isinstance(value, list)
-    elif expected_type == "dict":
-        return isinstance(value, dict)
-    elif expected_type == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
-    elif expected_type == "boolean":
-        return isinstance(value, bool)
-    elif expected_type == "date":
-        # Accept datetime.date/datetime.datetime objects (YAML auto-parses dates)
-        if isinstance(value, (date, datetime)):
-            return True
-        # Also accept string dates in YYYY-MM-DD format (strict)
-        if isinstance(value, str):
-            # First check format with regex (ensures zero-padded)
-            if not re.match(r'^\d{4}-\d{2}-\d{2}', value):
-                return False
-            # Then validate it's a real date
-            try:
-                datetime.strptime(value[:10], "%Y-%m-%d")
-                return True
-            except ValueError:
-                return False
-        return False
-    else:
-        logger.warning(f"Unknown type: {expected_type}")
-        return False
+    if expected_type == "date":
+        return _validate_date(value)
+    validator = _SIMPLE_TYPE_VALIDATORS.get(expected_type)
+    if validator:
+        return validator(value)
+    logger.warning(f"Unknown type: {expected_type}")
+    return False
 
 
 def safe_eval_validation(check: str, context: Dict[str, Any]) -> bool:

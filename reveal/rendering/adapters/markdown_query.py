@@ -57,61 +57,45 @@ def _render_single_file(data: Dict[str, Any], output_format: str) -> None:
         print("No front matter found")
 
 
-def _render_query_results(data: Dict[str, Any], output_format: str) -> None:
-    """Render query results.
+def _render_result_row(result: Dict[str, Any]) -> None:
+    """Print a single markdown query result row with tags/topics."""
+    path = result.get('relative_path', result.get('path', '?'))
+    parts = [path]
+    if result.get('type'):
+        parts.append(f"[{result['type']}]")
+    if result.get('status'):
+        parts.append(f"({result['status']})")
+    if result.get('title'):
+        parts.append(f"- {result['title']}")
+    print("  " + " ".join(parts))
 
-    Args:
-        data: Query results with matched files
-        output_format: Output format
-    """
+    for field in ['tags', 'topics']:
+        if field in result:
+            values = result[field]
+            if isinstance(values, list):
+                print(f"      {field}: {', '.join(str(v) for v in values)}")
+            else:
+                print(f"      {field}: {values}")
+
+
+def _render_query_results(data: Dict[str, Any], output_format: str) -> None:
+    """Render query results."""
     results = data.get('results', [])
 
     if output_format == 'grep':
-        # Grep format: one path per line (for piping)
         for result in results:
             print(result.get('relative_path', result.get('path', '?')))
         return
 
-    # Text format
-    # Header
-    matched = data.get('matched_files', 0)
-    total = data.get('total_files', 0)
-    base_path = data.get('base_path', '.')
-    query = data.get('query', '')
-
-    print(f"Markdown Query: {base_path}/")
-    if query:
-        print(f"Filter: ?{query}")
-    print(f"Matched: {matched} of {total} files")
+    print(f"Markdown Query: {data.get('base_path', '.')}/")
+    if data.get('query'):
+        print(f"Filter: ?{data['query']}")
+    print(f"Matched: {data.get('matched_files', 0)} of {data.get('total_files', 0)} files")
     print()
 
     if not results:
         print("No matching files found.")
         return
 
-    # Results
     for result in results:
-        path = result.get('relative_path', result.get('path', '?'))
-        title = result.get('title', '')
-        status = result.get('status', '')
-        file_type = result.get('type', '')
-
-        # Format: path [type] (status) - title
-        parts = [path]
-        if file_type:
-            parts.append(f"[{file_type}]")
-        if status:
-            parts.append(f"({status})")
-        if title:
-            parts.append(f"- {title}")
-
-        print("  " + " ".join(parts))
-
-        # Show matching fields (tags, topics)
-        for field in ['tags', 'topics']:
-            if field in result:
-                values = result[field]
-                if isinstance(values, list):
-                    print(f"      {field}: {', '.join(str(v) for v in values)}")
-                else:
-                    print(f"      {field}: {values}")
+        _render_result_row(result)

@@ -11,6 +11,21 @@ from typing import Optional, Dict, Any, List, Tuple
 
 from ..registry import get_analyzer, get_all_analyzers
 
+_CAPABILITY_METHODS = [
+    ('get_functions', 'Functions'),
+    ('get_classes', 'Classes'),
+    ('get_imports', 'Imports'),
+    ('get_structure', 'Structure'),
+    ('get_decorators', 'Decorators'),
+    ('get_types', 'Types'),
+    ('get_comments', 'Comments'),
+]
+
+
+def _get_analyzer_capabilities(analyzer_cls) -> list:
+    """Return list of capability labels for the given analyzer class."""
+    return [label for method, label in _CAPABILITY_METHODS if hasattr(analyzer_cls, method)]
+
 
 def explain_file(path: str, verbose: bool = False) -> str:
     """Explain how reveal will analyze a file.
@@ -65,26 +80,7 @@ def explain_file(path: str, verbose: bool = False) -> str:
     if verbose:
         lines.append("")
         lines.append("🛠️  Capabilities:")
-
-        # Check what the analyzer can extract
-        caps = []
-
-        # Most analyzers have these methods
-        if hasattr(analyzer_cls, 'get_functions'):
-            caps.append("Functions")
-        if hasattr(analyzer_cls, 'get_classes'):
-            caps.append("Classes")
-        if hasattr(analyzer_cls, 'get_imports'):
-            caps.append("Imports")
-        if hasattr(analyzer_cls, 'get_structure'):
-            caps.append("Structure")
-        if hasattr(analyzer_cls, 'get_decorators'):
-            caps.append("Decorators")
-        if hasattr(analyzer_cls, 'get_types'):
-            caps.append("Types")
-        if hasattr(analyzer_cls, 'get_comments'):
-            caps.append("Comments")
-
+        caps = _get_analyzer_capabilities(analyzer_cls)
         if caps:
             for cap in caps:
                 lines.append(f"   • {cap}")
@@ -569,37 +565,32 @@ def _get_extractable_types(ext: str, is_fallback: bool) -> list:
         return []
 
 
+# Maps element type → list of example query suffixes (formatted with file_name)
+_ELEMENT_TYPE_EXAMPLES = {
+    "function": ["{f} main"],
+    "class": ["{f} MyClass", "{f} MyClass.method"],  # includes hierarchical
+    "section": ['"{f}" "Installation"'],
+    "key": ["{f} database.host"],
+    "struct": ["{f} Config"],
+    "resource": ["{f} aws_instance.main"],
+    "query": ["{f} GetUser"],
+    "message": ["{f} UserRequest"],
+    "row": ["{f} 5"],      # Row number
+    "element": ["{f} bean"],  # XML tag name
+    "record": ["{f} 1"],   # JSONL record number
+}
+
+
 def _get_extraction_examples(path: str, element_types: list) -> list:
     """Generate extraction examples based on element types."""
-    examples = []
     file_name = Path(path).name
-
-    if "function" in element_types:
-        examples.append(f"reveal {file_name} main")
-    if "class" in element_types:
-        examples.append(f"reveal {file_name} MyClass")
-        # Hierarchical extraction for methods within classes
-        examples.append(f"reveal {file_name} MyClass.method")
-    if "section" in element_types:
-        examples.append(f'reveal {file_name} "Installation"')
-    if "key" in element_types:
-        examples.append(f"reveal {file_name} database.host")
-    if "struct" in element_types:
-        examples.append(f"reveal {file_name} Config")
-    if "resource" in element_types:
-        examples.append(f"reveal {file_name} aws_instance.main")
-    if "query" in element_types:
-        examples.append(f"reveal {file_name} GetUser")
-    if "message" in element_types:
-        examples.append(f"reveal {file_name} UserRequest")
-    if "row" in element_types:
-        examples.append(f"reveal {file_name} 5")  # Row number
-    if "element" in element_types:
-        examples.append(f"reveal {file_name} bean")  # XML tag name
-    if "record" in element_types:
-        examples.append(f"reveal {file_name} 1")  # JSONL record number
-
-    return examples[:3]  # Return top 3
+    examples = []
+    for etype in element_types:
+        for template in _ELEMENT_TYPE_EXAMPLES.get(etype, []):
+            examples.append("reveal " + template.replace("{f}", file_name))
+            if len(examples) >= 3:
+                return examples
+    return examples
 
 
 def _get_applicable_rule_categories(ext: str) -> list:

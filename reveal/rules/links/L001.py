@@ -273,63 +273,41 @@ class L001(BaseRule):
             pass
         return None
 
-    def _suggest_fix(self, base_dir: Path, broken_url: str, reason: str) -> str:
-        """Generate helpful suggestion for fixing broken link.
-
-        Args:
-            base_dir: Directory containing the markdown file
-            broken_url: The broken URL
-            reason: Reason why link is broken
-
-        Returns:
-            Suggestion string
-        """
-        # Split file path and anchor
-        if '#' in broken_url:
-            file_part, anchor = broken_url.split('#', 1)
-        else:
-            file_part = broken_url
-            anchor = None
-
-        target_path = base_dir / file_part
-        suggestions = []
-
-        # Reason-specific suggestions
+    def _suggestions_for_reason(self, reason: str, target_path: Path, file_part: str, broken_url: str) -> list:
+        """Return reason-specific suggestions for a broken link."""
         if reason == "target_is_directory":
-            suggestions.append("Link points to a directory, not a file")
-            # Check for index.md in that directory
-            index_file = target_path / "index.md"
-            if index_file.exists():
+            suggestions = ["Link points to a directory, not a file"]
+            if (target_path / "index.md").exists():
                 suggestions.append(f"Use: {file_part}/index.md")
-
-        elif reason == "case_mismatch":
-            # Find the correct case
+            return suggestions
+        if reason == "case_mismatch":
             case_match = self._find_case_mismatch(target_path)
-            if case_match:
-                suggestions.append(f"Fix case to match actual file: {case_match}")
-            else:
-                suggestions.append("Fix filename case to match actual file")
-
-        elif reason == "file_not_found":
-            # Check if file exists with .md extension
+            return [f"Fix case to match actual file: {case_match}" if case_match
+                    else "Fix filename case to match actual file"]
+        if reason == "file_not_found":
+            suggestions = []
             if not target_path.suffix:
                 md_path = target_path.parent / f"{target_path.name}.md"
                 if md_path.exists():
                     suggestions.append(f"Add .md extension: {broken_url}.md")
-
-            # Check for case mismatch
             case_match = self._find_case_mismatch(target_path)
             if case_match:
                 suggestions.append(f"Fix case: {case_match}")
-
-            # Check for common typos in path
             if '../' in file_part:
                 suggestions.append("Check relative path (../) is correct")
+            return suggestions
+        return []
 
-        # Add anchor-specific suggestion
+    def _suggest_fix(self, base_dir: Path, broken_url: str, reason: str) -> str:
+        """Generate helpful suggestion for fixing broken link."""
+        file_part, _, anchor = broken_url.partition('#')
+        if not anchor:
+            anchor = None  # type: ignore[assignment]
+
+        target_path = base_dir / file_part
+        suggestions = self._suggestions_for_reason(reason, target_path, file_part, broken_url)
+
         if anchor:
             suggestions.append(f"Verify anchor '#{anchor}' exists in target")
 
-        if suggestions:
-            return " | ".join(suggestions)
-        return "File not found - verify path is correct"
+        return " | ".join(suggestions) if suggestions else "File not found - verify path is correct"

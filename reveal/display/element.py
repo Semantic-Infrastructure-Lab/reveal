@@ -264,6 +264,18 @@ def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, co
     _output_result(analyzer, result, element, output_format, config)
 
 
+def _find_child_in_subtree(analyzer, node, target_name: str):
+    """Recursively search for a named child node within a subtree."""
+    for child in node.children:
+        if child.type in CHILD_NODE_TYPES:
+            if analyzer._get_node_name(child) == target_name:
+                return child
+        result = _find_child_in_subtree(analyzer, child, target_name)
+        if result:
+            return result
+    return None
+
+
 def _extract_hierarchical_element(analyzer, element: str):
     """Extract an element using hierarchical syntax (Class.method).
 
@@ -277,16 +289,13 @@ def _extract_hierarchical_element(analyzer, element: str):
     """
     parts = element.split('.')
     if len(parts) != 2:
-        # Only support single-level hierarchy for now (Class.method)
         return None
 
     parent_name, child_name = parts
 
-    # Find the parent node
     parent_node = None
     for node_type in PARENT_NODE_TYPES:
-        nodes = analyzer._find_nodes_by_type(node_type)
-        for node in nodes:
+        for node in analyzer._find_nodes_by_type(node_type):
             if analyzer._get_node_name(node) == parent_name:
                 parent_node = node
                 break
@@ -296,22 +305,7 @@ def _extract_hierarchical_element(analyzer, element: str):
     if not parent_node:
         return None
 
-    # Search for child within parent's subtree
-    def find_child_in_subtree(node, target_name):
-        """Recursively search for child node within subtree."""
-        for child in node.children:
-            if child.type in CHILD_NODE_TYPES:
-                name = analyzer._get_node_name(child)
-                if name == target_name:
-                    return child
-            # Recurse into child nodes (for nested blocks)
-            result = find_child_in_subtree(child, target_name)
-            if result:
-                return result
-        return None
-
-    child_node = find_child_in_subtree(parent_node, child_name)
-
+    child_node = _find_child_in_subtree(analyzer, parent_node, child_name)
     if not child_node:
         return None
 

@@ -4,6 +4,34 @@ import os
 from datetime import datetime, timedelta
 
 
+def _parse_version(v: str) -> tuple:
+    """Parse a version string into a tuple of ints for comparison."""
+    return tuple(map(int, v.split('.')))
+
+
+def _is_update_recent(cache_file) -> bool:
+    """Return True if an update check was performed in the last 24 hours."""
+    if not cache_file.exists():
+        return False
+    try:
+        last_check = datetime.fromisoformat(cache_file.read_text(encoding='utf-8').strip())
+        return datetime.now() - last_check < timedelta(days=1)
+    except (ValueError, OSError):
+        return False
+
+
+def _print_update_notice(latest: str, current: str) -> None:
+    """Print an update notice if latest > current."""
+    if latest == current:
+        return
+    try:
+        if _parse_version(latest) > _parse_version(current):
+            print(f"⚠️  Update available: reveal {latest} (you have {current})")
+            print("Update available: pip install --upgrade reveal-cli\n")
+    except (ValueError, AttributeError):
+        pass
+
+
 def check_for_updates():
     """Check PyPI for newer version (once per day, non-blocking).
 
@@ -16,53 +44,26 @@ def check_for_updates():
     from ..version import __version__
     from ..config import get_cache_path
 
-    # Opt-out check
     if os.environ.get('REVEAL_NO_UPDATE_CHECK'):
         return
 
     try:
-        # Use unified config system for cache file
-        cache_file = get_cache_path('last_update_check')
-
-        # Check if we should update (once per day)
-        if cache_file.exists():
-            last_check_str = cache_file.read_text(encoding='utf-8').strip()
-            try:
-                last_check = datetime.fromisoformat(last_check_str)
-                if datetime.now() - last_check < timedelta(days=1):
-                    return  # Checked recently, skip
-            except (ValueError, OSError):
-                pass  # Invalid cache, continue with check
-
-        # Check PyPI (using urllib to avoid new dependencies)
         import urllib.request
         import json
+
+        cache_file = get_cache_path('last_update_check')
+        if _is_update_recent(cache_file):
+            return
 
         req = urllib.request.Request(
             'https://pypi.org/pypi/reveal-cli/json',
             headers={'User-Agent': f'reveal-cli/{__version__}'}
         )
-
         with urllib.request.urlopen(req, timeout=1) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            latest_version = data['info']['version']
+            latest_version = json.loads(response.read().decode('utf-8'))['info']['version']
 
-        # Update cache file
         cache_file.write_text(datetime.now().isoformat())
-
-        # Compare versions (simple string comparison works for semver)
-        if latest_version != __version__:
-            # Parse versions for proper comparison
-            def parse_version(v):
-                return tuple(map(int, v.split('.')))
-
-            try:
-                if parse_version(latest_version) > parse_version(__version__):
-                    print(f"⚠️  Update available: reveal {latest_version} (you have {__version__})")
-                    print("Update available: pip install --upgrade reveal-cli\n")
-            except (ValueError, AttributeError):
-                pass  # Version comparison failed, ignore
+        _print_update_notice(latest_version, __version__)
 
     except Exception:
-        # Fail silently - don't interrupt user's workflow
         pass

@@ -1,5 +1,6 @@
 """Bytecode checking utilities for Python adapter."""
 
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
@@ -70,6 +71,28 @@ def _check_stale_bytecode(py_file: Path, pyc_file: Path) -> Dict[str, Any]:
     }
 
 
+def _should_skip_bytecode_path(path: Path) -> bool:
+    """Return True if path contains a directory that should be skipped."""
+    for part in path.parts:
+        if part in BYTECODE_SKIP_DIRS:
+            return True
+        if any('*' in pat and fnmatch(part, pat) for pat in BYTECODE_SKIP_DIRS):
+            return True
+    return False
+
+
+def _check_pyc_file(pyc_file: Path) -> Dict[str, Any]:
+    """Classify and return an issue dict for a single .pyc file."""
+    if "__pycache__" not in pyc_file.parts:
+        return _check_old_style_pyc(pyc_file)
+    py_file = pyc_to_source(pyc_file)
+    if not py_file.exists():
+        return _check_orphaned_bytecode(pyc_file)
+    if pyc_file.stat().st_mtime > py_file.stat().st_mtime:
+        return _check_stale_bytecode(py_file, pyc_file)
+    return {}
+
+
 def _build_bytecode_summary(issues: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Build summary statistics for bytecode issues."""
     return {
@@ -92,41 +115,13 @@ def check_bytecode(root_path: str = ".") -> Dict[str, Any]:
     issues: List[Dict[str, Any]] = []
     root = Path(root_path)
 
-    def should_skip(path: Path) -> bool:
-        """Check if path should be skipped based on directory patterns."""
-        parts = path.parts
-        for part in parts:
-            # Check exact matches
-            if part in BYTECODE_SKIP_DIRS:
-                return True
-            # Check wildcard patterns (e.g., *.egg-info)
-            for pattern in BYTECODE_SKIP_DIRS:
-                if '*' in pattern:
-                    from fnmatch import fnmatch
-                    if fnmatch(part, pattern):
-                        return True
-        return False
-
     try:
-        # Find all .pyc files
         for pyc_file in root.rglob("**/*.pyc"):
-            # Skip directories that are typically not user code
-            if should_skip(pyc_file):
+            if _should_skip_bytecode_path(pyc_file):
                 continue
-
-            # Skip if not in __pycache__ (old Python 2 style)
-            if "__pycache__" not in pyc_file.parts:
-                issues.append(_check_old_style_pyc(pyc_file))
-                continue
-
-            # Get corresponding .py file
-            py_file = pyc_to_source(pyc_file)
-
-            if not py_file.exists():
-                issues.append(_check_orphaned_bytecode(pyc_file))
-            elif pyc_file.stat().st_mtime > py_file.stat().st_mtime:
-                issues.append(_check_stale_bytecode(py_file, pyc_file))
-
+            issue = _check_pyc_file(pyc_file)
+            if issue:
+                issues.append(issue)
     except Exception as e:
         return {"error": f"Failed to scan for bytecode issues: {str(e)}", "status": "error"}
 

@@ -47,23 +47,25 @@ def format_output(structure: Dict[str, Any], format_type: str = 'text') -> str:
             lines.append(f"  [{help_marker}] {adapter['scheme']+'://':<15} {adapter['class']}")
         lines.append("")
 
-    # Rules
     if structure.get('rules'):
-        lines.append("## Rules by Category\n")
-        by_category: Dict[str, List[Dict[str, Any]]] = {}
-        for rule in structure['rules']:
-            cat = rule['category']
-            if cat not in by_category:
-                by_category[cat] = []
-            by_category[cat].append(rule)
-
-        for category, rules in sorted(by_category.items()):
-            lines.append(f"### {category.title()}")
-            for rule in rules:
-                lines.append(f"  • {rule['code']:<8} {rule['path']}")
-            lines.append("")
+        lines.extend(_format_rules_section(structure['rules']))
 
     return '\n'.join(lines)
+
+
+def _format_rules_section(rules: List[Dict[str, Any]]) -> List[str]:
+    """Format rules grouped by category into a list of lines."""
+    by_category: Dict[str, List[Dict[str, Any]]] = {}
+    for rule in rules:
+        by_category.setdefault(rule['category'], []).append(rule)
+
+    lines = ["## Rules by Category\n"]
+    for category, cat_rules in sorted(by_category.items()):
+        lines.append(f"### {category.title()}")
+        for rule in cat_rules:
+            lines.append(f"  • {rule['code']:<8} {rule['path']}")
+        lines.append("")
+    return lines
 
 
 def format_metadata_section(meta: Dict[str, Any]) -> List[str]:

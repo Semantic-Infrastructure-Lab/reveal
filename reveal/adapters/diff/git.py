@@ -167,6 +167,60 @@ def resolve_git_file(git_ref: str, path: str) -> Dict[str, Any]:
         os.unlink(temp_path)
 
 
+def _fetch_and_analyze_git_file(git_ref: str, file_path: str) -> Dict[str, Any]:
+    """Fetch a file from git and analyze its structure.
+
+    Returns the structure dict (functions/classes/imports), or raises on failure.
+    """
+    from ...registry import get_analyzer
+
+    content_result = subprocess.run(
+        ['git', 'show', f'{git_ref}:{file_path}'],
+        capture_output=True, text=True, check=True
+    )
+    with tempfile.NamedTemporaryFile(mode='w', suffix=Path(file_path).suffix, delete=False) as f:
+        f.write(content_result.stdout)
+        temp_path = f.name
+
+    try:
+        analyzer_class = get_analyzer(temp_path, allow_fallback=False)
+        if not analyzer_class:
+            return {}
+        structure = analyzer_class(temp_path).get_structure()
+        return structure.get('structure', structure)
+    finally:
+        os.unlink(temp_path)
+
+
+def _ls_tree_files(git_ref: str, dir_path: str) -> list:
+    """Run git ls-tree and return list of blob file paths."""
+    try:
+        result = subprocess.run(
+            ['git', 'ls-tree', '-r', git_ref, dir_path],
+            capture_output=True, text=True, check=True
+        )
+        if not result.stdout.strip():
+            raise ValueError(f"Directory not found in {git_ref}: {dir_path}")
+    except subprocess.CalledProcessError as e:
+        raise ValueError(f"Git error: {e.stderr}")
+
+    file_paths = []
+    for line in result.stdout.strip().split('\n'):
+        parts = line.split(maxsplit=3)
+        if len(parts) == 4 and parts[1] == 'blob':
+            file_paths.append(parts[3])
+    return file_paths
+
+
+def _tag_items_with_file(struct: Dict[str, Any], rel_path: str, key: str) -> list:
+    """Return items from struct[key] with 'file' set to rel_path."""
+    items = []
+    for item in struct.get(key, []):
+        item['file'] = rel_path
+        items.append(item)
+    return items
+
+
 def resolve_git_directory(git_ref: str, dir_path: str) -> Dict[str, Any]:
     """Get aggregated structure from a directory in git.
 
@@ -179,80 +233,31 @@ def resolve_git_directory(git_ref: str, dir_path: str) -> Dict[str, Any]:
     """
     from ...registry import get_analyzer
 
-    # Get list of files in the directory
-    try:
-        result = subprocess.run(
-            ['git', 'ls-tree', '-r', git_ref, dir_path],
-            capture_output=True, text=True, check=True
-        )
-        if not result.stdout.strip():
-            raise ValueError(f"Directory not found in {git_ref}: {dir_path}")
-    except subprocess.CalledProcessError as e:
-        raise ValueError(f"Git error: {e.stderr}")
+    file_paths = _ls_tree_files(git_ref, dir_path)
 
-    # Parse git ls-tree output
-    all_functions = []
-    all_classes = []
-    all_imports = []
+    all_functions: list = []
+    all_classes: list = []
+    all_imports: list = []
     file_count = 0
 
-    for line in result.stdout.strip().split('\n'):
-        parts = line.split(maxsplit=3)
-        if len(parts) < 4:
-            continue
-
-        mode, obj_type, sha, file_path = parts
-        if obj_type != 'blob':  # Only process files, not trees
-            continue
-
-        # Check if we have an analyzer for this file type
+    for file_path in file_paths:
         if not get_analyzer(file_path, allow_fallback=False):
             continue
-
-        # Get file content and analyze
         try:
-            content_result = subprocess.run(
-                ['git', 'show', f'{git_ref}:{file_path}'],
-                capture_output=True, text=True, check=True
-            )
-            content = content_result.stdout
-
-            # Write to temp file
-            with tempfile.NamedTemporaryFile(mode='w', suffix=Path(file_path).suffix, delete=False) as f:
-                f.write(content)
-                temp_path = f.name
-
-            # Analyze
-            analyzer_class = get_analyzer(temp_path, allow_fallback=False)
-            if analyzer_class:
-                analyzer = analyzer_class(temp_path)
-                structure = analyzer.get_structure()
-                struct = structure.get('structure', structure)
-
-                # Add file context
-                rel_path = file_path
-                if dir_path and dir_path != '.':
-                    rel_path = file_path[len(dir_path.rstrip('/')) + 1:]
-
-                for func in struct.get('functions', []):
-                    func['file'] = rel_path
-                    all_functions.append(func)
-
-                for cls in struct.get('classes', []):
-                    cls['file'] = rel_path
-                    all_classes.append(cls)
-
-                for imp in struct.get('imports', []):
-                    imp['file'] = rel_path
-                    all_imports.append(imp)
-
-                file_count += 1
-
-            os.unlink(temp_path)
-
-        except (subprocess.CalledProcessError, Exception):
-            # Skip files that fail to process
+            struct = _fetch_and_analyze_git_file(git_ref, file_path)
+        except Exception:
             continue
+        if not struct:
+            continue
+
+        rel_path = file_path
+        if dir_path and dir_path != '.':
+            rel_path = file_path[len(dir_path.rstrip('/')) + 1:]
+
+        all_functions.extend(_tag_items_with_file(struct, rel_path, 'functions'))
+        all_classes.extend(_tag_items_with_file(struct, rel_path, 'classes'))
+        all_imports.extend(_tag_items_with_file(struct, rel_path, 'imports'))
+        file_count += 1
 
     return {
         'type': 'git_directory',

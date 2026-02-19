@@ -351,6 +351,24 @@ class ClaudeRenderer(TypeDispatchRenderer):
             print()
 
     @staticmethod
+    def _parse_assistant_blocks(blocks: list):
+        """Parse content blocks into (text, tool_use_names, has_thinking)."""
+        text_parts = []
+        tool_use_names = []
+        has_thinking = False
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get('type', '')
+            if btype == 'text':
+                text_parts.append(block.get('text', ''))
+            elif btype == 'tool_use':
+                tool_use_names.append(block.get('name', '?'))
+            elif btype == 'thinking':
+                has_thinking = True
+        return '\n'.join(text_parts).strip(), tool_use_names, has_thinking
+
+    @staticmethod
     def _render_claude_assistant_messages(result: dict) -> None:
         """Render assistant messages: text blocks only (skip thinking/tool_use)."""
         session = result.get('session', 'unknown')
@@ -362,28 +380,13 @@ class ClaudeRenderer(TypeDispatchRenderer):
         for msg in result.get('messages', []):
             msg_idx = msg.get('message_index', '?')
             ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
-            blocks = msg.get('content', [])
+            text, tool_use_names, has_thinking = ClaudeRenderer._parse_assistant_blocks(
+                msg.get('content', [])
+            )
 
-            text_parts = []
-            tool_use_names = []
-            has_thinking = False
-
-            for block in blocks:
-                if not isinstance(block, dict):
-                    continue
-                btype = block.get('type', '')
-                if btype == 'text':
-                    text_parts.append(block.get('text', ''))
-                elif btype == 'tool_use':
-                    tool_use_names.append(block.get('name', '?'))
-                elif btype == 'thinking':
-                    has_thinking = True
-
-            text = '\n'.join(text_parts).strip()
             if not text and not tool_use_names and not has_thinking:
-                continue  # skip empty
+                continue
 
-            # Header
             meta_parts = []
             if has_thinking:
                 meta_parts.append('thinking')

@@ -221,6 +221,27 @@ def _handle_special_modes(args: Any) -> bool:
     return False
 
 
+def _process_at_file_target(target: str, args) -> None:
+    """Process a single URI or file path from an @file."""
+    from pathlib import Path
+
+    if '://' in target:
+        try:
+            handle_uri(target, None, args)
+        except SystemExit as e:
+            if e.code != 0:
+                print(f"Warning: {target} failed, skipping", file=sys.stderr)
+        return
+
+    target_path = Path(target)
+    if not target_path.exists():
+        print(f"Warning: {target} not found, skipping", file=sys.stderr)
+    elif target_path.is_dir():
+        print(f"Warning: {target} is a directory, skipping", file=sys.stderr)
+    elif target_path.is_file():
+        handle_file(str(target_path), None, args.meta, args.format, args)
+
+
 def _handle_at_file(file_path: str, args):
     """Handle @file syntax - read URIs/paths from a file.
 
@@ -248,26 +269,8 @@ def _handle_at_file(file_path: str, args):
         print(f"Error: No URIs found in {file_path}", file=sys.stderr)
         sys.exit(1)
 
-    # Process each URI/path
     for target in lines:
-        if '://' in target:
-            try:
-                handle_uri(target, None, args)
-            except SystemExit as e:
-                # Only warn for actual failures (non-zero exit codes)
-                if e.code != 0:
-                    print(f"Warning: {target} failed, skipping", file=sys.stderr)
-        else:
-            # Handle as file path
-            target_path = Path(target)
-            if not target_path.exists():
-                print(f"Warning: {target} not found, skipping", file=sys.stderr)
-                continue
-            if target_path.is_dir():
-                print(f"Warning: {target} is a directory, skipping", file=sys.stderr)
-                continue
-            if target_path.is_file():
-                handle_file(str(target_path), None, args.meta, args.format, args)
+        _process_at_file_target(target, args)
 
     sys.exit(0)
 

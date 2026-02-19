@@ -72,6 +72,23 @@ def _render_python_modules(data: Dict[str, Any]) -> None:
         print(f"\n  ... and {data['count'] - 50} more modules")
 
 
+def _render_doctor_item(item: Dict[str, Any], icon: str, show_impact: bool) -> None:
+    """Print a single diagnostic item with optional impact line."""
+    print(f"  {icon} [{item['category']}] {item['message']}")
+    if show_impact and 'impact' in item:
+        print(f"     Impact: {item['impact']}")
+
+
+def _render_doctor_section(label: str, items: list, icon: str, show_impact: bool) -> None:
+    """Print a labelled section of diagnostic items."""
+    if not items:
+        return
+    print(f"{label} ({len(items)}):")
+    for item in items:
+        _render_doctor_item(item, icon, show_impact=show_impact)
+    print()
+
+
 def _render_python_doctor(data: Dict[str, Any]) -> None:
     """Render Python environment health diagnostics."""
     status_icon = "*" if data['status'] == 'healthy' else "!"
@@ -79,35 +96,16 @@ def _render_python_doctor(data: Dict[str, Any]) -> None:
     print(f"Health Score: {data['health_score']}/100")
     print()
 
-    if data.get('issues'):
-        print(f"Issues ({len(data['issues'])}):")
-        for issue in data['issues']:
-            print(f"  X [{issue['category']}] {issue['message']}")
-            if 'impact' in issue:
-                print(f"     Impact: {issue['impact']}")
-        print()
-
-    if data.get('warnings'):
-        print(f"Warnings ({len(data['warnings'])}):")
-        for warn in data['warnings']:
-            print(f"  ! [{warn['category']}] {warn['message']}")
-            if 'impact' in warn:
-                print(f"     Impact: {warn['impact']}")
-        print()
-
-    if data.get('info'):
-        print(f"Info ({len(data['info'])}):")
-        for info in data['info']:
-            print(f"  i [{info['category']}] {info['message']}")
-        print()
+    _render_doctor_section("Issues", data.get('issues') or [], 'X', show_impact=True)
+    _render_doctor_section("Warnings", data.get('warnings') or [], '!', show_impact=True)
+    _render_doctor_section("Info", data.get('info') or [], 'i', show_impact=False)
 
     if data.get('recommendations'):
         print(f"Recommendations ({len(data['recommendations'])}):")
-        for rec in data['recommendations']:
-            print(f"  > {rec['message']}")
-            if 'commands' in rec:
-                for cmd in rec['commands']:
-                    print(f"     $ {cmd}")
+        for item in data['recommendations']:
+            print(f"  > {item['message']}")
+            for cmd in item.get('commands', []):
+                print(f"     $ {cmd}")
         print()
 
     print(f"Checks performed: {', '.join(data['checks_performed'])}")

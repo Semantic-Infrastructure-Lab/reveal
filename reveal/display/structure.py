@@ -467,61 +467,41 @@ def _should_skip_category(category: str, items: Any) -> bool:
     return False
 
 
-def _render_single_category(category: str, items: Any, path: Path, output_format: str) -> None:
-    """Render a single category.
+_CATEGORY_FORMATTERS = {
+    'frontmatter': lambda items, path, fmt: _format_frontmatter(cast(Dict[str, Any], items)),
+    'links': lambda items, path, fmt: _format_links(items, path, fmt),
+    'code_blocks': lambda items, path, fmt: _format_code_blocks(items, path, fmt),
+    'related': lambda items, path, fmt: _format_related(items, path, fmt),
+    'metadata': lambda items, path, fmt: _format_html_metadata(cast(Dict[str, Any], items), path, fmt),
+    'scripts': lambda items, path, fmt: _format_html_elements(items, path, fmt, 'scripts'),
+    'styles': lambda items, path, fmt: _format_html_elements(items, path, fmt, 'styles'),
+    'semantic': lambda items, path, fmt: _format_html_elements(items, path, fmt, 'semantic'),
+    'schema': lambda items, path, fmt: _format_csv_schema(items),
+    'children': lambda items, path, fmt: _format_xml_children(items),
+}
 
-    Args:
-        category: Category name
-        items: Category items
-        path: File path
-        output_format: Output format
-    """
-    # Handle dict-type categories that need special formatting
+
+def _render_single_category(category: str, items: Any, path: Path, output_format: str) -> None:
+    """Render a single category."""
+    # Handle dict-type metadata specially (HTML metadata as dict, not list)
     if category == 'metadata' and isinstance(items, dict):
-        # HTML metadata (title, meta tags, etc.)
         print("Metadata:")
         _format_html_metadata(items, path, output_format)
         print()
         return
 
-    # Skip non-list items (metadata values like strings, ints)
     if not isinstance(items, list):
         return
 
-    # Format category name (e.g., 'functions' -> 'Functions')
-    category_name = category.capitalize()
+    count = (len(items.get('data', {})) if isinstance(items, dict) else len(items)) \
+        if category == 'frontmatter' else len(items)
 
-    # Special handling for count (frontmatter is a dict, not a list)
-    if category == 'frontmatter':
-        items_dict = cast(Dict[str, Any], items)
-        count = len(items_dict.get('data', {})) if isinstance(items_dict, dict) else 0
-    else:
-        count = len(items)
+    print(f"{category.capitalize()} ({count}):")
 
-    print(f"{category_name} ({count}):")
+    formatter = _CATEGORY_FORMATTERS.get(category, _format_standard_items)
+    formatter(items, path, output_format)
 
-    # Special handling for different categories
-    if category == 'frontmatter':
-        _format_frontmatter(cast(Dict[str, Any], items))
-    elif category == 'links':
-        _format_links(items, path, output_format)
-    elif category == 'code_blocks':
-        _format_code_blocks(items, path, output_format)
-    elif category == 'related':
-        _format_related(items, path, output_format)
-    elif category == 'metadata':
-        _format_html_metadata(cast(Dict[str, Any], items), path, output_format)
-    elif category in ['scripts', 'styles', 'semantic']:
-        _format_html_elements(items, path, output_format, category)
-    elif category == 'schema':
-        _format_csv_schema(items)
-    elif category == 'children':
-        # XML children elements
-        _format_xml_children(items)
-    else:
-        _format_standard_items(items, path, output_format)
-
-    print()  # Blank line between categories
+    print()
 
 
 def _render_text_categories(structure: Dict[str, List[Dict[str, Any]]],

@@ -161,6 +161,31 @@ def get_thinking_blocks(messages: List[Dict], session_name: str,
     return base
 
 
+def _search_block(block: Dict, lower_term: str, term: str, i: int, role: str, ts: str):
+    """Search a single content block for the term. Returns a match dict or None."""
+    if not isinstance(block, dict):
+        return None
+    btype = block.get('type', '')
+    if btype == 'text':
+        text = block.get('text', '')
+        if lower_term in text.lower():
+            return {'message_index': i, 'role': role, 'block_type': 'text',
+                    'timestamp': ts, 'excerpt': _find_excerpt(text, term)}
+    elif btype == 'thinking':
+        text = block.get('thinking', '')
+        if lower_term in text.lower():
+            return {'message_index': i, 'role': role, 'block_type': 'thinking',
+                    'timestamp': ts, 'excerpt': _find_excerpt(text, term)}
+    elif btype == 'tool_use':
+        inp = block.get('input', {})
+        searchable = ' '.join(str(v) for v in inp.values() if isinstance(v, str))
+        name = block.get('name', '')
+        if lower_term in searchable.lower() or lower_term in name.lower():
+            return {'message_index': i, 'role': role, 'block_type': f'tool_use:{name}',
+                    'timestamp': ts, 'excerpt': _find_excerpt(searchable or name, term, window=80)}
+    return None
+
+
 def search_messages(messages: List[Dict], term: str, session_name: str,
                     contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Search all message content for a term (case-insensitive).
@@ -187,57 +212,14 @@ def search_messages(messages: List[Dict], term: str, session_name: str,
         if role not in ('user', 'assistant'):
             continue
 
-        raw_content = msg.get('message', {}).get('content', [])
-        blocks = _content_to_blocks(raw_content)
+        blocks = _content_to_blocks(msg.get('message', {}).get('content', []))
         ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
 
         for block in blocks:
             try:
-                if not isinstance(block, dict):
-                    continue
-                btype = block.get('type', '')
-
-                # Text blocks
-                if btype == 'text':
-                    text = block.get('text', '')
-                    if lower_term in text.lower():
-                        excerpt = _find_excerpt(text, term)
-                        matches.append({
-                            'message_index': i,
-                            'role': role,
-                            'block_type': 'text',
-                            'timestamp': ts,
-                            'excerpt': excerpt,
-                        })
-
-                # Thinking blocks (assistant only)
-                elif btype == 'thinking':
-                    text = block.get('thinking', '')
-                    if lower_term in text.lower():
-                        excerpt = _find_excerpt(text, term)
-                        matches.append({
-                            'message_index': i,
-                            'role': role,
-                            'block_type': 'thinking',
-                            'timestamp': ts,
-                            'excerpt': excerpt,
-                        })
-
-                # Tool use — search description/command
-                elif btype == 'tool_use':
-                    inp = block.get('input', {})
-                    searchable = ' '.join(str(v) for v in inp.values() if isinstance(v, str))
-                    name = block.get('name', '')
-                    if lower_term in searchable.lower() or lower_term in name.lower():
-                        excerpt = _find_excerpt(searchable or name, term, window=80)
-                        matches.append({
-                            'message_index': i,
-                            'role': role,
-                            'block_type': f'tool_use:{name}',
-                            'timestamp': ts,
-                            'excerpt': excerpt,
-                        })
-
+                match = _search_block(block, lower_term, term, i, role, ts)
+                if match:
+                    matches.append(match)
             except Exception:
                 continue
 

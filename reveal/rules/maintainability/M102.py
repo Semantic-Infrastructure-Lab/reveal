@@ -66,6 +66,29 @@ def _add_module_and_parents(imports: Set[str], module: str) -> None:
         imports.add('.'.join(parts[:i]))
 
 
+def _resolve_import_module(
+        module: str,
+        file_path: Optional[Path],
+        package_root: Optional[Path]) -> Optional[str]:
+    """Resolve a raw module string to an absolute name, or None to skip."""
+    if module.startswith('.'):
+        if file_path and package_root:
+            return _resolve_relative_import(module, file_path, package_root)
+        return None  # relative but no context — skip
+    return module
+
+
+def _add_named_imports(imports: Set[str], module: str, names_str: str, strip_backslash: bool = False) -> None:
+    """Add 'module.name' entries for each name in a comma-separated names string."""
+    for name in names_str.split(','):
+        name = name.strip()
+        if strip_backslash:
+            name = name.rstrip('\\').strip()
+        name = name.split()[0] if name else ''
+        if name and name != '*':
+            imports.add(module + '.' + name)
+
+
 def _extract_imports_regex(
         content: str,
         imports: Set[str],
@@ -82,14 +105,6 @@ def _extract_imports_regex(
     When file_path and package_root are provided, relative imports are
     resolved to their absolute module names.
     """
-    def _resolve(module: str) -> Optional[str]:
-        """Resolve module name; handle relative imports when context given."""
-        if module.startswith('.') and file_path and package_root:
-            return _resolve_relative_import(module, file_path, package_root)
-        if not module.startswith('.'):
-            return module
-        return None  # relative but no context — skip
-
     # `import X` and `import X, Y`
     for m in _RE_IMPORT.finditer(content):
         for name in m.group(1).split(','):
@@ -99,33 +114,20 @@ def _extract_imports_regex(
 
     # `from X import (Y, Z)` — multi-line; process first to avoid overlap
     for m in _RE_FROM_PAREN.finditer(content):
-        raw_module = m.group(1).strip()
-        module = _resolve(raw_module)
+        module = _resolve_import_module(m.group(1).strip(), file_path, package_root)
         if module is None:
             continue
         _add_module_and_parents(imports, module)
-        for name in m.group(2).split(','):
-            name = name.strip().rstrip('\\').strip()
-            # Strip 'as alias' suffix
-            name = name.split()[0] if name else ''
-            if name and name != '*':
-                imports.add(module + '.' + name)
+        _add_named_imports(imports, module, m.group(2), strip_backslash=True)
 
     # `from X import Y, Z` — single-line (skip if already covered by paren form)
     for m in _RE_FROM.finditer(content):
-        raw_module = m.group(1).strip()
-        module = _resolve(raw_module)
+        module = _resolve_import_module(m.group(1).strip(), file_path, package_root)
         if module is None:
             continue
         _add_module_and_parents(imports, module)
-        names_str = m.group(2).strip()
         # Record 'X.Y' for each name so `from pkg import mod` is not a false orphan
-        for name in names_str.split(','):
-            name = name.strip()
-            # Strip 'as alias' suffix
-            name = name.split()[0] if name else ''
-            if name and name != '*':
-                imports.add(module + '.' + name)
+        _add_named_imports(imports, module, m.group(2).strip())
 
 
 class M102(BaseRule):
