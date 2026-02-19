@@ -15,6 +15,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **ast:// OR logic** - `name=*run*|*process*` now returns the union of matches for all fields (was only `type=` field) (commit 0f861b2)
+- **ast:// import noise** - `name=*X*` glob no longer returns import declarations; use explicit `type=import` to find imports (commit 0f861b2)
+- **--check recursive** - `reveal dir/ --check` now runs recursively like ruff/mypy instead of exiting with an error (commit 0f861b2)
+- **M102 false positive** - `_find_package_root` two-pass walk now climbs to `pyproject.toml` before falling back to `__init__.py` boundary, fixing wrong module name resolution in nested packages (commit 0f861b2)
+- **I004 false positive** - Shadowing rule no longer fires for files nested ≥2 levels deep in subpackages (commit 0f861b2)
+- **--check paths** - File paths in `--check` output are now relative to CWD, not to the scan target (commit 0f861b2)
+- **claude:// UUID sessions** - Sessions with UUID IDs are now found via JSONL filename lookup, not just project dir name matching (commit 0f861b2)
+
+### Changed
+- **B003 threshold** - Raised from 8→15 lines; 8 was flagging legitimate computed properties in real-world code (commit 0f861b2)
+- **T004 severity** - Downgraded HIGH→MEDIUM; missing `Optional[]` annotations are a style/compat issue, not a runtime bug (commit 0f861b2)
+
+### Added
+- **--explain thresholds** - `reveal --explain B003` now shows threshold values, `.reveal.yaml` config guidance, and a compliant code example (commit 0f861b2)
+- **--select T category** - T (Types) rules now listed in applicable categories for Python files and in `--select` help text (commit 0f861b2)
+
 - **Element extraction** - `[0.50.0]` and `v1.2.3` in element position no longer trigger confusing "Looking for '0]' within '[0.50'" hierarchical error. Regex now requires both sides of `.` to start with `[A-Za-z_]` (commit d3c2307)
 - **diff:// errors** - Error messages now include expected format and examples when separator colon is missing (commit 2d9b7b8)
 - **--stdin patch detection** - Piping `git diff` (not `--name-only`) to `reveal --stdin` now emits a single clear error with the correct command, instead of N "not found, skipping" warnings (commit 2d9b7b8)
