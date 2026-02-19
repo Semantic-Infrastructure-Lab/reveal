@@ -461,8 +461,8 @@ class RuleRegistry:
         detections: List[Detection] = []
 
         for rule_class in rules:
-            # Check if rule applies to this file
-            if not rule_class().matches_target(file_path):
+            # Check if rule applies to this file (classmethod — no instantiation)
+            if not rule_class.matches_target(file_path):
                 continue
 
             # Check if rule is enabled by config (unless CLI select overrides)

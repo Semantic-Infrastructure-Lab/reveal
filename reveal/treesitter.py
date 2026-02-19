@@ -508,12 +508,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
             stack = [self.tree.root_node]
             while stack:
                 node = stack.pop()
-                node_t = node.type
-                if node_t not in self._node_cache:
-                    self._node_cache[node_t] = []
-                self._node_cache[node_t].append(node)
+                self._node_cache.setdefault(node.type, []).append(node)
                 # Reverse children to maintain document order (stack is LIFO)
-                stack.extend(reversed(node.children))
+                children = node.children
+                if children:
+                    stack.extend(reversed(children))
 
             # Write completed node_cache back to module-level cache
             if hasattr(self, '_cache_key') and self._cache_key in _parse_cache:

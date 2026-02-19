@@ -23,6 +23,7 @@ import re
 from typing import Optional, List, Dict, Any, cast
 from dataclasses import dataclass
 import fnmatch
+import functools
 
 try:
     import yaml
@@ -56,6 +57,44 @@ def _apply_int_rule_env(config: dict, env_var: str, rule_key: str, field_key: st
         logger.warning(f"Invalid {env_var} value: {value}")
 
 
+_path_resolve_cache: Dict[Path, Path] = {}
+
+
+def _cached_resolve(path: Path) -> Path:
+    """Resolve a path, caching the result to avoid repeated lstat chains.
+
+    Path.resolve() traverses every path component via lstat to canonicalize
+    symlinks. With many files and override patterns this adds up fast.
+    """
+    resolved = _path_resolve_cache.get(path)
+    if resolved is None:
+        resolved = path.resolve()
+        _path_resolve_cache[path] = resolved
+    return resolved
+
+
+@functools.lru_cache(maxsize=512)
+def _compile_glob_regex(pattern: str) -> re.Pattern:
+    """Compile a glob pattern to a regex object (cached).
+
+    Patterns are fixed across a run, so compiling them once eliminates
+    thousands of redundant fnmatch.translate + re.compile calls.
+    """
+    if '**' in pattern:
+        p = pattern.replace('/**/', '/§§/')  # Middle position
+        p = p.replace('**/', '§§/')           # Start position
+        p = p.replace('/**', '/§§')           # End position
+        p = p.replace('**', '§§')             # Standalone
+        p = fnmatch.translate(p)
+        p = p.replace('/§§/', '(/|/.*/)')
+        p = p.replace('§§/', '(.*/)?')
+        p = p.replace('/§§', '(/.*)?')
+        p = p.replace('§§', '.*')
+    else:
+        p = fnmatch.translate(pattern)
+    return re.compile(p)
+
+
 def glob_match(path: Path, pattern: str) -> bool:
     """Match a path against a glob pattern with ** support (gitignore-style).
 
@@ -72,35 +111,7 @@ def glob_match(path: Path, pattern: str) -> bool:
         True if path matches pattern
     """
     path_str = str(path).replace(os.sep, '/')
-
-    # Convert glob pattern to regex
-    # Handle ** specially for gitignore-style matching
-    if '**' in pattern:
-        # Replace ** with regex that matches zero or more path components
-        # Handle different positions of **
-        pattern = pattern.replace('/**/', '/§§/')  # Middle position
-        pattern = pattern.replace('**/', '§§/')     # Start position
-        pattern = pattern.replace('/**', '/§§')     # End position
-        pattern = pattern.replace('**', '§§')       # Standalone
-
-        # Now convert the rest to regex using fnmatch
-        pattern = fnmatch.translate(pattern)
-
-        # Replace our markers with proper regex
-        # /§§/ means zero or more path components with slashes
-        pattern = pattern.replace('/§§/', '(/|/.*/)')
-        # §§/ at start means zero or more path components
-        pattern = pattern.replace('§§/', '(.*/)?')
-        # /§§ at end means zero or more path components
-        pattern = pattern.replace('/§§', '(/.*)?')
-        # Standalone §§
-        pattern = pattern.replace('§§', '.*')
-    else:
-        # Simple pattern, use fnmatch
-        pattern = fnmatch.translate(pattern)
-
-    # Match the pattern
-    return re.match(pattern, path_str) is not None
+    return _compile_glob_regex(pattern).match(path_str) is not None
 
 
 # JSON Schema for .reveal.yaml validation
@@ -206,8 +217,8 @@ class Override:
         if project_root:
             try:
                 # Resolve both paths to handle symlinks consistently (macOS /var vs /private/var)
-                resolved_file = file_path.resolve()
-                resolved_root = project_root.resolve()
+                resolved_file = _cached_resolve(file_path)
+                resolved_root = _cached_resolve(project_root)
                 rel_path = resolved_file.relative_to(resolved_root)
             except ValueError:
                 rel_path = file_path
@@ -283,6 +294,11 @@ class RevealConfig:
     # without caching; reduced to once per unique directory with caching).
     _root_cache: Dict[Path, Path] = {}
 
+    # Resolve cache: unresolved Path -> resolved Path.
+    # Path.resolve() does a full lstat chain on every call even for absolute
+    # paths (to canonicalize symlinks). Caching avoids ~60 syscalls per file.
+    _resolve_cache: Dict[Path, Path] = {}
+
     def __init__(self, merged_config: Dict[str, Any], project_root: Optional[Path] = None):
         """Initialize with merged configuration.
 
@@ -330,8 +346,10 @@ class RevealConfig:
         if start_path is None:
             start_path = Path.cwd()
 
-        # Normalize to absolute path
-        start_path = start_path.resolve()
+        # Normalize to absolute path (cache resolve() to avoid repeated lstat chains)
+        if start_path not in cls._resolve_cache:
+            cls._resolve_cache[start_path] = start_path.resolve()
+        start_path = cls._resolve_cache[start_path]
         if start_path.is_file():
             start_path = start_path.parent
 
@@ -681,8 +699,8 @@ class RevealConfig:
         if self._project_root:
             try:
                 # Resolve both paths to handle symlinks consistently (macOS /var vs /private/var)
-                resolved_path = path.resolve()
-                resolved_root = self._project_root.resolve()
+                resolved_path = _cached_resolve(path)
+                resolved_root = _cached_resolve(self._project_root)
                 rel_path = resolved_path.relative_to(resolved_root)
             except ValueError:
                 rel_path = path

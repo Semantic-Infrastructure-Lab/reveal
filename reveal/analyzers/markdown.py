@@ -4,12 +4,17 @@ import re
 import yaml
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional, Set, cast
+from typing import Dict, List, Any, Optional, Set, Tuple, cast
 from urllib.parse import urlparse
 from pathlib import Path
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 from ..structure_options import StructureOptions
+
+# Cache for markdown_inline parse results, keyed by (path, mtime_ns).
+# Avoids re-parsing the same file's inline content when multiple rules or
+# calls analyze the same markdown file in a single --check run.
+_inline_parse_cache: Dict[Tuple[str, int], Any] = {}
 
 
 @dataclass
@@ -58,18 +63,26 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         """
         super().__init__(path)
 
-        # Parse inline content separately for link/code extraction
+        # Parse inline content separately for link/code extraction.
+        # Uses the same (path, mtime_ns) cache key as TreeSitterAnalyzer so
+        # multiple rule passes on the same file share a single parse.
         self.inline_tree = None
-        try:
-            from tree_sitter_language_pack import get_parser
-            import warnings
-            warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
+        cache_key = getattr(self, '_cache_key', None)
+        if cache_key is not None and cache_key in _inline_parse_cache:
+            self.inline_tree = _inline_parse_cache[cache_key]
+        else:
+            try:
+                from tree_sitter_language_pack import get_parser
+                import warnings
+                warnings.filterwarnings('ignore', category=FutureWarning, module='tree_sitter')
 
-            inline_parser = get_parser('markdown_inline')
-            self.inline_tree = inline_parser.parse(self.content.encode('utf-8'))
-        except Exception:
-            # Inline parsing failed - fall back to regex for links/code
-            pass
+                inline_parser = get_parser('markdown_inline')
+                self.inline_tree = inline_parser.parse(self.content.encode('utf-8'))
+                if cache_key is not None:
+                    _inline_parse_cache[cache_key] = self.inline_tree
+            except Exception:
+                # Inline parsing failed - fall back to regex for links/code
+                pass
 
     def _find_nodes_in_tree(self, tree, node_type: str) -> List:
         """Find all nodes of a given type in a specific tree.

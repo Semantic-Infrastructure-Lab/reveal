@@ -362,7 +362,8 @@ class BaseRule(ABC):
             category=self.category
         )
 
-    def matches_target(self, target: str) -> bool:
+    @classmethod
+    def matches_target(cls, target: str) -> bool:
         """
         Check if this rule applies to target (file or URI).
 
@@ -373,13 +374,13 @@ class BaseRule(ABC):
             True if rule should check this target
         """
         # Check URI patterns first
-        if self.uri_patterns:
-            for pattern in self.uri_patterns:
+        if cls.uri_patterns:
+            for pattern in cls.uri_patterns:
                 if re.match(pattern, target):
                     return True
 
         # Check file patterns
-        if self.file_patterns == ['*']:
+        if cls.file_patterns == ['*']:
             return True
 
         # Handle both string paths and Path objects
@@ -394,7 +395,7 @@ class BaseRule(ABC):
         # Also check for files like 'Dockerfile' with no extension
         name = target_path.name
 
-        for pattern in self.file_patterns:
+        for pattern in cls.file_patterns:
             if pattern == suffix:
                 return True
             # Support patterns like 'Dockerfile' (exact name match)
