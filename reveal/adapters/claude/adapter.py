@@ -19,6 +19,7 @@ from .analysis import (
     filter_by_role,
     get_message,
     get_thinking_blocks,
+    search_messages,
     calculate_tool_success_rate,
     get_files_touched,
     get_workflow,
@@ -173,6 +174,9 @@ class ClaudeAdapter(ResourceAdapter):
         elif self.query and self.query.startswith('tools='):
             tool_name = self.query.split('=')[1]
             return get_tool_calls(messages, tool_name, self.session_name, contract_base)
+        elif self.query and self.query.startswith('search='):
+            term = self.query.split('=', 1)[1]
+            return search_messages(messages, term, self.session_name, contract_base)
 
         # Route based on resource path
         if '/thinking' in self.resource:

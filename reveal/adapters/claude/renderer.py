@@ -277,6 +277,206 @@ class ClaudeRenderer(TypeDispatchRenderer):
         if len(results) > 25:
             print(f"  ... and {len(results) - 25} more results")
 
+    @staticmethod
+    def _render_claude_thinking(result: dict) -> None:
+        """Render thinking blocks with actual content text."""
+        session = result.get('session', 'unknown')
+        count = result.get('thinking_block_count', 0)
+        total_tokens = result.get('total_tokens_estimate', 0)
+
+        print(f"Thinking: {session}")
+        print(f"Blocks: {count} | ~{total_tokens} tokens")
+        print()
+
+        for i, block in enumerate(result.get('blocks', []), 1):
+            msg_idx = block.get('message_index', '?')
+            char_count = block.get('char_count', 0)
+            ts = (block.get('timestamp') or '')[:16].replace('T', ' ')
+            content = block.get('content', '')
+
+            print(f"[{i}] Message {msg_idx}  {ts}  ({char_count} chars)")
+            print('─' * 60)
+            if len(content) > 800:
+                print(content[:800])
+                print(f"  ... ({char_count - 800} more chars, use --format=json for full text)")
+            else:
+                print(content)
+            print()
+
+    @staticmethod
+    def _render_claude_user_messages(result: dict) -> None:
+        """Render user messages: first message as full text (the prompt), rest compact."""
+        session = result.get('session', 'unknown')
+        count = result.get('message_count', 0)
+
+        print(f"User Messages: {session} ({count} total)")
+        print()
+
+        for i, msg in enumerate(result.get('messages', [])):
+            msg_idx = msg.get('message_index', '?')
+            ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
+            blocks = msg.get('content', [])
+
+            # Separate text blocks from tool results
+            text_parts = []
+            tool_result_count = 0
+            for block in blocks:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get('type', '')
+                if btype == 'text':
+                    text_parts.append(block.get('text', ''))
+                elif btype == 'tool_result':
+                    tool_result_count += 1
+
+            text = '\n'.join(text_parts).strip()
+
+            print(f"[msg {msg_idx}] {ts}")
+
+            if text:
+                # First user message gets more space (it's the prompt)
+                limit = 1200 if i == 0 else 300
+                if len(text) > limit:
+                    print(text[:limit])
+                    print(f"  ... ({len(text) - limit} more chars)")
+                else:
+                    print(text)
+
+            if tool_result_count:
+                print(f"  [{tool_result_count} tool result(s)]")
+
+            if not text and not tool_result_count:
+                print("  [no text content]")
+
+            print()
+
+    @staticmethod
+    def _render_claude_assistant_messages(result: dict) -> None:
+        """Render assistant messages: text blocks only (skip thinking/tool_use)."""
+        session = result.get('session', 'unknown')
+        count = result.get('message_count', 0)
+
+        print(f"Assistant Messages: {session} ({count} total)")
+        print()
+
+        for msg in result.get('messages', []):
+            msg_idx = msg.get('message_index', '?')
+            ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
+            blocks = msg.get('content', [])
+
+            text_parts = []
+            tool_use_names = []
+            has_thinking = False
+
+            for block in blocks:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get('type', '')
+                if btype == 'text':
+                    text_parts.append(block.get('text', ''))
+                elif btype == 'tool_use':
+                    tool_use_names.append(block.get('name', '?'))
+                elif btype == 'thinking':
+                    has_thinking = True
+
+            text = '\n'.join(text_parts).strip()
+            if not text and not tool_use_names and not has_thinking:
+                continue  # skip empty
+
+            # Header
+            meta_parts = []
+            if has_thinking:
+                meta_parts.append('thinking')
+            if tool_use_names:
+                meta_parts.append(f"tools: {', '.join(tool_use_names)}")
+            meta = f"  [{', '.join(meta_parts)}]" if meta_parts else ''
+
+            print(f"[msg {msg_idx}] {ts}{meta}")
+
+            if text:
+                if len(text) > 600:
+                    print(text[:600])
+                    print(f"  ... ({len(text) - 600} more chars, use /message/{msg_idx} for full text)")
+                else:
+                    print(text)
+            elif tool_use_names:
+                print(f"  (tool calls only, no text)")
+
+            print()
+
+    @staticmethod
+    def _render_claude_message(result: dict) -> None:
+        """Render a single message by index."""
+        session = result.get('session', 'unknown')
+        msg_idx = result.get('message_index', '?')
+        role = result.get('message_type', '?')
+        ts = (result.get('timestamp') or '')[:16].replace('T', ' ')
+
+        if 'error' in result:
+            print(f"Error: {result['error']}")
+            return
+
+        print(f"Message {msg_idx}: {session}")
+        print(f"Role: {role}  |  {ts}")
+        print()
+
+        text = result.get('text', '')
+        if text:
+            print(text)
+        else:
+            # Fall back to raw message structure summary
+            msg = result.get('message', {})
+            content = msg.get('content', [])
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        btype = block.get('type', '?')
+                        if btype == 'text':
+                            print(block.get('text', ''))
+                        elif btype == 'tool_use':
+                            print(f"[tool_use: {block.get('name', '?')}]")
+                        elif btype == 'thinking':
+                            preview = block.get('thinking', '')[:200]
+                            print(f"[thinking: {preview}...]")
+                        else:
+                            print(f"[{btype}]")
+            elif isinstance(content, str):
+                print(content)
+
+    @staticmethod
+    def _render_claude_search_results(result: dict) -> None:
+        """Render search results with excerpts."""
+        session = result.get('session', 'unknown')
+        term = result.get('term', '')
+        count = result.get('match_count', 0)
+
+        print(f"Search: \"{term}\" in {session}")
+        print(f"Matches: {count}")
+        print()
+
+        matches = result.get('matches', [])
+        for i, match in enumerate(matches[:30], 1):
+            msg_idx = match.get('message_index', '?')
+            role = match.get('role', '?')
+            btype = match.get('block_type', '?')
+            ts = match.get('timestamp', '')
+            excerpt = match.get('excerpt', '')
+
+            # Truncate long excerpts
+            if len(excerpt) > 200:
+                excerpt = excerpt[:200] + '...'
+
+            # Clean up newlines for compact display
+            excerpt = excerpt.replace('\n', ' ').strip()
+
+            print(f"[{i:3}] msg {msg_idx} | {role} | {btype}  {ts}")
+            if excerpt:
+                print(f"      {excerpt}")
+            print()
+
+        if count > 30:
+            print(f"  ... and {count - 30} more matches")
+
     @classmethod
     def _render_text(cls, result: dict) -> None:
         """Dispatch to type-specific renderer with custom fallback."""

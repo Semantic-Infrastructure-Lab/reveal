@@ -3,6 +3,42 @@
 from typing import Dict, List, Any
 
 
+def _extract_text(content) -> str:
+    """Normalize content to plain text, regardless of format.
+
+    Handles the two formats seen in Claude Code JSONL:
+    - str: initial user message stored as raw string
+    - list[dict]: structured content blocks (text, thinking, tool_use, tool_result)
+
+    Returns extracted text only (skips thinking/tool_use/tool_result).
+    """
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ''
+    parts = []
+    for block in content:
+        try:
+            if isinstance(block, dict) and block.get('type') == 'text':
+                parts.append(block.get('text', ''))
+        except Exception:
+            continue
+    return '\n'.join(parts)
+
+
+def _content_to_blocks(content) -> list:
+    """Normalize content to a list of structured blocks.
+
+    Converts string content to a single text block so callers
+    always get a list, never a bare string.
+    """
+    if isinstance(content, str):
+        return [{'type': 'text', 'text': content}]
+    if isinstance(content, list):
+        return content
+    return []
+
+
 def filter_by_role(messages: List[Dict], role: str, session_name: str,
                    contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Filter messages by role (user or assistant).
@@ -14,7 +50,7 @@ def filter_by_role(messages: List[Dict], role: str, session_name: str,
         contract_base: Base contract fields
 
     Returns:
-        Dictionary with filtered messages
+        Dictionary with filtered messages, content normalized to list of blocks
     """
     base = contract_base.copy()
     base['type'] = f'claude_{role}_messages'
@@ -23,10 +59,11 @@ def filter_by_role(messages: List[Dict], role: str, session_name: str,
 
     for i, msg in enumerate(messages):
         if msg.get('type') == role:
+            raw_content = msg.get('message', {}).get('content', [])
             filtered.append({
                 'message_index': i,
                 'timestamp': msg.get('timestamp'),
-                'content': msg.get('message', {}).get('content', [])
+                'content': _content_to_blocks(raw_content),
             })
 
     base.update({
@@ -63,13 +100,15 @@ def get_message(messages: List[Dict], msg_id: int, session_name: str,
         return base
 
     msg = messages[msg_id]
+    raw_content = msg.get('message', {}).get('content', [])
 
     base.update({
         'session': session_name,
         'message_index': msg_id,
         'timestamp': msg.get('timestamp'),
-        'message_type': msg.get('type'),  # Changed from 'type' to 'message_type'
-        'message': msg.get('message', {})
+        'message_type': msg.get('type'),
+        'message': msg.get('message', {}),
+        'text': _extract_text(raw_content),
     })
 
     return base
@@ -85,7 +124,7 @@ def get_thinking_blocks(messages: List[Dict], session_name: str,
         contract_base: Base contract fields
 
     Returns:
-        Dictionary with thinking block count and list of blocks
+        Dictionary with thinking block count and list of blocks with content
     """
     base = contract_base.copy()
     base['type'] = 'claude_thinking'
@@ -94,16 +133,22 @@ def get_thinking_blocks(messages: List[Dict], session_name: str,
 
     for i, msg in enumerate(messages):
         if msg.get('type') == 'assistant':
-            for content in msg.get('message', {}).get('content', []):
-                if content.get('type') == 'thinking':
-                    thinking = content.get('thinking', '')
-                    thinking_blocks.append({
-                        'message_index': i,
-                        'content': thinking,
-                        'char_count': len(thinking),
-                        'token_estimate': len(thinking) // 4,
-                        'timestamp': msg.get('timestamp')
-                    })
+            content = msg.get('message', {}).get('content', [])
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                try:
+                    if isinstance(block, dict) and block.get('type') == 'thinking':
+                        thinking = block.get('thinking', '')
+                        thinking_blocks.append({
+                            'message_index': i,
+                            'content': thinking,
+                            'char_count': len(thinking),
+                            'token_estimate': len(thinking) // 4,
+                            'timestamp': msg.get('timestamp')
+                        })
+                except Exception:
+                    continue
 
     base.update({
         'session': session_name,
@@ -114,3 +159,109 @@ def get_thinking_blocks(messages: List[Dict], session_name: str,
     })
 
     return base
+
+
+def search_messages(messages: List[Dict], term: str, session_name: str,
+                    contract_base: Dict[str, Any]) -> Dict[str, Any]:
+    """Search all message content for a term (case-insensitive).
+
+    Searches text blocks, thinking blocks, and tool descriptions.
+
+    Args:
+        messages: List of message dictionaries
+        term: Search term (case-insensitive substring match)
+        session_name: Name of the session
+        contract_base: Base contract fields
+
+    Returns:
+        Dictionary with matching messages and excerpts
+    """
+    base = contract_base.copy()
+    base['type'] = 'claude_search_results'
+
+    lower_term = term.lower()
+    matches = []
+
+    for i, msg in enumerate(messages):
+        role = msg.get('type', '')
+        if role not in ('user', 'assistant'):
+            continue
+
+        raw_content = msg.get('message', {}).get('content', [])
+        blocks = _content_to_blocks(raw_content)
+        ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
+
+        for block in blocks:
+            try:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get('type', '')
+
+                # Text blocks
+                if btype == 'text':
+                    text = block.get('text', '')
+                    if lower_term in text.lower():
+                        excerpt = _find_excerpt(text, term)
+                        matches.append({
+                            'message_index': i,
+                            'role': role,
+                            'block_type': 'text',
+                            'timestamp': ts,
+                            'excerpt': excerpt,
+                        })
+
+                # Thinking blocks (assistant only)
+                elif btype == 'thinking':
+                    text = block.get('thinking', '')
+                    if lower_term in text.lower():
+                        excerpt = _find_excerpt(text, term)
+                        matches.append({
+                            'message_index': i,
+                            'role': role,
+                            'block_type': 'thinking',
+                            'timestamp': ts,
+                            'excerpt': excerpt,
+                        })
+
+                # Tool use — search description/command
+                elif btype == 'tool_use':
+                    inp = block.get('input', {})
+                    searchable = ' '.join(str(v) for v in inp.values() if isinstance(v, str))
+                    name = block.get('name', '')
+                    if lower_term in searchable.lower() or lower_term in name.lower():
+                        excerpt = _find_excerpt(searchable or name, term, window=80)
+                        matches.append({
+                            'message_index': i,
+                            'role': role,
+                            'block_type': f'tool_use:{name}',
+                            'timestamp': ts,
+                            'excerpt': excerpt,
+                        })
+
+            except Exception:
+                continue
+
+    base.update({
+        'session': session_name,
+        'term': term,
+        'match_count': len(matches),
+        'matches': matches,
+    })
+
+    return base
+
+
+def _find_excerpt(text: str, term: str, window: int = 120) -> str:
+    """Return a short excerpt around the first occurrence of term."""
+    lower = text.lower()
+    pos = lower.find(term.lower())
+    if pos == -1:
+        return text[:window]
+    start = max(0, pos - window // 3)
+    end = min(len(text), pos + len(term) + (window * 2 // 3))
+    excerpt = text[start:end].strip()
+    if start > 0:
+        excerpt = '...' + excerpt
+    if end < len(text):
+        excerpt = excerpt + '...'
+    return excerpt

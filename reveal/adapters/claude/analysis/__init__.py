@@ -12,7 +12,7 @@ from .tools import (
 from .errors import get_errors, get_error_context
 from .timeline import get_timeline
 from .overview import get_overview, get_summary, analyze_message_sizes, get_context_changes
-from .messages import filter_by_role, get_message, get_thinking_blocks
+from .messages import filter_by_role, get_message, get_thinking_blocks, search_messages
 
 __all__ = [
     # Tools
@@ -37,4 +37,5 @@ __all__ = [
     'filter_by_role',
     'get_message',
     'get_thinking_blocks',
+    'search_messages',
 ]
