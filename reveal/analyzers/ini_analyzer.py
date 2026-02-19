@@ -102,14 +102,7 @@ class IniAnalyzer(FileAnalyzer):
             if config.defaults():
                 all_sections.insert(0, 'DEFAULT')
 
-            # Apply filtering if requested
-            if head is not None:
-                all_sections = all_sections[:head]
-            elif tail is not None:
-                all_sections = all_sections[-tail:]
-            elif range is not None:
-                start, end = range
-                all_sections = all_sections[start-1:end]
+            all_sections = self._apply_section_filter(all_sections, head, tail, range)
 
             total_keys = 0
             for section in all_sections:
@@ -148,6 +141,18 @@ class IniAnalyzer(FileAnalyzer):
             logger.debug(f"Error parsing INI {self.path}: {e}")
             # Try to parse as simple properties file (Java-style, no sections)
             return self._parse_properties()
+
+    @staticmethod
+    def _apply_section_filter(sections: list, head, tail, range_tuple) -> list:
+        """Apply head/tail/range slice to *sections* list."""
+        if head is not None:
+            return sections[:head]
+        if tail is not None:
+            return sections[-tail:]
+        if range_tuple is not None:
+            start, end = range_tuple
+            return sections[start - 1:end]
+        return sections
 
     def _parse_properties(self) -> Dict[str, Any]:
         """Parse as simple key=value properties file (no sections).

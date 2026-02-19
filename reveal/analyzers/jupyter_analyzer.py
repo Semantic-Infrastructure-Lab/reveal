@@ -167,44 +167,43 @@ class JupyterAnalyzer(FileAnalyzer):
 
         # Show preview of each cell
         for idx, cell in enumerate(self.cells[:10]):  # Limit to first 10 cells
-            cell_type = cell.get('cell_type', 'unknown')
-            source = cell.get('source', [])
-            execution_count = cell.get('execution_count', None)
-
-            # Cell header
-            cell_line = self._find_cell_line(idx)
-            header = f"[{idx + 1}] {cell_type.upper()}"
-            if execution_count is not None:
-                header += f" (exec: {execution_count})"
-            preview.append((cell_line, header))
-            preview.append((cell_line, "─" * 60))
-
-            # Cell content (first 5 lines)
-            if source:
-                source_lines = source if isinstance(source, list) else [source]
-                for i, line in enumerate(source_lines[:5]):
-                    # Remove trailing newlines for display
-                    clean_line = line.rstrip('\n')
-                    preview.append((cell_line + i + 1, clean_line))
-
-                if len(source_lines) > 5:
-                    preview.append((cell_line + 6, f"... ({len(source_lines) - 5} more lines)"))
-
-            # Show output summary for code cells
-            outputs = cell.get('outputs', [])
-            if outputs:
-                preview.append((cell_line, f"Outputs: {len(outputs)} items"))
-                # Show first output if available
-                if outputs[0]:
-                    output_type = outputs[0].get('output_type', 'unknown')
-                    preview.append((cell_line, f"  └─ {output_type}"))
-
-            preview.append((cell_line, ""))  # Blank line between cells
+            preview.extend(self._format_cell_preview(idx, cell))
 
         if len(self.cells) > 10:
             preview.append((1, f"... ({len(self.cells) - 10} more cells)"))
 
         return preview
+
+    def _format_cell_preview(self, idx: int, cell: dict) -> List[tuple]:
+        """Build preview lines for a single cell."""
+        entries = []
+        cell_type = cell.get('cell_type', 'unknown')
+        source = cell.get('source', [])
+        execution_count = cell.get('execution_count', None)
+        cell_line = self._find_cell_line(idx)
+
+        header = f"[{idx + 1}] {cell_type.upper()}"
+        if execution_count is not None:
+            header += f" (exec: {execution_count})"
+        entries.append((cell_line, header))
+        entries.append((cell_line, "─" * 60))
+
+        if source:
+            source_lines = source if isinstance(source, list) else [source]
+            for i, line in enumerate(source_lines[:5]):
+                entries.append((cell_line + i + 1, line.rstrip('\n')))
+            if len(source_lines) > 5:
+                entries.append((cell_line + 6, f"... ({len(source_lines) - 5} more lines)"))
+
+        outputs = cell.get('outputs', [])
+        if outputs:
+            entries.append((cell_line, f"Outputs: {len(outputs)} items"))
+            if outputs[0]:
+                output_type = outputs[0].get('output_type', 'unknown')
+                entries.append((cell_line, f"  └─ {output_type}"))
+
+        entries.append((cell_line, ""))  # blank line between cells
+        return entries
 
     def format_structure(self, structure: Dict[str, Any]) -> List[str]:
         """Format structure output for Jupyter notebooks."""
