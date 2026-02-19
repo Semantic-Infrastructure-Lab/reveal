@@ -8,15 +8,11 @@
 
 ## About This Guide
 
-**Use the quick reference instead:** `reveal --agent-help` (~2,200 tokens)
+This is the complete offline reference for reveal (~12,000 tokens). Both `--agent-help` and `--agent-help-full` serve this file.
 
-**Use this complete guide when:**
-- Cannot make multiple reveal calls (API/token constraints)
-- Working in restricted environment (no file system access)
-- Need complete offline reference with all features
-- Implementing reveal integration in your agent
-
-**For interactive usage:** Use `reveal --agent-help` + `reveal help://topic` for progressive discovery.
+**For interactive usage:** Use `reveal help://topic` for progressive, low-token discovery.
+- `reveal help://ast` - AST adapter details
+- `reveal help://tricks` - Cool tricks and hidden features
 
 ---
 
@@ -1969,8 +1965,8 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 ## Help System Overview
 
 **For AI agents (you):**
-- **Quick reference** (`reveal --agent-help`) - Task-based patterns (~2,200 tokens)
-- **This complete guide** (`reveal --agent-help-full`) - Comprehensive reference (~12,000 tokens)
+- **Complete guide** (`reveal --agent-help` or `reveal --agent-help-full`) - This file (~12,000 tokens)
+- **Progressive help** (`reveal help://topic`) - Low-token per-topic exploration
 
 **For humans:**
 - **CLI reference** (`reveal --help`) - All flags and options

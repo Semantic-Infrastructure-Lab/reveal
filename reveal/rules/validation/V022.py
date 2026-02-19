@@ -142,7 +142,7 @@ class V022(BaseRule):
 
         critical_files = [
             'reveal/docs/AGENT_HELP.md',
-            'reveal/docs/AGENT_HELP_FULL.md',
+            # AGENT_HELP_FULL.md was consolidated into AGENT_HELP.md (commit 9292da3)
         ]
 
         manifest_content = manifest_file.read_text(encoding='utf-8')

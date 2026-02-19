@@ -346,19 +346,20 @@ class TestV022CriticalFiles(unittest.TestCase):
         detections = self.rule._check_critical_files(self.project_root)
         self.assertEqual(len(detections), 0)  # File doesn't exist, so not checked
 
-    def test_multiple_critical_files(self):
-        """Multiple critical files should all be validated."""
-        # Create both critical files
-        (self.reveal_root / "docs" / "AGENT_HELP.md").write_text("# Help")
-        (self.reveal_root / "docs" / "AGENT_HELP_FULL.md").write_text("# Full Help")
+    def test_single_critical_file_missing_from_manifest(self):
+        """AGENT_HELP.md missing from manifest should be flagged.
 
-        # Include only one
+        AGENT_HELP_FULL.md was consolidated into AGENT_HELP.md (commit 9292da3)
+        so there is now only one critical docs file to validate.
+        """
+        (self.reveal_root / "docs" / "AGENT_HELP.md").write_text("# Help")
+
         manifest = self.project_root / "MANIFEST.in"
-        manifest.write_text("include reveal/docs/AGENT_HELP.md\n")
+        manifest.write_text("")
 
         detections = self.rule._check_critical_files(self.project_root)
         self.assertEqual(len(detections), 1)
-        self.assertIn("AGENT_HELP_FULL.md", detections[0].message)
+        self.assertIn("AGENT_HELP.md", detections[0].message)
 
     def test_critical_file_detection_has_suggestion(self):
         """Detection should include helpful suggestion."""
@@ -397,9 +398,8 @@ class TestV022Integration(unittest.TestCase):
 
     def test_perfect_package_no_detections(self):
         """Perfect package setup should have no detections."""
-        # Create all files
+        # Create critical file (AGENT_HELP_FULL.md was consolidated into AGENT_HELP.md at 9292da3)
         (self.reveal_root / "docs" / "AGENT_HELP.md").write_text("# Help")
-        (self.reveal_root / "docs" / "AGENT_HELP_FULL.md").write_text("# Full")
 
         handlers_file = self.reveal_root / "cli" / "handlers.py"
         handlers_file.write_text("""

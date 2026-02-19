@@ -12,7 +12,6 @@ Checks:
     - pyproject.toml (source of truth)
     - CHANGELOG.md (must have section for current version)
     - reveal/docs/AGENT_HELP.md (version reference)
-    - reveal/docs/AGENT_HELP_FULL.md (version reference)
     - ROADMAP.md (current version reference)
     - README.md (version badge, if present)
 """
@@ -147,12 +146,13 @@ class V007(BaseRule):
     def _check_agent_help_versions(
         self, reveal_root: Path, canonical: str, detections: List[Detection]
     ) -> None:
-        """Check AGENT_HELP*.md version references."""
+        """Check AGENT_HELP.md version reference.
+
+        Note: AGENT_HELP_FULL.md was consolidated into AGENT_HELP.md at
+        commit 9292da3 and no longer exists.
+        """
         self._validate_agent_help_file(
             reveal_root, 'AGENT_HELP.md', canonical, detections
-        )
-        self._validate_agent_help_file(
-            reveal_root, 'AGENT_HELP_FULL.md', canonical, detections
         )
 
     def _validate_agent_help_file(

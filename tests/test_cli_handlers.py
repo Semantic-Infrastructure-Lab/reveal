@@ -406,26 +406,16 @@ class TestHandleAgentHelp(unittest.TestCase):
 
     @patch('sys.exit')
     @patch('sys.stdout', new_callable=StringIO)
-    @patch('builtins.open', new_callable=unittest.mock.mock_open, read_data="Full agent help")
-    def test_handle_agent_help_full_success(self, mock_open, mock_stdout, mock_exit):
-        """Test --agent-help-full reads and displays AGENT_HELP_FULL.md."""
+    @patch('builtins.open', new_callable=unittest.mock.mock_open, read_data="Agent help content")
+    def test_handle_agent_help_full_delegates_to_agent_help(self, mock_open, mock_stdout, mock_exit):
+        """Test --agent-help-full is an alias for --agent-help (files were consolidated at 9292da3)."""
         handle_agent_help_full()
-
-        output = mock_stdout.getvalue()
-        self.assertIn('Full agent help', output)
+        # Both flags should open AGENT_HELP.md (not the deleted AGENT_HELP_FULL.md)
+        opened_path = mock_open.call_args[0][0]
+        self.assertIn('AGENT_HELP.md', str(opened_path))
+        self.assertNotIn('AGENT_HELP_FULL.md', str(opened_path))
+        self.assertIn('Agent help content', mock_stdout.getvalue())
         mock_exit.assert_called_once_with(0)
-
-    @patch('sys.stderr', new_callable=StringIO)
-    @patch('builtins.open', side_effect=FileNotFoundError)
-    def test_handle_agent_help_full_missing_file(self, mock_open, mock_stderr):
-        """Test --agent-help-full handles missing AGENT_HELP_FULL.md."""
-        with self.assertRaises(SystemExit) as cm:
-            handle_agent_help_full()
-
-        error = mock_stderr.getvalue()
-        self.assertIn('AGENT_HELP_FULL.md not found', error)
-        self.assertIn('bug', error.lower())
-        self.assertEqual(cm.exception.code, 1)
 
 
 class TestHandleSchema(unittest.TestCase):

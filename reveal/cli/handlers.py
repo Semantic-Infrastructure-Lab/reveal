@@ -138,16 +138,12 @@ def handle_agent_help():
 
 
 def handle_agent_help_full():
-    """Handle --agent-help-full flag."""
-    agent_help_full_path = Path(__file__).parent.parent / 'docs' / 'AGENT_HELP_FULL.md'
-    try:
-        with open(agent_help_full_path, 'r', encoding='utf-8') as f:
-            print(f.read())
-    except FileNotFoundError:
-        print(f"Error: AGENT_HELP_FULL.md not found at {agent_help_full_path}", file=sys.stderr)
-        print("This is a bug - please report it at https://github.com/Semantic-Infrastructure-Lab/reveal/issues", file=sys.stderr)
-        sys.exit(1)
-    sys.exit(0)
+    """Handle --agent-help-full flag.
+
+    AGENT_HELP.md and AGENT_HELP_FULL.md were consolidated into a single file
+    at commit 9292da3. This flag is now an alias for --agent-help.
+    """
+    handle_agent_help()
 
 
 def handle_schema(version: Optional[str] = None):
