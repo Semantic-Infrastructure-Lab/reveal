@@ -34,8 +34,14 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                     structure[category], head, tail, range
                 )
 
-        # Remove empty categories
-        return {k: v for k, v in structure.items() if v}
+        # Remove empty categories and add output contract fields
+        return {
+            'contract_version': '1.0',
+            'type': 'zig_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+            **{k: v for k, v in structure.items() if v},
+        }
 
     def _has_pub_visibility(self, decl_node) -> bool:
         """Check if declaration has pub keyword."""

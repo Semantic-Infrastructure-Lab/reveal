@@ -86,13 +86,20 @@ class MarkdownQueryAdapter(ResourceAdapter):
         Returns:
             Dict containing matched files with frontmatter summary
         """
-        return operations.get_structure(
+        result = operations.get_structure(
             self.base_path,
             self.query or '',
             self.filters,
             self.query_filters,
             self.result_control
         )
+        return {
+            'contract_version': '1.0',
+            'type': 'markdown_query',
+            'source': str(self.base_path),
+            'source_type': 'directory',
+            **result,
+        }
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get frontmatter from a specific file.

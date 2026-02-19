@@ -92,20 +92,26 @@ class HTMLAnalyzer(FileAnalyzer):
             return self._extract_lines(options.head, options.tail, options.range)
 
         # Specialized extractions (filtering mode)
+        _contract = {
+            'contract_version': '1.0',
+            'type': 'html',
+            'source': str(self.path),
+            'source_type': 'file',
+        }
         if options.metadata:
-            return {'metadata': self._extract_metadata()}
+            return {**_contract, 'metadata': self._extract_metadata()}
 
         if options.extract_links:
-            return {'links': self._extract_links(options.link_type, options.domain, options.broken)}
+            return {**_contract, 'links': self._extract_links(options.link_type, options.domain, options.broken)}
 
         if options.semantic:
-            return {'semantic': self._extract_semantic_elements(options.semantic)}
+            return {**_contract, 'semantic': self._extract_semantic_elements(options.semantic)}
 
         if options.scripts:
-            return {'scripts': self._extract_scripts(options.scripts)}
+            return {**_contract, 'scripts': self._extract_scripts(options.scripts)}
 
         if options.styles:
-            return {'styles': self._extract_styles(options.styles)}
+            return {**_contract, 'styles': self._extract_styles(options.styles)}
 
         # Default: Full structure overview (progressive disclosure)
         return self._get_default_structure()
@@ -117,7 +123,10 @@ class HTMLAnalyzer(FileAnalyzer):
             Dict with structured HTML information
         """
         structure = {
+            'contract_version': '1.0',
             'type': 'html',
+            'source': str(self.path),
+            'source_type': 'file',
             'document': self._build_document_info(),
             'head': self._build_head_info(),
             'body': self._build_body_info(),

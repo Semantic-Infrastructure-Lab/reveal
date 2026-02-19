@@ -75,6 +75,10 @@ class BatchAnalyzer(FileAnalyzer):
         stats = self._calculate_stats()
 
         return {
+            'contract_version': '1.0',
+            'type': 'batch_structure',
+            'source': str(self.path),
+            'source_type': 'file',
             'functions': labels,  # Labels are the "functions" in batch
             'variables': variables,
             'internal_calls': internal_calls,

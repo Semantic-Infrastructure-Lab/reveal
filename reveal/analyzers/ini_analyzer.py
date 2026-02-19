@@ -128,13 +128,17 @@ class IniAnalyzer(FileAnalyzer):
 
                 sections_data.append({
                     'name': section,
-                    'line': section_lines.get(section),
+                    'line_start': section_lines.get(section),
                     'key_count': len(items),
                     'keys': keys_data
                 })
                 total_keys += len(items)
 
             return {
+                'contract_version': '1.0',
+                'type': 'ini_structure',
+                'source': str(self.path),
+                'source_type': 'file',
                 'section_count': len(config.sections()) + (1 if config.defaults() else 0),
                 'total_keys': total_keys,
                 'sections': sections_data

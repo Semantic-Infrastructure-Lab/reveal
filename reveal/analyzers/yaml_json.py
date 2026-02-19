@@ -73,11 +73,19 @@ class YamlAnalyzer(TreeSitterAnalyzer):
             key_name, _ = self._extract_key_info(pair)
             if key_name:
                 keys.append({
-                    'line': pair.start_point[0] + 1,
+                    'line_start': pair.start_point[0] + 1,
                     'name': key_name,
                 })
 
-        return {'keys': keys} if keys else {}
+        if not keys:
+            return {}
+        return {
+            'contract_version': '1.0',
+            'type': 'yaml_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+            'keys': keys,
+        }
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a YAML key and its value using tree-sitter.
@@ -167,11 +175,19 @@ class JsonAnalyzer(TreeSitterAnalyzer):
             key_name, _ = self._extract_key_info(pair)
             if key_name:
                 keys.append({
-                    'line': pair.start_point[0] + 1,
+                    'line_start': pair.start_point[0] + 1,
                     'name': key_name,
                 })
 
-        return {'keys': keys} if keys else {}
+        if not keys:
+            return {}
+        return {
+            'contract_version': '1.0',
+            'type': 'json_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+            'keys': keys,
+        }
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a JSON key and its value using tree-sitter.

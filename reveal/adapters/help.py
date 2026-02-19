@@ -212,7 +212,10 @@ class HelpAdapter(ResourceAdapter):
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get help structure (list of available topics)."""
         return {
+            'contract_version': '1.0',
             'type': 'help',
+            'source': 'help://',
+            'source_type': 'runtime',
             'available_topics': self._list_topics(),
             'adapters': self._list_adapters(),
             'static_guides': list(self.help_topics.keys())

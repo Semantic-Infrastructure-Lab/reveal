@@ -37,8 +37,14 @@ class HCLAnalyzer(TreeSitterAnalyzer):
                     structure[category], head, tail, range
                 )
 
-        # Remove empty categories
-        return {k: v for k, v in structure.items() if v}
+        # Remove empty categories and add output contract fields
+        return {
+            'contract_version': '1.0',
+            'type': 'hcl_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+            **{k: v for k, v in structure.items() if v},
+        }
 
     def _extract_blocks(self, block_type: str) -> List[Dict[str, Any]]:
         """Extract blocks of a specific type (resource, variable, output, etc.)."""

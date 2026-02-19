@@ -26,8 +26,13 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
     """
     language = 'elixir'
 
-    # Optional: Override these for custom behavior
-    # def get_structure(self) -> Dict[str, Any]:
-    #     structure = super().get_structure()
-    #     # Add custom processing here
-    #     return structure
+    def get_structure(self, head=None, tail=None, range=None, **kwargs):
+        """Extract Elixir code structure with output contract fields."""
+        structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
+        return {
+            'contract_version': '1.0',
+            'type': 'elixir_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+            **structure,
+        }

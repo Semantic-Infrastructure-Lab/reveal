@@ -73,7 +73,14 @@ class RevealAdapter(ResourceAdapter):
             Dict containing analyzers, adapters, rules, etc.
             Filtered by self.component if specified.
         """
-        return structure.get_structure(self.reveal_root, self.component, **kwargs)
+        result = structure.get_structure(self.reveal_root, self.component, **kwargs)
+        return {
+            'contract_version': '1.0',
+            'type': 'reveal_structure',
+            'source': f'reveal://{self.component or "."}',
+            'source_type': 'runtime',
+            **result,
+        }
 
     def check(self, select: Optional[List[str]] = None, ignore: Optional[List[str]] = None) -> Dict[str, Any]:
         """Run validation rules on reveal itself.

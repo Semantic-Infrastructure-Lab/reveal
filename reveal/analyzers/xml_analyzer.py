@@ -223,6 +223,10 @@ class XmlAnalyzer(FileAnalyzer):
                 root_data['attributes'] = dict(root.attrib)
 
             result = {
+                'contract_version': '1.0',
+                'type': 'xml_structure',
+                'source': str(self.path),
+                'source_type': 'file',
                 'root': root_data,
                 'statistics': {
                     'total_elements': total_elements,

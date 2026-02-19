@@ -17,7 +17,11 @@ def build_hierarchy(structure: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str
     all_items = []
 
     for category, items in structure.items():
+        if not isinstance(items, list):
+            continue  # Skip contract metadata fields (strings, ints, etc.)
         for item in items:
+            if not isinstance(item, dict):
+                continue
             item = item.copy()  # Don't mutate original
             item['category'] = category
             item['children'] = []
@@ -29,14 +33,14 @@ def build_hierarchy(structure: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str
     # Build parent-child relationships based on line ranges
     # An item is a child if it's within another item's line range
     for i, item in enumerate(all_items):
-        item_start = item.get('line', 0)
+        item_start = item.get('line_start', item.get('line', 0))
         item_end = item.get('line_end', item_start)
 
         # Find potential parent (previous item that contains this one)
         parent = None
         for j in range(i - 1, -1, -1):
             candidate = all_items[j]
-            candidate_start = candidate.get('line', 0)
+            candidate_start = candidate.get('line_start', candidate.get('line', 0))
             candidate_end = candidate.get('line_end', candidate_start)
 
             # Check if candidate contains this item
@@ -157,7 +161,7 @@ def _print_outline_item(item: Dict[str, Any], path: Path,
         is_root: Whether this is a root-level item
         is_last_item: Whether this is the last item in its list
     """
-    line = item.get('line', '?')
+    line = item.get('line_start', item.get('line', '?'))
     display = _build_item_display(item)
 
     if is_root:

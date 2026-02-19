@@ -205,6 +205,10 @@ class CsvAnalyzer(FileAnalyzer):
             sample_rows = self._filter_sample_rows(rows, head, tail, range)
 
             return {
+                'contract_version': '1.0',
+                'type': 'csv_structure',
+                'source': str(self.path),
+                'source_type': 'file',
                 'columns': columns,
                 'column_count': len(columns),
                 'row_count': len(rows),

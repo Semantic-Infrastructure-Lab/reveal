@@ -118,7 +118,7 @@ class JsonlAnalyzer(FileAnalyzer):
                 # Store all records for slicing
                 preview = self._build_preview(obj)
                 all_records.append({
-                    'line': i,
+                    'line_start': i,
                     'name': f"{rec_type} #{total_records}",
                     'preview': preview,
                 })
@@ -126,7 +126,7 @@ class JsonlAnalyzer(FileAnalyzer):
             except json.JSONDecodeError as e:
                 # Track malformed records
                 all_records.append({
-                    'line': i,
+                    'line_start': i,
                     'name': '⚠️ Invalid JSON',
                     'preview': f'Parse error: {str(e)[:50]}',
                 })
@@ -141,13 +141,17 @@ class JsonlAnalyzer(FileAnalyzer):
 
         # Add summary as metadata (always included)
         summary = {
-            'line': 0,
+            'line_start': 0,
             'name': f'📊 Summary: {total_records} records',
             'preview': ', '.join(f'{k}: {v}' for k, v in
                                 sorted(record_types.items(), key=lambda x: -x[1])),
         }
 
         return {
+            'contract_version': '1.0',
+            'type': 'jsonl_structure',
+            'source': str(self.path),
+            'source_type': 'file',
             'records': [summary] + selected_records,
         }
 

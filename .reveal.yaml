@@ -61,13 +61,33 @@ ignore:
   - "*.bak"
   - "*~"
 
-# File-specific overrides (optional - examples below)
-# files:
-#   "tests/**/*.py":
-#     rules:
-#       C901:
-#         threshold: 20  # Tests can be more complex
-#   "reveal/rules/**/*.py":
-#     rules:
-#       C901:
-#         threshold: 12  # Rule implementations should be simple
+# File-specific overrides
+overrides:
+  - files: "reveal/rules/**/*.py"
+    rules:
+      disable:
+        - M102  # Rules are discovered dynamically via importlib, not static imports
+  - files: "reveal/templates/**/*.py"
+    rules:
+      disable:
+        - M102  # Template scaffolding files are intentionally not imported at runtime
+  - files: "reveal/adapters/ast/adapter.py"
+    rules:
+      disable:
+        - V023  # Contract fields added by ResultBuilder (utils/results.py)
+  - files: "reveal/adapters/git/adapter.py"
+    rules:
+      disable:
+        - V023  # Contract fields added by helper modules (files.py, commits.py, refs.py)
+  - files: "reveal/adapters/imports.py"
+    rules:
+      disable:
+        - V023  # Contract fields added by _format_all() and other helper methods
+  - files: "reveal/adapters/json/adapter.py"
+    rules:
+      disable:
+        - V023  # Contract fields added by _build_success_result() and other helpers
+  - files: "reveal/adapters/xlsx.py"
+    rules:
+      disable:
+        - V023  # Contract fields added by ResultBuilder in helper methods

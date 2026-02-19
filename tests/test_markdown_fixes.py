@@ -414,21 +414,28 @@ x = 1
         try:
             analyzer = MarkdownAnalyzer(path)
 
-            # Default: only headings
+            _contract_keys = {'contract_version', 'type', 'source', 'source_type'}
+
+            # Default: only headings (plus contract envelope)
             struct1 = analyzer.get_structure()
-            self.assertEqual(set(struct1.keys()), {'headings'})
+            self.assertIn('headings', struct1)
+            self.assertFalse(struct1.keys() - _contract_keys - {'headings'})
 
             # Links only
             struct2 = analyzer.get_structure(extract_links=True)
-            self.assertEqual(set(struct2.keys()), {'links'})
+            self.assertIn('links', struct2)
+            self.assertFalse(struct2.keys() - _contract_keys - {'links'})
 
             # Code only
             struct3 = analyzer.get_structure(extract_code=True)
-            self.assertEqual(set(struct3.keys()), {'code_blocks'})
+            self.assertIn('code_blocks', struct3)
+            self.assertFalse(struct3.keys() - _contract_keys - {'code_blocks'})
 
             # Links + Code (no headings)
             struct4 = analyzer.get_structure(extract_links=True, extract_code=True)
-            self.assertEqual(set(struct4.keys()), {'links', 'code_blocks'})
+            self.assertIn('links', struct4)
+            self.assertIn('code_blocks', struct4)
+            self.assertFalse(struct4.keys() - _contract_keys - {'links', 'code_blocks'})
 
             # Outline mode: headings required
             struct5 = analyzer.get_structure(extract_links=True, outline=True)

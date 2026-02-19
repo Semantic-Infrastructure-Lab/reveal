@@ -28,7 +28,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
 
         # Extract schema elements
         services_data = self._extract_services()
-        structure['services'] = [{'line': s['line'], 'name': s['name']} for s in services_data]
+        structure['services'] = [{'line_start': s['line_start'], 'name': s['name']} for s in services_data]
 
         # Extract RPCs as separate category
         rpcs = []
@@ -49,8 +49,14 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
                         structure[category], head, tail, range
                     )
 
-        # Remove empty categories
-        return {k: v for k, v in structure.items() if v}
+        # Remove empty categories and add output contract fields
+        return {
+            'contract_version': '1.0',
+            'type': 'protobuf_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+            **{k: v for k, v in structure.items() if v},
+        }
 
     def _extract_package(self) -> Optional[Dict[str, Any]]:
         """Extract package declaration."""
@@ -61,7 +67,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
                 if child.type == 'full_ident':
                     package_name = self._get_node_text(child)
                     return {
-                        'line': pkg_node.start_point[0] + 1,
+                        'line_start': pkg_node.start_point[0] + 1,
                         'name': package_name,
                     }
 
@@ -79,7 +85,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
 
             rpcs = self._extract_service_rpcs(service_node)
             services.append({
-                'line': service_node.start_point[0] + 1,
+                'line_start': service_node.start_point[0] + 1,
                 'name': service_name,
                 'rpcs': rpcs,
             })
@@ -124,7 +130,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
         return {
             'name': rpc_name,
             'signature': signature,
-            'line': rpc_node.start_point[0] + 1,
+            'line_start': rpc_node.start_point[0] + 1,
         }
 
     def _get_rpc_name(self, rpc_node) -> Optional[str]:
@@ -233,7 +239,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
                     fields.append(field_info)
 
             messages.append({
-                'line': msg_node.start_point[0] + 1,
+                'line_start': msg_node.start_point[0] + 1,
                 'name': message_name,
                 'fields': fields,
             })
@@ -281,7 +287,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
                                     values.append(value_name)
 
             enums.append({
-                'line': enum_node.start_point[0] + 1,
+                'line_start': enum_node.start_point[0] + 1,
                 'name': enum_name,
                 'values': values,
             })

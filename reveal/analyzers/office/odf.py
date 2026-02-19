@@ -58,6 +58,17 @@ class OdfAnalyzer(ZipXMLAnalyzer):
         # Remove None values
         self.metadata = {k: v for k, v in self.metadata.items() if v}
 
+    def _get_element_text(self, elem: ET.Element) -> str:
+        """Extract all text from an element and its children."""
+        texts = []
+        if elem.text:
+            texts.append(elem.text)
+        for child in elem:
+            texts.append(self._get_element_text(child))
+            if child.tail:
+                texts.append(child.tail)
+        return ''.join(texts)
+
     def _get_mimetype(self) -> Optional[str]:
         """Get document mimetype."""
         content = self._read_part('mimetype')
@@ -194,18 +205,14 @@ class OdtAnalyzer(OdfAnalyzer):
             para_count += para_inc
             word_count += word_inc
 
-        return self._build_odf_result(sections, tables, para_count, word_count, head, tail, range)
-
-    def _get_element_text(self, elem: ET.Element) -> str:
-        """Extract all text from an element and its children."""
-        texts = []
-        if elem.text:
-            texts.append(elem.text)
-        for child in elem:
-            texts.append(self._get_element_text(child))
-            if child.tail:
-                texts.append(child.tail)
-        return ''.join(texts)
+        result = self._build_odf_result(sections, tables, para_count, word_count, head, tail, range)
+        return {
+            'contract_version': '1.0',
+            'type': 'odt_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+            **result,
+        }
 
     def _get_table_dimensions(self, table: ET.Element) -> tuple:
         """Get table row and column counts."""
@@ -306,7 +313,12 @@ class OdsAnalyzer(OdfAnalyzer):
             sheet_info['line'] = idx + 1
             sheets.append(sheet_info)
 
-        result: Dict[str, List[Dict[str, Any]]] = {}
+        result: Dict[str, List[Dict[str, Any]]] = {
+            'contract_version': '1.0',
+            'type': 'ods_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+        }
 
         if sheets:
             # Format sheets with details in name
@@ -349,17 +361,6 @@ class OdsAnalyzer(OdfAnalyzer):
             'cols': col_count,
             'total_rows': len(rows),
         }
-
-    def _get_element_text(self, elem: ET.Element) -> str:
-        """Extract text from element."""
-        texts = []
-        if elem.text:
-            texts.append(elem.text)
-        for child in elem:
-            texts.append(self._get_element_text(child))
-            if child.tail:
-                texts.append(child.tail)
-        return ''.join(texts)
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a sheet by name."""
@@ -460,7 +461,12 @@ class OdpAnalyzer(OdfAnalyzer):
             slide_info = self._analyze_slide(page, idx + 1)
             slides.append(slide_info)
 
-        result: Dict[str, List[Dict[str, Any]]] = {}
+        result: Dict[str, List[Dict[str, Any]]] = {
+            'contract_version': '1.0',
+            'type': 'odp_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+        }
 
         if slides:
             # Format slides with details
@@ -522,17 +528,6 @@ class OdpAnalyzer(OdfAnalyzer):
             'text_elements': text_count,
             'line': slide_num,
         }
-
-    def _get_element_text(self, elem: ET.Element) -> str:
-        """Extract text from element."""
-        texts = []
-        if elem.text:
-            texts.append(elem.text)
-        for child in elem:
-            texts.append(self._get_element_text(child))
-            if child.tail:
-                texts.append(child.tail)
-        return ''.join(texts)
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract a slide by number or title match."""

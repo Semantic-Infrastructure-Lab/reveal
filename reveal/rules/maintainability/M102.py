@@ -27,6 +27,37 @@ _RE_FROM = re.compile(r'^\s*from\s+([\w.]+)\s+import\s+([^\n(#]+)', re.MULTILINE
 _RE_FROM_PAREN = re.compile(r'^\s*from\s+([\w.]+)\s+import\s*\(([^)]+)\)', re.MULTILINE | re.DOTALL)
 
 
+def _resolve_relative_import(
+        module: str, file_path: Path, package_root: Path) -> Optional[str]:
+    """Convert a relative import like '.analysis' or '..base' to its absolute name.
+
+    Args:
+        module: Raw module string from source, e.g. '.analysis', '..base', '.'
+        file_path: Absolute path of the file containing the import
+        package_root: Root of the package (directory containing pyproject.toml etc.)
+
+    Returns:
+        Absolute dotted module name, or None if it can't be resolved
+    """
+    dots = len(module) - len(module.lstrip('.'))
+    rest = module.lstrip('.')
+
+    try:
+        rel = file_path.relative_to(package_root)
+        pkg_parts = list(rel.parts[:-1])  # directories only — strip filename
+        # Each extra dot beyond the first goes up one level
+        go_up = dots - 1
+        if go_up > len(pkg_parts):
+            return None
+        if go_up > 0:
+            pkg_parts = pkg_parts[:len(pkg_parts) - go_up]
+        if rest:
+            pkg_parts.append(rest)
+        return '.'.join(pkg_parts) if pkg_parts else None
+    except ValueError:
+        return None
+
+
 def _add_module_and_parents(imports: Set[str], module: str) -> None:
     """Add a module name and all its parent packages to the imports set."""
     imports.add(module)
@@ -35,14 +66,30 @@ def _add_module_and_parents(imports: Set[str], module: str) -> None:
         imports.add('.'.join(parts[:i]))
 
 
-def _extract_imports_regex(content: str, imports: Set[str]) -> None:
+def _extract_imports_regex(
+        content: str,
+        imports: Set[str],
+        file_path: Optional[Path] = None,
+        package_root: Optional[Path] = None) -> None:
     """Extract all import names from Python source using regex.
 
     Much faster than ast.parse + ast.walk for bulk import scanning
     (used by _collect_all_imports to scan 700+ files in the package).
     Handles: `import X`, `import X, Y`, `from X import Y, Z`,
-    and `from X import (\\n    Y, Z\\n)` (multi-line parenthesized imports).
+    `from X import (\\n    Y, Z\\n)` (multi-line parenthesized imports),
+    and relative imports (`from .foo import bar`, `from . import baz`).
+
+    When file_path and package_root are provided, relative imports are
+    resolved to their absolute module names.
     """
+    def _resolve(module: str) -> Optional[str]:
+        """Resolve module name; handle relative imports when context given."""
+        if module.startswith('.') and file_path and package_root:
+            return _resolve_relative_import(module, file_path, package_root)
+        if not module.startswith('.'):
+            return module
+        return None  # relative but no context — skip
+
     # `import X` and `import X, Y`
     for m in _RE_IMPORT.finditer(content):
         for name in m.group(1).split(','):
@@ -52,7 +99,10 @@ def _extract_imports_regex(content: str, imports: Set[str]) -> None:
 
     # `from X import (Y, Z)` — multi-line; process first to avoid overlap
     for m in _RE_FROM_PAREN.finditer(content):
-        module = m.group(1).strip()
+        raw_module = m.group(1).strip()
+        module = _resolve(raw_module)
+        if module is None:
+            continue
         _add_module_and_parents(imports, module)
         for name in m.group(2).split(','):
             name = name.strip().rstrip('\\').strip()
@@ -63,7 +113,10 @@ def _extract_imports_regex(content: str, imports: Set[str]) -> None:
 
     # `from X import Y, Z` — single-line (skip if already covered by paren form)
     for m in _RE_FROM.finditer(content):
-        module = m.group(1).strip()
+        raw_module = m.group(1).strip()
+        module = _resolve(raw_module)
+        if module is None:
+            continue
         _add_module_and_parents(imports, module)
         names_str = m.group(2).strip()
         # Record 'X.Y' for each name so `from pkg import mod` is not a false orphan
@@ -247,7 +300,7 @@ class M102(BaseRule):
         for py_file in package_root.rglob('*.py'):
             try:
                 content = py_file.read_text(encoding='utf-8', errors='ignore')
-                _extract_imports_regex(content, imports)
+                _extract_imports_regex(content, imports, py_file, package_root)
             except OSError:
                 continue
 

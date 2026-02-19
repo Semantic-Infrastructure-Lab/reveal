@@ -108,7 +108,12 @@ class JupyterAnalyzer(FileAnalyzer):
                          for idx, cell in enumerate(self.cells)]
 
         # Return only the cells list for display
-        result = {}
+        result = {
+            'contract_version': '1.0',
+            'type': 'jupyter_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+        }
         if cell_summaries:
             result['cells'] = cell_summaries
 

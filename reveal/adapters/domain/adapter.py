@@ -395,7 +395,10 @@ class DomainAdapter(ResourceAdapter):
         ]
 
         return {
+            'contract_version': '1.0',
             'type': 'domain_overview',
+            'source': f'domain://{self.domain}',
+            'source_type': 'network',
             'domain': self.domain,
             'dns': {
                 'nameservers': dns_summary.get('nameservers', []),

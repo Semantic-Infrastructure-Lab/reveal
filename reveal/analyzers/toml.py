@@ -41,7 +41,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
                     key_node = node.children[0]
                     key_name = self.content[key_node.start_byte:key_node.end_byte]
                     keys.append({
-                        'line': node.start_point[0] + 1,
+                        'line_start': node.start_point[0] + 1,
                         'name': key_name,
                     })
 
@@ -49,7 +49,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
             elif node.type == 'table':
                 section_name = self._extract_table_name(node)
                 section_info = {
-                    'line': node.start_point[0] + 1,
+                    'line_start': node.start_point[0] + 1,
                     'name': section_name,
                 }
 
@@ -61,9 +61,9 @@ class TomlAnalyzer(TreeSitterAnalyzer):
 
             # Array of tables: [[array]]
             elif node.type == 'table_array_element':
-                section_name = self._extract_table_array_name(node)
+                section_name = self._extract_table_name(node)
                 section_info = {
-                    'line': node.start_point[0] + 1,
+                    'line_start': node.start_point[0] + 1,
                     'name': section_name,
                 }
 
@@ -78,19 +78,19 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         if keys:
             result['keys'] = keys
 
-        return result
+        if not result:
+            return {}
+        return {
+            'contract_version': '1.0',
+            'type': 'toml_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+            **result,
+        }
 
     def _extract_table_name(self, node) -> str:
         """Extract section name from table node."""
         # Find the key node between [ and ]
-        for child in node.children:
-            if child.type in ['bare_key', 'dotted_key', 'quoted_key']:
-                return self.content[child.start_byte:child.end_byte]
-        return ''
-
-    def _extract_table_array_name(self, node) -> str:
-        """Extract section name from table_array_element node."""
-        # Find the key node between [[ and ]]
         for child in node.children:
             if child.type in ['bare_key', 'dotted_key', 'quoted_key']:
                 return self.content[child.start_byte:child.end_byte]
@@ -112,9 +112,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         # Search for matching section
         for node in self.tree.root_node.children:
             if node.type in ['table', 'table_array_element']:
-                section_name = (self._extract_table_name(node)
-                               if node.type == 'table'
-                               else self._extract_table_array_name(node))
+                section_name = self._extract_table_name(node)
 
                 if section_name == name:
                     # Find end of section (next section or EOF)

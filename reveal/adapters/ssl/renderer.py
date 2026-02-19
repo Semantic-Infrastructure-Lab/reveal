@@ -365,6 +365,14 @@ class SSLRenderer(TypeDispatchRenderer):
         print(f"\nExit code: {result['exit_code']}")
 
     @staticmethod
+    def _expires_within_days(r: dict, expiring_days: int) -> bool:
+        """Return True if result cert expires within N days (or is an error)."""
+        days = r.get('certificate', {}).get('days_until_expiry')
+        if days is None:
+            return r['status'] == 'failure'  # Include errors
+        return days <= expiring_days
+
+    @staticmethod
     def _filter_results(result: dict, only_failures: bool = False,
                         expiring_days: Optional[int] = None) -> dict:
         """Filter check results based on criteria.
@@ -388,12 +396,8 @@ class SSLRenderer(TypeDispatchRenderer):
             results = [r for r in results if r['status'] in ('failure', 'warning')]
 
         if expiring_days is not None:
-            def within_days(r):
-                days = r.get('certificate', {}).get('days_until_expiry')
-                if days is None:
-                    return r['status'] == 'failure'  # Include errors
-                return days <= expiring_days
-            results = [r for r in results if within_days(r)]
+            results = [r for r in results
+                       if SSLRenderer._expires_within_days(r, expiring_days)]
 
         filtered['results'] = results
         return filtered
@@ -414,12 +418,8 @@ class SSLRenderer(TypeDispatchRenderer):
         filtered = all_results
 
         if expiring_days is not None:
-            def within_days(r):
-                days = r.get('certificate', {}).get('days_until_expiry')
-                if days is None:
-                    return r['status'] == 'failure'
-                return days <= expiring_days
-            filtered = [r for r in filtered if within_days(r)]
+            filtered = [r for r in filtered
+                        if SSLRenderer._expires_within_days(r, expiring_days)]
 
         if only_failures:
             filtered = [r for r in filtered if r['status'] in ('failure', 'warning')]

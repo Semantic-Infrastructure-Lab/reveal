@@ -306,7 +306,9 @@ class SSLAdapter(ResourceAdapter):
         cert = self._certificate
 
         if not cert:
-            return {'type': 'ssl_certificate', 'error': 'Failed to fetch certificate'}
+            return {'contract_version': '1.0', 'type': 'ssl_certificate',
+                    'source': f'ssl://{self.host}', 'source_type': 'network',
+                    'error': 'Failed to fetch certificate'}
 
         # Determine health status
         days = cert.days_until_expiry
@@ -331,7 +333,10 @@ class SSLAdapter(ResourceAdapter):
             next_steps.append(f"reveal ssl://{self.host} --check  # Run health checks")
 
         return {
+            'contract_version': '1.0',
             'type': 'ssl_certificate',
+            'source': f'ssl://{self.host}',
+            'source_type': 'network',
             'host': self.host,
             'port': self.port,
             'common_name': cert.common_name,

@@ -60,23 +60,31 @@ class DockerfileAnalyzer(TreeSitterAnalyzer):
 
                 if key == 'from':
                     structure[key].append({
-                        'line': line_num,
+                        'line_start': line_num,
                         'name': content,
                     })
                 elif key == 'run':
                     # Truncate long commands
                     display = content[:80] + '...' if len(content) > 80 else content
                     structure[key].append({
-                        'line': line_num,
+                        'line_start': line_num,
                         'content': display,
                     })
                 else:
                     structure[key].append({
-                        'line': line_num,
+                        'line_start': line_num,
                         'content': content,
                     })
 
-        return structure
+        if not structure:
+            return {}
+        return {
+            'contract_version': '1.0',
+            'type': 'dockerfile_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+            **structure,
+        }
 
     def _get_instruction_content(self, node) -> str:
         """Extract content from instruction node, handling various formats."""

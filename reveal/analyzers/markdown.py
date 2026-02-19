@@ -172,7 +172,12 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
             options = StructureOptions.from_kwargs(**kwargs)
 
-        result: Dict[str, Any] = {}
+        result: Dict[str, Any] = {
+            'contract_version': '1.0',
+            'type': 'markdown_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+        }
 
         # Extract front matter if requested (always first, not affected by slicing)
         if options.extract_frontmatter:

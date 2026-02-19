@@ -155,6 +155,10 @@ class NginxAnalyzer(FileAnalyzer):
                 current_server = None
 
         return {
+            'contract_version': '1.0',
+            'type': 'nginx_structure',
+            'source': str(self.path),
+            'source_type': 'file',
             'comments': comments,
             'servers': servers,
             'locations': locations,

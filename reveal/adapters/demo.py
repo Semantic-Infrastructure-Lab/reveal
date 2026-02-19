@@ -176,6 +176,7 @@ class DemoAdapter(ResourceAdapter):
             'contract_version': '1.0',
             'type': 'demo_structure',
             'source': 'demo://',
+            'source_type': 'runtime',
             'items': [
                 # TODO: Populate with actual items
                 {'name': 'example_item', 'type': 'item'},

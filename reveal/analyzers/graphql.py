@@ -39,8 +39,14 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
                     structure[category], head, tail, range
                 )
 
-        # Remove empty categories
-        return {k: v for k, v in structure.items() if v}
+        # Remove empty categories and add output contract fields
+        return {
+            'contract_version': '1.0',
+            'type': 'graphql_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+            **{k: v for k, v in structure.items() if v},
+        }
 
     def _get_name_from_node(self, node) -> Optional[str]:
         """Extract name from a node's children.

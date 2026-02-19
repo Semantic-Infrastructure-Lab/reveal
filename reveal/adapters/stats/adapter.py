@@ -380,7 +380,13 @@ class StatsAdapter(ResourceAdapter):
         if hotspots:
             result['hotspots'] = identify_hotspots(controlled_stats)
 
-        return result
+        return {
+            'contract_version': '1.0',
+            'type': 'stats_structure',
+            'source': str(self.path),
+            'source_type': 'directory' if self.path.is_dir() else 'file',
+            **result,
+        }
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get statistics for a specific file.

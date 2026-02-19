@@ -103,7 +103,7 @@ class DocxAnalyzer(ZipXMLAnalyzer):
                         'name': text[:80] + ('...' if len(text) > 80 else '') if text else f'[{style}]',
                         'level': level,
                         'style': style,
-                        'line': idx + 1,
+                        'line_start': idx + 1,
                     })
 
             elif tag == 'tbl':  # Table
@@ -112,11 +112,16 @@ class DocxAnalyzer(ZipXMLAnalyzer):
                     'name': f'Table ({rows}×{cols})',
                     'rows': rows,
                     'cols': cols,
-                    'line': idx + 1,
+                    'line_start': idx + 1,
                 })
 
         # Build result
-        result: Dict[str, List[Dict[str, Any]]] = {}
+        result: Dict[str, List[Dict[str, Any]]] = {
+            'contract_version': '1.0',
+            'type': 'docx_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+        }
 
         if sections:
             sections = self._apply_semantic_slice(sections, head, tail, range)
@@ -128,7 +133,7 @@ class DocxAnalyzer(ZipXMLAnalyzer):
         # Add overview as first item (formatted for standard renderer)
         result['overview'] = [{
             'name': f'{para_count} paragraphs, {word_count} words',
-            'line': 1,
+            'line_start': 1,
         }]
 
         # Add embedded media
@@ -136,7 +141,7 @@ class DocxAnalyzer(ZipXMLAnalyzer):
         if media:
             result['media'] = [{
                 'name': f"{m['name']} ({m['type']}, {format_size(m['size'])})",
-                'line': idx + 1,
+                'line_start': idx + 1,
             } for idx, m in enumerate(media)]
 
         return result
@@ -295,10 +300,15 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             # Try to get sheet details
             sheet_path = f'xl/worksheets/sheet{sheet_id}.xml'
             sheet_info = self._analyze_sheet(sheet_path, sheet_name)
-            sheet_info['line'] = idx + 1
+            sheet_info['line_start'] = idx + 1
             sheets.append(sheet_info)
 
-        result: Dict[str, List[Dict[str, Any]]] = {}
+        result: Dict[str, List[Dict[str, Any]]] = {
+            'contract_version': '1.0',
+            'type': 'xlsx_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+        }
 
         if sheets:
             # Format sheets with details in name
@@ -308,7 +318,7 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
                 formulas = f", {s['formulas']} formulas" if s.get('formulas') else ''
                 formatted_sheets.append({
                     'name': f"{s['name']}{dim} - {s['rows']} rows, {s['cols']} cols{formulas}",
-                    'line': s['line'],
+                    'line_start': s['line_start'],
                 })
             formatted_sheets = self._apply_semantic_slice(formatted_sheets, head, tail, range)
             result['sheets'] = formatted_sheets
@@ -468,7 +478,12 @@ class PptxAnalyzer(ZipXMLAnalyzer):
             slide_info = self._analyze_slide(slide_path, idx + 1)
             slides.append(slide_info)
 
-        result: Dict[str, List[Dict[str, Any]]] = {}
+        result: Dict[str, List[Dict[str, Any]]] = {
+            'contract_version': '1.0',
+            'type': 'pptx_structure',
+            'source': str(self.path),
+            'source_type': 'file',
+        }
 
         if slides:
             # Format slides with details
@@ -477,7 +492,7 @@ class PptxAnalyzer(ZipXMLAnalyzer):
                 shapes_info = f", {s['shapes']} shapes" if s.get('shapes') else ''
                 formatted_slides.append({
                     'name': f"[{s['slide_num']}] {s['name']}{shapes_info}",
-                    'line': s['line'],
+                    'line_start': s['line_start'],
                 })
             formatted_slides = self._apply_semantic_slice(formatted_slides, head, tail, range)
             result['slides'] = formatted_slides
@@ -487,7 +502,7 @@ class PptxAnalyzer(ZipXMLAnalyzer):
         if media:
             result['media'] = [{
                 'name': f"{m['name']} ({m['type']}, {format_size(m['size'])})",
-                'line': idx + 1,
+                'line_start': idx + 1,
             } for idx, m in enumerate(media)]
 
         return result
@@ -535,7 +550,7 @@ class PptxAnalyzer(ZipXMLAnalyzer):
             'slide_num': slide_num,
             'shapes': shapes_count,
             'text_elements': text_count,
-            'line': slide_num,
+            'line_start': slide_num,
         }
 
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:

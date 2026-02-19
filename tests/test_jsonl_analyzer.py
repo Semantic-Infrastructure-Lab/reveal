@@ -266,9 +266,9 @@ class TestJsonlAnalyzer(unittest.TestCase):
             data_records = [r for r in records if 'Summary' not in r['name']]
 
             # First record at line 1
-            self.assertEqual(data_records[0]['line'], 1)
+            self.assertEqual(data_records[0]['line_start'], 1)
             # Second record at line 3 (after empty line)
-            self.assertEqual(data_records[1]['line'], 3)
+            self.assertEqual(data_records[1]['line_start'], 3)
 
         finally:
             self.teardown_file(path)
