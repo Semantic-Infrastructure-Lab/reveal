@@ -246,52 +246,52 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
 
         return messages
 
+    def _get_enum_name(self, enum_node) -> Optional[str]:
+        """Extract name string from an enum node."""
+        for child in enum_node.children:
+            if child.type == 'enum_name':
+                for name_child in child.children:
+                    if name_child.type == 'identifier':
+                        return self._get_node_text(name_child)
+        return None
+
+    def _get_enum_field_value(self, enum_field) -> Optional[str]:
+        """Build 'name = number' string from an enum_field node."""
+        value_name = None
+        value_number = None
+        for field_child in enum_field.children:
+            if field_child.type == 'identifier':
+                value_name = self._get_node_text(field_child)
+            elif field_child.type == 'int_lit':
+                value_number = self._get_node_text(field_child)
+        if not value_name:
+            return None
+        return f"{value_name} = {value_number}" if value_number else value_name
+
+    def _get_enum_body_values(self, enum_node) -> List[str]:
+        """Extract all value strings from an enum node's body."""
+        values = []
+        for child in enum_node.children:
+            if child.type == 'enum_body':
+                for body_child in child.children:
+                    if body_child.type == 'enum_field':
+                        val = self._get_enum_field_value(body_child)
+                        if val:
+                            values.append(val)
+        return values
+
     def _extract_enums(self) -> List[Dict[str, Any]]:
         """Extract enum definitions."""
         enums = []
-
-        enum_nodes = self._find_nodes_by_type('enum')
-
-        for enum_node in enum_nodes:
-            enum_name = None
-            values = []
-
-            # Get enum name
-            for child in enum_node.children:
-                if child.type == 'enum_name':
-                    for name_child in child.children:
-                        if name_child.type == 'identifier':
-                            enum_name = self._get_node_text(name_child)
-
+        for enum_node in self._find_nodes_by_type('enum'):
+            enum_name = self._get_enum_name(enum_node)
             if not enum_name:
                 continue
-
-            # Extract enum values
-            for child in enum_node.children:
-                if child.type == 'enum_body':
-                    for body_child in child.children:
-                        if body_child.type == 'enum_field':
-                            value_name = None
-                            value_number = None
-
-                            for field_child in body_child.children:
-                                if field_child.type == 'identifier':
-                                    value_name = self._get_node_text(field_child)
-                                elif field_child.type == 'int_lit':
-                                    value_number = self._get_node_text(field_child)
-
-                            if value_name:
-                                if value_number:
-                                    values.append(f"{value_name} = {value_number}")
-                                else:
-                                    values.append(value_name)
-
             enums.append({
                 'line_start': enum_node.start_point[0] + 1,
                 'name': enum_name,
-                'values': values,
+                'values': self._get_enum_body_values(enum_node),
             })
-
         return enums
 
     def _find_nodes_in_subtree(self, root_node, node_type: str) -> List:

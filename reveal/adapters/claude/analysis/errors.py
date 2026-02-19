@@ -5,6 +5,17 @@ from typing import Dict, List, Any, Optional
 from ....utils.patterns import Patterns
 
 
+def _get_tool_input_preview(tool_input: dict) -> Optional[str]:
+    """Extract a short preview string from a tool_use input dict."""
+    if 'command' in tool_input:
+        return tool_input['command'][:200]
+    if 'file_path' in tool_input:
+        return tool_input['file_path']
+    for k, v in tool_input.items():
+        return f"{k}: {str(v)[:150]}"
+    return None
+
+
 def get_error_context(messages: List[Dict], error_msg_index: int,
                       tool_use_id: Optional[str]) -> Dict[str, Any]:
     """Get context around an error for debugging.
@@ -45,17 +56,7 @@ def get_error_context(messages: List[Dict], error_msg_index: int,
                 context['tool_name'] = content.get('name')
                 tool_input = content.get('input', {})
                 if isinstance(tool_input, dict):
-                    # For Bash, show the command
-                    if 'command' in tool_input:
-                        context['tool_input_preview'] = tool_input['command'][:200]
-                    # For Read/Edit, show the file path
-                    elif 'file_path' in tool_input:
-                        context['tool_input_preview'] = tool_input['file_path']
-                    else:
-                        # Generic: show first key-value
-                        for k, v in tool_input.items():
-                            context['tool_input_preview'] = f"{k}: {str(v)[:150]}"
-                            break
+                    context['tool_input_preview'] = _get_tool_input_preview(tool_input)
 
             # Look for thinking in the same message
             if content.get('type') == 'thinking':

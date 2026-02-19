@@ -1,3 +1,7 @@
+---
+title: Markdown Support - Complete Guide
+category: guide
+---
 # Markdown Support - Complete Guide
 
 ## Overview

@@ -1,3 +1,7 @@
+---
+title: Element Discovery Guide
+category: guide
+---
 # Element Discovery Guide
 
 **Phase 5: UX Consistency - Element Discovery**

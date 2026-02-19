@@ -1,3 +1,7 @@
+---
+title: SQLite Adapter Guide
+category: guide
+---
 # SQLite Adapter Guide
 
 **Version**: 1.0 (reveal 0.49.2+)

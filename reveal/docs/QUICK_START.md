@@ -1,3 +1,7 @@
+---
+title: Reveal Quick Start (5 Minutes)
+category: reference
+---
 # Reveal Quick Start (5 Minutes)
 
 **Get productive with reveal in 5 minutes.**

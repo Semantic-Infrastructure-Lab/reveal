@@ -65,19 +65,23 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                     return self._get_node_text(next_sib)
         return None
 
+    def _get_param_name(self, param_decl) -> Optional[str]:
+        """Get the identifier name from a ParamDecl node, or None."""
+        for p in param_decl.children:
+            if p.type == 'IDENTIFIER':
+                return self._get_node_text(p)
+        return None
+
     def _extract_param_names(self, fn_proto) -> List[str]:
         """Extract parameter names from FnProto node."""
         params = []
         for fn_child in fn_proto.children:
             if fn_child.type == 'ParamDeclList':
-                # Extract parameter names
                 for param_child in fn_child.children:
                     if param_child.type == 'ParamDecl':
-                        # Try to get parameter name
-                        for p in param_child.children:
-                            if p.type == 'IDENTIFIER':
-                                params.append(self._get_node_text(p))
-                                break
+                        name = self._get_param_name(param_child)
+                        if name:
+                            params.append(name)
         return params
 
     def _build_function_signature(self, fn_name: str, params: List[str]) -> str:

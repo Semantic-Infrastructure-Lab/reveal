@@ -775,7 +775,10 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             # Parse YAML
             metadata = yaml.safe_load(frontmatter_text)
 
-            if not isinstance(metadata, dict):
+            if metadata is None:
+                # Empty front matter (---\n---) - valid but empty
+                metadata = {}
+            elif not isinstance(metadata, dict):
                 # Invalid front matter (not a dict)
                 return None
 

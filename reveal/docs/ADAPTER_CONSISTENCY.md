@@ -1,3 +1,7 @@
+---
+title: Adapter Consistency Guide
+category: reference
+---
 # Adapter Consistency Guide
 
 **Audience**: Users and adapter authors

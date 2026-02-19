@@ -1,3 +1,7 @@
+---
+title: Reveal Documentation
+category: reference
+---
 # Reveal Documentation
 
 Comprehensive guides for users, developers, and AI agents.

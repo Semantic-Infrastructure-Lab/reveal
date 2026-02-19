@@ -141,8 +141,19 @@ class V017(BaseRule):
 
         return node_types
 
+    # Python type annotation keywords that may appear in method signatures
+    _TYPE_ANNOTATION_WORDS: Set[str] = {
+        'str', 'int', 'bool', 'float', 'list', 'dict', 'tuple',
+        'set', 'any', 'optional', 'none', 'true', 'false',
+    }
+
+    def _extract_strings_filtered(self, text: str) -> List[str]:
+        """Extract quoted lowercase strings, removing type-annotation keywords."""
+        raw = re.findall(r"['\"]([a-z_]+)['\"]", text)
+        return [t for t in raw if t not in self._TYPE_ANNOTATION_WORDS]
+
     def _extract_function_types(self, content: str) -> List[str]:
-        """Extract function node types from _get_function_node_types().
+        """Extract function node types from _get_function_node_types() or FUNCTION_NODE_TYPES.
 
         Args:
             content: File content
@@ -150,22 +161,24 @@ class V017(BaseRule):
         Returns:
             List of function node type strings
         """
-        types = []
-
-        # Find the _get_function_node_types method
-        pattern = r"def _get_function_node_types.*?\]"
-        match = re.search(pattern, content, re.DOTALL)
-
+        # Match from method definition up to (and including) the first ']' after it.
+        # re.DOTALL allows matching across lines for multi-line return lists.
+        # Type annotation keywords are filtered out so 'str' in List[str] is ignored.
+        match = re.search(r"def _get_function_node_types.*?\]", content, re.DOTALL)
         if match:
-            method_content = match.group(0)
-            # Extract strings within this method
-            string_pattern = r"['\"]([a-z_]+)['\"]"
-            types = re.findall(string_pattern, method_content)
+            types = self._extract_strings_filtered(match.group(0))
+            if types:
+                return types
 
-        return types
+        # Fallback: method delegates to a module-level constant
+        const_match = re.search(r"FUNCTION_NODE_TYPES\s*=\s*\(.*?\)", content, re.DOTALL)
+        if const_match:
+            return self._extract_strings_filtered(const_match.group(0))
+
+        return []
 
     def _extract_class_types(self, content: str) -> List[str]:
-        """Extract class node types from _get_class_node_types().
+        """Extract class node types from _get_class_node_types() or CLASS_NODE_TYPES.
 
         Args:
             content: File content
@@ -173,19 +186,18 @@ class V017(BaseRule):
         Returns:
             List of class node type strings
         """
-        types = []
-
-        # Find the _get_class_node_types method
-        pattern = r"def _get_class_node_types.*?\]"
-        match = re.search(pattern, content, re.DOTALL)
-
+        match = re.search(r"def _get_class_node_types.*?\]", content, re.DOTALL)
         if match:
-            method_content = match.group(0)
-            # Extract strings within this method
-            string_pattern = r"['\"]([a-z_]+)['\"]"
-            types = re.findall(string_pattern, method_content)
+            types = self._extract_strings_filtered(match.group(0))
+            if types:
+                return types
 
-        return types
+        # Fallback: method delegates to a module-level constant
+        const_match = re.search(r"CLASS_NODE_TYPES\s*=\s*\(.*?\)", content, re.DOTALL)
+        if const_match:
+            return self._extract_strings_filtered(const_match.group(0))
+
+        return []
 
     def _find_line_number(self, content: str, search_str: str) -> int:
         """Find line number of string in content.

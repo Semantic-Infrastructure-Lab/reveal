@@ -67,6 +67,7 @@ overrides:
     rules:
       disable:
         - M102  # Rules are discovered dynamically via importlib, not static imports
+        - M104  # Rules use file_patterns lists by design (core rule interface)
   - files: "reveal/templates/**/*.py"
     rules:
       disable:
@@ -95,3 +96,91 @@ overrides:
     rules:
       disable:
         - D001  # Result monad: Success/Failure intentionally have same-body methods (is_success/is_failure)
+  - files: "reveal/config.py"
+    rules:
+      disable:
+        - D001  # FileConfig and RevealConfig both have get_rule_config (different classes, different self._config)
+
+  # U502: Docs use example URLs (github.com/user/repo) and third-party URLs by design
+  - files: "reveal/docs/**/*.md"
+    rules:
+      disable:
+        - U502  # Doc examples intentionally use placeholder/third-party URLs, not canonical project URL
+
+  # I002: Standard Python package pattern - __init__.py re-exports from adapter.py
+  # The import cycle (adapter.py -> __init__.py -> adapter.py) is Python's standard
+  # public-interface re-export pattern and is resolved at runtime without issues.
+  - files: "reveal/adapters/git/__init__.py"
+    rules:
+      disable:
+        - I002  # Standard package re-export pattern
+  - files: "reveal/adapters/git/adapter.py"
+    rules:
+      disable:
+        - I002  # Standard package re-export pattern
+  - files: "reveal/adapters/markdown/__init__.py"
+    rules:
+      disable:
+        - I002  # Standard package re-export pattern
+  - files: "reveal/adapters/markdown/adapter.py"
+    rules:
+      disable:
+        - I002  # Standard package re-export pattern
+  - files: "reveal/adapters/reveal/__init__.py"
+    rules:
+      disable:
+        - I002  # Standard package re-export pattern
+  - files: "reveal/adapters/reveal/adapter.py"
+    rules:
+      disable:
+        - I002  # Standard package re-export pattern
+  - files: "reveal/cli/__init__.py"
+    rules:
+      disable:
+        - I002  # Standard package re-export pattern (routing.py)
+  - files: "reveal/cli/routing.py"
+    rules:
+      disable:
+        - I002  # Standard package re-export pattern (cli/__init__.py)
+  - files: "reveal/cli/handlers.py"
+    rules:
+      disable:
+        - I002  # cli package circular re-export pattern (__init__ -> handlers -> routing -> __init__)
+
+  # M104: Legitimate constants - pattern lists, security constants, help lookups
+  - files: "reveal/adapters/**/help.py"
+    rules:
+      disable:
+        - M104  # Help files use command/option lookup tables by design
+  - files: "reveal/adapters/env.py"
+    rules:
+      disable:
+        - M104  # SENSITIVE_PATTERNS is a security constant (belongs inline)
+  - files: "reveal/adapters/claude/adapter.py"
+    rules:
+      disable:
+        - M104  # Adapter lookup tables for Claude message type handling
+  - files: "reveal/display/filtering.py"
+    rules:
+      disable:
+        - M104  # DEFAULT_NOISE_PATTERNS is a filtering constant by design
+  - files: "reveal/registry.py"
+    rules:
+      disable:
+        - M104  # Language registry pattern lists (nginx_patterns, etc.) are intentional
+  - files: "reveal/utils/path_utils.py"
+    rules:
+      disable:
+        - M104  # File detection marker list is a known constant
+  - files: "reveal/cli/introspection.py"
+    rules:
+      disable:
+        - M104  # CLI introspection uses large lookup tables for command metadata
+  - files: "reveal/elements.py"
+    rules:
+      disable:
+        - I002  # Mutual reference with type_system.py - resolved at runtime
+  - files: "reveal/type_system.py"
+    rules:
+      disable:
+        - I002  # Mutual reference with elements.py - resolved at runtime

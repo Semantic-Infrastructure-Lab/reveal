@@ -1,3 +1,7 @@
+---
+title: Env Adapter Guide
+category: guide
+---
 # Env Adapter Guide
 
 **Author**: TIA (The Intelligent Agent)

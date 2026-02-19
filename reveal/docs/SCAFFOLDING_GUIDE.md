@@ -1,3 +1,7 @@
+---
+title: Reveal Scaffolding System
+category: guide
+---
 # Reveal Scaffolding System
 
 **Generate production-ready components in seconds**
@@ -379,3 +383,8 @@ All scaffolded components follow the same high-quality pattern.
 ---
 
 **Scaffolding system**: Reducing barrier to entry, enabling community growth.
+
+## See Also
+
+- [CLI_INTEGRATION_GUIDE.md](CLI_INTEGRATION_GUIDE.md) - Wiring commands into the CLI
+- [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Comprehensive adapter creation guide

@@ -1,3 +1,7 @@
+---
+title: Imports Adapter Guide (imports://)
+category: guide
+---
 # Imports Adapter Guide (imports://)
 
 **Adapter**: `imports://`
@@ -1628,3 +1632,8 @@ repos:
   - Integration examples (jq, Python, CI/CD, pre-commit)
   - Performance optimization tips
   - 52 references consolidated
+
+## See Also
+
+- [GIT_ADAPTER_GUIDE.md](GIT_ADAPTER_GUIDE.md) - Git repository analysis
+- [QUICK_START.md](QUICK_START.md) - General reveal usage reference

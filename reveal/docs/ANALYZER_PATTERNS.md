@@ -1,3 +1,7 @@
+---
+title: Analyzer Development Patterns
+category: reference
+---
 # Analyzer Development Patterns
 
 **Date:** 2026-01-03

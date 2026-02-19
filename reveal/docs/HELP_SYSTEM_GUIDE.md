@@ -1,3 +1,7 @@
+---
+title: The Reveal Help System
+category: guide
+---
 # The Reveal Help System
 
 **Purpose:** Understand how reveal's help system works

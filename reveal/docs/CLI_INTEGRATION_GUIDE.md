@@ -1,3 +1,7 @@
+---
+title: CLI Integration Guide
+category: guide
+---
 # CLI Integration Guide
 
 **When you need this**: Adding a new top-level command to reveal (like `reveal scaffold`)
@@ -273,3 +277,5 @@ See `reveal/main.py` `_handle_scaffold_command()` for a complete, production exa
 - `reveal/main.py` - Main entry point and wiring examples
 - `SCAFFOLDING_GUIDE.md` - For creating adapters/analyzers/rules
 - `CONTRIBUTING.md` - General contribution guide
+- [SCAFFOLDING_GUIDE.md](SCAFFOLDING_GUIDE.md) - Creating adapters, analyzers, and rules
+- [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Deep dive on adapter creation

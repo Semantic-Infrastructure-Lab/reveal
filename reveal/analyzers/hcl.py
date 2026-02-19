@@ -147,32 +147,29 @@ class HCLAnalyzer(TreeSitterAnalyzer):
             if 'source' in attributes:
                 block_info['source'] = attributes['source']
 
+    def _parse_attribute_node(self, attr_node) -> tuple:
+        """Parse key and value from a single HCL attribute node."""
+        key = None
+        value = None
+        for attr_child in attr_node.children:
+            if attr_child.type == 'identifier' and key is None:
+                key = self._get_node_text(attr_child)
+            elif attr_child.type in ['string_lit', 'number_lit', 'bool_lit']:
+                value = self._get_node_text(attr_child)
+                if value and value.startswith('"') and value.endswith('"'):
+                    value = value[1:-1]
+            elif attr_child.type == 'expression':
+                value = self._get_node_text(attr_child)
+        return key, value
+
     def _extract_block_attributes(self, block_node) -> Dict[str, str]:
         """Extract key-value attributes from a block's body."""
         attributes = {}
-
-        # Find the body node
         for child in block_node.children:
             if child.type == 'body':
-                # Look for attribute nodes in the body
                 for body_child in child.children:
                     if body_child.type == 'attribute':
-                        key = None
-                        value = None
-
-                        for attr_child in body_child.children:
-                            if attr_child.type == 'identifier' and key is None:
-                                key = self._get_node_text(attr_child)
-                            elif attr_child.type in ['string_lit', 'number_lit', 'bool_lit']:
-                                value = self._get_node_text(attr_child)
-                                # Clean up string quotes
-                                if value and value.startswith('"') and value.endswith('"'):
-                                    value = value[1:-1]
-                            elif attr_child.type == 'expression':
-                                # For complex expressions, just get the text
-                                value = self._get_node_text(attr_child)
-
+                        key, value = self._parse_attribute_node(body_child)
                         if key:
                             attributes[key] = value or ''
-
         return attributes

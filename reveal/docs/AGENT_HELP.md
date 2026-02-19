@@ -1,3 +1,7 @@
+---
+title: Reveal - AI Agent Reference (Complete)
+category: guide
+---
 # Reveal - AI Agent Reference (Complete)
 **Version:** 0.50.0
 **Purpose:** Comprehensive guide for AI code assistants

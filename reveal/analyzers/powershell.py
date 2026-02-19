@@ -69,6 +69,19 @@ class PowerShellAnalyzer(TreeSitterAnalyzer):
         # Fallback to parent implementation
         return super()._get_node_name(node)
 
+    @staticmethod
+    def _find_paren_block(text: str, start: int) -> str:
+        """Return the balanced-paren substring starting at text[start]."""
+        depth = 0
+        for i, c in enumerate(text[start:]):
+            if c == '(':
+                depth += 1
+            elif c == ')':
+                depth -= 1
+                if depth == 0:
+                    return text[start:start + i + 1]
+        return ''
+
     def _get_signature(self, node) -> str:
         """Get function signature for PowerShell.
 
@@ -95,23 +108,13 @@ class PowerShellAnalyzer(TreeSitterAnalyzer):
         for child in node.children:
             if child.type == 'script_block':
                 block_text = self._get_node_text(child)
-                # Check for param(...) at start of block
                 if 'param(' in block_text.lower():
-                    # Find the param block
                     param_start = block_text.lower().find('param(')
                     if param_start >= 0:
-                        # Find matching closing paren
-                        depth = 0
-                        for i, c in enumerate(block_text[param_start:]):
-                            if c == '(':
-                                depth += 1
-                            elif c == ')':
-                                depth -= 1
-                                if depth == 0:
-                                    param_block = block_text[param_start:param_start + i + 1]
-                                    # Add leading space since formatter does name+signature
-                                    return ' ' + param_block
-                        break
+                        param_block = self._find_paren_block(block_text, param_start)
+                        if param_block:
+                            return ' ' + param_block
+                    break
 
         # No parameters found - return empty (don't return name again)
         return ''

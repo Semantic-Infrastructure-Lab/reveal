@@ -1,3 +1,7 @@
+---
+title: Reveal Documentation Index
+category: reference
+---
 # Reveal Documentation Index
 
 **Complete catalog of all user-facing documentation**

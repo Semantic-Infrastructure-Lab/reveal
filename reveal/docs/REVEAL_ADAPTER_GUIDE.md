@@ -1,3 +1,7 @@
+---
+title: reveal:// Adapter - Reference Implementation
+category: guide
+---
 # reveal:// Adapter - Reference Implementation
 
 **Purpose**: Self-inspection and validation adapter demonstrating reveal's extensibility

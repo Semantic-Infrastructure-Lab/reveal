@@ -1,3 +1,7 @@
+---
+title: Excel (XLSX) Adapter Guide
+category: guide
+---
 # Excel (XLSX) Adapter Guide
 
 **Adapter**: `xlsx://`

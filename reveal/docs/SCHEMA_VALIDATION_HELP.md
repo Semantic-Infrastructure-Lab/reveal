@@ -1,3 +1,7 @@
+---
+title: Schema Validation for Markdown Front Matter
+category: guide
+---
 # Schema Validation for Markdown Front Matter
 
 **Purpose:** Validate markdown front matter against built-in or custom schemas
@@ -609,3 +613,8 @@ reveal --rules | grep F00
   - Custom schema support
   - CI/CD integration (exit codes, JSON output)
   - 103 comprehensive tests
+
+## See Also
+
+- [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Project-wide configuration options
+- [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Markdown analysis and front matter reference

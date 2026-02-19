@@ -23,26 +23,31 @@ class YamlAnalyzer(TreeSitterAnalyzer):
 
     language = 'yaml'
 
-    def _find_yaml_pairs(self):
+    def _get_mapping_pairs(self, block_node) -> List[Any]:
+        """Extract block_mapping_pair nodes from a block_node child."""
+        pairs: List[Any] = []
+        for mapping_child in block_node.children:
+            if mapping_child.type == 'block_mapping':
+                pairs.extend(
+                    p for p in mapping_child.children
+                    if p.type == 'block_mapping_pair'
+                )
+        return pairs
+
+    def _find_yaml_pairs(self) -> List[Any]:
         """Find top-level block_mapping_pair nodes in the document.
 
         Returns:
             List of top-level block_mapping_pair nodes
         """
-        pairs: List[Any] = []
-        # Navigate to the top-level block_mapping
         if not self.tree:
-            return pairs
+            return []
+        pairs: List[Any] = []
         for node in self.tree.root_node.children:
             if node.type == 'document':
                 for child in node.children:
                     if child.type == 'block_node':
-                        for mapping_child in child.children:
-                            if mapping_child.type == 'block_mapping':
-                                # Get top-level pairs only
-                                for pair in mapping_child.children:
-                                    if pair.type == 'block_mapping_pair':
-                                        pairs.append(pair)
+                        pairs.extend(self._get_mapping_pairs(child))
         return pairs
 
     def _extract_key_info(self, pair_node):

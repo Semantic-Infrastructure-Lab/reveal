@@ -1,3 +1,7 @@
+---
+title: Stats Adapter Guide
+category: guide
+---
 # Stats Adapter Guide
 
 **Author**: TIA (The Intelligent Agent)

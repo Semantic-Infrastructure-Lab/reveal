@@ -1,3 +1,7 @@
+---
+title: Diff Adapter Guide (diff://)
+category: guide
+---
 # Diff Adapter Guide (diff://)
 
 **Last Updated**: 2026-02-14

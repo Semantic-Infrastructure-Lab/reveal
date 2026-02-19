@@ -7,6 +7,14 @@ from typing import Dict, Any, Optional, List
 from ...registry import get_analyzer
 
 
+def _is_large_json(file_path: Path) -> bool:
+    """Return True if file_path is a JSON file larger than 10KB."""
+    try:
+        return file_path.stat().st_size > 10240
+    except (OSError, PermissionError):
+        return False
+
+
 def find_analyzable_files(directory: Path, code_only: bool = False) -> List[Path]:
     """Find all files that can be analyzed.
 
@@ -49,13 +57,8 @@ def find_analyzable_files(directory: Path, code_only: bool = False) -> List[Path
                     continue
 
                 # Exclude large JSON files (>10KB, likely data not code)
-                if suffix == '.json':
-                    try:
-                        if file_path.stat().st_size > 10240:  # 10KB
-                            continue
-                    except (OSError, PermissionError):
-                        # If we can't stat it, include it
-                        pass
+                if suffix == '.json' and _is_large_json(file_path):
+                    continue
 
             analyzable.append(file_path)
 

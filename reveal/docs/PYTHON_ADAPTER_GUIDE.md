@@ -1,3 +1,7 @@
+---
+title: Python Adapter (python://) - Complete Guide
+category: guide
+---
 # Python Adapter (python://) - Complete Guide
 
 ## Overview

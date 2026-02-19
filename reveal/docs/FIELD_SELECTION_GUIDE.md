@@ -1,3 +1,7 @@
+---
+title: Field Selection & Budget Constraints Guide
+category: guide
+---
 # Field Selection & Budget Constraints Guide
 
 **Phase 4 Feature**: Token reduction through field selection and explicit budget constraints.

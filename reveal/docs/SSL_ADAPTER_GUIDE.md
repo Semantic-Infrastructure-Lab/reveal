@@ -1,3 +1,7 @@
+---
+title: SSL Adapter Guide
+category: guide
+---
 # SSL Adapter Guide
 
 **Author**: TIA (The Intelligent Agent)

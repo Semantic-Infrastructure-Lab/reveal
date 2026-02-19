@@ -1,3 +1,7 @@
+---
+title: HTML Analysis with Reveal
+category: guide
+---
 # HTML Analysis with Reveal
 
 First-class HTML support for reveal with progressive disclosure, template awareness, and semantic structure extraction.

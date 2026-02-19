@@ -1,3 +1,7 @@
+---
+title: Reveal Configuration Guide
+category: guide
+---
 # Reveal Configuration Guide
 
 **Version:** v0.29.0+

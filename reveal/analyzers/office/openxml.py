@@ -452,6 +452,23 @@ class PptxAnalyzer(ZipXMLAnalyzer):
 
         return result
 
+    def _extract_shape_title(self, shape, ns_a: str, ns_p: str) -> Optional[str]:
+        """Return the title text from a title/ctrTitle placeholder shape, or None."""
+        nvSpPr = shape.find(f'.//{{{ns_p}}}nvSpPr')
+        if nvSpPr is None:
+            return None
+        nvPr = nvSpPr.find(f'{{{ns_p}}}nvPr')
+        if nvPr is None:
+            return None
+        ph = nvPr.find(f'{{{ns_p}}}ph')
+        if ph is None or ph.get('type') not in ('title', 'ctrTitle'):
+            return None
+        texts = [t.text for t in shape.iter(f'{{{ns_a}}}t') if t.text]
+        if not texts:
+            return None
+        full = ''.join(texts)
+        return full[:60] + ('...' if len(full) > 60 else '')
+
     def _analyze_slide(self, slide_path: str, slide_num: int) -> Dict[str, Any]:
         """Analyze a single slide."""
         slide_tree = self._read_xml(slide_path)
@@ -464,30 +481,15 @@ class PptxAnalyzer(ZipXMLAnalyzer):
             a = self.NAMESPACES['a']
             p = self.NAMESPACES['p']
 
-            # Count shapes
             shapes = list(slide_tree.iter(f'{{{p}}}sp'))
             shapes_count = len(shapes)
 
-            # Try to find title
             for shape in shapes:
-                # Check for title placeholder
-                nvSpPr = shape.find(f'.//{{{p}}}nvSpPr')
-                if nvSpPr is not None:
-                    nvPr = nvSpPr.find(f'{{{p}}}nvPr')
-                    if nvPr is not None:
-                        ph = nvPr.find(f'{{{p}}}ph')
-                        if ph is not None and ph.get('type') in ('title', 'ctrTitle'):
-                            # Extract title text
-                            texts = []
-                            for t in shape.iter(f'{{{a}}}t'):
-                                if t.text:
-                                    texts.append(t.text)
-                            if texts:
-                                title = ''.join(texts)[:60]
-                                if len(''.join(texts)) > 60:
-                                    title += '...'
+                shape_title = self._extract_shape_title(shape, a, p)
+                if shape_title:
+                    title = shape_title
+                    break
 
-            # Count text elements
             text_count = len(list(slide_tree.iter(f'{{{a}}}t')))
 
         return {

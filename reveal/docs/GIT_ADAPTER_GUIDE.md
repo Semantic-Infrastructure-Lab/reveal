@@ -1,3 +1,7 @@
+---
+title: Git Adapter Guide (git://)
+category: guide
+---
 # Git Adapter Guide (git://)
 
 **Adapter**: `git://`
@@ -1868,3 +1872,8 @@ reveal git://.@main?limit=1000 --format=json | \
   - Integration examples (jq, Python, CI/CD)
   - Performance optimization tips
   - 107 references consolidated
+
+## See Also
+
+- [IMPORTS_ADAPTER_GUIDE.md](IMPORTS_ADAPTER_GUIDE.md) - Import analysis and dependency checking
+- [QUICK_START.md](QUICK_START.md) - General reveal usage reference

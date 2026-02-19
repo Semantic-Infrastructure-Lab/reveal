@@ -1,3 +1,7 @@
+---
+title: Elixir Analyzer Guide
+category: guide
+---
 # Elixir Analyzer Guide
 
 ## Overview
@@ -65,3 +69,8 @@ def get_structure(self):
 2. Verify tree-sitter-elixir works correctly
 3. Add language-specific features if needed
 4. Update this documentation with real examples
+
+## See Also
+
+- [QUICK_START.md](QUICK_START.md) - Getting started with reveal
+- [ANALYZER_PATTERNS.md](ANALYZER_PATTERNS.md) - Common analyzer implementation patterns

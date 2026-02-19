@@ -1,3 +1,7 @@
+---
+title: Claude Adapter Guide (claude://)
+category: guide
+---
 # Claude Adapter Guide (claude://)
 
 **Last Updated**: 2026-02-14

@@ -1,3 +1,7 @@
+---
+title: Output Contract Specification
+category: reference
+---
 # Output Contract Specification
 
 **Current Version**: 1.1.0
@@ -667,3 +671,8 @@ reveal --check reveal/adapters/myadapter.py --select V016
 3. Add `reveal schema` command
 4. Update adapter authoring guide
 5. Release v0.38.0 with Output Contract support
+
+## See Also
+
+- [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Configuring output format and rules
+- [QUICK_START.md](QUICK_START.md) - Getting started with reveal

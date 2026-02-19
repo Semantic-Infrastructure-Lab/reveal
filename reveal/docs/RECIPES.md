@@ -1,3 +1,7 @@
+---
+title: Reveal Recipes
+category: reference
+---
 # Reveal Recipes
 
 **Task-based patterns for getting work done**

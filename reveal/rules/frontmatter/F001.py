@@ -45,15 +45,16 @@ class F001(BaseRule):
         """
         detections: List[Detection] = []
 
-        # If structure is None, can't check (no markdown analysis done)
-        if structure is None:
+        # Skip empty content - no meaningful signal
+        if not content:
             return detections
 
-        # Check if frontmatter key exists and is None
-        # (None means markdown analyzer found no front matter)
-        frontmatter = structure.get('frontmatter')
+        # Check raw content directly - front matter starts with '---\n'
+        # This is more reliable than structure-based detection which requires
+        # the analyzer to be called with extract_frontmatter=True
+        has_frontmatter = content.startswith('---\n') or content.startswith('---\r\n')
 
-        if frontmatter is None:
+        if not has_frontmatter:
             detections.append(self.create_detection(
                 file_path=file_path,
                 line=1,

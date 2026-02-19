@@ -31,6 +31,22 @@ QUALITY_DEFAULTS = {
 }
 
 
+def _merge_quality_section(config: Dict[str, Any], loaded: Dict[str, Any], key: str) -> None:
+    """Merge a single config section (thresholds or penalties) in-place."""
+    if key not in loaded or not isinstance(loaded[key], dict):
+        return
+    if not isinstance(config.get(key), dict):
+        return
+    loaded_section = cast(Dict[str, Any], loaded[key])
+    config_section = cast(Dict[str, Any], config[key])
+    if key == 'penalties':
+        for subkey in loaded_section:
+            if subkey in config_section:
+                config_section[subkey].update(loaded_section[subkey])
+    else:
+        config_section.update(loaded_section)
+
+
 def get_quality_config(path: Path) -> Dict[str, Any]:
     """Load quality scoring configuration.
 
@@ -58,20 +74,11 @@ def get_quality_config(path: Path) -> Dict[str, Any]:
             if config_path.exists():
                 with open(config_path) as f:
                     loaded_raw = yaml.safe_load(f)
-                    if loaded_raw and isinstance(loaded_raw, dict):
-                        loaded: Dict[str, Any] = loaded_raw
-                        # Deep merge loaded config into defaults
-                        for key in ['thresholds', 'penalties']:
-                            if key in loaded and isinstance(loaded[key], dict) and isinstance(config[key], dict):
-                                loaded_section = cast(Dict[str, Any], loaded[key])
-                                config_section = cast(Dict[str, Any], config[key])
-                                if key == 'penalties':
-                                    for subkey in loaded_section:
-                                        if subkey in config_section:
-                                            config_section[subkey].update(loaded_section[subkey])
-                                else:
-                                    config_section.update(loaded_section)
-                        break
+                if loaded_raw and isinstance(loaded_raw, dict):
+                    loaded: Dict[str, Any] = loaded_raw
+                    for key in ['thresholds', 'penalties']:
+                        _merge_quality_section(config, loaded, key)
+                    break
     except ImportError:
         pass  # yaml not available, use defaults
     except Exception:

@@ -1,3 +1,7 @@
+---
+title: MySQL Adapter Guide (mysql://)
+category: guide
+---
 # MySQL Adapter Guide (mysql://)
 
 **Adapter**: `mysql://`
@@ -2105,3 +2109,8 @@ SHOW VARIABLES LIKE 'slow_query%';
   - 6 complete workflows
   - Integration examples (jq, Python, monitoring)
   - Production best practices
+
+## See Also
+
+- [QUICK_START.md](QUICK_START.md) - Getting started with reveal
+- [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Configuring reveal for your project

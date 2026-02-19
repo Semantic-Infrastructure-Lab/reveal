@@ -1,3 +1,7 @@
+---
+title: Reveal Adapter Authoring Guide
+category: guide
+---
 # Reveal Adapter Authoring Guide
 
 **For Extension/Plugin Authors**: How to create adapters with excellent help documentation

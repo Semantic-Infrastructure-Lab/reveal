@@ -1,3 +1,7 @@
+---
+title: Domain Adapter Guide (domain://)
+category: guide
+---
 # Domain Adapter Guide (domain://)
 
 **Last Updated**: 2026-02-14

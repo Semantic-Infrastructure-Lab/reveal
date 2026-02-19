@@ -1,3 +1,7 @@
+---
+title: Duplicate Code Detection in Reveal
+category: guide
+---
 # Duplicate Code Detection in Reveal
 
 **Version:** 0.30.0
