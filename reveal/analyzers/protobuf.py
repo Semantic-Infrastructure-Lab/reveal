@@ -197,54 +197,47 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
     def _extract_messages(self) -> List[Dict[str, Any]]:
         """Extract message definitions."""
         messages = []
-
-        message_nodes = self._find_nodes_by_type('message')
-
-        for msg_node in message_nodes:
-            message_name = None
-            fields = []
-
-            # Get message name
-            for child in msg_node.children:
-                if child.type == 'message_name':
-                    for name_child in child.children:
-                        if name_child.type == 'identifier':
-                            message_name = self._get_node_text(name_child)
-
+        for msg_node in self._find_nodes_by_type('message'):
+            message_name = self._get_message_name(msg_node)
             if not message_name:
                 continue
-
-            # Extract fields
-            field_nodes = self._find_nodes_in_subtree(msg_node, 'field')
-
-            for field_node in field_nodes:
-                field_type = None
-                field_name = None
-                field_number = None
-
-                for child in field_node.children:
-                    if child.type == 'type':
-                        field_type = self._get_node_text(child)
-                    elif child.type == 'identifier':
-                        field_name = self._get_node_text(child)
-                    elif child.type == 'field_number':
-                        field_number = self._get_node_text(child)
-
-                if field_name:
-                    field_info = field_name
-                    if field_type:
-                        field_info = f"{field_type} {field_name}"
-                    if field_number:
-                        field_info += f" = {field_number}"
-                    fields.append(field_info)
-
+            fields = [
+                info
+                for field_node in self._find_nodes_in_subtree(msg_node, 'field')
+                if (info := self._format_field_info(field_node)) is not None
+            ]
             messages.append({
                 'line_start': msg_node.start_point[0] + 1,
                 'name': message_name,
                 'fields': fields,
             })
-
         return messages
+
+    def _get_message_name(self, msg_node) -> Optional[str]:
+        """Extract identifier string from a message node's message_name child."""
+        for child in msg_node.children:
+            if child.type == 'message_name':
+                for name_child in child.children:
+                    if name_child.type == 'identifier':
+                        return self._get_node_text(name_child)
+        return None
+
+    def _format_field_info(self, field_node) -> Optional[str]:
+        """Build a display string for a protobuf field node, or None if unnamed."""
+        field_type = field_name = field_number = None
+        for child in field_node.children:
+            if child.type == 'type':
+                field_type = self._get_node_text(child)
+            elif child.type == 'identifier':
+                field_name = self._get_node_text(child)
+            elif child.type == 'field_number':
+                field_number = self._get_node_text(child)
+        if not field_name:
+            return None
+        info = f"{field_type} {field_name}" if field_type else field_name
+        if field_number:
+            info += f" = {field_number}"
+        return info
 
     def _get_enum_name(self, enum_node) -> Optional[str]:
         """Extract name string from an enum node."""

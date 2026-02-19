@@ -378,24 +378,22 @@ class HTMLAnalyzer(FileAnalyzer):
             metadata['stylesheets'] = stylesheets
 
         # Scripts
-        scripts = []
-        for script in head.find_all('script'):
-            script_info = {}
-            if src := script.get('src'):
-                script_info['src'] = src
-                script_info['type'] = 'external'
-            else:
-                script_info['type'] = 'inline'
-                # Include snippet of inline scripts
-                script_text = script.string or ''
-                if script_text:
-                    script_info['preview'] = script_text[:100]
-            scripts.append(script_info)
-
+        scripts = [self._describe_script(s) for s in head.find_all('script')]
         if scripts:
             metadata['scripts'] = scripts
 
         return metadata
+
+    @staticmethod
+    def _describe_script(script) -> dict:
+        """Build a description dict for a single <script> element."""
+        if src := script.get('src'):
+            return {'src': src, 'type': 'external'}
+        info: dict = {'type': 'inline'}
+        script_text = script.string or ''
+        if script_text:
+            info['preview'] = script_text[:100]
+        return info
 
     def _extract_links(self,
                       link_type: Optional[str] = None,

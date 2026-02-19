@@ -398,29 +398,34 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
                     fields.append(field_name)
         return fields
 
+    def _find_child_by_types(self, node, types) -> 'Optional[Any]':
+        """Return the first child whose .type is in *types*, or None."""
+        for child in node.children:
+            if child.type in types:
+                return child
+        return None
+
     def _get_type_string(self, type_node) -> str:
         """Convert a type node to a string representation."""
-        if type_node.type == 'non_null_type':
-            # Get the inner type and add !
-            for child in type_node.children:
-                if child.type in ['named_type', 'list_type']:
-                    return self._get_type_string(child) + '!'
-            return self._get_node_text(type_node)
-        elif type_node.type == 'list_type':
-            # Get the inner type and wrap in []
-            for child in type_node.children:
-                if child.type in ['type', 'named_type', 'non_null_type']:
-                    return '[' + self._get_type_string(child) + ']'
-            return self._get_node_text(type_node)
-        elif type_node.type == 'named_type':
-            # Get the name
-            for child in type_node.children:
-                if child.type == 'name':
-                    return self._get_node_text(child)
-        elif type_node.type == 'type':
-            # Recurse into type wrapper
-            for child in type_node.children:
-                if child.type in ['named_type', 'list_type', 'non_null_type']:
-                    return self._get_type_string(child)
+        node_type = type_node.type
+
+        if node_type == 'non_null_type':
+            inner = self._find_child_by_types(type_node, {'named_type', 'list_type'})
+            return (self._get_type_string(inner) if inner else self._get_node_text(type_node)) + '!'
+
+        if node_type == 'list_type':
+            inner = self._find_child_by_types(type_node, {'type', 'named_type', 'non_null_type'})
+            inner_str = self._get_type_string(inner) if inner else self._get_node_text(type_node)
+            return f'[{inner_str}]'
+
+        if node_type == 'named_type':
+            name_child = self._find_child_by_types(type_node, {'name'})
+            if name_child:
+                return self._get_node_text(name_child)
+
+        if node_type == 'type':
+            inner = self._find_child_by_types(type_node, {'named_type', 'list_type', 'non_null_type'})
+            if inner:
+                return self._get_type_string(inner)
 
         return self._get_node_text(type_node)
