@@ -65,19 +65,8 @@ class PythonExtractor(LanguageExtractor):
         if cache_key in _extract_imports_cache:
             return _extract_imports_cache[cache_key]
 
-        try:
-            analyzer_class = get_analyzer(path_str)
-            if not analyzer_class:
-                _extract_imports_cache[cache_key] = []
-                return []
-
-            analyzer = analyzer_class(path_str)
-            if not analyzer.tree:
-                _extract_imports_cache[cache_key] = []
-                return []
-
-        except Exception:
-            # Can't parse - return empty
+        analyzer = self._get_tree_analyzer(path_str)
+        if not analyzer:
             _extract_imports_cache[cache_key] = []
             return []
 
@@ -85,23 +74,28 @@ class PythonExtractor(LanguageExtractor):
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 source_lines = f.readlines()
-        except Exception:
+        except Exception:  # noqa: BLE001
             source_lines = []
 
         imports = []
-
-        # Find import_statement nodes (import os, sys)
-        import_nodes = analyzer._find_nodes_by_type('import_statement')
-        for node in import_nodes:
+        for node in analyzer._find_nodes_by_type('import_statement'):
             imports.extend(self._parse_import_statement(node, file_path, analyzer, source_lines))
-
-        # Find import_from_statement nodes (from x import y)
-        from_nodes = analyzer._find_nodes_by_type('import_from_statement')
-        for node in from_nodes:
+        for node in analyzer._find_nodes_by_type('import_from_statement'):
             imports.extend(self._parse_from_import(node, file_path, analyzer, source_lines))
 
         _extract_imports_cache[cache_key] = imports
         return imports
+
+    def _get_tree_analyzer(self, path_str: str):
+        """Get a tree-sitter analyzer instance for *path_str*, or None if parse fails."""
+        try:
+            analyzer_class = get_analyzer(path_str)
+            if not analyzer_class:
+                return None
+            analyzer = analyzer_class(path_str)
+            return analyzer if analyzer.tree else None
+        except Exception:  # noqa: BLE001
+            return None
 
     def _is_inside_type_checking(self, node) -> bool:
         """Check if import node is inside a TYPE_CHECKING conditional block.
@@ -390,46 +384,34 @@ class PythonExtractor(LanguageExtractor):
         Used to detect re-exports - imports that appear in __all__
         are intentionally exposed and should not be flagged as unused.
         """
-        try:
-            analyzer_class = get_analyzer(str(file_path))
-            if not analyzer_class:
-                return set()
-
-            analyzer = analyzer_class(str(file_path))
-            if not analyzer.tree:
-                return set()
-
-        except Exception:
+        analyzer = self._get_tree_analyzer(str(file_path))
+        if not analyzer:
             return set()
 
-        exports = set()
-
-        def extract_strings(node):
-            """Recursively extract string content from AST nodes."""
-            strings = []
-            if node.type == 'string':
-                text = analyzer._get_node_text(node)
-                text = text.strip('"\'')
-                strings.append(text)
-            for child in node.children:
-                strings.extend(extract_strings(child))
-            return strings
+        exports: Set[str] = set()
 
         # Find __all__ = [...] and __all__ += [...] assignments
-        assignment_nodes = analyzer._find_nodes_by_type('assignment')
-        for node in assignment_nodes:
-            assignment_text = analyzer._get_node_text(node)
-            if assignment_text.strip().startswith('__all__'):
-                exports.update(extract_strings(node))
+        for node in analyzer._find_nodes_by_type('assignment'):
+            if analyzer._get_node_text(node).strip().startswith('__all__'):
+                exports.update(self._extract_string_literals(node, analyzer))
 
         # Also find __all__.append('X') and __all__.extend([...]) call patterns
-        call_nodes = analyzer._find_nodes_by_type('call')
-        for node in call_nodes:
+        for node in analyzer._find_nodes_by_type('call'):
             call_text = analyzer._get_node_text(node)
             if call_text.startswith('__all__.append(') or call_text.startswith('__all__.extend('):
-                exports.update(extract_strings(node))
+                exports.update(self._extract_string_literals(node, analyzer))
 
         return exports
+
+    def _extract_string_literals(self, node, analyzer) -> List[str]:
+        """Recursively extract string content from AST nodes."""
+        strings = []
+        if node.type == 'string':
+            text = analyzer._get_node_text(node).strip('"\'')
+            strings.append(text)
+        for child in node.children:
+            strings.extend(self._extract_string_literals(child, analyzer))
+        return strings
 
     def resolve_import(
         self,
