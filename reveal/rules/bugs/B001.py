@@ -40,7 +40,7 @@ class B001(BaseRule, ASTParsingMixin):
             return detections
 
         # Walk the AST looking for bare except handlers
-        for node in ast.walk(tree):
+        for node in self._ast_walk(tree):
             if isinstance(node, ast.ExceptHandler):
                 # Bare except has type=None
                 if node.type is None:

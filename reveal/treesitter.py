@@ -1,6 +1,7 @@
 """Tree-sitter based analyzer for multi-language support."""
 
-from typing import Dict, List, Any, Optional
+import os
+from typing import Dict, List, Any, Optional, Tuple
 from .base import FileAnalyzer
 from .core import suppress_treesitter_warnings
 
@@ -8,6 +9,13 @@ from .core import suppress_treesitter_warnings
 suppress_treesitter_warnings()
 
 from tree_sitter_language_pack import get_parser
+
+
+# Module-level cache: (path_str, mtime_ns) -> {'tree': ..., 'node_cache': ...}
+# Eliminates redundant parses when multiple rules/callers analyze the same
+# unchanged file (e.g. extract_imports + extract_symbols + extract_exports
+# for the same .py file during `reveal --check`).
+_parse_cache: Dict[Tuple[str, int], Dict[str, Any]] = {}
 
 
 # =============================================================================
@@ -124,15 +132,39 @@ class TreeSitterAnalyzer(FileAnalyzer):
     def _parse_tree(self) -> None:
         """Parse file with tree-sitter.
 
+        Uses a module-level cache keyed by (path, mtime_ns) to avoid
+        re-parsing the same unchanged file across multiple analyzer
+        instances (e.g. extract_imports, extract_symbols, extract_exports
+        all called on the same .py file during --check).
+
         Note: Tree-sitter warnings are suppressed at module level via
         suppress_treesitter_warnings() call at top of file.
         """
+        path_str = os.path.abspath(str(self.path))
+        try:
+            mtime_ns = os.stat(path_str).st_mtime_ns
+        except OSError:
+            mtime_ns = 0
+        self._cache_key: Tuple[str, int] = (path_str, mtime_ns)
+
+        cached = _parse_cache.get(self._cache_key)
+        if cached is not None:
+            self.tree = cached['tree']
+            if 'node_cache' in cached:
+                self._node_cache = cached['node_cache']
+            return
+
         try:
             parser = get_parser(self.language)  # type: ignore[arg-type]  # language is validated at runtime
-            self.tree = parser.parse(self.content.encode('utf-8'))
+            content_bytes = self.content.encode('utf-8')
+            self._content_bytes = content_bytes  # cache for _get_node_text reuse
+            self.tree = parser.parse(content_bytes)
         except Exception:
             # Parsing failed - fall back to text analysis
             self.tree = None
+
+        if self.tree is not None:
+            _parse_cache[self._cache_key] = {'tree': self.tree}
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
@@ -286,14 +318,15 @@ class TreeSitterAnalyzer(FileAnalyzer):
         line_start = bounds_node.start_point[0] + 1
         line_end = bounds_node.end_point[0] + 1
 
+        complexity, depth = self._calculate_complexity_and_depth(node)
         return {
             'line': line_start,
             'line_end': line_end,
             'name': name,
             'signature': self._get_signature(node),
             'line_count': line_end - line_start + 1,
-            'depth': self._get_nesting_depth(node),
-            'complexity': self._calculate_complexity(node),
+            'depth': depth,
+            'complexity': complexity,
             'decorators': decorators,
         }
 
@@ -461,6 +494,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
         Uses single-pass caching: first call walks entire tree once and caches
         ALL node types. Subsequent calls return from cache. This is 5-6x faster
         than walking the tree separately for each node type query.
+
+        Also writes the completed node_cache back into the module-level
+        _parse_cache so subsequent analyzer instances for the same unchanged
+        file can skip the tree traversal entirely.
         """
         if not self.tree:
             return []
@@ -478,6 +515,10 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 # Reverse children to maintain document order (stack is LIFO)
                 stack.extend(reversed(node.children))
 
+            # Write completed node_cache back to module-level cache
+            if hasattr(self, '_cache_key') and self._cache_key in _parse_cache:
+                _parse_cache[self._cache_key]['node_cache'] = self._node_cache
+
         return self._node_cache.get(node_type, [])
 
     def _get_node_text(self, node) -> str:
@@ -485,12 +526,16 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         IMPORTANT: Tree-sitter uses byte offsets, not character offsets!
         Must slice the UTF-8 bytes, not the string, to handle multi-byte characters.
+
+        Caches content.encode('utf-8') per instance to avoid re-encoding the
+        entire file on every call (hot path: called once per symbol/function/class).
         """
-        start_byte = node.start_byte
-        end_byte = node.end_byte
-        # Convert to bytes, slice, then decode back to string
-        content_bytes = self.content.encode('utf-8')
-        return content_bytes[start_byte:end_byte].decode('utf-8')
+        try:
+            content_bytes = self._content_bytes  # type: ignore[attr-defined]
+        except AttributeError:
+            content_bytes = self.content.encode('utf-8')
+            self._content_bytes = content_bytes  # type: ignore[attr-defined]
+        return content_bytes[node.start_byte:node.end_byte].decode('utf-8')
 
     def _get_node_name(self, node) -> Optional[str]:
         """Get the name of a node (function/class/struct name).
@@ -590,108 +635,70 @@ class TreeSitterAnalyzer(FileAnalyzer):
     def _get_nesting_depth(self, node) -> int:
         """Calculate maximum nesting depth within a function node.
 
-        Counts control flow structures: if, for, while, with, try, match, etc.
-
-        Args:
-            node: Tree-sitter node (function/method)
-
-        Returns:
-            Maximum nesting depth (0 = no nesting)
+        Delegates to _calculate_complexity_and_depth for a single-pass traversal.
         """
         if not node:
             return 0
-
-        # Control flow node types across languages
-        nesting_types = {
-            # Conditionals
-            'if_statement', 'if_expression', 'if',
-            # Loops
-            'for_statement', 'for_expression', 'for', 'while_statement', 'while',
-            # Exception handling
-            'try_statement', 'try', 'with_statement', 'with',
-            # Pattern matching
-            'match_statement', 'match_expression', 'case_statement',
-            # Other control flow
-            'do_statement', 'switch_statement',
-        }
-
-        def get_depth(n, current_depth: int = 0) -> int:
-            """Recursively calculate depth."""
-            max_depth = current_depth
-
-            for child in n.children:
-                child_depth = current_depth
-                # If this child is a nesting construct, increase depth
-                if child.type in nesting_types:
-                    child_depth = current_depth + 1
-
-                # Recursively check children
-                nested_depth = get_depth(child, child_depth)
-                max_depth = max(max_depth, nested_depth)
-
-            return max_depth
-
-        return get_depth(node)
+        _, depth = self._calculate_complexity_and_depth(node)
+        return depth
 
     def _calculate_complexity(self, node) -> int:
         """Calculate cyclomatic complexity for a function node.
 
-        McCabe complexity: count of decision points + 1
-        Decision points: if, elif, for, while, and, or, try/except, case, etc.
-
-        Args:
-            node: Tree-sitter node (function/method)
-
-        Returns:
-            Cyclomatic complexity score (1 = simple, higher = more complex)
+        Delegates to _calculate_complexity_and_depth for a single-pass traversal.
         """
         if not node:
             return 1
+        complexity, _ = self._calculate_complexity_and_depth(node)
+        return complexity
 
+    def _calculate_complexity_and_depth(self, node) -> tuple:
+        """Compute cyclomatic complexity and max nesting depth in one iterative pass.
+
+        Replaces separate recursive _calculate_complexity and _get_nesting_depth
+        traversals with a single iterative stack walk, halving the node visits.
+
+        Returns:
+            (complexity, depth) where complexity = decision_count + 1
+        """
         # Decision point node types across languages
-        # These represent branches in the control flow
-        #
-        # IMPORTANT: Include both long forms (Python's if_statement) and
-        # short forms (Ruby's if, case, when) as they serve as containers
-        # in different languages.
-        #
-        # Note: In Python, 'if' nodes are just keywords with no decision-relevant
-        # children, so they don't cause double-counting. In Ruby, 'if' is the
-        # actual container node type.
         decision_types = {
-            # Conditionals (each branch is a decision point)
-            'if_statement', 'if_expression', 'if',  # Python uses if_statement, Ruby uses if
-            'elif_clause', 'elsif',  # Python uses elif_clause, Ruby uses elsif
+            # Conditionals
+            'if_statement', 'if_expression', 'if',
+            'elif_clause', 'elsif',
             'else_if_clause',
-            'case_statement', 'case',  # Python uses case_statement, Ruby uses case
-            'when',  # Ruby case branches
+            'case_statement', 'case',
+            'when',
             'switch_case',
-            'unless',  # Ruby negative conditional
-
-            # Loops (each loop is a decision point)
-            'for_statement', 'for_expression', 'for',  # Ruby uses 'for'
-            'while_statement', 'while',  # Ruby uses 'while'
-            'until',  # Ruby negative loop
+            'unless',
+            # Loops
+            'for_statement', 'for_expression', 'for',
+            'while_statement', 'while',
+            'until',
             'do_statement',
-
-            # Boolean operators (each adds a branch)
-            'boolean_operator',  # Python, generic
-            'and', 'or',  # Ruby uses and/or as node types
-            'logical_and', 'logical_or',  # C-family (JavaScript, C++, etc.)
-
-            # Ternary/conditional expressions
+            # Boolean operators
+            'boolean_operator',
+            'and', 'or',
+            'logical_and', 'logical_or',
+            # Ternary
             'conditional_expression', 'ternary_expression',
-
-            # Exception handling (each except/catch is a branch)
+            # Exception handling
             'except_clause', 'catch_clause',
-            'rescue',  # Ruby exception handling
-
+            'rescue',
             # Pattern matching
             'match_statement', 'case_clause',
         }
 
-        # Keyword-container pairs that should not be double-counted
-        # Format: (parent_type, child_type) - if child is just a keyword for parent, skip it
+        # Nesting types for depth calculation
+        nesting_types = {
+            'if_statement', 'if_expression', 'if',
+            'for_statement', 'for_expression', 'for', 'while_statement', 'while',
+            'try_statement', 'try', 'with_statement', 'with',
+            'match_statement', 'match_expression', 'case_statement',
+            'do_statement', 'switch_statement',
+        }
+
+        # Keyword-container pairs not to double-count
         keyword_pairs = {
             ('if_statement', 'if'),
             ('if_expression', 'if'),
@@ -704,30 +711,23 @@ class TreeSitterAnalyzer(FileAnalyzer):
             ('boolean_operator', 'and'),
         }
 
-        def count_decisions(n, parent_type: Optional[str] = None) -> int:
-            """Recursively count decision points.
+        decision_count = 0
+        max_depth = 0
 
-            Args:
-                n: Current node
-                parent_type: Type of parent node (to detect keyword children)
-            """
-            count = 0
-
+        # Stack entries: (node, n_type, current_depth)
+        # n_type = type of this node (used as parent context for its children)
+        stack = [(node, None, 0)]
+        while stack:
+            n, n_type, depth = stack.pop()
+            if depth > max_depth:
+                max_depth = depth
             for child in n.children:
-                child_is_decision = child.type in decision_types
+                child_type = child.type
+                # Count decision points (skip keyword children of their containers)
+                if child_type in decision_types and (n_type, child_type) not in keyword_pairs:
+                    decision_count += 1
+                # Increase depth when entering a nesting construct
+                child_depth = depth + 1 if child_type in nesting_types else depth
+                stack.append((child, child_type, child_depth))
 
-                # Skip if this is a keyword child of its container
-                # (e.g., 'if' keyword inside 'if_statement' in Python)
-                is_keyword_child = (parent_type, child.type) in keyword_pairs
-
-                # Count if this is a decision type and not a keyword child
-                if child_is_decision and not is_keyword_child:
-                    count += 1
-
-                # Recursively count in children, passing current node type as parent
-                count += count_decisions(child, parent_type=child.type)
-
-            return count
-
-        # McCabe complexity = decision points + 1
-        return count_decisions(node) + 1
+        return decision_count + 1, max_depth

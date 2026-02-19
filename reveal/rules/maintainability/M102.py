@@ -6,6 +6,7 @@ These are often dead code left behind after refactoring.
 
 import ast
 import logging
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Set
 
@@ -16,6 +17,62 @@ logger = logging.getLogger(__name__)
 # Module-level cache: package_root → set of imported names.
 # Built once per package per process; safe because files don't change mid-run.
 _import_cache: Dict[Path, Set[str]] = {}
+
+# Compiled regexes for fast import extraction (replaces ast.parse + ast.walk in scan)
+# Handles both `import X` (including `import X, Y`) and `from X import Y, Z`.
+# Leading whitespace is allowed to catch imports inside functions/blocks.
+_RE_IMPORT = re.compile(r'^\s*import\s+([\w.]+(?:\s*,\s*[\w.]+)*)', re.MULTILINE)
+_RE_FROM = re.compile(r'^\s*from\s+([\w.]+)\s+import\s+([^\n(#]+)', re.MULTILINE)
+# Multi-line: `from X import (\n    Y, Z\n)` — captures everything inside the parens
+_RE_FROM_PAREN = re.compile(r'^\s*from\s+([\w.]+)\s+import\s*\(([^)]+)\)', re.MULTILINE | re.DOTALL)
+
+
+def _add_module_and_parents(imports: Set[str], module: str) -> None:
+    """Add a module name and all its parent packages to the imports set."""
+    imports.add(module)
+    parts = module.split('.')
+    for i in range(1, len(parts)):
+        imports.add('.'.join(parts[:i]))
+
+
+def _extract_imports_regex(content: str, imports: Set[str]) -> None:
+    """Extract all import names from Python source using regex.
+
+    Much faster than ast.parse + ast.walk for bulk import scanning
+    (used by _collect_all_imports to scan 700+ files in the package).
+    Handles: `import X`, `import X, Y`, `from X import Y, Z`,
+    and `from X import (\\n    Y, Z\\n)` (multi-line parenthesized imports).
+    """
+    # `import X` and `import X, Y`
+    for m in _RE_IMPORT.finditer(content):
+        for name in m.group(1).split(','):
+            name = name.strip()
+            if name:
+                _add_module_and_parents(imports, name)
+
+    # `from X import (Y, Z)` — multi-line; process first to avoid overlap
+    for m in _RE_FROM_PAREN.finditer(content):
+        module = m.group(1).strip()
+        _add_module_and_parents(imports, module)
+        for name in m.group(2).split(','):
+            name = name.strip().rstrip('\\').strip()
+            # Strip 'as alias' suffix
+            name = name.split()[0] if name else ''
+            if name and name != '*':
+                imports.add(module + '.' + name)
+
+    # `from X import Y, Z` — single-line (skip if already covered by paren form)
+    for m in _RE_FROM.finditer(content):
+        module = m.group(1).strip()
+        _add_module_and_parents(imports, module)
+        names_str = m.group(2).strip()
+        # Record 'X.Y' for each name so `from pkg import mod` is not a false orphan
+        for name in names_str.split(','):
+            name = name.strip()
+            # Strip 'as alias' suffix
+            name = name.split()[0] if name else ''
+            if name and name != '*':
+                imports.add(module + '.' + name)
 
 
 class M102(BaseRule):
@@ -190,32 +247,8 @@ class M102(BaseRule):
         for py_file in package_root.rglob('*.py'):
             try:
                 content = py_file.read_text(encoding='utf-8', errors='ignore')
-                tree = ast.parse(content)
-
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.Import):
-                        for alias in node.names:
-                            imports.add(alias.name)
-                            # Add parent modules
-                            parts = alias.name.split('.')
-                            for i in range(len(parts)):
-                                imports.add('.'.join(parts[:i+1]))
-
-                    elif isinstance(node, ast.ImportFrom):
-                        if node.module:
-                            imports.add(node.module)
-                            # Add parent modules
-                            parts = node.module.split('.')
-                            for i in range(len(parts)):
-                                imports.add('.'.join(parts[:i+1]))
-                            # Record 'X.Y' for each 'from X import Y' so that a
-                            # module imported via attribute access is not falsely
-                            # flagged as an orphan (e.g. 'from pkg import mod').
-                            for alias in node.names:
-                                if alias.name != '*':
-                                    imports.add(node.module + '.' + alias.name)
-
-            except (SyntaxError, UnicodeDecodeError, OSError):
+                _extract_imports_regex(content, imports)
+            except OSError:
                 continue
 
         _import_cache[package_root] = imports

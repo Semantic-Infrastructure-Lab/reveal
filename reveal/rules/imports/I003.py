@@ -20,13 +20,19 @@ Example .reveal.yaml configuration:
 
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ...analyzers.imports.python import extract_python_imports
 from ...analyzers.imports.resolver import resolve_python_import
 
 logger = logging.getLogger(__name__)
+
+# Module-level cache: directory_path -> (layer_config, project_root)
+# All files in the same directory resolve to the same .reveal.yaml, so we
+# only need to walk + parse once per unique directory (typically 1 parse total
+# when all files share the same project root config).
+_config_cache: Dict[Path, Tuple[Optional[Any], Optional[Path]]] = {}
 
 
 class I003(BaseRule):
@@ -129,15 +135,23 @@ class I003(BaseRule):
     def _load_config_and_find_root(self, start_path: Path) -> tuple[Optional[Any], Optional[Path]]:
         """Load layer config and return it along with project root.
 
+        Uses a module-level cache keyed by directory so all files in the same
+        project share one YAML parse instead of re-parsing on every call.
+
         Args:
             start_path: Starting path for search
 
         Returns:
             Tuple of (layer_config, project_root) where project_root is where .reveal.yaml was found
         """
+        cache_key = start_path if start_path.is_dir() else start_path.parent
+        if cache_key in _config_cache:
+            return _config_cache[cache_key]
+
         import yaml
 
-        current = start_path if start_path.is_dir() else start_path.parent
+        current = cache_key
+        result: tuple[Optional[Any], Optional[Path]] = (None, None)
 
         while current != current.parent:
             config_file = current / ".reveal.yaml"
@@ -147,14 +161,16 @@ class I003(BaseRule):
                     with open(config_file, encoding='utf-8') as f:
                         config_dict = yaml.safe_load(f)
                     if config_dict:
-                        return LayerConfig.from_dict(config_dict), current
+                        result = (LayerConfig.from_dict(config_dict), current)
+                        break
                 except Exception as e:
                     logger.warning(f"Failed to load .reveal.yaml from {config_file}: {e}")
-                    return None, None
+                    break
 
             current = current.parent
 
-        return None, None
+        _config_cache[cache_key] = result
+        return result
 
     def _create_suggestion(self, layer_name: str, config) -> str:
         """Create helpful suggestion for fixing layer violation.

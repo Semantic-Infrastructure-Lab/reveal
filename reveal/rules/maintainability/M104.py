@@ -110,7 +110,7 @@ class M104(BaseRule, ASTParsingMixin):
             return detections
 
         # Find all list assignments
-        for node in ast.walk(tree):
+        for node in self._ast_walk(tree):
             # Module-level or class-level list assignments
             if isinstance(node, ast.Assign):
                 for target in node.targets:

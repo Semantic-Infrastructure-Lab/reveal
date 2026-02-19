@@ -5,18 +5,18 @@ Uses McCabe algorithm for Python (matching Ruff/flake8), with heuristic
 fallback for other languages.
 """
 
-import ast
 import logging
 from typing import List, Dict, Any, Optional
 
 from mccabe import PathGraphingAstVisitor  # type: ignore[import-untyped]
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from ..base_mixins import ASTParsingMixin
 
 logger = logging.getLogger(__name__)
 
 
-class C901(BaseRule):
+class C901(BaseRule, ASTParsingMixin):
     """Detect overly complex functions (cyclomatic complexity).
 
     Uses the McCabe algorithm for Python files, matching Ruff's C901 rule.
@@ -65,7 +65,7 @@ class C901(BaseRule):
         is_python = file_path.endswith('.py')
         mccabe_results = {}
         if is_python and content:
-            mccabe_results = self._get_mccabe_complexity(content)
+            mccabe_results = self._get_mccabe_complexity(content, file_path)
 
         # Get functions from structure
         functions = structure.get('functions', [])
@@ -98,21 +98,25 @@ class C901(BaseRule):
 
         return detections
 
-    def _get_mccabe_complexity(self, content: str) -> Dict[str, int]:
+    def _get_mccabe_complexity(self, content: str, file_path: str = "<unknown>") -> Dict[str, int]:
         """
         Calculate McCabe cyclomatic complexity for all functions in Python code.
 
         Uses the same algorithm as Ruff and flake8-mccabe for consistent results.
+        Shares the cached AST tree with other rules via ASTParsingMixin.
 
         Args:
             content: Python source code
+            file_path: Path for error messages and cache key
 
         Returns:
             Dict mapping function names to complexity scores
         """
         results = {}
         try:
-            tree = ast.parse(content)
+            tree = self._parse_python(content, file_path)
+            if tree is None:
+                return results
             visitor = PathGraphingAstVisitor()
             visitor.preorder(tree, visitor)
 
@@ -123,8 +127,6 @@ class C901(BaseRule):
                 if '.' in name:
                     name = name.split('.')[-1]
                 results[name] = graph.complexity()
-        except SyntaxError:
-            logger.debug("Could not parse Python for McCabe analysis")
         except Exception as e:
             logger.debug(f"McCabe analysis failed: {e}")
 

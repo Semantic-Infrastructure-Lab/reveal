@@ -48,7 +48,7 @@ class B006(BaseRule, ASTParsingMixin):
         lines = content.split('\n')
 
         # Walk the AST looking for problematic exception handlers
-        for node in ast.walk(tree):
+        for node in self._ast_walk(tree):
             if isinstance(node, ast.ExceptHandler):
                 # Check if catching Exception (broad catch)
                 if self._is_broad_exception(node):

@@ -12,13 +12,21 @@ Extracts import statements and symbol usage from Python source files.
 Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
+import os
 from pathlib import Path
-from typing import List, Set, Optional
+from typing import List, Set, Optional, Dict, Tuple
 
 from .types import ImportStatement
 from .base import LanguageExtractor, register_extractor
 from .resolver import resolve_python_import
 from ...registry import get_analyzer
+
+# Module-level cache for extract_imports results keyed by (file_path_str, mtime_ns).
+# I002 builds an import graph by calling extract_imports on every file in a directory,
+# often visiting the same files multiple times across different graph builds.
+# I001 also calls extract_imports for each checked file independently.
+# Caching avoids redundant parses + file reads across both rules and repeated builds.
+_extract_imports_cache: Dict[Tuple[str, int], List[ImportStatement]] = {}
 
 
 @register_extractor
@@ -39,23 +47,38 @@ class PythonExtractor(LanguageExtractor):
     def extract_imports(self, file_path: Path) -> List[ImportStatement]:
         """Extract all import statements from Python file using tree-sitter.
 
+        Results are cached by (file_path, mtime_ns) so I002's graph builder and
+        I001's per-file check share results without re-parsing.
+
         Args:
             file_path: Path to Python source file
 
         Returns:
             List of ImportStatement objects
         """
+        path_str = os.path.abspath(str(file_path))
         try:
-            analyzer_class = get_analyzer(str(file_path))
+            mtime_ns = os.stat(path_str).st_mtime_ns
+        except OSError:
+            mtime_ns = 0
+        cache_key = (path_str, mtime_ns)
+        if cache_key in _extract_imports_cache:
+            return _extract_imports_cache[cache_key]
+
+        try:
+            analyzer_class = get_analyzer(path_str)
             if not analyzer_class:
+                _extract_imports_cache[cache_key] = []
                 return []
 
-            analyzer = analyzer_class(str(file_path))
+            analyzer = analyzer_class(path_str)
             if not analyzer.tree:
+                _extract_imports_cache[cache_key] = []
                 return []
 
         except Exception:
             # Can't parse - return empty
+            _extract_imports_cache[cache_key] = []
             return []
 
         # Read source lines for noqa comment detection
@@ -77,6 +100,7 @@ class PythonExtractor(LanguageExtractor):
         for node in from_nodes:
             imports.extend(self._parse_from_import(node, file_path, analyzer, source_lines))
 
+        _extract_imports_cache[cache_key] = imports
         return imports
 
     def _is_inside_type_checking(self, node) -> bool:
@@ -304,23 +328,28 @@ class PythonExtractor(LanguageExtractor):
         if not node.parent:
             return True
 
-        # Walk up the tree to check if we're inside an import statement
-        current = node
-        while current:
+        parent_type = node.parent.type
+
+        # Fast path: common definition/import contexts at immediate parent level.
+        # import_from_name covers `from x import NAME` identifiers;
+        # dotted_name covers module path identifiers; aliased_import covers aliases.
+        if parent_type in ('function_definition', 'class_definition', 'parameters',
+                           'keyword_argument', 'dotted_name', 'aliased_import',
+                           'import_from_name'):
+            return False
+
+        # Check for import statement ancestor. Import identifiers are at most
+        # 2-3 levels below their containing import_statement, so bound the walk.
+        current = node.parent
+        for _ in range(3):
             if current.type in ('import_statement', 'import_from_statement'):
                 return False
             current = current.parent
-
-        parent_type = node.parent.type
-
-        # Skip definition contexts
-        if parent_type in ('function_definition', 'class_definition', 'parameters',
-                          'keyword_argument', 'dotted_name', 'aliased_import'):
-            return False
+            if current is None:
+                break
 
         # For assignments, check if this is the target (left side)
         if parent_type == 'assignment':
-            # Check if this node is on the left side
             if node.parent.children and node.parent.children[0] == node:
                 return False
 

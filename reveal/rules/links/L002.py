@@ -5,6 +5,7 @@ This rule requires network access and may be slower than L001.
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional, Tuple
 from urllib.parse import urlparse
 import urllib.request
@@ -62,34 +63,44 @@ class L002(BaseRule):
             else:
                 return detections
 
-        # Check each external link for issues
-        for link in links:
-            text = link.get('text', '')
-            url = link.get('url', '')
-            line_num = link.get('line', 1)
+        # Collect external HTTP(S) links to check
+        external_links = [
+            (link.get('text', ''), link.get('url', ''), link.get('line', 1))
+            for link in links
+            if link.get('url', '').startswith(('http://', 'https://'))
+        ]
 
-            # Only check external HTTP(S) links
-            if not url.startswith(('http://', 'https://')):
-                continue
+        if not external_links:
+            return detections
 
-            # Check if this external link is broken
-            is_broken, reason, status = self._is_broken_link(url)
+        # Check all external links concurrently
+        with ThreadPoolExecutor(max_workers=min(10, len(external_links))) as executor:
+            future_to_link = {
+                executor.submit(self._is_broken_link, url): (text, url, line_num)
+                for text, url, line_num in external_links
+            }
+            for future in as_completed(future_to_link):
+                text, url, line_num = future_to_link[future]
+                try:
+                    is_broken, reason, status = future.result()
+                except Exception:
+                    is_broken, reason, status = True, "validation_error", None
 
-            if is_broken:
-                message = f"{self.message}: {url}"
-                suggestion = self._suggest_fix(url, reason, status)
+                if is_broken:
+                    message = f"{self.message}: {url}"
+                    suggestion = self._suggest_fix(url, reason, status)
 
-                detections.append(Detection(
-                    file_path=file_path,
-                    line=line_num,
-                    rule_code=self.code,
-                    message=message,
-                    column=1,  # Column not available from structure
-                    suggestion=suggestion,
-                    context=f"[{text}]({url})",
-                    severity=self.severity,
-                    category=self.category
-                ))
+                    detections.append(Detection(
+                        file_path=file_path,
+                        line=line_num,
+                        rule_code=self.code,
+                        message=message,
+                        column=1,  # Column not available from structure
+                        suggestion=suggestion,
+                        context=f"[{text}]({url})",
+                        severity=self.severity,
+                        category=self.category
+                    ))
 
         return detections
 

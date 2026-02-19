@@ -117,7 +117,7 @@ class B005(BaseRule, ASTParsingMixin):
             return detections
 
         file_dir = Path(file_path).parent
-        for node in ast.walk(tree):
+        for node in self._ast_walk(tree):
             if isinstance(node, ast.Import):
                 detections.extend(self._check_import_statement(node, file_path, file_dir))
             elif isinstance(node, ast.ImportFrom):

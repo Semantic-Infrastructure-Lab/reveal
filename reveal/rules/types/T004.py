@@ -50,7 +50,7 @@ class T004(BaseRule, ASTParsingMixin):
             return detections
 
         # Walk the AST looking for function definitions
-        for node in ast.walk(tree):
+        for node in self._ast_walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 self._check_function_params(node, file_path, content, detections)
 

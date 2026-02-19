@@ -17,6 +17,10 @@ from ..base import BaseRule, Detection, RulePrefix, Severity
 
 logger = logging.getLogger(__name__)
 
+# Module-level caches: keyed by directory (for pyproject lookup) and by pyproject path
+_pyproject_dir_cache: Dict[Path, Optional[Path]] = {}
+_canonical_url_cache: Dict[Path, Set[str]] = {}
+
 
 class U502(BaseRule):
     """Detect URLs inconsistent with pyproject.toml canonical URLs."""
@@ -111,22 +115,38 @@ class U502(BaseRule):
         return detections
 
     def _find_pyproject(self, path: Path) -> Optional[Path]:
-        """Find pyproject.toml by walking up the directory tree."""
-        current = path.parent if path.is_file() else path
+        """Find pyproject.toml by walking up the directory tree.
 
+        Results are cached by directory so 355 files sharing one pyproject.toml
+        only walk the tree once.
+        """
+        directory = path.parent if path.is_file() else path
+        if directory in _pyproject_dir_cache:
+            return _pyproject_dir_cache[directory]
+
+        current = directory
+        result = None
         for _ in range(10):  # Max 10 levels up
             pyproject = current / 'pyproject.toml'
             if pyproject.exists():
-                return pyproject
+                result = pyproject
+                break
             if current.parent == current:
                 break
             current = current.parent
 
-        return None
+        _pyproject_dir_cache[directory] = result
+        return result
 
     def _get_canonical_urls(self, pyproject_path: Path) -> Set[str]:
-        """Extract canonical URLs from pyproject.toml."""
-        urls = set()
+        """Extract canonical URLs from pyproject.toml.
+
+        Cached by pyproject path — one TOML parse per unique pyproject.toml.
+        """
+        if pyproject_path in _canonical_url_cache:
+            return _canonical_url_cache[pyproject_path]
+
+        urls: Set[str] = set()
 
         try:
             content = pyproject_path.read_text(encoding='utf-8')
@@ -153,6 +173,7 @@ class U502(BaseRule):
         except Exception as e:
             logger.debug(f"Error reading pyproject.toml: {e}")
 
+        _canonical_url_cache[pyproject_path] = urls
         return urls
 
     def _extract_repos(self, urls: Set[str]) -> Set[str]:

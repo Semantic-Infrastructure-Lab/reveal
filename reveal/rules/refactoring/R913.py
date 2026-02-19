@@ -43,7 +43,7 @@ class R913(BaseRule, ASTParsingMixin):
             return detections
 
         # Walk the AST looking for function definitions
-        for node in ast.walk(tree):
+        for node in self._ast_walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 # Count arguments (exclude self, cls, *args, **kwargs)
                 args = node.args
