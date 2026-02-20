@@ -1,5 +1,7 @@
 """Elixir file analyzer."""
 
+from typing import Any, Dict
+
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -26,7 +28,7 @@ class ElixirAnalyzer(TreeSitterAnalyzer):
     """
     language = 'elixir'
 
-    def get_structure(self, head=None, tail=None, range=None, **kwargs):
+    def get_structure(self, head=None, tail=None, range=None, **kwargs) -> Dict[str, Any]:
         """Extract Elixir code structure with output contract fields."""
         structure = super().get_structure(head=head, tail=tail, range=range, **kwargs)
         return {
