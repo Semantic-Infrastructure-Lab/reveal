@@ -52,7 +52,7 @@ Each command generates:
 - Documentation template
 - Next steps guide
 
-**See [SCAFFOLDING_GUIDE.md](SCAFFOLDING_GUIDE.md) for full documentation.**
+See the scaffolding commands (`reveal scaffold --help`) for full documentation.
 
 ---
 
@@ -147,7 +147,7 @@ class PostgresAdapter(ResourceAdapter):
 reveal mycommand subcommand --flag
 ```
 
-**See [CLI_INTEGRATION_GUIDE.md](docs/CLI_INTEGRATION_GUIDE.md) for complete guide:**
+Complete guide covers:
 - When CLI wiring is needed (vs auto-registration)
 - Step-by-step integration instructions
 - Patterns and examples

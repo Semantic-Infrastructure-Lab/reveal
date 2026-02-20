@@ -112,7 +112,7 @@ def collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> Li
     from ..registry import get_analyzer
 
     files_to_check = []
-    excluded_dirs = {'.git', '__pycache__', 'node_modules', '.venv', 'venv'}
+    excluded_dirs = {'.git', '__pycache__', 'node_modules', '.venv', 'venv', 'build', 'dist'}
 
     for root, dirs, files in os.walk(directory):
         # Filter out excluded directories

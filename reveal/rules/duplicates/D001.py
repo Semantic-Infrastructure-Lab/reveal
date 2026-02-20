@@ -53,52 +53,60 @@ class D001(BaseRule):
         if len(functions) < 2:
             return []  # Need at least 2 functions to have duplicates
 
-        hash_to_funcs: Dict[str, List[tuple]] = {}  # hash -> [(func_name, line, body_length), ...]
+        # Assign each function to its containing class (by line range) so that
+        # methods with the same name/body in *different* classes (e.g. setUp in
+        # multiple TestCase subclasses) are not flagged as duplicates.
+        # Functions outside any class share the module-level scope (None).
+        classes = structure.get('classes', [])
+
+        def class_for(line: int) -> Optional[str]:
+            for cls in classes:
+                if cls.get('line', 0) <= line <= cls.get('line_end', 0):
+                    return cls.get('name')
+            return None
+
+        # hash -> [(func_name, line, body_length), ...] keyed by scope
+        from collections import defaultdict
+        scope_hashes: Dict[str, Dict[str, List[tuple]]] = defaultdict(lambda: defaultdict(list))
         detections: List[Detection] = []
 
-        # Build hash map
         for func in functions:
             func_body = self._extract_function_body(func, content)
             if not func_body or len(func_body.strip()) < 10:
-                # Skip empty or trivial functions
                 continue
 
-            # Normalize and hash
             normalized = self._normalize(func_body)
             if not normalized:
                 continue
 
             func_hash = sha256(normalized.encode('utf-8')).hexdigest()[:16]
-
-            # Track duplicates
-            if func_hash not in hash_to_funcs:
-                hash_to_funcs[func_hash] = []
-            hash_to_funcs[func_hash].append((
+            scope = class_for(func.get('line', 0)) or '__module__'
+            scope_hashes[scope][func_hash].append((
                 func.get('name', '<unknown>'),
                 func.get('line', 0),
                 len(func_body)
             ))
 
-        # Report duplicates
-        for func_hash, instances in hash_to_funcs.items():
-            if len(instances) < 2:
-                continue
+        # Report duplicates within each scope
+        for _scope, hash_to_funcs in scope_hashes.items():
+            for func_hash, instances in hash_to_funcs.items():
+                if len(instances) < 2:
+                    continue
 
-            # Sort by line number to get "original" first
-            instances.sort(key=lambda x: x[1])
-            original = instances[0]
+                instances.sort(key=lambda x: x[1])
+                original = instances[0]
 
-            for duplicate in instances[1:]:
-                detections.append(Detection(
-                    file_path=file_path,
-                    line=duplicate[1],
-                    rule_code=self.code,
-                    message=f"{self.message}: '{duplicate[0]}' identical to '{original[0]}' (line {original[1]})",
-                    severity=self.severity,
-                    category=self.category,
-                    suggestion=f"Refactor to share implementation with {original[0]}",
-                    context=f"{duplicate[2]} chars, hash {func_hash}"
-                ))
+                for duplicate in instances[1:]:
+                    detections.append(Detection(
+                        file_path=file_path,
+                        line=duplicate[1],
+                        rule_code=self.code,
+                        message=f"{self.message}: '{duplicate[0]}' identical to '{original[0]}' (line {original[1]})",
+                        severity=self.severity,
+                        category=self.category,
+                        suggestion=f"Refactor to share implementation with {original[0]}",
+                        context=f"{duplicate[2]} chars, hash {func_hash}"
+                    ))
 
         return detections
 

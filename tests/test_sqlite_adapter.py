@@ -774,7 +774,7 @@ class TestSQLiteAdapterEdgeCases(unittest.TestCase):
             # Should be able to delete database file (connection closed)
             safe_unlink(db_path)
             self.assertFalse(os.path.exists(db_path))
-        except:
+        except Exception:
             if os.path.exists(db_path):
                 safe_unlink(db_path)
             raise
