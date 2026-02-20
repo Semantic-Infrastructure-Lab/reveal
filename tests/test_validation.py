@@ -1,4 +1,5 @@
 """Tests for reveal.utils.validation module."""
+import sys
 import pytest
 import tempfile
 from pathlib import Path
@@ -347,6 +348,7 @@ class TestRequireReadableFile:
         with pytest.raises(ValueError, match="is not a file"):
             require_readable_file(test_dir)
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod does not restrict access on Windows")
     def test_unreadable_file_raises(self, tmp_path):
         """Unreadable file raises PermissionError."""
         # This test is platform-dependent and may be skipped on Windows
@@ -385,6 +387,7 @@ class TestRequireWritableDirectory:
         with pytest.raises(ValueError, match="is not a directory"):
             require_writable_directory(test_file)
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod does not restrict access on Windows")
     def test_read_only_directory_raises(self, tmp_path):
         """Read-only directory raises PermissionError."""
         # This test is platform-dependent and may be skipped on Windows

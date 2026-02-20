@@ -238,6 +238,9 @@ class V009(BaseRule):
 
             # Handle relative paths
             source_dir = source_file.parent
+            # Reject links with null bytes (invalid in filesystem paths)
+            if '\x00' in link:
+                return None
             # Use normpath (not resolve) to avoid following symlinks.
             # On macOS, /var is a symlink to /private/var; resolve() would
             # change the prefix and break relative_to() checks.

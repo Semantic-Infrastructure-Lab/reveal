@@ -107,6 +107,6 @@ def get_file_display_path(file_path: Path, base_path: Path) -> str:
     if base_path.is_file() and file_path == base_path:
         return file_path.name
     elif file_path.is_relative_to(base_path):
-        return str(file_path.relative_to(base_path))
+        return file_path.relative_to(base_path).as_posix()
     else:
         return str(file_path)
