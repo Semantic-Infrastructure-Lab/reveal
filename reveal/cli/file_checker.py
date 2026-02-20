@@ -8,11 +8,51 @@ This module handles quality checking of files in a directory tree:
 
 import sys
 import os
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from argparse import Namespace
+
+# Minimum files before paying process-pool startup overhead.
+# On Linux (fork), startup is cheap; on Windows/macOS (spawn) it's heavier,
+# but the break-even is still low for CPU-bound work.
+_PARALLEL_THRESHOLD = 4
+
+
+def _parallel_worker(packed_args: tuple) -> tuple:
+    """Check one file and return results without printing.
+
+    Module-level so it is picklable by multiprocessing.
+
+    Args:
+        packed_args: (file_path, directory, select, ignore)
+
+    Returns:
+        (file_path, issue_count, detections)
+    """
+    file_path, directory, select, ignore = packed_args
+    issue_count, detections = check_and_collect_file(file_path, directory, select, ignore)
+    return file_path, issue_count, detections
+
+
+def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
+    """Run file checks in parallel, preserving input order in results.
+
+    Args:
+        files: Already-sorted list of files to check
+        directory: Base directory for relative paths
+        select: Rule codes to select
+        ignore: Rule codes to ignore
+
+    Returns:
+        List of (file_path, issue_count, detections) in same order as input
+    """
+    workers = min(os.cpu_count() or 4, len(files))
+    args_iter = [(f, directory, select, ignore) for f in files]
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(_parallel_worker, args_iter))
 
 
 def load_gitignore_patterns(directory: Path) -> List[str]:
@@ -261,13 +301,21 @@ def _check_files_json(
     total_issues = 0
     files_with_issues = 0
     file_results = []
+    sorted_files = sorted(files)
 
-    for file_path in sorted(files):
-        issue_count, detections = check_and_collect_file(file_path, directory, select, ignore)
+    if len(sorted_files) >= _PARALLEL_THRESHOLD:
+        try:
+            results = _run_parallel(sorted_files, directory, select, ignore)
+        except Exception:
+            results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
+    else:
+        results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
+
+    cwd = Path.cwd()
+    for file_path, issue_count, detections in results:
         if issue_count > 0:
             total_issues += issue_count
             files_with_issues += 1
-            cwd = Path.cwd()
             try:
                 rel_path = file_path.relative_to(cwd)
             except ValueError:
@@ -308,12 +356,34 @@ def _check_files_text(
     """
     total_issues = 0
     files_with_issues = 0
+    sorted_files = sorted(files)
 
-    for file_path in sorted(files):
-        issue_count = check_and_report_file(file_path, directory, select, ignore)
+    if len(sorted_files) >= _PARALLEL_THRESHOLD:
+        try:
+            results = _run_parallel(sorted_files, directory, select, ignore)
+        except Exception:
+            results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
+    else:
+        results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
+
+    cwd = Path.cwd()
+    severity_icons = {"HIGH": "❌", "MEDIUM": "⚠️ ", "LOW": "ℹ️ "}
+    for file_path, issue_count, detections in results:
         if issue_count > 0:
             total_issues += issue_count
             files_with_issues += 1
+            try:
+                relative = file_path.relative_to(cwd)
+            except ValueError:
+                relative = file_path.relative_to(directory)
+            print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
+            for detection in detections:
+                icon = severity_icons.get(detection.severity.value, "ℹ️ ")
+                print(f"{relative}:{detection.line}:{detection.column} {icon} {detection.rule_code} {detection.message}")
+                if detection.suggestion:
+                    print(f"  💡 {detection.suggestion}")
+                if detection.context:
+                    print(f"  📝 {detection.context}")
 
     return total_issues, files_with_issues
 
