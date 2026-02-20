@@ -107,17 +107,17 @@ class ClaudeAdapter(ResourceAdapter):
         if not self.session_name or not self.CONVERSATION_BASE.exists():
             return None
 
-        for project_dir in self.CONVERSATION_BASE.iterdir():
-            if not project_dir.is_dir():
-                continue
+        dirs = [d for d in self.CONVERSATION_BASE.iterdir() if d.is_dir()]
 
-            # Strategy 1: session name appears in project dir name (named sessions)
+        # Strategy 1 (priority): session name appears in project dir name (named sessions)
+        for project_dir in dirs:
             if self.session_name in project_dir.name:
                 jsonl_files = list(project_dir.glob('*.jsonl'))
                 if jsonl_files:
                     return jsonl_files[0]
 
-            # Strategy 2: session name is a UUID matching a JSONL filename
+        # Strategy 2 (fallback): session name is a UUID matching a JSONL filename
+        for project_dir in dirs:
             jsonl_file = project_dir / f"{self.session_name}.jsonl"
             if jsonl_file.exists():
                 return jsonl_file
