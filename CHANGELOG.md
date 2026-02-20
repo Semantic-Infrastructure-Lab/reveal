@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.1] - 2026-02-20
+
+### Fixed
+- **Cross-platform CI** — all 6 matrix jobs (Python 3.10/3.12 × Ubuntu/macOS/Windows) now pass
+- **Claude adapter conversation search** — split `_find_conversation` into two sequential passes so TIA-style directory names (Strategy 1) are always checked before UUID filename matches (Strategy 2), preventing filesystem-order-dependent failures
+- **DNS adapter** — added missing `dnspython>=2.0.0` dev dependency; tests patched `HAS_DNSPYTHON=True` but the module was never imported
+- **V009 symlink resolution** — replaced `Path.resolve()` (which follows symlinks, causing `/var` → `/private/var` on macOS) with `os.path.normpath()` plus an explicit null-byte guard
+- **V003 / stats adapter** — used `.as_posix()` for relative paths to ensure forward-slash separators on Windows
+- **Diff adapter** — parse Windows drive-letter paths (e.g. `C:\...`) via `parse_diff_uris()` wrapped in try/except instead of short-circuiting on the `:` character
+- **Scaffold `rule.py`** — added `encoding='utf-8'` to all `write_text()` / `read_text()` calls to avoid `charmap` errors on Windows
+- **V002/V007/V011/V015/validation chmod tests** — skipped on Windows (`pytest.mark.skipif`) since `chmod(0o000)` is a no-op on that platform
+
 ## [0.51.0] - 2026-02-20
 
 ### Performance
