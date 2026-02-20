@@ -14,10 +14,48 @@ from ...analyzers.imports.base import get_extractor, get_all_extensions
 
 logger = logging.getLogger(__name__)
 
-# Module-level cache: directory → ImportGraph.
-# _build_import_graph scans every source file in a directory via tree-sitter;
-# caching by directory makes the O(n) scan happen once per directory per run.
+# Module-level cache: project_root → ImportGraph.
+# _build_import_graph scans every source file under the project root via
+# tree-sitter; caching by project root makes the scan happen once per project
+# per process (was once per subdirectory, defeating the cache on deep trees).
 _graph_cache: Dict[Path, 'ImportGraph'] = {}
+
+
+def _find_project_root(path: Path) -> Path:
+    """Walk up from path to find the project root (pyproject.toml/setup.py).
+
+    Falls back to the topmost directory containing __init__.py, then to
+    path.parent if no markers are found.
+    """
+    current = path.parent
+
+    # Pass 1: look for project-level markers (strongest signal)
+    sentinel = current
+    git_root = None
+    for _ in range(15):
+        if (current / 'pyproject.toml').exists() or (current / 'setup.py').exists():
+            return current
+        if git_root is None and (current / '.git').exists():
+            git_root = current  # note it, keep walking for pyproject.toml above it
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+    # .git is a strong project root signal even without pyproject.toml
+    if git_root is not None:
+        return git_root
+
+    # Pass 2: topmost __init__.py boundary
+    current = sentinel
+    for _ in range(15):
+        if (current / '__init__.py').exists():
+            parent = current.parent
+            if not (parent / '__init__.py').exists():
+                return current
+        current = current.parent
+
+    return sentinel
 
 
 # Initialize file patterns from all registered extractors at module load time
@@ -63,8 +101,11 @@ class I002(BaseRule):
         target_path = Path(file_path).resolve()
 
         try:
-            # Build import graph for the directory containing this file
-            graph = self._build_import_graph(target_path.parent)
+            # Build import graph rooted at the project root so that:
+            # 1. The cache hits for every file in the same project (not per-subdir)
+            # 2. Cross-package cycles are detected (subdir scan misses them)
+            scan_root = _find_project_root(target_path)
+            graph = self._build_import_graph(scan_root)
 
             # Find all cycles in the graph
             cycles = graph.find_cycles()

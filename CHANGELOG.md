@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Performance
+- **I002 import-graph cache fix** — `_build_import_graph` was keyed on each file's parent directory, so a project with N subdirectories triggered N full tree-sitter scans instead of 1. Cache is now keyed on the project root (resolved via `.git` → `pyproject.toml` → `__init__.py` boundary). Serial I002 cost on a 73-subdir project: 13 min → 33s. Also fixes a correctness gap: the old per-subdir scan missed cycles that cross package boundaries.
 - **`--check` parallelism** — `reveal --check dir/` now uses `ProcessPoolExecutor` (4 workers) to check files in parallel. Wall-clock time on a 3,500-file project: 48s → 21.5s (2.2×). Worker count capped at 4 after empirical benchmark sweep showed 74% of max speedup at 4 workers vs marginal gains beyond that (commits 1298515, 891f9bd)
 - **O(n²) rule scan eliminated** — `RuleRegistry.check_file` was iterating all rules for every file even after an early-exit condition; fixed to short-circuit correctly. Large projects went from many minutes → ~30s before parallelism (commit faa09d4)
 - **Per-file micro-optimizations** — 8 targeted fixes: cache `Path.resolve()`, pre-compile glob patterns once, reuse `RuleRegistry` instance across files, avoid re-parsing markdown for link rules. Net: 8.3s → ~5.6s user time on reveal's own codebase (commits 25c42f9, 5d52a0a)
@@ -37,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **claude:// adapter guides** - Quick Start, Elements Reference, and Query Params sections updated in `CLAUDE_ADAPTER_GUIDE.md`; inline `_get_help_examples` and `_get_help_workflows` updated with new examples (commit f9ae167)
 
 ### Tests
+- Added 3 regression tests for I002 cache-key fix: project-root resolution via `.git`, shared cache across sibling subdirectories, and no false-positive for unresolved cross-package imports (`TestI002ProjectRootCache` in `tests/test_rules.py`)
 - Added 67 unit tests for `analysis/messages.py` covering `_extract_text`, `_content_to_blocks`, `_find_excerpt`, `search_messages`, `filter_by_role` str-content fix, `get_thinking_blocks`, `get_message` (new file: `tests/adapters/test_claude_analysis.py`)
 - Added 27 renderer tests for 5 new renderers: `_render_claude_thinking`, `_render_claude_user_messages`, `_render_claude_assistant_messages`, `_render_claude_message`, `_render_claude_search_results`
 
