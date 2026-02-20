@@ -54,10 +54,8 @@ Complete guides for all URI protocol adapters (22,720 lines):
 | [SSL_ADAPTER_GUIDE.md](SSL_ADAPTER_GUIDE.md) | 1449 | SSL/TLS certificate analysis and validation |
 | [STATS_ADAPTER_GUIDE.md](STATS_ADAPTER_GUIDE.md) | 1864 | Codebase statistics and metrics collection |
 | [XLSX_ADAPTER_GUIDE.md](XLSX_ADAPTER_GUIDE.md) | 564 | Excel/XLSX file analysis and data extraction |
-| *[DEMO_ADAPTER_GUIDE.md](DEMO_ADAPTER_GUIDE.md)* | *3* | *Stub - demo:// adapter placeholder* |
-| *[TEST_ADAPTER_GUIDE.md](TEST_ADAPTER_GUIDE.md)* | *3* | *Stub - test:// adapter placeholder* |
 
-**Total**: 22,897 lines (22,714 excluding stubs)
+**Total**: ~22,700 lines
 
 ---
 
@@ -76,7 +74,7 @@ Language analyzer development and patterns:
 
 ---
 
-## Reference Documentation (10 files)
+## Reference Documentation (11 files)
 
 Core reference and technical specifications:
 
@@ -84,6 +82,7 @@ Core reference and technical specifications:
 |------|-------|-------------|
 | [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md) | 762 | Universal query operators and result control |
 | [QUERY_PARAMETER_REFERENCE.md](QUERY_PARAMETER_REFERENCE.md) | 363 | Query parameters for all adapters |
+| [UNIFIED_OPERATOR_REFERENCE.md](UNIFIED_OPERATOR_REFERENCE.md) | 670 | Operator support matrix across all 5 core adapters |
 | [FIELD_SELECTION_GUIDE.md](FIELD_SELECTION_GUIDE.md) | 654 | Token reduction with --fields and budgets |
 | [ELEMENT_DISCOVERY_GUIDE.md](ELEMENT_DISCOVERY_GUIDE.md) | 697 | Progressive disclosure with available_elements |
 | [OUTPUT_CONTRACT.md](OUTPUT_CONTRACT.md) | 669 | JSON output specification |
@@ -93,7 +92,7 @@ Core reference and technical specifications:
 | [DUPLICATE_DETECTION_GUIDE.md](DUPLICATE_DETECTION_GUIDE.md) | 495 | Duplicate detection algorithms |
 | [SCHEMA_VALIDATION_HELP.md](SCHEMA_VALIDATION_HELP.md) | 611 | Frontmatter schema validation |
 
-**Total**: 5,577 lines
+**Total**: ~6,250 lines
 
 ---
 
@@ -126,16 +125,16 @@ Complete reference for AI agent integration:
 ## Documentation Statistics
 
 **By Category**:
-- Adapter Guides: 16 files, 22,897 lines (62% of docs)
-- Reference: 10 files, 5,577 lines (15%)
-- User Guides: 4 files, 2,723 lines (7%)
-- Analyzer Guides: 4 files, 2,108 lines (6%)
-- AI Agent: 1 file, 2,079 lines (6%)
-- Development: 3 files, 1,216 lines (3%)
+- Adapter Guides: 14 files, ~22,700 lines (61%)
+- Reference: 11 files, ~6,250 lines (17%)
+- User Guides: 4 files, ~2,700 lines (7%)
+- Analyzer Guides: 4 files, ~2,100 lines (6%)
+- AI Agent: 1 file, ~2,100 lines (6%)
+- Development: 3 files, ~1,200 lines (3%)
 
-**Total**: 38 files, 36,600 lines (100%)
+**Total**: 37 files, ~37,000 lines
 
-**Stubs**: 2 files (DEMO_ADAPTER, TEST_ADAPTER) - 6 lines total
+**Last Updated**: 2026-02-20 (Session: blazing-spark-0220)
 
 ---
 
@@ -156,14 +155,10 @@ Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guid
 
 ## Maintenance Notes
 
-**Stub Files**:
-- DEMO_ADAPTER_GUIDE.md (3 lines) - Placeholder for demo:// adapter docs
-- TEST_ADAPTER_GUIDE.md (3 lines) - Placeholder for test:// adapter docs
-
 **Internal Documentation**:
 Internal maintainer documentation (planning, research, architecture) is maintained separately outside the public repository.
 
 ---
 
-**Last Updated**: 2026-02-15 (Session: receding-journey-0215)
+**Last Updated**: 2026-02-20 (Session: blazing-spark-0220)
 **Navigation**: [README](README.md) | [Project Root](../../README.md)

@@ -74,9 +74,24 @@ This validates:
 
 Fix any errors before proceeding. These rules prevent releasing with stale documentation.
 
-### Step 1: Prepare CHANGELOG
+### Step 1: Update All 4 Required Files
 
-Update `CHANGELOG.md` before running the release script:
+Before running the release script, **4 files must be updated** — CI checks validate all of them and will fail if any are missed:
+
+| File | What to update |
+|------|---------------|
+| `CHANGELOG.md` | Add new version section |
+| `reveal/docs/AGENT_HELP.md` | Version line near the top |
+| `ROADMAP.md` | Add entry to "What We've Shipped" |
+| `pyproject.toml` | Handled by release script — but verify manually if doing a manual release |
+
+> **Why all 4?** Learned from v0.51.1: `test_agent_help_is_current_version` checks
+> `AGENT_HELP.md`; V011 (release readiness) checks `ROADMAP.md`'s shipped section.
+> Missing either causes CI failures that block PyPI publish.
+
+#### Update CHANGELOG.md
+
+Add a new version section:
 
 ```markdown
 ## [0.18.0] - 2025-12-09
@@ -249,13 +264,17 @@ Follow [Semantic Versioning](https://semver.org/):
 
 ## Release Checklist
 
-**Before release:**
-- [ ] **Self-check passes**: `reveal reveal:// --check --select V012,V013` (no errors)
+**Before release — 4-file update check:**
+- [ ] `CHANGELOG.md` — new version section added
+- [ ] `reveal/docs/AGENT_HELP.md` — version line updated to match new version
+- [ ] `ROADMAP.md` — new version added to "What We've Shipped" section
+- [ ] `pyproject.toml` — version bumped (or let release script handle it)
+
+**Pre-flight:**
+- [ ] **Self-check passes**: `reveal reveal:// --check` (no errors, especially V007/V011)
 - [ ] **Version check**: `git tag | grep vX.Y.Z` returns nothing (version doesn't exist)
 - [ ] All features merged to master
-- [ ] Tests passing
-- [ ] CHANGELOG.md updated with correct NEW version
-- [ ] `pyproject.toml` version matches CHANGELOG
+- [ ] Tests passing: `pytest`
 - [ ] Clean git status
 - [ ] On master branch, pulled latest
 
@@ -299,4 +318,4 @@ python -m build && twine upload dist/*
 
 ---
 
-**Last updated:** 2025-12-09
+**Last updated:** 2026-02-20
