@@ -11,7 +11,6 @@ added in violet-gem-0218:
   - get_message
 """
 
-import pytest
 from reveal.adapters.claude.analysis.messages import (
     _extract_text,
     _content_to_blocks,

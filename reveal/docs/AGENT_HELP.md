@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.50.0
+**Version:** 0.51.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -20,7 +20,7 @@ This is the complete offline reference for reveal (~12,000 tokens). Both `--agen
 
 ---
 
-## Agent Introspection (v0.50.0 - Complete Coverage)
+## Agent Introspection (v0.51.0 - Complete Coverage)
 
 **NEW: Auto-discover capabilities programmatically**
 

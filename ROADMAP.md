@@ -1,11 +1,21 @@
 # Reveal Roadmap
-> **Last updated**: 2026-02-16 (v0.50.0 - MySQL table I/O statistics + Windows CI fixes)
+> **Last updated**: 2026-02-20 (v0.51.0 - Performance overhaul, security hardening, claude:// content views)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.51.0
+- ✅ **I002 cache fix** — Import graph cache keyed on project root (not file parent); 73-subdir project: 13 min → 33s
+- ✅ **I002 shared graph across workers** — Pre-build once in main process, seed workers via pool initializer; CPU cost 4× → 1×
+- ✅ **`--check` parallelism** — ProcessPoolExecutor (4 workers); 3,500-file project: 48s → 21.5s (2.2×)
+- ✅ **O(n²) scan eliminated** — Rule registry short-circuits correctly; large projects: minutes → ~30s
+- ✅ **Security hardening** — Zip bomb protection, 100 MB file guard, MySQL URL parsing fix, frontmatter eval hardening
+- ✅ **claude:// content views** — `/user`, `/assistant`, `/thinking`, `/message/<n>` render real content
+- ✅ **claude:// search** — `?search=term` searches all content including thinking blocks and tool inputs
+- ✅ **Bug fixes** — ast:// OR logic, `--check` recursive mode, M102/I004 false positives, D001 scoping
 
 ### v0.50.0
 - ✅ **MySQL table I/O statistics** — `mysql:///tables` endpoint for table hotspot detection

@@ -37,8 +37,48 @@ def _parallel_worker(packed_args: tuple) -> tuple:
     return file_path, issue_count, detections
 
 
+def _i002_preload(directory: Path, ignore) -> dict:
+    """Build the I002 import graph in the main process before spawning workers.
+
+    Returns a plain dict (project_root -> ImportGraph) ready to pickle into
+    each worker via the ProcessPoolExecutor initializer.  Workers that receive
+    a non-empty cache skip the expensive tree-sitter scan entirely.
+
+    Returns an empty dict on any error so the caller degrades gracefully to
+    the old per-worker build behaviour.
+    """
+    if ignore and "I002" in ignore:
+        return {}
+    try:
+        from reveal.rules.imports.I002 import I002, _find_project_root, _graph_cache
+        root = _find_project_root(directory.resolve())
+        I002()._build_import_graph(root)   # populates _graph_cache in main process
+        return dict(_graph_cache)          # plain dict is picklable
+    except Exception:
+        return {}
+
+
+def _i002_init_worker(graph_cache: dict) -> None:
+    """ProcessPoolExecutor initializer: seed each worker's I002 cache.
+
+    Runs once per worker process, before any files are checked.  Importing
+    the module here is safe because each worker is a fresh process.
+    """
+    if not graph_cache:
+        return
+    try:
+        from reveal.rules.imports.I002 import _graph_cache
+        _graph_cache.update(graph_cache)
+    except Exception:
+        pass
+
+
 def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
     """Run file checks in parallel, preserving input order in results.
+
+    The I002 import graph is built once in the main process and injected into
+    each worker via the initializer so workers get a cache hit instead of
+    rebuilding the graph themselves (was: 4 builds for 4 workers → now: 1).
 
     Args:
         files: Already-sorted list of files to check
@@ -54,7 +94,12 @@ def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
     # Capping at 4 leaves remaining cores free and reduces IPC pressure.
     workers = min(4, os.cpu_count() or 4, len(files))
     args_iter = [(f, directory, select, ignore) for f in files]
-    with ProcessPoolExecutor(max_workers=workers) as pool:
+    graph_cache = _i002_preload(directory, ignore)
+    with ProcessPoolExecutor(
+        max_workers=workers,
+        initializer=_i002_init_worker,
+        initargs=(graph_cache,),
+    ) as pool:
         return list(pool.map(_parallel_worker, args_iter))
 
 

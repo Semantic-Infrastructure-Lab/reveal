@@ -2,7 +2,7 @@
 title: Reveal Changelog
 type: documentation
 category: changelog
-date: 2026-02-13
+date: 2026-02-20
 ---
 
 # Changelog
@@ -14,7 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-02-20
+
 ### Performance
+- **I002 shared graph across parallel workers** — `ProcessPoolExecutor` previously triggered up to 4 independent import-graph builds (one per worker). The main process now pre-builds the graph once, pickles it, and seeds each worker's `_graph_cache` via the pool `initializer`. Workers get a cache hit on the first file they check; CPU cost drops from 4× to 1× with no change in wall-clock time. Graceful degradation: if the pre-build fails, workers fall back to building their own graph as before.
 - **I002 import-graph cache fix** — `_build_import_graph` was keyed on each file's parent directory, so a project with N subdirectories triggered N full tree-sitter scans instead of 1. Cache is now keyed on the project root (resolved via `.git` → `pyproject.toml` → `__init__.py` boundary). Serial I002 cost on a 73-subdir project: 13 min → 33s. Also fixes a correctness gap: the old per-subdir scan missed cycles that cross package boundaries.
 - **`--check` parallelism** — `reveal --check dir/` now uses `ProcessPoolExecutor` (4 workers) to check files in parallel. Wall-clock time on a 3,500-file project: 48s → 21.5s (2.2×). Worker count capped at 4 after empirical benchmark sweep showed 74% of max speedup at 4 workers vs marginal gains beyond that (commits 1298515, 891f9bd)
 - **O(n²) rule scan eliminated** — `RuleRegistry.check_file` was iterating all rules for every file even after an early-exit condition; fixed to short-circuit correctly. Large projects went from many minutes → ~30s before parallelism (commit faa09d4)

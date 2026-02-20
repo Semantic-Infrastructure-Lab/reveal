@@ -10,6 +10,8 @@ from reveal.cli.file_checker import (
     should_skip_file,
     collect_files_to_check,
     check_and_report_file,
+    _i002_preload,
+    _i002_init_worker,
 )
 
 
@@ -309,3 +311,82 @@ class TestCheckAndReportFile:
             call_args = mock_check_file.call_args
             assert call_args[1]['select'] == ['B001', 'B002']
             assert call_args[1]['ignore'] == ['V001']
+
+
+class TestI002Preload:
+    """Tests for _i002_preload and _i002_init_worker (shared graph cache)."""
+
+    def test_preload_skipped_when_i002_ignored(self, tmp_path):
+        """_i002_preload returns empty dict when I002 is in the ignore list."""
+        result = _i002_preload(tmp_path, ignore=["I002"])
+        assert result == {}
+
+    def test_preload_skipped_when_i002_in_ignore_with_others(self, tmp_path):
+        """_i002_preload returns empty dict when I002 is among other ignored rules."""
+        result = _i002_preload(tmp_path, ignore=["V001", "I002", "F001"])
+        assert result == {}
+
+    def test_preload_runs_when_ignore_is_none(self, tmp_path):
+        """_i002_preload attempts graph build when ignore=None."""
+        (tmp_path / "a.py").write_text("import os\n")
+        result = _i002_preload(tmp_path, ignore=None)
+        # Should return a dict (may be empty if no cycles, but a dict either way)
+        assert isinstance(result, dict)
+
+    def test_preload_runs_when_ignore_excludes_i002(self, tmp_path):
+        """_i002_preload attempts graph build when I002 is not in ignore list."""
+        (tmp_path / "a.py").write_text("import os\n")
+        result = _i002_preload(tmp_path, ignore=["V001"])
+        assert isinstance(result, dict)
+
+    def test_preload_survives_import_error(self, tmp_path):
+        """_i002_preload returns empty dict if I002 module cannot be imported."""
+        with patch("reveal.cli.file_checker._i002_preload", wraps=_i002_preload):
+            with patch.dict("sys.modules", {"reveal.rules.imports.I002": None}):
+                result = _i002_preload(tmp_path, ignore=None)
+        assert isinstance(result, dict)
+
+    def test_init_worker_populates_cache(self, tmp_path):
+        """_i002_init_worker seeds the I002 module-level cache."""
+        from reveal.rules.imports.I002 import _graph_cache
+        from reveal.analyzers.imports.types import ImportGraph
+
+        fake_graph = ImportGraph()
+        fake_root = tmp_path / "fake_root"
+
+        try:
+            _i002_init_worker({fake_root: fake_graph})
+            assert _graph_cache.get(fake_root) is fake_graph
+        finally:
+            _graph_cache.pop(fake_root, None)
+
+    def test_init_worker_noop_on_empty_cache(self):
+        """_i002_init_worker does nothing when called with empty dict."""
+        from reveal.rules.imports.I002 import _graph_cache
+        before = dict(_graph_cache)
+        _i002_init_worker({})
+        assert dict(_graph_cache) == before
+
+    def test_init_worker_survives_import_error(self):
+        """_i002_init_worker silently ignores import errors."""
+        with patch.dict("sys.modules", {"reveal.rules.imports.I002": None}):
+            _i002_init_worker({"some_key": "some_value"})  # must not raise
+
+    def test_run_parallel_uses_preload(self, tmp_path):
+        """_run_parallel calls _i002_preload and passes result to workers."""
+        from reveal.cli.file_checker import _run_parallel
+
+        (tmp_path / "a.py").write_text("x = 1\n")
+        files = [tmp_path / "a.py"]
+
+        preload_calls = []
+
+        def fake_preload(directory, ignore):
+            preload_calls.append((directory, ignore))
+            return {}
+
+        with patch("reveal.cli.file_checker._i002_preload", side_effect=fake_preload):
+            _run_parallel(files, tmp_path, select=None, ignore=None)
+
+        assert len(preload_calls) == 1
+        assert preload_calls[0][0] == tmp_path

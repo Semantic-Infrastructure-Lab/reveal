@@ -51,6 +51,10 @@ ignore:
   - ".benchmarks/**"
   - "external-git/**"  # Nested git repos
 
+  # Tool caches (generated, not source)
+  - ".mypy_cache/**"
+  - ".deepeval/**"
+
   # Generated files
   - "*.pyc"
   - "*.pyo"
