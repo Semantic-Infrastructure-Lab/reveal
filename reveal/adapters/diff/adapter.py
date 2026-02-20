@@ -55,9 +55,16 @@ class DiffAdapter(ResourceAdapter):
             # Old style: two arguments
             self.left_uri = cast(str, resource)  # resource must be provided with right_uri
             self.right_uri = right_uri
-        elif resource and ':' in resource:
+        elif resource:
             # New style: parse combined resource string
-            self.left_uri, self.right_uri = parse_diff_uris(resource)
+            # parse_diff_uris handles Windows drive letters and all URI schemes
+            try:
+                self.left_uri, self.right_uri = parse_diff_uris(resource)
+            except ValueError:
+                raise ValueError(
+                    "DiffAdapter requires 'left:right' format. "
+                    "Got: {!r}. Example: diff://app.py:backup/app.py".format(resource)
+                )
         else:
             # Resource provided but invalid format
             raise ValueError(

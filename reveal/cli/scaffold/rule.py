@@ -135,12 +135,12 @@ def scaffold_rule(
     # Create __init__.py if it doesn't exist
     init_file = rules_dir / '__init__.py'
     if not init_file.exists():
-        init_file.write_text('"""Quality rules."""\n')
+        init_file.write_text('"""Quality rules."""\n', encoding='utf-8')
 
     # Write files
-    rule_file.write_text(rule_content)
-    test_file.write_text(test_content)
-    doc_file.write_text(doc_content)
+    rule_file.write_text(rule_content, encoding='utf-8')
+    test_file.write_text(test_content, encoding='utf-8')
+    doc_file.write_text(doc_content, encoding='utf-8')
 
     return {
         'rule_file': str(rule_file),

@@ -158,7 +158,7 @@ class TestM105Integration:
         if not main_path.exists():
             pytest.skip("main.py not found")
 
-        content = main_path.read_text()
+        content = main_path.read_text(encoding='utf-8')
         rule = M105()
 
         # Should be imported

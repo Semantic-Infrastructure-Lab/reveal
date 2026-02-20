@@ -3,11 +3,13 @@
 Comprehensive edge case coverage for V011 rule testing.
 """
 
+import sys
 import unittest
 from pathlib import Path
 import tempfile
 import shutil
 from unittest import mock
+import pytest
 
 from reveal.rules.validation.V011 import V011
 
@@ -93,6 +95,7 @@ class TestV011PyprojectHandling(unittest.TestCase):
                 # No version extractable = no checks
                 self.assertEqual(len(detections), 0)
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod does not restrict access on Windows")
     def test_pyproject_read_exception_handled(self):
         """Test exception handling when reading pyproject.toml."""
         pyproject_file = self.project_root / 'pyproject.toml'
@@ -160,6 +163,7 @@ class TestV011ChangelogValidation(unittest.TestCase):
                 self.assertIn("CHANGELOG.md", detections[0].message)
                 self.assertIn("missing date", detections[0].message)
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod does not restrict access on Windows")
     def test_changelog_read_exception_handled(self):
         """Test exception handling when reading CHANGELOG.md."""
         changelog_file = self.project_root / 'CHANGELOG.md'
@@ -253,6 +257,7 @@ class TestV011RoadmapValidation(unittest.TestCase):
         result = self.rule._roadmap_has_shipped_section(roadmap_file, "1.0.0")
         self.assertFalse(result)
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod does not restrict access on Windows")
     def test_roadmap_read_exception_handled(self):
         """Test exception handling when reading ROADMAP.md."""
         roadmap_file = self.project_root / 'ROADMAP.md'

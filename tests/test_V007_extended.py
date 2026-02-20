@@ -3,11 +3,13 @@
 Comprehensive edge case coverage for V007 rule testing.
 """
 
+import sys
 import unittest
 from pathlib import Path
 import tempfile
 import shutil
 from unittest import mock
+import pytest
 
 from reveal.rules.validation.V007 import V007
 
@@ -97,6 +99,7 @@ name = "reveal"
                 self.assertEqual(len(detections), 1)
                 self.assertIn("Could not extract version", detections[0].message)
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod does not restrict access on Windows")
     def test_pyproject_read_exception_handled(self):
         """Test exception handling when reading pyproject.toml."""
         pyproject_file = self.project_root / 'pyproject.toml'
@@ -171,6 +174,7 @@ version = "1.0.0"
                 self.assertIn("CHANGELOG.md missing section", detections[0].message)
                 self.assertIn("1.0.0", detections[0].message)
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod does not restrict access on Windows")
     def test_changelog_read_exception_handled(self):
         """Test exception handling when reading CHANGELOG.md."""
         changelog_file = self.project_root / 'CHANGELOG.md'
@@ -297,6 +301,7 @@ version = "1.0.0"
                 self.assertIn("AGENT_HELP.md version mismatch", detections[0].message)
                 self.assertIn("0.9.0", detections[0].message)
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod does not restrict access on Windows")
     def test_agent_help_read_exception_handled(self):
         """Test exception handling when reading AGENT_HELP.md."""
         agent_help_file = self.docs_dir / 'AGENT_HELP.md'

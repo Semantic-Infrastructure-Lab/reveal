@@ -3,11 +3,13 @@
 Comprehensive edge case coverage for V015 rule testing.
 """
 
+import sys
 import unittest
 from pathlib import Path
 import tempfile
 import shutil
 from unittest import mock
+import pytest
 
 from reveal.rules.validation.V015 import V015
 
@@ -186,6 +188,7 @@ class TestV015CountingLogic(unittest.TestCase):
             # Should only count V001 and V002, not utils/init/_private
             self.assertEqual(count, 2)
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod does not restrict access on Windows")
     def test_count_exception_handled(self):
         """Test exception handling in count_registered_rules."""
         # Make rules_dir unreadable
@@ -235,6 +238,7 @@ Details:
         self.assertEqual(claims[1][1], 57)
         self.assertFalse(claims[1][2])
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod does not restrict access on Windows")
     def test_extract_readme_exception_handled(self):
         """Test exception handling in extract_rules_count_from_readme."""
         readme_file = Path(self.tmpdir) / 'README.md'

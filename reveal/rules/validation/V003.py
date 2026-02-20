@@ -32,7 +32,7 @@ class AnalyzerContext:
     @property
     def relative_path(self) -> str:
         """Get analyzer path relative to reveal root for detection reporting."""
-        return str(self.analyzer_path.relative_to(self.reveal_root))
+        return self.analyzer_path.relative_to(self.reveal_root).as_posix()
 
 
 class V003(BaseRule):

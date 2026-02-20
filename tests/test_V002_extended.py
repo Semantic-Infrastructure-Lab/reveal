@@ -3,11 +3,13 @@
 Comprehensive edge case coverage for V002 rule testing.
 """
 
+import sys
 import unittest
 from pathlib import Path
 import tempfile
 import shutil
 from unittest import mock
+import pytest
 
 from reveal.rules.validation.V002 import V002
 
@@ -120,6 +122,7 @@ CONSTANT = 42
             )
             self.assertEqual(len(detections), 0)
 
+    @pytest.mark.skipif(sys.platform == 'win32', reason="chmod does not restrict access on Windows")
     def test_analyzer_file_read_exception_no_detection(self):
         """Test no detection when file cannot be read."""
         analyzer_file = self.analyzers_dir / 'custom.py'

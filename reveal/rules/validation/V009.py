@@ -10,6 +10,7 @@ Example violation:
     - Suggestion: Create file or update link
 """
 
+import os
 import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
@@ -237,7 +238,10 @@ class V009(BaseRule):
 
             # Handle relative paths
             source_dir = source_file.parent
-            resolved = (source_dir / link).resolve()
+            # Use normpath (not resolve) to avoid following symlinks.
+            # On macOS, /var is a symlink to /private/var; resolve() would
+            # change the prefix and break relative_to() checks.
+            resolved = Path(os.path.normpath(source_dir / link))
 
             # Check if resolved path is within project
             try:
