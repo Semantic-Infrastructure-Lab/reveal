@@ -69,7 +69,7 @@ jobs:
           if detections:
               print('❌ Reveal self-validation failed:')
               for d in detections:
-                  print(f'  [{d.severity.upper()}] {d.code}: {d.message}')
+                  print(f'  [{d.severity.value.upper()}] {d.code}: {d.message}')
               exit(1)
 
           print('✅ Reveal self-validation passed (all V001-V006 checks)')

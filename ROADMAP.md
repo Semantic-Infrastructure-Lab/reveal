@@ -1,11 +1,20 @@
 # Reveal Roadmap
-> **Last updated**: 2026-02-20 (v0.51.0 - Performance overhaul, security hardening, claude:// content views)
+> **Last updated**: 2026-02-20 (v0.51.1 - Cross-platform CI fixes)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.51.1
+- ✅ **Cross-platform CI** — All 6 matrix jobs pass (Python 3.10/3.12 × Ubuntu/macOS/Windows)
+- ✅ **Claude adapter two-pass search** — TIA-style directory names always checked before UUID filename matches
+- ✅ **V009 symlink fix** — `normpath` instead of `resolve()` prevents macOS `/var` → `/private/var` expansion
+- ✅ **Windows path separators** — `.as_posix()` in V003 and stats adapter; robust drive-letter parsing in diff adapter
+- ✅ **Windows encoding** — `encoding='utf-8'` in scaffold write/read; `charmap` errors eliminated
+- ✅ **DNS dev dep** — `dnspython>=2.0.0` added to dev extras so DNS adapter tests load correctly
+- ✅ **chmod tests skipped on Windows** — V002/V007/V011/V015/validation tests skip where `chmod(0o000)` is a no-op
 
 ### v0.51.0
 - ✅ **I002 cache fix** — Import graph cache keyed on project root (not file parent); 73-subdir project: 13 min → 33s
@@ -157,6 +166,71 @@ This document outlines reveal's development priorities and future direction. For
 ## Post-v1.0 Features
 
 > **Status**: Strategic backlog. Not prioritized for implementation yet.
+> See `internal-docs/design/SUBCOMMANDS_DESIGN.md` for the full design.
+
+### Subcommands (Intent-Based Workflows)
+
+Reveal's URI model (`reveal <path|uri> [flags]`) is powerful for resource exploration. Subcommands address a complementary need: encoding *user intent* as first-class CLI verbs that orchestrate multiple adapters into unified workflows.
+
+**Design principle**: URIs explore resources. Subcommands accomplish goals.
+
+#### Tier 1 (Highest Value)
+
+**`reveal check`** — formalize the existing `--check` flag as a proper subcommand
+```bash
+reveal check ./src
+reveal check ./src --select=B,S --only-failures
+```
+Low effort, high ergonomics gain. Makes linting discoverable in `reveal --help`.
+
+---
+
+**`reveal review`** — code review workflow for PRs and health checks
+```bash
+reveal review ./src                  # Health + quality review
+reveal review main..feature          # PR structural diff + quality
+reveal review main..feature --format json  # CI/CD gate (exit codes)
+```
+Orchestrates: `diff://`, `stats://`, `ast://`, `imports://`, `--check`. Five commands today; one command tomorrow.
+
+---
+
+**`reveal pack`** — curated, token-budgeted context for LLM consumption
+```bash
+reveal pack ./src --budget 2000-tokens
+reveal pack ./api --budget 500-lines
+```
+Formalizes "give me enough context but not too much." Critical for agentic workflows.
+
+---
+
+**`reveal health`** — unified health check across any resource type
+```bash
+reveal health ./src                  # Code quality health
+reveal health ssl://example.com      # SSL cert health
+reveal health mysql://prod/db        # DB health
+```
+Consistent pass/warn/fail model with exit codes for CI/CD monitoring.
+
+---
+
+**`reveal dev`** — developer tooling namespace
+```bash
+reveal dev new-adapter payments --uri pay
+reveal dev new-rule R914 "deep nesting"
+reveal dev inspect-config
+```
+Wraps the planned scaffold commands + config introspection into a coherent namespace.
+
+#### Tier 2 (Post-v1.0)
+
+```bash
+reveal overview              # Auto-generated repo summary
+reveal hotspots              # Complexity/quality issues (top N files/functions)
+reveal onboarding            # First-day guide for unfamiliar codebases
+reveal audit                 # Security/compliance focus (S, B, N rules)
+reveal deps                  # Full dependency analysis (wraps imports://)
+```
 
 ### Relationship Queries (Call Graphs)
 ```bash
@@ -166,22 +240,6 @@ reveal depends://src/module/              # What depends on this?
 **Why valuable**: Structure tells you what exists; relationships tell you what *matters*.
 
 **Current limitation**: Requires cross-file static analysis. Tree-sitter infrastructure is ready, but call resolution is non-trivial.
-
-### Intent-Based Commands
-```bash
-reveal overview              # Auto-generated repo summary
-reveal entrypoints           # Find main(), __init__, index.js
-reveal hotspots              # Complexity/quality issues
-reveal onboarding            # First-day guide
-```
-**Why valuable**: Strong tools encode *questions*, not mechanics.
-
-### Context Packs (Budgeted Context)
-```bash
-reveal pack ./src --budget 500-lines     # Curated context
-reveal pack ./api --budget 2000-tokens   # For LLM consumption
-```
-**Why valuable**: Formalizes "give me enough context but not too much."
 
 ### Git-Aware Defaults
 ```bash
