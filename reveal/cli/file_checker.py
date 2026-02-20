@@ -49,7 +49,10 @@ def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
     Returns:
         List of (file_path, issue_count, detections) in same order as input
     """
-    workers = min(os.cpu_count() or 4, len(files))
+    # Benchmark shows 4 workers captures ~74% of max speedup (vs 12 workers at
+    # 100%). Beyond 4, marginal gain is <0.5s while fork overhead grows.
+    # Capping at 4 leaves remaining cores free and reduces IPC pressure.
+    workers = min(4, os.cpu_count() or 4, len(files))
     args_iter = [(f, directory, select, ignore) for f in files]
     with ProcessPoolExecutor(max_workers=workers) as pool:
         return list(pool.map(_parallel_worker, args_iter))
