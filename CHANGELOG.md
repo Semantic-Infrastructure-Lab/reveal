@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+- **`--check` parallelism** — `reveal --check dir/` now uses `ProcessPoolExecutor` (4 workers) to check files in parallel. Wall-clock time on a 3,500-file project: 48s → 21.5s (2.2×). Worker count capped at 4 after empirical benchmark sweep showed 74% of max speedup at 4 workers vs marginal gains beyond that (commits 1298515, 891f9bd)
+- **O(n²) rule scan eliminated** — `RuleRegistry.check_file` was iterating all rules for every file even after an early-exit condition; fixed to short-circuit correctly. Large projects went from many minutes → ~30s before parallelism (commit faa09d4)
+- **Per-file micro-optimizations** — 8 targeted fixes: cache `Path.resolve()`, pre-compile glob patterns once, reuse `RuleRegistry` instance across files, avoid re-parsing markdown for link rules. Net: 8.3s → ~5.6s user time on reveal's own codebase (commits 25c42f9, 5d52a0a)
+
+### Security
+- **Zip bomb protection** — `.docx`/`.xlsx`/`.pptx` files are now checked before extraction: decompressed size capped at 50 MB and compression ratio capped at 1000×. Crafted archives that would cause OOM are rejected with a clear error (commit 8569c47)
+- **File size guard** — `_read_file()` now rejects files larger than 100 MB before reading, preventing OOM from `/dev/zero` or similar (commit 8569c47)
+- **MySQL URL parsing** — replaced custom `@`-split parser with `urlparse`+`unquote`; passwords containing `@` or `:` were previously silently misparsed and caused connection failures (commit 8569c47)
+- **Frontmatter eval hardening** — `safe_builtins` can no longer be shadowed by frontmatter field values (e.g., `len: evil`); expression length capped at 200 chars (commit 8569c47)
+- **SSL timeout propagation** — user-configured timeout now threads through `_run_advanced_checks()` instead of being hardcoded to 10s (commit 8569c47)
+
 ### Added
 - **claude:// content views** - `/user`, `/assistant`, `/thinking`, `/message/<n>` routes now render actual content instead of falling through to the fallback `[list with N items]` renderer (commit 78505b2)
   - `/user` — first message as full prompt text (1200 char limit), subsequent turns as `[N tool result(s)]`
@@ -36,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **I004 false positive** - Shadowing rule no longer fires for files nested ≥2 levels deep in subpackages (commit 0f861b2)
 - **--check paths** - File paths in `--check` output are now relative to CWD, not to the scan target (commit 0f861b2)
 - **claude:// UUID sessions** - Sessions with UUID IDs are now found via JSONL filename lookup, not just project dir name matching (commit 0f861b2)
+- **claude:// session list** — `reveal claude://` now renders sessions as a table (id, date, title) instead of a collapsed dict (commit 77407b3)
+- **--agent-help-full** — flag was broken after AGENT_HELP consolidation; restored correct file lookup (commit 1000fca)
+- **D001 false positives** — duplicate function detection now scopes to the containing class; `setUp`/`tearDown` in different test classes no longer flagged as duplicates (commit 086d98b)
+- **`--check` build artifact noise** — `build/` and `dist/` directories are now excluded from recursive checks alongside `.git`, `__pycache__`, `node_modules` (commit 086d98b)
 
 ### Changed
 - **B003 threshold** - Raised from 8→15 lines; 8 was flagging legitimate computed properties in real-world code (commit 0f861b2)
