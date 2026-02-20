@@ -20,7 +20,7 @@ class XlsxRenderer:
             result: Structure dict from XlsxAdapter.get_structure()
             format: Output format ('text', 'json', 'grep', 'csv')
         """
-        from ..main import safe_json_dumps
+        from ..utils import safe_json_dumps
 
         # Check for format preference in result (from ?format=csv query param)
         preferred_format = result.get('preferred_format', format)

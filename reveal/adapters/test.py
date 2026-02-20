@@ -17,7 +17,7 @@ class TestRenderer:
             format: Output format ('text', 'json', 'grep')
         """
         # TODO: Implement custom rendering or use generic renderer
-        from ..main import safe_json_dumps
+        from ..utils import safe_json_dumps
 
         if format == 'json':
             print(safe_json_dumps(result))
@@ -35,7 +35,7 @@ class TestRenderer:
             result: Element dict from TestAdapter.get_element()
             format: Output format ('text', 'json', 'grep')
         """
-        from ..main import safe_json_dumps
+        from ..utils import safe_json_dumps
 
         if format == 'json':
             print(safe_json_dumps(result))

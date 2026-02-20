@@ -15,7 +15,7 @@ class StatsRenderer:
             format: Output format ('text', 'json')
         """
         if format == 'json':
-            from ...main import safe_json_dumps
+            from ...utils import safe_json_dumps
             print(safe_json_dumps(result))
             return
 
@@ -75,7 +75,7 @@ class StatsRenderer:
             format: Output format ('text', 'json')
         """
         if format == 'json':
-            from ...main import safe_json_dumps
+            from ...utils import safe_json_dumps
             print(safe_json_dumps(result))
             return
 

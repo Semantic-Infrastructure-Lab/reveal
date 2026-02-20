@@ -26,7 +26,7 @@ class RevealRenderer:
             format: Output format ('text', 'json', 'grep')
             **kwargs: Ignored (for compatibility with other adapters' filter flags)
         """
-        from ...main import safe_json_dumps
+        from ...utils import safe_json_dumps
 
         detections = result.get('detections', [])
         uri = result.get('file', 'reveal://')

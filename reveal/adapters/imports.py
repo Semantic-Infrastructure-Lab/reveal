@@ -124,7 +124,7 @@ class ImportsRenderer:
             resource: Resource path for display
         """
         if format == 'json':
-            from ..main import safe_json_dumps
+            from ..utils import safe_json_dumps
             print(safe_json_dumps(result))
             return
 
@@ -140,7 +140,7 @@ class ImportsRenderer:
             else:
                 ImportsRenderer._render_import_summary(result, resource)
         else:
-            from ..main import safe_json_dumps
+            from ..utils import safe_json_dumps
             print(safe_json_dumps(result))
 
     @staticmethod
@@ -152,7 +152,7 @@ class ImportsRenderer:
             format: Output format ('text', 'json')
         """
         if format == 'json':
-            from ..main import safe_json_dumps
+            from ..utils import safe_json_dumps
             print(safe_json_dumps(result))
             return
 

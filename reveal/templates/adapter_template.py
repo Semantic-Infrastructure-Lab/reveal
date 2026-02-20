@@ -19,7 +19,7 @@ class {class_name}Renderer:
             format: Output format ('text', 'json', 'grep')
         """
         # TODO: Implement custom rendering or use generic renderer
-        from ..main import safe_json_dumps
+        from ..utils import safe_json_dumps
 
         if format == 'json':
             print(safe_json_dumps(result))
@@ -37,7 +37,7 @@ class {class_name}Renderer:
             result: Element dict from {class_name}Adapter.get_element()
             format: Output format ('text', 'json', 'grep')
         """
-        from ..main import safe_json_dumps
+        from ..utils import safe_json_dumps
 
         if format == 'json':
             print(safe_json_dumps(result))
@@ -230,7 +230,7 @@ def render_{adapter_name}_structure(result: Dict[str, Any], format: str) -> None
         format: Output format ('text', 'json', 'grep')
     """
     if format == 'json':
-        from ..main import safe_json_dumps
+        from ..utils import safe_json_dumps
         print(safe_json_dumps(result))
         return
 

@@ -16,7 +16,7 @@ def _is_update_recent(cache_file) -> bool:
     try:
         last_check = datetime.fromisoformat(cache_file.read_text(encoding='utf-8').strip())
         return datetime.now() - last_check < timedelta(days=1)
-    except (ValueError, OSError):
+    except ValueError:
         return False
 
 

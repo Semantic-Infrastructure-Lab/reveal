@@ -611,12 +611,14 @@ class TestStatsAdapterIntegration(unittest.TestCase):
     def run_reveal_command(self, *args):
         """Run reveal command and return result."""
         cmd = [sys.executable, "-m", "reveal.main"] + list(args)
+        cwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             encoding='utf-8',
-            timeout=30
+            timeout=30,
+            cwd=cwd,
         )
         return result
 
@@ -715,12 +717,15 @@ class TestDiffAdapterIntegration(unittest.TestCase):
     def run_reveal_command(self, *args):
         """Run reveal command and return result."""
         cmd = [sys.executable, "-m", "reveal.main"] + list(args)
+        # Run from external-git/ so relative paths like reveal/__init__.py resolve
+        cwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             encoding='utf-8',
-            timeout=30
+            timeout=30,
+            cwd=cwd,
         )
         return result
 
