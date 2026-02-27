@@ -27,6 +27,7 @@ from .sqlite import SQLiteAdapter
 from .ssl import SSLAdapter
 from .stats import StatsAdapter
 from .xlsx import XlsxAdapter
+from .cpanel import CpanelAdapter
 
 # Optional adapters (require extra dependencies)
 try:
@@ -63,6 +64,7 @@ __all__ = [
     'SSLAdapter',
     'StatsAdapter',
     'XlsxAdapter',
+    'CpanelAdapter',
 ]
 if _git_available:
     __all__.append('GitAdapter')
