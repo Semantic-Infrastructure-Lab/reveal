@@ -27,7 +27,7 @@ This is the complete offline reference for reveal (~12,000 tokens). Both `--agen
 AI agents can now query reveal's capabilities via machine-readable schemas:
 
 ```bash
-# Discover adapter schemas (ALL 18 adapters now supported)
+# Discover adapter schemas (ALL 19 adapters now supported)
 reveal help://schemas/<adapter> --format=json
 
 # File & Analysis Adapters
@@ -49,6 +49,7 @@ reveal help://schemas/ssl --format=json        # SSL certificates
 reveal help://schemas/domain --format=json     # Domain DNS/WHOIS
 reveal help://schemas/git --format=json        # Git repositories
 reveal help://schemas/claude --format=json     # Claude conversations
+reveal help://schemas/cpanel --format=json     # cPanel user environments
 
 # Meta Adapters
 reveal help://schemas/reveal --format=json     # Self-inspection
@@ -715,6 +716,49 @@ N004: ACME challenge path inconsistency
   # ❌ Inconsistent paths cause cert renewal failures (Let's Encrypt)
 ```
 
+**Nginx ACL and routing checks:**
+```bash
+# N1: Check that nobody user can read every docroot (cPanel nginx requirement)
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --check-acl
+# Exit 2 on any path component that blocks nobody (ACME renewal will fail)
+
+# N4: Find ACME root paths + ACL status in one table
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --extract acme-roots
+# domain → acme root path → ACL status
+
+# N2: Detect location block routing surprises
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --check-conflicts
+# prefix_overlap: one non-regex location is a strict prefix of another
+# regex_shadows_prefix: regex pattern can match a prefix location's path
+# Exit 2 on regex conflicts; prefix overlap is info-only
+
+# N3: Filter output to a specific domain (essential for 1,500-line cPanel configs)
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --domain example.com
+```
+
+**cPanel nginx audit commands:**
+```bash
+# The single command that would have caught the Feb 2026 Sociamonials incident:
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
+# Per-domain table: ACME root path | nobody ACL status | live SSL cert status
+# Exit 2 on any ACL failure or SSL expiry
+
+# Check nginx error log for ACME/SSL failures (retroactive diagnosis)
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --diagnose
+# Scans last 5,000 lines of nginx error log for:
+# - permission_denied: open() on /.well-known/ returned EACCES (exit 2)
+# - ssl_error: SSL_CTX_use_certificate / handshake failures (exit 2)
+# - not_found: ENOENT on /.well-known/ (info-only, exit 0)
+# Groups by (domain, pattern): count + last seen + sample line
+# Override log path: reveal ... --diagnose --log-path /var/log/nginx/error.log
+
+# Check cPanel disk certs vs live certs (detect stale-after-AutoSSL-renewal)
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs
+# Per-domain table: disk cert expiry | live cert expiry | match status
+# ⚠️ STALE (reload nginx) when serial numbers differ
+# Exit 2 on stale or expired certs
+```
+
 **Docker security checks (S701):**
 ```
 S701: Running as root
@@ -753,6 +797,33 @@ reveal @domains.txt --check
 
 # Batch check via stdin
 echo -e "ssl://a.com\nssl://b.com" | reveal --stdin --check
+```
+
+**Batch output includes inline failure detail and expiry dates:**
+```
+# Failures show reason inline:
+example.com         EXPIRED  3 days ago  (Jan 25, 2026)
+api.example.com     DNS FAILURE (NXDOMAIN)
+db.example.com      CONNECTION REFUSED
+cdn.example.com     TIMEOUT
+
+# Warnings show expiry date:
+staging.example.com  WARNING  expires in 12 days  (Mar 11, 2026)
+
+# Healthy domains show expiry:
+www.example.com      OK       182 days  (Aug 27, 2026)
+```
+
+**On-disk certificate inspection (cPanel / file-based certs):**
+```bash
+# Inspect a PEM cert on disk without a live connection
+reveal ssl://file:///var/cpanel/ssl/apache_tls/example.com/combined
+# Same health/expiry/SAN display as live cert
+# PEM combined files (leaf + chain) are split; chain count surfaced
+# Next step suggested: reveal ssl://example.com --check for disk-vs-live
+
+# Any PEM or DER file
+reveal ssl://file:///etc/letsencrypt/live/example.com/fullchain.pem
 ```
 
 **Nginx SSL audit (composable pipeline):**
@@ -805,6 +876,68 @@ reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --only-f
 # 3. Find certs expiring within 14 days
 reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --expiring-within=14
 ```
+
+---
+
+### Task: "Audit a cPanel user environment"
+
+The `cpanel://` adapter provides a first-class view of a cPanel user's web environment.
+All operations are filesystem-based — no WHM API or credentials required.
+
+**Pattern:**
+```bash
+# Overview: domain count + SSL summary + nginx config path
+reveal cpanel://USERNAME
+
+# List all domains with docroots and type (addon/subdomain/main)
+reveal cpanel://USERNAME/domains
+
+# Disk cert health for every domain (S2)
+reveal cpanel://USERNAME/ssl
+
+# Nobody ACL check on every domain docroot (N1)
+reveal cpanel://USERNAME/acl-check
+
+# JSON output for scripting
+reveal cpanel://USERNAME --format=json
+reveal cpanel://USERNAME/ssl --format=json
+```
+
+**Full per-user audit workflow:**
+```bash
+# 1. Overview
+reveal cpanel://USERNAME
+
+# 2. Check nobody ACL on all docroots (required for nginx ACME renewal)
+reveal cpanel://USERNAME/acl-check
+
+# 3. Check on-disk cert health for every SSL domain
+reveal cpanel://USERNAME/ssl
+
+# 4. Composed audit: ACME paths + ACL + live SSL in one table
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
+
+# 5. Disk cert vs live cert comparison (detect AutoSSL renewed but nginx not reloaded)
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs
+
+# 6. Retroactive error log diagnosis (what has already failed)
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --diagnose
+```
+
+**cpanel:// views:**
+- `cpanel://USERNAME` — overview: domain count, SSL summary, nginx config path
+- `cpanel://USERNAME/domains` — all addon/subdomain domains with docroots and type
+- `cpanel://USERNAME/ssl` — disk cert health per domain from `/var/cpanel/ssl/apache_tls/`
+- `cpanel://USERNAME/acl-check` — nobody ACL status on every domain docroot
+
+**When to use which command:**
+| Scenario | Command |
+|----------|---------|
+| Quick user overview | `reveal cpanel://USERNAME` |
+| "Why is ACME renewal failing?" | `reveal ... --validate-nginx-acme` then `--diagnose` |
+| "Did AutoSSL run but nginx not reload?" | `reveal ... --cpanel-certs` |
+| "Which docroots block nobody?" | `reveal cpanel://USERNAME/acl-check` |
+| "What domains does this user have?" | `reveal cpanel://USERNAME/domains` |
 
 ---
 
@@ -2005,11 +2138,22 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Check SSL cert | `reveal ssl://example.com` |
 | SSL health check | `reveal ssl://example.com --check` |
 | Batch SSL from file | `reveal @domains.txt --check` |
+| On-disk cert inspection | `reveal ssl://file:///path/to/cert.pem` |
 | Nginx SSL domains | `reveal nginx.conf --extract domains` |
 | Nginx SSL check | `... --extract domains \| reveal --stdin --check` |
 | SSL failures only | `--check --only-failures` |
 | SSL expiring soon | `--check --expiring-within=30` |
 | Nginx config check | `reveal nginx.conf --check --select N` |
+| Nginx nobody ACL check | `reveal nginx:///.../user.conf --check-acl` |
+| Nginx ACME roots table | `reveal nginx:///.../user.conf --extract acme-roots` |
+| Nginx location conflicts | `reveal nginx:///.../user.conf --check-conflicts` |
+| Filter to one domain | `reveal nginx:///.../user.conf --domain example.com` |
+| Full ACME+ACL+SSL audit | `reveal nginx:///.../user.conf --validate-nginx-acme` |
+| Disk vs live cert compare | `reveal nginx:///.../user.conf --cpanel-certs` |
+| Error log ACME diagnosis | `reveal nginx:///.../user.conf --diagnose` |
+| cPanel user overview | `reveal cpanel://USERNAME` |
+| cPanel SSL health | `reveal cpanel://USERNAME/ssl` |
+| cPanel ACL check | `reveal cpanel://USERNAME/acl-check` |
 | Get JSON output | `reveal file.py --format=json` |
 | Copy to clipboard | `reveal file.py --copy` |
 | Extract links | `reveal doc.md --links` |

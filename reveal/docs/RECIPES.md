@@ -19,6 +19,13 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
 - [Documentation Maintenance](#documentation-maintenance)
 - [JSON Navigation](#json-navigation)
 - [Database Operations](#database-operations)
+  - [SSL certificate inspection](#ssl-certificate-inspection)
+  - [On-disk certificate inspection](#on-disk-certificate-inspection)
+  - [SSL expiry monitoring](#ssl-expiry-monitoring)
+  - [Nginx SSL audit](#nginx-ssl-audit)
+  - [Nginx ACL, routing, and ACME audit](#nginx-acl-routing-and-acme-audit)
+  - [cPanel user environment](#cpanel-user-environment)
+  - [Batch SSL checking with @file](#batch-ssl-checking-with-file)
 - [Pipeline Integration](#pipeline-integration)
 - [AI Agent Patterns](#ai-agent-patterns)
 - [Multi-Language Support](#multi-language-support)
@@ -536,6 +543,17 @@ reveal ssl://example.com --check
 reveal ssl://example.com --check --format=json
 ```
 
+### On-disk certificate inspection
+
+```bash
+# Inspect a PEM/DER cert file directly (no network connection needed)
+reveal ssl://file:///var/cpanel/ssl/apache_tls/example.com/combined
+reveal ssl://file:///etc/letsencrypt/live/example.com/fullchain.pem
+
+# Same output as live cert: health, expiry, SANs, chain count
+# Combined PEM files (leaf + chain) are split automatically
+```
+
 ### SSL expiry monitoring
 
 ```bash
@@ -545,6 +563,12 @@ reveal ssl://example.com --check
 
 # Combine with nginx config analysis
 reveal /etc/nginx/nginx.conf --check  # N004 detects ACME path issues, N006 detects timeout mismatches
+
+# Batch output shows failure reason and expiry dates inline:
+# example.com    EXPIRED  3 days ago  (Jan 25, 2026)
+# api.example.com    DNS FAILURE (NXDOMAIN)
+# staging.example.com    WARNING  expires in 12 days  (Mar 11, 2026)
+# www.example.com    OK  182 days  (Aug 27, 2026)
 ```
 
 ### Nginx SSL audit
@@ -567,6 +591,52 @@ reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --summar
 
 # Find certs expiring within 30 days
 reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --expiring-within=30
+```
+
+### Nginx ACL, routing, and ACME audit
+
+```bash
+# Check nobody-user ACL access on all docroots (required for nginx ACME renewal)
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --check-acl
+
+# Find all ACME challenge root paths + ACL status in one table
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --extract acme-roots
+
+# Detect location block routing surprises (prefix overlap, regex shadowing prefix)
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --check-conflicts
+
+# Filter output to a single domain (essential for 1,500-line cPanel user configs)
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --domain example.com
+
+# Full composed audit: ACME paths + ACL status + live SSL cert per domain
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
+
+# Disk cert vs live cert comparison (detect "AutoSSL renewed but nginx not reloaded")
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs
+# ⚠️ STALE (reload nginx) when serial numbers differ; exit 2 on stale or expired
+
+# Scan nginx error log for ACME/SSL failure patterns (retroactive diagnosis)
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --diagnose
+# Groups by domain: permission_denied (exit 2), ssl_error (exit 2), not_found (info)
+```
+
+### cPanel user environment
+
+```bash
+# Overview: domain count, SSL summary, nginx config path
+reveal cpanel://USERNAME
+
+# All domains with docroots and type (addon/subdomain/main)
+reveal cpanel://USERNAME/domains
+
+# Disk cert health per domain
+reveal cpanel://USERNAME/ssl
+
+# Nobody ACL check on every domain docroot
+reveal cpanel://USERNAME/acl-check
+
+# JSON output for scripting
+reveal cpanel://USERNAME/ssl --format=json
 ```
 
 ### Batch SSL checking with @file
@@ -776,7 +846,10 @@ reveal --list-supported
 # See all server blocks
 reveal nginx.conf
 
-# Extract specific server
+# Filter output to a single domain (essential for large cPanel user configs)
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --domain example.com
+
+# Extract specific server block by name
 reveal nginx.conf server_myapp
 
 # Find all upstreams
@@ -794,6 +867,24 @@ reveal /etc/nginx/nginx.conf --check
 # Large generated configs collapse repeated rules by default
 reveal ea-nginx.conf --check          # N003 x2,685 shown as one summary line
 reveal ea-nginx.conf --check --no-group  # expand all occurrences
+
+# Check nobody-user ACL access (cPanel ACME requirement)
+reveal nginx:///path/user.conf --check-acl
+
+# Find ACME challenge root paths + ACL status
+reveal nginx:///path/user.conf --extract acme-roots
+
+# Detect location routing surprises (regex shadowing prefix, prefix overlap)
+reveal nginx:///path/user.conf --check-conflicts
+
+# Full audit: ACME paths + ACL + live SSL cert status per domain
+reveal nginx:///path/user.conf --validate-nginx-acme
+
+# Disk cert vs live cert comparison
+reveal nginx:///path/user.conf --cpanel-certs
+
+# Scan nginx error log for ACME/SSL failures
+reveal nginx:///path/user.conf --diagnose
 ```
 
 ### Jupyter notebooks
