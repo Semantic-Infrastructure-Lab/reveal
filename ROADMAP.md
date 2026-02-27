@@ -1,11 +1,18 @@
 # Reveal Roadmap
-> **Last updated**: 2026-02-20 (v0.51.1 - Cross-platform CI fixes)
+> **Last updated**: 2026-02-27 (v0.52.0 - nginx analyzer improvements)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.52.0
+- ✅ **nginx: main context directives** — `user`, `worker_processes`, `worker_rlimit_nofile`, `error_log`, `pid` now visible in `nginx.conf`; `ssl_protocols`, `ssl_ciphers`, `client_max_body_size` visible in vhost includes
+- ✅ **nginx: multi-line directives** — `log_format` and other continuation-line directives no longer silently dropped
+- ✅ **nginx: upstream backend detail** — server entries, `max_fails`, `fail_timeout`, `keepalive` now surfaced per upstream
+- ✅ **nginx: map{} block detection** — `map $src $target {}` blocks detected and listed (cPanel/WHM pattern)
+- ✅ **nginx: N005 rule** — flags timeout/buffer directives outside safe operational bounds
 
 ### v0.51.1
 - ✅ **Cross-platform CI** — All 6 matrix jobs pass (Python 3.10/3.12 × Ubuntu/macOS/Windows)
