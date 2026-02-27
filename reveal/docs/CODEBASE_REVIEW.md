@@ -628,6 +628,7 @@ reveal mysql://localhost/connections  # Check for root logins
 - B005: Broken imports (supply chain risk)
 - S701: Docker :latest tags (non-reproducible builds)
 - N002: Missing SSL certificates
+- N006: send_timeout too short for configured max body size (HIGH — silent upload failures)
 - U501: Insecure http:// links
 - Hardcoded secrets in env://
 
@@ -1317,7 +1318,7 @@ reveal stats://./src --format=json > perf_after.json
 | **I** | Imports | I001 (unused), I002 (circular), I003 (layer violations), I004 (shadowing) |
 | **L** | Links | L001-L005 (broken links, missing index) |
 | **M** | Maintainability | M101 (file too large), M102 (orphaned file), M103 (version mismatch) |
-| **N** | Nginx | N001-N003 (config issues) |
+| **N** | Nginx | N001-N006 (config issues, timeouts, body-size mismatch) |
 | **R** | Refactoring | R913 (too many args) |
 | **S** | Security | S701 (Docker :latest) |
 | **T** | Types | T004 (missing Optional[] annotations) |

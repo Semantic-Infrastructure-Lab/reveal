@@ -128,6 +128,9 @@ class RulePrefix(Enum):
     # N001: Duplicate backend servers
     # N002: Missing SSL configuration
     # N003: Missing proxy headers
+    # N004: ACME challenge path inconsistency
+    # N005: Timeout/buffer values outside safe operational ranges
+    # N006: send_timeout too short for client_max_body_size (HIGH)
 
     # Validation (V) - reveal self-validation
     V = "V"  # Reveal internal validation rules

@@ -544,7 +544,7 @@ reveal ssl://example.com --check
 # Exit code 0 = healthy, 1 = warning (<30 days), 2 = critical (<7 days)
 
 # Combine with nginx config analysis
-reveal /etc/nginx/nginx.conf --check  # N004 detects ACME path issues
+reveal /etc/nginx/nginx.conf --check  # N004 detects ACME path issues, N006 detects timeout mismatches
 ```
 
 ### Nginx SSL audit
@@ -787,6 +787,13 @@ reveal /etc/nginx/nginx.conf --check
 # N001: Duplicate backends
 # N002: SSL servers missing certificate directives
 # N003: Proxy locations missing X-Real-IP, X-Forwarded-For
+# N004: ACME challenge path inconsistency (cert renewal failures)
+# N005: Timeout/buffer values outside safe ranges
+# N006: send_timeout too short for client_max_body_size (HIGH — silent uploads)
+
+# Large generated configs collapse repeated rules by default
+reveal ea-nginx.conf --check          # N003 x2,685 shown as one summary line
+reveal ea-nginx.conf --check --no-group  # expand all occurrences
 ```
 
 ### Jupyter notebooks
