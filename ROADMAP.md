@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-02-27 (revodoku-0227 — grouped output, N006, generated file skip)
+> **Last updated**: 2026-02-27 (tropical-sleet-0227 — cPanel/SSL/nginx backlog from Sociamonials production work)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -260,6 +260,58 @@ reveal --since HEAD~3       # Changes since commit
 reveal --pr                 # PR context auto-detection
 ```
 **Why valuable**: Makes tool instantly relevant to daily workflows.
+
+---
+
+### cPanel / SSL / nginx (session tropical-sleet-0227)
+
+Real-world backlog from Sociamonials production cPanel work. All items driven by actual debugging sessions.
+
+#### ssl:// improvements
+
+| # | Feature | Description |
+|---|---------|-------------|
+| S1 | **Batch failure detail** | `--batch --check` shows pass/fail but not _why_. Make failure reason visible by default: `✗ domain.com  EXPIRED 95 days ago (Nov 25, 2025)` / `✗ domain.com  DNS FAILURE (NXDOMAIN)`. |
+| S2 | **Cert file inspection** | `reveal ssl://file:///path/to/cert` — inspect an on-disk cert without a live connection. cPanel stores certs at `/var/cpanel/ssl/apache_tls/DOMAIN/combined`. Enables disk-cert vs live-cert diff and expiry checks before nginx loads them. |
+| S3 | **AutoSSL log awareness** | `reveal ssl://DOMAIN --check --diagnose` detects the Permission Denied / 404 pattern by cross-referencing the nginx error log for that domain alongside the cert check. Today's 404 is opaque without a manual log pivot. |
+| S4 | **cPanel cert path resolution** | `reveal ssl://nginx:///etc/nginx/conf.d/users/preprodsociamoni.conf` resolves the cPanel cert path format (`/var/cpanel/ssl/apache_tls/DOMAIN/combined`) and shows on-disk cert expiry alongside the live check, flagging mismatches. |
+| S5 | **Expiry in batch output** | `--expiring-within` is useful but the expiry date/delta should appear in batch output without a follow-up per-domain query. `⚠ domain.com (expires in 12 days)` vs `✗ domain.com (expired -95 days)`. |
+
+#### nginx:// improvements
+
+| # | Feature | Description |
+|---|---------|-------------|
+| N1 | **cPanel ACL awareness** | `--check-acl` flag checks that the `nobody` user has read access to all domain docroots referenced in location blocks. Directly catches the class of bug hit in the Feb 2026 incident. |
+| N2 | **Include file location conflict detection** | Flag when two location blocks could match the same prefix (inline + included file). Example: `/.well-known/acme-challenge/` (inline, 26-char) vs `/.well-known/acme-challenge` (letsencrypt.conf, 25-char) — nginx's longest-prefix-wins rule isn't obvious without parsing both. |
+| N3 | **`--domain` filter for cPanel monoliths** | `reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --domain DOMAIN` extracts just the relevant server block from a 1,500-line cPanel user config (one server block per domain). |
+| N4 | **ACME pipeline extraction** | `reveal nginx:///path/to/user.conf --extract acme-roots` → per-domain table: `[domain] → [nginx acme root path] → [ACL status for nobody]`. Would have identified the Feb 2026 incident in one command. |
+
+#### New adapter: cpanel://
+
+cPanel has a WHM API and stable file conventions that reveal could wrap:
+
+```bash
+reveal cpanel://USERNAME/domains      # list addon domains + docroots
+reveal cpanel://USERNAME/ssl          # cert status per domain (WHM API or on-disk)
+reveal cpanel://USERNAME/acl-check    # nobody ACL health for all domain docroots
+```
+
+AutoSSL log parsing as a sub-adapter:
+
+```bash
+reveal autossl:///var/cpanel/logs/autossl/TIMESTAMP/
+# → per-domain outcomes table: domain / outcome / reason
+```
+
+#### Composed workflow: `--validate-nginx-acme`
+
+A single flag that chains: extract domains from nginx config → check live SSL status → check ACME docroot permissions → report combined findings.
+
+```bash
+reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
+```
+
+The "SSL audit for cPanel nginx" command that doesn't exist today. Could eventually become `reveal audit ssl://cpanel:USERNAME` under the subcommand model.
 
 ---
 
