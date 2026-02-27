@@ -817,3 +817,120 @@ class NginxAnalyzer(FileAnalyzer):
             'line_end': end_line,
             'source': source,
         }
+
+    def get_error_log_path(self) -> Optional[str]:
+        """Return the nginx error_log path from the config, or None if not specified.
+
+        Checks main context directives first (nginx.conf).  For cPanel user
+        vhost configs the error_log is not present inline; callers should fall
+        back to common paths such as /var/log/nginx/error.log.
+        """
+        main = self._parse_main_directives()
+        raw = main.get('error_log', '')
+        if not raw:
+            return None
+        # error_log may be "path level" — strip the level token and whitespace
+        parts = raw.split()
+        return parts[0] if parts else None
+
+    def diagnose_acme_errors(
+        self, log_path: str, tail_lines: int = 5000
+    ) -> List[Dict[str, Any]]:
+        """Scan an nginx error log for ACME / SSL failure patterns per domain.
+
+        Reads the last *tail_lines* lines of *log_path* and groups error events
+        by domain and pattern type.  Only SSL domains present in this config
+        file are considered.
+
+        Pattern types detected:
+            permission_denied   – open() on /.well-known/ path returned 13
+            not_found           – open() on /.well-known/ path returned 2 (ENOENT)
+            ssl_error           – SSL_CTX_use_certificate or handshake failures
+
+        Returns:
+            List of dicts sorted by domain then pattern:
+                domain      – server_name from this config
+                pattern     – 'permission_denied' | 'not_found' | 'ssl_error'
+                count       – number of matching log lines
+                last_seen   – raw timestamp string of most recent match
+                sample      – one representative log line (first 120 chars)
+        """
+        import os
+
+        domains = set(self.extract_ssl_domains())
+        if not domains:
+            return []
+
+        # Patterns: (pattern_key, compiled_regex)
+        PATTERNS = [
+            ('permission_denied', re.compile(
+                r'open\(\)\s+"[^"]*\.well-known[^"]*"\s+failed.*Permission denied',
+                re.IGNORECASE,
+            )),
+            ('not_found', re.compile(
+                r'open\(\)\s+"[^"]*\.well-known[^"]*"\s+failed.*No such file',
+                re.IGNORECASE,
+            )),
+            ('ssl_error', re.compile(
+                r'(SSL_CTX_use_certificate|SSL handshake|ssl_handshake|'
+                r'no "ssl_certificate"|cannot load certificate)',
+                re.IGNORECASE,
+            )),
+        ]
+
+        # Read last tail_lines lines from the log
+        try:
+            with open(log_path, 'r', encoding='utf-8', errors='replace') as fh:
+                all_lines = fh.readlines()
+        except OSError:
+            return []
+
+        recent_lines = all_lines[-tail_lines:]
+
+        # Group results: key = (domain, pattern_key)
+        hits: Dict[tuple, Dict] = {}
+
+        for raw_line in recent_lines:
+            line = raw_line.rstrip()
+
+            # Try to extract server name from nginx error log line.
+            # Format: 2026/02/15 03:21:17 [error] … server: example.com, request: …
+            server_match = re.search(r'server:\s+([^\s,]+)', line)
+            line_domain = server_match.group(1).lower() if server_match else None
+
+            for pattern_key, regex in PATTERNS:
+                if not regex.search(line):
+                    continue
+
+                # Which domains does this line belong to?
+                matched_domains: set = set()
+                if line_domain and line_domain in domains:
+                    matched_domains.add(line_domain)
+                else:
+                    # Fallback: scan line for any known domain substring
+                    for d in domains:
+                        if d in line:
+                            matched_domains.add(d)
+
+                if not matched_domains:
+                    continue
+
+                # Extract timestamp (first token: YYYY/MM/DD HH:MM:SS)
+                ts_match = re.match(r'^(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})', line)
+                timestamp = ts_match.group(1) if ts_match else ''
+
+                for d in matched_domains:
+                    key = (d, pattern_key)
+                    if key not in hits:
+                        hits[key] = {
+                            'domain': d,
+                            'pattern': pattern_key,
+                            'count': 0,
+                            'last_seen': timestamp,
+                            'sample': line[:120],
+                        }
+                    hits[key]['count'] += 1
+                    if timestamp > hits[key]['last_seen']:
+                        hits[key]['last_seen'] = timestamp
+
+        return sorted(hits.values(), key=lambda r: (r['domain'], r['pattern']))

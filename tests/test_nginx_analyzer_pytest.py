@@ -2022,3 +2022,193 @@ server {
         with pytest.raises(SystemExit) as exc_info:
             _handle_cpanel_certs(analyzer)
         assert exc_info.value.code == 1
+
+
+class TestNginxDiagnose:
+    """Tests for get_error_log_path(), diagnose_acme_errors(), and _handle_diagnose() — S3."""
+
+    def _make_analyzer(self, config: str):
+        f = tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False)
+        f.write(config)
+        f.close()
+        a = NginxAnalyzer(f.name)
+        os.unlink(f.name)
+        return a
+
+    SSL_CONFIG = """
+server {
+    listen 443 ssl;
+    server_name alpha.example.com;
+    ssl_certificate /etc/ssl/alpha.crt;
+}
+"""
+
+    # --- get_error_log_path ---
+
+    def test_get_error_log_path_from_directive(self):
+        """error_log directive value is returned."""
+        config = """
+error_log /var/log/nginx/my_error.log warn;
+server {
+    listen 80;
+    server_name x.com;
+}
+"""
+        a = self._make_analyzer(config)
+        assert a.get_error_log_path() == '/var/log/nginx/my_error.log'
+
+    def test_get_error_log_path_no_directive_returns_none(self):
+        """When no error_log directive, return None."""
+        a = self._make_analyzer(self.SSL_CONFIG)
+        assert a.get_error_log_path() is None
+
+    def test_get_error_log_path_no_level_suffix(self):
+        """error_log path only (no level token) still works."""
+        config = "error_log /var/log/nginx/err.log;\n"
+        a = self._make_analyzer(config)
+        assert a.get_error_log_path() == '/var/log/nginx/err.log'
+
+    # --- diagnose_acme_errors ---
+
+    def _make_log(self, lines: list, tmp_path) -> str:
+        """Write lines to a temp file and return path."""
+        p = tmp_path / "error.log"
+        p.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+        return str(p)
+
+    def test_permission_denied_detected(self, tmp_path):
+        """Permission denied on /.well-known/ is classified as permission_denied."""
+        log = self._make_log([
+            '2026/02/15 03:21:17 [error] 123#123: *1 open() '
+            '"/home/user/.well-known/acme-challenge/TOKEN" failed (13: Permission denied), '
+            'client: 1.1.1.1, server: alpha.example.com, request: "GET /.well-known/ HTTP/1.1"',
+        ], tmp_path)
+        a = self._make_analyzer(self.SSL_CONFIG)
+        hits = a.diagnose_acme_errors(log)
+        assert len(hits) == 1
+        assert hits[0]['domain'] == 'alpha.example.com'
+        assert hits[0]['pattern'] == 'permission_denied'
+        assert hits[0]['count'] == 1
+
+    def test_not_found_detected(self, tmp_path):
+        """ENOENT on /.well-known/ is classified as not_found."""
+        log = self._make_log([
+            '2026/02/15 04:00:00 [error] 123#123: *2 open() '
+            '"/home/user/.well-known/acme-challenge/XYZ" failed (2: No such file or directory), '
+            'client: 2.2.2.2, server: alpha.example.com, request: "GET /.well-known/ HTTP/1.1"',
+        ], tmp_path)
+        a = self._make_analyzer(self.SSL_CONFIG)
+        hits = a.diagnose_acme_errors(log)
+        assert len(hits) == 1
+        assert hits[0]['pattern'] == 'not_found'
+
+    def test_ssl_error_detected(self, tmp_path):
+        """SSL_CTX_use_certificate error is classified as ssl_error."""
+        log = self._make_log([
+            '2026/02/15 05:00:00 [error] 123#123: *3 SSL_CTX_use_certificate_file("/etc/ssl/cert.crt") '
+            'failed, server: alpha.example.com',
+        ], tmp_path)
+        a = self._make_analyzer(self.SSL_CONFIG)
+        hits = a.diagnose_acme_errors(log)
+        assert len(hits) == 1
+        assert hits[0]['pattern'] == 'ssl_error'
+
+    def test_unrelated_domain_not_included(self, tmp_path):
+        """Errors for domains not in this nginx config are ignored."""
+        log = self._make_log([
+            '2026/02/15 03:21:17 [error] 123#123: *1 open() '
+            '"/home/user/.well-known/acme-challenge/T" failed (13: Permission denied), '
+            'client: 1.1.1.1, server: other.domain.com, request: "GET /.well-known/ HTTP/1.1"',
+        ], tmp_path)
+        a = self._make_analyzer(self.SSL_CONFIG)
+        hits = a.diagnose_acme_errors(log)
+        assert hits == []
+
+    def test_count_accumulates_per_domain_pattern(self, tmp_path):
+        """Multiple matching lines increment the count."""
+        lines = [
+            '2026/02/15 03:00:00 [error] 123#123: *1 open() '
+            '"/home/user/.well-known/acme-challenge/A" failed (13: Permission denied), '
+            'server: alpha.example.com, request: "GET / HTTP/1.1"',
+        ] * 5
+        log = self._make_log(lines, tmp_path)
+        a = self._make_analyzer(self.SSL_CONFIG)
+        hits = a.diagnose_acme_errors(log)
+        assert len(hits) == 1
+        assert hits[0]['count'] == 5
+
+    def test_missing_log_file_returns_empty(self):
+        """Non-existent log path returns empty list rather than raising."""
+        a = self._make_analyzer(self.SSL_CONFIG)
+        hits = a.diagnose_acme_errors('/nonexistent/path/error.log')
+        assert hits == []
+
+    def test_no_ssl_domains_returns_empty(self, tmp_path):
+        """Config with no SSL server blocks returns empty list."""
+        config = """
+server {
+    listen 80;
+    server_name plain.example.com;
+}
+"""
+        log = self._make_log([
+            '2026/02/15 03:00:00 [error] open() "/.well-known/acme-challenge/T" '
+            'failed (13: Permission denied), server: plain.example.com',
+        ], tmp_path)
+        a = self._make_analyzer(config)
+        hits = a.diagnose_acme_errors(log)
+        assert hits == []
+
+    # --- _handle_diagnose ---
+
+    def test_handle_diagnose_no_log_found_exits(self, tmp_path):
+        """When no log path resolved and default paths absent, exit 1."""
+        from unittest.mock import patch
+        from reveal.file_handler import _handle_diagnose
+        import argparse
+
+        a = self._make_analyzer(self.SSL_CONFIG)
+        with patch('os.path.exists', return_value=False), \
+             pytest.raises(SystemExit) as exc_info:
+            _handle_diagnose(a, log_path=None)
+        assert exc_info.value.code == 1
+
+    def test_handle_diagnose_clean_log_prints_ok(self, tmp_path, capsys):
+        """When no hits found, print clean message and no exit."""
+        from reveal.file_handler import _handle_diagnose
+
+        log = self._make_log(['2026/02/15 03:00:00 [notice] nginx started'], tmp_path)
+        a = self._make_analyzer(self.SSL_CONFIG)
+        _handle_diagnose(a, log_path=log)
+        out = capsys.readouterr().out
+        assert 'No ACME' in out or '✅' in out
+
+    def test_handle_diagnose_permission_denied_exits_2(self, tmp_path, capsys):
+        """Permission denied hits trigger exit 2."""
+        from reveal.file_handler import _handle_diagnose
+
+        lines = [
+            '2026/02/15 03:00:00 [error] 123#123: *1 open() '
+            '"/home/user/.well-known/acme-challenge/A" failed (13: Permission denied), '
+            'server: alpha.example.com, request: "GET / HTTP/1.1"',
+        ]
+        log = self._make_log(lines, tmp_path)
+        a = self._make_analyzer(self.SSL_CONFIG)
+        with pytest.raises(SystemExit) as exc_info:
+            _handle_diagnose(a, log_path=log)
+        assert exc_info.value.code == 2
+        out = capsys.readouterr().out
+        assert 'alpha.example.com' in out
+        assert 'permission_denied' in out or 'Permission Denied' in out
+
+    def test_handle_diagnose_wrong_analyzer_exits(self, tmp_path):
+        """Non-nginx analyzer exits with error code 1."""
+        from reveal.file_handler import _handle_diagnose
+        from reveal.analyzers.python import PythonAnalyzer
+
+        py_file = tmp_path / "foo.py"
+        py_file.write_text("x = 1\n")
+        a = PythonAnalyzer(str(py_file))
+        with pytest.raises(SystemExit) as exc_info:
+            _handle_diagnose(a, log_path='/some/log.log')
+        assert exc_info.value.code == 1

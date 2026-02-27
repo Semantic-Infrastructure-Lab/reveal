@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added (session magnetic-regiment-0227)
 - **nginx: S4 — `--cpanel-certs`** — `reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs` compares cPanel on-disk certs (`/var/cpanel/ssl/apache_tls/DOMAIN/combined`) against live certs per SSL domain. Serial number comparison detects "AutoSSL renewed but nginx hasn't reloaded" (shows `⚠️ STALE (reload nginx)`). Table: domain | disk cert expiry | live cert expiry | match status. Exit 2 on stale or expired certs.
+- **nginx: S3 — `--diagnose`** — `reveal nginx:///path/user.conf --diagnose` scans the nginx error log for ACME/SSL failure patterns (Permission Denied on `/.well-known/`, ENOENT, SSL cert load errors) grouped by SSL domain with count and last-seen timestamp. Auto-detects error_log path from config directive or cPanel defaults; `--log-path PATH` overrides. Exit 2 on permission_denied or ssl_error hits. Retroactively diagnoses incidents already in the log.
 
 ### Added (session meteoric-armada-0227)
 - **nginx: N3 — `--domain` filter** — `reveal nginx:///path/user.conf --domain DOMAIN` filters output to only the server block(s) matching DOMAIN, including all server_name aliases. Essential for navigating 1,500-line cPanel user configs with one block per domain. Passes as `get_structure(domain=...)` kwarg; no extra request.

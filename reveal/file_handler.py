@@ -281,6 +281,86 @@ def _handle_check_conflicts(analyzer) -> None:
         sys.exit(2)
 
 
+def _handle_diagnose(analyzer, log_path: Optional[str] = None) -> None:
+    """Diagnose ACME / SSL failures from the nginx error log (S3 -- --diagnose).
+
+    Parses the last 5,000 lines of the nginx error log for Permission Denied /
+    ENOENT errors on /.well-known/ paths and SSL cert load failures, grouped by
+    SSL domain present in the config.
+    """
+    if not hasattr(analyzer, 'diagnose_acme_errors'):
+        print(f"Error: --diagnose not supported for {type(analyzer).__name__}",
+              file=sys.stderr)
+        print("This option is available for nginx config files.", file=sys.stderr)
+        sys.exit(1)
+
+    import os
+
+    # Resolve log path: arg > config directive > cPanel default > nginx default
+    resolved_path = log_path
+    if not resolved_path:
+        resolved_path = analyzer.get_error_log_path()
+    if not resolved_path:
+        # cPanel nginx writes to this path by default
+        for candidate in [
+            '/var/log/nginx/error.log',
+            '/usr/local/nginx/logs/error.log',
+        ]:
+            if os.path.exists(candidate):
+                resolved_path = candidate
+                break
+
+    if not resolved_path or not os.path.exists(resolved_path):
+        print(f"⚠️  No nginx error log found.", file=sys.stderr)
+        if resolved_path:
+            print(f"   Checked: {resolved_path}", file=sys.stderr)
+        print("   Use --log-path /path/to/error.log to specify the log file.",
+              file=sys.stderr)
+        sys.exit(1)
+
+    hits = analyzer.diagnose_acme_errors(resolved_path)
+
+    if not hits:
+        print(f"✅ No ACME/SSL errors found in {resolved_path} (last 5,000 lines).")
+        return
+
+    LABELS = {
+        'permission_denied': '❌ Permission Denied',
+        'not_found':         '⚠️  Not Found (ENOENT)',
+        'ssl_error':         '❌ SSL Error',
+    }
+
+    col_domain = max(len(r['domain']) for r in hits)
+    col_pattern = max(len(LABELS.get(r['pattern'], r['pattern'])) for r in hits)
+
+    print(f"nginx error log: {resolved_path}")
+    header = (f"  {'domain':<{col_domain}}  {'pattern':<{col_pattern}}"
+              f"  {'count':>5}  last seen")
+    print(header)
+    print("  " + "─" * (len(header) - 2))
+
+    has_failures = False
+    for r in hits:
+        label = LABELS.get(r['pattern'], r['pattern'])
+        if r['pattern'] in ('permission_denied', 'ssl_error'):
+            has_failures = True
+        print(f"  {r['domain']:<{col_domain}}  {label:<{col_pattern}}"
+              f"  {r['count']:>5}  {r['last_seen']}")
+
+    print()
+    print("Sample (most recent match per type):")
+    seen = set()
+    for r in hits:
+        key = (r['domain'], r['pattern'])
+        if key not in seen:
+            print(f"  [{r['domain']} / {r['pattern']}]")
+            print(f"    {r['sample']}")
+            seen.add(key)
+
+    if has_failures:
+        sys.exit(2)
+
+
 def _handle_cpanel_certs(analyzer) -> None:
     """Compare cPanel on-disk certs against live certs per domain (S4 -- --cpanel-certs).
 
@@ -502,6 +582,10 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
 
     if args and getattr(args, 'cpanel_certs', False):
         _handle_cpanel_certs(analyzer)
+        return
+
+    if args and getattr(args, 'diagnose', False):
+        _handle_diagnose(analyzer, log_path=getattr(args, 'log_path', None))
         return
 
     if args and getattr(args, 'validate_schema', None):
