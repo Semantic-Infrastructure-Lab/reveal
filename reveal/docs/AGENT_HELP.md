@@ -310,7 +310,7 @@ reveal file.py --check --select C,E    # Complexity & errors only
 
 # Specific file types
 reveal Dockerfile --check              # Docker best practices (S701)
-reveal nginx.conf --check              # Nginx validation (N001-N004)
+reveal nginx.conf --check              # Nginx validation (N001-N006)
 ```
 
 **Available rule categories:**
@@ -322,7 +322,7 @@ reveal nginx.conf --check              # Nginx validation (N001-N004)
 - **I** (imports) - Import analysis and dependencies (I001-I005)
 - **L** (links) - Link validation and documentation (L001-L005)
 - **M** (maintainability) - Code maintainability checks (M101-M104)
-- **N** (nginx) - Nginx configuration validation (N001-N004)
+- **N** (nginx) - Nginx configuration validation (N001-N006)
 - **R** (refactoring) - Refactoring opportunities (R913)
 - **S** (security) - Security vulnerabilities (S701)
 - **T** (types) - Type annotation issues (T004)
@@ -670,11 +670,18 @@ done
 **Pattern:**
 ```bash
 # Nginx configuration
-reveal nginx.conf --check              # N001-N004 rules
+reveal nginx.conf --check              # N001-N006 rules
 # - N001: Duplicate backends (upstreams with same server:port)
 # - N002: Missing SSL certificates
 # - N003: Missing proxy headers
 # - N004: ACME challenge path inconsistency (cert renewal failures)
+# - N005: Timeout/buffer values outside safe operational ranges
+# - N006: send_timeout too short relative to client_max_body_size (HIGH)
+
+# Tip: large generated configs (e.g. cPanel) collapse repeated rules by default
+reveal ea-nginx.conf --check          # 2,685 N003s shown as one summary line
+reveal ea-nginx.conf --check --no-group  # expand all occurrences
+# Add '# reveal: generated' to skip a file in recursive sweeps
 
 # Dockerfile
 reveal Dockerfile --check              # S701 rule
@@ -1781,6 +1788,41 @@ server {
     location /.well-known/acme-challenge/ { root /var/www/letsencrypt; }
 }
 ```
+
+**N005: Timeout/buffer values outside safe operational ranges**
+```nginx
+# ❌ Bad - values that cause silent failures or resource exhaustion
+http {
+    send_timeout 3s;           # N005 – below minimum of 10s
+    proxy_read_timeout 600s;   # N005 – above maximum of 300s
+    client_body_buffer_size 512m;  # N005 – above maximum of 64m
+}
+
+# ✅ Good
+http {
+    send_timeout 30s;
+    proxy_read_timeout 60s;
+    client_body_buffer_size 16m;
+}
+```
+
+**N006: send_timeout too short for client_max_body_size** *(HIGH severity)*
+```nginx
+# ❌ Bad - large uploads will be silently killed mid-transfer
+http {
+    send_timeout 30s;          # N006 – too short for 200m body size
+    client_max_body_size 200m;
+}
+# Real-world incident: Sociamonials Feb 2026 - media uploads silently dropped
+
+# ✅ Good
+http {
+    send_timeout 300s;
+    client_max_body_size 200m;
+}
+```
+*Fires when any of `send_timeout`, `proxy_read_timeout`, `proxy_send_timeout` is < 60s
+and `client_max_body_size` exceeds 10m.*
 
 ---
 
