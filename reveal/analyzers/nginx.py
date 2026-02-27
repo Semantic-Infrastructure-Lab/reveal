@@ -80,6 +80,162 @@ class NginxAnalyzer(FileAnalyzer):
                     break
         return loc_info
 
+    def _parse_block_directives(self, block_name: str) -> Dict[str, str]:
+        """Parse key-value directives from a top-level named block (e.g. http, events).
+
+        Collects only direct-child directives (depth 1 inside the block),
+        skipping nested blocks like server{}, map{}, upstream{}.
+        Handles multi-line directives (e.g. log_format spanning multiple lines).
+
+        Returns:
+            Dict mapping directive name -> value string (without trailing semicolon).
+        """
+        directives: Dict[str, str] = {}
+        depth = 0
+        in_block = False
+        block_pattern = re.compile(r'^' + re.escape(block_name) + r'\s*\{')
+        pending_key: Optional[str] = None
+        pending_parts: List[str] = []
+
+        for line in self.lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+
+            if not in_block and depth == 0 and block_pattern.match(stripped):
+                in_block = True
+                depth += stripped.count('{') - stripped.count('}')
+                continue
+
+            if in_block:
+                # Accumulating a multi-line directive value
+                if pending_key is not None:
+                    pending_parts.append(stripped.rstrip(';').rstrip())
+                    if ';' in stripped:
+                        directives[pending_key] = ' '.join(pending_parts)
+                        pending_key = None
+                        pending_parts = []
+                    continue  # don't update depth for continuation lines
+
+                opens = stripped.count('{')
+                closes = stripped.count('}')
+
+                if depth == 1 and opens == 0 and not stripped.startswith('}'):
+                    match = re.match(r'^([\w_-]+)\s+(.+)', stripped)
+                    if match:
+                        key, rest = match.group(1), match.group(2)
+                        if ';' in stripped:
+                            # Single-line directive
+                            directives[key] = rest.rstrip(';').rstrip()
+                        else:
+                            # Start of multi-line directive
+                            pending_key = key
+                            pending_parts = [rest.rstrip()]
+
+                depth += opens - closes
+                if depth <= 0:
+                    break  # exited the block
+
+        return directives
+
+    def _parse_main_directives(self) -> Dict[str, str]:
+        """Parse key-value directives at the main (outermost) context — depth 0.
+
+        Captures directives like user, worker_processes, error_log, pid in
+        nginx.conf, and ssl_protocols, client_max_body_size, etc. in vhost
+        include files. Skips block openers (events{}, http{}, map{}, etc.)
+
+        Returns:
+            Dict mapping directive name -> value string (without trailing semicolon).
+        """
+        directives: Dict[str, str] = {}
+        depth = 0
+        pending_key: Optional[str] = None
+        pending_parts: List[str] = []
+
+        for line in self.lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+
+            if pending_key is not None:
+                # Continuation of multi-line directive
+                pending_parts.append(stripped.rstrip(';').rstrip())
+                depth += stripped.count('{') - stripped.count('}')
+                if ';' in stripped:
+                    directives[pending_key] = ' '.join(pending_parts)
+                    pending_key = None
+                    pending_parts = []
+                continue
+
+            opens = stripped.count('{')
+            closes = stripped.count('}')
+
+            if depth == 0 and not stripped.startswith('}'):
+                if opens == 0 and ';' in stripped:
+                    # Single-line top-level directive
+                    match = re.match(r'^([\w_-]+)\s+(.+?)\s*;', stripped)
+                    if match:
+                        directives[match.group(1)] = match.group(2)
+                elif opens == 0:
+                    # Possible start of multi-line top-level directive
+                    match = re.match(r'^([\w_-]+)\s+(.+)', stripped)
+                    if match:
+                        pending_key = match.group(1)
+                        pending_parts = [match.group(2).rstrip()]
+
+            depth += opens - closes
+
+        return directives
+
+    def _parse_upstream_servers(self, line_num: int) -> Dict[str, Any]:
+        """Parse upstream block body, extracting server entries and key settings.
+
+        Args:
+            line_num: 1-based line number where the upstream block starts.
+
+        Returns:
+            Dict with 'servers' (list of dicts with 'address' + optional 'params')
+            and 'settings' (dict of other directives like keepalive).
+        """
+        servers: List[Dict[str, str]] = []
+        settings: Dict[str, str] = {}
+        depth = 0
+
+        for i in range(line_num - 1, len(self.lines)):
+            line = self.lines[i]
+            stripped = line.strip()
+            depth += stripped.count('{') - stripped.count('}')
+
+            if depth <= 0 and i >= line_num:
+                break
+
+            if not stripped or stripped.startswith('#') or '{' in stripped:
+                continue
+
+            if stripped.startswith('server '):
+                match = re.match(r'server\s+(\S+)(.*?)\s*;', stripped)
+                if match:
+                    addr = match.group(1)
+                    params = match.group(2).strip()
+                    entry: Dict[str, str] = {'address': addr}
+                    if params:
+                        entry['params'] = params
+                    servers.append(entry)
+            elif ';' in stripped:
+                m = re.match(r'^([\w_-]+)\s+(.+?)\s*;', stripped)
+                if m:
+                    settings[m.group(1)] = m.group(2)
+
+        return {'servers': servers, 'settings': settings}
+
+    def _try_parse_map_block(self, stripped: str) -> Optional[Dict[str, str]]:
+        """Try to parse map block source/target variables from line."""
+        match = re.match(r'map\s+(\S+)\s+(\S+)\s*\{', stripped)
+        if match:
+            return {'source': match.group(1), 'target': match.group(2)}
+        return None
+
     def _is_top_level_comment(self, stripped: str, line_num: int) -> bool:
         """Check if line is a top-level comment header."""
         return stripped.startswith('#') and line_num <= 10 and len(stripped) > 3
@@ -119,18 +275,33 @@ class NginxAnalyzer(FileAnalyzer):
                 locations.append(loc_info)
 
     def _process_upstream_block(self, upstreams: List, stripped: str, line_num: int) -> None:
-        """Process upstream block if detected."""
+        """Process upstream block if detected, extracting server entries and settings."""
         if 'upstream ' in stripped and '{' in stripped:
             upstream_name = self._try_parse_upstream_block(stripped)
             if upstream_name:
-                upstreams.append({'line': line_num, 'name': upstream_name})
+                detail = self._parse_upstream_servers(line_num)
+                servers = detail['servers']
+                settings = detail['settings']
+                if servers:
+                    first = servers[0]['address']
+                    sig = f" [{first}]" if len(servers) == 1 else f" [{first}, +{len(servers)-1} more]"
+                else:
+                    sig = ''
+                upstreams.append({
+                    'line': line_num,
+                    'name': upstream_name,
+                    'servers': servers,
+                    'settings': settings,
+                    'signature': sig,
+                })
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract nginx config structure."""
         servers: List[Dict[str, Any]] = []
         locations: List[Dict[str, Any]] = []
         upstreams: List[Dict[str, Any]] = []
+        maps: List[Dict[str, Any]] = []
         comments: List[Dict[str, Any]] = []
 
         current_server = None
@@ -148,22 +319,44 @@ class NginxAnalyzer(FileAnalyzer):
             else:
                 self._process_location_block(locations, stripped, i, in_server, brace_depth, current_server)
                 self._process_upstream_block(upstreams, stripped, i)
+                if 'map ' in stripped and '{' in stripped:
+                    map_info = self._try_parse_map_block(stripped)
+                    if map_info:
+                        maps.append({
+                            'line': i,
+                            'name': f"{map_info['source']} → {map_info['target']}",
+                            'source_var': map_info['source'],
+                            'target_var': map_info['target'],
+                        })
 
             # Reset server context when we exit server block
             if in_server and brace_depth == 0:
                 in_server = False
                 current_server = None
 
-        return {
+        main_directives = self._parse_main_directives()
+        http_directives = self._parse_block_directives('http')
+        events_directives = self._parse_block_directives('events')
+
+        result: Dict[str, Any] = {
             'contract_version': '1.0',
             'type': 'nginx_structure',
             'source': str(self.path),
             'source_type': 'file',
             'comments': comments,
-            'servers': servers,
-            'locations': locations,
-            'upstreams': upstreams
         }
+        if main_directives:
+            result['main_directives'] = main_directives
+        result['servers'] = servers
+        result['locations'] = locations
+        result['upstreams'] = upstreams
+        if maps:
+            result['maps'] = maps
+        if http_directives:
+            result['directives'] = http_directives
+        if events_directives:
+            result['events_directives'] = events_directives
+        return result
 
     def extract_ssl_domains(self) -> List[str]:
         """Extract all SSL-enabled domains from nginx config.

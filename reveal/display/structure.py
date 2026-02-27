@@ -490,6 +490,21 @@ def _render_single_category(category: str, items: Any, path: Path, output_format
         print()
         return
 
+    # Handle nginx directive dicts (main_directives, directives, events_directives)
+    if isinstance(items, dict) and category in ('directives', 'events_directives', 'main_directives'):
+        label_map = {
+            'directives': 'Http directives',
+            'events_directives': 'Events directives',
+            'main_directives': 'Main directives',
+        }
+        label = label_map.get(category, category.capitalize())
+        print(f"{label} ({len(items)}):")
+        for key, value in items.items():
+            display_val = value if len(str(value)) <= 80 else str(value)[:77] + '...'
+            print(f"  {key}: {display_val}")
+        print()
+        return
+
     if not isinstance(items, list):
         return
 

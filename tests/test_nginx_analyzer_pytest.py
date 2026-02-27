@@ -605,3 +605,682 @@ server {
                 assert domains == []
             finally:
                 safe_unlink(f.name)
+
+
+class TestNginxHttpDirectives:
+    """Tests for Issue #21: parse global http{} directives (timeouts, buffers, proxy settings).
+
+    Ensures that reveal surfaces http{}-level directives even when there are
+    no server{} blocks, so that main nginx.conf files produce useful output.
+    """
+
+    def _write_conf(self, content):
+        """Helper: write content to a temp .conf file and return path."""
+        f = tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False)
+        f.write(content)
+        f.flush()
+        f.close()
+        return f.name
+
+    def test_http_only_config_surfaces_directives(self):
+        """Issue #21: config with only http{} directives should not be empty."""
+        config = """
+http {
+    send_timeout 30s;
+    proxy_read_timeout 60s;
+    keepalive_timeout 15s;
+    client_body_timeout 30s;
+    proxy_connect_timeout 10s;
+    proxy_buffering on;
+    client_body_buffer_size 256k;
+}
+"""
+        path = self._write_conf(config)
+        try:
+            analyzer = NginxAnalyzer(path)
+            structure = analyzer.get_structure()
+
+            assert 'directives' in structure, "Expected 'directives' key in structure"
+            d = structure['directives']
+            assert d['send_timeout'] == '30s'
+            assert d['proxy_read_timeout'] == '60s'
+            assert d['keepalive_timeout'] == '15s'
+            assert d['client_body_timeout'] == '30s'
+            assert d['proxy_connect_timeout'] == '10s'
+            assert d['proxy_buffering'] == 'on'
+            assert d['client_body_buffer_size'] == '256k'
+        finally:
+            safe_unlink(path)
+
+    def test_http_directives_not_included_when_absent(self):
+        """No http{} block → 'directives' key absent (not an empty dict)."""
+        config = """
+server {
+    listen 80;
+    server_name example.com;
+}
+"""
+        path = self._write_conf(config)
+        try:
+            analyzer = NginxAnalyzer(path)
+            structure = analyzer.get_structure()
+
+            assert 'directives' not in structure
+        finally:
+            safe_unlink(path)
+
+    def test_http_directives_excludes_nested_block_contents(self):
+        """Directives inside server{} are not collected into http directives."""
+        config = """
+http {
+    send_timeout 30s;
+
+    server {
+        listen 80;
+        server_name inner.example.com;
+        proxy_pass http://backend;
+    }
+}
+"""
+        path = self._write_conf(config)
+        try:
+            analyzer = NginxAnalyzer(path)
+            structure = analyzer.get_structure()
+
+            d = structure.get('directives', {})
+            assert 'send_timeout' in d
+            assert 'proxy_pass' not in d
+            assert 'listen' not in d
+        finally:
+            safe_unlink(path)
+
+    def test_events_directives_parsed(self):
+        """events{} directives surfaced under 'events_directives'."""
+        config = """
+events {
+    worker_connections 8192;
+    use epoll;
+    multi_accept on;
+}
+"""
+        path = self._write_conf(config)
+        try:
+            analyzer = NginxAnalyzer(path)
+            structure = analyzer.get_structure()
+
+            assert 'events_directives' in structure
+            e = structure['events_directives']
+            assert e['worker_connections'] == '8192'
+            assert e['use'] == 'epoll'
+            assert e['multi_accept'] == 'on'
+        finally:
+            safe_unlink(path)
+
+    def test_both_http_and_events_directives(self):
+        """Both http{} and events{} directives are present when both blocks exist."""
+        config = """
+events {
+    worker_connections 1024;
+}
+
+http {
+    send_timeout 60s;
+    keepalive_timeout 20s;
+}
+"""
+        path = self._write_conf(config)
+        try:
+            analyzer = NginxAnalyzer(path)
+            structure = analyzer.get_structure()
+
+            assert 'directives' in structure
+            assert 'events_directives' in structure
+            assert structure['directives']['send_timeout'] == '60s'
+            assert structure['events_directives']['worker_connections'] == '1024'
+        finally:
+            safe_unlink(path)
+
+    def test_http_directives_with_server_blocks_still_parsed(self):
+        """http{} directives are collected even when server{} blocks are also present."""
+        config = """
+http {
+    gzip on;
+    gzip_types text/plain application/json;
+
+    server {
+        listen 443 ssl;
+        server_name api.example.com;
+    }
+}
+"""
+        path = self._write_conf(config)
+        try:
+            analyzer = NginxAnalyzer(path)
+            structure = analyzer.get_structure()
+
+            assert 'directives' in structure
+            assert structure['directives']['gzip'] == 'on'
+            assert len(structure['servers']) == 1
+        finally:
+            safe_unlink(path)
+
+    def test_comments_inside_http_block_ignored(self):
+        """Comment lines inside http{} are not parsed as directives."""
+        config = """
+http {
+    # This is a timeout comment
+    send_timeout 45s;
+    # proxy_read_timeout 999s;
+}
+"""
+        path = self._write_conf(config)
+        try:
+            analyzer = NginxAnalyzer(path)
+            structure = analyzer.get_structure()
+
+            d = structure.get('directives', {})
+            assert 'send_timeout' in d
+            assert d['send_timeout'] == '45s'
+            # Commented-out directive must not appear
+            assert 'proxy_read_timeout' not in d
+        finally:
+            safe_unlink(path)
+
+    def test_empty_http_block_no_directives_key(self):
+        """An http{} block with no directives produces no 'directives' key."""
+        config = """
+http {
+    # nothing here
+    server {
+        listen 80;
+    }
+}
+"""
+        path = self._write_conf(config)
+        try:
+            analyzer = NginxAnalyzer(path)
+            structure = analyzer.get_structure()
+
+            # No directive key-value pairs → key should be absent
+            assert 'directives' not in structure
+        finally:
+            safe_unlink(path)
+
+
+class TestN005TimeoutRule:
+    """Tests for N005: dangerous nginx timeout/buffer values."""
+
+    def _write_conf(self, content):
+        f = tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False)
+        f.write(content)
+        f.flush()
+        f.close()
+        return f.name
+
+    def _run_n005(self, config_content):
+        from reveal.rules.infrastructure.N005 import N005
+        path = self._write_conf(config_content)
+        try:
+            analyzer = NginxAnalyzer(path)
+            structure = analyzer.get_structure()
+            rule = N005()
+            return rule.check(path, structure, config_content)
+        finally:
+            safe_unlink(path)
+
+    def test_safe_timeouts_no_detections(self):
+        """Timeouts within safe bounds generate no detections."""
+        config = """
+http {
+    send_timeout 60s;
+    proxy_read_timeout 120s;
+    keepalive_timeout 30s;
+}
+"""
+        detections = self._run_n005(config)
+        assert detections == []
+
+    def test_send_timeout_too_short(self):
+        """send_timeout below minimum triggers N005."""
+        config = """
+http {
+    send_timeout 3s;
+}
+"""
+        detections = self._run_n005(config)
+        assert len(detections) == 1
+        assert 'send_timeout' in detections[0].message or 'send timeout' in detections[0].message
+        assert 'below' in detections[0].message
+
+    def test_proxy_read_timeout_too_long(self):
+        """proxy_read_timeout above maximum triggers N005."""
+        config = """
+http {
+    proxy_read_timeout 600s;
+}
+"""
+        detections = self._run_n005(config)
+        assert len(detections) == 1
+        assert 'proxy read timeout' in detections[0].message
+        assert 'exceeds' in detections[0].message
+
+    def test_buffer_size_too_large(self):
+        """client_body_buffer_size above maximum triggers N005."""
+        config = """
+http {
+    client_body_buffer_size 512m;
+}
+"""
+        detections = self._run_n005(config)
+        assert len(detections) == 1
+        assert 'client body buffer size' in detections[0].message
+        assert 'exceeds' in detections[0].message
+
+    def test_multiple_violations(self):
+        """Multiple bad directives produce multiple detections."""
+        config = """
+http {
+    send_timeout 2s;
+    proxy_read_timeout 900s;
+    client_body_buffer_size 256m;
+}
+"""
+        detections = self._run_n005(config)
+        assert len(detections) == 3
+
+    def test_no_http_block_no_detections(self):
+        """Config without http{} block produces no detections."""
+        config = """
+server {
+    listen 80;
+    server_name example.com;
+}
+"""
+        detections = self._run_n005(config)
+        assert detections == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Issue improvements: main directives, multi-line, upstream detail, map blocks
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestNginxMainDirectives:
+    """Tests for _parse_main_directives — depth-0 directive extraction."""
+
+    def _make_analyzer(self, config: str):
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+            name = f.name
+        analyzer = NginxAnalyzer(name)
+        os.unlink(name)
+        return analyzer
+
+    def test_basic_main_directives(self):
+        """worker_processes, user, pid captured from main context."""
+        config = """
+user nobody;
+worker_processes auto;
+worker_rlimit_nofile 200000;
+pid /var/run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+"""
+        a = self._make_analyzer(config)
+        d = a._parse_main_directives()
+        assert d['user'] == 'nobody'
+        assert d['worker_processes'] == 'auto'
+        assert d['worker_rlimit_nofile'] == '200000'
+        assert d['pid'] == '/var/run/nginx.pid'
+
+    def test_directives_inside_blocks_not_captured(self):
+        """Directives inside events{} or http{} are NOT included."""
+        config = """
+worker_processes 4;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    keepalive_timeout 15s;
+}
+"""
+        a = self._make_analyzer(config)
+        d = a._parse_main_directives()
+        assert d == {'worker_processes': '4'}
+        assert 'worker_connections' not in d
+        assert 'keepalive_timeout' not in d
+
+    def test_vhost_top_level_ssl_directives(self):
+        """ssl_protocols, client_max_body_size at top of vhost file captured."""
+        config = """
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_prefer_server_ciphers on;
+client_max_body_size 200m;
+server_names_hash_bucket_size 256;
+
+server {
+    listen 443 ssl;
+    server_name example.com;
+}
+"""
+        a = self._make_analyzer(config)
+        d = a._parse_main_directives()
+        assert d['ssl_protocols'] == 'TLSv1.2 TLSv1.3'
+        assert d['ssl_prefer_server_ciphers'] == 'on'
+        assert d['client_max_body_size'] == '200m'
+        assert d['server_names_hash_bucket_size'] == '256'
+
+    def test_include_directive_captured(self):
+        """include directives at top level are captured."""
+        config = """
+include /etc/nginx/conf.d/modules/*.conf;
+user nobody;
+"""
+        a = self._make_analyzer(config)
+        d = a._parse_main_directives()
+        assert d['include'] == '/etc/nginx/conf.d/modules/*.conf'
+        assert d['user'] == 'nobody'
+
+    def test_empty_config_no_directives(self):
+        """Config with only a server block returns empty main directives."""
+        config = """
+server {
+    listen 80;
+    server_name example.com;
+}
+"""
+        a = self._make_analyzer(config)
+        d = a._parse_main_directives()
+        assert d == {}
+
+    def test_main_directives_in_get_structure(self):
+        """get_structure() includes main_directives key when directives exist."""
+        config = """
+worker_processes auto;
+worker_rlimit_nofile 200000;
+
+events {
+    worker_connections 8192;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        assert 'main_directives' in structure
+        assert structure['main_directives']['worker_processes'] == 'auto'
+        assert structure['main_directives']['worker_rlimit_nofile'] == '200000'
+
+    def test_no_main_directives_key_absent(self):
+        """get_structure() omits main_directives when none present."""
+        config = """
+server {
+    listen 80;
+    server_name example.com;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        assert 'main_directives' not in structure
+
+
+class TestNginxMultiLineDirectives:
+    """Tests for multi-line directive support in _parse_block_directives."""
+
+    def _make_analyzer(self, config: str):
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+            name = f.name
+        analyzer = NginxAnalyzer(name)
+        os.unlink(name)
+        return analyzer
+
+    def test_multiline_log_format(self):
+        """log_format spanning multiple lines is captured under its key."""
+        config = """
+http {
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent"';
+
+    keepalive_timeout 15s;
+}
+"""
+        a = self._make_analyzer(config)
+        d = a._parse_block_directives('http')
+        assert 'log_format' in d
+        assert 'main' in d['log_format']
+        assert '$remote_addr' in d['log_format']
+        assert '$http_user_agent' in d['log_format']
+
+    def test_single_line_directives_still_work(self):
+        """Single-line directives are unaffected by multi-line support."""
+        config = """
+http {
+    keepalive_timeout 15s;
+    gzip on;
+    worker_connections 1024;
+}
+"""
+        a = self._make_analyzer(config)
+        d = a._parse_block_directives('http')
+        assert d['keepalive_timeout'] == '15s'
+        assert d['gzip'] == 'on'
+
+    def test_multiline_followed_by_normal_directive(self):
+        """Directive after multi-line is still captured correctly."""
+        config = """
+http {
+    log_format combined '$remote_addr - '
+                        '$request';
+    gzip on;
+    sendfile on;
+}
+"""
+        a = self._make_analyzer(config)
+        d = a._parse_block_directives('http')
+        assert 'log_format' in d
+        assert d['gzip'] == 'on'
+        assert d['sendfile'] == 'on'
+
+
+class TestNginxUpstreamDetail:
+    """Tests for rich upstream parsing — server entries and settings."""
+
+    def _make_analyzer(self, config: str):
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+            name = f.name
+        analyzer = NginxAnalyzer(name)
+        os.unlink(name)
+        return analyzer
+
+    def test_upstream_server_entry_captured(self):
+        """Server address inside upstream block is captured."""
+        config = """
+upstream backend {
+    server localhost:5000;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        upstream = structure['upstreams'][0]
+        assert upstream['name'] == 'backend'
+        assert len(upstream['servers']) == 1
+        assert upstream['servers'][0]['address'] == 'localhost:5000'
+
+    def test_upstream_server_with_params(self):
+        """Server with max_fails and fail_timeout params are captured."""
+        config = """
+upstream backend {
+    server master.example.com:443 max_fails=3 fail_timeout=10s;
+    keepalive 32;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        upstream = structure['upstreams'][0]
+        assert upstream['servers'][0]['address'] == 'master.example.com:443'
+        assert 'max_fails=3' in upstream['servers'][0]['params']
+        assert upstream['settings']['keepalive'] == '32'
+
+    def test_upstream_signature_contains_backend(self):
+        """Signature field contains backend address for display."""
+        config = """
+upstream myapp {
+    server 127.0.0.1:8080;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        upstream = structure['upstreams'][0]
+        assert '127.0.0.1:8080' in upstream['signature']
+
+    def test_upstream_multiple_servers_signature(self):
+        """Multiple servers: signature shows first + count."""
+        config = """
+upstream pool {
+    server 10.0.0.1:80;
+    server 10.0.0.2:80;
+    server 10.0.0.3:80;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        upstream = structure['upstreams'][0]
+        assert len(upstream['servers']) == 3
+        assert '10.0.0.1:80' in upstream['signature']
+        assert '+2 more' in upstream['signature']
+
+    def test_upstream_keepalive_settings(self):
+        """keepalive and keepalive_timeout captured in settings."""
+        config = """
+upstream backend {
+    server app:443;
+    keepalive 32;
+    keepalive_timeout 5;
+    keepalive_requests 100;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        upstream = structure['upstreams'][0]
+        assert upstream['settings']['keepalive'] == '32'
+        assert upstream['settings']['keepalive_timeout'] == '5'
+        assert upstream['settings']['keepalive_requests'] == '100'
+
+    def test_upstream_no_servers(self):
+        """Upstream with no server entries has empty servers list."""
+        config = """
+upstream empty_pool {
+    keepalive 16;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        upstream = structure['upstreams'][0]
+        assert upstream['servers'] == []
+        assert upstream['signature'] == ''
+
+
+class TestNginxMapBlocks:
+    """Tests for map{} block detection."""
+
+    def _make_analyzer(self, config: str):
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            f.flush()
+            name = f.name
+        analyzer = NginxAnalyzer(name)
+        os.unlink(name)
+        return analyzer
+
+    def test_single_map_detected(self):
+        """Single map block is detected."""
+        config = """
+map $host $backend {
+    default 127.0.0.1;
+    example.com 10.0.0.1;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        assert 'maps' in structure
+        assert len(structure['maps']) == 1
+        m = structure['maps'][0]
+        assert m['source_var'] == '$host'
+        assert m['target_var'] == '$backend'
+
+    def test_multiple_maps_all_detected(self):
+        """All 5 map blocks in ea-nginx pattern are detected."""
+        config = """
+map $host $PROXY_IP {
+    default 127.0.0.1;
+}
+
+map $host $PROXY_PORT {
+    default 81;
+}
+
+map $host $PROXY_SSL_IP {
+    default 127.0.0.1;
+}
+
+map $host $PROXY_SSL_PORT {
+    default 444;
+}
+
+map $host $SERVICE_SUBDOMAIN {
+    default 0;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        assert 'maps' in structure
+        assert len(structure['maps']) == 5
+
+    def test_map_name_format(self):
+        """Map name uses 'source → target' arrow format."""
+        config = """
+map $uri $new_uri {
+    default $uri;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        m = structure['maps'][0]
+        assert m['name'] == '$uri → $new_uri'
+
+    def test_no_maps_key_absent(self):
+        """Configs without map blocks have no 'maps' key."""
+        config = """
+server {
+    listen 80;
+    server_name example.com;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        assert 'maps' not in structure
+
+    def test_map_variables_preserved(self):
+        """source_var and target_var fields match map declaration."""
+        config = """
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    '' close;
+}
+"""
+        a = self._make_analyzer(config)
+        structure = a.get_structure()
+        m = structure['maps'][0]
+        assert m['source_var'] == '$http_upgrade'
+        assert m['target_var'] == '$connection_upgrade'

@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-02-27
+
+### Added (session clever-zenith-0227)
+- **nginx: main context directives** — `_parse_main_directives()` extracts depth-0 directives (`user`, `worker_processes`, `worker_rlimit_nofile`, `error_log`, `pid`, `include`) from `nginx.conf`, and `ssl_protocols`, `ssl_ciphers`, `client_max_body_size`, `server_names_hash_*` from vhost include files. Surfaced as `main_directives` key.
+- **nginx: multi-line directive support** — `_parse_block_directives()` now accumulates continuation lines until the terminating `;`. Fixes `log_format` spanning 9 lines in prod — previously silently dropped.
+- **nginx: upstream backend detail** — `_parse_upstream_servers()` reads each upstream block body, extracting `server` entries (address + params like `max_fails`, `fail_timeout`) and settings (`keepalive`, `keepalive_timeout`, `keepalive_requests`). Upstream items now carry a `signature` with backend hostname for display.
+- **nginx: map{} block detection** — detects `map $src $target { }` blocks. Surfaced as `maps` list with `source_var`/`target_var`. Captures the 5 `$host`-routing maps in `ea-nginx.conf` (cPanel/WHM pattern).
+- **display: Main directives label** — `_render_single_category()` extended to handle `main_directives` dict; long values (ssl_ciphers etc.) truncated at 80 chars for display.
+
+### Added (session valley-flood-0227)
+- **nginx: http{} and events{} directives** — `get_structure()` now surfaces all direct-child key-value directives from the `http {}` and `events {}` blocks as `directives` and `events_directives` dict keys. Previously, a main `nginx.conf` containing only global timeout/buffer/proxy settings (no `server {}` blocks) returned only a file header — all directives were invisible.
+- **nginx: N005 rule** — new check flags timeout and buffer directives outside safe operational ranges (e.g. `send_timeout < 10s`, `proxy_read_timeout > 300s`, `client_body_buffer_size > 64m`). Covers: `send_timeout`, `proxy_read_timeout`, `proxy_send_timeout`, `proxy_connect_timeout`, `keepalive_timeout`, `client_body_timeout`, `client_header_timeout`, `client_body_buffer_size`, `proxy_buffer_size`, `client_max_body_size`.
+- **display: dict-type category rendering** — `_render_single_category()` handles `directives` and `events_directives` as key-value tables rather than silently dropping them.
+
 ## [0.51.1] - 2026-02-20
 
 ### Fixed
