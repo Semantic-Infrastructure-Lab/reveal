@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.54.0] - 2026-02-27
 
 ### Added (session magnetic-regiment-0227)
 - **nginx: S4 — `--cpanel-certs`** — `reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs` compares cPanel on-disk certs (`/var/cpanel/ssl/apache_tls/DOMAIN/combined`) against live certs per SSL domain. Serial number comparison detects "AutoSSL renewed but nginx hasn't reloaded" (shows `⚠️ STALE (reload nginx)`). Table: domain | disk cert expiry | live cert expiry | match status. Exit 2 on stale or expired certs.
