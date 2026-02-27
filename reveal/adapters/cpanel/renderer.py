@@ -100,11 +100,20 @@ class CpanelRenderer:
         username = r.get('username', '?')
         certs = r.get('certs', [])
         summary = r.get('summary', {})
+        dns_verified = r.get('dns_verified', False)
+        dns_excluded = r.get('dns_excluded', {})
         print(f"SSL disk certs for cPanel user: {username}")
         print(f"  source: {r.get('cpanel_ssl_dir', '')}/DOMAIN/combined")
         if summary:
             parts = [f"{v} {k}" for k, v in summary.items() if v]
-            print(f"  summary: {', '.join(parts)}")
+            summary_line = f"  summary: {', '.join(parts)}"
+            if dns_excluded:
+                excluded_total = sum(dns_excluded.values())
+                excluded_parts = [f"{v} {k}" for k, v in dns_excluded.items() if v]
+                summary_line += f"  ({excluded_total} nxdomain-excluded: {', '.join(excluded_parts)})"
+            print(summary_line)
+        if dns_verified:
+            print(f"  dns-verified: NXDOMAIN domains shown but excluded from summary counts")
         if not certs:
             print("  (no domains found)")
             return
@@ -114,8 +123,8 @@ class CpanelRenderer:
         print(f"  {'domain':<{col_domain}}  status")
         print("  " + "─" * (col_domain + 40))
         for c in certs:
-            icon = _icon_for_ssl_status(c['status'])
             s = c['status']
+            nxdomain = dns_verified and not c.get('dns_resolves', True)
             if s == 'ok':
                 detail = f"✅ {c.get('days_until_expiry')}d  ({c.get('not_after', '')})"
             elif s in ('expiring', 'critical'):
@@ -127,6 +136,8 @@ class CpanelRenderer:
                 detail = f"⚫ no cert at {c.get('cert_path', '')}"
             else:
                 detail = f"❌ {c.get('error', s)}"
+            if nxdomain:
+                detail += "  [nxdomain]"
             print(f"  {c['domain']:<{col_domain}}  {detail}")
 
         steps = r.get('next_steps', [])

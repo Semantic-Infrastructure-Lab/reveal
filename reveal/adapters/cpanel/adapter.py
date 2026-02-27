@@ -20,6 +20,7 @@ Examples:
 
 import os
 import re
+import socket
 from typing import Dict, Any, Optional, List
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -146,6 +147,15 @@ def _check_docroot_acl(docroot: str) -> Dict[str, Any]:
     return _check_nobody_access(docroot)
 
 
+def _dns_resolves(domain: str) -> bool:
+    """Return True if domain resolves in DNS, False if NXDOMAIN or lookup error."""
+    try:
+        socket.getaddrinfo(domain, None)
+        return True
+    except socket.gaierror:
+        return False
+
+
 @register_adapter('cpanel')
 @register_renderer(CpanelRenderer)
 class CpanelAdapter(ResourceAdapter):
@@ -184,13 +194,13 @@ class CpanelAdapter(ResourceAdapter):
     def _get_domains(self) -> List[Dict[str, str]]:
         return _list_user_domains(self.username)
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, dns_verified: bool = False, **kwargs) -> Dict[str, Any]:
         """Get cPanel user overview or element data."""
         if self.element:
             if self.element == 'domains':
                 return self._get_domains_structure()
             elif self.element == 'ssl':
-                return self._get_ssl_structure()
+                return self._get_ssl_structure(dns_verified=dns_verified)
             elif self.element == 'acl-check':
                 return self._get_acl_structure()
             else:
@@ -253,25 +263,34 @@ class CpanelAdapter(ResourceAdapter):
             'domains': domains,
         }
 
-    def _get_ssl_structure(self) -> Dict[str, Any]:
+    def _get_ssl_structure(self, dns_verified: bool = False) -> Dict[str, Any]:
         """Disk cert health per domain."""
         domains = self._get_domains()
         certs = []
         for d in domains:
             status = _get_disk_cert_status(d['domain'])
-            certs.append({
+            entry: Dict[str, Any] = {
                 'domain': d['domain'],
                 **status,
-            })
+            }
+            if dns_verified:
+                entry['dns_resolves'] = _dns_resolves(d['domain'])
+            certs.append(entry)
+
         # Sort: failures first, then expiring, then ok
         _ORDER = {'expired': 0, 'critical': 1, 'error': 2, 'expiring': 3,
                   'missing': 4, 'ok': 5}
         certs.sort(key=lambda r: (_ORDER.get(r['status'], 9), r['domain']))
 
-        summary = {}
+        # Build summary: with --dns-verified, exclude NXDOMAIN domains from counts
+        summary: Dict[str, int] = {}
+        dns_excluded: Dict[str, int] = {}
         for c in certs:
             s = c['status']
-            summary[s] = summary.get(s, 0) + 1
+            if dns_verified and not c.get('dns_resolves', True):
+                dns_excluded[s] = dns_excluded.get(s, 0) + 1
+            else:
+                summary[s] = summary.get(s, 0) + 1
 
         return {
             'contract_version': '1.0',
@@ -279,7 +298,9 @@ class CpanelAdapter(ResourceAdapter):
             'username': self.username,
             'cpanel_ssl_dir': CPANEL_SSL_DIR,
             'cert_count': len(certs),
+            'dns_verified': dns_verified,
             'summary': summary,
+            'dns_excluded': dns_excluded,
             'certs': certs,
             'next_steps': [
                 f"reveal cpanel://{self.username}/acl-check  # Check docroot ACL",

@@ -376,6 +376,8 @@ def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
                         help='Scan the nginx error log for ACME/SSL failure patterns (Permission Denied, ENOENT on /.well-known/, SSL cert errors) grouped by SSL domain; identifies the root cause of AutoSSL failures (nginx only)')
     parser.add_argument('--log-path', type=str, dest='log_path', metavar='PATH',
                         help='Path to nginx error log for --diagnose (overrides auto-detection from config and default paths)')
+    parser.add_argument('--dns-verified', action='store_true', dest='dns_verified',
+                        help='cpanel://USERNAME/ssl: resolve each domain in DNS before reporting; NXDOMAIN domains are shown but excluded from critical/expiring summary counts (eliminates false alarms from domains that have moved away)')
 
 
 def create_argument_parser(version: str) -> argparse.ArgumentParser:

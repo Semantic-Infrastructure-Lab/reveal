@@ -356,5 +356,123 @@ class TestCpanelRenderer:
         assert parsed['username'] == 'u'
 
 
+class TestCpanelSslDnsVerified:
+    """U6 — cpanel://USERNAME/ssl --dns-verified excludes NXDOMAIN domains from summary counts."""
+
+    def _make_adapter(self):
+        return CpanelAdapter('cpanel://testuser/ssl')
+
+    def _disk_status_ok(self, domain):
+        from datetime import datetime, timezone, timedelta
+        return {
+            'status': 'ok',
+            'days_until_expiry': 60,
+            'not_after': (datetime.now(timezone.utc) + timedelta(days=60)).strftime('%Y-%m-%d'),
+            'serial_number': 'AA',
+            'cert_path': f'/var/cpanel/ssl/apache_tls/{domain}/combined',
+        }
+
+    def _disk_status_critical(self, domain):
+        from datetime import datetime, timezone, timedelta
+        return {
+            'status': 'critical',
+            'days_until_expiry': 5,
+            'not_after': (datetime.now(timezone.utc) + timedelta(days=5)).strftime('%Y-%m-%d'),
+            'serial_number': 'BB',
+            'cert_path': f'/var/cpanel/ssl/apache_tls/{domain}/combined',
+        }
+
+    def test_without_dns_verified_no_dns_status_field(self):
+        """Without --dns-verified, certs have no dns_resolves field."""
+        adapter = self._make_adapter()
+        domains = [{'domain': 'active.example.com', 'docroot': '/home/u/public_html'}]
+        with patch('reveal.adapters.cpanel.adapter._list_user_domains', return_value=domains), \
+             patch('reveal.adapters.cpanel.adapter._get_disk_cert_status',
+                   side_effect=self._disk_status_ok):
+            result = adapter.get_structure(dns_verified=False)
+        assert result['dns_verified'] is False
+        assert 'dns_resolves' not in result['certs'][0]
+
+    def test_dns_verified_resolving_domain_in_summary(self):
+        """Domains that resolve are counted normally in summary."""
+        adapter = self._make_adapter()
+        domains = [{'domain': 'live.example.com', 'docroot': '/home/u/public_html'}]
+        with patch('reveal.adapters.cpanel.adapter._list_user_domains', return_value=domains), \
+             patch('reveal.adapters.cpanel.adapter._get_disk_cert_status',
+                   side_effect=self._disk_status_critical), \
+             patch('reveal.adapters.cpanel.adapter._dns_resolves', return_value=True):
+            result = adapter.get_structure(dns_verified=True)
+        assert result['summary'].get('critical', 0) == 1
+        assert sum(result['dns_excluded'].values()) == 0
+        assert result['certs'][0]['dns_resolves'] is True
+
+    def test_dns_verified_nxdomain_excluded_from_summary(self):
+        """NXDOMAIN domains are excluded from critical/expiring summary counts."""
+        adapter = self._make_adapter()
+        domains = [
+            {'domain': 'dead.example.com', 'docroot': '/home/u/dead'},
+            {'domain': 'live.example.com', 'docroot': '/home/u/live'},
+        ]
+
+        def disk_status(domain):
+            return self._disk_status_critical(domain)
+
+        def dns(domain):
+            return domain == 'live.example.com'
+
+        with patch('reveal.adapters.cpanel.adapter._list_user_domains', return_value=domains), \
+             patch('reveal.adapters.cpanel.adapter._get_disk_cert_status',
+                   side_effect=disk_status), \
+             patch('reveal.adapters.cpanel.adapter._dns_resolves', side_effect=dns):
+            result = adapter.get_structure(dns_verified=True)
+
+        # live domain is critical and resolves → in summary
+        assert result['summary'].get('critical', 0) == 1
+        # dead domain is critical but NXDOMAIN → in dns_excluded, not summary
+        assert result['dns_excluded'].get('critical', 0) == 1
+        # certs show dns_resolves field
+        cert_map = {c['domain']: c for c in result['certs']}
+        assert cert_map['dead.example.com']['dns_resolves'] is False
+        assert cert_map['live.example.com']['dns_resolves'] is True
+
+    def test_dns_excluded_shown_in_renderer_output(self, capsys):
+        """Renderer shows nxdomain-excluded count in summary line."""
+        from reveal.adapters.cpanel.renderer import CpanelRenderer
+        from datetime import datetime, timezone, timedelta
+        result = {
+            'type': 'cpanel_ssl',
+            'username': 'testuser',
+            'cpanel_ssl_dir': CPANEL_SSL_DIR,
+            'cert_count': 2,
+            'dns_verified': True,
+            'summary': {'critical': 1},
+            'dns_excluded': {'critical': 2},
+            'certs': [
+                {
+                    'domain': 'live.example.com',
+                    'status': 'critical',
+                    'days_until_expiry': 5,
+                    'not_after': '2026-03-04',
+                    'dns_resolves': True,
+                },
+                {
+                    'domain': 'dead1.example.com',
+                    'status': 'critical',
+                    'days_until_expiry': 3,
+                    'not_after': '2026-03-02',
+                    'dns_resolves': False,
+                },
+            ],
+            'next_steps': [],
+        }
+        CpanelRenderer.render_structure(result, format='text')
+        out = capsys.readouterr().out
+        assert 'nxdomain-excluded' in out
+        assert '2 critical' in out or 'critical: 2' in out or '2' in out
+        assert '[nxdomain]' in out
+        assert 'dead1.example.com' in out
+        assert 'live.example.com' in out
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

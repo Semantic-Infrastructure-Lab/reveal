@@ -411,7 +411,8 @@ def _build_adapter_kwargs(adapter, args: 'Namespace', scheme: Optional[str] = No
         'max_lines': 'max_lines',
         'min_complexity': 'min_complexity',
         'max_complexity': 'max_complexity',
-        'min_functions': 'min_functions'
+        'min_functions': 'min_functions',
+        'dns_verified': 'dns_verified',
     }
 
     for arg_name, param_name in param_mapping.items():

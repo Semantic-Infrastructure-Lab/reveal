@@ -87,7 +87,7 @@ class N004(BaseRule):
                 # Find root directive
                 root_match = self.ROOT_PATTERN.search(acme_body)
                 if root_match:
-                    root_path = root_match.group(1).strip()
+                    root_path = root_match.group(1).strip().strip('"\'')
                     acme_paths[root_path].append((server_name, acme_line))
             elif is_ssl:
                 # SSL server without ACME challenge location

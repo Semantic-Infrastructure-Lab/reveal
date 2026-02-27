@@ -603,5 +603,83 @@ server {
         self.assertEqual(line, 20)
 
 
+class TestN004QuotedPaths(unittest.TestCase):
+    """B3 — N004 strips quotes from cPanel-style root directives before embedding in messages."""
+
+    def setUp(self):
+        from reveal.rules.infrastructure.N004 import N004
+        self.rule = N004()
+
+    def test_quoted_paths_not_shown_in_message(self):
+        """N004 message should show bare paths, not '"/home/..."'."""
+        content = '''
+server {
+    server_name domain-a.com;
+    location /.well-known/acme-challenge/ {
+        root "/home/user1/public_html";
+    }
+}
+server {
+    server_name domain-b.com;
+    location /.well-known/acme-challenge/ {
+        root "/home/user2/public_html";
+    }
+}
+'''
+        detections = self.rule.check('test.conf', None, content)
+        self.assertEqual(len(detections), 1)
+        msg = detections[0].message
+        self.assertIn('/home/user1/public_html', msg)
+        self.assertIn('/home/user2/public_html', msg)
+        self.assertNotIn('"/home/', msg, "raw double-quotes should be stripped from message")
+
+    def test_quoted_and_unquoted_same_path_no_detection(self):
+        """Quoted and unquoted versions of the same path are treated as equal (no false positive)."""
+        content = '''
+server {
+    server_name domain-a.com;
+    location /.well-known/acme-challenge/ {
+        root /home/user/public_html;
+    }
+}
+server {
+    server_name domain-b.com;
+    location /.well-known/acme-challenge/ {
+        root "/home/user/public_html";
+    }
+}
+'''
+        detections = self.rule.check('test.conf', None, content)
+        self.assertEqual(len(detections), 0,
+                         "Quoted and unquoted same path should not trigger N004")
+
+    def test_suggestion_also_has_no_quotes(self):
+        """The suggestion field (common path) should also be quote-free."""
+        content = '''
+server {
+    server_name a.com;
+    location /.well-known/acme-challenge/ {
+        root "/home/common/public_html";
+    }
+}
+server {
+    server_name b.com;
+    location /.well-known/acme-challenge/ {
+        root "/home/common/public_html";
+    }
+}
+server {
+    server_name c.com;
+    location /.well-known/acme-challenge/ {
+        root "/home/other/public_html";
+    }
+}
+'''
+        detections = self.rule.check('test.conf', None, content)
+        self.assertEqual(len(detections), 1)
+        suggestion = detections[0].suggestion
+        self.assertNotIn('"', suggestion, "Suggestion field should contain no quotes")
+
+
 if __name__ == '__main__':
     unittest.main()
