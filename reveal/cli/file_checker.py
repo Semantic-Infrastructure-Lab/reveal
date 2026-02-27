@@ -8,6 +8,7 @@ This module handles quality checking of files in a directory tree:
 
 import sys
 import os
+from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Optional, List, TYPE_CHECKING
@@ -19,6 +20,9 @@ if TYPE_CHECKING:
 # On Linux (fork), startup is cheap; on Windows/macOS (spawn) it's heavier,
 # but the break-even is still low for CPU-bound work.
 _PARALLEL_THRESHOLD = 4
+
+# Import shared threshold and generated-file detector from checks module.
+from reveal.checks import _GROUP_THRESHOLD, _is_generated_file  # noqa: E402
 
 
 def _parallel_worker(packed_args: tuple) -> tuple:
@@ -103,6 +107,54 @@ def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
         return list(pool.map(_parallel_worker, args_iter))
 
 
+def _print_grouped_detections(detections: list, relative: Path, no_group: bool = False) -> None:
+    """Print detections for one file, collapsing rules that repeat excessively.
+
+    When a rule fires >= _GROUP_THRESHOLD times in a single file the first
+    occurrence is shown followed by a "+N more" note.  Keeps noisy generated
+    configs (e.g. cPanel ea-nginx.conf) from burying genuine findings.
+
+    Args:
+        detections: Ordered list of Detection objects for this file
+        relative: CWD-relative path used as the source label
+        no_group: When True, skip collapsing entirely
+    """
+    severity_icons = {"HIGH": "❌", "MEDIUM": "⚠️ ", "LOW": "ℹ️ "}
+
+    if no_group or len(detections) < _GROUP_THRESHOLD:
+        for d in detections:
+            icon = severity_icons.get(d.severity.value, "ℹ️ ")
+            print(f"{relative}:{d.line}:{d.column} {icon} {d.rule_code} {d.message}")
+            if d.suggestion:
+                print(f"  💡 {d.suggestion}")
+            if d.context:
+                print(f"  📝 {d.context}")
+        return
+
+    # Identify which rule codes exceed the grouping threshold
+    by_rule: dict = defaultdict(list)
+    for d in detections:
+        by_rule[d.rule_code].append(d)
+    collapsed = {code for code, grp in by_rule.items() if len(grp) >= _GROUP_THRESHOLD}
+    shown_collapsed: set = set()
+
+    for d in detections:
+        icon = severity_icons.get(d.severity.value, "ℹ️ ")
+        if d.rule_code not in collapsed:
+            print(f"{relative}:{d.line}:{d.column} {icon} {d.rule_code} {d.message}")
+            if d.suggestion:
+                print(f"  💡 {d.suggestion}")
+            if d.context:
+                print(f"  📝 {d.context}")
+        elif d.rule_code not in shown_collapsed:
+            shown_collapsed.add(d.rule_code)
+            total = len(by_rule[d.rule_code])
+            print(f"{relative}:{d.line}:{d.column} {icon} {d.rule_code} {d.message}")
+            if d.suggestion:
+                print(f"  💡 {d.suggestion}")
+            print(f"  ↳ +{total - 1} more {d.rule_code} occurrences hidden — use --no-group to expand")
+
+
 def load_gitignore_patterns(directory: Path) -> List[str]:
     """Load .gitignore patterns from directory.
 
@@ -183,7 +235,8 @@ def check_and_report_file(
     file_path: Path,
     directory: Path,
     select: Optional[list[str]],
-    ignore: Optional[list[str]]
+    ignore: Optional[list[str]],
+    no_group: bool = False,
 ) -> int:
     """Check a single file and report issues.
 
@@ -192,6 +245,7 @@ def check_and_report_file(
         directory: Base directory for relative paths
         select: Rule codes to select (None = all)
         ignore: Rule codes to ignore
+        no_group: Disable collapsing of repeated rule detections
 
     Returns:
         Number of issues found (0 if no issues or on error)
@@ -210,6 +264,10 @@ def check_and_report_file(
         structure = analyzer.get_structure(extract_links=True)
         content = analyzer.content
 
+        # Skip auto-generated files silently in recursive sweeps
+        if _is_generated_file(content):
+            return 0
+
         detections = RuleRegistry.check_file(
             str(file_path), structure, content, select=select, ignore=ignore
         )
@@ -217,7 +275,6 @@ def check_and_report_file(
         if not detections:
             return 0
 
-        # Print file header and detections
         # Always use CWD-relative paths so editor "click to jump" works regardless
         # of where the target argument points (matches ruff/mypy/flake8 behavior).
         cwd = Path.cwd()
@@ -227,18 +284,7 @@ def check_and_report_file(
             relative = file_path.relative_to(directory)
         issue_count = len(detections)
         print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
-
-        for detection in detections:
-            # Determine severity icon
-            severity_icons = {"HIGH": "❌", "MEDIUM": "⚠️ ", "LOW": "ℹ️ "}
-            icon = severity_icons.get(detection.severity.value, "ℹ️ ")
-
-            print(f"{relative}:{detection.line}:{detection.column} {icon} {detection.rule_code} {detection.message}")
-
-            if detection.suggestion:
-                print(f"  💡 {detection.suggestion}")
-            if detection.context:
-                print(f"  📝 {detection.context}")
+        _print_grouped_detections(detections, relative, no_group=no_group)
 
         return issue_count
 
@@ -277,6 +323,10 @@ def check_and_collect_file(
         # this parse instead of creating a second analyzer for each file.
         structure = analyzer.get_structure(extract_links=True)
         content = analyzer.content
+
+        # Skip auto-generated files silently in recursive sweeps
+        if _is_generated_file(content):
+            return 0, []
 
         detections = RuleRegistry.check_file(
             str(file_path), structure, content, select=select, ignore=ignore
@@ -389,7 +439,11 @@ def _check_files_json(
 
 
 def _check_files_text(
-    files: List[Path], directory: Path, select: Optional[List[str]], ignore: Optional[List[str]]
+    files: List[Path],
+    directory: Path,
+    select: Optional[List[str]],
+    ignore: Optional[List[str]],
+    no_group: bool = False,
 ) -> tuple:
     """Check files with text output.
 
@@ -398,6 +452,7 @@ def _check_files_text(
         directory: Base directory
         select: Rule codes to select
         ignore: Rule codes to ignore
+        no_group: Disable collapsing of repeated rule detections
 
     Returns:
         Tuple of (total_issues, files_with_issues)
@@ -415,7 +470,6 @@ def _check_files_text(
         results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
 
     cwd = Path.cwd()
-    severity_icons = {"HIGH": "❌", "MEDIUM": "⚠️ ", "LOW": "ℹ️ "}
     for file_path, issue_count, detections in results:
         if issue_count > 0:
             total_issues += issue_count
@@ -425,13 +479,7 @@ def _check_files_text(
             except ValueError:
                 relative = file_path.relative_to(directory)
             print(f"\n{relative}: Found {issue_count} issue{'s' if issue_count != 1 else ''}\n")
-            for detection in detections:
-                icon = severity_icons.get(detection.severity.value, "ℹ️ ")
-                print(f"{relative}:{detection.line}:{detection.column} {icon} {detection.rule_code} {detection.message}")
-                if detection.suggestion:
-                    print(f"  💡 {detection.suggestion}")
-                if detection.context:
-                    print(f"  📝 {detection.context}")
+            _print_grouped_detections(detections, relative, no_group=no_group)
 
     return total_issues, files_with_issues
 
@@ -521,6 +569,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     # Parse select/ignore options
     select = args.select.split(',') if args.select else None
     ignore = args.ignore.split(',') if args.ignore else None
+    no_group = getattr(args, 'no_group', False)
 
     # Check files based on output format
     if output_format == 'json':
@@ -530,7 +579,7 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
         _print_json_output(file_results, len(files_to_check), files_with_issues, total_issues)
     else:
         total_issues, files_with_issues = _check_files_text(
-            files_to_check, directory, select, ignore
+            files_to_check, directory, select, ignore, no_group=no_group
         )
         _print_text_summary(len(files_to_check), files_with_issues, total_issues, directory, config)
 

@@ -232,6 +232,8 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
                         help='Select specific rules or categories (e.g., "B,S,T" or "B001,S701"). Categories: B=Bugs, C=Complexity, I=Imports, M=Maintainability, R=Refactoring, S=Security, T=Types')
     parser.add_argument('--ignore', type=str, metavar='RULES',
                         help='Ignore specific rules or categories (e.g., "E501" or "C")')
+    parser.add_argument('--no-group', action='store_true', dest='no_group',
+                        help='Show every check result individually (disables collapsing repeated rules)')
     parser.add_argument('--recursive', '-r', action='store_true',
                         help='Process directory recursively (with --check)')
     parser.add_argument('--rules', action='store_true',

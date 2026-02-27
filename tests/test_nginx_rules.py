@@ -420,7 +420,7 @@ class TestNginxRulesIntegration(unittest.TestCase):
         rules = RuleRegistry.get_rules(select=['N'])
         rule_codes = [r.code for r in rules]
 
-        self.assertEqual(len(rules), 5)
+        self.assertEqual(len(rules), 6)
         self.assertIn('N001', rule_codes)
         self.assertIn('N002', rule_codes)
         self.assertIn('N003', rule_codes)
