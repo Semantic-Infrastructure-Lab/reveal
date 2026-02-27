@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.1] - 2026-02-27
+
+### Fixed (session serene-current-0227)
+- **`reveal help://cpanel` — "Element not found"** — `CpanelAdapter` inherited `get_help()` from base (returns `None`); added full `get_help()` implementation with examples, elements, and operator workflow.
+- **`reveal help://nginx` — "Element not found"** — nginx is a file-based analyzer (not a URI adapter); added `_get_file_analyzer_help()` to `HelpAdapter` returning focused usage help for known file analyzers.
+- **V016 not firing via `reveal reveal:// --check`** — added `_check_reveal_adapters()` so V016 scans adapter files when called with `file_path.startswith('reveal://')`.
+
 ## [0.54.0] - 2026-02-27
 
 ### Added (session magnetic-regiment-0227)
