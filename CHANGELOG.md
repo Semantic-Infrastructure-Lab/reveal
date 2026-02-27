@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.53.0] - 2026-02-27
 
 ### Added (session revodoku-0227)
 - **`--check` grouped output** — when a rule fires ≥ 10 times in a single file, results collapse to one summary line + "+N more occurrences hidden" note. Keeps 2,685 N003s from burying 6 actionable N004s in cPanel-managed configs. Applies to both single-file and recursive check.
