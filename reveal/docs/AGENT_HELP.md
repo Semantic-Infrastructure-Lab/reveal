@@ -719,32 +719,34 @@ N004: ACME challenge path inconsistency
 **Nginx ACL and routing checks:**
 ```bash
 # N1: Check that nobody user can read every docroot (cPanel nginx requirement)
-reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --check-acl
+reveal /etc/nginx/conf.d/users/USERNAME.conf --check-acl
 # Exit 2 on any path component that blocks nobody (ACME renewal will fail)
 
 # N4: Find ACME root paths + ACL status in one table
-reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --extract acme-roots
+reveal /etc/nginx/conf.d/users/USERNAME.conf --extract acme-roots
 # domain → acme root path → ACL status
 
 # N2: Detect location block routing surprises
-reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --check-conflicts
+reveal /etc/nginx/conf.d/users/USERNAME.conf --check-conflicts
 # prefix_overlap: one non-regex location is a strict prefix of another
 # regex_shadows_prefix: regex pattern can match a prefix location's path
 # Exit 2 on regex conflicts; prefix overlap is info-only
 
 # N3: Filter output to a specific domain (essential for 1,500-line cPanel configs)
-reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --domain example.com
+reveal /etc/nginx/conf.d/users/USERNAME.conf --domain example.com
 ```
 
 **cPanel nginx audit commands:**
 ```bash
 # The single command that would have caught the Feb 2026 Sociamonials incident:
-reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
+reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
 # Per-domain table: ACME root path | nobody ACL status | live SSL cert status
 # Exit 2 on any ACL failure or SSL expiry
+# On large configs (500+ domains), filter to problems only:
+reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme --only-failures
 
 # Check nginx error log for ACME/SSL failures (retroactive diagnosis)
-reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --diagnose
+reveal /etc/nginx/conf.d/users/USERNAME.conf --diagnose
 # Scans last 5,000 lines of nginx error log for:
 # - permission_denied: open() on /.well-known/ returned EACCES (exit 2)
 # - ssl_error: SSL_CTX_use_certificate / handshake failures (exit 2)
@@ -753,7 +755,7 @@ reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --diagnose
 # Override log path: reveal ... --diagnose --log-path /var/log/nginx/error.log
 
 # Check cPanel disk certs vs live certs (detect stale-after-AutoSSL-renewal)
-reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs
+reveal /etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs
 # Per-domain table: disk cert expiry | live cert expiry | match status
 # ⚠️ STALE (reload nginx) when serial numbers differ
 # Exit 2 on stale or expired certs
@@ -915,13 +917,15 @@ reveal cpanel://USERNAME/acl-check
 reveal cpanel://USERNAME/ssl
 
 # 4. Composed audit: ACME paths + ACL + live SSL in one table
-reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
+reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
+# On 500+ domain configs, filter to failures only:
+reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme --only-failures
 
 # 5. Disk cert vs live cert comparison (detect AutoSSL renewed but nginx not reloaded)
-reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs
+reveal /etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs
 
 # 6. Retroactive error log diagnosis (what has already failed)
-reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --diagnose
+reveal /etc/nginx/conf.d/users/USERNAME.conf --diagnose
 ```
 
 **cpanel:// views:**
@@ -934,10 +938,16 @@ reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --diagnose
 | Scenario | Command |
 |----------|---------|
 | Quick user overview | `reveal cpanel://USERNAME` |
-| "Why is ACME renewal failing?" | `reveal ... --validate-nginx-acme` then `--diagnose` |
-| "Did AutoSSL run but nginx not reload?" | `reveal ... --cpanel-certs` |
+| "Why is ACME renewal failing?" | `reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme` then `--diagnose` |
+| "Did AutoSSL run but nginx not reload?" | `reveal /etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs` |
 | "Which docroots block nobody?" | `reveal cpanel://USERNAME/acl-check` |
 | "What domains does this user have?" | `reveal cpanel://USERNAME/domains` |
+| 500+ domain config, show only problems | add `--only-failures` to `--validate-nginx-acme` |
+
+**ACL check methods:**
+- `reveal cpanel://USERNAME/acl-check` — filesystem walk (authoritative); finds denied docroots directly
+- `reveal /etc/nginx/.../USERNAME.conf --validate-nginx-acme` — parses nginx config + checks ACME paths + live SSL; also verifies routing
+- Use both: cpanel ACL check for fast docroot scan; nginx audit to verify ACME config path resolution
 
 ---
 
@@ -2144,13 +2154,14 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | SSL failures only | `--check --only-failures` |
 | SSL expiring soon | `--check --expiring-within=30` |
 | Nginx config check | `reveal nginx.conf --check --select N` |
-| Nginx nobody ACL check | `reveal nginx:///.../user.conf --check-acl` |
-| Nginx ACME roots table | `reveal nginx:///.../user.conf --extract acme-roots` |
-| Nginx location conflicts | `reveal nginx:///.../user.conf --check-conflicts` |
-| Filter to one domain | `reveal nginx:///.../user.conf --domain example.com` |
-| Full ACME+ACL+SSL audit | `reveal nginx:///.../user.conf --validate-nginx-acme` |
-| Disk vs live cert compare | `reveal nginx:///.../user.conf --cpanel-certs` |
-| Error log ACME diagnosis | `reveal nginx:///.../user.conf --diagnose` |
+| Nginx nobody ACL check | `reveal /path/user.conf --check-acl` |
+| Nginx ACME roots table | `reveal /path/user.conf --extract acme-roots` |
+| Nginx location conflicts | `reveal /path/user.conf --check-conflicts` |
+| Filter to one domain | `reveal /path/user.conf --domain example.com` |
+| Full ACME+ACL+SSL audit | `reveal /path/user.conf --validate-nginx-acme` |
+| ACME audit, failures only | `reveal /path/user.conf --validate-nginx-acme --only-failures` |
+| Disk vs live cert compare | `reveal /path/user.conf --cpanel-certs` |
+| Error log ACME diagnosis | `reveal /path/user.conf --diagnose` |
 | cPanel user overview | `reveal cpanel://USERNAME` |
 | cPanel SSL health | `reveal cpanel://USERNAME/ssl` |
 | cPanel ACL check | `reveal cpanel://USERNAME/acl-check` |
