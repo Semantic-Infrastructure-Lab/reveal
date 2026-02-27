@@ -363,7 +363,9 @@ def _add_ssl_options(parser: argparse.ArgumentParser) -> None:
 def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
     """Add extraction options for composable pipelines."""
     parser.add_argument('--extract', type=str, metavar='TYPE',
-                        help='Extract specific data for piping (nginx: "domains" extracts SSL domains as ssl:// URIs)')
+                        help='Extract specific data for piping (nginx: "domains" extracts SSL domains as ssl:// URIs; "acme-roots" extracts ACME challenge roots with nobody ACL status)')
+    parser.add_argument('--check-acl', action='store_true', dest='check_acl',
+                        help='Check nobody user ACL access for all root directives (nginx only)')
 
 
 def create_argument_parser(version: str) -> argparse.ArgumentParser:

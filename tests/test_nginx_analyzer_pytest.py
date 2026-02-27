@@ -3,6 +3,7 @@
 import tempfile
 import os
 import time
+from pathlib import Path
 import pytest
 from reveal.analyzers.nginx import NginxAnalyzer
 
@@ -1284,3 +1285,336 @@ map $http_upgrade $connection_upgrade {
         m = structure['maps'][0]
         assert m['source_var'] == '$http_upgrade'
         assert m['target_var'] == '$connection_upgrade'
+
+
+
+
+# ---------------------------------------------------------------------------
+# N4: extract_acme_roots()
+# ---------------------------------------------------------------------------
+
+class TestNginxAcmeRootsExtraction:
+    """Tests for extract_acme_roots() — N4 (ACME pipeline extraction).
+
+    ACL results are mocked so tests focus on config parsing, not filesystem
+    traversal through pytest's restricted tmp directories.
+    """
+
+    def _make_analyzer(self, config: str):
+        f = tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False)
+        f.write(config)
+        f.close()
+        a = NginxAnalyzer(f.name)
+        os.unlink(f.name)
+        return a
+
+    def _ok_acl(self, path):
+        return {'status': 'ok', 'message': 'nobody has read access', 'failing_path': None}
+
+    def _denied_acl(self, path):
+        return {'status': 'denied', 'message': f'nobody cannot read {path} (mode 750, no ACL entry)',
+                'failing_path': path}
+
+    def test_finds_acme_location_with_root(self, monkeypatch):
+        """ACME location with explicit root is found and root is returned."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', self._ok_acl)
+        config = """
+server {
+    listen 80;
+    server_name example.com;
+    location /.well-known/acme-challenge/ {
+        root /home/example/public_html;
+    }
+}
+"""
+        rows = self._make_analyzer(config).extract_acme_roots()
+        assert len(rows) == 1
+        assert rows[0]['domain'] == 'example.com'
+        assert rows[0]['acme_path'] == '/home/example/public_html'
+
+    def test_inherits_server_root_when_location_has_none(self, monkeypatch):
+        """Falls back to server-level root when location has no root directive."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', self._ok_acl)
+        config = """
+server {
+    listen 80;
+    server_name fallback.com;
+    root /home/fallback/public_html;
+    location /.well-known/acme-challenge/ {
+    }
+}
+"""
+        rows = self._make_analyzer(config).extract_acme_roots()
+        assert len(rows) == 1
+        assert rows[0]['acme_path'] == '/home/fallback/public_html'
+
+    def test_acl_ok_status_propagated(self, monkeypatch):
+        """ok ACL result is surfaced in row."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', self._ok_acl)
+        config = """
+server {
+    listen 80;
+    server_name ok.com;
+    location /.well-known/acme-challenge/ {
+        root /home/ok/public_html;
+    }
+}
+"""
+        rows = self._make_analyzer(config).extract_acme_roots()
+        assert rows[0]['acl_status'] == 'ok'
+
+    def test_acl_denied_status_propagated(self, monkeypatch):
+        """denied ACL result and failing_path are surfaced in row."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', self._denied_acl)
+        config = """
+server {
+    listen 80;
+    server_name denied.com;
+    location /.well-known/acme-challenge/ {
+        root /home/denied/public_html;
+    }
+}
+"""
+        rows = self._make_analyzer(config).extract_acme_roots()
+        assert rows[0]['acl_status'] == 'denied'
+        assert rows[0]['acl_failing_path'] is not None
+
+    def test_acl_not_found_when_root_missing(self, monkeypatch):
+        """not_found ACL status when path doesn't exist."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
+                            lambda p: {'status': 'not_found',
+                                       'message': f'Path not found: {p}',
+                                       'failing_path': p})
+        config = """
+server {
+    listen 80;
+    server_name ghost.com;
+    location /.well-known/acme-challenge/ {
+        root /nonexistent/path;
+    }
+}
+"""
+        rows = self._make_analyzer(config).extract_acme_roots()
+        assert rows[0]['acl_status'] == 'not_found'
+
+    def test_no_acme_location_returns_empty(self):
+        """Config with no ACME challenge location returns empty list."""
+        config = """
+server {
+    listen 80;
+    server_name example.com;
+    location / {
+        proxy_pass http://backend;
+    }
+}
+"""
+        assert self._make_analyzer(config).extract_acme_roots() == []
+
+    def test_multiple_servers_produce_multiple_rows(self, monkeypatch):
+        """Each server block with an ACME location produces its own row."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', self._ok_acl)
+        config = """
+server {
+    listen 80;
+    server_name alpha.com;
+    location /.well-known/acme-challenge/ { root /home/alpha/pub; }
+}
+server {
+    listen 80;
+    server_name beta.com;
+    location /.well-known/acme-challenge/ { root /home/beta/pub; }
+}
+"""
+        rows = self._make_analyzer(config).extract_acme_roots()
+        assert len(rows) == 2
+        assert {r['domain'] for r in rows} == {'alpha.com', 'beta.com'}
+
+    def test_without_trailing_slash_matches(self, monkeypatch):
+        """location /.well-known/acme-challenge without trailing slash is matched."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', self._ok_acl)
+        config = """
+server {
+    listen 80;
+    server_name noslash.com;
+    location /.well-known/acme-challenge {
+        root /home/noslash/pub;
+    }
+}
+"""
+        rows = self._make_analyzer(config).extract_acme_roots()
+        assert len(rows) == 1
+        assert rows[0]['domain'] == 'noslash.com'
+
+    def test_unknown_status_when_no_root_found(self, monkeypatch):
+        """When no root directive exists anywhere, acl_status is 'unknown'."""
+        # _check_nobody_access should not be called; status comes from else branch
+        config = """
+server {
+    listen 80;
+    server_name noroot.com;
+    location /.well-known/acme-challenge/ {
+        try_files $uri =404;
+    }
+}
+"""
+        rows = self._make_analyzer(config).extract_acme_roots()
+        assert len(rows) == 1
+        assert rows[0]['acl_status'] == 'unknown'
+        assert rows[0]['acme_path'] == '(not found)'
+
+
+# ---------------------------------------------------------------------------
+# N1: extract_docroot_acl()
+# ---------------------------------------------------------------------------
+
+class TestNginxDocRootAcl:
+    """Tests for extract_docroot_acl() — N1 (cPanel ACL awareness).
+
+    ACL results are mocked; tests focus on which root directives are found.
+    """
+
+    def _make_analyzer(self, config: str):
+        f = tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False)
+        f.write(config)
+        f.close()
+        a = NginxAnalyzer(f.name)
+        os.unlink(f.name)
+        return a
+
+    def _ok_acl(self, path):
+        return {'status': 'ok', 'message': 'nobody has read access', 'failing_path': None}
+
+    def _denied_acl(self, path):
+        return {'status': 'denied', 'message': f'denied at {path}', 'failing_path': path}
+
+    def test_finds_root_directive(self, monkeypatch):
+        """root directive is found and reported."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', self._ok_acl)
+        config = """
+server {
+    listen 80;
+    server_name example.com;
+    root /home/example/public_html;
+}
+"""
+        rows = self._make_analyzer(config).extract_docroot_acl()
+        assert len(rows) == 1
+        assert rows[0]['root'] == '/home/example/public_html'
+        assert rows[0]['domain'] == 'example.com'
+
+    def test_ok_status_propagated(self, monkeypatch):
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', self._ok_acl)
+        config = """
+server {
+    listen 80;
+    server_name ok.com;
+    root /home/ok/pub;
+}
+"""
+        rows = self._make_analyzer(config).extract_docroot_acl()
+        assert rows[0]['acl_status'] == 'ok'
+
+    def test_denied_status_propagated(self, monkeypatch):
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', self._denied_acl)
+        config = """
+server {
+    listen 80;
+    server_name secret.com;
+    root /home/secret/pub;
+}
+"""
+        rows = self._make_analyzer(config).extract_docroot_acl()
+        assert rows[0]['acl_status'] == 'denied'
+        assert rows[0]['acl_failing_path'] is not None
+
+    def test_no_root_directives_returns_empty(self):
+        config = """
+server {
+    listen 80;
+    server_name example.com;
+    location / { proxy_pass http://backend; }
+}
+"""
+        assert self._make_analyzer(config).extract_docroot_acl() == []
+
+    def test_deduplicates_same_root(self, monkeypatch):
+        """Same root path mentioned in two server blocks checked only once."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', self._ok_acl)
+        config = """
+server {
+    listen 80;
+    server_name a.com;
+    root /home/shared/pub;
+}
+server {
+    listen 80;
+    server_name b.com;
+    root /home/shared/pub;
+}
+"""
+        rows = self._make_analyzer(config).extract_docroot_acl()
+        assert [r['root'] for r in rows].count('/home/shared/pub') == 1
+
+    def test_multiple_roots_reported(self, monkeypatch):
+        """Different root directives across servers all appear in output."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', self._ok_acl)
+        config = """
+server {
+    listen 80;
+    server_name a.com;
+    root /home/a/pub;
+}
+server {
+    listen 80;
+    server_name b.com;
+    root /home/b/pub;
+}
+"""
+        rows = self._make_analyzer(config).extract_docroot_acl()
+        roots = {r['root'] for r in rows}
+        assert '/home/a/pub' in roots
+        assert '/home/b/pub' in roots
+
+
+# ---------------------------------------------------------------------------
+# _check_nobody_access() unit tests (real filesystem, using /tmp which is 1777)
+# ---------------------------------------------------------------------------
+
+class TestCheckNobodyAccess:
+    """Unit tests for the _check_nobody_access() utility.
+
+    Uses /tmp (mode 1777, universally world-executable) as the traversable
+    parent so tests don't depend on pytest's restricted tmp directory layout.
+    """
+
+    def test_world_readable_dir_is_ok(self):
+        """Directory with mode 755 under /tmp returns ok."""
+        from reveal.analyzers.nginx import _check_nobody_access
+        import uuid
+        d = Path(tempfile.gettempdir()) / f"reveal_acl_test_{uuid.uuid4().hex}"
+        d.mkdir(mode=0o755)
+        try:
+            result = _check_nobody_access(str(d))
+            assert result['status'] == 'ok'
+        finally:
+            d.rmdir()
+
+    def test_nonexistent_path_returns_not_found(self):
+        """Non-existent path returns not_found."""
+        from reveal.analyzers.nginx import _check_nobody_access
+        result = _check_nobody_access('/tmp/reveal_test_ghost_will_never_exist_xyz123')
+        assert result['status'] == 'not_found'
+
+    def test_no_other_read_returns_denied(self):
+        """Directory with mode 750 (no other-r-x) under /tmp returns denied."""
+        from reveal.analyzers.nginx import _check_nobody_access
+        import uuid
+        d = Path(tempfile.gettempdir()) / f"reveal_acl_priv_{uuid.uuid4().hex}"
+        d.mkdir(mode=0o750)
+        try:
+            result = _check_nobody_access(str(d))
+            assert result['status'] == 'denied'
+            assert result['failing_path'] is not None
+        finally:
+            d.chmod(0o755)
+            d.rmdir()

@@ -1,9 +1,100 @@
 """Nginx configuration file analyzer."""
 
+import os
 import re
-from typing import Dict, List, Any, Optional
+import subprocess
+from pathlib import Path
+from typing import Dict, List, Any, Optional, Tuple
 from ..base import FileAnalyzer
 from ..registry import register
+
+
+# Pattern matching ACME challenge location paths
+_ACME_PATH_RE = re.compile(r'^\.well-known[/\\]acme-challenge/?$')
+
+
+def _check_nobody_access(path: str) -> Dict[str, Any]:
+    """Check if the nobody user can read files at path.
+
+    Checks standard Unix other-execute bits on every directory component
+    and other-read on the final target.  Also tries getfacl for ACL entries
+    that could grant access to nobody even without world bits.
+
+    Returns:
+        {'status': 'ok'|'denied'|'not_found'|'error',
+         'message': str,
+         'failing_path': str or None}
+    """
+    p = Path(path)
+    if not p.exists():
+        return {'status': 'not_found', 'message': f'Path not found: {path}',
+                'failing_path': path}
+
+    # Walk every directory component from / to target, checking execute (traverse) bit
+    check = Path('/')
+    for part in p.parts[1:]:
+        check = check / part
+        if not check.exists():
+            return {'status': 'not_found',
+                    'message': f'Component not found: {check}',
+                    'failing_path': str(check)}
+        if check.is_dir():
+            mode = os.stat(check).st_mode
+            can_traverse = bool(mode & 0o001)  # other-execute
+            if not can_traverse:
+                # Check extended ACL as fallback (Linux only)
+                if not _acl_grants_nobody(str(check), 'x'):
+                    return {
+                        'status': 'denied',
+                        'message': (
+                            f'nobody cannot traverse {check} '
+                            f'(mode {oct(mode)[-3:]}, no ACL entry)'
+                        ),
+                        'failing_path': str(check),
+                    }
+
+    # Final target: need read (+ execute for directories)
+    mode = os.stat(p).st_mode
+    if p.is_dir():
+        can_read = bool(mode & 0o005)  # other r-x
+    else:
+        can_read = bool(mode & 0o004)  # other r--
+    if not can_read:
+        if not _acl_grants_nobody(str(p), 'r'):
+            return {
+                'status': 'denied',
+                'message': (
+                    f'nobody cannot read {p} '
+                    f'(mode {oct(mode)[-3:]}, no ACL entry)'
+                ),
+                'failing_path': str(p),
+            }
+
+    return {'status': 'ok', 'message': 'nobody has read access', 'failing_path': None}
+
+
+def _acl_grants_nobody(path: str, perm: str) -> bool:
+    """Return True if getfacl shows nobody or other has the given permission.
+
+    perm: 'r', 'w', or 'x'
+    Returns False if getfacl is unavailable or raises any error.
+    """
+    try:
+        result = subprocess.run(
+            ['getfacl', '--omit-header', path],
+            capture_output=True, text=True, timeout=3,
+        )
+        if result.returncode != 0:
+            return False
+        for line in result.stdout.splitlines():
+            # Lines like: user:nobody:r-x  or  other::r-x
+            if line.startswith(('user:nobody:', 'other::')):
+                perms = line.split(':', 2)[-1] if ':' in line else ''
+                if perm in perms:
+                    return True
+    except Exception:
+        pass
+    return False
 
 
 @register('.conf', name='Nginx', icon='')
@@ -390,6 +481,158 @@ class NginxAnalyzer(FileAnalyzer):
                 domains.add(domain)
 
         return sorted(domains)
+
+    def _parse_location_root(self, line_num: int) -> Optional[str]:
+        """Return the root or alias directive value from a location block body."""
+        for j in range(line_num, min(line_num + 20, len(self.lines) + 1)):
+            line = self.lines[j - 1].strip()
+            m = re.match(r'^(?:root|alias)\s+(.*?)\s*;', line)
+            if m:
+                return m.group(1)
+            if line == '}':
+                break
+        return None
+
+    def _parse_server_root(self, server_line: int) -> Optional[str]:
+        """Return the root directive value from a server block."""
+        depth = 0
+        for j in range(server_line - 1, min(server_line + 200, len(self.lines))):
+            line = self.lines[j].strip()
+            depth += line.count('{') - line.count('}')
+            m = re.match(r'^root\s+(.*?)\s*;', line)
+            if m and depth == 1:
+                return m.group(1)
+            if depth <= 0 and j > server_line:
+                break
+        return None
+
+    def _find_server_start_for_location(self, location_line: int) -> Tuple[int, Dict]:
+        """Find the server block that contains the given location line number."""
+        best_start = 0
+        best_info: Dict = {}
+        depth = 0
+        in_server = False
+        current_start = 0
+        current_info: Dict = {}
+
+        for i, line in enumerate(self.lines, 1):
+            stripped = line.strip()
+            depth += stripped.count('{') - stripped.count('}')
+            if self._is_server_block_start(stripped):
+                current_start = i
+                current_info, _ = self._process_server_block([], i)
+                in_server = True
+            if in_server and i <= location_line:
+                best_start = current_start
+                best_info = current_info
+            if in_server and depth == 0:
+                in_server = False
+        return best_start, best_info
+
+    def extract_acme_roots(self) -> List[Dict[str, Any]]:
+        """Find ACME challenge location blocks and check nobody ACL on each root.
+
+        Returns a list of dicts (one per ACME location found):
+            domain      – first server_name from the parent server block
+            acme_path   – resolved root/alias path for the challenge location
+            acl_status  – 'ok', 'denied', 'not_found', or 'unknown'
+            acl_message – human-readable detail
+            line        – line number in config
+        """
+        results: List[Dict[str, Any]] = []
+        seen: set = set()
+
+        for i, line in enumerate(self.lines, 1):
+            stripped = line.strip()
+            # Match: location [modifier] /.well-known/acme-challenge[/] {
+            m = re.match(r'^location\s+(?:=\s+|~\*?\s+|^~\s+)?(.+?)\s*\{', stripped)
+            if not m:
+                continue
+            path = m.group(1).strip().lstrip('/')
+            if not _ACME_PATH_RE.match(path):
+                continue
+
+            # Find parent server block
+            server_start, server_info = self._find_server_start_for_location(i)
+            domain = server_info.get('name', 'unknown') if server_info else 'unknown'
+
+            # Resolve root: location-level first, then server-level
+            root = self._parse_location_root(i)
+            if not root and server_start:
+                root = self._parse_server_root(server_start)
+
+            key = (domain, root)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            if root:
+                acl = _check_nobody_access(root)
+            else:
+                acl = {'status': 'unknown', 'message': 'no root directive found',
+                       'failing_path': None}
+
+            results.append({
+                'domain': domain,
+                'acme_path': root or '(not found)',
+                'acl_status': acl['status'],
+                'acl_message': acl['message'],
+                'acl_failing_path': acl.get('failing_path'),
+                'line': i,
+            })
+
+        return results
+
+    def extract_docroot_acl(self) -> List[Dict[str, Any]]:
+        """Check nobody ACL for all root directives found in the config.
+
+        Returns a list of dicts:
+            domain      – first server_name from parent server block
+            root        – root path
+            acl_status  – 'ok', 'denied', 'not_found', or 'error'
+            acl_message – human-readable detail
+            line        – line number of the root directive
+        """
+        results: List[Dict[str, Any]] = []
+        seen: set = set()
+
+        current_server_info: Dict = {}
+        current_server_start = 0
+        depth = 0
+        in_server = False
+
+        for i, line in enumerate(self.lines, 1):
+            stripped = line.strip()
+            depth += stripped.count('{') - stripped.count('}')
+
+            if self._is_server_block_start(stripped):
+                current_server_info, in_server = self._process_server_block([], i)
+                current_server_start = i
+
+            if in_server and depth == 0:
+                in_server = False
+
+            m = re.match(r'^root\s+(.*?)\s*;', stripped)
+            if not m:
+                continue
+            root = m.group(1)
+            domain = current_server_info.get('name', 'unknown') if current_server_info else 'unknown'
+
+            if root in seen:
+                continue
+            seen.add(root)
+
+            acl = _check_nobody_access(root)
+            results.append({
+                'domain': domain,
+                'root': root,
+                'acl_status': acl['status'],
+                'acl_message': acl['message'],
+                'acl_failing_path': acl.get('failing_path'),
+                'line': i,
+            })
+
+        return results
 
     def _find_server_line(self, name: str) -> Optional[int]:
         """Find line number of server block with given server_name."""

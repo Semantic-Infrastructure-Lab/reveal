@@ -84,21 +84,99 @@ def _handle_domain_extraction(analyzer) -> None:
         sys.exit(1)
 
 
+def _handle_acme_roots_extraction(analyzer) -> None:
+    """Print ACME challenge root paths and nobody ACL status (N4)."""
+    if not hasattr(analyzer, 'extract_acme_roots'):
+        print(f"Error: --extract acme-roots not supported for {type(analyzer).__name__}",
+              file=sys.stderr)
+        print("This option is available for nginx config files.", file=sys.stderr)
+        sys.exit(1)
+
+    rows = analyzer.extract_acme_roots()
+    if not rows:
+        print("No ACME challenge location blocks found.")
+        return
+
+    col_domain = max(len(r['domain']) for r in rows)
+    col_path = max(len(r['acme_path']) for r in rows)
+
+    header = (f"  {'domain':<{col_domain}}  {'acme root path':<{col_path}}  acl status")
+    print(header)
+    print("  " + "-" * (len(header) - 2))
+
+    for r in rows:
+        status = r['acl_status']
+        if status == 'ok':
+            icon = "✅"
+            detail = "nobody:read OK"
+        elif status == 'denied':
+            failing = r.get('acl_failing_path') or ''
+            detail = f"❌ DENIED  ({r['acl_message']})"
+            icon = ""
+        elif status == 'not_found':
+            icon = "⚠️ "
+            detail = f"path not found: {r['acme_path']}"
+        else:
+            icon = "❓"
+            detail = r['acl_message']
+
+        print(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}  {icon} {detail}")
+
+
+def _handle_check_acl(analyzer) -> None:
+    """Print nobody ACL status for all root directives in config (N1)."""
+    if not hasattr(analyzer, 'extract_docroot_acl'):
+        print(f"Error: --check-acl not supported for {type(analyzer).__name__}",
+              file=sys.stderr)
+        print("This option is available for nginx config files.", file=sys.stderr)
+        sys.exit(1)
+
+    rows = analyzer.extract_docroot_acl()
+    if not rows:
+        print("No root directives found.")
+        return
+
+    failures = [r for r in rows if r['acl_status'] != 'ok']
+    passes = [r for r in rows if r['acl_status'] == 'ok']
+
+    col_root = max(len(r['root']) for r in rows)
+    col_domain = max(len(r['domain']) for r in rows)
+
+    if failures:
+        print(f"❌ ACL failures ({len(failures)}):")
+        for r in failures:
+            msg = r['acl_message']
+            print(f"  {r['root']:<{col_root}}  ({r['domain']})  {msg}")
+        print()
+
+    if passes:
+        print(f"✅ OK ({len(passes)}):")
+        for r in passes:
+            print(f"  {r['root']:<{col_root}}  ({r['domain']})")
+        print()
+
+    exit_code = 2 if failures else 0
+    if failures:
+        sys.exit(exit_code)
+
+
 def _handle_extract_option(analyzer, extract_type: str) -> None:
     """Handle --extract option with validation.
 
     Args:
         analyzer: Analyzer instance
-        extract_type: Type to extract (e.g., 'domains')
+        extract_type: Type to extract (e.g., 'domains', 'acme-roots')
 
     Exits:
         With error code 1 if extract type unknown
     """
     if extract_type == 'domains':
         _handle_domain_extraction(analyzer)
+    elif extract_type == 'acme-roots':
+        _handle_acme_roots_extraction(analyzer)
     else:
         print(f"Error: Unknown extract type '{extract_type}'", file=sys.stderr)
-        print("Supported types: domains (for nginx configs)", file=sys.stderr)
+        print("Supported types: domains, acme-roots (for nginx configs)", file=sys.stderr)
         sys.exit(1)
 
 
@@ -134,6 +212,10 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
 
     if args and getattr(args, 'extract', None):
         _handle_extract_option(analyzer, args.extract.lower())
+        return
+
+    if args and getattr(args, 'check_acl', False):
+        _handle_check_acl(analyzer)
         return
 
     if args and getattr(args, 'validate_schema', None):
