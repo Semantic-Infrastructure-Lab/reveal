@@ -1149,5 +1149,139 @@ class TestStdinBatchSSLCheck(unittest.TestCase):
         self.assertNotIn('healthy.com', output)
 
 
+# ---------------------------------------------------------------------------
+# S2: ssl://file:///path — cert file inspection
+# ---------------------------------------------------------------------------
+
+class TestSSLFileMode(unittest.TestCase):
+    """Tests for ssl://file:///path cert file inspection (S2)."""
+
+    def _make_cert_info(self, cn='file.example.com', days=90):
+        expiry = datetime.now(timezone.utc) + timedelta(days=days)
+        issue = datetime.now(timezone.utc) - timedelta(days=10)
+        return CertificateInfo(
+            subject={'commonName': cn},
+            issuer={'organizationName': 'Test CA', 'commonName': 'Test CA Root'},
+            not_before=issue,
+            not_after=expiry,
+            serial_number='AABBCC',
+            version=3,
+            san=[cn, f'www.{cn}'],
+            signature_algorithm='sha256WithRSAEncryption',
+        )
+
+    def test_parse_connection_string_file_mode(self):
+        """ssl://file:///path sets _cert_file_path and clears host."""
+        adapter = SSLAdapter.__new__(SSLAdapter)
+        adapter.host = None
+        adapter.port = 443
+        adapter.element = None
+        adapter._certificate = None
+        adapter._chain = []
+        adapter._verification = None
+        adapter._nginx_path = None
+        adapter._cert_file_path = None
+        adapter._fetcher = MagicMock()
+        adapter._parse_connection_string('ssl://file:///var/cpanel/ssl/example.com/combined')
+        assert adapter._cert_file_path == '/var/cpanel/ssl/example.com/combined'
+        assert adapter.host is None
+
+    def test_get_structure_file_mode_healthy(self):
+        """get_structure() with file cert shows file_path and HEALTHY status."""
+        cert = self._make_cert_info(days=90)
+        adapter = SSLAdapter.__new__(SSLAdapter)
+        adapter.host = None
+        adapter.port = 443
+        adapter.element = None
+        adapter._certificate = cert
+        adapter._chain = []
+        adapter._verification = None
+        adapter._nginx_path = None
+        adapter._cert_file_path = '/path/to/cert.pem'
+        adapter._fetcher = MagicMock()
+
+        result = adapter.get_structure()
+        assert result['source_type'] == 'file'
+        assert result['file_path'] == '/path/to/cert.pem'
+        assert result['health_status'] == 'HEALTHY'
+        assert result['common_name'] == 'file.example.com'
+        assert 'host' not in result
+        assert 'verification' not in result
+
+    def test_get_structure_file_mode_expired(self):
+        """Expired on-disk cert shows EXPIRED health status."""
+        cert = self._make_cert_info(days=-30)
+        adapter = SSLAdapter.__new__(SSLAdapter)
+        adapter.host = None
+        adapter.port = 443
+        adapter.element = None
+        adapter._certificate = cert
+        adapter._chain = []
+        adapter._verification = None
+        adapter._nginx_path = None
+        adapter._cert_file_path = '/path/to/expired.pem'
+        adapter._fetcher = MagicMock()
+
+        result = adapter.get_structure()
+        assert result['health_status'] == 'EXPIRED'
+        assert result['days_until_expiry'] < 0
+
+    def test_get_structure_file_mode_chain_count(self):
+        """chain_certs count is included when chain is non-empty."""
+        leaf = self._make_cert_info()
+        chain = [self._make_cert_info(cn='intermediate.ca')]
+        adapter = SSLAdapter.__new__(SSLAdapter)
+        adapter.host = None
+        adapter.port = 443
+        adapter.element = None
+        adapter._certificate = leaf
+        adapter._chain = chain
+        adapter._verification = None
+        adapter._nginx_path = None
+        adapter._cert_file_path = '/path/combined.pem'
+        adapter._fetcher = MagicMock()
+
+        result = adapter.get_structure()
+        assert result.get('chain_certs') == 1
+
+    def test_fetch_certificate_calls_load_from_file(self):
+        """_fetch_certificate() delegates to load_certificate_from_file for file mode."""
+        cert = self._make_cert_info()
+        adapter = SSLAdapter.__new__(SSLAdapter)
+        adapter.host = None
+        adapter.port = 443
+        adapter.element = None
+        adapter._certificate = None
+        adapter._chain = []
+        adapter._verification = None
+        adapter._nginx_path = None
+        adapter._cert_file_path = '/fake/cert.pem'
+        adapter._fetcher = MagicMock()
+
+        with patch('reveal.adapters.ssl.certificate.load_certificate_from_file',
+                   return_value=(cert, [])) as mock_load:
+            adapter._fetch_certificate()
+            mock_load.assert_called_once_with('/fake/cert.pem')
+            assert adapter._certificate is cert
+
+    def test_next_steps_suggest_live_check(self):
+        """File mode next_steps include a live ssl:// comparison hint."""
+        cert = self._make_cert_info(cn='example.com', days=60)
+        adapter = SSLAdapter.__new__(SSLAdapter)
+        adapter.host = None
+        adapter.port = 443
+        adapter.element = None
+        adapter._certificate = cert
+        adapter._chain = []
+        adapter._verification = None
+        adapter._nginx_path = None
+        adapter._cert_file_path = '/path/cert.pem'
+        adapter._fetcher = MagicMock()
+
+        result = adapter.get_structure()
+        steps = ' '.join(result.get('next_steps', []))
+        assert 'ssl://example.com' in steps or 'ssl://' in steps
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -856,4 +856,8 @@ def _build_analyzer_kwargs(analyzer: FileAnalyzer, args) -> Dict[str, Any]:
             if args.domain:
                 kwargs['domain'] = args.domain
 
+    # nginx-specific: --domain filters to a single server block (N3)
+    if args and hasattr(analyzer, '_filter_structure_by_domain') and getattr(args, 'domain', None):
+        kwargs['domain'] = args.domain
+
     return kwargs

@@ -788,6 +788,63 @@ def _add_remediation_for_issues(issues: Dict[str, bool], host: str) -> List[str]
     return steps
 
 
+def load_certificate_from_file(path: str) -> Tuple[CertificateInfo, List[CertificateInfo]]:
+    """Load and parse a PEM or DER certificate file from disk (S2).
+
+    Args:
+        path: Filesystem path to a .pem, .crt, .cer, or .der file.
+              cPanel combined files (/var/cpanel/ssl/apache_tls/DOMAIN/combined) are PEM.
+
+    Returns:
+        Tuple of (leaf CertificateInfo, chain list).  Chain is extracted from
+        PEM files that contain multiple certificates (combined format).
+
+    Raises:
+        FileNotFoundError: If path does not exist.
+        ValueError: If file cannot be parsed as a certificate.
+    """
+    from pathlib import Path as _Path
+    data = _Path(path).read_bytes()
+
+    # PEM may contain multiple certs (combined = leaf + chain)
+    if b'-----BEGIN CERTIFICATE-----' in data:
+        pem_blocks = []
+        current: List[bytes] = []
+        for raw_line in data.splitlines(keepends=True):
+            current.append(raw_line)
+            if b'-----END CERTIFICATE-----' in raw_line:
+                pem_blocks.append(b''.join(current))
+                current = []
+        if not pem_blocks:
+            raise ValueError(f"No PEM certificate blocks found in {path}")
+
+        certs = []
+        fetcher = SSLFetcher()
+        for block in pem_blocks:
+            try:
+                x509_cert = x509.load_pem_x509_certificate(block, default_backend())
+                cert_dict = fetcher._parse_binary_cert(
+                    x509_cert.public_bytes(
+                        __import__('cryptography.hazmat.primitives.serialization',
+                                   fromlist=['Encoding']).Encoding.DER
+                    )
+                )
+                certs.append(fetcher._parse_certificate(cert_dict))
+            except Exception as exc:
+                raise ValueError(f"Failed to parse PEM block in {path}: {exc}") from exc
+
+        return certs[0], certs[1:]
+    else:
+        # Try DER
+        try:
+            fetcher = SSLFetcher()
+            cert_dict = fetcher._parse_binary_cert(data)
+            leaf = fetcher._parse_certificate(cert_dict)
+            return leaf, []
+        except Exception as exc:
+            raise ValueError(f"Failed to parse certificate file {path}: {exc}") from exc
+
+
 def _generate_remediation_steps(checks: List[Dict[str, Any]], host: str) -> List[str]:
     """Generate remediation steps based on check results.
 

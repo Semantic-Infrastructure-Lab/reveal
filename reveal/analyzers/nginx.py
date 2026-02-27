@@ -447,7 +447,39 @@ class NginxAnalyzer(FileAnalyzer):
             result['directives'] = http_directives
         if events_directives:
             result['events_directives'] = events_directives
+
+        # N3: filter to a single domain if requested
+        domain_filter = kwargs.get('domain')
+        if domain_filter:
+            result = self._filter_structure_by_domain(result, domain_filter)
+
         return result
+
+    def _filter_structure_by_domain(self, structure: Dict[str, Any], domain: str) -> Dict[str, Any]:
+        """Return structure filtered to server blocks matching domain (N3)."""
+        all_servers = structure.get('servers', [])
+        matching = [
+            s for s in all_servers
+            if domain in s.get('domains', []) or s.get('name') == domain
+        ]
+        if not matching:
+            filtered = dict(structure)
+            filtered['servers'] = []
+            filtered['locations'] = []
+            filtered['_domain_filter'] = domain
+            filtered['_domain_not_found'] = True
+            return filtered
+
+        matching_names = {s['name'] for s in matching}
+        matching_locs = [
+            loc for loc in structure.get('locations', [])
+            if loc.get('server') in matching_names
+        ]
+        filtered = dict(structure)
+        filtered['servers'] = matching
+        filtered['locations'] = matching_locs
+        filtered['_domain_filter'] = domain
+        return filtered
 
     def extract_ssl_domains(self) -> List[str]:
         """Extract all SSL-enabled domains from nginx config.
@@ -633,6 +665,98 @@ class NginxAnalyzer(FileAnalyzer):
             })
 
         return results
+
+    def detect_location_conflicts(self) -> List[Dict[str, Any]]:
+        """Detect nginx location blocks where prefix-overlap could cause routing surprises (N2).
+
+        nginx uses longest-prefix-wins for non-regex locations, and regex locations
+        are evaluated in order. Conflicts arise when:
+          - Two non-regex locations where one is a strict prefix of the other
+            (different servers, or same server from different include files)
+          - A non-regex location and a regex location match the same prefix
+
+        Returns a list of conflict dicts:
+            server      – server_name of the affected server block
+            location_a  – {line, path} of first location
+            location_b  – {line, path} of second location
+            type        – 'prefix_overlap' or 'regex_shadows_prefix'
+            severity    – 'warning' or 'info'
+            note        – human-readable explanation
+        """
+        structure = self.get_structure()
+        locations = structure.get('locations', [])
+        conflicts: List[Dict[str, Any]] = []
+
+        # Group by server
+        from collections import defaultdict
+        by_server: Dict[str, List[Dict]] = defaultdict(list)
+        for loc in locations:
+            by_server[loc.get('server', 'unknown')].append(loc)
+
+        for server_name, locs in by_server.items():
+            # Separate regex vs non-regex
+            regex_locs = [l for l in locs if re.match(r'^~\*?\s+', l['path'])]
+            prefix_locs = [l for l in locs if not re.match(r'^~\*?\s+', l['path'])]
+
+            # Check prefix-prefix overlaps
+            for i, loc_a in enumerate(prefix_locs):
+                for loc_b in prefix_locs[i + 1:]:
+                    pa = loc_a['path'].rstrip('/')
+                    pb = loc_b['path'].rstrip('/')
+                    shorter, longer = (pa, pb) if len(pa) <= len(pb) else (pb, pa)
+                    shorter_loc = loc_a if loc_a['path'].rstrip('/') == shorter else loc_b
+                    longer_loc = loc_a if shorter_loc is loc_b else loc_b
+
+                    if shorter and longer.startswith(shorter):
+                        # Only flag if they differ (not identical paths)
+                        if shorter != longer:
+                            note = (
+                                f'"{shorter_loc["path"]}" (line {shorter_loc["line"]}) is a '
+                                f'prefix of "{longer_loc["path"]}" (line {longer_loc["line"]}) — '
+                                f'nginx picks the longer match; requests to "{shorter}/" that '
+                                f'don\'t match "{longer}" fall through to the shorter block'
+                            )
+                            conflicts.append({
+                                'server': server_name,
+                                'location_a': {'line': shorter_loc['line'], 'path': shorter_loc['path']},
+                                'location_b': {'line': longer_loc['line'], 'path': longer_loc['path']},
+                                'type': 'prefix_overlap',
+                                'severity': 'info',
+                                'note': note,
+                            })
+
+            # Check regex vs prefix conflicts
+            for rloc in regex_locs:
+                raw_pattern = re.sub(r'^~\*?\s+', '', rloc['path'])
+                for ploc in prefix_locs:
+                    prefix_path = ploc['path'].rstrip('/')
+                    if not prefix_path:
+                        continue
+                    # Check if the regex pattern could match the prefix path
+                    try:
+                        # Test both bare path and path/ so that patterns like
+                        # /static/.* match against the /static prefix location
+                        test_paths = [prefix_path, prefix_path + '/']
+                        if any(re.search(raw_pattern, tp, re.IGNORECASE) for tp in test_paths):
+                            note = (
+                                f'regex location "{rloc["path"]}" (line {rloc["line"]}) '
+                                f'may match requests also handled by prefix '
+                                f'"{ploc["path"]}" (line {ploc["line"]}) — '
+                                f'regex locations are evaluated after longest-prefix match; '
+                                f'verify intended priority'
+                            )
+                            conflicts.append({
+                                'server': server_name,
+                                'location_a': {'line': ploc['line'], 'path': ploc['path']},
+                                'location_b': {'line': rloc['line'], 'path': rloc['path']},
+                                'type': 'regex_shadows_prefix',
+                                'severity': 'warning',
+                                'note': note,
+                            })
+                    except re.error:
+                        pass  # Skip malformed regex patterns
+
+        return conflicts
 
     def _find_server_line(self, name: str) -> Optional[int]:
         """Find line number of server block with given server_name."""

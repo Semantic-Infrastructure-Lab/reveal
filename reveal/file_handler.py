@@ -160,6 +160,127 @@ def _handle_check_acl(analyzer) -> None:
         sys.exit(exit_code)
 
 
+def _handle_validate_nginx_acme(analyzer) -> None:
+    """Full ACME pipeline audit: acme root + ACL + live SSL per domain (--validate-nginx-acme)."""
+    if not hasattr(analyzer, 'extract_acme_roots'):
+        print(f"Error: --validate-nginx-acme not supported for {type(analyzer).__name__}",
+              file=sys.stderr)
+        print("This option is available for nginx config files.", file=sys.stderr)
+        sys.exit(1)
+
+    from .adapters.ssl.certificate import check_ssl_health
+
+    rows = analyzer.extract_acme_roots()
+    if not rows:
+        print("No ACME challenge location blocks found.")
+        return
+
+    # Fetch live SSL for each domain
+    results = []
+    for r in rows:
+        domain = r['domain']
+        try:
+            ssl_result = check_ssl_health(domain, warn_days=30, critical_days=7)
+            ssl_status = ssl_result.get('status', 'unknown')
+            leaf = ssl_result.get('leaf', {})
+            ssl_days = leaf.get('days_until_expiry')
+            ssl_not_after = leaf.get('not_after', '')
+        except Exception as exc:
+            ssl_status = 'error'
+            ssl_days = None
+            ssl_not_after = str(exc)[:60]
+        results.append({**r, 'ssl_status': ssl_status, 'ssl_days': ssl_days,
+                        'ssl_not_after': ssl_not_after})
+
+    col_domain = max(len(r['domain']) for r in results)
+    col_path = max(len(r['acme_path']) for r in results)
+
+    # Header
+    header = (f"  {'domain':<{col_domain}}  {'acme root path':<{col_path}}"
+              f"  {'acl':<14}  ssl status")
+    print(header)
+    print("  " + "─" * (len(header) - 2))
+
+    has_failures = False
+    for r in results:
+        acl_status = r['acl_status']
+        if acl_status == 'ok':
+            acl_col = "✅ ACL ok"
+        elif acl_status == 'denied':
+            acl_col = "❌ ACL DENIED"
+            has_failures = True
+        else:
+            acl_col = f"⚠️  ACL {acl_status}"
+
+        ssl_status = r['ssl_status']
+        if ssl_status == 'healthy':
+            days = r['ssl_days']
+            ssl_col = f"✅ {days}d"
+            if r['ssl_not_after']:
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(r['ssl_not_after'].replace('Z', '+00:00'))
+                    ssl_col += f"  ({dt.strftime('%b %d, %Y')})"
+                except (ValueError, TypeError):
+                    pass
+        elif ssl_status in ('warning', 'critical'):
+            days = r['ssl_days']
+            ssl_col = f"⚠️  expires in {days}d"
+        elif ssl_status == 'expired':
+            days = abs(r['ssl_days'] or 0)
+            ssl_col = f"❌ EXPIRED {days} days ago"
+            has_failures = True
+        elif ssl_status == 'error':
+            ssl_col = f"❌ {r['ssl_not_after']}"
+            has_failures = True
+        else:
+            ssl_col = ssl_status
+
+        print(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}"
+              f"  {acl_col:<14}  {ssl_col}")
+
+    if has_failures:
+        sys.exit(2)
+
+
+def _handle_check_conflicts(analyzer) -> None:
+    """Detect nginx location prefix overlaps and regex/prefix conflicts (N2)."""
+    if not hasattr(analyzer, 'detect_location_conflicts'):
+        print(f"Error: --check-conflicts not supported for {type(analyzer).__name__}",
+              file=sys.stderr)
+        print("This option is available for nginx config files.", file=sys.stderr)
+        sys.exit(1)
+
+    conflicts = analyzer.detect_location_conflicts()
+    if not conflicts:
+        print("✅ No location conflicts detected.")
+        return
+
+    warnings = [c for c in conflicts if c['severity'] == 'warning']
+    infos = [c for c in conflicts if c['severity'] == 'info']
+
+    if warnings:
+        print(f"⚠️  Conflicts ({len(warnings)}):")
+        for c in warnings:
+            print(f"\n  [{c['server']}]")
+            print(f"    {c['location_a']['path']}  (line {c['location_a']['line']})")
+            print(f"    {c['location_b']['path']}  (line {c['location_b']['line']})")
+            print(f"    → {c['note']}")
+        print()
+
+    if infos:
+        print(f"ℹ️  Prefix overlaps ({len(infos)}):")
+        for c in infos:
+            print(f"\n  [{c['server']}]")
+            print(f"    {c['location_a']['path']}  (line {c['location_a']['line']})")
+            print(f"    {c['location_b']['path']}  (line {c['location_b']['line']})")
+            print(f"    → {c['note']}")
+        print()
+
+    if warnings:
+        sys.exit(2)
+
+
 def _handle_extract_option(analyzer, extract_type: str) -> None:
     """Handle --extract option with validation.
 
@@ -216,6 +337,14 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
 
     if args and getattr(args, 'check_acl', False):
         _handle_check_acl(analyzer)
+        return
+
+    if args and getattr(args, 'validate_nginx_acme', False):
+        _handle_validate_nginx_acme(analyzer)
+        return
+
+    if args and getattr(args, 'check_conflicts', False):
+        _handle_check_conflicts(analyzer)
         return
 
     if args and getattr(args, 'validate_schema', None):

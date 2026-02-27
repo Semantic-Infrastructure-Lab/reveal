@@ -1618,3 +1618,177 @@ class TestCheckNobodyAccess:
         finally:
             d.chmod(0o755)
             d.rmdir()
+
+# ---------------------------------------------------------------------------
+# N3: get_structure(domain=...) — server block filter
+# ---------------------------------------------------------------------------
+
+class TestNginxDomainFilter:
+    """Tests for get_structure(domain=...) — N3 filter."""
+
+    def _make_analyzer(self, config: str):
+        f = tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False)
+        f.write(config)
+        f.close()
+        a = NginxAnalyzer(f.name)
+        os.unlink(f.name)
+        return a
+
+    _MULTI_SERVER = """
+server {
+    listen 80;
+    server_name alpha.com www.alpha.com;
+    location / { proxy_pass http://backend-a; }
+}
+server {
+    listen 80;
+    server_name beta.com;
+    location / { proxy_pass http://backend-b; }
+    location /api { proxy_pass http://api-b; }
+}
+server {
+    listen 443 ssl;
+    server_name beta.com;
+    location / { proxy_pass http://backend-b-ssl; }
+}
+"""
+
+    def test_domain_filter_returns_only_matching_server(self):
+        """Filtering by 'alpha.com' returns only alpha server block."""
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(domain='alpha.com')
+        servers = structure['servers']
+        assert len(servers) == 1
+        assert servers[0]['name'] == 'alpha.com'
+
+    def test_domain_filter_returns_matching_locations(self):
+        """Locations are filtered to only those in the matching server block."""
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(domain='beta.com')
+        location_servers = {loc['server'] for loc in structure['locations']}
+        assert 'alpha.com' not in location_servers
+        assert 'beta.com' in location_servers
+
+    def test_domain_filter_matches_alias(self):
+        """Filtering by an alias in server_name (www.alpha.com) resolves correctly."""
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(domain='www.alpha.com')
+        servers = structure['servers']
+        assert len(servers) == 1
+        assert 'www.alpha.com' in servers[0]['domains']
+
+    def test_domain_filter_multiple_server_blocks_same_name(self):
+        """Two server blocks for beta.com (80 + 443) are both returned."""
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(domain='beta.com')
+        assert len(structure['servers']) == 2
+
+    def test_domain_filter_no_match_returns_empty(self):
+        """Non-existent domain returns empty servers and locations."""
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(domain='nothere.com')
+        assert structure['servers'] == []
+        assert structure['locations'] == []
+        assert structure.get('_domain_not_found') is True
+
+    def test_no_domain_filter_returns_all(self):
+        """Without domain kwarg, all server blocks are returned."""
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure()
+        assert len(structure['servers']) == 3
+
+
+# ---------------------------------------------------------------------------
+# N2: detect_location_conflicts()
+# ---------------------------------------------------------------------------
+
+class TestNginxLocationConflicts:
+    """Tests for detect_location_conflicts() — N2."""
+
+    def _make_analyzer(self, config: str):
+        f = tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False)
+        f.write(config)
+        f.close()
+        a = NginxAnalyzer(f.name)
+        os.unlink(f.name)
+        return a
+
+    def test_no_conflicts_clean_config(self):
+        """Config with non-overlapping locations has no conflicts."""
+        config = """
+server {
+    server_name example.com;
+    location / { proxy_pass http://backend; }
+    location /static { proxy_pass http://static; }
+    location /api/v1 { proxy_pass http://api; }
+}
+"""
+        # /static and /api/v1 are independent prefixes (neither is prefix of the other)
+        # / is a prefix of both, but that's expected nginx catch-all behaviour — low severity
+        conflicts = self._make_analyzer(config).detect_location_conflicts()
+        # / is a prefix of /static and /api/v1 → info, not warning
+        warnings = [c for c in conflicts if c['severity'] == 'warning']
+        assert warnings == []
+
+    def test_prefix_overlap_detected(self):
+        """Two non-regex locations where one is a strict prefix of the other."""
+        config = """
+server {
+    server_name example.com;
+    location /.well-known/acme-challenge/ { root /home/a/pub; }
+    location /.well-known { proxy_pass http://backend; }
+}
+"""
+        conflicts = self._make_analyzer(config).detect_location_conflicts()
+        assert len(conflicts) >= 1
+        types = {c['type'] for c in conflicts}
+        assert 'prefix_overlap' in types
+
+    def test_regex_conflict_detected(self):
+        """Regex location that could match a prefix location is flagged."""
+        config = """
+server {
+    server_name example.com;
+    location /static { root /var/www; }
+    location ~ /static/.* { root /var/cache; }
+}
+"""
+        conflicts = self._make_analyzer(config).detect_location_conflicts()
+        types = {c['type'] for c in conflicts}
+        assert 'regex_shadows_prefix' in types
+
+    def test_conflict_includes_server_name(self):
+        """Conflict records include the server_name for context."""
+        config = """
+server {
+    server_name mysite.com;
+    location /app { proxy_pass http://app; }
+    location /app/health { proxy_pass http://health; }
+}
+"""
+        conflicts = self._make_analyzer(config).detect_location_conflicts()
+        assert any(c['server'] == 'mysite.com' for c in conflicts)
+
+    def test_conflict_includes_line_numbers(self):
+        """Conflict records include line numbers for both locations."""
+        config = """
+server {
+    server_name example.com;
+    location /foo { proxy_pass http://a; }
+    location /foo/bar { proxy_pass http://b; }
+}
+"""
+        conflicts = self._make_analyzer(config).detect_location_conflicts()
+        prefix_conflicts = [c for c in conflicts if c['type'] == 'prefix_overlap']
+        assert len(prefix_conflicts) >= 1
+        c = prefix_conflicts[0]
+        assert 'line' in c['location_a']
+        assert 'line' in c['location_b']
+
+    def test_identical_paths_not_flagged(self):
+        """Two location blocks with identical paths are not flagged as prefix overlap."""
+        config = """
+server {
+    server_name example.com;
+    location /api { proxy_pass http://a; }
+    location /api { proxy_pass http://b; }
+}
+"""
+        conflicts = self._make_analyzer(config).detect_location_conflicts()
+        prefix_conflicts = [c for c in conflicts if c['type'] == 'prefix_overlap']
+        # identical paths stripped of / are equal → not flagged (only strict prefixes flagged)
+        assert prefix_conflicts == []

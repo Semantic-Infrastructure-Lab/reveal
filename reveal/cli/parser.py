@@ -269,7 +269,7 @@ def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--link-type', choices=['internal', 'external', 'email', 'all'],
                         help='Filter links by type (requires --links)')
     parser.add_argument('--domain', type=str,
-                        help='Filter links by domain (requires --links)')
+                        help='Filter links by domain (requires --links); for nginx configs, filter output to the matching server block')
     parser.add_argument('--code', action='store_true',
                         help='Extract code blocks from markdown files')
     parser.add_argument('--language', type=str,
@@ -366,6 +366,10 @@ def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
                         help='Extract specific data for piping (nginx: "domains" extracts SSL domains as ssl:// URIs; "acme-roots" extracts ACME challenge roots with nobody ACL status)')
     parser.add_argument('--check-acl', action='store_true', dest='check_acl',
                         help='Check nobody user ACL access for all root directives (nginx only)')
+    parser.add_argument('--validate-nginx-acme', action='store_true', dest='validate_nginx_acme',
+                        help='Full ACME pipeline audit: per-domain table of acme root path, nobody ACL status, and live SSL cert status (nginx only)')
+    parser.add_argument('--check-conflicts', action='store_true', dest='check_conflicts',
+                        help='Detect nginx location block prefix overlaps and regex/prefix conflicts (nginx only)')
 
 
 def create_argument_parser(version: str) -> argparse.ArgumentParser:

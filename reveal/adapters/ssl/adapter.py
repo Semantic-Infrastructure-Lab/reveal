@@ -198,6 +198,7 @@ class SSLAdapter(ResourceAdapter):
         self._verification: Optional[Dict[str, Any]] = None
         self._fetcher = SSLFetcher()
         self._nginx_path: Optional[str] = None  # For ssl://nginx:///path mode
+        self._cert_file_path: Optional[str] = None  # For ssl://file:///path mode
 
         self._parse_connection_string(connection_string)
 
@@ -221,6 +222,12 @@ class SSLAdapter(ResourceAdapter):
             self.host = None  # Indicates batch mode
             return
 
+        # Check for file:// syntax (ssl://file:///path/to/cert) — S2
+        if uri.startswith("file://"):
+            self._cert_file_path = uri[7:]  # Remove file:// → /path/to/cert
+            self.host = None
+            return
+
         # Split host:port from element
         parts = uri.split('/', 1)
         host_port = parts[0]
@@ -241,8 +248,14 @@ class SSLAdapter(ResourceAdapter):
             raise ValueError("SSL URI requires hostname: ssl://example.com")
 
     def _fetch_certificate(self) -> None:
-        """Fetch certificate if not already fetched."""
-        if self._certificate is None and self.host:
+        """Fetch certificate if not already fetched (network or file)."""
+        if self._certificate is not None:
+            return
+        if self._cert_file_path:
+            from .certificate import load_certificate_from_file
+            self._certificate, self._chain = load_certificate_from_file(self._cert_file_path)
+            self._verification = None  # no network verification for file certs
+        elif self.host:
             (
                 self._certificate,
                 self._chain,
@@ -305,9 +318,14 @@ class SSLAdapter(ResourceAdapter):
         self._fetch_certificate()
         cert = self._certificate
 
+        is_file_mode = bool(self._cert_file_path)
+        source_uri = (f'ssl://file://{self._cert_file_path}' if is_file_mode
+                      else f'ssl://{self.host}')
+
         if not cert:
             return {'contract_version': '1.0', 'type': 'ssl_certificate',
-                    'source': f'ssl://{self.host}', 'source_type': 'network',
+                    'source': source_uri,
+                    'source_type': 'file' if is_file_mode else 'network',
                     'error': 'Failed to fetch certificate'}
 
         # Determine health status
@@ -327,18 +345,25 @@ class SSLAdapter(ResourceAdapter):
 
         # Build next steps
         next_steps = []
-        if self.element is None:
+        if is_file_mode:
+            file_uri = f'ssl://file://{self._cert_file_path}'
+            next_steps.append(f"reveal {file_uri}/san  # View all SANs")
+            next_steps.append(f"reveal {file_uri}/chain  # View cert chain")
+            if cert.san:
+                primary = cert.san[0].lstrip('*').lstrip('.')
+                next_steps.append(
+                    f"reveal ssl://{primary} --check  # Compare with live cert"
+                )
+        elif self.element is None:
             next_steps.append(f"reveal ssl://{self.host}/san  # View all domain names")
             next_steps.append(f"reveal ssl://{self.host}/issuer  # Issuer details")
             next_steps.append(f"reveal ssl://{self.host} --check  # Run health checks")
 
-        return {
+        result = {
             'contract_version': '1.0',
             'type': 'ssl_certificate',
-            'source': f'ssl://{self.host}',
-            'source_type': 'network',
-            'host': self.host,
-            'port': self.port,
+            'source': source_uri,
+            'source_type': 'file' if is_file_mode else 'network',
             'common_name': cert.common_name,
             'issuer': cert.issuer_name,
             'valid_from': cert.not_before.strftime('%Y-%m-%d'),
@@ -347,13 +372,22 @@ class SSLAdapter(ResourceAdapter):
             'health_status': health_status,
             'health_icon': health_icon,
             'san_count': len(cert.san),
-            'verification': {
+            'next_steps': next_steps,
+        }
+        if is_file_mode:
+            result['file_path'] = self._cert_file_path
+            chain_count = len(self._chain)
+            if chain_count:
+                result['chain_certs'] = chain_count
+        else:
+            result['host'] = self.host
+            result['port'] = self.port
+            result['verification'] = {
                 'chain_valid': self._verification.get('verified', False) if self._verification else False,
                 'hostname_match': self._verification.get('hostname_match', False) if self._verification else False,
                 'error': self._verification.get('error') if self._verification else None,
-            },
-            'next_steps': next_steps,
-        }
+            }
+        return result
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get specific certificate element.
