@@ -160,13 +160,15 @@ def _handle_check_acl(analyzer) -> None:
         sys.exit(exit_code)
 
 
-def _handle_validate_nginx_acme(analyzer) -> None:
+def _handle_validate_nginx_acme(analyzer, args=None) -> None:
     """Full ACME pipeline audit: acme root + ACL + live SSL per domain (--validate-nginx-acme)."""
     if not hasattr(analyzer, 'extract_acme_roots'):
         print(f"Error: --validate-nginx-acme not supported for {type(analyzer).__name__}",
               file=sys.stderr)
         print("This option is available for nginx config files.", file=sys.stderr)
         sys.exit(1)
+
+    only_failures = getattr(args, 'only_failures', False)
 
     from .adapters.ssl.certificate import check_ssl_health
 
@@ -202,8 +204,10 @@ def _handle_validate_nginx_acme(analyzer) -> None:
     print("  " + "─" * (len(header) - 2))
 
     has_failures = False
+    printed = 0
     for r in results:
         acl_status = r['acl_status']
+        is_acl_failure = acl_status in ('denied', 'not_found')
         if acl_status == 'ok':
             acl_col = "✅ ACL ok"
         elif acl_status == 'denied':
@@ -213,6 +217,7 @@ def _handle_validate_nginx_acme(analyzer) -> None:
             acl_col = f"⚠️  ACL {acl_status}"
 
         ssl_status = r['ssl_status']
+        is_ssl_failure = ssl_status in ('expired', 'error')
         if ssl_status == 'healthy':
             days = r['ssl_days']
             ssl_col = f"✅ {days}d"
@@ -236,8 +241,15 @@ def _handle_validate_nginx_acme(analyzer) -> None:
         else:
             ssl_col = ssl_status
 
+        if only_failures and not (is_acl_failure or is_ssl_failure):
+            continue
+
         print(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}"
               f"  {acl_col:<14}  {ssl_col}")
+        printed += 1
+
+    if only_failures and printed == 0:
+        print("✅ No failures found.")
 
     if has_failures:
         sys.exit(2)
@@ -573,7 +585,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         return
 
     if args and getattr(args, 'validate_nginx_acme', False):
-        _handle_validate_nginx_acme(analyzer)
+        _handle_validate_nginx_acme(analyzer, args)
         return
 
     if args and getattr(args, 'check_conflicts', False):

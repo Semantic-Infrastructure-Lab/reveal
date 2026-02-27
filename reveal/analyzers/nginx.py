@@ -520,7 +520,7 @@ class NginxAnalyzer(FileAnalyzer):
             line = self.lines[j - 1].strip()
             m = re.match(r'^(?:root|alias)\s+(.*?)\s*;', line)
             if m:
-                return m.group(1)
+                return m.group(1).strip('"\'')
             if line == '}':
                 break
         return None
@@ -533,7 +533,7 @@ class NginxAnalyzer(FileAnalyzer):
             depth += line.count('{') - line.count('}')
             m = re.match(r'^root\s+(.*?)\s*;', line)
             if m and depth == 1:
-                return m.group(1)
+                return m.group(1).strip('"\'')
             if depth <= 0 and j > server_line:
                 break
         return None

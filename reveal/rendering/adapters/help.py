@@ -406,7 +406,7 @@ def _render_help_detail_header(scheme: str, data: Dict[str, Any]) -> None:
     """Render help header with scheme, description, and metadata for detail mode."""
     # Stability classification
     stable_adapters = {'help', 'env', 'ast', 'python', 'reveal'}
-    beta_adapters = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git'}
+    beta_adapters = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git', 'cpanel'}
 
     stability = "Stable 🟢" if scheme in stable_adapters else "Beta 🟡" if scheme in beta_adapters else "Experimental 🔴"
 

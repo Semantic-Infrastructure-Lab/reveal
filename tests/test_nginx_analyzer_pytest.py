@@ -2212,3 +2212,163 @@ server {
         with pytest.raises(SystemExit) as exc_info:
             _handle_diagnose(a, log_path='/some/log.log')
         assert exc_info.value.code == 1
+
+
+class TestQuotedRootPaths:
+    """B1 — _parse_location_root and _parse_server_root strip quotes from cPanel configs."""
+
+    def _make_analyzer(self, config_text: str, tmp_path=None):
+        import tempfile, os
+        from reveal.analyzers.nginx import NginxAnalyzer
+        if tmp_path is None:
+            tmp_path = tempfile.mkdtemp()
+        path = os.path.join(str(tmp_path), 'nginx.conf')
+        with open(path, 'w') as f:
+            f.write(config_text)
+        return NginxAnalyzer(path)
+
+    _ACL_OK = {'status': 'ok', 'message': 'ok', 'failing_path': None}
+
+    def test_location_root_unquoted(self, tmp_path, monkeypatch):
+        """Unquoted root still works."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
+                            lambda p: self._ACL_OK)
+        config = """
+server {
+    server_name example.com;
+    location /.well-known/acme-challenge/ {
+        root /home/example/public_html;
+    }
+}
+"""
+        rows = self._make_analyzer(config, tmp_path).extract_acme_roots()
+        assert rows[0]['acme_path'] == '/home/example/public_html'
+
+    def test_location_root_double_quoted(self, tmp_path, monkeypatch):
+        """cPanel-style double-quoted root path is unquoted."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
+                            lambda p: self._ACL_OK)
+        config = """
+server {
+    server_name example.com;
+    location /.well-known/acme-challenge/ {
+        root "/home/example/public_html";
+    }
+}
+"""
+        rows = self._make_analyzer(config, tmp_path).extract_acme_roots()
+        assert rows[0]['acme_path'] == '/home/example/public_html'
+
+    def test_server_root_double_quoted(self, tmp_path, monkeypatch):
+        """cPanel-style double-quoted server-level root is unquoted."""
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
+                            lambda p: self._ACL_OK)
+        config = """
+server {
+    server_name example.com;
+    root "/home/example/public_html";
+    location /.well-known/acme-challenge/ {
+    }
+}
+"""
+        rows = self._make_analyzer(config, tmp_path).extract_acme_roots()
+        assert rows[0]['acme_path'] == '/home/example/public_html'
+
+    def test_acl_checked_on_unquoted_path(self, tmp_path, monkeypatch):
+        """ACL check receives the unquoted path (no quotes → Path() resolves correctly)."""
+        checked_paths = []
+        def capture_acl(path):
+            checked_paths.append(path)
+            return {'status': 'ok', 'message': 'ok', 'failing_path': None}
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', capture_acl)
+        config = """
+server {
+    server_name example.com;
+    location /.well-known/acme-challenge/ {
+        root "/home/example/public_html";
+    }
+}
+"""
+        self._make_analyzer(config, tmp_path).extract_acme_roots()
+        assert checked_paths, "ACL check was not called"
+        assert '"' not in checked_paths[0], f"Path still has quotes: {checked_paths[0]}"
+        assert checked_paths[0] == '/home/example/public_html'
+
+
+class TestValidateNginxAcmeOnlyFailures:
+    """U3 — --validate-nginx-acme respects --only-failures."""
+
+    def _make_analyzer(self, config_text: str, tmp_path):
+        from reveal.analyzers.nginx import NginxAnalyzer
+        path = tmp_path / 'nginx.conf'
+        path.write_text(config_text)
+        return NginxAnalyzer(str(path))
+
+    def _make_args(self, only_failures=False):
+        import argparse
+        args = argparse.Namespace()
+        args.only_failures = only_failures
+        return args
+
+    CONFIG = """
+server {
+    server_name ok.com;
+    location /.well-known/acme-challenge/ {
+        root /home/ok/public_html;
+    }
+}
+server {
+    server_name fail.com;
+    location /.well-known/acme-challenge/ {
+        root /home/fail/public_html;
+    }
+}
+"""
+
+    _ACL_OK = {'status': 'ok', 'message': 'ok', 'failing_path': None}
+    _ACL_DENIED = {'status': 'denied', 'message': 'denied', 'failing_path': '/some/path'}
+
+    def test_without_only_failures_shows_all(self, tmp_path, monkeypatch, capsys):
+        """Without --only-failures, all rows are printed."""
+        def fake_ssl(domain, **_):
+            return {'status': 'healthy', 'leaf': {'days_until_expiry': 90, 'not_after': ''}}
+        def fake_acl(path):
+            return self._ACL_OK if 'ok' in path else self._ACL_DENIED
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', fake_acl)
+        monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
+        from reveal.file_handler import _handle_validate_nginx_acme
+        a = self._make_analyzer(self.CONFIG, tmp_path)
+        with pytest.raises(SystemExit):
+            _handle_validate_nginx_acme(a, self._make_args(only_failures=False))
+        out = capsys.readouterr().out
+        assert 'ok.com' in out
+        assert 'fail.com' in out
+
+    def test_only_failures_hides_ok_rows(self, tmp_path, monkeypatch, capsys):
+        """With --only-failures, passing rows are suppressed."""
+        def fake_ssl(domain, **_):
+            return {'status': 'healthy', 'leaf': {'days_until_expiry': 90, 'not_after': ''}}
+        def fake_acl(path):
+            return self._ACL_OK if 'ok' in path else self._ACL_DENIED
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', fake_acl)
+        monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
+        from reveal.file_handler import _handle_validate_nginx_acme
+        a = self._make_analyzer(self.CONFIG, tmp_path)
+        with pytest.raises(SystemExit):
+            _handle_validate_nginx_acme(a, self._make_args(only_failures=True))
+        out = capsys.readouterr().out
+        assert 'ok.com' not in out
+        assert 'fail.com' in out
+
+    def test_only_failures_all_pass_prints_clean_message(self, tmp_path, monkeypatch, capsys):
+        """With --only-failures, if nothing fails, prints clean message instead of empty output."""
+        def fake_ssl(domain, **_):
+            return {'status': 'healthy', 'leaf': {'days_until_expiry': 90, 'not_after': ''}}
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
+                            lambda p: self._ACL_OK)
+        monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
+        from reveal.file_handler import _handle_validate_nginx_acme
+        a = self._make_analyzer(self.CONFIG, tmp_path)
+        _handle_validate_nginx_acme(a, self._make_args(only_failures=True))
+        out = capsys.readouterr().out
+        assert 'No failures' in out or '✅' in out

@@ -226,7 +226,7 @@ class CpanelAdapter(ResourceAdapter):
         ]
         if nginx_present:
             next_steps.append(
-                f"reveal nginx:///{nginx_conf} --validate-nginx-acme"
+                f"reveal {nginx_conf} --validate-nginx-acme"
                 f"  # Full ACME audit"
             )
 
@@ -283,7 +283,7 @@ class CpanelAdapter(ResourceAdapter):
             'certs': certs,
             'next_steps': [
                 f"reveal cpanel://{self.username}/acl-check  # Check docroot ACL",
-                f"reveal nginx:///{os.path.join(NGINX_USER_CONF_DIR, self.username + '.conf')}"
+                f"reveal {os.path.join(NGINX_USER_CONF_DIR, self.username + '.conf')}"
                 f" --cpanel-certs  # Compare disk vs live",
             ],
         }
@@ -327,7 +327,7 @@ class CpanelAdapter(ResourceAdapter):
             'domains': acl_results,
             'next_steps': [
                 f"reveal cpanel://{self.username}/ssl  # Check cert status",
-                f"reveal nginx:///{os.path.join(NGINX_USER_CONF_DIR, self.username + '.conf')}"
+                f"reveal {os.path.join(NGINX_USER_CONF_DIR, self.username + '.conf')}"
                 f" --check-acl  # Full nginx ACL check",
             ],
         }
@@ -342,7 +342,7 @@ class CpanelAdapter(ResourceAdapter):
         return {
             'name': 'cpanel',
             'description': 'Inspect cPanel user environments — domains, SSL certs, ACL health',
-            'stability': 'experimental',
+            'stability': 'beta',
             'syntax': 'cpanel://USERNAME[/element]',
             'features': [
                 'Filesystem-based — no WHM API or credentials required',
@@ -389,23 +389,24 @@ class CpanelAdapter(ResourceAdapter):
                         'reveal cpanel://USERNAME                    # Overview',
                         'reveal cpanel://USERNAME/acl-check          # ACL health',
                         'reveal cpanel://USERNAME/ssl                # Disk cert health',
-                        'reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme  # Composed audit',
-                        'reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs         # Disk vs live',
-                        'reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --diagnose             # Error log audit',
+                        'reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme  # Composed audit',
+                        'reveal /etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs         # Disk vs live',
+                        'reveal /etc/nginx/conf.d/users/USERNAME.conf --diagnose             # Error log audit',
                     ],
                 },
             ],
             'notes': [
                 'Must run as root or with read access to /var/cpanel/userdata/',
                 'All operations are filesystem-based — no WHM API or network access',
-                'Pairs with nginx:// commands for full operator workflows',
+                'nginx commands use plain file paths (e.g. reveal /etc/nginx/conf.d/users/USERNAME.conf)',
                 'Use --validate-nginx-acme for the single-command "would have caught this" audit',
+                'cpanel ACL check is filesystem-based (authoritative); nginx ACME audit also verifies config routing — use both',
             ],
             'see_also': [
                 'reveal help://ssl - SSL certificate inspection',
-                'reveal nginx:///path/user.conf --check-acl - N1 ACL check',
-                'reveal nginx:///path/user.conf --validate-nginx-acme - Full ACME+ACL+SSL audit',
-                'reveal nginx:///path/user.conf --cpanel-certs - Disk vs live cert compare',
-                'reveal nginx:///path/user.conf --diagnose - Error log ACME/SSL audit',
+                'reveal /etc/nginx/conf.d/users/USERNAME.conf --check-acl - N1 ACL check',
+                'reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme - Full ACME+ACL+SSL audit',
+                'reveal /etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs - Disk vs live cert compare',
+                'reveal /etc/nginx/conf.d/users/USERNAME.conf --diagnose - Error log ACME/SSL audit',
             ],
         }
