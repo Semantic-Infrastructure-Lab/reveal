@@ -217,7 +217,7 @@ echo
 info "Creating GitHub release..."
 
 # Extract CHANGELOG section for this version
-CHANGELOG_SECTION=$(awk "/## \[?$NEW_VERSION\]?/,/## \[?[0-9]/" CHANGELOG.md | sed '1d;$d' | sed '/^$/d')
+CHANGELOG_SECTION=$(awk "/## \[?${NEW_VERSION//./\\.}\]?/{found=1; next} found && /## \[/{exit} found{print}" CHANGELOG.md)
 
 if [ -z "$CHANGELOG_SECTION" ]; then
     warn "Could not extract CHANGELOG section for v$NEW_VERSION"
