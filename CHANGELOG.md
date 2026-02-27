@@ -12,6 +12,17 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added (session tropical-sleet-0227)
+- **ssl: S1 — batch failure detail** — `--batch --check` now shows failure reason inline: expired certs show `EXPIRED N days ago (Mon DD, YYYY)`, connection errors classified as `DNS FAILURE (NXDOMAIN)`, `CONNECTION REFUSED`, `TIMEOUT`, `NETWORK UNREACHABLE`, `CERT VERIFY FAILED`. All rows column-aligned to max hostname width. Eliminates follow-up loop per domain.
+- **ssl: S5 — expiry dates in batch output** — warnings show `expires in N days  (Mon DD, YYYY)`, healthy domains show `N days  (Mon DD, YYYY)`. Date derived from `not_after` field, no extra request needed.
+- **nginx: N1 — `--check-acl`** — checks that the `nobody` user has read+execute access to every `root` directive in the config. Checks standard Unix `other` permission bits on each path component; falls back to `getfacl` for ACL entries. Deduplicates paths; exits 2 on any failure.
+- **nginx: N4 — `--extract acme-roots`** — finds `/.well-known/acme-challenge` location blocks, resolves the root path (location-level or server-level fallback), runs nobody ACL check on each. Outputs aligned table: `domain → acme root path → ACL status`. The "SSL audit for cPanel nginx" command — would have identified the Feb 2026 Sociamonials incident in one command.
+
+### Fixed (session tropical-sleet-0227)
+- **release script: CHANGELOG extractor** — awk range pattern had two bugs: unescaped dots in version number matched any character, causing the range end to collide with the start line (empty output). New approach: `found=1; next` skips header, prints body, exits on next `## [`.
+
 ## [0.53.0] - 2026-02-27
 
 ### Added (session revodoku-0227)
