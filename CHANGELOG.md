@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (session meteoric-armada-0227)
+- **nginx: N3 — `--domain` filter** — `reveal nginx:///path/user.conf --domain DOMAIN` filters output to only the server block(s) matching DOMAIN, including all server_name aliases. Essential for navigating 1,500-line cPanel user configs with one block per domain. Passes as `get_structure(domain=...)` kwarg; no extra request.
+- **nginx: N2 — `--check-conflicts`** — detects location block routing surprises: `prefix_overlap` (one non-regex location is a strict prefix of another) and `regex_shadows_prefix` (a regex location pattern can match a prefix location's path). Groups by server block, includes line numbers and human-readable explanations. Exit 2 on regex conflicts; info-only for prefix overlaps.
+- **ssl: S2 — cert file inspection** — `reveal ssl://file:///var/cpanel/ssl/apache_tls/DOMAIN/combined` loads and inspects an on-disk PEM or DER certificate without a live connection. PEM combined files (leaf + chain) are split; chain count surfaced. Same health/expiry/SAN display as live cert. Next steps suggest `reveal ssl://DOMAIN --check` for disk-vs-live comparison.
+- **nginx: `--validate-nginx-acme`** — composed audit command: per-domain table of ACME root path + nobody ACL status + live SSL certificate status in one invocation. Chains `extract_acme_roots()` (N4) with `check_ssl_health()` per domain. Exit 2 on any ACL failure or SSL expiry. The single command that would have caught and explained the Feb 2026 Sociamonials incident.
+
 ### Added (session tropical-sleet-0227)
 - **ssl: S1 — batch failure detail** — `--batch --check` now shows failure reason inline: expired certs show `EXPIRED N days ago (Mon DD, YYYY)`, connection errors classified as `DNS FAILURE (NXDOMAIN)`, `CONNECTION REFUSED`, `TIMEOUT`, `NETWORK UNREACHABLE`, `CERT VERIFY FAILED`. All rows column-aligned to max hostname width. Eliminates follow-up loop per domain.
 - **ssl: S5 — expiry dates in batch output** — warnings show `expires in N days  (Mon DD, YYYY)`, healthy domains show `N days  (Mon DD, YYYY)`. Date derived from `not_after` field, no extra request needed.
