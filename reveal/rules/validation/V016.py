@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
+from .utils import find_reveal_root, is_dev_checkout
 
 
 class V016(BaseRule):
@@ -55,6 +56,10 @@ class V016(BaseRule):
         Returns:
             List of detections for adapters missing help
         """
+        # When called via reveal reveal:// --check, do self-scan of all adapter files
+        if file_path.startswith('reveal://'):
+            return self._check_reveal_adapters()
+
         # Only check Python files in adapters/ directory
         if not file_path.endswith('.py'):
             return []
@@ -153,3 +158,66 @@ class V016(BaseRule):
                 return True
 
         return False
+
+    def _check_reveal_adapters(self) -> List[Detection]:
+        """Scan all reveal adapter files when called via reveal:// --check.
+
+        V016 is normally a per-file rule but `reveal reveal:// --check` calls
+        check_file() once with path="reveal://" and no content. This method
+        handles that case by discovering and checking all adapter Python files
+        directly, so V016 fires correctly from self-check.
+        """
+        reveal_root = find_reveal_root()
+        if not reveal_root or not is_dev_checkout(reveal_root):
+            return []
+
+        from ...registry import get_analyzer
+
+        adapters_dir = reveal_root / 'adapters'
+        if not adapters_dir.exists():
+            return []
+
+        detections: List[Detection] = []
+
+        for py_file in sorted(adapters_dir.rglob('*.py')):
+            # Skip __init__.py and base.py (same logic as check())
+            if py_file.name in ('__init__.py', 'base.py'):
+                continue
+
+            file_path_str = str(py_file)
+
+            try:
+                content = py_file.read_text(encoding='utf-8', errors='replace')
+                analyzer_class = get_analyzer(file_path_str, allow_fallback=False)
+                if not analyzer_class:
+                    continue
+                analyzer = analyzer_class(file_path_str)
+                structure = analyzer.get_structure()
+            except Exception:
+                continue
+
+            if not self._is_adapter_file(structure, content):
+                continue
+            if self._has_get_help_implementation(structure, content):
+                continue
+
+            # Use path relative to project root for readable output
+            try:
+                display_path = str(py_file.relative_to(reveal_root.parent))
+            except ValueError:
+                display_path = file_path_str
+
+            detections.append(self.create_detection(
+                display_path, 1,
+                message="Adapter missing get_help() implementation",
+                suggestion=(
+                    "Add @staticmethod get_help() method returning Dict with:\n"
+                    "  - name: str (adapter scheme)\n"
+                    "  - description: str (one-line summary)\n"
+                    "  - examples: List[Dict] (usage examples)\n"
+                    "  - syntax: str (URI pattern)\n"
+                    "See reveal/adapters/python/adapter.py for reference"
+                )
+            ))
+
+        return detections

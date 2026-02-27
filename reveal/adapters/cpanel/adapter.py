@@ -335,3 +335,77 @@ class CpanelAdapter(ResourceAdapter):
     def get_element(self, element_type: str, name: str = '') -> Optional[Dict[str, Any]]:
         """Not used — element routing handled in get_structure."""
         return None
+
+    @staticmethod
+    def get_help() -> Dict[str, Any]:
+        """Help documentation for the cpanel:// adapter."""
+        return {
+            'name': 'cpanel',
+            'description': 'Inspect cPanel user environments — domains, SSL certs, ACL health',
+            'stability': 'experimental',
+            'syntax': 'cpanel://USERNAME[/element]',
+            'features': [
+                'Filesystem-based — no WHM API or credentials required',
+                'Overview: domain count, SSL summary, nginx config path',
+                'Domain listing with docroots and type (addon/subdomain/main)',
+                'Disk cert health from /var/cpanel/ssl/apache_tls/ (S2)',
+                'nobody ACL check on every domain docroot (N1)',
+                'JSON output for scripting',
+                'Composable with nginx:// commands for full operator audits',
+            ],
+            'examples': [
+                {
+                    'uri': 'reveal cpanel://USERNAME',
+                    'description': 'Overview: domain count, SSL summary, nginx config path',
+                },
+                {
+                    'uri': 'reveal cpanel://USERNAME/domains',
+                    'description': 'All domains with docroots and type (addon/subdomain/main)',
+                },
+                {
+                    'uri': 'reveal cpanel://USERNAME/ssl',
+                    'description': 'Disk cert health per SSL domain',
+                },
+                {
+                    'uri': 'reveal cpanel://USERNAME/acl-check',
+                    'description': 'nobody ACL check on every domain docroot (required for ACME renewal)',
+                },
+                {
+                    'uri': 'reveal cpanel://USERNAME/ssl --format=json',
+                    'description': 'JSON output for scripting',
+                },
+            ],
+            'elements': {
+                '(none)': 'Overview: domain count, SSL summary, nginx config path',
+                'domains': 'All addon/subdomain domains with docroots and type',
+                'ssl': 'Disk cert health per domain from /var/cpanel/ssl/apache_tls/',
+                'acl-check': 'nobody ACL status on every domain docroot',
+            },
+            'workflows': [
+                {
+                    'name': 'Full cPanel User SSL Audit',
+                    'description': 'Complete SSL and ACL health check for a user',
+                    'steps': [
+                        'reveal cpanel://USERNAME                    # Overview',
+                        'reveal cpanel://USERNAME/acl-check          # ACL health',
+                        'reveal cpanel://USERNAME/ssl                # Disk cert health',
+                        'reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme  # Composed audit',
+                        'reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs         # Disk vs live',
+                        'reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --diagnose             # Error log audit',
+                    ],
+                },
+            ],
+            'notes': [
+                'Must run as root or with read access to /var/cpanel/userdata/',
+                'All operations are filesystem-based — no WHM API or network access',
+                'Pairs with nginx:// commands for full operator workflows',
+                'Use --validate-nginx-acme for the single-command "would have caught this" audit',
+            ],
+            'see_also': [
+                'reveal help://ssl - SSL certificate inspection',
+                'reveal nginx:///path/user.conf --check-acl - N1 ACL check',
+                'reveal nginx:///path/user.conf --validate-nginx-acme - Full ACME+ACL+SSL audit',
+                'reveal nginx:///path/user.conf --cpanel-certs - Disk vs live cert compare',
+                'reveal nginx:///path/user.conf --diagnose - Error log ACME/SSL audit',
+            ],
+        }

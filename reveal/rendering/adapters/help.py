@@ -410,6 +410,19 @@ def _render_help_detail_header(scheme: str, data: Dict[str, Any]) -> None:
 
     stability = "Stable 🟢" if scheme in stable_adapters else "Beta 🟡" if scheme in beta_adapters else "Experimental 🔴"
 
+    # File-based analyzers have a different type label
+    adapter_type = data.get('type', '')
+    if adapter_type == 'file_analyzer':
+        print(f"# {scheme} - {data.get('description', '')}")
+        print()
+        note = data.get('note', '')
+        if note:
+            print(f"**Note:** {note}")
+            print()
+        print(f"**Access:** reveal help://{scheme}")
+        print()
+        return
+
     print(f"# {scheme}:// - {data.get('description', '')}")
     print()
     print(f"**Source:** {scheme}.py adapter (dynamic)")

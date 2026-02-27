@@ -261,6 +261,12 @@ class HelpAdapter(ResourceAdapter):
         if topic in _ADAPTER_REGISTRY:
             return self._get_adapter_help(topic)
 
+        # Check if it's a known file-based analyzer (not a URI adapter)
+        # Return focused inline help rather than failing with "not found"
+        file_analyzer_help = self._get_file_analyzer_help(topic)
+        if file_analyzer_help is not None:
+            return file_analyzer_help
+
         return None
 
     def _validate_section_name(
@@ -425,6 +431,46 @@ class HelpAdapter(ResourceAdapter):
             adapters.append(info)
 
         return sorted(adapters, key=lambda x: x['scheme'])
+
+    def _get_file_analyzer_help(self, topic: str) -> Optional[Dict[str, Any]]:
+        """Return inline help for file-based analyzers (not URI adapters).
+
+        These are not in _ADAPTER_REGISTRY but users sometimes try `reveal help://nginx`
+        thinking it's a URI scheme. Return focused usage help rather than "not found".
+        """
+        FILE_ANALYZERS: Dict[str, Dict[str, Any]] = {
+            'nginx': {
+                'name': 'nginx',
+                'type': 'file_analyzer',
+                'description': 'nginx is a file-based analyzer — pass a config file path directly',
+                'note': (
+                    'nginx is NOT a URI adapter. '
+                    'Use: reveal /path/to/nginx.conf or reveal nginx:///path/file.conf'
+                ),
+                'examples': [
+                    {'uri': 'reveal /etc/nginx/nginx.conf', 'description': 'See all server blocks'},
+                    {'uri': 'reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --domain example.com',
+                     'description': 'Filter to one domain'},
+                    {'uri': 'reveal /etc/nginx/nginx.conf --check', 'description': 'N001-N006 rules'},
+                    {'uri': 'reveal nginx:///path/user.conf --check-acl', 'description': 'N1: nobody ACL check'},
+                    {'uri': 'reveal nginx:///path/user.conf --extract acme-roots',
+                     'description': 'N4: ACME root paths + ACL status'},
+                    {'uri': 'reveal nginx:///path/user.conf --check-conflicts',
+                     'description': 'N2: location block routing issues'},
+                    {'uri': 'reveal nginx:///path/user.conf --validate-nginx-acme',
+                     'description': 'Full ACME+ACL+SSL audit in one table'},
+                    {'uri': 'reveal nginx:///path/user.conf --cpanel-certs',
+                     'description': 'Disk cert vs live cert comparison'},
+                    {'uri': 'reveal nginx:///path/user.conf --diagnose',
+                     'description': 'Scan error log for ACME/SSL failures'},
+                ],
+                'see_also': [
+                    'reveal help://ssl - SSL certificate inspection',
+                    'reveal help://cpanel - cPanel user environment adapter',
+                ],
+            },
+        }
+        return FILE_ANALYZERS.get(topic)
 
     def _get_adapter_help(self, scheme: str) -> Optional[Dict[str, Any]]:
         """Get help for a specific adapter.

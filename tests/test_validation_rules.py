@@ -1441,6 +1441,69 @@ class TestAdapter(ResourceAdapter):
         structure = {'classes': [{'name': 'Helper'}]}
         self.assertFalse(self.rule._is_adapter_file(structure, content_regular))
 
+    def test_reveal_uri_triggers_self_scan(self):
+        """V016 should run a self-scan when called with reveal:// path."""
+        detections = self.rule.check(
+            file_path="reveal://",
+            structure=None,
+            content=""
+        )
+        # Should return a list (may be empty if all adapters have get_help)
+        self.assertIsInstance(detections, list)
+
+    def test_reveal_uri_self_scan_no_missing_adapters(self):
+        """All reveal adapters should have get_help() — self-scan returns no detections."""
+        from reveal.rules.validation.utils import find_reveal_root
+        reveal_root = find_reveal_root()
+        if not reveal_root:
+            self.skipTest("Reveal root not found (not a dev checkout)")
+
+        detections = self.rule._check_reveal_adapters()
+        missing = [d.file_path for d in detections]
+        self.assertEqual(
+            missing, [],
+            f"Adapters missing get_help(): {missing}"
+        )
+
+    def test_cpanel_adapter_has_get_help(self):
+        """CpanelAdapter must implement get_help() so reveal help://cpanel works."""
+        from reveal.adapters.cpanel.adapter import CpanelAdapter
+        self.assertTrue(
+            hasattr(CpanelAdapter, 'get_help'),
+            "CpanelAdapter missing get_help()"
+        )
+        help_data = CpanelAdapter.get_help()
+        self.assertIsNotNone(help_data, "CpanelAdapter.get_help() returned None")
+        self.assertIn('name', help_data)
+        self.assertIn('description', help_data)
+        self.assertIn('examples', help_data)
+        self.assertIn('elements', help_data)
+        self.assertEqual(help_data['name'], 'cpanel')
+
+    def test_help_adapter_cpanel_resolves(self):
+        """reveal help://cpanel must resolve without 'Element not found'."""
+        from reveal.adapters.help import HelpAdapter
+        import reveal.adapters  # ensure all adapters registered
+
+        adapter = HelpAdapter.__new__(HelpAdapter)
+        adapter.help_topics = {}
+        result = adapter.get_element('cpanel')
+        self.assertIsNotNone(result, "help://cpanel returned None (Element not found)")
+        self.assertNotIn('error', result)
+        self.assertIn('examples', result)
+
+    def test_help_adapter_nginx_resolves(self):
+        """reveal help://nginx must return useful help, not 'Element not found'."""
+        from reveal.adapters.help import HelpAdapter
+        import reveal.adapters
+
+        adapter = HelpAdapter.__new__(HelpAdapter)
+        adapter.help_topics = {}
+        result = adapter.get_element('nginx')
+        self.assertIsNotNone(result, "help://nginx returned None (Element not found)")
+        self.assertIn('examples', result)
+        self.assertEqual(result.get('type'), 'file_analyzer')
+
 
 class TestV018RendererRegistration(unittest.TestCase):
     """Test V018: Adapter renderer registration completeness."""
