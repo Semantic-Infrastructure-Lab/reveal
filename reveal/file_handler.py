@@ -281,6 +281,159 @@ def _handle_check_conflicts(analyzer) -> None:
         sys.exit(2)
 
 
+def _handle_cpanel_certs(analyzer) -> None:
+    """Compare cPanel on-disk certs against live certs per domain (S4 -- --cpanel-certs).
+
+    For each SSL domain found in the nginx config:
+    - Looks up /var/cpanel/ssl/apache_tls/DOMAIN/combined (disk cert)
+    - Fetches the live cert from the network
+    - Compares serial numbers to detect "AutoSSL renewed but nginx hasn't reloaded"
+    """
+    if not hasattr(analyzer, 'extract_ssl_domains'):
+        print(f"Error: --cpanel-certs not supported for {type(analyzer).__name__}",
+              file=sys.stderr)
+        print("This option is available for nginx config files.", file=sys.stderr)
+        sys.exit(1)
+
+    from .adapters.ssl.certificate import load_certificate_from_file, check_ssl_health
+
+    domains = analyzer.extract_ssl_domains()
+    if not domains:
+        print("No SSL domains found in nginx config.")
+        return
+
+    CPANEL_CERT_DIR = "/var/cpanel/ssl/apache_tls"
+
+    rows = []
+    for domain in domains:
+        cert_path = f"{CPANEL_CERT_DIR}/{domain}/combined"
+
+        # --- disk cert ---
+        disk_expiry = None
+        disk_serial = None
+        disk_status = None
+        disk_not_after = None
+        if not __import__('os').path.exists(cert_path):
+            disk_status = 'missing'
+        else:
+            try:
+                disk_leaf, _ = load_certificate_from_file(cert_path)
+                disk_expiry = disk_leaf.days_until_expiry
+                disk_serial = disk_leaf.serial_number
+                disk_not_after = disk_leaf.not_after
+                disk_status = 'ok'
+            except Exception as exc:
+                disk_status = f"error: {str(exc)[:40]}"
+
+        # --- live cert ---
+        live_expiry = None
+        live_serial = None
+        live_status = None
+        live_not_after = None
+        try:
+            ssl_result = check_ssl_health(domain, warn_days=30, critical_days=7)
+            live_ssl_status = ssl_result.get('status', 'unknown')
+            leaf_data = ssl_result.get('leaf', {})
+            live_expiry = leaf_data.get('days_until_expiry')
+            live_serial = leaf_data.get('serial_number')
+            live_not_after_str = leaf_data.get('not_after', '')
+            if live_not_after_str:
+                try:
+                    from datetime import datetime
+                    live_not_after = datetime.fromisoformat(
+                        live_not_after_str.replace('Z', '+00:00')
+                    )
+                except (ValueError, TypeError):
+                    pass
+            live_status = live_ssl_status
+        except Exception as exc:
+            live_status = f"error: {str(exc)[:40]}"
+
+        # --- match determination ---
+        if disk_serial and live_serial:
+            match = 'match' if disk_serial == live_serial else 'STALE'
+        elif disk_status == 'missing':
+            match = 'no-disk'
+        else:
+            match = '?'
+
+        rows.append({
+            'domain': domain,
+            'cert_path': cert_path,
+            'disk_status': disk_status,
+            'disk_expiry': disk_expiry,
+            'disk_not_after': disk_not_after,
+            'live_status': live_status,
+            'live_expiry': live_expiry,
+            'live_not_after': live_not_after,
+            'match': match,
+        })
+
+    col_domain = max(len(r['domain']) for r in rows)
+
+    header = (f"  {'domain':<{col_domain}}  {'disk cert':<28}  {'live cert':<28}  match")
+    print(header)
+    print("  " + "─" * (len(header) - 2))
+
+    has_failures = False
+    for r in rows:
+        # disk column
+        ds = r['disk_status']
+        if ds == 'missing':
+            disk_col = "⚫ not found"
+        elif ds == 'ok':
+            days = r['disk_expiry']
+            na = r['disk_not_after']
+            date_str = na.strftime('%b %d, %Y') if na else ''
+            if days is not None and days < 0:
+                disk_col = f"❌ EXPIRED {abs(days)}d ago"
+                has_failures = True
+            elif days is not None and days < 30:
+                disk_col = f"⚠️  {days}d  ({date_str})"
+            else:
+                disk_col = f"✅ {days}d  ({date_str})" if days is not None else "✅ ok"
+        else:
+            disk_col = f"❌ {ds}"
+            has_failures = True
+
+        # live column
+        ls = r['live_status']
+        if ls in ('healthy',):
+            days = r['live_expiry']
+            na = r['live_not_after']
+            date_str = na.strftime('%b %d, %Y') if na else ''
+            live_col = f"✅ {days}d  ({date_str})" if days is not None else "✅ ok"
+        elif ls in ('warning', 'critical'):
+            days = r['live_expiry']
+            live_col = f"⚠️  {days}d"
+        elif ls == 'expired':
+            days = abs(r['live_expiry'] or 0)
+            live_col = f"❌ EXPIRED {days}d ago"
+            has_failures = True
+        elif ls and ls.startswith('error'):
+            live_col = f"⚠️  {ls}"  # can't reach live cert → unknown, not a definitive failure
+        else:
+            live_col = str(ls)
+
+        # match column
+        match = r['match']
+        if match == 'match':
+            match_col = "✅ same cert"
+        elif match == 'STALE':
+            match_col = "⚠️  STALE (reload nginx)"
+            has_failures = True
+        elif match == 'no-disk':
+            match_col = "⚫ no disk cert"
+        else:
+            match_col = f"? {match}"
+
+        print(f"  {r['domain']:<{col_domain}}  {disk_col:<28}  {live_col:<28}  {match_col}")
+
+    print()
+    if has_failures:
+        sys.exit(2)
+
+
 def _handle_extract_option(analyzer, extract_type: str) -> None:
     """Handle --extract option with validation.
 
@@ -345,6 +498,10 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
 
     if args and getattr(args, 'check_conflicts', False):
         _handle_check_conflicts(analyzer)
+        return
+
+    if args and getattr(args, 'cpanel_certs', False):
+        _handle_cpanel_certs(analyzer)
         return
 
     if args and getattr(args, 'validate_schema', None):

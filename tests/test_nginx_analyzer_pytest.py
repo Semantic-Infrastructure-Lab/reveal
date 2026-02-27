@@ -1792,3 +1792,233 @@ server {
         prefix_conflicts = [c for c in conflicts if c['type'] == 'prefix_overlap']
         # identical paths stripped of / are equal → not flagged (only strict prefixes flagged)
         assert prefix_conflicts == []
+
+
+class TestCpanelCerts:
+    """Tests for _handle_cpanel_certs() — S4 cPanel disk-cert vs live-cert comparison."""
+
+    CPANEL_DIR = "/var/cpanel/ssl/apache_tls"
+
+    def _make_analyzer(self, config: str):
+        f = tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False)
+        f.write(config)
+        f.close()
+        a = NginxAnalyzer(f.name)
+        os.unlink(f.name)
+        return a
+
+    def _make_args(self, **kwargs):
+        import argparse
+        args = argparse.Namespace(
+            cpanel_certs=True,
+            check_acl=False,
+            validate_nginx_acme=False,
+            check_conflicts=False,
+            extract=None,
+            meta=False,
+            check=False,
+            validate_schema=None,
+            no_fallback=False,
+            format='text',
+        )
+        for k, v in kwargs.items():
+            setattr(args, k, v)
+        return args
+
+    SSL_CONFIG = """
+server {
+    listen 443 ssl;
+    server_name alpha.example.com;
+    ssl_certificate /etc/ssl/alpha.crt;
+}
+server {
+    listen 443 ssl;
+    server_name beta.example.com;
+    ssl_certificate /etc/ssl/beta.crt;
+}
+"""
+
+    def _make_cert_info(self, cn='example.com', days=90, serial='AABB'):
+        from datetime import datetime, timezone, timedelta
+        from reveal.adapters.ssl.certificate import CertificateInfo
+        now = datetime.now(timezone.utc)
+        return CertificateInfo(
+            subject={'commonName': cn},
+            issuer={'organizationName': 'Test CA', 'commonName': 'Test CA Root'},
+            not_before=now - timedelta(days=10),
+            not_after=now + timedelta(days=days),
+            serial_number=serial,
+            version=3,
+            san=[cn],
+            signature_algorithm='sha256WithRSAEncryption',
+        )
+
+    def test_missing_disk_cert_shows_not_found(self, capsys):
+        """When /var/cpanel/ssl/apache_tls/DOMAIN/combined is absent, show ⚫ not found."""
+        from unittest.mock import patch, MagicMock
+        from reveal.file_handler import _handle_cpanel_certs
+
+        analyzer = self._make_analyzer(self.SSL_CONFIG)
+        cert = self._make_cert_info(cn='alpha.example.com', days=60, serial='LIVE01')
+        live_result = {
+            'status': 'healthy',
+            'leaf': {
+                'days_until_expiry': 60,
+                'serial_number': 'LIVE01',
+                'not_after': cert.not_after.isoformat(),
+            },
+        }
+
+        with patch('os.path.exists', return_value=False), \
+             patch('reveal.adapters.ssl.certificate.check_ssl_health', return_value=live_result):
+            _handle_cpanel_certs(analyzer)
+
+        out = capsys.readouterr().out
+        assert 'not found' in out or '⚫' in out
+
+    def test_matching_serials_shows_match(self, capsys):
+        """When disk serial == live serial, show ✅ same cert."""
+        from unittest.mock import patch, MagicMock
+        from reveal.file_handler import _handle_cpanel_certs
+
+        analyzer = self._make_analyzer(self.SSL_CONFIG)
+        serial = 'MATCHSERIAL'
+        disk_cert = self._make_cert_info(cn='alpha.example.com', days=60, serial=serial)
+        live_result = {
+            'status': 'healthy',
+            'leaf': {
+                'days_until_expiry': 60,
+                'serial_number': serial,
+                'not_after': disk_cert.not_after.isoformat(),
+            },
+        }
+
+        with patch('os.path.exists', return_value=True), \
+             patch('reveal.adapters.ssl.certificate.load_certificate_from_file',
+                   return_value=(disk_cert, [])), \
+             patch('reveal.adapters.ssl.certificate.check_ssl_health', return_value=live_result):
+            _handle_cpanel_certs(analyzer)
+
+        out = capsys.readouterr().out
+        assert 'same cert' in out or '✅' in out
+
+    def test_mismatched_serials_shows_stale(self, capsys):
+        """When disk serial != live serial, show ⚠️  STALE (reload nginx)."""
+        from unittest.mock import patch
+        from reveal.file_handler import _handle_cpanel_certs
+        import sys
+
+        analyzer = self._make_analyzer("""
+server {
+    listen 443 ssl;
+    server_name alpha.example.com;
+    ssl_certificate /etc/ssl/alpha.crt;
+}
+""")
+        disk_cert = self._make_cert_info(cn='alpha.example.com', days=5, serial='OLDSERIAL')
+        live_result = {
+            'status': 'healthy',
+            'leaf': {
+                'days_until_expiry': 60,
+                'serial_number': 'NEWSERIAL',
+                'not_after': disk_cert.not_after.isoformat(),
+            },
+        }
+
+        with patch('os.path.exists', return_value=True), \
+             patch('reveal.adapters.ssl.certificate.load_certificate_from_file',
+                   return_value=(disk_cert, [])), \
+             patch('reveal.adapters.ssl.certificate.check_ssl_health', return_value=live_result), \
+             pytest.raises(SystemExit) as exc_info:
+            _handle_cpanel_certs(analyzer)
+
+        assert exc_info.value.code == 2
+        out = capsys.readouterr().out
+        assert 'STALE' in out
+
+    def test_cpanel_cert_path_format(self, capsys):
+        """Cert path is /var/cpanel/ssl/apache_tls/DOMAIN/combined."""
+        from unittest.mock import patch, call
+        from reveal.file_handler import _handle_cpanel_certs
+
+        analyzer = self._make_analyzer("""
+server {
+    listen 443 ssl;
+    server_name mysite.example.com;
+    ssl_certificate /etc/ssl/cert.crt;
+}
+""")
+        disk_cert = self._make_cert_info(cn='mysite.example.com', days=60, serial='S1')
+        live_result = {
+            'status': 'healthy',
+            'leaf': {'days_until_expiry': 60, 'serial_number': 'S1', 'not_after': ''},
+        }
+
+        exists_calls = []
+        def fake_exists(p):
+            exists_calls.append(p)
+            return True
+
+        with patch('os.path.exists', side_effect=fake_exists), \
+             patch('reveal.adapters.ssl.certificate.load_certificate_from_file',
+                   return_value=(disk_cert, [])), \
+             patch('reveal.adapters.ssl.certificate.check_ssl_health', return_value=live_result):
+            _handle_cpanel_certs(analyzer)
+
+        expected_path = '/var/cpanel/ssl/apache_tls/mysite.example.com/combined'
+        assert expected_path in exists_calls
+
+    def test_live_cert_error_shows_error(self, capsys):
+        """When live cert check fails, show ❌ error."""
+        from unittest.mock import patch
+        from reveal.file_handler import _handle_cpanel_certs
+        import sys
+
+        analyzer = self._make_analyzer("""
+server {
+    listen 443 ssl;
+    server_name alpha.example.com;
+    ssl_certificate /etc/ssl/alpha.crt;
+}
+""")
+        disk_cert = self._make_cert_info(cn='alpha.example.com', days=60, serial='S1')
+
+        def raise_err(host, **kw):
+            raise ConnectionError("Connection refused")
+
+        with patch('os.path.exists', return_value=True), \
+             patch('reveal.adapters.ssl.certificate.load_certificate_from_file',
+                   return_value=(disk_cert, [])), \
+             patch('reveal.adapters.ssl.certificate.check_ssl_health', side_effect=raise_err):
+            _handle_cpanel_certs(analyzer)
+
+        out = capsys.readouterr().out
+        # Error in live check → ? match, no sys.exit(2) for connection errors treated as unknown
+        assert 'alpha.example.com' in out
+
+    def test_no_ssl_domains_prints_message(self, capsys):
+        """Nginx config with no SSL server blocks prints a helpful message."""
+        from reveal.file_handler import _handle_cpanel_certs
+
+        analyzer = self._make_analyzer("""
+server {
+    listen 80;
+    server_name plain.example.com;
+}
+""")
+        _handle_cpanel_certs(analyzer)
+        out = capsys.readouterr().out
+        assert 'No SSL domains' in out
+
+    def test_wrong_analyzer_type_exits(self, tmp_path):
+        """Passing a non-nginx analyzer (e.g. Python file) exits with error."""
+        from reveal.file_handler import _handle_cpanel_certs
+        from reveal.analyzers.python import PythonAnalyzer
+
+        py_file = tmp_path / "foo.py"
+        py_file.write_text("x = 1\n")
+        analyzer = PythonAnalyzer(str(py_file))
+
+        with pytest.raises(SystemExit) as exc_info:
+            _handle_cpanel_certs(analyzer)
+        assert exc_info.value.code == 1

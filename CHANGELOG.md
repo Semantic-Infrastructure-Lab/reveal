@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (session magnetic-regiment-0227)
+- **nginx: S4 — `--cpanel-certs`** — `reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs` compares cPanel on-disk certs (`/var/cpanel/ssl/apache_tls/DOMAIN/combined`) against live certs per SSL domain. Serial number comparison detects "AutoSSL renewed but nginx hasn't reloaded" (shows `⚠️ STALE (reload nginx)`). Table: domain | disk cert expiry | live cert expiry | match status. Exit 2 on stale or expired certs.
+
 ### Added (session meteoric-armada-0227)
 - **nginx: N3 — `--domain` filter** — `reveal nginx:///path/user.conf --domain DOMAIN` filters output to only the server block(s) matching DOMAIN, including all server_name aliases. Essential for navigating 1,500-line cPanel user configs with one block per domain. Passes as `get_structure(domain=...)` kwarg; no extra request.
 - **nginx: N2 — `--check-conflicts`** — detects location block routing surprises: `prefix_overlap` (one non-regex location is a strict prefix of another) and `regex_shadows_prefix` (a regex location pattern can match a prefix location's path). Groups by server block, includes line numbers and human-readable explanations. Exit 2 on regex conflicts; info-only for prefix overlaps.
