@@ -12,6 +12,17 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.2] - 2026-02-27
+
+### Fixed (session peaceful-aurora-0227)
+- **B1 — `--validate-nginx-acme` ACL always `not_found` on cPanel configs** — `_parse_location_root` and `_parse_server_root` returned `m.group(1)` raw; cPanel nginx configs quote all root directives (`root "/home/user/public_html";`), so `Path('"..."')` never existed → every domain reported `not_found`. Fixed with `.strip('"\'')` in both methods. Feature is now functional on production cPanel gateways.
+- **U1 — `nginx:///` four-slash URIs in cpanel next_steps** — `cpanel://` overview and `get_help()` suggested `reveal nginx:///path` which fails in subprocesses (only works in shell where one slash is consumed). Replaced all instances with plain file paths (`reveal /path/to/nginx.conf`), consistent with `reveal help://nginx` guidance.
+
+### Added (session peaceful-aurora-0227)
+- **U3 — `--validate-nginx-acme --only-failures`** — `--only-failures` flag now respected by `--validate-nginx-acme`. On 500+ domain configs the full output is 89KB; filter suppresses passing rows and prints `✅ No failures found.` when everything passes.
+- **U4 — doc note: cpanel ACL vs nginx ACME audit** — added note to `reveal help://cpanel`: "cpanel ACL check is filesystem-based (authoritative); nginx ACME audit also verifies config routing — use both". Clarifies which to trust and why results can differ.
+- **U5 — cpanel graduated 🔴 Experimental → 🟡 Beta** — adapter produced accurate results in production (found 3 denied domains in 2s, correct next steps). B1 was in the nginx analyzer, not cpanel. Updated renderer and `get_help()` stability field.
+
 ## [0.54.1] - 2026-02-27
 
 ### Fixed (session serene-current-0227)
