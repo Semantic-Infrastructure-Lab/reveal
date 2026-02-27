@@ -790,6 +790,177 @@ class TestSSLRendererFilters(unittest.TestCase):
         self.assertEqual(len(parsed['results']), 2)
 
 
+class TestSSLBatchDetailOutput(unittest.TestCase):
+    """Tests for S1/S5: failure detail and expiry dates in batch output."""
+
+    def _make_expired(self, host, days_ago):
+        return {
+            'host': host,
+            'status': 'failure',
+            'certificate': {
+                'days_until_expiry': -days_ago,
+                'not_after': '2025-11-25T12:00:00+00:00',
+            },
+        }
+
+    def _make_error(self, host, error):
+        return {'host': host, 'status': 'failure', 'error': error}
+
+    def _make_warning(self, host, days, not_after='2026-03-14T12:00:00+00:00'):
+        return {
+            'host': host,
+            'status': 'warning',
+            'certificate': {'days_until_expiry': days, 'not_after': not_after},
+        }
+
+    def _make_pass(self, host, days, not_after='2026-05-28T12:00:00+00:00'):
+        return {
+            'host': host,
+            'status': 'pass',
+            'certificate': {'days_until_expiry': days, 'not_after': not_after},
+        }
+
+    # --- _classify_error ---
+
+    def test_classify_dns_failure(self):
+        self.assertEqual(
+            SSLRenderer._classify_error('[Errno -2] Name or service not known'),
+            'DNS FAILURE (NXDOMAIN)',
+        )
+
+    def test_classify_nxdomain(self):
+        self.assertEqual(
+            SSLRenderer._classify_error('getaddrinfo failed: NXDOMAIN'),
+            'DNS FAILURE (NXDOMAIN)',
+        )
+
+    def test_classify_connection_refused(self):
+        self.assertEqual(
+            SSLRenderer._classify_error('[Errno 111] Connection refused'),
+            'CONNECTION REFUSED',
+        )
+
+    def test_classify_timeout(self):
+        self.assertIn('TIMEOUT', SSLRenderer._classify_error('timed out'))
+
+    def test_classify_network_unreachable(self):
+        self.assertIn('UNREACHABLE', SSLRenderer._classify_error('Network is unreachable'))
+
+    def test_classify_cert_verify(self):
+        self.assertIn('VERIFY', SSLRenderer._classify_error('certificate verify failed'))
+
+    def test_classify_unknown_error(self):
+        msg = 'something completely unexpected happened'
+        result = SSLRenderer._classify_error(msg)
+        self.assertTrue(result.startswith('ERROR:'))
+        self.assertIn('something completely unexpected', result)
+
+    # --- _format_expiry_date ---
+
+    def test_format_expiry_date_iso(self):
+        result = SSLRenderer._format_expiry_date('2025-11-25T12:00:00+00:00')
+        self.assertEqual(result, 'Nov 25, 2025')
+
+    def test_format_expiry_date_invalid(self):
+        self.assertEqual(SSLRenderer._format_expiry_date('not-a-date'), '')
+        self.assertEqual(SSLRenderer._format_expiry_date(None), '')
+
+    # --- _render_failed_domains ---
+
+    def test_failed_expired_shows_days_ago_and_date(self):
+        failures = [self._make_expired('dashboard.web-expressions.net', 95)]
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer._render_failed_domains(failures)
+        out = f.getvalue()
+        self.assertIn('EXPIRED 95 days ago', out)
+        self.assertIn('Nov 25, 2025', out)
+        self.assertIn('dashboard.web-expressions.net', out)
+
+    def test_failed_dns_shows_label(self):
+        failures = [self._make_error('social.orces.com', '[Errno -2] Name or service not known')]
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer._render_failed_domains(failures)
+        out = f.getvalue()
+        self.assertIn('DNS FAILURE (NXDOMAIN)', out)
+        self.assertIn('social.orces.com', out)
+
+    def test_failed_connection_refused_shows_label(self):
+        failures = [self._make_error('down.example.com', '[Errno 111] Connection refused')]
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer._render_failed_domains(failures)
+        self.assertIn('CONNECTION REFUSED', f.getvalue())
+
+    def test_failed_columns_aligned(self):
+        """All rows should be padded to the same host-column width."""
+        failures = [
+            self._make_expired('short.com', 10),
+            self._make_error('a-much-longer-hostname.example.net', '[Errno -2] Name or service not known'),
+        ]
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer._render_failed_domains(failures)
+        lines = [l for l in f.getvalue().splitlines() if 'short.com' in l or 'a-much-longer' in l]
+        # Labels (EXPIRED / DNS FAILURE) should start at the same column position
+        expired_col = lines[0].index('EXPIRED')
+        dns_col = lines[1].index('DNS')
+        self.assertEqual(expired_col, dns_col)
+
+    def test_failed_no_date_when_not_after_missing(self):
+        """Expired cert without not_after should not crash or show empty parens."""
+        failures = [{'host': 'x.com', 'status': 'failure',
+                     'certificate': {'days_until_expiry': -5}}]
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer._render_failed_domains(failures)
+        out = f.getvalue()
+        self.assertIn('EXPIRED 5 days ago', out)
+        self.assertNotIn('()', out)
+
+    # --- _render_warning_domains ---
+
+    def test_warning_shows_expires_in_and_date(self):
+        warnings = [self._make_warning('soon.example.com', 12)]
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer._render_warning_domains(warnings)
+        out = f.getvalue()
+        self.assertIn('expires in 12 days', out)
+        self.assertIn('Mar 14, 2026', out)
+        self.assertIn('soon.example.com', out)
+
+    def test_warning_no_date_when_not_after_missing(self):
+        warnings = [{'host': 'x.com', 'status': 'warning',
+                     'certificate': {'days_until_expiry': 20}}]
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer._render_warning_domains(warnings)
+        out = f.getvalue()
+        self.assertIn('expires in 20 days', out)
+        self.assertNotIn('()', out)
+
+    # --- _render_healthy_domains ---
+
+    def test_healthy_shows_days_and_date(self):
+        passes = [self._make_pass('ok.example.com', 90)]
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer._render_healthy_domains(passes, only_failures=False)
+        out = f.getvalue()
+        self.assertIn('90 days', out)
+        self.assertIn('May 28, 2026', out)
+        self.assertIn('ok.example.com', out)
+
+    def test_healthy_hidden_when_only_failures(self):
+        passes = [self._make_pass('ok.example.com', 90)]
+        f = io.StringIO()
+        with redirect_stdout(f):
+            SSLRenderer._render_healthy_domains(passes, only_failures=True)
+        self.assertEqual(f.getvalue(), '')
+
+
 class TestSSLAdapterNginxMode(unittest.TestCase):
     """Test SSLAdapter nginx integration (Issue #18).
 

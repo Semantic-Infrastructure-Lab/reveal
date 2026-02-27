@@ -1,6 +1,7 @@
 """SSL certificate result rendering for CLI output."""
 
 import sys
+from datetime import datetime, timezone
 from typing import Optional
 
 from reveal.rendering import TypeDispatchRenderer
@@ -490,6 +491,33 @@ class SSLRenderer(TypeDispatchRenderer):
         print()
 
     @staticmethod
+    def _classify_error(error: str) -> str:
+        """Convert a raw exception message to a clean failure label."""
+        e = error.lower()
+        if any(x in e for x in ('name or service not known', 'name does not resolve',
+                                 'nxdomain', 'getaddrinfo failed', 'nodename nor servname',
+                                 'errno -2', 'errno -3')):
+            return 'DNS FAILURE (NXDOMAIN)'
+        if any(x in e for x in ('connection refused', 'errno 111')):
+            return 'CONNECTION REFUSED'
+        if any(x in e for x in ('timed out', 'timeout')):
+            return 'TIMEOUT'
+        if any(x in e for x in ('network is unreachable', 'no route to host')):
+            return 'NETWORK UNREACHABLE'
+        if any(x in e for x in ('certificate verify failed', 'certificate_verify_failed')):
+            return 'CERT VERIFY FAILED'
+        return f'ERROR: {error[:60]}'
+
+    @staticmethod
+    def _format_expiry_date(not_after: str) -> str:
+        """Format an ISO datetime string as 'Mon DD, YYYY'."""
+        try:
+            dt = datetime.fromisoformat(not_after)
+            return dt.strftime('%b %d, %Y')
+        except (ValueError, TypeError, AttributeError):
+            return ''
+
+    @staticmethod
     def _render_failed_domains(failures: list) -> None:
         """Render failed domains section.
 
@@ -499,16 +527,22 @@ class SSLRenderer(TypeDispatchRenderer):
         if not failures:
             return
 
+        max_host = max(len(r['host']) for r in failures)
         print("\u274c Failed:")
         for r in failures:
             host = r['host']
-            if 'certificate' in r:
-                days = r['certificate'].get('days_until_expiry', '?')
-                print(f"  {host}: {days} days")
+            cert = r.get('certificate', {})
+            days = cert.get('days_until_expiry')
+            not_after = cert.get('not_after', '')
+            if days is not None and days < 0:
+                date_str = SSLRenderer._format_expiry_date(not_after)
+                date_part = f'  ({date_str})' if date_str else ''
+                label = f'EXPIRED {abs(days)} days ago{date_part}'
             elif 'error' in r:
-                print(f"  {host}: {r['error']}")
+                label = SSLRenderer._classify_error(r['error'])
             else:
-                print(f"  {host}")
+                label = 'FAILED'
+            print(f"  {host:<{max_host}}  {label}")
         print()
 
     @staticmethod
@@ -521,11 +555,16 @@ class SSLRenderer(TypeDispatchRenderer):
         if not warnings:
             return
 
-        print("\u26a0\ufe0f  Warnings:")
+        max_host = max(len(r['host']) for r in warnings)
+        print("\u26a0\ufe0f  Expiring Soon:")
         for r in warnings:
             host = r['host']
-            days = r.get('certificate', {}).get('days_until_expiry', '?')
-            print(f"  {host}: {days} days")
+            cert = r.get('certificate', {})
+            days = cert.get('days_until_expiry', '?')
+            not_after = cert.get('not_after', '')
+            date_str = SSLRenderer._format_expiry_date(not_after)
+            date_part = f'  ({date_str})' if date_str else ''
+            print(f"  {host:<{max_host}}  expires in {days} days{date_part}")
         print()
 
     @staticmethod
@@ -539,11 +578,16 @@ class SSLRenderer(TypeDispatchRenderer):
         if not passes or only_failures:
             return
 
+        max_host = max(len(r['host']) for r in passes)
         print("\u2705 Healthy:")
         for r in passes:
             host = r['host']
-            days = r.get('certificate', {}).get('days_until_expiry', '?')
-            print(f"  {host}: {days} days")
+            cert = r.get('certificate', {})
+            days = cert.get('days_until_expiry', '?')
+            not_after = cert.get('not_after', '')
+            date_str = SSLRenderer._format_expiry_date(not_after)
+            date_part = f'  ({date_str})' if date_str else ''
+            print(f"  {host:<{max_host}}  {days} days{date_part}")
         print()
 
     @staticmethod
