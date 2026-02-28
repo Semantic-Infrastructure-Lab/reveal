@@ -47,10 +47,16 @@ class B006(BaseRule, ASTParsingMixin):
         # Split content into lines for comment checking
         lines = content.split('\n')
 
+        # Build parent map so handlers can walk up to the enclosing function
+        parent_map: Dict[ast.AST, ast.AST] = {}
+        for parent in ast.walk(tree):
+            for child in ast.iter_child_nodes(parent):
+                parent_map[child] = parent
+
         # Walk the AST looking for problematic exception handlers
         for node in self._ast_walk(tree):
             if isinstance(node, ast.ExceptHandler):
-                detection = self._check_handler(node, file_path, content, lines)
+                detection = self._check_handler(node, file_path, content, lines, parent_map)
                 if detection:
                     detections.append(detection)
 
@@ -62,6 +68,7 @@ class B006(BaseRule, ASTParsingMixin):
         file_path: str,
         content: str,
         lines: List[str],
+        parent_map: Optional[Dict[ast.AST, ast.AST]] = None,
     ) -> Optional[Detection]:
         """Check a single exception handler for silent broad exception swallowing."""
         if not self._is_broad_exception(node):
@@ -69,6 +76,8 @@ class B006(BaseRule, ASTParsingMixin):
         if not self._is_silent_pass(node):
             return None
         if self._has_explanatory_comment(node, lines):
+            return None
+        if parent_map and self._is_intentional_fallback(node, parent_map):
             return None
 
         context = None
@@ -131,6 +140,46 @@ class B006(BaseRule, ASTParsingMixin):
             return False
 
         return isinstance(node.body[0], ast.Pass)
+
+    # Keywords that indicate a docstring explicitly documents error-tolerance
+    _DOCSTRING_ERROR_TOLERANCE = re.compile(
+        r'\b(unavailable|raises any|if raises|on error|if error|if fails|'
+        r'if not available|error is ignored|returns.*if.*error|error is expected)\b',
+        re.IGNORECASE,
+    )
+
+    def _is_intentional_fallback(
+        self, node: ast.ExceptHandler, parent_map: Dict[ast.AST, ast.AST]
+    ) -> bool:
+        """Return True when the enclosing function's docstring explicitly documents
+        that exceptions are tolerated (e.g. "Returns False if unavailable or raises").
+
+        This is narrower than checking for a fallback return, which would also suppress
+        legitimate findings like `except Exception: pass; return None`.
+        """
+        # Walk up: ExceptHandler → Try → enclosing function
+        try_node = parent_map.get(node)
+        if not isinstance(try_node, ast.Try):
+            return False
+        func_node = parent_map.get(try_node)
+        # Accept Try nested one level inside an if-guard at function scope
+        if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            outer = parent_map.get(func_node) if func_node else None
+            if not isinstance(outer, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                return False
+            func_node = outer
+
+        # Get docstring: first statement must be a string literal
+        body = func_node.body
+        if not body:
+            return False
+        first = body[0]
+        if not (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)):
+            return False
+
+        docstring = first.value.value
+        return bool(self._DOCSTRING_ERROR_TOLERANCE.search(docstring))
 
     def _has_explanatory_comment(self, node: ast.ExceptHandler, lines: List[str]) -> bool:
         """Check if exception handler has an explanatory comment.

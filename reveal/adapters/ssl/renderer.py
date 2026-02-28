@@ -1,7 +1,7 @@
 """SSL certificate result rendering for CLI output."""
 
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from reveal.rendering import TypeDispatchRenderer

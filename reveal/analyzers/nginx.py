@@ -414,7 +414,8 @@ class NginxAnalyzer(FileAnalyzer):
                     map_info = self._try_parse_map_block(stripped)
                     if map_info:
                         maps.append({
-                            'line': i,
+                            'line_start': i,
+                            'line_end': i,
                             'name': f"{map_info['source']} → {map_info['target']}",
                             'source_var': map_info['source'],
                             'target_var': map_info['target'],

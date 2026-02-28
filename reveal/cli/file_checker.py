@@ -73,7 +73,7 @@ def _i002_init_worker(graph_cache: dict) -> None:
     try:
         from reveal.rules.imports.I002 import _graph_cache
         _graph_cache.update(graph_cache)
-    except Exception:
+    except Exception:  # I002 module unavailable in some configs; worker continues without cache
         pass
 
 

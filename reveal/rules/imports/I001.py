@@ -183,6 +183,10 @@ class I001(BaseRule):
         detections: List[Detection] = []
         path = Path(file_path)
 
+        # __init__.py imports are public API / side-effect registrations — skip
+        if path.name == '__init__.py':
+            return detections
+
         # Get language-specific extractor
         extractor = get_extractor(path)
         if not extractor:

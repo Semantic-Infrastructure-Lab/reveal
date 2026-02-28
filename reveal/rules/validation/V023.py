@@ -201,6 +201,12 @@ class V023(BaseRule):
 
     def _check_required_contract_fields(self, method_body, method_name, file_path, line_num):
         """Check that required contract fields appear in the method body."""
+        # Dispatcher pattern: method delegates to sub-methods that own the contract.
+        # e.g. get_structure() returns self._get_ssl_structure() / self._get_overview_structure()
+        # The fields live in those sub-methods; checking get_structure() is a false positive.
+        if 'return self._get_' in method_body or 'return self._' in method_body:
+            return []
+
         required_fields = ['contract_version', 'type', 'source', 'source_type']
         missing_fields = [
             f for f in required_fields
