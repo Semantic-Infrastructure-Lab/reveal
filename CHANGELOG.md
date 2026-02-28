@@ -12,6 +12,20 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.4] - 2026-02-27
+
+### Fixed (session aqua-shade-0227)
+- **V023 false positive — `ResultBuilder.create()` pattern** — V023 was flagging `get_structure()` in `ast/adapter.py` as non-compliant because it checks for `'contract_version':` dict literal syntax; `ResultBuilder.create(contract_version='1.1', ...)` uses kwargs. V023 now skips when `ResultBuilder.create(` appears in the method body.
+- **V023 false positive — delegating adapters** — `git/adapter.py` `get_structure()` delegates all paths to module-level helpers (`return files.get_file_history(...)`, `return refs.get_ref_structure()`, etc.) with no direct dict return. V023 now skips when all returns are `module.func(...)` calls with no literal `return {`.
+- **Broken anchor links in INDEX.md** — two stale `#adapter-guides-16-files` links (updated heading is now 18 files). Was causing `test_all_docs_have_valid_internal_links` to fail.
+
+### Added (session aqua-shade-0227)
+- **Batch checker warning on skipped files** — `file_checker.py` now logs `WARNING: check: skipped <path> — ExceptionType: message` when a file is skipped due to an analyzer exception during `--check` runs. Previously silent; analyzer crashes now surface for debugging.
+
+### Changed (session aqua-shade-0227)
+- **Type annotations** — added full type annotations to `xml_analyzer.py` (`_filter_xml_children`), `graphql.py` (7 tree-sitter helper methods), `hcl.py` (3 methods), `protobuf.py` (11 methods; `_get_rpc_types` and `_get_rpc_streaming` now have precise `Tuple` return types).
+- **CSV sniffer logging** — `csv_analyzer.py` now logs at DEBUG level when `csv.Sniffer` fails and the extension-based fallback is used.
+
 ## [0.54.3] - 2026-02-27
 
 ### Fixed (sessions infernal-lightning-0227, ninja-force-0227)
