@@ -897,6 +897,12 @@ reveal cpanel://USERNAME/domains
 # Disk cert health for every domain (S2)
 reveal cpanel://USERNAME/ssl
 
+# DNS-verified: exclude NXDOMAIN domains from critical/expiring counts
+# Use when large accounts have inactive/former-customer domains with expiring certs
+reveal cpanel://USERNAME/ssl --dns-verified
+# Output: summary shows "1 critical  (2 nxdomain-excluded: 2 critical)"
+# NXDOMAIN domains still shown in table with [nxdomain] tag
+
 # Nobody ACL check on every domain docroot (N1)
 reveal cpanel://USERNAME/acl-check
 
@@ -943,6 +949,7 @@ reveal /etc/nginx/conf.d/users/USERNAME.conf --diagnose
 | "Which docroots block nobody?" | `reveal cpanel://USERNAME/acl-check` |
 | "What domains does this user have?" | `reveal cpanel://USERNAME/domains` |
 | 500+ domain config, show only problems | add `--only-failures` to `--validate-nginx-acme` |
+| "Former-customer domains inflating critical count" | `reveal cpanel://USERNAME/ssl --dns-verified` |
 
 **ACL check methods:**
 - `reveal cpanel://USERNAME/acl-check` — filesystem walk (authoritative); finds denied docroots directly

@@ -635,6 +635,10 @@ reveal cpanel://USERNAME/domains
 # Disk cert health per domain
 reveal cpanel://USERNAME/ssl
 
+# DNS-verified: exclude NXDOMAIN (former-customer) domains from counts
+# Useful when large accounts have inactive domains with expiring certs
+reveal cpanel://USERNAME/ssl --dns-verified
+
 # Nobody ACL check on every domain docroot
 reveal cpanel://USERNAME/acl-check
 

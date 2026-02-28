@@ -6,16 +6,17 @@ category: reference
 
 **Complete catalog of all user-facing documentation**
 
-**Last Updated**: 2026-02-15
-**Total**: 38 markdown files, 36,768 lines
+**Last Updated**: 2026-02-27
+**Total**: 40 markdown files, ~38,500 lines
 
 ---
 
 ## Quick Navigation
 
 - **New users** → [QUICK_START.md](QUICK_START.md) → [RECIPES.md](RECIPES.md)
-- **Adapters** → See [Adapter Guides](#adapter-guides-16-files) below
-- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2079 lines)
+- **Adapters** → See [Adapter Guides](#adapter-guides-18-files) below
+- **nginx / cPanel operator** → [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md)
+- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2289 lines)
 - **Developers** → [Development Guides](#development-guides-3-files)
 
 ---
@@ -33,14 +34,15 @@ category: reference
 
 ---
 
-## Adapter Guides (16 files)
+## Adapter Guides (18 files)
 
-Complete guides for all URI protocol adapters (22,720 lines):
+Complete guides for all URI protocol adapters and infrastructure analyzers (~23,450 lines):
 
 | File | Lines | Purpose |
 |------|-------|---------|
 | [AST_ADAPTER_GUIDE.md](AST_ADAPTER_GUIDE.md) | 1188 | AST-based code analysis with complexity/size filtering |
 | [CLAUDE_ADAPTER_GUIDE.md](CLAUDE_ADAPTER_GUIDE.md) | 2182 | Claude CLI session analysis and tool usage tracking |
+| [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md) | 328 | cPanel user environment: domains, SSL, ACL health |
 | [DIFF_ADAPTER_GUIDE.md](DIFF_ADAPTER_GUIDE.md) | 1928 | Git diff analysis and structure comparison |
 | [DOMAIN_ADAPTER_GUIDE.md](DOMAIN_ADAPTER_GUIDE.md) | 2293 | Domain/DNS/WHOIS information analysis |
 | [ENV_ADAPTER_GUIDE.md](ENV_ADAPTER_GUIDE.md) | 1347 | Environment variable analysis and validation |
@@ -55,13 +57,13 @@ Complete guides for all URI protocol adapters (22,720 lines):
 | [STATS_ADAPTER_GUIDE.md](STATS_ADAPTER_GUIDE.md) | 1864 | Codebase statistics and metrics collection |
 | [XLSX_ADAPTER_GUIDE.md](XLSX_ADAPTER_GUIDE.md) | 564 | Excel/XLSX file analysis and data extraction |
 
-**Total**: ~22,700 lines
+**Total**: ~23,050 lines
 
 ---
 
-## Analyzer Guides (4 files)
+## Analyzer Guides (5 files)
 
-Language analyzer development and patterns:
+Language and infrastructure analyzer guides:
 
 | File | Lines | Description |
 |------|-------|-------------|
@@ -69,8 +71,9 @@ Language analyzer development and patterns:
 | [ELIXIR_ANALYZER_GUIDE.md](ELIXIR_ANALYZER_GUIDE.md) | 67 | Elixir language analyzer guide |
 | [HTML_GUIDE.md](HTML_GUIDE.md) | 397 | HTML analysis and template extraction |
 | [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) | 827 | Markdown analysis, headings, and frontmatter |
+| [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) | 405 | nginx config analysis: rules, operator commands, cPanel workflows |
 
-**Total**: 2,108 lines
+**Total**: ~2,513 lines
 
 ---
 
@@ -116,25 +119,25 @@ Complete reference for AI agent integration:
 
 | File | Lines | Description |
 |------|-------|-------------|
-| [AGENT_HELP.md](AGENT_HELP.md) | 2079 | Complete AI agent reference (~45KB) |
+| [AGENT_HELP.md](AGENT_HELP.md) | 2289 | Complete AI agent reference (~48KB) |
 
-**Total**: 2,079 lines
+**Total**: 2,289 lines
 
 ---
 
 ## Documentation Statistics
 
 **By Category**:
-- Adapter Guides: 14 files, ~22,700 lines (61%)
-- Reference: 11 files, ~6,250 lines (17%)
+- Adapter Guides: 16 files, ~23,050 lines (60%)
+- Reference: 11 files, ~6,250 lines (16%)
+- Analyzer Guides: 5 files, ~2,513 lines (7%)
 - User Guides: 4 files, ~2,700 lines (7%)
-- Analyzer Guides: 4 files, ~2,100 lines (6%)
-- AI Agent: 1 file, ~2,100 lines (6%)
+- AI Agent: 1 file, ~2,289 lines (6%)
 - Development: 3 files, ~1,200 lines (3%)
 
-**Total**: 37 files, ~37,000 lines
+**Total**: 40 files, ~38,500 lines
 
-**Last Updated**: 2026-02-20 (Session: blazing-spark-0220)
+**Last Updated**: 2026-02-27 (Session: ninja-force-0227)
 
 ---
 
@@ -160,5 +163,5 @@ Internal maintainer documentation (planning, research, architecture) is maintain
 
 ---
 
-**Last Updated**: 2026-02-20 (Session: blazing-spark-0220)
+**Last Updated**: 2026-02-27 (Session: ninja-force-0227)
 **Navigation**: [README](README.md) | [Project Root](../../README.md)
