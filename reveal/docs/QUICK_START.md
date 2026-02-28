@@ -322,7 +322,7 @@ reveal help://anti-patterns      # What NOT to do
 
 **New users:**
 1. [RECIPES.md](RECIPES.md) - Task-based workflows
-2. [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Complete feature reference
+2. [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Markdown file analysis guide
 3. [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Customize behavior
 
 **AI agents:**
@@ -340,4 +340,4 @@ reveal help://anti-patterns      # What NOT to do
 
 ---
 
-**Navigation:** [← Documentation Index](README.md) | [Full Guide →](MARKDOWN_GUIDE.md) | [Recipes →](RECIPES.md)
+**Navigation:** [← Documentation Index](README.md) | [Recipes →](RECIPES.md) | [Markdown Guide →](MARKDOWN_GUIDE.md)
