@@ -6,14 +6,20 @@ Common uses: Maven pom.xml, Spring configs, Android manifests, SOAP APIs.
 
 import xml.etree.ElementTree as ET
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from ..base import FileAnalyzer
 from ..registry import register
 
 logger = logging.getLogger(__name__)
 
 
-def _filter_xml_children(children, head, tail, range, child_count):
+def _filter_xml_children(
+    children: List[Any],
+    head: Optional[int],
+    tail: Optional[int],
+    range: Optional[Tuple[int, int]],
+    child_count: int,
+) -> List[Any]:
     """Apply head/tail/range filtering to a list of XML children."""
     if head is not None:
         return children[:head]

@@ -48,7 +48,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
             **{k: v for k, v in structure.items() if v},
         }
 
-    def _get_name_from_node(self, node) -> Optional[str]:
+    def _get_name_from_node(self, node: Any) -> Optional[str]:
         """Extract name from a node's children.
 
         Args:
@@ -62,7 +62,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
                 return self._get_node_text(child)
         return None
 
-    def _get_fields_definition(self, node) -> Optional[Any]:
+    def _get_fields_definition(self, node: Any) -> Optional[Any]:
         """Get fields_definition child node.
 
         Args:
@@ -76,7 +76,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
                 return child
         return None
 
-    def _extract_field_names(self, fields_def) -> List[str]:
+    def _extract_field_names(self, fields_def: Any) -> List[str]:
         """Extract field names from fields_definition node.
 
         Args:
@@ -93,7 +93,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
                     fields.append(field_name)
         return fields
 
-    def _extract_implements(self, type_def) -> List[str]:
+    def _extract_implements(self, type_def: Any) -> List[str]:
         """Extract implemented interfaces from type definition.
 
         Args:
@@ -112,7 +112,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
                             implements.append(iface_name)
         return implements
 
-    def _extract_arguments(self, args_def_node) -> List[str]:
+    def _extract_arguments(self, args_def_node: Any) -> List[str]:
         """Extract arguments from arguments_definition node.
 
         Args:
@@ -134,7 +134,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
                         args.append(arg_name)
         return args
 
-    def _get_field_type(self, field_node) -> Optional[str]:
+    def _get_field_type(self, field_node: Any) -> Optional[str]:
         """Get the return type from a field node.
 
         Args:
@@ -148,7 +148,7 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
                 return self._get_type_string(child)
         return None
 
-    def _extract_field_info(self, field_node) -> Tuple[Optional[str], List[str], Optional[str]]:
+    def _extract_field_info(self, field_node: Any) -> Tuple[Optional[str], List[str], Optional[str]]:
         """Extract name, arguments, and return type from field_definition.
 
         Args:

@@ -1,5 +1,5 @@
 """HCL (HashiCorp Configuration Language) analyzer using tree-sitter."""
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -74,7 +74,7 @@ class HCLAnalyzer(TreeSitterAnalyzer):
 
         return blocks
 
-    def _parse_block_header(self, block_node):
+    def _parse_block_header(self, block_node: Any) -> Tuple[Optional[str], List[str]]:
         """Parse block identifier and labels from block node.
 
         Args:
@@ -125,7 +125,7 @@ class HCLAnalyzer(TreeSitterAnalyzer):
 
         return block_type
 
-    def _add_type_specific_info(self, block_info: Dict[str, Any], block_type: str, attributes: Dict[str, Any]):
+    def _add_type_specific_info(self, block_info: Dict[str, Any], block_type: str, attributes: Dict[str, Any]) -> None:
         """Add type-specific attributes to block info.
 
         Args:
@@ -147,7 +147,7 @@ class HCLAnalyzer(TreeSitterAnalyzer):
             if 'source' in attributes:
                 block_info['source'] = attributes['source']
 
-    def _parse_attribute_node(self, attr_node) -> tuple:
+    def _parse_attribute_node(self, attr_node: Any) -> Tuple[Optional[str], Optional[str]]:
         """Parse key and value from a single HCL attribute node."""
         key = None
         value = None

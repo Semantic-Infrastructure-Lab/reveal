@@ -6,7 +6,7 @@ Provides schema inference and data quality metrics.
 
 import csv
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from ..base import FileAnalyzer
 from ..registry import register
 
@@ -82,13 +82,14 @@ class CsvAnalyzer(FileAnalyzer):
             sample = '\n'.join(content.split('\n')[:5])  # First 5 lines
             dialect = sniffer.sniff(sample)
             return dialect.delimiter
-        except Exception:
+        except Exception as e:
+            logger.debug("csv sniffer failed for %s (%s: %s); falling back to extension heuristic", self.path, type(e).__name__, e)
             # Fallback: check file extension
             if str(self.path).endswith('.tsv'):
                 return '\t'
             return ','
 
-    def _parse_csv_rows(self, delimiter: str) -> tuple:
+    def _parse_csv_rows(self, delimiter: str) -> Tuple[Optional[List[str]], Optional[List[List[str]]]]:
         """Parse CSV and return columns and data rows.
 
         Returns:

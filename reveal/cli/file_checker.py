@@ -8,6 +8,7 @@ This module handles quality checking of files in a directory tree:
 
 import sys
 import os
+import logging
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -288,8 +289,8 @@ def check_and_report_file(
 
         return issue_count
 
-    except Exception:
-        # Skip files that can't be read or processed
+    except Exception as e:
+        logging.warning("check: skipped %s — %s: %s", file_path, type(e).__name__, e)
         return 0
 
 
@@ -334,8 +335,8 @@ def check_and_collect_file(
 
         return len(detections), detections
 
-    except Exception:
-        # Skip files that can't be read or processed
+    except Exception as e:
+        logging.warning("check: skipped %s — %s: %s", file_path, type(e).__name__, e)
         return 0, []
 
 

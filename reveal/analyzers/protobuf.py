@@ -1,5 +1,5 @@
 """Protocol Buffers analyzer using tree-sitter."""
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 
@@ -92,7 +92,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
 
         return services
 
-    def _get_service_name(self, service_node) -> Optional[str]:
+    def _get_service_name(self, service_node: Any) -> Optional[str]:
         """Extract service name from service node."""
         for child in service_node.children:
             if child.type == 'service_name':
@@ -101,7 +101,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
                         return self._get_node_text(name_child)
         return None
 
-    def _extract_service_rpcs(self, service_node) -> List[Dict[str, Any]]:
+    def _extract_service_rpcs(self, service_node: Any) -> List[Dict[str, Any]]:
         """Extract all RPC methods from a service node."""
         rpcs = []
         rpc_nodes = self._find_nodes_in_subtree(service_node, 'rpc')
@@ -113,7 +113,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
 
         return rpcs
 
-    def _extract_single_rpc(self, rpc_node) -> Optional[Dict[str, Any]]:
+    def _extract_single_rpc(self, rpc_node: Any) -> Optional[Dict[str, Any]]:
         """Extract details of a single RPC method."""
         rpc_name = self._get_rpc_name(rpc_node)
         request_type, response_type = self._get_rpc_types(rpc_node)
@@ -133,7 +133,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
             'line_start': rpc_node.start_point[0] + 1,
         }
 
-    def _get_rpc_name(self, rpc_node) -> Optional[str]:
+    def _get_rpc_name(self, rpc_node: Any) -> Optional[str]:
         """Extract RPC method name."""
         for child in rpc_node.children:
             if child.type == 'rpc_name':
@@ -142,7 +142,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
                         return self._get_node_text(name_child)
         return None
 
-    def _get_rpc_types(self, rpc_node):
+    def _get_rpc_types(self, rpc_node: Any) -> Tuple[Optional[str], Optional[str]]:
         """Extract request and response types from RPC node."""
         request_type = None
         response_type = None
@@ -164,7 +164,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
 
         return request_type, response_type
 
-    def _get_rpc_streaming(self, rpc_node):
+    def _get_rpc_streaming(self, rpc_node: Any) -> Tuple[bool, bool]:
         """Determine if RPC uses streaming for request/response."""
         is_streaming_request = False
         is_streaming_response = False
@@ -213,7 +213,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
             })
         return messages
 
-    def _get_message_name(self, msg_node) -> Optional[str]:
+    def _get_message_name(self, msg_node: Any) -> Optional[str]:
         """Extract identifier string from a message node's message_name child."""
         for child in msg_node.children:
             if child.type == 'message_name':
@@ -222,7 +222,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
                         return self._get_node_text(name_child)
         return None
 
-    def _format_field_info(self, field_node) -> Optional[str]:
+    def _format_field_info(self, field_node: Any) -> Optional[str]:
         """Build a display string for a protobuf field node, or None if unnamed."""
         field_type = field_name = field_number = None
         for child in field_node.children:
@@ -239,7 +239,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
             info += f" = {field_number}"
         return info
 
-    def _get_enum_name(self, enum_node) -> Optional[str]:
+    def _get_enum_name(self, enum_node: Any) -> Optional[str]:
         """Extract name string from an enum node."""
         for child in enum_node.children:
             if child.type == 'enum_name':
@@ -248,7 +248,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
                         return self._get_node_text(name_child)
         return None
 
-    def _get_enum_field_value(self, enum_field) -> Optional[str]:
+    def _get_enum_field_value(self, enum_field: Any) -> Optional[str]:
         """Build 'name = number' string from an enum_field node."""
         value_name = None
         value_number = None
@@ -261,7 +261,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
             return None
         return f"{value_name} = {value_number}" if value_number else value_name
 
-    def _get_enum_body_values(self, enum_node) -> List[str]:
+    def _get_enum_body_values(self, enum_node: Any) -> List[str]:
         """Extract all value strings from an enum node's body."""
         values = []
         for child in enum_node.children:
@@ -287,7 +287,7 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
             })
         return enums
 
-    def _find_nodes_in_subtree(self, root_node, node_type: str) -> List:
+    def _find_nodes_in_subtree(self, root_node: Any, node_type: str) -> List[Any]:
         """Find all nodes of a specific type within a subtree."""
         nodes = []
 

@@ -146,13 +146,13 @@ Complete reference for AI agent integration:
 **By Task**:
 - "How do I start?" → [QUICK_START.md](QUICK_START.md)
 - "What can Reveal do?" → [RECIPES.md](RECIPES.md)
-- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-16-files)
+- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-18-files)
 - "How do queries work?" → [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md)
 - "For AI agents?" → [AGENT_HELP.md](AGENT_HELP.md)
 - "Create custom adapter?" → [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md)
 
 **By Adapter**:
-Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-16-files) above.
+Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-18-files) above.
 
 ---
 

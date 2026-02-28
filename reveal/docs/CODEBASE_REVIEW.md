@@ -7,8 +7,8 @@ category: reference
 **Author**: TIA (The Intelligent Agent)
 **Created**: 2026-01-16
 **Session**: yafimi-0116
-**Updated**: 2026-02-18 (iridescent-aurora-0218)
-**Version**: 1.1
+**Updated**: 2026-02-27 (aqua-shade-0227)
+**Version**: 1.2
 
 ---
 
@@ -363,7 +363,7 @@ reveal 'ast://reveal:?decorator=register_adapter'
 
 ---
 
-### 13. **help://** - Self-Documenting Help System
+### 14. **help://** - Self-Documenting Help System
 Progressive disclosure documentation: discover adapters, read guides, learn patterns.
 
 **Codebase Review Usage:**
@@ -1340,6 +1340,8 @@ reveal stats://./src --format=json > perf_after.json
 | `env://` | Environment vars | `env://DATABASE_URL` |
 | `mysql://` | MySQL inspector | `mysql://localhost/innodb` |
 | `sqlite://` | SQLite explorer | `sqlite:///app.db/users` |
+| `ssl://` | SSL cert inspector | `ssl://example.com --check` |
+| `cpanel://` | cPanel environment | `cpanel://USERNAME/ssl` |
 | `reveal://` | Meta-review | `reveal://adapters/ast.py` |
 | `help://` | Documentation | `help://tricks` |
 
