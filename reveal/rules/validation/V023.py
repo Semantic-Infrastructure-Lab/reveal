@@ -201,10 +201,21 @@ class V023(BaseRule):
 
     def _check_required_contract_fields(self, method_body, method_name, file_path, line_num):
         """Check that required contract fields appear in the method body."""
-        # Dispatcher pattern: method delegates to sub-methods that own the contract.
-        # e.g. get_structure() returns self._get_ssl_structure() / self._get_overview_structure()
-        # The fields live in those sub-methods; checking get_structure() is a false positive.
+        # Dispatcher pattern: method delegates to sub-methods/functions that own the contract.
+        # e.g. get_structure() returns self._get_ssl_structure() or files.get_file_history()
+        # The fields live in those callees; checking the dispatcher is a false positive.
         if 'return self._get_' in method_body or 'return self._' in method_body:
+            return []
+        # Module-level delegation: all paths return via an imported helper (e.g. return files.get_X(...))
+        import re as _re
+        delegated_returns = _re.findall(r'\breturn \w+\.\w+\(', method_body)
+        direct_dict_returns = _re.findall(r'\breturn \{', method_body)
+        if delegated_returns and not direct_dict_returns:
+            return []
+
+        # ResultBuilder pattern: fields are passed as kwargs, not dict literals.
+        # ResultBuilder.create(contract_version=..., source=..., ...) satisfies the contract.
+        if 'ResultBuilder.create(' in method_body:
             return []
 
         required_fields = ['contract_version', 'type', 'source', 'source_type']
