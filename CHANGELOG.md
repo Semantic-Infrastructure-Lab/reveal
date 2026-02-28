@@ -12,6 +12,20 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.3] - 2026-02-27
+
+### Fixed (sessions infernal-lightning-0227, ninja-force-0227)
+- **B3 — N004 quoted ACME root paths** — `.strip('"\'')` applied to ACME root in N004 messages; cPanel nginx configs quote all `root` directives, causing `'"/home/..."'` double-wrapped display and false-positive path mismatches. Messages now show bare paths; quoted and unquoted forms treated as equal.
+- **I001 false positive — `__init__.py` broad catches** — B006 rule incorrectly flagged `except Exception` in `__init__.py` registration functions. `__init__.py` imports are always public API; broad catches there are intentional. B006 now skips `__init__.py` files.
+- **V023 false positive — dispatcher delegation** — V023 fired on `return self._delegate_method(...)` patterns where the method is a dispatcher, not a dead branch. V023 now skips `return self._` patterns (delegation by convention).
+
+### Added (sessions infernal-lightning-0227, ninja-force-0227)
+- **U6 — `cpanel://USERNAME/ssl --dns-verified`** — DNS-verified mode for cpanel ssl element: domains with no DNS record (NXDOMAIN) are shown with a `[nxdomain]` tag but excluded from critical/expiring summary counts. Eliminates false alarms from former-customer domains whose DNS has moved away. Detection uses `socket.getaddrinfo` (stdlib only, no subprocess).
+
+### Documentation (session ninja-force-0227)
+- **CPANEL_ADAPTER_GUIDE.md** — new comprehensive guide for the `cpanel://` adapter: all four elements, `--dns-verified` with annotated example output, JSON scripting patterns, 6-step SSL audit workflow, and filesystem paths reference.
+- **NGINX_ANALYZER_GUIDE.md** — new comprehensive guide for nginx file analysis: all 6 rules (N001–N006) with real-world context, all operator flags, domain extraction pipeline, 7-step SSL failure diagnosis workflow.
+
 ## [0.54.2] - 2026-02-27
 
 ### Fixed (session peaceful-aurora-0227)

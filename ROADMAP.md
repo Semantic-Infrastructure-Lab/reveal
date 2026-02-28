@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-02-27 (ninja-force-0227 — CPANEL/NGINX guides, --dns-verified, dogfood rule fixes, stale section cleanup)
+> **Last updated**: 2026-02-27 (aqua-shade-0227 — v0.54.3 release)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -7,7 +7,7 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
-### v0.54.3-dev (unreleased)
+### v0.54.3
 - ✅ **B3 — N004 quoted path messages** — `.strip('"\'')` on ACME root in N004 messages; cPanel configs quote root directives, causing `'"/home/..."'` double-wrapped display and false-positive path mismatches. Messages now show bare paths; quoted and unquoted forms treated as equal.
 - ✅ **U6 — `cpanel://USERNAME/ssl --dns-verified`** — DNS-verified mode for cpanel ssl: NXDOMAIN domains shown with `[nxdomain]` tag but excluded from critical/expiring summary counts. Eliminates false alarms from former-customer domains whose DNS has moved away. NXDOMAIN-only scope via `socket.getaddrinfo` (stdlib, no subprocess).
 - ✅ **Dogfood false positive elimination** — three rules fixed via `reveal reveal/ --check`: I001 skips `__init__.py` (imports are always public API/registration); B006 checks enclosing function docstring for error-tolerance keywords before flagging intentional broad catches; V023 skips dispatcher methods (`return self._` delegation pattern).
@@ -171,7 +171,7 @@ This document outlines reveal's development priorities and future direction. For
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: 4,546 passing (as of v0.54.3-dev)
+- Test count: 4,546 passing (as of v0.54.3)
 - UX Phases 3/4/5: ✅ **ALL COMPLETE** (query operators, field selection, element discovery)
 - Target: 80%+ coverage for core adapters
 
