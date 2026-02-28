@@ -6,6 +6,7 @@ category: guide
 
 **Author**: TIA (The Intelligent Agent)
 **Created**: 2025-02-14
+**Updated**: 2026-02-27 (v0.54.0 — on-disk certs, batch failure detail, expiry dates)
 **Adapter**: `ssl://`
 **Purpose**: SSL/TLS certificate inspection and health monitoring
 
@@ -47,7 +48,9 @@ The **ssl adapter** (`ssl://`) provides SSL/TLS certificate inspection with:
 
 - ✅ **Progressive disclosure** - Start with overview, drill down to details
 - ✅ **Health checks** - Expiry thresholds (30/7 days), chain validation, hostname match
-- ✅ **Batch mode** - Check multiple domains at once (nginx, stdin)
+- ✅ **Batch mode** - Check multiple domains at once; failure reason shown inline (DNS FAILURE, TIMEOUT, CONNECTION REFUSED, etc.)
+- ✅ **On-disk cert inspection** - `ssl://file:///path` — inspect PEM/DER certs without a live connection
+- ✅ **Expiry dates in batch output** - warnings and healthy rows both show human-readable date
 - ✅ **Advanced checks** - TLS version, key strength, self-signed detection
 - ✅ **Zero external dependencies** - Pure Python `ssl` module
 - ✅ **Exit codes** - 0=healthy, 1=warning, 2=critical (CI/CD friendly)
@@ -1432,6 +1435,34 @@ reveal ssl://example.com/san --format=json | jq '.wildcard_entries'
 ---
 
 ## Version History
+
+### Version 1.2.0 (2026-02-27, v0.54.0–v0.54.3)
+
+**S2 — On-disk certificate inspection** (`ssl://file:///path`):
+```bash
+reveal ssl://file:///var/cpanel/ssl/apache_tls/example.com/combined
+reveal ssl://file:///etc/letsencrypt/live/example.com/fullchain.pem
+```
+Loads and inspects PEM/DER certificates without a live connection. PEM combined files (leaf + chain) are split automatically; chain length surfaced. Same health/expiry/SAN display as live cert.
+
+**S1 — Batch failure detail** (`--batch --check`):
+
+Failure reason now shown inline on each row:
+- Expired: `EXPIRED N days ago (Mon DD, YYYY)`
+- DNS: `DNS FAILURE (NXDOMAIN)`
+- Port: `CONNECTION REFUSED`
+- Firewall: `NETWORK UNREACHABLE`
+- Timeout: `TIMEOUT`
+- Chain: `CERT VERIFY FAILED`
+
+**S5 — Expiry dates in batch output**:
+- Warnings: `expires in N days  (Mon DD, YYYY)`
+- Healthy: `N days  (Mon DD, YYYY)`
+
+**U6 — `--dns-verified` (cpanel ssl)**:
+Domains with no DNS record (NXDOMAIN) are tagged `[nxdomain]` and excluded from critical/expiring counts. Prevents false alarms from former-customer domains whose DNS has moved away. Uses `socket.getaddrinfo` (stdlib only). Available via `cpanel://USERNAME/ssl --dns-verified`.
+
+---
 
 ### Version 1.0.0 (2025-02-14)
 - ✅ Comprehensive SSL adapter documentation

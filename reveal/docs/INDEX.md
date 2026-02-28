@@ -14,7 +14,7 @@ category: reference
 ## Quick Navigation
 
 - **New users** → [QUICK_START.md](QUICK_START.md) → [RECIPES.md](RECIPES.md)
-- **Adapters** → See [Adapter Guides](#adapter-guides-18-files) below
+- **Adapters** → See [Adapter Guides](#adapter-guides-16-files) below
 - **nginx / cPanel operator** → [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md)
 - **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2289 lines)
 - **Developers** → [Development Guides](#development-guides-3-files)
@@ -34,9 +34,9 @@ category: reference
 
 ---
 
-## Adapter Guides (18 files)
+## Adapter Guides (16 files)
 
-Complete guides for all URI protocol adapters and infrastructure analyzers (~23,450 lines):
+Complete guides for all URI protocol adapters (~23,050 lines):
 
 | File | Lines | Purpose |
 |------|-------|---------|
@@ -137,7 +137,7 @@ Complete reference for AI agent integration:
 
 **Total**: 40 files, ~38,500 lines
 
-**Last Updated**: 2026-02-27 (Session: ninja-force-0227)
+**Last Updated**: 2026-02-27 (Session: nexus-jack-0227)
 
 ---
 
@@ -146,13 +146,13 @@ Complete reference for AI agent integration:
 **By Task**:
 - "How do I start?" → [QUICK_START.md](QUICK_START.md)
 - "What can Reveal do?" → [RECIPES.md](RECIPES.md)
-- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-18-files)
+- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-16-files)
 - "How do queries work?" → [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md)
 - "For AI agents?" → [AGENT_HELP.md](AGENT_HELP.md)
 - "Create custom adapter?" → [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md)
 
 **By Adapter**:
-Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-18-files) above.
+Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-16-files) above.
 
 ---
 
@@ -163,5 +163,5 @@ Internal maintainer documentation (planning, research, architecture) is maintain
 
 ---
 
-**Last Updated**: 2026-02-27 (Session: ninja-force-0227)
+**Last Updated**: 2026-02-27 (Session: nexus-jack-0227)
 **Navigation**: [README](README.md) | [Project Root](../../README.md)
