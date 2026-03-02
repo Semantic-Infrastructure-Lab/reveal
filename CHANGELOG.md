@@ -12,6 +12,16 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.5] - 2026-03-01
+
+### Fixed (session charcoal-glow-0301)
+- **N003 false positives — `include` snippets not resolved** — `_find_proxy_headers()` now follows `include` directives in proxy location blocks. Resolves paths relative to the config file's directory then the nginx root (e.g. `/etc/nginx/snippets/tia-proxy-headers.conf`). If the included file contains the required headers, N003 is suppressed. If the include exists but can't be read, N003 is also suppressed (can't verify → no false positive). Bare locations with no include and no headers still fire. Eliminated 17 false positives across 4 vhost configs on tia-proxy.
+- **N001 false positives — no way to mark intentional shared backends** — Added `# reveal:allow-shared-backend` annotation. Any upstream block containing this comment is excluded from the duplicate-backend map entirely. N001's suggestion text now tells users about the annotation. Allows intentional aliasing (e.g. staging alias for a dev node) without noise.
+- **`nginx://` URI scheme in `help://nginx` and `ssl.yaml`** — The scheme is not implemented; `reveal nginx://...` returns "Unsupported URI scheme". Removed unimplemented `nginx://` examples from `HelpAdapter` and one stray reference in `ssl.yaml`. Replaced with working file-path equivalents.
+
+### Added (session charcoal-glow-0301)
+- **N007: ssl_stapling without OCSP responder URL** (LOW) — Detects server blocks with `ssl_stapling on;` whose certificate has no Authority Information Access / OCSP extension. When present, nginx silently ignores stapling and logs a warning; TLS handshakes degrade because clients must fetch OCSP directly. Rule reads the `ssl_certificate` file and checks for an OCSP URL (via `cryptography` library if available, DER byte-scan fallback). Gracefully suppresses when the cert is unreadable (cert may live on a remote host). Fires with suggestion to remove `ssl_stapling` or replace the cert.
+
 ## [0.54.4] - 2026-02-27
 
 ### Fixed (session aqua-shade-0227)

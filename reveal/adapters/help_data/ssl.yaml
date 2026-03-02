@@ -121,7 +121,7 @@ workflows:
     steps:
       - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --validate-nginx  # Cross-validate"
       - "reveal ssl://domain-with-issues.com --check --advanced                  # Inspect specific issue"
-      - "reveal nginx:///etc/nginx/conf.d/domain.conf                            # Check nginx config"
+      - "reveal /etc/nginx/conf.d/domain.conf --check                            # Check nginx config"
 
   - name: 'Monitor Certificate Expiry'
     scenario: 'Find certificates expiring soon across infrastructure'

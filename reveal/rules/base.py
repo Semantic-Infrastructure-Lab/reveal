@@ -131,6 +131,7 @@ class RulePrefix(Enum):
     # N004: ACME challenge path inconsistency
     # N005: Timeout/buffer values outside safe operational ranges
     # N006: send_timeout too short for client_max_body_size (HIGH)
+    # N007: ssl_stapling enabled on cert without OCSP responder URL (LOW)
 
     # Validation (V) - reveal self-validation
     V = "V"  # Reveal internal validation rules

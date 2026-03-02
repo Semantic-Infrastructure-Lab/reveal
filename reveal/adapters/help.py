@@ -444,25 +444,13 @@ class HelpAdapter(ResourceAdapter):
                 'type': 'file_analyzer',
                 'description': 'nginx is a file-based analyzer — pass a config file path directly',
                 'note': (
-                    'nginx is NOT a URI adapter. '
-                    'Use: reveal /path/to/nginx.conf or reveal nginx:///path/file.conf'
+                    'nginx is a file-based analyzer — pass config file paths directly. '
+                    'The nginx:// URI scheme is not yet implemented.'
                 ),
                 'examples': [
                     {'uri': 'reveal /etc/nginx/nginx.conf', 'description': 'See all server blocks'},
-                    {'uri': 'reveal nginx:///etc/nginx/conf.d/users/USERNAME.conf --domain example.com',
-                     'description': 'Filter to one domain'},
-                    {'uri': 'reveal /etc/nginx/nginx.conf --check', 'description': 'N001-N006 rules'},
-                    {'uri': 'reveal nginx:///path/user.conf --check-acl', 'description': 'N1: nobody ACL check'},
-                    {'uri': 'reveal nginx:///path/user.conf --extract acme-roots',
-                     'description': 'N4: ACME root paths + ACL status'},
-                    {'uri': 'reveal nginx:///path/user.conf --check-conflicts',
-                     'description': 'N2: location block routing issues'},
-                    {'uri': 'reveal nginx:///path/user.conf --validate-nginx-acme',
-                     'description': 'Full ACME+ACL+SSL audit in one table'},
-                    {'uri': 'reveal nginx:///path/user.conf --cpanel-certs',
-                     'description': 'Disk cert vs live cert comparison'},
-                    {'uri': 'reveal nginx:///path/user.conf --diagnose',
-                     'description': 'Scan error log for ACME/SSL failures'},
+                    {'uri': 'reveal /etc/nginx/nginx.conf --check', 'description': 'Run N001-N007 rules'},
+                    {'uri': 'reveal /etc/nginx/conf.d/example.com.conf --check', 'description': 'Check a single vhost'},
                 ],
                 'see_also': [
                     'reveal help://ssl - SSL certificate inspection',

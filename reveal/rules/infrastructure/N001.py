@@ -53,6 +53,10 @@ class N001(BaseRule):
             upstream_body = match.group(2)
             upstream_start = content[:match.start()].count('\n') + 1
 
+            # Skip upstreams explicitly marked as intentionally sharing a backend
+            if 'reveal:allow-shared-backend' in upstream_body:
+                continue
+
             # Find all server directives in this upstream
             for server_match in self.SERVER_PATTERN.finditer(upstream_body):
                 server_spec = server_match.group(1).strip()
@@ -73,7 +77,7 @@ class N001(BaseRule):
                         file_path=file_path,
                         line=line,
                         message=f"Upstream '{upstream_name}' shares backend {backend} with '{first_upstream}'",
-                        suggestion="Verify this is intentional. Different upstreams usually need different backends.",
+                        suggestion="Verify this is intentional. If so, add '# reveal:allow-shared-backend' inside the upstream block to suppress.",
                         context=f"Both '{first_upstream}' and '{upstream_name}' → {backend}"
                     ))
 

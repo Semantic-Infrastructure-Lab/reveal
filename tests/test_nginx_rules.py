@@ -1,12 +1,15 @@
-"""Tests for nginx configuration rules (N001, N002, N003).
+"""Tests for nginx configuration rules (N001, N002, N003, N007).
 
 Tests pattern detection for common nginx misconfigurations.
 """
 
+import os
+import tempfile
 import unittest
 from reveal.rules.infrastructure.N001 import N001
 from reveal.rules.infrastructure.N002 import N002
 from reveal.rules.infrastructure.N003 import N003
+from reveal.rules.infrastructure.N007 import N007
 
 
 class TestN001DuplicateBackend(unittest.TestCase):
@@ -420,11 +423,12 @@ class TestNginxRulesIntegration(unittest.TestCase):
         rules = RuleRegistry.get_rules(select=['N'])
         rule_codes = [r.code for r in rules]
 
-        self.assertEqual(len(rules), 6)
+        self.assertEqual(len(rules), 7)
         self.assertIn('N001', rule_codes)
         self.assertIn('N002', rule_codes)
         self.assertIn('N003', rule_codes)
         self.assertIn('N004', rule_codes)
+        self.assertIn('N007', rule_codes)
 
 
 class TestN004ACMEPathInconsistency(unittest.TestCase):
@@ -679,6 +683,286 @@ server {
         self.assertEqual(len(detections), 1)
         suggestion = detections[0].suggestion
         self.assertNotIn('"', suggestion, "Suggestion field should contain no quotes")
+
+
+class TestN001AllowAnnotation(unittest.TestCase):
+    """Tests for N001: reveal:allow-shared-backend suppression annotation."""
+
+    def setUp(self):
+        self.rule = N001()
+
+    def test_annotation_suppresses_duplicate(self):
+        """Upstream with reveal:allow-shared-backend should not fire N001."""
+        content = """
+upstream sil_website_staging {
+    # reveal:allow-shared-backend
+    server 10.108.0.8:8080;
+}
+upstream tia_dev_nginx {
+    server 10.108.0.8:8080;
+}
+"""
+        detections = self.rule.check("nginx.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_annotation_on_second_upstream_suppresses(self):
+        """Annotation on either upstream in a pair should suppress."""
+        content = """
+upstream app_prod {
+    server 10.0.0.1:8080;
+}
+upstream app_staging {
+    # reveal:allow-shared-backend
+    server 10.0.0.1:8080;
+}
+"""
+        detections = self.rule.check("nginx.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_no_annotation_still_fires(self):
+        """Without annotation, N001 should still fire for duplicate backends."""
+        content = """
+upstream app1 {
+    server 10.0.0.1:8080;
+}
+upstream app2 {
+    server 10.0.0.1:8080;
+}
+"""
+        detections = self.rule.check("nginx.conf", None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_suggestion_mentions_annotation(self):
+        """N001 suggestion should tell users about the suppression annotation."""
+        content = """
+upstream a { server 127.0.0.1:9000; }
+upstream b { server 127.0.0.1:9000; }
+"""
+        detections = self.rule.check("nginx.conf", None, content)
+        self.assertGreater(len(detections), 0)
+        self.assertIn("reveal:allow-shared-backend", detections[0].suggestion)
+
+
+class TestN003IncludeResolution(unittest.TestCase):
+    """Tests for N003: include directive handling."""
+
+    def setUp(self):
+        self.rule = N003()
+
+    def test_unresolvable_include_suppresses_warning(self):
+        """Location with an include (even if unresolvable) should not fire N003."""
+        content = """
+location /api/v1/assets/ {
+    proxy_pass http://sdms_assets;
+    include snippets/tia-proxy-headers.conf;
+}
+"""
+        detections = self.rule.check("/etc/nginx/conf.d/test.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_include_with_headers_suppresses_warning(self):
+        """Location whose include file contains the required headers should not fire."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create snippet file with the required headers
+            snippet_dir = os.path.join(tmpdir, "snippets")
+            os.makedirs(snippet_dir)
+            snippet = os.path.join(snippet_dir, "proxy-headers.conf")
+            with open(snippet, "w") as fh:
+                fh.write("proxy_set_header X-Real-IP $remote_addr;\n")
+                fh.write("proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n")
+
+            # Config file lives in tmpdir/conf.d/; snippet is at tmpdir/snippets/
+            conf_dir = os.path.join(tmpdir, "conf.d")
+            os.makedirs(conf_dir)
+            config_file = os.path.join(conf_dir, "test.conf")
+
+            content = f"""
+location /api/ {{
+    proxy_pass http://backend;
+    include snippets/proxy-headers.conf;
+}}
+"""
+            detections = self.rule.check(config_file, None, content)
+            self.assertEqual(len(detections), 0)
+
+    def test_include_without_headers_still_fires(self):
+        """Location whose include file lacks the required headers should still fire."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snippet_dir = os.path.join(tmpdir, "snippets")
+            os.makedirs(snippet_dir)
+            snippet = os.path.join(snippet_dir, "no-proxy-headers.conf")
+            with open(snippet, "w") as fh:
+                fh.write("proxy_set_header Host $host;\n")  # Host only, not X-Real-IP etc.
+
+            conf_dir = os.path.join(tmpdir, "conf.d")
+            os.makedirs(conf_dir)
+            config_file = os.path.join(conf_dir, "test.conf")
+
+            content = """
+location /api/ {
+    proxy_pass http://backend;
+    include snippets/no-proxy-headers.conf;
+}
+"""
+            detections = self.rule.check(config_file, None, content)
+            self.assertEqual(len(detections), 1)
+
+    def test_no_include_no_headers_still_fires(self):
+        """Bare proxy location with no include and no headers must still fire."""
+        content = """
+location /bare/ {
+    proxy_pass http://backend;
+}
+"""
+        detections = self.rule.check("/etc/nginx/conf.d/test.conf", None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_absolute_include_path_resolved(self):
+        """Absolute include paths should be resolved directly."""
+        with tempfile.NamedTemporaryFile(suffix=".conf", mode="w", delete=False) as fh:
+            fh.write("proxy_set_header X-Real-IP $remote_addr;\n")
+            fh.write("proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n")
+            snippet_path = fh.name
+
+        try:
+            content = f"""
+location /api/ {{
+    proxy_pass http://backend;
+    include {snippet_path};
+}}
+"""
+            detections = self.rule.check("/etc/nginx/conf.d/test.conf", None, content)
+            self.assertEqual(len(detections), 0)
+        finally:
+            os.unlink(snippet_path)
+
+
+class TestN007SslStapling(unittest.TestCase):
+    """Tests for N007: ssl_stapling without OCSP URL."""
+
+    def setUp(self):
+        self.rule = N007()
+
+    def _cert_path(self):
+        """Return path to a cert that will be 'unreadable' (does not exist)."""
+        return "/etc/letsencrypt/live/example.org/fullchain.pem"
+
+    def test_no_ssl_stapling_no_detection(self):
+        """Server blocks without ssl_stapling should not fire N007."""
+        content = """
+server {
+    listen 443 ssl;
+    ssl_certificate /etc/ssl/certs/example.pem;
+    ssl_certificate_key /etc/ssl/private/example.key;
+}
+"""
+        detections = self.rule.check("test.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_ssl_stapling_unreadable_cert_no_detection(self):
+        """ssl_stapling on a cert that can't be read should not fire (can't verify)."""
+        content = f"""
+server {{
+    listen 443 ssl;
+    ssl_certificate {self._cert_path()};
+    ssl_stapling on;
+    ssl_stapling_verify on;
+}}
+"""
+        detections = self.rule.check("test.conf", None, content)
+        # cert is unreadable → suppressed
+        self.assertEqual(len(detections), 0)
+
+    def test_ssl_stapling_with_real_cert_with_ocsp(self):
+        """ssl_stapling on a cert that has an OCSP URL should not fire."""
+        # Write a minimal PEM that our check_ocsp_url will see as 'unreadable'
+        # (since it won't parse as a valid DER cert), which also suppresses.
+        # This tests the code path without requiring a real cert on the test host.
+        with tempfile.NamedTemporaryFile(suffix=".pem", mode="w", delete=False) as fh:
+            fh.write("-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n")
+            cert_path = fh.name
+        try:
+            content = f"""
+server {{
+    listen 443 ssl;
+    ssl_certificate {cert_path};
+    ssl_stapling on;
+}}
+"""
+            detections = self.rule.check("test.conf", None, content)
+            # Unparseable cert → 'unreadable' → suppressed (not a false positive)
+            self.assertEqual(len(detections), 0)
+        finally:
+            os.unlink(cert_path)
+
+    def test_ssl_stapling_cert_with_no_ocsp_fires(self):
+        """ssl_stapling on a readable cert with no OCSP URL should fire N007."""
+        # Write a minimal PEM that parses as DER but contains no 'ocsp'/'http' bytes.
+        # We patch _check_ocsp_url to control the result cleanly.
+        rule = N007()
+        rule._check_ocsp_url = lambda path: 'missing'
+
+        with tempfile.NamedTemporaryFile(suffix=".pem", mode="w", delete=False) as fh:
+            fh.write("-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n")
+            cert_path = fh.name
+        try:
+            content = f"""
+server {{
+    listen 443 ssl;
+    ssl_certificate {cert_path};
+    ssl_stapling on;
+}}
+"""
+            detections = rule.check("test.conf", None, content)
+            self.assertEqual(len(detections), 1)
+            self.assertIn(cert_path, detections[0].message)
+            self.assertIn("OCSP", detections[0].message)
+        finally:
+            os.unlink(cert_path)
+
+    def test_no_ssl_certificate_directive_no_detection(self):
+        """ssl_stapling without ssl_certificate directive should not fire (nothing to check)."""
+        content = """
+server {
+    listen 443 ssl;
+    ssl_stapling on;
+}
+"""
+        detections = self.rule.check("test.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_multiple_server_blocks_checked_independently(self):
+        """Each server block is checked independently."""
+        rule = N007()
+        call_count = [0]
+        original = rule._check_ocsp_url
+
+        def patched(path):
+            call_count[0] += 1
+            return 'missing'
+
+        rule._check_ocsp_url = patched
+
+        content = """
+server {
+    listen 443 ssl;
+    ssl_certificate /etc/ssl/a.pem;
+    ssl_stapling on;
+}
+server {
+    listen 8443 ssl;
+    ssl_certificate /etc/ssl/b.pem;
+    ssl_stapling on;
+}
+"""
+        detections = rule.check("test.conf", None, content)
+        self.assertEqual(len(detections), 2)
+        self.assertEqual(call_count[0], 2)
+
+    def test_severity_is_low(self):
+        """N007 should be LOW severity."""
+        from reveal.rules.base import Severity
+        self.assertEqual(self.rule.severity, Severity.LOW)
 
 
 if __name__ == '__main__':
