@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`reveal pack` key-directory scoring** — `'main'` substring was falsely matching `maintainability`, causing all rules in that directory to score +2.0 as "key modules". Now uses whole-path-component matching (`Path.parts` set intersection), fixing `reveal/rules/maintainability/*.py` files from being over-scored.
 - **Mypy cleanup — 121 → 0 errors**: Phase 1 (121→33): `get_structure` return type, treesitter class-level attrs, adapter signature fixes. Phase 2 (33→0): str()/cast() for no-any-return, typed variables for StructureOptions returns, `parse_host_port` return type fix, unused `type: ignore` removal across 19 files.
 
+### Fixed (session prism-tone-0303)
+- **`--sort modified` alias for `'mtime'`** — `reveal dir/ --files --sort modified` and `reveal dir/ --sort modified` were silently ignored because `'modified'` wasn't a recognized sort key in `tree_view.py`. Now accepted as an alias for `'mtime'` in both `show_file_list` and `_get_sorted_entries`.
+
 ### Added (session techno-thrasher-0303)
 - **Parser inheritance consistency** — `review`, `health`, `pack` parsers now use `parents=[_build_global_options_parser()]`, matching `check`. All 4 subcommand parsers now inherit `--format`, `--copy`, `--verbose`, `--no-breadcrumbs` uniformly.
 - **`--check` one-implementation rule** — routing.py `--check` path now calls `run_check(args)` from `commands/check.py` directly, eliminating dead code duplication. `handle_recursive_check` import removed.
