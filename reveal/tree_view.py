@@ -3,7 +3,7 @@
 import datetime
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 from .registry import get_analyzer
 from .display.filtering import PathFilter
 from .utils import format_size
@@ -141,8 +141,10 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
             lines.append("   Consider using --fast to skip line counting for better performance\n")
 
     # Track how many entries we've shown
-    context = {'count': 0, 'max_entries': max_entries, 'truncated': 0, 'dir_limit': dir_limit,
-               'sort_by': sort_by, 'sort_desc': sort_desc, 'include_extensions': include_extensions}
+    context: dict[str, Any] = {
+        'count': 0, 'max_entries': max_entries, 'truncated': 0, 'dir_limit': dir_limit,
+        'sort_by': sort_by, 'sort_desc': sort_desc, 'include_extensions': include_extensions,
+    }
     _walk_directory(root_path, lines, depth=depth, show_hidden=show_hidden,
                    fast=fast, context=context, path_filter=path_filter)
 

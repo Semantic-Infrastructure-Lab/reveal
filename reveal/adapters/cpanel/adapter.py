@@ -331,7 +331,7 @@ class CpanelAdapter(ResourceAdapter):
                     'acl_detail': {},
                 })
 
-        summary = {}
+        summary: dict[str, int] = {}
         for r in acl_results:
             s = r['acl_status']
             summary[s] = summary.get(s, 0) + 1
@@ -353,7 +353,7 @@ class CpanelAdapter(ResourceAdapter):
             ],
         }
 
-    def get_element(self, element_type: str, name: str = '') -> Optional[Dict[str, Any]]:
+    def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Not used — element routing handled in get_structure."""
         return None
 

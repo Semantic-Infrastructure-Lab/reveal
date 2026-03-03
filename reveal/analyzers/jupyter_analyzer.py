@@ -36,7 +36,7 @@ class JupyterAnalyzer(FileAnalyzer):
         if not source:
             return ""
 
-        first_line = (source[0] if isinstance(source, list) else source).strip()
+        first_line = str(source[0] if isinstance(source, list) else source).strip()
         if len(first_line) > 50:
             first_line = first_line[:50] + "..."
         return first_line
@@ -108,7 +108,7 @@ class JupyterAnalyzer(FileAnalyzer):
                          for idx, cell in enumerate(self.cells)]
 
         # Return only the cells list for display
-        result = {
+        result: Dict[str, Any] = {
             'contract_version': '1.0',
             'type': 'jupyter_structure',
             'source': str(self.path),

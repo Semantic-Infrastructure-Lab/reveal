@@ -326,7 +326,7 @@ _ORDERED_OPS = {
 def _apply_ordered_op(a, b, operator: str) -> bool:
     """Apply an ordered comparison operator to two comparable values."""
     fn = _ORDERED_OPS.get(operator)
-    return fn(a, b) if fn else False
+    return bool(fn(a, b)) if fn else False
 
 
 def _handle_numeric_operator(field_value: Any, operator: str, target_value: Any, opts: dict) -> bool:
@@ -434,7 +434,7 @@ def compare_values(
 
     # Handle None/null values
     if field_value is None:
-        return _handle_none_comparison(operator, target_value, opts)
+        return _handle_none_comparison(operator, target_value, opts) or False
 
     # Handle list fields - check if any element matches
     if opts['allow_list_any'] and isinstance(field_value, list):
