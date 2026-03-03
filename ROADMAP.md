@@ -1,11 +1,38 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-02 (obsidian-kaiju-0302 — v0.54.7 release)
+> **Last updated**: 2026-03-03 (prism-tone-0303 — v0.57.0 release)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.57.0
+- ✅ **`reveal check <path>`** — canonical quality check subcommand replacing `--check` flag; own `--help`, `--rules`, `--explain`
+- ✅ **`reveal review <path>`** — PR review workflow orchestrating diff + check + hotspots + complexity; `--format json` for CI/CD
+- ✅ **`reveal health <target>`** — unified health check with exit codes 0/1/2; `--all` auto-detects targets from `.reveal.yaml` or common source dirs
+- ✅ **`reveal pack <path>`** — token-budgeted context snapshot for LLM consumption; `--budget`, `--focus`, `--verbose`
+- ✅ **`reveal dev <subcommand>`** — developer tooling: `new-adapter`, `new-analyzer`, `new-rule`, `inspect-config`
+- ✅ **Parser inheritance** — all 4 subcommand parsers inherit global flags via `parents=` pattern
+- ✅ **`--sort -field` syntax** — `reveal 'markdown://path/' --sort -modified` now works via argv preprocessing
+- ✅ **`--sort modified` alias** — accepted as alias for `mtime` in `--files` mode and directory trees
+- ✅ **`claude:// --base-path DIR`** — runtime override for `CONVERSATION_BASE` (WSL, remote machines, mounted volumes)
+- ✅ **Per-adapter CLI flags in `help://`** — `help://ssl`, `help://nginx`, `help://markdown`, `help://html` each show adapter-specific flag reference
+- ✅ **Mypy: 0 errors** across 313 source files
+
+### v0.56.0
+- ✅ **`reveal check` parser foundation** — `_build_global_options_parser()` shared parent; `reveal check --help` subcommand-specific help
+- ✅ **Error-with-hint guards** — nginx/cPanel batch flags and markdown `--related` fail with helpful redirect errors on wrong input types
+- ✅ **`--check` deprecation hint** — `reveal ./src --check` still works but prints migration hint
+
+### v0.55.0
+- ✅ **`--files` mode** — flat time-sorted file list with timestamps; replaces `find dir/ | sort -rn`
+- ✅ **`--ext <ext>`** — filetype filter for directory trees and `--files` mode
+- ✅ **`--sort`, `--desc`, `--asc`** — sort control for directory listings and file lists
+- ✅ **`--meta`** — show file metadata (size, lines, extension) in directory listings
+
+### v0.54.8
+- ✅ **`claude://` Bash commands in tools summary** — `reveal claude://session` shows Bash tool invocations in tool-use summary view
 
 ### v0.54.7
 - ✅ **Issue 3 — `claude://sessions` alias** — `sessions` was parsed as a session name and errored. Now an early-exit alias for `_list_sessions()`, mirroring the `search` guard.
