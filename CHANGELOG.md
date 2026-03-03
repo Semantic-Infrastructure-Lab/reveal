@@ -12,6 +12,20 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.57.0] - 2026-03-03
+
+### Added (session ultra-warmonger-0303)
+- **`reveal dev` subcommand** — developer tooling: `reveal dev new-adapter`, `new-analyzer`, `new-rule` (wraps scaffold), `reveal dev inspect-config` (shows effective `.reveal.yaml`).
+- **`reveal review` subcommand** — PR review workflow. Orchestrates diff + check + hotspots + complexity into a unified report. Supports git range syntax (`reveal review main..feature`) and path syntax (`reveal review ./src`). `--format json` for CI/CD gating.
+- **`reveal health` subcommand** — unified health check across code, SSL, databases, DNS. Routes by target type. Exit codes: 0=pass, 1=warn, 2=fail. Composable: `reveal health ./src ssl://example.com`.
+- **`reveal pack` subcommand** — token-budgeted context snapshot for LLM consumption. `--budget N` (tokens) or `--budget N-lines`. `--focus TOPIC` weights matching files. Prioritizes entry points → key modules → recency. `--verbose` shows per-file token/line counts.
+- **`--sort -field` syntax** — `reveal 'markdown:///path/' --sort -modified` now works. argv preprocessing converts space-form to `=` form before argparse.
+- **CLI flags sections in `help://` topics** — `help://ssl`, `help://nginx`, `help://markdown`, `help://html` each show a "CLI Flags" section listing adapter-specific flags with descriptions. `_render_help_cli_flags()` added to help renderer.
+
+### Fixed
+- **SSL batch flags error-with-hint** — `--expiring-within`, `--summary`, `--validate-nginx` now fail with a helpful error and `ssl://` URI hint when used on local paths.
+- **Markdown `--related` error-with-hint** — `--related`, `--related-all` now fail with helpful error when used on non-markdown files.
+
 ## [0.56.0] - 2026-03-03
 
 ### Added (session celestial-mage-0303)
