@@ -4,9 +4,9 @@ category: guide
 ---
 # Claude Adapter Guide (claude://)
 
-**Last Updated**: 2026-02-14
+**Last Updated**: 2026-03-02
 **Version**: 1.0
-**Adapter Version**: reveal 0.1.0+
+**Adapter Version**: reveal 0.54.6+
 
 ---
 
@@ -1594,10 +1594,10 @@ reveal claude://session/my-session/tools --format json | jq '.tools[] | select(.
    - **Limitation**: Read-only analysis (can't edit conversations)
    - **Design**: Intentional (inspection tool, not editor)
 
-6. **Limited message indexing**
-   - **Limitation**: No full-text search across all sessions
-   - **Impact**: Must analyze one session at a time
-   - **Workaround**: Use shell loops for multi-session analysis
+6. **No cross-session full-text search**
+   - **Limitation**: `claude://search?query=` is not implemented — returns a structured error
+   - **Impact**: Can't search text across all sessions from reveal
+   - **Workaround**: `tia search sessions "<term>"` — scans all session transcripts
 
 ---
 
@@ -1623,9 +1623,24 @@ reveal claude://session/my-session/tools --format json | jq '.tools[] | select(.
 ls ~/.claude/projects/my-project/
 
 # List available sessions
-reveal claude://session/list
+reveal claude://
 
 # Verify session name spelling
+```
+
+---
+
+#### Error: "cross-session search not implemented"
+
+**Meaning**: `claude://search?query=` is not yet implemented
+
+**Solutions**:
+```bash
+# Use TIA search instead
+tia search sessions "<term>"
+
+# Or search locally with ripgrep
+rg "<term>" ~/.claude/projects/
 ```
 
 ---
@@ -2296,6 +2311,6 @@ A: See [GitHub Actions Integration](#5-github-actions-integration) example.
 
 ---
 
-**Last Updated**: 2026-02-14
-**Adapter Version**: reveal 0.1.0+
+**Last Updated**: 2026-03-02
+**Adapter Version**: reveal 0.54.6+
 **Documentation Version**: 1.0
