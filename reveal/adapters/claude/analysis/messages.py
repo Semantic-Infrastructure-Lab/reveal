@@ -265,7 +265,7 @@ def get_messages(messages: List[Dict], session_name: str,
     base['type'] = 'claude_messages'
 
     lower_search = search.lower() if search else None
-    turns = []
+    turns: List[Dict[str, Any]] = []
 
     for i, msg in enumerate(messages):
         if msg.get('type') != 'assistant':

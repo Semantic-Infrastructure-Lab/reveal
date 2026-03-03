@@ -76,7 +76,7 @@ _TIMEOUT_THRESHOLDS: Dict[str, Tuple[Optional[float], Optional[float], str]] = {
 }
 
 # Size directive thresholds: (min_mb, max_mb, description)
-_SIZE_THRESHOLDS: Dict[str, Tuple[Optional[float], Optional[float], str]] = {
+_SIZE_THRESHOLDS: Dict[str, Tuple[Optional[float], Optional[float], Optional[str]]] = {
     'client_body_buffer_size':   (None, 64.0,  'client body buffer size'),
     'client_max_body_size':      (None, 2048.0, 'client max body size'),
     'proxy_buffers':             (None, None,   None),  # complex – handled separately

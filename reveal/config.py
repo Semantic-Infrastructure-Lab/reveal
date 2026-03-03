@@ -31,17 +31,17 @@ except ImportError:
     yaml = None  # type: ignore[assignment]
 
 try:
-    import tomllib  # type: ignore[import-not-found]  # Python 3.11+
+    import tomllib  # Python 3.11+
 except ImportError:
     try:
         import tomli as tomllib  # Backport
     except ImportError:
-        tomllib = None  # type: ignore[assignment,unused-ignore]
+        tomllib = None
 
 try:
-    import jsonschema  # type: ignore[import-untyped]
+    import jsonschema
 except ImportError:
-    jsonschema = None  # type: ignore[assignment,unused-ignore]
+    jsonschema = None
 
 logger = logging.getLogger(__name__)
 

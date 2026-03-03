@@ -370,8 +370,8 @@ class SSLRenderer(TypeDispatchRenderer):
         """Return True if result cert expires within N days (or is an error)."""
         days = r.get('certificate', {}).get('days_until_expiry')
         if days is None:
-            return r['status'] == 'failure'  # Include errors
-        return days <= expiring_days
+            return bool(r['status'] == 'failure')  # Include errors
+        return bool(days <= expiring_days)
 
     @staticmethod
     def _filter_results(result: dict, only_failures: bool = False,

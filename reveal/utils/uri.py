@@ -209,7 +209,7 @@ def parse_connection_string(
 def parse_host_port(
     host_port_str: str,
     default_port: Optional[int] = None
-) -> tuple[str, int]:
+) -> tuple[str, Optional[int]]:
     """Parse host:port string into components.
 
     Args:
@@ -235,6 +235,7 @@ def parse_host_port(
         >>> port
         443
     """
+    port: Optional[int]
     if ':' in host_port_str:
         host, port_str = host_port_str.rsplit(':', 1)
         try:

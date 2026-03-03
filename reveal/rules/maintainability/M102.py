@@ -297,7 +297,7 @@ class M102(BaseRule):
         if package_root in _import_cache:
             return _import_cache[package_root]
 
-        imports = set()
+        imports: set[str] = set()
 
         for py_file in package_root.rglob('*.py'):
             try:

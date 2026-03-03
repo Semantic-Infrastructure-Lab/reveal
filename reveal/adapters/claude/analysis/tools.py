@@ -73,7 +73,7 @@ def extract_all_tool_results(messages: List[Dict]) -> List[Dict]:
                 if not isinstance(content, dict):
                     continue
                 if content.get('type') == 'tool_result':
-                    tool_id = content.get('tool_use_id')
+                    tool_id = str(content.get("tool_use_id", ""))
                     tool_name = tool_use_map.get(tool_id, 'unknown')
                     result_content = str(content.get('content', ''))
 
@@ -222,7 +222,7 @@ def _track_tool_results(messages: List[Dict], tool_use_map: Dict[str, str],
             if content.get('type') != 'tool_result':
                 continue
 
-            tool_id = content.get('tool_use_id')
+            tool_id = str(content.get("tool_use_id", ""))
             if tool_id not in tool_use_map:
                 continue
 
@@ -373,17 +373,18 @@ def _extract_tool_detail(tool_name: str, tool_input: Dict[str, Any]) -> Optional
         Detail string or None
     """
     if tool_name == 'Bash':
-        return tool_input.get('description') or tool_input.get('command', '')
+        return str(tool_input.get('description') or tool_input.get('command', ''))
     elif tool_name in ('Read', 'Write', 'Edit'):
-        return tool_input.get('file_path', '')
+        return str(tool_input.get('file_path', ''))
     elif tool_name == 'Grep':
         pattern = tool_input.get('pattern')
         path = tool_input.get('path', '.')
         return f"'{pattern}' in {path}"
     elif tool_name == 'Glob':
-        return tool_input.get('pattern')
+        return str(tool_input.get('pattern')) if tool_input.get('pattern') is not None else None
     elif tool_name in ('TaskCreate', 'TaskUpdate'):
-        return tool_input.get('subject') or tool_input.get('taskId')
+        result = tool_input.get('subject') or tool_input.get('taskId')
+        return str(result) if result is not None else None
     return None
 
 

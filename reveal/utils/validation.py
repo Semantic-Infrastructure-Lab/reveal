@@ -26,7 +26,7 @@ Usage:
 """
 
 from pathlib import Path
-from typing import Optional, Any, Callable
+from typing import Optional, Any, Callable, cast
 
 
 def require_path_exists(
@@ -326,7 +326,7 @@ def validate_callable(
     """
     if not callable(value):
         raise TypeError(f"{param_name} must be callable, got {type(value).__name__}")
-    return value
+    return cast(Callable[..., Any], value)
 
 
 # Convenience validators for common patterns

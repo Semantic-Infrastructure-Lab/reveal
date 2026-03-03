@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, cast
 
 from ...registry import get_analyzer
 
@@ -87,7 +87,7 @@ def analyze_file(file_path: Path, calculate_file_stats_func) -> Optional[Dict[st
 
         # Calculate statistics (analyzer has content)
         stats = calculate_file_stats_func(file_path, structure_dict, analyzer.content)
-        return stats
+        return cast(Dict[str, Any], stats)
 
     except Exception:
         # Silently skip files that can't be analyzed

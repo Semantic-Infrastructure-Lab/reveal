@@ -508,8 +508,7 @@ def _render_single_category(category: str, items: Any, path: Path, output_format
     if not isinstance(items, list):
         return
 
-    count = (len(items.get('data', {})) if isinstance(items, dict) else len(items)) \
-        if category == 'frontmatter' else len(items)
+    count = len(items)
 
     print(f"{category.capitalize()} ({count}):")
 

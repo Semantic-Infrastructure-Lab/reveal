@@ -2,7 +2,7 @@
 
 import re
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, cast
 from ..base import FileAnalyzer
 from ..registry import register
 from ..structure_options import StructureOptions
@@ -47,19 +47,19 @@ class HTMLAnalyzer(FileAnalyzer):
     @staticmethod
     def _build_structure_options(head, tail, range, kwargs) -> 'StructureOptions':
         """Build StructureOptions from explicit params and kwargs."""
-        options = kwargs.get('options')
-        if options is not None:
-            return options
+        existing = kwargs.get('options')
+        if existing is not None:
+            return cast('StructureOptions', existing)
         if head is not None:
             kwargs['head'] = head
         if tail is not None:
             kwargs['tail'] = tail
         if range is not None:
             kwargs['range'] = range
-        options = StructureOptions.from_kwargs(**kwargs)
+        built: StructureOptions = StructureOptions.from_kwargs(**kwargs)
         if 'links' in kwargs:
-            options.extract_links = kwargs['links']
-        return options
+            built.extract_links = kwargs['links']
+        return built
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract HTML structure progressively.

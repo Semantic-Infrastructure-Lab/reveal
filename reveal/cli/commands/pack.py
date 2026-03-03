@@ -114,7 +114,7 @@ def _parse_budget(budget_str: str) -> Tuple[Optional[int], Optional[int]]:
 
 def _collect_candidates(path: Path, focus: Optional[str]) -> List[Dict[str, Any]]:
     """Collect and score candidate files for the pack."""
-    candidates = []
+    candidates: List[Dict[str, Any]] = []
 
     for f in _walk_files(path):
         # Skip near-empty __init__.py files — they're almost always re-export

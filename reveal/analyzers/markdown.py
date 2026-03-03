@@ -146,14 +146,15 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
     def _build_md_options(options, head, tail, range, kwargs) -> 'StructureOptions':
         """Build StructureOptions from explicit params and kwargs."""
         if options is not None:
-            return options
+            return cast('StructureOptions', options)
         if head is not None:
             kwargs['head'] = head
         if tail is not None:
             kwargs['tail'] = tail
         if range is not None:
             kwargs['range'] = range
-        return StructureOptions.from_kwargs(**kwargs)
+        result: StructureOptions = StructureOptions.from_kwargs(**kwargs)
+        return result
 
     def get_structure(self, options: Optional[StructureOptions] = None, head: Optional[int] = None, tail: Optional[int] = None, range: Optional[str] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:  # type: ignore[override]
         """Extract markdown structure.

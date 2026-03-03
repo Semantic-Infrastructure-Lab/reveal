@@ -62,7 +62,7 @@ class D001(BaseRule):
         def class_for(line: int) -> Optional[str]:
             for cls in classes:
                 if cls.get('line', 0) <= line <= cls.get('line_end', 0):
-                    return cls.get('name')
+                    return str(cls.get("name")) if cls.get("name") is not None else None
             return None
 
         # hash -> [(func_name, line, body_length), ...] keyed by scope

@@ -134,7 +134,7 @@ class JavaScriptExtractor(LanguageExtractor):
         for child in node.children:
             if child.type == 'string':
                 # Get string content, strip quotes
-                return analyzer._get_node_text(child).strip('"\'')
+                return str(analyzer._get_node_text(child)).strip("'\"")
         return None
 
     def _find_import_clause_node(self, node) -> Optional[Any]:
