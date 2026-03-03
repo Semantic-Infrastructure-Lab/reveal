@@ -37,6 +37,9 @@ class ClaudeRenderer(TypeDispatchRenderer):
     def _render_claude_session_overview(result: dict) -> None:
         """Render session overview."""
         print(f"Claude Session: {result.get('session', 'unknown')}")
+        title = result.get('title')
+        if title:
+            print(f"Title: {title}")
         print(f"Messages: {result.get('message_count', 0)}")
         print(f"User: {result.get('user_messages', 0)} | Assistant: {result.get('assistant_messages', 0)}")
         if 'duration' in result:

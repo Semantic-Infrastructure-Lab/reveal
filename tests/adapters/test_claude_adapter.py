@@ -1264,6 +1264,139 @@ class TestClaudeRenderer:
         assert 'ls -la' in output
 
 
+class TestSessionsAlias:
+    """Tests for claude://sessions alias — Issue 3."""
+
+    def test_sessions_alias_returns_listing(self, tmp_path):
+        """claude://sessions should return the session list, not an error."""
+        base = tmp_path / 'projects'
+        base.mkdir()
+        proj = base / '-home-user-src-tia-sessions-my-session'
+        proj.mkdir()
+        (proj / 'main.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('sessions')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter.get_structure()
+
+        assert result['type'] == 'claude_session_list'
+        assert result['session_count'] == 1
+
+    def test_sessions_trailing_slash_alias(self, tmp_path):
+        """claude://sessions/ (trailing slash) also returns the listing."""
+        base = tmp_path / 'projects'
+        base.mkdir()
+
+        adapter = ClaudeAdapter('sessions/')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter.get_structure()
+
+        assert result['type'] == 'claude_session_list'
+
+    def test_sessions_not_treated_as_session_name(self, tmp_path):
+        """Ensure 'sessions' is never passed to _find_conversation as a session name."""
+        base = tmp_path / 'projects'
+        base.mkdir()
+
+        adapter = ClaudeAdapter('sessions')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter.get_structure()
+
+        assert 'error' not in result or result.get('type') == 'claude_session_list'
+        assert result['type'] == 'claude_session_list'
+
+
+class TestSessionTitle:
+    """Tests for session title extraction — Issue 4."""
+
+    def _make_session(self, tmp_path, messages):
+        """Write a JSONL session file and return (base_path, adapter)."""
+        import json as _json
+        base = tmp_path / 'projects'
+        base.mkdir()
+        proj = base / '-home-user-src-tia-sessions-my-session'
+        proj.mkdir()
+        jsonl = proj / 'main.jsonl'
+        jsonl.write_text('\n'.join(_json.dumps(m) for m in messages) + '\n')
+        adapter = ClaudeAdapter('session/my-session')
+        adapter.conversation_path = jsonl
+        return base, adapter
+
+    def test_title_extracted_from_string_content(self, tmp_path):
+        """Title extracted when first user message has string content."""
+        import json as _json
+        msgs = [
+            {'type': 'user', 'message': {'role': 'user', 'content': 'Fix the login bug\nMore details below'}, 'uuid': 'u1', 'timestamp': '2026-01-01T00:00:00Z'},
+            {'type': 'assistant', 'message': {'role': 'assistant', 'content': [{'type': 'text', 'text': 'OK'}]}, 'uuid': 'a1', 'timestamp': '2026-01-01T00:00:01Z'},
+        ]
+        base, adapter = self._make_session(tmp_path, msgs)
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter.get_structure()
+
+        assert result.get('title') == 'Fix the login bug'
+
+    def test_title_extracted_from_list_content(self, tmp_path):
+        """Title extracted when first user message has list-of-items content."""
+        msgs = [
+            {'type': 'user', 'message': {'role': 'user', 'content': [
+                {'type': 'text', 'text': 'Refactor the auth module\nDetails follow'}
+            ]}, 'uuid': 'u1', 'timestamp': '2026-01-01T00:00:00Z'},
+            {'type': 'assistant', 'message': {'role': 'assistant', 'content': [{'type': 'text', 'text': 'OK'}]}, 'uuid': 'a1', 'timestamp': '2026-01-01T00:00:01Z'},
+        ]
+        base, adapter = self._make_session(tmp_path, msgs)
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter.get_structure()
+
+        assert result.get('title') == 'Refactor the auth module'
+
+    def test_title_truncated_at_100_chars(self, tmp_path):
+        """Title is capped at 100 characters."""
+        long_line = 'A' * 150
+        msgs = [
+            {'type': 'user', 'message': {'role': 'user', 'content': long_line}, 'uuid': 'u1', 'timestamp': '2026-01-01T00:00:00Z'},
+            {'type': 'assistant', 'message': {'role': 'assistant', 'content': [{'type': 'text', 'text': 'OK'}]}, 'uuid': 'a1', 'timestamp': '2026-01-01T00:00:01Z'},
+        ]
+        base, adapter = self._make_session(tmp_path, msgs)
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter.get_structure()
+
+        assert len(result.get('title', '')) == 100
+
+    def test_title_none_when_no_user_messages(self, tmp_path):
+        """Title is None when there are no user messages."""
+        msgs = [
+            {'type': 'assistant', 'message': {'role': 'assistant', 'content': [{'type': 'text', 'text': 'Hello'}]}, 'uuid': 'a1', 'timestamp': '2026-01-01T00:00:00Z'},
+        ]
+        base, adapter = self._make_session(tmp_path, msgs)
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter.get_structure()
+
+        assert result.get('title') is None
+
+
+class TestHelpCrossPlatform:
+    """Tests for help://claude cross-platform examples — Issue 5."""
+
+    def test_try_now_has_no_bash_substitution(self):
+        """try_now entries must not contain $(basename $PWD) or similar bash substitutions."""
+        help_doc = ClaudeAdapter.get_help()
+        for cmd in help_doc.get('try_now', []):
+            assert '$(' not in cmd, f"Bash substitution found in try_now: {cmd!r}"
+
+    def test_notes_mention_both_platforms(self):
+        """Notes should mention both bash/zsh and PowerShell for finding session name."""
+        help_doc = ClaudeAdapter.get_help()
+        notes_text = ' '.join(help_doc.get('notes', []))
+        assert 'bash' in notes_text.lower() or 'zsh' in notes_text.lower(), "No bash/zsh mention in notes"
+        assert 'powershell' in notes_text.lower(), "No PowerShell mention in notes"
+
+    def test_try_now_still_has_examples(self):
+        """try_now must still contain actual reveal commands."""
+        help_doc = ClaudeAdapter.get_help()
+        reveal_cmds = [c for c in help_doc.get('try_now', []) if 'reveal' in c]
+        assert len(reveal_cmds) >= 3, "Expected at least 3 reveal commands in try_now"
+
+
 # Run tests with pytest
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

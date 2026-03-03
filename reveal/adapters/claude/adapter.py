@@ -220,6 +220,10 @@ class ClaudeAdapter(ResourceAdapter):
         if not self.resource or self.resource in ('.', ''):
             return self._list_sessions()
 
+        # Handle 'sessions' as alias for listing (plural form of bare claude://)
+        if self.resource in ('sessions', 'sessions/') or self.resource.startswith('sessions/'):
+            return self._list_sessions()
+
         # Handle top-level search subcommand (not yet implemented)
         if self.resource == 'search' or self.resource.startswith('search/'):
             return {
@@ -754,15 +758,18 @@ class ClaudeAdapter(ResourceAdapter):
             ],
             'workflows': ClaudeAdapter._get_help_workflows(),
             'try_now': [
-                'reveal claude://session/$(basename $PWD)',
-                'reveal claude://session/$(basename $PWD)?summary',
-                'reveal claude://session/$(basename $PWD)/thinking'
+                'reveal claude://                                   # list all sessions',
+                'reveal claude://session/infernal-earth-0118',
+                'reveal claude://session/infernal-earth-0118?summary',
+                'reveal claude://session/infernal-earth-0118/thinking'
             ],
             'notes': [
                 'Conversation files stored in ~/.claude/projects/{project-dir}/',
                 'Session names typically match directory names (e.g., infernal-earth-0118)',
                 'Token estimates are approximate (chars / 4)',
-                'Use --format=json for programmatic analysis with jq'
+                'Use --format=json for programmatic analysis with jq',
+                'Current session name — bash/zsh: basename $PWD | PowerShell: Split-Path -Leaf $PWD',
+                'On Windows, UUID session names are shown in the listing (reveal claude://)',
             ],
             'output_formats': ['text', 'json', 'grep'],
             'see_also': [

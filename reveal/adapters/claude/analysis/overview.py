@@ -1,10 +1,35 @@
 """Overview and summary generation for Claude sessions."""
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from collections import defaultdict
 from datetime import datetime
 
 from .tools import calculate_tool_success_rate
+
+
+def _extract_session_title(messages: List[Dict]) -> Optional[str]:
+    """Extract a display title from the first user message with text content.
+
+    Content can be a string (inline text) or a list of content items.
+    Returns the first non-empty line, truncated to 100 chars, or None.
+    """
+    for msg in messages:
+        if msg.get('type') != 'user':
+            continue
+        content = msg.get('message', {}).get('content', '')
+        if isinstance(content, str):
+            text = content.strip()
+        elif isinstance(content, list):
+            text = ''
+            for item in content:
+                if isinstance(item, dict) and item.get('type') == 'text':
+                    text = item.get('text', '').strip()
+                    break
+        else:
+            continue
+        if text:
+            return text.split('\n')[0].strip()[:100] or None
+    return None
 
 
 def analyze_message_sizes(messages: List[Dict]) -> Dict[str, Any]:
@@ -105,9 +130,11 @@ def get_overview(messages: List[Dict], session_name: str, conversation_path: str
 
     stats = _collect_message_stats(messages)
     duration = _calculate_session_duration(messages)
+    title = _extract_session_title(messages)
 
     base.update({
         'session': session_name,
+        'title': title,
         'message_count': len(messages),
         'user_messages': stats['user_messages'],
         'assistant_messages': stats['assistant_messages'],
