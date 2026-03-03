@@ -168,6 +168,37 @@ reveal src/app.py handle_request
 
 ---
 
+## Subcommands (v0.57.0+)
+
+Reveal includes intent-based subcommands for common workflows:
+
+```bash
+# Quality check (replaces --check flag)
+reveal check src/
+reveal check src/ --rules complexity,maintainability
+reveal check src/ --format json   # CI/CD gating
+
+# PR review (diff + check + hotspots in one pass)
+reveal review main..feature
+reveal review ./src               # Check current work
+
+# Health check (code, SSL, databases)
+reveal health src/
+reveal health ssl://example.com
+reveal health --all               # Auto-detect targets from .reveal.yaml
+
+# Token-budgeted snapshot for LLM context
+reveal pack src/ --budget 8000
+reveal pack src/ --focus authentication --budget 4000
+
+# Developer tools
+reveal dev new-adapter            # Scaffold a new adapter
+reveal dev new-rule               # Scaffold a quality rule
+reveal dev inspect-config         # Show effective .reveal.yaml
+```
+
+---
+
 ## Real-World Task: Code Review
 
 **Task:** Review a pull request for a feature branch.
@@ -182,13 +213,11 @@ git diff main..feature | cat
 
 **Reveal way (✅):**
 ```bash
-# What changed structurally?
-reveal diff://git://main/.:git://feature/.
+# Structural review (what changed + quality check)
+reveal review main..feature
 
-# Output shows:
-# - Which functions were added/removed/modified
-# - Which files changed
-# - No noise from whitespace or comments
+# Or just the structural diff:
+reveal diff://git://main/.:git://feature/.
 
 # Token cost: ~500 tokens (1000x reduction)
 # Time: 30 seconds

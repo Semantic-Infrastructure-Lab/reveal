@@ -36,13 +36,23 @@ reveal 'ast://src?complexity>30'
 - **Full Guide**: `reveal help://`
 - **Agent Help**: `reveal --agent-help`
 
+## Subcommands
+
+```bash
+reveal check src/             # Quality check (complexity, maintainability, links)
+reveal review main..feature   # PR review: diff + check + hotspots in one pass
+reveal health ssl://site.com  # Health check with exit codes 0/1/2
+reveal pack src/ --budget 8k  # Token-budgeted snapshot for LLM context
+reveal dev new-adapter        # Scaffold new adapters/rules
+```
+
 ## Features
 
 - 🎯 **Progressive Disclosure**: Structure → Element → Detail
 - 🔍 **Unified Query Syntax**: Filter and sort across all adapters
 - 🤖 **AI-Optimized**: Token-efficient output for LLM consumption
 - 📊 **Quality Metrics**: Complexity, maintainability, test coverage
-- 🔌 **Extensible**: 19 built-in adapters, 42+ languages built-in, easy to add custom ones
+- 🔌 **Extensible**: 16 built-in adapters, 42+ languages, easy to add custom ones
 
 ## License
 
