@@ -193,7 +193,7 @@ This document outlines reveal's development priorities and future direction. For
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: 4,546 passing (as of v0.54.4)
+- Test count: 4,587 passing (as of v0.54.7)
 - UX Phases 3/4/5: ✅ **ALL COMPLETE** (query operators, field selection, element discovery)
 - Target: 80%+ coverage for core adapters
 

@@ -50,7 +50,7 @@ Complete guides for all URI adapters:
 | Adapter | Purpose | Lines |
 |---------|---------|-------|
 | [AST_ADAPTER_GUIDE.md](AST_ADAPTER_GUIDE.md) | AST-based code analysis with complexity/size filtering | 1188 |
-| [CLAUDE_ADAPTER_GUIDE.md](CLAUDE_ADAPTER_GUIDE.md) | Claude CLI session analysis and tool usage | 2182 |
+| [CLAUDE_ADAPTER_GUIDE.md](CLAUDE_ADAPTER_GUIDE.md) | Claude CLI session analysis and tool usage | 2316 |
 | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md) | cPanel user environment: domains, SSL, ACL health | 328 |
 | [DIFF_ADAPTER_GUIDE.md](DIFF_ADAPTER_GUIDE.md) | Git diff analysis and structure comparison | 1928 |
 | [DOMAIN_ADAPTER_GUIDE.md](DOMAIN_ADAPTER_GUIDE.md) | Domain/DNS/WHOIS analysis | 2293 |
@@ -142,6 +142,6 @@ Internal maintainer documentation (planning, research, architecture) is maintain
 
 ---
 
-**Last updated:** 2026-02-27
+**Last updated:** 2026-03-02
 
 [← Project README](../../README.md)

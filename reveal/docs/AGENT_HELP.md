@@ -1034,6 +1034,93 @@ reveal doc.md --links --link-type internal
 
 ---
 
+### Task: "Analyze Claude Code sessions (claude://)"
+
+The `claude://` adapter provides session-level analysis of Claude Code conversations — tool usage analytics, file operation tracking, workflow visualization, and error detection. Designed for post-session review, debugging, and token optimization.
+
+**Pattern:**
+```bash
+# List recent sessions (most recent first)
+reveal claude://
+reveal claude://sessions          # alias
+
+# Session overview: messages, tools, duration
+reveal claude://session/my-session-0302
+
+# Chronological tool sequence
+reveal claude://session/my-session-0302/workflow
+
+# Files read/written/edited
+reveal claude://session/my-session-0302/files
+
+# Tool usage with success rates
+reveal claude://session/my-session-0302/tools
+
+# Errors with full context
+reveal claude://session/my-session-0302?errors
+
+# Thinking blocks with token estimates
+reveal claude://session/my-session-0302/thinking
+
+# Filter to specific tool
+reveal 'claude://session/my-session-0302?tools=Bash'
+
+# Directory and branch changes
+reveal claude://session/my-session-0302/context
+
+# User messages (prompts only)
+reveal claude://session/my-session-0302/user
+
+# Assistant text responses (no thinking/tools)
+reveal claude://session/my-session-0302/assistant
+
+# Specific message by number
+reveal claude://session/my-session-0302/message/5
+```
+
+**claude:// views:**
+- `claude://` / `claude://sessions` — listing of all sessions (sorted by recency)
+- `claude://session/<name>` — overview: message counts, tools used, duration, title
+- `claude://session/<name>/workflow` — numbered chronological tool sequence with descriptions
+- `claude://session/<name>/files` — Read/Write/Edit operations grouped by type, with repeat counts
+- `claude://session/<name>/tools` — all tools with call counts and success rates
+- `claude://session/<name>/thinking` — thinking blocks with character counts and token estimates
+- `claude://session/<name>/errors` — tool errors with full input/output context
+- `claude://session/<name>/context` — directory and branch changes during session
+- `claude://session/<name>/user` — user turns (initial prompt + tool result messages)
+- `claude://session/<name>/assistant` — assistant text responses only
+
+**When to use which view:**
+
+| Scenario | Command |
+|----------|---------|
+| "What did this session do?" | `reveal claude://session/<name>` |
+| "What order did things happen?" | `.../workflow` |
+| "Which files were changed?" | `.../files` |
+| "Why did a tool keep failing?" | `?errors` |
+| "How many tokens did thinking use?" | `.../thinking` |
+| "What was the original prompt?" | `.../user` |
+| "What did Claude output?" | `.../assistant` |
+
+**Progressive analysis workflow:**
+```bash
+# 1. Start with overview (cheapest)
+reveal claude://session/my-session-0302
+
+# 2. Check for errors if something went wrong
+reveal 'claude://session/my-session-0302?errors'
+
+# 3. See the workflow if the sequence matters
+reveal claude://session/my-session-0302/workflow
+
+# 4. Drill into files if you need to know what was touched
+reveal claude://session/my-session-0302/files
+```
+
+**Note:** `claude://search` is not yet implemented. To search across sessions, use `tia search sessions "<term>"`.
+
+---
+
 ## Output Formats
 
 **Choose format based on use case:**
@@ -2280,6 +2367,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
+- **v0.54.7** - Added claude:// task section (session analysis, workflow, files, thinking, errors)
 - **Pipeline workflows** - Advanced composition patterns
 - **Troubleshooting** - Common issues and solutions
 - **Performance data** - Benchmarks and optimization tips
