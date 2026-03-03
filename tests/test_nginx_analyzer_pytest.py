@@ -1580,11 +1580,18 @@ server {
 # _check_nobody_access() unit tests (real filesystem, using /tmp which is 1777)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skipif(
+    not __import__('sys').platform.startswith('linux'),
+    reason="_check_nobody_access uses Linux /tmp path traversal; macOS uses /private/var paths with different ancestor permissions"
+)
 class TestCheckNobodyAccess:
     """Unit tests for the _check_nobody_access() utility.
 
     Uses /tmp (mode 1777, universally world-executable) as the traversable
     parent so tests don't depend on pytest's restricted tmp directory layout.
+
+    Linux-only: macOS uses /private/var/folders paths where ancestor dirs
+    lack world-execute bits, causing false 'denied' results.
     """
 
     def test_world_readable_dir_is_ok(self):
