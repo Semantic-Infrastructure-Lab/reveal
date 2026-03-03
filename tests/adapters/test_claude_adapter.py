@@ -441,6 +441,27 @@ class TestSessionListing:
 
         assert len(result['recent_sessions']) == 1
 
+    def test_list_sessions_uuid_names_windows_style(self, tmp_path):
+        """Test that UUID JSONL filenames are used as session names (Windows layout)."""
+        base = tmp_path / 'projects'
+        base.mkdir()
+        # Windows: one project dir, multiple UUID JSONL files
+        proj = base / 'C--Users-markf-frono'
+        proj.mkdir()
+        uuid1 = '6b7f43f0-29fe-47bf-8b03-e430f7ed7e9b'
+        uuid2 = '00767efa-e49b-483d-a136-b0b02326d630'
+        (proj / f'{uuid1}.jsonl').write_text('{}')
+        (proj / f'{uuid2}.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter._list_sessions()
+
+        names = {s['session'] for s in result['recent_sessions']}
+        assert uuid1 in names
+        assert uuid2 in names
+        assert 'C--Users-markf-frono' not in names
+
 
 class TestConversationBaseEnvVar:
     """Tests for REVEAL_CLAUDE_DIR environment variable support."""

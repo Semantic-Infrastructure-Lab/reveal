@@ -317,13 +317,18 @@ class ClaudeAdapter(ResourceAdapter):
                 if not project_dir.is_dir():
                     continue
 
-                # Find JSONL files in project dir
+                # Find JSONL files in project dir (skip subagent dirs)
                 for jsonl_file in project_dir.glob('*.jsonl'):
-                    # Try to extract session name from path
-                    # TIA sessions: -home-scottsen-src-tia-sessions-SESSION_NAME
+                    # Derive session name:
+                    # 1. TIA Linux:  dir = -home-user-src-tia-sessions-SESSION_NAME (one jsonl)
+                    # 2. Windows:    dir = C--Users-markf-frono, file = UUID.jsonl (many per dir)
                     dir_name = project_dir.name
+                    file_stem = jsonl_file.stem
                     if '-sessions-' in dir_name:
                         session_name = dir_name.split('-sessions-')[-1]
+                    elif len(file_stem) == 36 and file_stem.count('-') == 4:
+                        # UUID filename (Windows-style) — use the UUID as the session name
+                        session_name = file_stem
                     else:
                         session_name = dir_name
 
