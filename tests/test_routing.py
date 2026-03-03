@@ -877,9 +877,8 @@ class TestHandleFileOrDirectory(unittest.TestCase):
                 mock_tree.assert_called_once()
 
     def test_directory_recursive_check(self):
-        """Verify directory with --recursive --check triggers recursive check handler."""
+        """Verify directory with --check delegates to run_check (canonical implementation)."""
         import tempfile
-        from reveal.cli import routing
 
         with tempfile.TemporaryDirectory() as temp_dir:
             mock_args = Namespace(
@@ -892,11 +891,9 @@ class TestHandleFileOrDirectory(unittest.TestCase):
                 no_breadcrumbs=False
             )
 
-            with patch.object(routing, 'handle_recursive_check') as mock_recursive:
+            with patch('reveal.cli.commands.check.run_check') as mock_run:
                 handle_file_or_directory(temp_dir, mock_args)
-
-                # Verify handle_recursive_check was called
-                mock_recursive.assert_called_once()
+                mock_run.assert_called_once_with(mock_args)
 
     def test_file_calls_handle_file(self):
         """Verify file path calls handle_file."""
@@ -933,16 +930,12 @@ class TestHandleFileOrDirectory(unittest.TestCase):
             os.unlink(temp_path)
 
     def test_recursive_check_json_format(self):
-        """Verify --format=json works with --recursive --check."""
+        """Verify --format=json is passed through when --check delegates to run_check."""
         import tempfile
-        import json
         from pathlib import Path
-        from io import StringIO
 
-        # Create temp directory with a Python file
         with tempfile.TemporaryDirectory() as tmpdir:
-            test_file = Path(tmpdir) / "test.py"
-            test_file.write_text("x = 1\n")
+            Path(tmpdir, "test.py").write_text("x = 1\n")
 
             mock_args = Namespace(
                 recursive=True,
@@ -953,48 +946,11 @@ class TestHandleFileOrDirectory(unittest.TestCase):
                 hotspots=False
             )
 
-            # Capture stdout
-            from reveal.cli import routing
-
-            with patch.object(routing, 'handle_recursive_check') as mock_recursive:
-                # Simulate JSON output from handle_recursive_check
-                def json_output_side_effect(directory, args):
-                    result = {
-                        "files": [],
-                        "summary": {
-                            "files_checked": 1,
-                            "files_with_issues": 0,
-                            "total_issues": 0,
-                            "exit_code": 0
-                        }
-                    }
-                    print(json.dumps(result, indent=2))
-
-                mock_recursive.side_effect = json_output_side_effect
-
-                # Capture output
-                import sys
-                old_stdout = sys.stdout
-                sys.stdout = StringIO()
-
-                try:
-                    handle_file_or_directory(tmpdir, mock_args)
-                except SystemExit:
-                    pass  # Expected from handle_recursive_check
-                finally:
-                    output = sys.stdout.getvalue()
-                    sys.stdout = old_stdout
-
-                # Verify handle_recursive_check was called
-                mock_recursive.assert_called_once()
-
-                # Verify output is valid JSON
-                try:
-                    result = json.loads(output)
-                    self.assertIn("files", result)
-                    self.assertIn("summary", result)
-                except json.JSONDecodeError:
-                    self.fail(f"Output is not valid JSON: {output}")
+            with patch('reveal.cli.commands.check.run_check') as mock_run:
+                handle_file_or_directory(tmpdir, mock_args)
+                mock_run.assert_called_once_with(mock_args)
+                # Verify args with json format were passed through
+                self.assertEqual(mock_run.call_args[0][0].format, 'json')
 
 
 class TestHandleFile(unittest.TestCase):

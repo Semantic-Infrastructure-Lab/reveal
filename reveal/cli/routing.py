@@ -58,13 +58,6 @@ def _read_session_title_cheap(jsonl_path: str) -> Optional[str]:
 
 
 # ============================================================================
-# File checking functions
-# ============================================================================
-
-from .file_checker import (  # noqa: E402
-    handle_recursive_check,
-)
-
 # Import file handling from shared module to avoid circular dependency
 from ..file_handler import handle_file  # noqa: E402
 
@@ -830,9 +823,12 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     """
     from ..tree_view import show_directory_tree
 
-    # Deprecation hint for --check flag (before any path handling)
+    # Deprecation hint for --check flag — delegate to canonical implementation
     if getattr(args, 'check', False):
         print("hint: --check is deprecated; use `reveal check <path>` instead", file=sys.stderr)
+        from ..cli.commands.check import run_check
+        run_check(args)
+        return
 
     # Validate adapter-specific flags
     if getattr(args, 'hotspots', False):
@@ -942,14 +938,6 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
                                     include_extensions=include_extensions)
             print(output)
             return
-        # Check if recursive mode is enabled with --check
-        if getattr(args, 'recursive', False) and getattr(args, 'check', False):
-            handle_recursive_check(path, args)
-        elif getattr(args, 'check', False):
-            # --check on a directory: implicitly recursive, matching linter convention
-            # (ruff check src/, mypy src/ — both recurse without an explicit flag)
-            args.recursive = True
-            handle_recursive_check(path, args)
         else:
             sort_by = getattr(args, 'sort', None)
             sort_desc = getattr(args, 'desc', False)
