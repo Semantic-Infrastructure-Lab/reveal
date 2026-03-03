@@ -150,10 +150,12 @@ def get_all_tools(messages: List[Dict], session_name: str,
             for content in msg.get('message', {}).get('content', []):
                 if content.get('type') == 'tool_use':
                     tool_name = content.get('name')
+                    tool_input = content.get('input', {})
                     tools[tool_name].append({
                         'message_index': i,
                         'tool_use_id': content.get('id'),
-                        'timestamp': msg.get('timestamp')
+                        'timestamp': msg.get('timestamp'),
+                        'detail': _extract_tool_detail(tool_name, tool_input)
                     })
 
     # Calculate success rates
@@ -371,7 +373,7 @@ def _extract_tool_detail(tool_name: str, tool_input: Dict[str, Any]) -> Optional
         Detail string or None
     """
     if tool_name == 'Bash':
-        return tool_input.get('description') or tool_input.get('command', '')[:60]
+        return tool_input.get('description') or tool_input.get('command', '')[:80]
     elif tool_name in ('Read', 'Write', 'Edit'):
         return tool_input.get('file_path', '')
     elif tool_name == 'Grep':

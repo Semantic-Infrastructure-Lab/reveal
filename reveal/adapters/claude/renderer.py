@@ -113,10 +113,19 @@ class ClaudeRenderer(TypeDispatchRenderer):
         print()
 
         tools = result.get('tools', {})
+        details = result.get('details', {})
         for tool, stats in sorted(tools.items(), key=lambda x: -x[1].get('count', 0)):
             count = stats.get('count', 0)
             success_rate = stats.get('success_rate', 'N/A')
             print(f"  {tool}: {count} calls ({success_rate} success)")
+            tool_details = [d.get('detail') for d in details.get(tool, []) if d.get('detail')]
+            limit = 8
+            for d in tool_details[:limit]:
+                print(f"    {d}")
+            if len(tool_details) > limit:
+                print(f"    ...and {len(tool_details) - limit} more")
+            if tool_details:
+                print()
 
     @staticmethod
     def _render_claude_errors(result: dict) -> None:
