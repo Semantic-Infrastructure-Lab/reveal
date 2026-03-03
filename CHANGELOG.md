@@ -12,6 +12,12 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.8] - 2026-03-02
+
+### Fixed (session distant-voyage-0302)
+- **B8 — `claude://tools` showed counts only, no commands** — `get_all_tools()` now captures `detail` via `_extract_tool_detail()` for every tool call (preferred: Claude's description; fallback: `command[:80]`). Renderer shows up to 8 details per tool with "...and N more" for longer lists. Previously "Bash: 58 calls" told you nothing; now you see the actual commands run.
+- **Bash command truncation 60→80** — `_extract_tool_detail()` raw command fallback extended to 80 chars so full reveal URIs and common compound commands fit without mid-argument truncation.
+
 ## [0.54.7] - 2026-03-02
 
 ### Fixed (session obsidian-kaiju-0302)
