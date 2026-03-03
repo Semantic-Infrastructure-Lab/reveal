@@ -462,6 +462,103 @@ class TestSessionListing:
         assert uuid2 in names
         assert 'C--Users-markf-frono' not in names
 
+    def test_list_sessions_skips_agent_files(self, tmp_path):
+        """Test that agent-*.jsonl subagent files are excluded from listing."""
+        base = tmp_path / 'projects'
+        base.mkdir()
+        proj = base / '-home-user-src-tia-sessions-my-session'
+        proj.mkdir()
+        (proj / 'main-uuid.jsonl').write_text('{}')
+        (proj / 'agent-abc1234.jsonl').write_text('{}')
+        (proj / 'agent-def5678.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter._list_sessions()
+
+        assert result['session_count'] == 1
+        assert result['recent_sessions'][0]['session'] == 'my-session'
+
+    def test_list_sessions_agent_files_windows_style(self, tmp_path):
+        """Test that agent-*.jsonl files are excluded even in Windows UUID layout."""
+        base = tmp_path / 'projects'
+        base.mkdir()
+        proj = base / 'C--Users-markf-frono'
+        proj.mkdir()
+        uuid1 = '6b7f43f0-29fe-47bf-8b03-e430f7ed7e9b'
+        (proj / f'{uuid1}.jsonl').write_text('{}')
+        (proj / 'agent-abc1234.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter._list_sessions()
+
+        names = {s['session'] for s in result['recent_sessions']}
+        assert uuid1 in names
+        assert 'agent-abc1234' not in names
+        assert result['session_count'] == 1
+
+
+class TestSearchSubcommand:
+    """Tests for claude://search routing."""
+
+    def test_search_subcommand_returns_helpful_error(self, tmp_path):
+        """Test that claude://search returns a not-implemented error, not session-not-found."""
+        adapter = ClaudeAdapter('search', query='query=reveal')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            result = adapter.get_structure()
+
+        assert result['type'] == 'claude_error'
+        assert 'not implemented' in result['error']
+        assert 'tia search sessions' in result['hint']
+
+    def test_search_subpath_also_caught(self, tmp_path):
+        """Test that claude://search/anything also returns the not-implemented error."""
+        adapter = ClaudeAdapter('search/whatever', query='query=foo')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            result = adapter.get_structure()
+
+        assert result['type'] == 'claude_error'
+        assert 'not implemented' in result['error']
+
+
+class TestFindConversationAgentFilter:
+    """Tests that _find_conversation skips agent-*.jsonl subagent files."""
+
+    def test_find_conversation_skips_agent_files(self, tmp_path):
+        """Test that _find_conversation returns the main JSONL, not agent files."""
+        base = tmp_path / 'projects'
+        base.mkdir()
+        proj = base / '-home-user-src-tia-sessions-my-session'
+        proj.mkdir()
+        agent1 = proj / 'agent-abc1234.jsonl'
+        agent2 = proj / 'agent-def5678.jsonl'
+        main = proj / 'main-uuid.jsonl'
+        agent1.write_text('{}')
+        agent2.write_text('{}')
+        main.write_text('{}')
+
+        adapter = ClaudeAdapter('session/my-session')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter._find_conversation()
+
+        assert result is not None
+        assert result.name == 'main-uuid.jsonl'
+
+    def test_find_conversation_only_agent_files_returns_none(self, tmp_path):
+        """Test that _find_conversation returns None if only agent files exist."""
+        base = tmp_path / 'projects'
+        base.mkdir()
+        proj = base / '-home-user-src-tia-sessions-my-session'
+        proj.mkdir()
+        (proj / 'agent-abc1234.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('session/my-session')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter._find_conversation()
+
+        assert result is None
+
 
 class TestConversationBaseEnvVar:
     """Tests for REVEAL_CLAUDE_DIR environment variable support."""

@@ -113,7 +113,8 @@ class ClaudeAdapter(ResourceAdapter):
         # Strategy 1 (priority): session name appears in project dir name (named sessions)
         for project_dir in dirs:
             if self.session_name in project_dir.name:
-                jsonl_files = list(project_dir.glob('*.jsonl'))
+                jsonl_files = [f for f in project_dir.glob('*.jsonl')
+                               if not f.stem.startswith('agent-')]
                 if jsonl_files:
                     return jsonl_files[0]
 
@@ -219,6 +220,17 @@ class ClaudeAdapter(ResourceAdapter):
         if not self.resource or self.resource in ('.', ''):
             return self._list_sessions()
 
+        # Handle top-level search subcommand (not yet implemented)
+        if self.resource == 'search' or self.resource.startswith('search/'):
+            return {
+                'contract_version': '1.0',
+                'type': 'claude_error',
+                'source': str(self.CONVERSATION_BASE),
+                'source_type': 'directory',
+                'error': 'cross-session search not implemented',
+                'hint': 'Use: tia search sessions "<term>" — scans all session transcripts',
+            }
+
         messages = self._load_messages()
         contract_base = self._get_contract_base()
         conversation_path_str = str(self.conversation_path) if self.conversation_path else ''
@@ -317,8 +329,10 @@ class ClaudeAdapter(ResourceAdapter):
                 if not project_dir.is_dir():
                     continue
 
-                # Find JSONL files in project dir (skip subagent dirs)
+                # Find JSONL files in project dir (skip subagent agent-*.jsonl files)
                 for jsonl_file in project_dir.glob('*.jsonl'):
+                    if jsonl_file.stem.startswith('agent-'):
+                        continue
                     # Derive session name:
                     # 1. TIA Linux:  dir = -home-user-src-tia-sessions-SESSION_NAME (one jsonl)
                     # 2. Windows:    dir = C--Users-markf-frono, file = UUID.jsonl (many per dir)
