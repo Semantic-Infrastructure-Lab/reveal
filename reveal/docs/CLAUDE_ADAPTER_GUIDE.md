@@ -6,7 +6,7 @@ category: guide
 
 **Last Updated**: 2026-03-02
 **Version**: 1.0
-**Adapter Version**: reveal 0.54.6+
+**Adapter Version**: reveal 0.54.7+
 
 ---
 
@@ -2312,5 +2312,5 @@ A: See [GitHub Actions Integration](#5-github-actions-integration) example.
 ---
 
 **Last Updated**: 2026-03-02
-**Adapter Version**: reveal 0.54.6+
+**Adapter Version**: reveal 0.54.7+
 **Documentation Version**: 1.0

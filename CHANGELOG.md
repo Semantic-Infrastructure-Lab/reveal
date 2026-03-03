@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.7] - 2026-03-02
+
+### Fixed (session obsidian-kaiju-0302)
+- **Issue 3 — `claude://sessions` errored with "Conversation not found for session: sessions"** — `sessions` was parsed as a session name and fell through to `_load_messages()`. Added `sessions` and `sessions/` to the early-exit guards in `get_structure()`, routing to `_list_sessions()` (mirrors the existing `search` guard).
+- **Issue 4 — Session overview showed raw UUID, no title** — `get_overview()` now derives a `title` from the first user message: first line, max 100 chars, handles both string content and list-of-items content. Renderer prints it below the session name. `None` when no user text is found (overview still works).
+- **Issue 5 — `help://claude` try_now used `$(basename $PWD)` bash substitution** — replaced with static example session name (`infernal-earth-0118`) plus a `reveal claude://` listing entry. Added two notes explaining how to get the current session name on bash/zsh (`basename $PWD`) and PowerShell (`Split-Path -Leaf $PWD`).
+
 ## [0.54.6] - 2026-03-02
 
 ### Fixed (session jewaha-0302)
