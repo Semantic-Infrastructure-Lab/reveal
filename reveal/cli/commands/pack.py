@@ -207,8 +207,8 @@ def _apply_budget(
             if used_lines + c['lines'] > budget_lines:
                 skipped += 1
                 continue
-            used_lines += c['lines']
 
+        used_lines += c['lines']
         selected.append(c)
 
     meta = {
