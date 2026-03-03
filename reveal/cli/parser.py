@@ -298,6 +298,8 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                         help='Show all results (no limit, e.g., reveal claude:// --all)')
     parser.add_argument('--since', type=str, metavar='DATE',
                         help='Filter results since date (YYYY-MM-DD, e.g., reveal claude:// --since 2026-02-27)')
+    parser.add_argument('--base-path', dest='base_path', type=str, metavar='DIR',
+                        help='Override base directory for claude:// (e.g., reveal claude:// --base-path /mnt/wsl/.claude/projects)')
 
 
 def _add_markdown_options(parser: argparse.ArgumentParser) -> None:

@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (session zaheye-0303)
 - **`reveal health --all`** — auto-detects health check targets from context: first checks `.reveal.yaml` `health.targets`, then falls back to common source dirs (`src/`, `lib/`, `app/`, or top-level Python package), then `.`. No more slow `reveal health .` on large repos.
 - **`health.targets` config support** — `.reveal.yaml` can declare `health: targets: [src/, ssl://api.example.com]` for `--all` to use.
+- **`claude:// --base-path DIR`** — override `CONVERSATION_BASE` at runtime: `reveal claude:// --base-path /mnt/wsl/.claude/projects`. Enables use with WSL, mounted volumes, Zack/Mark Windows machines, or any non-default Claude session directory. Works for session listing and individual session lookup.
 
 ### Fixed (session zaheye-0303)
 - **`reveal pack` key-directory scoring** — `'main'` substring was falsely matching `maintainability`, causing all rules in that directory to score +2.0 as "key modules". Now uses whole-path-component matching (`Path.parts` set intersection), fixing `reveal/rules/maintainability/*.py` files from being over-scored.

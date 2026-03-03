@@ -123,6 +123,15 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
     # Initialize adapter using multiple fallback strategies
     adapter = _try_initialize_adapter(adapter_class, scheme, resource, element, renderer_class)
 
+    # Apply --base-path override for adapters that use a base directory (e.g., claude://)
+    path_override = getattr(args, 'base_path', None)
+    if path_override and hasattr(adapter, 'CONVERSATION_BASE'):
+        from pathlib import Path as _Path
+        adapter.CONVERSATION_BASE = _Path(path_override)
+        # Re-locate the conversation file under the new base
+        if hasattr(adapter, '_find_conversation'):
+            adapter.conversation_path = adapter._find_conversation()
+
     # Handle --check mode if requested
     if getattr(args, 'check', False) and hasattr(adapter, 'check'):
         _handle_check_mode(adapter, renderer_class, args)
