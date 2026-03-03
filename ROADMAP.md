@@ -1,11 +1,16 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-01 (charcoal-glow-0301 — v0.54.5 release)
+> **Last updated**: 2026-03-02 (jewaha-0302 — v0.54.6 release)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.54.6
+- ✅ **B6 — subagent files excluded from `claude://` listing** — `agent-*.jsonl` files were counted as duplicate sessions (2841 phantom entries on TIA, 45 on Frono). Now skipped in both `_list_sessions()` and `_find_conversation()`.
+- ✅ **B7 — `_find_conversation()` agent-file filter** — explicit filter replaces accidental alphabetic ordering; main session JSONL reliably returned.
+- ✅ **B2 — `claude://search` returns helpful error** — structured `claude_error` with `tia search sessions` hint instead of "session not found".
 
 ### v0.54.5
 - ✅ **N003 false positive fix — `include` snippets not resolved** — `_find_proxy_headers()` now follows `include` directives in proxy location blocks and checks included files for the required headers. Eliminated 17 false positives across 4 vhost configs on tia-proxy.

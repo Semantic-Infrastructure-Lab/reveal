@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.6] - 2026-03-02
+
+### Fixed (session jewaha-0302)
+- **B6 — `claude://` listing inflated by subagent files** — `_list_sessions()` was including `agent-*.jsonl` subagent files as duplicate session entries (2841 phantom sessions on a typical TIA machine; 45 on Frono). Now skips any JSONL file whose stem starts with `agent-`.
+- **B7 — `_find_conversation()` fragile agent-file ordering** — strategy 1 was relying on alphabetic ordering (`0` < `a`) to accidentally return the main JSONL over agent files. Now explicitly filters agent files from the candidate list before picking `[0]`.
+- **B2 — `claude://search?query=` returned "session not found"** — `search` was parsed as a session name, causing a confusing error. Now caught before `_load_messages()` and returns a structured `claude_error` with a hint pointing to `tia search sessions "<term>"`.
+
 ## [0.54.5] - 2026-03-01
 
 ### Fixed (session charcoal-glow-0301)
