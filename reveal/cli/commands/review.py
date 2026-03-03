@@ -236,7 +236,7 @@ def _render_report(report: Dict[str, Any], verbose: bool) -> None:
         print("\nHotspots needing attention:")
         for h in hotspots[:5]:
             name = h.get('file', h.get('path', '?'))
-            quality = h.get('quality', h.get('score', '?'))
+            quality = h.get('quality_score', h.get('quality', h.get('score', '?')))
             complexity = h.get('complexity', h.get('max_complexity', ''))
             cx_str = f"  complexity: {complexity}" if complexity else ""
             print(f"  {name:40} quality: {quality}{cx_str}")

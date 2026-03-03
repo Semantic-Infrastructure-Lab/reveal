@@ -88,7 +88,12 @@ class HelpAdapter(ResourceAdapter):
         'schemas': 'SCHEMA_VALIDATION_HELP.md',  # Schema validation guide (v0.29.0+)
         'duplicates': 'DUPLICATE_DETECTION_GUIDE.md',  # Duplicate code detection guide
         'duplicate-detection': 'DUPLICATE_DETECTION_GUIDE.md',  # Alias for duplicates
-        'scaffolding': 'SCAFFOLDING_GUIDE.md'  # Component scaffolding system
+        'scaffolding': 'SCAFFOLDING_GUIDE.md',  # Component scaffolding system
+        'dev': 'DEV_GUIDE.md',             # reveal dev subcommand
+        'review': 'REVIEW_GUIDE.md',       # reveal review subcommand
+        'health': 'HEALTH_GUIDE.md',       # reveal health subcommand
+        'pack': 'PACK_GUIDE.md',           # reveal pack subcommand
+        'schema': 'SCHEMA_VALIDATION_HELP.md',  # schema validation (alias)
     }
 
     @staticmethod

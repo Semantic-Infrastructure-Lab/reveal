@@ -12,12 +12,14 @@ from typing import Dict, Any, List, Optional, Tuple
 # Entry point filename patterns (highest priority)
 _ENTRY_POINT_PATTERNS = {
     'main.py', 'app.py', 'server.py', 'index.py', 'cli.py', 'run.py',
-    '__init__.py', 'wsgi.py', 'asgi.py',
+    'wsgi.py', 'asgi.py',
     'main.js', 'index.js', 'app.js', 'server.js',
     'main.ts', 'index.ts', 'app.ts',
     'main.go', 'main.rb', 'main.rs',
     'Makefile', 'Dockerfile', 'pyproject.toml', 'package.json', 'Cargo.toml',
 }
+# __init__.py excluded from unconditional entry points — most are near-empty;
+# only promote them if they have substantial content (scored by size below)
 
 _APPROX_CHARS_PER_TOKEN = 4
 
@@ -119,6 +121,11 @@ def _collect_candidates(path: Path, focus: Optional[str]) -> List[Dict[str, Any]
     candidates = []
 
     for f in _walk_files(path):
+        # Skip near-empty __init__.py files — they're almost always re-export
+        # stubs and waste token budget without adding understanding
+        if f.name == '__init__.py' and f.stat().st_size < 500:
+            continue
+
         rel = f.relative_to(path)
         stat = f.stat()
         size_chars = stat.st_size
@@ -151,6 +158,11 @@ def _compute_priority(path: Path, rel: Path, focus: Optional[str]) -> float:
     # Entry points: highest priority
     if name in _ENTRY_POINT_PATTERNS:
         score += 10.0
+
+    # __init__.py: only gives a bonus if it has substantial content.
+    # Near-empty ones (< 500 bytes) are already excluded by _collect_candidates.
+    if name == '__init__.py' and path.stat().st_size > 2000:
+        score += 2.0
 
     # Focus pattern match: high bonus
     if focus and focus.lower() in rel_str:

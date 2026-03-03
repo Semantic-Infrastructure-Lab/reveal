@@ -614,6 +614,20 @@ reveal --rules | grep F00
   - CI/CD integration (exit codes, JSON output)
   - 103 comprehensive tests
 
+## CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--validate-schema SCHEMA` | Validate front matter against named or custom schema (e.g., `beth`, `hugo`, `/path/schema.yaml`) |
+| `--list-schemas` | List all available built-in schemas |
+
+```bash
+reveal README.md --validate-schema beth         # Validate against beth schema
+reveal README.md --validate-schema hugo         # Validate against hugo schema
+reveal . --validate-schema beth --format json   # Directory batch + JSON output
+reveal README.md --list-schemas                 # Show available built-in schemas
+```
+
 ## See Also
 
 - [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Project-wide configuration options
