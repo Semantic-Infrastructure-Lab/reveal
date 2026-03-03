@@ -731,6 +731,48 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
                 print("Learn more: reveal help://nginx", file=sys.stderr)
                 sys.exit(1)
 
+    # SSL batch flags are adapter-specific: guard against use on local paths
+    _SSL_FLAGS = {
+        'expiring_within': '--expiring-within',
+        'summary': '--summary',
+        'validate_nginx': '--validate-nginx',
+    }
+    for attr, flag in _SSL_FLAGS.items():
+        if getattr(args, attr, False):
+            print(f"❌ Error: {flag} only works with the ssl:// adapter", file=sys.stderr)
+            print(file=sys.stderr)
+            print("Examples:", file=sys.stderr)
+            print(f"  reveal ssl://example.com {flag}           # with a domain", file=sys.stderr)
+            print(f"  reveal ssl://example.com?{attr.replace('_', '-')}=true  # URI param", file=sys.stderr)
+            print(file=sys.stderr)
+            print("Learn more: reveal help://ssl", file=sys.stderr)
+            sys.exit(1)
+
+    # Markdown --related cluster flags: only meaningful alongside --related or --related-all.
+    # Guard against use on non-markdown files when those flags are actively triggered.
+    _related_active = getattr(args, 'related', False) or getattr(args, 'related_all', False)
+    if _related_active:
+        _NON_MARKDOWN_EXTENSIONS = {
+            '.py', '.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs',
+            '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.cc', '.h', '.hpp',
+            '.cs', '.php', '.swift', '.kt', '.scala', '.lua',
+            '.sh', '.bash', '.zsh', '.fish', '.ps1',
+            '.json', '.yaml', '.yml', '.toml', '.xml',
+            '.html', '.htm', '.css', '.scss', '.sass',
+            '.sql', '.csv', '.conf', '.ini',
+        }
+        _md_ext = Path(path_str).suffix.lower() if '.' in Path(path_str).name else ''
+        if _md_ext in _NON_MARKDOWN_EXTENSIONS:
+            flag = '--related-all' if getattr(args, 'related_all', False) else '--related'
+            print(f"❌ Error: {flag} only works with markdown files", file=sys.stderr)
+            print(file=sys.stderr)
+            print("Examples:", file=sys.stderr)
+            print(f"  reveal docs/ --related          # on a markdown directory", file=sys.stderr)
+            print(f"  reveal doc.md --related         # on a .md file", file=sys.stderr)
+            print(file=sys.stderr)
+            print("Learn more: reveal help://markdown", file=sys.stderr)
+            sys.exit(1)
+
     # Parse path and check existence
     path, element_from_path = _parse_file_line_syntax(path_str)
     _validate_path_exists(path, path_str)

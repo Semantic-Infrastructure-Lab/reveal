@@ -381,6 +381,24 @@ done
 - **Line numbers**: Approximate for dynamically generated content
 - **JavaScript**: Analyzes static HTML only (no JS rendering)
 
+## CLI Flags
+
+These flags apply specifically to HTML files:
+
+| Flag | Description |
+|------|-------------|
+| `--metadata` | Extract `<meta>` tags (title, description, og:*, etc.) |
+| `--semantic` | Extract semantic HTML elements (nav, main, article, section, aside, footer) |
+| `--scripts` | Extract `<script>` tags and src references |
+| `--styles` | Extract `<link rel="stylesheet">` and `<style>` tags |
+
+Examples:
+```bash
+reveal page.html --metadata          # All meta tags
+reveal page.html --semantic          # Page structure landmarks
+reveal page.html --scripts --styles  # All external resources
+```
+
 ## Dependencies
 
 The HTML analyzer requires:

@@ -838,6 +838,28 @@ python -c "import api; print(dir(api))" > actual.txt
 diff documented.txt actual.txt
 ```
 
+## CLI Flags
+
+These flags apply specifically to markdown files:
+
+| Flag | Description |
+|------|-------------|
+| `--links` | Extract all hyperlinks |
+| `--link-type internal\|external\|broken` | Filter links by type |
+| `--domain DOMAIN` | Filter links by domain (e.g., `--domain github.com`) |
+| `--code` | Extract code blocks |
+| `--language LANG` | Filter code blocks by language (requires `--code`) |
+| `--inline` | Include inline code snippets (requires `--code`) |
+| `--frontmatter` | Extract YAML front matter |
+| `--related` | Show related documents from front matter |
+| `--related-depth N` | Traversal depth for `--related` (default: 1, 0=unlimited) |
+| `--related-all` | Follow all related links (equivalent to `--related --related-depth 0`) |
+| `--related-flat` | Output related docs as flat path list (grep-friendly) |
+| `--related-limit N` | Max files to traverse for `--related` (default: 100) |
+| `--section NAME` | Extract section by heading name |
+
+For adapter-specific flags via URI params: `reveal 'markdown:///path/?type=guide'`
+
 ## Notes
 
 - **Accurate Parsing**: Tree-sitter ensures `#` in code fences aren't treated as headings

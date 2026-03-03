@@ -4,6 +4,7 @@ import sys
 import os
 import logging
 import io
+import re
 from typing import Optional, Tuple, Any, List
 from collections.abc import Callable
 
@@ -57,6 +58,85 @@ def _handle_check_command() -> bool:
     args = parser.parse_args(sys.argv[2:])
     check_for_updates()
     run_check(args)
+    return True
+
+
+def _handle_dev_command() -> bool:
+    """Handle 'reveal dev' subcommand.
+
+    Returns:
+        bool: True if dev command was handled, False otherwise
+    """
+    import argparse as _argparse
+
+    if len(sys.argv) < 2 or sys.argv[1] != 'dev':
+        return False
+
+    parser = _argparse.ArgumentParser(
+        prog='reveal dev',
+        description='Developer tooling: scaffold adapters, analyzers, and rules; inspect config.',
+        formatter_class=_argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  reveal dev new-adapter payments --uri pay  # Scaffold new adapter\n"
+            "  reveal dev new-analyzer kotlin --ext .kt   # Scaffold new analyzer\n"
+            "  reveal dev new-rule C001 deep-nesting      # Scaffold new rule\n"
+            "  reveal dev inspect-config                  # Show effective .reveal.yaml\n"
+        )
+    )
+
+    from reveal.cli.commands.dev import add_arguments, run_dev
+    add_arguments(parser)
+    args = parser.parse_args(sys.argv[2:])
+    run_dev(args)
+    return True
+
+
+def _handle_review_command() -> bool:
+    """Handle 'reveal review' subcommand.
+
+    Returns:
+        bool: True if review command was handled, False otherwise
+    """
+    if len(sys.argv) < 2 or sys.argv[1] != 'review':
+        return False
+
+    from reveal.cli.commands.review import create_review_parser, run_review
+    parser = create_review_parser()
+    args = parser.parse_args(sys.argv[2:])
+    run_review(args)
+    return True
+
+
+def _handle_health_command() -> bool:
+    """Handle 'reveal health' subcommand.
+
+    Returns:
+        bool: True if health command was handled, False otherwise
+    """
+    if len(sys.argv) < 2 or sys.argv[1] != 'health':
+        return False
+
+    from reveal.cli.commands.health import create_health_parser, run_health
+    parser = create_health_parser()
+    args = parser.parse_args(sys.argv[2:])
+    run_health(args)
+    return True
+
+
+def _handle_pack_command() -> bool:
+    """Handle 'reveal pack' subcommand.
+
+    Returns:
+        bool: True if pack command was handled, False otherwise
+    """
+    if len(sys.argv) < 2 or sys.argv[1] != 'pack':
+        return False
+
+    from reveal.cli.commands.pack import create_pack_parser, run_pack
+    parser = create_pack_parser()
+    args = parser.parse_args(sys.argv[2:])
+    run_pack(args)
     return True
 
 
@@ -179,12 +259,40 @@ def _handle_clipboard_copy(captured_output: io.StringIO, original_stdout: Any) -
         print("   Install xclip, xsel (Linux), or use pbcopy (macOS)", file=sys.stderr)
 
 
+def _preprocess_sort_arg() -> None:
+    """Allow --sort -field syntax (descending) by converting to --sort=-field.
+
+    Argparse treats '--sort -modified' as a missing argument error because
+    '-modified' looks like a flag. The '=' form '--sort=-modified' is accepted.
+    This converts the space form to the = form before argparse runs.
+    """
+    i = 0
+    while i < len(sys.argv) - 1:
+        if sys.argv[i] == '--sort':
+            next_arg = sys.argv[i + 1]
+            # Single-dash prefix that looks like a field name (not a -- flag)
+            if re.match(r'^-[a-zA-Z_][a-zA-Z0-9_]*$', next_arg):
+                sys.argv[i] = f'--sort={next_arg}'
+                del sys.argv[i + 1]
+                break
+        i += 1
+
+
 def main() -> None:
     """Main CLI entry point."""
     _setup_windows_console()
+    _preprocess_sort_arg()
 
     # Handle subcommands early (before copy mode setup and argparse)
     if _handle_check_command():
+        return
+    if _handle_dev_command():
+        return
+    if _handle_health_command():
+        return
+    if _handle_review_command():
+        return
+    if _handle_pack_command():
         return
     if _handle_scaffold_command():
         return

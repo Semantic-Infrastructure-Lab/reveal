@@ -452,6 +452,16 @@ class HelpAdapter(ResourceAdapter):
                     {'uri': 'reveal /etc/nginx/nginx.conf --check', 'description': 'Run N001-N007 rules'},
                     {'uri': 'reveal /etc/nginx/conf.d/example.com.conf --check', 'description': 'Check a single vhost'},
                 ],
+                'cli_flags': [
+                    '--check                      # Run N001-N007 nginx quality rules',
+                    '--diagnose                   # Audit nginx error log for ACME/SSL failures',
+                    '--check-acl                  # Verify nginx ACL configuration',
+                    '--validate-nginx-acme        # Validate ACME challenge paths',
+                    '--check-conflicts            # Detect conflicting server_name directives',
+                    '--log-path PATH              # Override error log path for --diagnose',
+                    '--dns-verified               # Skip DNS check (use when DNS is verified)',
+                    '--extract domains|certs|...  # Extract specific elements (domains, certs, paths)',
+                ],
                 'see_also': [
                     'reveal help://ssl - SSL certificate inspection',
                     'reveal help://cpanel - cPanel user environment adapter',

@@ -540,6 +540,22 @@ def _render_help_output_formats(data: Dict[str, Any]) -> None:
         print()
 
 
+def _render_help_cli_flags(data: Dict[str, Any]) -> None:
+    """Render CLI flags section if present."""
+    flags = data.get('cli_flags')
+    if not flags:
+        return
+    print("## CLI Flags")
+    for flag in flags:
+        if isinstance(flag, dict):
+            print(f"  {flag['flag']}")
+            if flag.get('description'):
+                print(f"    {flag['description']}")
+        else:
+            print(f"  {flag}")
+    print()
+
+
 def _render_help_see_also(data: Dict[str, Any]) -> None:
     """Render see also section if present."""
     if data.get('see_also'):
@@ -574,6 +590,7 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
     _render_help_anti_patterns(data)
     _render_help_notes(data)
     _render_help_output_formats(data)
+    _render_help_cli_flags(data)
     _render_help_see_also(data)
     _render_help_breadcrumbs(scheme, data)
 

@@ -176,6 +176,20 @@ notes:
   - 'Default connection timeout is 10 seconds'
   - 'Exit codes: 0=healthy, 1=warning (<30 days), 2=critical (<7 days or error)'
 
+cli_flags:
+  - flag: '--check'
+    description: 'Run health checks (expiry, chain validation, hostname match)'
+  - flag: '--advanced'
+    description: 'Advanced checks: TLS version, key strength, OCSP, self-signed detection'
+  - flag: '--only-failures'
+    description: 'Show only failed/warning certs (batch mode)'
+  - flag: '--summary'
+    description: 'Show counts only, no per-domain details (batch mode)'
+  - flag: '--expiring-within N'
+    description: 'Filter: only show certs expiring within N days'
+  - flag: '--validate-nginx'
+    description: 'Cross-validate nginx cert paths against actual certificates'
+
 output_formats:
   - text
   - json
