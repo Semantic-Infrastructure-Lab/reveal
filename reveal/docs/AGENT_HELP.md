@@ -300,18 +300,22 @@ reveal file.py --search get_repository --sort=-line_count
 
 ### Task: "Review code quality"
 
-**Pattern:**
+**Pattern (v0.57.0+: use subcommand form):**
 ```bash
-# Check all quality rules
-reveal file.py --check
+# Subcommand form (preferred — own --help, clean namespace)
+reveal check src/                      # Check directory recursively
+reveal check file.py                   # Check single file
+reveal check src/ --select B,S         # Bugs & security only
+reveal check src/ --format json        # JSON for CI/CD gating
 
-# Check specific categories (faster)
+# Legacy flag form (still works)
+reveal file.py --check
 reveal file.py --check --select B,S    # Bugs & security only
 reveal file.py --check --select C,E    # Complexity & errors only
 
 # Specific file types
-reveal Dockerfile --check              # Docker best practices (S701)
-reveal nginx.conf --check              # Nginx validation (N001-N006)
+reveal check nginx.conf                # Nginx validation (N001-N006)
+reveal check Dockerfile                # Docker best practices (S701)
 ```
 
 **Available rule categories:**
@@ -550,22 +554,23 @@ json.database.credentials.user = "admin"
 
 ### Task: "Review pull request / git changes"
 
-**Pattern:**
+**Pattern (v0.57.0+: use `reveal review` for one-shot PR reviews):**
 ```bash
-# See structure of changed files
-git diff --name-only | reveal --stdin --outline
+# Full PR review: diff + check + hotspots + complexity
+reveal review main..feature
+reveal review HEAD~3..HEAD      # Last 3 commits
+reveal review ./src             # Review a directory
 
-# Check quality on changed Python files
-git diff --name-only | grep "\.py$" | reveal --stdin --check
-
-# Deep dive on specific changed file
+# Manual approach (more control)
+git diff --name-only | reveal --stdin --outline   # Structure of changed files
+git diff --name-only | grep "\.py$" | reveal --stdin --check  # Quality check
 reveal src/changed_file.py --check
 reveal src/changed_file.py changed_function
 ```
 
-**--stdin mode:** Feed file paths via stdin. Works with `git diff`, `find`, `ls`, any line-delimited output.
+**`reveal review` output:** structural diff + quality violations + top hotspots + complex functions, unified in one pass.
 
-**Advanced PR review workflows:**
+**Advanced workflows:**
 ```bash
 # Compare with main branch
 git diff main --name-only | reveal --stdin --outline
@@ -573,9 +578,8 @@ git diff main --name-only | reveal --stdin --outline
 # Check only modified (not new) files
 git diff --name-only --diff-filter=M | reveal --stdin --check
 
-# Get complexity of changed functions
-git diff main --name-only | grep "\.py$" | reveal --stdin --format=json | \
-  jq '.structure.functions[] | {name, complexity: .depth}'
+# JSON output for CI/CD gating
+reveal review main..feature --format json
 
 # Check security on new files only
 git diff --name-only --diff-filter=A | reveal --stdin --check --select S
