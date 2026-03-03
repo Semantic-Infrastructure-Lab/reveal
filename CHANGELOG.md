@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed (session zaheye-0303)
 - **`reveal pack` key-directory scoring** — `'main'` substring was falsely matching `maintainability`, causing all rules in that directory to score +2.0 as "key modules". Now uses whole-path-component matching (`Path.parts` set intersection), fixing `reveal/rules/maintainability/*.py` files from being over-scored.
-- **Mypy cleanup — 121 → 33 errors**: Fixed `get_structure` return type (`Dict[str, Any]` not `Dict[str, List[Dict]]`) across 9 analyzer files; treesitter `_node_cache`/`_content_bytes` class-level declarations; signature fixes in xlsx, cpanel, diff/git adapters; cast fixes in review, routing, claude/analysis modules.
+- **Mypy cleanup — 121 → 0 errors**: Phase 1 (121→33): `get_structure` return type, treesitter class-level attrs, adapter signature fixes. Phase 2 (33→0): str()/cast() for no-any-return, typed variables for StructureOptions returns, `parse_host_port` return type fix, unused `type: ignore` removal across 19 files.
 
 ### Added (session techno-thrasher-0303)
 - **Parser inheritance consistency** — `review`, `health`, `pack` parsers now use `parents=[_build_global_options_parser()]`, matching `check`. All 4 subcommand parsers now inherit `--format`, `--copy`, `--verbose`, `--no-breadcrumbs` uniformly.
