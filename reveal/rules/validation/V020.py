@@ -189,7 +189,7 @@ class V020(BaseRule):
             )
 
     @staticmethod
-    def _try_instantiate(adapter_class: type) -> Optional[object]:
+    def _try_instantiate(adapter_class: type) -> Optional[Any]:
         """Attempt to instantiate adapter with minimal arguments; return None if impossible."""
         try:
             return adapter_class()

@@ -8,7 +8,7 @@ fallback for other languages.
 import logging
 from typing import List, Dict, Any, Optional
 
-from mccabe import PathGraphingAstVisitor  # type: ignore[import-untyped]
+from mccabe import PathGraphingAstVisitor  # type: ignore[import]
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
 from ..base_mixins import ASTParsingMixin
@@ -112,7 +112,7 @@ class C901(BaseRule, ASTParsingMixin):
         Returns:
             Dict mapping function names to complexity scores
         """
-        results = {}
+        results: Dict[str, int] = {}
         try:
             tree = self._parse_python(content, file_path)
             if tree is None:

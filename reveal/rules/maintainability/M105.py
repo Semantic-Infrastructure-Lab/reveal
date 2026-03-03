@@ -93,12 +93,7 @@ class M105(BaseRule):
                     line=line,
                     column=1,
                     severity=self.severity,
-                    context={
-                        'handler': handler,
-                        'issue': 'not_imported',
-                        'fix': f"Add to main.py imports: from .cli import {handler}",
-                        'guide': 'reveal/docs/CLI_INTEGRATION_GUIDE.md'
-                    }
+                    context=f"Fix: Add to main.py imports: from .cli import {handler}"
                 ))
 
             # Check if called (only if imported)
@@ -111,12 +106,7 @@ class M105(BaseRule):
                     line=line,
                     column=1,
                     severity=self.severity,
-                    context={
-                        'handler': handler,
-                        'issue': 'not_called',
-                        'fix': "Call in main.py or remove import",
-                        'guide': 'reveal/docs/CLI_INTEGRATION_GUIDE.md'
-                    }
+                    context="Fix: Call in main.py or remove import"
                 ))
 
         return detections

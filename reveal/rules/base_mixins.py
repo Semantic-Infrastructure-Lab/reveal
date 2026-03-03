@@ -71,7 +71,7 @@ class ASTParsingMixin:
         Use instead of ``ast.walk(tree)`` in rule check() methods.
         """
         try:
-            return tree._cached_walk  # type: ignore[attr-defined]
+            return list(tree._cached_walk)  # type: ignore[attr-defined]
         except AttributeError:
             nodes = list(ast.walk(tree))
             tree._cached_walk = nodes  # type: ignore[attr-defined]
