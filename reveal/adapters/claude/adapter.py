@@ -1,5 +1,6 @@
 """Claude Code conversation adapter implementation."""
 
+import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime
@@ -40,7 +41,7 @@ class ClaudeAdapter(ResourceAdapter):
     - Token usage estimates
     """
 
-    CONVERSATION_BASE = Path.home() / '.claude' / 'projects'
+    CONVERSATION_BASE = Path(os.environ.get('REVEAL_CLAUDE_DIR', str(Path.home() / '.claude' / 'projects')))
 
     def __init__(self, resource: str, query: Optional[str] = None):
         """Initialize Claude adapter.
@@ -291,6 +292,11 @@ class ClaudeAdapter(ResourceAdapter):
         Scans the Claude projects directory for sessions and returns
         recent ones with basic metadata.
 
+        Supports query params when called from get_structure():
+            ?limit=N      - show N most recent (default: 20)
+            ?filter=term  - filter session names by substring (case-insensitive)
+            ?search=term  - alias for ?filter=term
+
         Returns:
             Dictionary with session list and usage help
         """
@@ -300,6 +306,10 @@ class ClaudeAdapter(ResourceAdapter):
             'source': str(self.CONVERSATION_BASE),
             'source_type': 'directory'
         }
+
+        # Read listing query params
+        limit = int(self.query_params.get('limit', 20))
+        name_filter = (self.query_params.get('filter') or self.query_params.get('search', '')).lower()
 
         sessions = []
         try:
@@ -331,9 +341,13 @@ class ClaudeAdapter(ResourceAdapter):
         except Exception as e:
             base['error'] = str(e)
 
+        # Apply name filter if provided
+        if name_filter:
+            sessions = [s for s in sessions if name_filter in s['session'].lower()]
+
         base.update({
             'session_count': len(sessions),
-            'recent_sessions': sessions[:20],  # Show 20 most recent
+            'recent_sessions': sessions[:limit],
             'usage': {
                 'overview': 'reveal claude://session/<name>',
                 'workflow': 'reveal claude://session/<name>/workflow',

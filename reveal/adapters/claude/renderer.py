@@ -446,6 +446,9 @@ class ClaudeRenderer(TypeDispatchRenderer):
             elif isinstance(content, str):
                 print(content)
 
+        if 'hint' in result:
+            print(f"\nNote: {result['hint']}")
+
     @staticmethod
     def _render_claude_search_results(result: dict) -> None:
         """Render search results with excerpts."""

@@ -101,16 +101,26 @@ def get_message(messages: List[Dict], msg_id: int, session_name: str,
 
     msg = messages[msg_id]
     raw_content = msg.get('message', {}).get('content', [])
+    msg_type = msg.get('type')
 
-    base.update({
+    result: Dict[str, Any] = {
         'session': session_name,
         'message_index': msg_id,
         'timestamp': msg.get('timestamp'),
-        'message_type': msg.get('type'),
+        'message_type': msg_type,
         'message': msg.get('message', {}),
         'text': _extract_text(raw_content),
-    })
+    }
 
+    # Help users understand metadata records that are not conversation messages
+    if msg_type == 'file-history-snapshot':
+        result['hint'] = (
+            'This is a Claude Code metadata record, not a conversation message. '
+            'Use /user or /assistant to browse real messages, '
+            'or /message/2 to jump to the first user prompt.'
+        )
+
+    base.update(result)
     return base
 
 

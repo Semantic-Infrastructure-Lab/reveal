@@ -344,6 +344,136 @@ class TestSpecificMessageRetrieval:
         assert 'error' in result
         assert 'out of range' in result['error']
 
+    def test_get_message_snapshot_includes_hint(self, tmp_path):
+        """Test that file-history-snapshot messages include a helpful hint."""
+        snapshot_line = json.dumps({
+            'type': 'file-history-snapshot',
+            'message': {},
+            'timestamp': None,
+        })
+        jsonl = tmp_path / 'snap.jsonl'
+        jsonl.write_text(snapshot_line + '\n')
+
+        adapter = ClaudeAdapter('session/snap/message/0')
+        adapter.conversation_path = jsonl
+
+        result = adapter.get_structure()
+
+        assert result['message_type'] == 'file-history-snapshot'
+        assert 'hint' in result
+        assert 'metadata record' in result['hint']
+
+    @patch.object(ClaudeAdapter, '_find_conversation')
+    def test_get_message_non_snapshot_has_no_hint(self, mock_find):
+        """Test that normal messages do not include the snapshot hint."""
+        mock_find.return_value = TEST_CONVERSATION
+        adapter = ClaudeAdapter('session/test/message/0')
+
+        result = adapter.get_structure()
+
+        assert 'hint' not in result
+
+
+class TestSessionListing:
+    """Tests for claude:// listing with query params."""
+
+    def test_list_sessions_limit_param(self, tmp_path):
+        """Test ?limit=N restricts output to N sessions."""
+        # Create 5 fake project dirs each with a jsonl file
+        base = tmp_path / 'projects'
+        base.mkdir()
+        for i in range(5):
+            d = base / f'-home-user-src-tia-sessions-session-{i:02d}'
+            d.mkdir()
+            (d / 'conv.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('', query='limit=3')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter._list_sessions()
+
+        assert len(result['recent_sessions']) == 3
+
+    def test_list_sessions_filter_param(self, tmp_path):
+        """Test ?filter=term restricts output to matching session names."""
+        base = tmp_path / 'projects'
+        base.mkdir()
+        for name in ['apple-session', 'banana-session', 'apple-other']:
+            d = base / f'-home-user-src-tia-sessions-{name}'
+            d.mkdir()
+            (d / 'conv.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('', query='filter=apple')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter._list_sessions()
+
+        names = [s['session'] for s in result['recent_sessions']]
+        assert all('apple' in n for n in names)
+        assert len(names) == 2
+
+    def test_list_sessions_search_alias(self, tmp_path):
+        """Test ?search=term is an alias for ?filter=term."""
+        base = tmp_path / 'projects'
+        base.mkdir()
+        for name in ['reveal-session', 'unrelated-session']:
+            d = base / f'-home-user-src-tia-sessions-{name}'
+            d.mkdir()
+            (d / 'conv.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('', query='search=reveal')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter._list_sessions()
+
+        names = [s['session'] for s in result['recent_sessions']]
+        assert len(names) == 1
+        assert 'reveal' in names[0]
+
+    def test_list_sessions_filter_case_insensitive(self, tmp_path):
+        """Test ?filter=term matching is case-insensitive."""
+        base = tmp_path / 'projects'
+        base.mkdir()
+        d = base / '-home-user-src-tia-sessions-Brewing-Session'
+        d.mkdir()
+        (d / 'conv.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('', query='filter=brewing')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
+            result = adapter._list_sessions()
+
+        assert len(result['recent_sessions']) == 1
+
+
+class TestConversationBaseEnvVar:
+    """Tests for REVEAL_CLAUDE_DIR environment variable support."""
+
+    def test_env_var_overrides_default_path(self, tmp_path, monkeypatch):
+        """Test that REVEAL_CLAUDE_DIR env var overrides ~/.claude/projects."""
+        monkeypatch.setenv('REVEAL_CLAUDE_DIR', str(tmp_path))
+
+        # Re-evaluate the class attribute by importing fresh
+        import importlib
+        import reveal.adapters.claude.adapter as mod
+        importlib.reload(mod)
+
+        assert mod.ClaudeAdapter.CONVERSATION_BASE == tmp_path
+
+        # Restore after test
+        importlib.reload(mod)
+
+    def test_listing_respects_env_var_path(self, tmp_path, monkeypatch):
+        """Test that session listing scans the env-var directory."""
+        sessions_dir = tmp_path / 'my-claude-dir'
+        sessions_dir.mkdir()
+        proj = sessions_dir / '-home-user-src-tia-sessions-env-test'
+        proj.mkdir()
+        (proj / 'conv.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter('')
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', sessions_dir):
+            result = adapter._list_sessions()
+
+        names = [s['session'] for s in result['recent_sessions']]
+        assert 'env-test' in names
+
 
 class TestHelpDocumentation:
     """Tests for help documentation."""
