@@ -1,5 +1,6 @@
 """Result building and processing for markdown adapter."""
 
+import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
@@ -16,12 +17,15 @@ def build_result_item(path: Path, frontmatter: Optional[Dict[str, Any]]) -> Dict
     Returns:
         Result item dict
     """
+    stat = path.stat()
     result = {
         'path': str(path),
         'relative_path': str(path.relative_to(Path.cwd())
                             if path.is_relative_to(Path.cwd())
                             else path),
         'has_frontmatter': frontmatter is not None,
+        'mtime': stat.st_mtime,
+        'modified': datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
     }
 
     # Include key frontmatter fields

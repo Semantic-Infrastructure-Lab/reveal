@@ -210,6 +210,12 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
                         help='Ignore .gitignore rules and show all files')
     parser.add_argument('--exclude', action='append', metavar='PATTERN',
                         help='Exclude files/directories matching pattern (e.g., --exclude "*.log" --exclude "tmp/")')
+    parser.add_argument('--ext', type=str, metavar='EXTS',
+                        help='Filter to files with these extensions, comma-separated (e.g., --ext md or --ext py,md). '
+                             'Works on directory trees and --stdin pipelines.')
+    parser.add_argument('--files', action='store_true',
+                        help='Flat file list with timestamps sorted by mtime — replaces find|sort. '
+                             'Combine with --ext to filter by type, --sort name/size/mtime, --desc.')
     parser.add_argument('--outline', action='store_true',
                         help='Show hierarchical outline (classes with methods, nested structures)')
     parser.add_argument('--hotspots', action='store_true',
@@ -257,7 +263,12 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--search', type=str, metavar='PATTERN',
                         help='Search for symbols matching pattern (regex on name field)')
     parser.add_argument('--sort', type=str, metavar='FIELD',
-                        help='Sort results by field (prefix with - for descending, e.g., -complexity)')
+                        help='Sort results by field (e.g., modified, size, name, complexity). '
+                             'Use --desc for descending order, or prefix with - in URI queries.')
+    parser.add_argument('--desc', action='store_true',
+                        help='Sort descending (use with --sort, e.g., --sort modified --desc)')
+    parser.add_argument('--asc', action='store_true',
+                        help='Sort ascending (use with --files to reverse its default newest-first order)')
     parser.add_argument('--type', type=str, metavar='TYPE',
                         help='Filter by element type (function, class, method, etc.)')
 

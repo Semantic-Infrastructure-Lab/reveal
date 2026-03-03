@@ -12,6 +12,16 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.55.0] - 2026-03-03
+
+### Added (sessions enigmatic-wave-0303, solar-observatory-0303)
+- **`--files` — flat file listing replacing `find dir/ | sort -rn`** — shows all files sorted by mtime (newest first) with timestamps. Combines with `--ext`, `--sort`, `--asc`/`--desc`. Respects `.gitignore` and `--exclude` patterns. Replaces the most common shell one-liner in TIA workflow.
+- **`--ext EXTS` — extension filter** — comma-separated extensions (e.g., `--ext md` or `--ext py,md`). Works on directory trees and `--stdin` pipelines. Case-insensitive, leading-dot-tolerant.
+- **`--sort FIELD` extended** — now works with `--files` (sort by `mtime`, `size`, `name`) in addition to existing code element sorting. `--sort name --files` gives alphabetical listing.
+- **`--desc` / `--asc` flags** — explicit sort direction. `--files` defaults newest-first; `--asc` reverses to oldest-first. `--sort modified --desc` in element views sorts descending.
+- **`--sort` injects into URI query string** — `reveal stats://. --sort complexity --desc` now passes `sort=-complexity` to adapter automatically; no need to embed sort in the URI manually.
+- **`--meta` on directories** — shows summary: file count, total size, modification range, breakdown by extension. Outputs JSON with `--format json`.
+
 ## [0.54.8] - 2026-03-02
 
 ### Fixed (session distant-voyage-0302)

@@ -68,6 +68,7 @@ class FileAnalyzer(ABC):
 
         Automatic - works for all file types.
         """
+        import datetime
         stat = os.stat(self.path)
 
         return {
@@ -77,6 +78,8 @@ class FileAnalyzer(ABC):
             'size_human': format_size(stat.st_size),
             'lines': len(self.lines),
             'encoding': self._detect_encoding(),
+            'modified': datetime.datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
+            'modified_timestamp': stat.st_mtime,
         }
 
     @abstractmethod

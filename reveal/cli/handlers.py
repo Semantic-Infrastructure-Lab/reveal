@@ -467,6 +467,12 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
             _process_stdin_uri(target, args, is_batch_mode, is_ssl_batch_check,
                              batch_results, ssl_check_results)
         else:
+            # Apply --ext filter for file paths
+            ext_filter = getattr(args, 'ext', None)
+            if ext_filter:
+                allowed = {e.strip().lower().lstrip('.') for e in ext_filter.split(',') if e.strip()}
+                if Path(target).suffix.lower().lstrip('.') not in allowed:
+                    continue
             _process_stdin_file(target, args, handle_file_func)
 
     # Render aggregated batch results

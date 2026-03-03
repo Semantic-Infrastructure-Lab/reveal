@@ -50,6 +50,14 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
 
     scheme, resource = uri.split('://', 1)
 
+    # Inject --sort/--desc CLI flags into URI query string for adapters that support them
+    sort_field = getattr(args, 'sort', None)
+    if sort_field:
+        if getattr(args, 'desc', False) and not sort_field.startswith('-'):
+            sort_field = f"-{sort_field}"
+        sep = '&' if '?' in resource else '?'
+        resource = f"{resource}{sep}sort={sort_field}"
+
     # Look up adapter from registry
     from ..adapters.base import get_adapter_class, list_supported_schemes
     # Import adapters package to trigger all registrations (single source of truth)
@@ -572,6 +580,84 @@ def _validate_path_exists(path: Path, path_str: str) -> None:
         sys.exit(1)
 
 
+def _show_directory_meta(path: Path, args: 'Namespace') -> None:
+    """Show metadata summary for a directory.
+
+    Args:
+        path: Directory path
+        args: Parsed arguments (uses args.format for JSON output)
+    """
+    import os
+    import datetime
+    from collections import defaultdict
+    from ..utils import safe_json_dumps
+
+    ext_counts: dict = defaultdict(int)
+    total_files = 0
+    total_size = 0
+    newest_mtime = 0.0
+    oldest_mtime = float('inf')
+
+    for root, _dirs, files in os.walk(path):
+        for fname in files:
+            fpath = Path(root) / fname
+            try:
+                stat = fpath.stat()
+                total_files += 1
+                total_size += stat.st_size
+                if stat.st_mtime > newest_mtime:
+                    newest_mtime = stat.st_mtime
+                if stat.st_mtime < oldest_mtime:
+                    oldest_mtime = stat.st_mtime
+                ext = fpath.suffix.lower().lstrip('.') or '(no ext)'
+                ext_counts[ext] += 1
+            except OSError:
+                continue
+
+    from ..utils import format_size
+    meta = {
+        'path': str(path),
+        'name': path.name,
+        'total_files': total_files,
+        'total_size': total_size,
+        'size_human': format_size(total_size),
+        'modified': datetime.datetime.fromtimestamp(newest_mtime).isoformat(timespec='seconds') if newest_mtime else None,
+        'oldest_file': datetime.datetime.fromtimestamp(oldest_mtime).isoformat(timespec='seconds') if oldest_mtime != float('inf') else None,
+        'by_extension': dict(sorted(ext_counts.items(), key=lambda x: -x[1])),
+    }
+
+    output_format = getattr(args, 'format', 'text')
+    if output_format == 'json':
+        print(safe_json_dumps(meta))
+    else:
+        print(f"Directory: {meta['name']}\n")
+        print(f"Path:       {meta['path']}")
+        print(f"Files:      {meta['total_files']:,}")
+        print(f"Size:       {meta['size_human']}")
+        if meta['modified']:
+            print(f"Modified:   {meta['modified']}")
+        if meta['oldest_file']:
+            print(f"Oldest:     {meta['oldest_file']}")
+        if ext_counts:
+            print(f"\nBy extension:")
+            for ext, count in meta['by_extension'].items():
+                print(f"  .{ext:<12} {count:>6,}")
+
+
+def _parse_ext_arg(ext_arg: Optional[str]) -> Optional[list]:
+    """Parse --ext argument into a list of normalized extensions.
+
+    Args:
+        ext_arg: Raw --ext value (e.g., 'md', 'py,md', '.py,.md')
+
+    Returns:
+        List of lowercase extensions without dots, or None if not specified
+    """
+    if not ext_arg:
+        return None
+    return [e.strip().lower().lstrip('.') for e in ext_arg.split(',') if e.strip()]
+
+
 def _build_ast_query_from_flags(path: Path, args: 'Namespace') -> str:
     """Build AST query URI from convenience flags."""
     query_params = []
@@ -580,7 +666,10 @@ def _build_ast_query_from_flags(path: Path, args: 'Namespace') -> str:
     if getattr(args, 'type', None):
         query_params.append(f"type={args.type}")
     if getattr(args, 'sort', None):
-        query_params.append(f"sort={args.sort}")
+        sort_field = args.sort
+        if getattr(args, 'desc', False) and not sort_field.startswith('-'):
+            sort_field = f"-{sort_field}"
+        query_params.append(f"sort={sort_field}")
 
     query_string = '&'.join(query_params)
     return f"ast://{path}?{query_string}"
@@ -611,6 +700,24 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     _validate_path_exists(path, path_str)
 
     if path.is_dir():
+        # --meta on a directory: show directory metadata summary
+        if getattr(args, 'meta', False):
+            _show_directory_meta(path, args)
+            return
+        # --files: flat sorted file list with timestamps (replaces find|sort)
+        if getattr(args, 'files', False):
+            from ..tree_view import show_file_list
+            sort_by = getattr(args, 'sort', None)
+            # --files defaults to newest-first; --desc has no effect (already desc by default)
+            sort_desc = not getattr(args, 'asc', False)
+            include_extensions = _parse_ext_arg(getattr(args, 'ext', None))
+            output = show_file_list(str(path),
+                                    respect_gitignore=args.respect_gitignore,
+                                    exclude_patterns=args.exclude,
+                                    sort_by=sort_by, sort_desc=sort_desc,
+                                    include_extensions=include_extensions)
+            print(output)
+            return
         # Check if recursive mode is enabled with --check
         if getattr(args, 'recursive', False) and getattr(args, 'check', False):
             handle_recursive_check(path, args)
@@ -620,11 +727,16 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
             args.recursive = True
             handle_recursive_check(path, args)
         else:
+            sort_by = getattr(args, 'sort', None)
+            sort_desc = getattr(args, 'desc', False)
+            include_extensions = _parse_ext_arg(getattr(args, 'ext', None))
             output = show_directory_tree(str(path), depth=args.depth,
                                          max_entries=args.max_entries, fast=args.fast,
                                          respect_gitignore=args.respect_gitignore,
                                          exclude_patterns=args.exclude,
-                                         dir_limit=getattr(args, 'dir_limit', 0))
+                                         dir_limit=getattr(args, 'dir_limit', 0),
+                                         sort_by=sort_by, sort_desc=sort_desc,
+                                         include_extensions=include_extensions)
             print(output)
     elif path.is_file():
         # Check if convenience flags are set (--search, --sort, --type)

@@ -1,5 +1,6 @@
 """Directory tree view for reveal."""
 
+import datetime
 import os
 from pathlib import Path
 from typing import List, Optional
@@ -8,11 +9,93 @@ from .display.filtering import PathFilter
 from .utils import format_size
 
 
+def show_file_list(path: str, show_hidden: bool = False,
+                   respect_gitignore: bool = True,
+                   exclude_patterns: Optional[List[str]] = None,
+                   sort_by: Optional[str] = None,
+                   sort_desc: bool = True,
+                   include_extensions: Optional[List[str]] = None) -> str:
+    """Show a flat sorted file list — replaces `find dir/ | sort -rn`.
+
+    Args:
+        path: Directory path
+        show_hidden: Whether to include hidden files/dirs
+        respect_gitignore: Whether to respect .gitignore rules
+        exclude_patterns: Additional patterns to exclude
+        sort_by: Sort key: 'mtime' (default), 'name', 'size'
+        sort_desc: If True, newest/largest/z-first (default: True)
+        include_extensions: If set, only include files with these extensions
+
+    Returns:
+        Formatted list string, one file per line with date prefix
+    """
+    root_path = Path(path)
+    if not root_path.is_dir():
+        return f"Error: {root_path} is not a directory"
+
+    path_filter = PathFilter(
+        root_path=root_path,
+        respect_gitignore=respect_gitignore,
+        exclude_patterns=exclude_patterns,
+        include_defaults=True
+    )
+
+    exts = {e.lower().lstrip('.') for e in include_extensions} if include_extensions else None
+
+    # Collect all matching files
+    files = []
+    for root, dirs, filenames in os.walk(root_path):
+        # Filter hidden dirs in-place to prevent descending into them
+        if not show_hidden:
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+        dirs[:] = [d for d in dirs if not path_filter.should_filter(Path(root) / d)]
+
+        for fname in filenames:
+            fpath = Path(root) / fname
+            if not show_hidden and fname.startswith('.'):
+                continue
+            if path_filter.should_filter(fpath):
+                continue
+            if exts and fpath.suffix.lower().lstrip('.') not in exts:
+                continue
+            try:
+                stat = fpath.stat()
+                files.append((fpath, stat))
+            except OSError:
+                continue
+
+    if not files:
+        return f"No files found in {path}" + (f" (ext: {','.join(include_extensions)})" if include_extensions else "")
+
+    # Sort
+    effective_sort = sort_by or 'mtime'
+    if effective_sort == 'mtime':
+        files.sort(key=lambda x: x[1].st_mtime, reverse=sort_desc)
+    elif effective_sort == 'size':
+        files.sort(key=lambda x: x[1].st_size, reverse=sort_desc)
+    elif effective_sort == 'name':
+        files.sort(key=lambda x: x[0].name.lower(), reverse=sort_desc)
+
+    lines = []
+    for fpath, stat in files:
+        date_str = datetime.datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M')
+        try:
+            rel = fpath.relative_to(root_path)
+        except ValueError:
+            rel = fpath
+        lines.append(f"{date_str}  {rel}")
+
+    return '\n'.join(lines)
+
+
 def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
                         max_entries: int = 200, fast: bool = False,
                         respect_gitignore: bool = True,
                         exclude_patterns: Optional[List[str]] = None,
-                        dir_limit: int = 50) -> str:
+                        dir_limit: int = 50,
+                        sort_by: Optional[str] = None,
+                        sort_desc: bool = False,
+                        include_extensions: Optional[List[str]] = None) -> str:
     """Show directory tree with file info.
 
     Args:
@@ -25,6 +108,9 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
         exclude_patterns: Additional patterns to exclude (e.g., ['*.log', 'tmp/'])
         dir_limit: Maximum entries per directory before snipping (default: 50, 0=unlimited).
                    When exceeded, shows "[snipped N more]" and continues with siblings.
+        sort_by: Sort entries by field: 'name', 'size', 'mtime' (default: dirs first, then name)
+        sort_desc: If True, reverse sort order
+        include_extensions: If set, only show files with these extensions (e.g., ['md', 'py'])
 
     Returns:
         Formatted tree string
@@ -55,7 +141,8 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
             lines.append("   Consider using --fast to skip line counting for better performance\n")
 
     # Track how many entries we've shown
-    context = {'count': 0, 'max_entries': max_entries, 'truncated': 0, 'dir_limit': dir_limit}
+    context = {'count': 0, 'max_entries': max_entries, 'truncated': 0, 'dir_limit': dir_limit,
+               'sort_by': sort_by, 'sort_desc': sort_desc, 'include_extensions': include_extensions}
     _walk_directory(root_path, lines, depth=depth, show_hidden=show_hidden,
                    fast=fast, context=context, path_filter=path_filter)
 
@@ -99,20 +186,37 @@ def _initialize_context() -> dict:
     return {'count': 0, 'max_entries': 0, 'truncated': 0, 'dir_limit': 0}
 
 
-def _get_sorted_entries(path: Path) -> Optional[List[Path]]:
+def _get_sorted_entries(path: Path, sort_by: Optional[str] = None,
+                        sort_desc: bool = False) -> Optional[List[Path]]:
     """Get sorted directory entries, handling permission errors."""
     try:
-        return sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name))
+        entries = list(path.iterdir())
     except PermissionError:
         return None
 
+    if sort_by == 'mtime':
+        entries.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=sort_desc)
+    elif sort_by == 'size':
+        entries.sort(key=lambda p: p.stat().st_size if p.is_file() else 0, reverse=sort_desc)
+    elif sort_by == 'name':
+        entries.sort(key=lambda p: p.name.lower(), reverse=sort_desc)
+    else:
+        # Default: dirs first, then alphabetical
+        entries.sort(key=lambda p: (not p.is_dir(), p.name))
 
-def _filter_entries(entries: List[Path], show_hidden: bool, path_filter: Optional[PathFilter]) -> List[Path]:
+    return entries
+
+
+def _filter_entries(entries: List[Path], show_hidden: bool, path_filter: Optional[PathFilter],
+                    include_extensions: Optional[List[str]] = None) -> List[Path]:
     """Apply hidden file and path filtering to entries."""
     if not show_hidden:
         entries = [e for e in entries if not e.name.startswith('.')]
     if path_filter:
         entries = [e for e in entries if not path_filter.should_filter(e)]
+    if include_extensions:
+        exts = {e.lower().lstrip('.') for e in include_extensions}
+        entries = [e for e in entries if e.is_dir() or e.suffix.lower().lstrip('.') in exts]
     return entries
 
 
@@ -203,11 +307,15 @@ def _walk_directory(path: Path, lines: List[str], prefix: str = '', depth: int =
 
     context = context or _initialize_context()
 
-    entries = _get_sorted_entries(path)
+    sort_by = context.get('sort_by')
+    sort_desc = context.get('sort_desc', False)
+    include_extensions = context.get('include_extensions')
+
+    entries = _get_sorted_entries(path, sort_by=sort_by, sort_desc=sort_desc)
     if entries is None:
         return
 
-    entries = _filter_entries(entries, show_hidden, path_filter)
+    entries = _filter_entries(entries, show_hidden, path_filter, include_extensions=include_extensions)
 
     dir_limit = context.get('dir_limit', 0)
     dir_entry_count = 0
