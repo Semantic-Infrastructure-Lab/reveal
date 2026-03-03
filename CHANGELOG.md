@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.57.0] - 2026-03-03
 
+### Added (session zaheye-0303)
+- **`reveal health --all`** — auto-detects health check targets from context: first checks `.reveal.yaml` `health.targets`, then falls back to common source dirs (`src/`, `lib/`, `app/`, or top-level Python package), then `.`. No more slow `reveal health .` on large repos.
+- **`health.targets` config support** — `.reveal.yaml` can declare `health: targets: [src/, ssl://api.example.com]` for `--all` to use.
+
+### Fixed (session zaheye-0303)
+- **`reveal pack` key-directory scoring** — `'main'` substring was falsely matching `maintainability`, causing all rules in that directory to score +2.0 as "key modules". Now uses whole-path-component matching (`Path.parts` set intersection), fixing `reveal/rules/maintainability/*.py` files from being over-scored.
+- **Mypy cleanup — 121 → 33 errors**: Fixed `get_structure` return type (`Dict[str, Any]` not `Dict[str, List[Dict]]`) across 9 analyzer files; treesitter `_node_cache`/`_content_bytes` class-level declarations; signature fixes in xlsx, cpanel, diff/git adapters; cast fixes in review, routing, claude/analysis modules.
+
+### Added (session techno-thrasher-0303)
+- **Parser inheritance consistency** — `review`, `health`, `pack` parsers now use `parents=[_build_global_options_parser()]`, matching `check`. All 4 subcommand parsers now inherit `--format`, `--copy`, `--verbose`, `--no-breadcrumbs` uniformly.
+- **`--check` one-implementation rule** — routing.py `--check` path now calls `run_check(args)` from `commands/check.py` directly, eliminating dead code duplication. `handle_recursive_check` import removed.
+
 ### Added (session ultra-warmonger-0303)
 - **`reveal dev` subcommand** — developer tooling: `reveal dev new-adapter`, `new-analyzer`, `new-rule` (wraps scaffold), `reveal dev inspect-config` (shows effective `.reveal.yaml`).
 - **`reveal review` subcommand** — PR review workflow. Orchestrates diff + check + hotspots + complexity into a unified report. Supports git range syntax (`reveal review main..feature`) and path syntax (`reveal review ./src`). `--format json` for CI/CD gating.
