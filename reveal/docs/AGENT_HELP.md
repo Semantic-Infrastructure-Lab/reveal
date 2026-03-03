@@ -2367,6 +2367,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
+- **v0.57.0** - `reveal dev/review/health/pack` subcommands; error-with-hint guards; claude:// workflow filtering, /messages route, truncation fix
 - **v0.56.0** - `reveal check` subcommand; parser foundation with shared global opts
 - **v0.55.0** - `--files`, `--ext`, `--sort`/`--desc`/`--asc`, `--meta` on directories
 - **v0.54.7** - Added claude:// task section (session analysis, workflow, files, thinking, errors)

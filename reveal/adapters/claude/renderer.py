@@ -12,19 +12,29 @@ class ClaudeRenderer(TypeDispatchRenderer):
 
     @staticmethod
     def _render_claude_session_list(result: dict) -> None:
-        """Render recent sessions list."""
+        """Render sessions list."""
         total = result.get('session_count', 0)
         recent = result.get('recent_sessions', [])
-        print(f"Claude Sessions: {total} total | {len(recent)} most recent\n")
-        print(f"  {'SESSION':<36} {'MODIFIED':<17} {'SIZE':>7}")
-        print(f"  {'-'*36} {'-'*17} {'-'*7}")
+        displayed = result.get('displayed_count', len(recent))
+
+        count_line = f"Claude Sessions: {total} total"
+        if displayed < total:
+            count_line += f" | showing {displayed}"
+        count_line += " | --all to show all | --head N for more | --since YYYY-MM-DD to filter"
+        print(count_line)
+        print()
+        print(f"  {'SESSION':<38} {'MODIFIED':<17} {'SIZE':>6}  TITLE")
+        print(f"  {'-'*38} {'-'*17} {'-'*6}  {'-'*30}")
         for s in recent:
             name = s.get('session', '?')
-            if len(name) > 36:
-                name = name[-36:]
+            if len(name) > 38:
+                name = name[-38:]
             mod = s.get('modified', '')[:16].replace('T', ' ')
             kb = s.get('size_kb', 0)
-            print(f"  {name:<36} {mod:<17} {kb:>5}kb")
+            title = s.get('title', '') or ''
+            if len(title) > 40:
+                title = title[:37] + '...'
+            print(f"  {name:<38} {mod:<17} {kb:>4}kb  {title}")
         print()
         usage = result.get('usage', {})
         if usage:
@@ -201,25 +211,39 @@ class ClaudeRenderer(TypeDispatchRenderer):
         """Render workflow sequence."""
         session = result.get('session', 'unknown')
         total = result.get('total_steps', 0)
+        displayed = result.get('displayed_steps', None)
+        filtered_from = result.get('filtered_from', None)
+
+        display = result.get('_display', {})
+        verbose = display.get('verbose', False)
+        max_chars = display.get('max_snippet_chars', None)
+        # Default truncation: unlimited if verbose or explicit max_chars, else 80
+        if verbose:
+            truncate_at = None
+        elif max_chars is not None:
+            truncate_at = max_chars
+        else:
+            truncate_at = 80
 
         print(f"Workflow: {session}")
-        print(f"Total Steps: {total}")
+        total_line = f"Total Steps: {total}"
+        if filtered_from is not None:
+            total_line += f" (filtered from {filtered_from})"
+        elif displayed is not None and displayed < total:
+            total_line += f" (showing {displayed})"
+        print(total_line)
         print()
 
         workflow = result.get('workflow', [])
-        for step in workflow[:50]:
+        for step in workflow:
             step_num = step.get('step', 0)
             tool = step.get('tool', 'unknown')
-            detail = step.get('detail', '')
+            detail = step.get('detail', '') or ''
 
-            # Truncate long details
-            if detail and len(detail) > 60:
-                detail = detail[:57] + '...'
+            if truncate_at is not None and len(detail) > truncate_at:
+                detail = detail[:truncate_at - 3] + '...'
 
             print(f"[{step_num:3}] {tool:12} {detail}")
-
-        if len(workflow) > 50:
-            print(f"  ... and {len(workflow) - 50} more steps")
 
     @staticmethod
     def _render_claude_context(result: dict) -> None:
@@ -494,6 +518,47 @@ class ClaudeRenderer(TypeDispatchRenderer):
 
         if count > 30:
             print(f"  ... and {count - 30} more matches")
+
+    @staticmethod
+    def _render_claude_messages(result: dict) -> None:
+        """Render assistant narrative turns (text only, no tool calls)."""
+        session = result.get('session', 'unknown')
+        total = result.get('total_turns', 0)
+        search = result.get('search')
+
+        display = result.get('_display', {})
+        verbose = display.get('verbose', False)
+        max_chars = display.get('max_snippet_chars', None)
+        # Default: 600 chars per turn unless verbose or explicit max_snippet_chars
+        if verbose:
+            truncate_at = None
+        elif max_chars is not None:
+            truncate_at = max_chars
+        else:
+            truncate_at = 600
+
+        header = f"Messages: {session} ({total} assistant turns"
+        if search:
+            header += f', filtered by "{search}"'
+        header += ")"
+        print(header)
+        print()
+
+        messages = result.get('messages', [])
+        for msg in messages:
+            turn = msg.get('turn', '?')
+            msg_idx = msg.get('message_index', '?')
+            ts = msg.get('timestamp', '')
+            text = msg.get('text', '')
+            char_count = msg.get('char_count', len(text))
+
+            print(f"[turn {turn} / msg {msg_idx}] {ts}")
+            if truncate_at is not None and char_count > truncate_at:
+                print(text[:truncate_at])
+                print(f"  ... ({char_count - truncate_at} more chars — use --verbose or --max-snippet-chars {char_count})")
+            else:
+                print(text)
+            print()
 
     @classmethod
     def _render_text(cls, result: dict) -> None:

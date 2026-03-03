@@ -470,7 +470,7 @@ class TestClaudeRenderer:
         assert '...' in captured.out  # Detail truncation
 
     def test_render_workflow_many_steps(self, capsys):
-        """Test rendering many workflow steps (truncated to 50)."""
+        """Test rendering many workflow steps (all shown; head/tail applied upstream)."""
         from reveal.adapters.claude.renderer import ClaudeRenderer
 
         workflow = [{'step': i, 'tool': 'Tool', 'detail': f'step {i}'} for i in range(60)]
@@ -484,7 +484,9 @@ class TestClaudeRenderer:
         ClaudeRenderer._render_claude_workflow(result)
         captured = capsys.readouterr()
 
-        assert '... and 10 more steps' in captured.out
+        # All 60 steps should be rendered (slicing is done by routing.py, not renderer)
+        assert 'step 59' in captured.out
+        assert 'Total Steps: 60' in captured.out
 
     def test_render_context_changes(self, capsys):
         """Test rendering context changes."""

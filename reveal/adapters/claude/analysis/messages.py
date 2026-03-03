@@ -1,6 +1,6 @@
 """Message filtering and extraction for Claude sessions."""
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 
 def _extract_text(content) -> str:
@@ -239,6 +239,74 @@ def search_messages(messages: List[Dict], term: str, session_name: str,
         'match_count': len(matches),
         'matches': matches,
     })
+
+    return base
+
+
+def get_messages(messages: List[Dict], session_name: str,
+                 contract_base: Dict[str, Any],
+                 search: Optional[str] = None) -> Dict[str, Any]:
+    """Extract assistant narrative text turns (not tool calls).
+
+    Returns what the assistant *said* — explanations, summaries, decisions —
+    not tool use records. Useful for understanding what Peyton/Claude was
+    thinking and communicating, not just what it did.
+
+    Args:
+        messages: List of message dictionaries
+        session_name: Name of the session
+        contract_base: Base contract fields
+        search: Optional search term to filter messages containing it
+
+    Returns:
+        Dictionary with assistant messages list
+    """
+    base = contract_base.copy()
+    base['type'] = 'claude_messages'
+
+    lower_search = search.lower() if search else None
+    turns = []
+
+    for i, msg in enumerate(messages):
+        if msg.get('type') != 'assistant':
+            continue
+
+        content = msg.get('message', {}).get('content', [])
+        if not isinstance(content, list):
+            continue
+
+        # Collect only text blocks (skip tool_use, tool_result, thinking)
+        text_parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get('type') == 'text':
+                t = block.get('text', '').strip()
+                if t:
+                    text_parts.append(t)
+
+        if not text_parts:
+            continue
+
+        text = '\n\n'.join(text_parts)
+
+        if lower_search and lower_search not in text.lower():
+            continue
+
+        ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
+        turns.append({
+            'turn': len(turns) + 1,
+            'message_index': i,
+            'timestamp': ts,
+            'text': text,
+            'char_count': len(text),
+        })
+
+    base.update({
+        'session': session_name,
+        'total_turns': len(turns),
+        'messages': turns,
+    })
+    if search:
+        base['search'] = search
 
     return base
 

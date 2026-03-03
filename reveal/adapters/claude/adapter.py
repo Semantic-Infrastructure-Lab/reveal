@@ -21,6 +21,7 @@ from .analysis import (
     get_message,
     get_thinking_blocks,
     search_messages,
+    get_messages,
     calculate_tool_success_rate,
     get_files_touched,
     get_workflow,
@@ -189,6 +190,9 @@ class ClaudeAdapter(ResourceAdapter):
         if '/message/' in self.resource:
             msg_id = int(self.resource.split('/message/')[1])
             return get_message(messages, msg_id, self.session_name, contract_base)
+        if '/messages' in self.resource:
+            search = self.query_params.get('search') or self.query_params.get('contains')
+            return get_messages(messages, self.session_name, contract_base, search=search)
         return get_overview(messages, self.session_name, conversation_path_str, contract_base)
 
     def _route_query_handler(self, messages: List[Dict], conversation_path_str: str,
@@ -302,19 +306,59 @@ class ClaudeAdapter(ResourceAdapter):
 
         return base
 
+    @staticmethod
+    def _read_session_title(jsonl_path: Path) -> Optional[str]:
+        """Read first user text message from JSONL as a display title.
+
+        Reads only the first 30 lines to avoid loading entire file.
+        """
+        try:
+            import json as _json
+            with open(jsonl_path, 'r', errors='replace') as fh:
+                for i, line in enumerate(fh):
+                    if i > 30:
+                        break
+                    try:
+                        rec = _json.loads(line)
+                    except Exception:
+                        continue
+                    if rec.get('type') != 'user':
+                        continue
+                    content = rec.get('message', {}).get('content', '')
+                    if isinstance(content, str):
+                        text = content.strip()
+                    elif isinstance(content, list):
+                        text = ''
+                        for item in content:
+                            if isinstance(item, dict) and item.get('type') == 'text':
+                                text = item.get('text', '').strip()
+                                break
+                    else:
+                        continue
+                    if text:
+                        return text.split('\n')[0].strip()[:80] or None
+        except Exception:
+            pass
+        return None
+
     def _list_sessions(self) -> Dict[str, Any]:
         """List available Claude Code sessions.
 
         Scans the Claude projects directory for sessions and returns
-        recent ones with basic metadata.
+        all sessions sorted by recency.
 
         Supports query params when called from get_structure():
-            ?limit=N      - show N most recent (default: 20)
             ?filter=term  - filter session names by substring (case-insensitive)
             ?search=term  - alias for ?filter=term
 
+        CLI flags (applied by routing.py):
+            --head N      - show N most recent (default: 20)
+            --all         - show all sessions
+            --since DATE  - filter by modified date (e.g. 2026-02-27)
+            --search TERM - filter session names (overrides ?filter=)
+
         Returns:
-            Dictionary with session list and usage help
+            Dictionary with full session list (routing.py applies display limits)
         """
         base: Dict[str, Any] = {
             'contract_version': '1.0',
@@ -323,8 +367,6 @@ class ClaudeAdapter(ResourceAdapter):
             'source_type': 'directory'
         }
 
-        # Read listing query params
-        limit = int(self.query_params.get('limit', 20))
         name_filter = (self.query_params.get('filter') or self.query_params.get('search', '')).lower()
 
         sessions = []
@@ -370,7 +412,7 @@ class ClaudeAdapter(ResourceAdapter):
 
         base.update({
             'session_count': len(sessions),
-            'recent_sessions': sessions[:limit],
+            'recent_sessions': sessions,  # routing.py applies head/since limits
             'usage': {
                 'overview': 'reveal claude://session/<name>',
                 'workflow': 'reveal claude://session/<name>/workflow',

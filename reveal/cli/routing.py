@@ -20,6 +20,43 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
 
+def _read_session_title_cheap(jsonl_path: str) -> Optional[str]:
+    """Read first meaningful user text from a JSONL session file (first 30 lines only).
+
+    Skips system-injected continuation context blocks so the title reflects
+    the actual user prompt, not the framework's session context.
+    """
+    import json as _json
+    _SKIP_PREFIXES = ('# Session Continuation Context', '# System', '<system')
+    try:
+        with open(jsonl_path, 'r', errors='replace') as fh:
+            for i, line in enumerate(fh):
+                if i > 30:
+                    break
+                try:
+                    rec = _json.loads(line)
+                except Exception:
+                    continue
+                if rec.get('type') != 'user':
+                    continue
+                content = rec.get('message', {}).get('content', '')
+                if isinstance(content, str):
+                    text = content.strip()
+                elif isinstance(content, list):
+                    text = ''
+                    for item in content:
+                        if isinstance(item, dict) and item.get('type') == 'text':
+                            text = item.get('text', '').strip()
+                            break
+                else:
+                    continue
+                if text and not any(text.startswith(p) for p in _SKIP_PREFIXES):
+                    return text.split('\n')[0].strip()[:80] or None
+    except Exception:
+        pass
+    return None
+
+
 # ============================================================================
 # File checking functions
 # ============================================================================
@@ -478,6 +515,114 @@ def _apply_budget_constraints(result: dict, args: 'Namespace') -> dict:
     return result
 
 
+def _apply_claude_display_hints(result: dict, args: 'Namespace') -> dict:
+    """Inject display hints and apply filtering for claude:// adapter results.
+
+    For claude_workflow: applies --type, --search filters and injects _display hints.
+    For all claude types: injects _display hints for renderer use.
+    """
+    if not isinstance(result, dict):
+        return result
+
+    result_type = result.get('type', '')
+    if not result_type.startswith('claude_'):
+        return result
+
+    # Build _display hints for the renderer
+    result['_display'] = {
+        'max_snippet_chars': getattr(args, 'max_snippet_chars', None),
+        'verbose': getattr(args, 'verbose', False),
+        'head': getattr(args, 'head', None),
+        'tail': getattr(args, 'tail', None),
+        'range': getattr(args, 'range', None),
+    }
+
+    # Apply workflow-specific filtering
+    if result_type == 'claude_workflow' and 'workflow' in result:
+        workflow = result['workflow']
+        total_before = len(workflow)
+
+        # --type: filter by tool name (case-insensitive)
+        type_filter = getattr(args, 'type', None)
+        if type_filter:
+            workflow = [s for s in workflow if (s.get('tool') or '').lower() == type_filter.lower()]
+
+        # --search: grep detail and tool fields
+        search_term = getattr(args, 'search', None)
+        if search_term:
+            lower = search_term.lower()
+            workflow = [
+                s for s in workflow
+                if lower in (s.get('detail') or '').lower()
+                or lower in (s.get('tool') or '').lower()
+            ]
+
+        # --head / --tail / --range slicing
+        head = getattr(args, 'head', None)
+        tail = getattr(args, 'tail', None)
+        rng = getattr(args, 'range', None)
+        if head:
+            workflow = workflow[:head]
+        elif tail:
+            workflow = workflow[-tail:]
+        elif rng:
+            start, end = rng  # already parsed as (int, int) by parser
+            workflow = workflow[start - 1:end]
+
+        result['workflow'] = workflow
+        result['displayed_steps'] = len(workflow)
+        if len(workflow) < total_before:
+            result['filtered_from'] = total_before
+
+    # Apply session-listing filters (--head, --all, --since, --search)
+    if result_type == 'claude_session_list' and 'recent_sessions' in result:
+        sessions = result['recent_sessions']
+
+        # --search: filter by session name substring (CLI flag overrides ?filter= query param)
+        search_term = getattr(args, 'search', None)
+        if search_term:
+            lower = search_term.lower()
+            sessions = [s for s in sessions if lower in s.get('session', '').lower()]
+
+        # --since DATE: filter by modified date
+        since = getattr(args, 'since', None)
+        if since:
+            sessions = [s for s in sessions if s.get('modified', '') >= since]
+
+        # --head / --all: apply display limit (default 20)
+        show_all = getattr(args, 'all', False)
+        head = getattr(args, 'head', None)
+        if not show_all:
+            limit = head if head else 20
+            sessions = sessions[:limit]
+
+        result['recent_sessions'] = sessions
+        result['displayed_count'] = len(sessions)
+
+        # Add title for displayed sessions (read first user message, cheap)
+        for s in sessions:
+            if 'title' not in s and s.get('path'):
+                s['title'] = _read_session_title_cheap(s['path'])
+
+    # Apply messages-specific slicing (--head/--tail/--range)
+    if result_type == 'claude_messages' and 'messages' in result:
+        msgs = result['messages']
+        head = getattr(args, 'head', None)
+        tail = getattr(args, 'tail', None)
+        rng = getattr(args, 'range', None)
+        if head:
+            msgs = msgs[:head]
+        elif tail:
+            msgs = msgs[-tail:]
+        elif rng:
+            start, end = rng
+            msgs = msgs[start - 1:end]
+        result['messages'] = msgs
+        result['total_turns'] = len(msgs)
+
+    return result
+
+
 def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
                       scheme: Optional[str] = None, resource: Optional[str] = None) -> None:
     """Render full structure from adapter.
@@ -507,6 +652,7 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
     # Apply post-processing
     result = _apply_field_selection(result, args)
     result = _apply_budget_constraints(result, args)
+    result = _apply_claude_display_hints(result, args)
 
     # Add available elements if adapter supports discovery
     if hasattr(adapter, 'get_available_elements'):

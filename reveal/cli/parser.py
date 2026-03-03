@@ -294,6 +294,10 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                         help='Sort ascending (use with --files to reverse its default newest-first order)')
     parser.add_argument('--type', type=str, metavar='TYPE',
                         help='Filter by element type (function, class, method, etc.)')
+    parser.add_argument('--all', action='store_true',
+                        help='Show all results (no limit, e.g., reveal claude:// --all)')
+    parser.add_argument('--since', type=str, metavar='DATE',
+                        help='Filter results since date (YYYY-MM-DD, e.g., reveal claude:// --since 2026-02-27)')
 
 
 def _add_markdown_options(parser: argparse.ArgumentParser) -> None:

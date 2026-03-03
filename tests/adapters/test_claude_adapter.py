@@ -378,7 +378,7 @@ class TestSessionListing:
     """Tests for claude:// listing with query params."""
 
     def test_list_sessions_limit_param(self, tmp_path):
-        """Test ?limit=N restricts output to N sessions."""
+        """Test _list_sessions returns all sessions (limit applied by routing.py)."""
         # Create 5 fake project dirs each with a jsonl file
         base = tmp_path / 'projects'
         base.mkdir()
@@ -391,7 +391,9 @@ class TestSessionListing:
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', base):
             result = adapter._list_sessions()
 
-        assert len(result['recent_sessions']) == 3
+        # All 5 sessions returned; routing.py applies the limit
+        assert len(result['recent_sessions']) == 5
+        assert result['session_count'] == 5
 
     def test_list_sessions_filter_param(self, tmp_path):
         """Test ?filter=term restricts output to matching session names."""

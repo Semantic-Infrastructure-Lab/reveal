@@ -373,7 +373,7 @@ def _extract_tool_detail(tool_name: str, tool_input: Dict[str, Any]) -> Optional
         Detail string or None
     """
     if tool_name == 'Bash':
-        return tool_input.get('description') or tool_input.get('command', '')[:80]
+        return tool_input.get('description') or tool_input.get('command', '')
     elif tool_name in ('Read', 'Write', 'Edit'):
         return tool_input.get('file_path', '')
     elif tool_name == 'Grep':
