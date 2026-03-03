@@ -22,7 +22,7 @@ def show_file_list(path: str, show_hidden: bool = False,
         show_hidden: Whether to include hidden files/dirs
         respect_gitignore: Whether to respect .gitignore rules
         exclude_patterns: Additional patterns to exclude
-        sort_by: Sort key: 'mtime' (default), 'name', 'size'
+        sort_by: Sort key: 'mtime'/'modified' (default), 'name', 'size'
         sort_desc: If True, newest/largest/z-first (default: True)
         include_extensions: If set, only include files with these extensions
 
@@ -69,7 +69,7 @@ def show_file_list(path: str, show_hidden: bool = False,
 
     # Sort
     effective_sort = sort_by or 'mtime'
-    if effective_sort == 'mtime':
+    if effective_sort in ('mtime', 'modified'):
         files.sort(key=lambda x: x[1].st_mtime, reverse=sort_desc)
     elif effective_sort == 'size':
         files.sort(key=lambda x: x[1].st_size, reverse=sort_desc)
@@ -108,7 +108,7 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
         exclude_patterns: Additional patterns to exclude (e.g., ['*.log', 'tmp/'])
         dir_limit: Maximum entries per directory before snipping (default: 50, 0=unlimited).
                    When exceeded, shows "[snipped N more]" and continues with siblings.
-        sort_by: Sort entries by field: 'name', 'size', 'mtime' (default: dirs first, then name)
+        sort_by: Sort entries by field: 'name', 'size', 'mtime'/'modified' (default: dirs first, then name)
         sort_desc: If True, reverse sort order
         include_extensions: If set, only show files with these extensions (e.g., ['md', 'py'])
 
@@ -196,7 +196,7 @@ def _get_sorted_entries(path: Path, sort_by: Optional[str] = None,
     except PermissionError:
         return None
 
-    if sort_by == 'mtime':
+    if sort_by in ('mtime', 'modified'):
         entries.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=sort_desc)
     elif sort_by == 'size':
         entries.sort(key=lambda p: p.stat().st_size if p.is_file() else 0, reverse=sort_desc)

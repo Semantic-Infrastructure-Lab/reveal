@@ -6,6 +6,7 @@ import os
 import shutil
 from reveal.tree_view import (
     show_directory_tree,
+    show_file_list,
     _count_entries,
     _get_file_info,
     _walk_directory
@@ -350,6 +351,45 @@ class TestWalkDirectory(unittest.TestCase):
         # Directory should come before files
         if dir_pos is not None and file_pos is not None:
             self.assertLess(dir_pos, file_pos)
+
+
+class TestSortAliases(unittest.TestCase):
+    """Test that 'modified' is accepted as an alias for 'mtime' in sort_by."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        # Create files with distinct mtimes
+        self.older = os.path.join(self.temp_dir, 'older.txt')
+        self.newer = os.path.join(self.temp_dir, 'newer.txt')
+        with open(self.older, 'w') as f:
+            f.write('old')
+        with open(self.newer, 'w') as f:
+            f.write('new')
+        # Ensure distinct mtimes
+        os.utime(self.older, (1000000, 1000000))
+        os.utime(self.newer, (2000000, 2000000))
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir)
+
+    def test_show_file_list_sort_modified_alias(self):
+        """'modified' should sort by mtime, same as 'mtime'."""
+        result_mtime = show_file_list(self.temp_dir, sort_by='mtime', sort_desc=True)
+        result_modified = show_file_list(self.temp_dir, sort_by='modified', sort_desc=True)
+        self.assertEqual(result_mtime, result_modified)
+
+    def test_show_file_list_sort_modified_newest_first(self):
+        """sort_by='modified' desc puts newest file first."""
+        result = show_file_list(self.temp_dir, sort_by='modified', sort_desc=True)
+        lines = [l for l in result.strip().splitlines() if l]
+        self.assertIn('newer.txt', lines[0])
+        self.assertIn('older.txt', lines[1])
+
+    def test_show_directory_tree_sort_modified_alias(self):
+        """'modified' as sort key for directory tree doesn't crash and produces output."""
+        result_mtime = show_directory_tree(self.temp_dir, sort_by='mtime')
+        result_modified = show_directory_tree(self.temp_dir, sort_by='modified')
+        self.assertEqual(result_mtime, result_modified)
 
 
 if __name__ == '__main__':
