@@ -6,7 +6,7 @@ import subprocess
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, cast
 
 
 def create_review_parser() -> argparse.ArgumentParser:
@@ -124,7 +124,7 @@ def _run_check(path: Path, select: str) -> List[Dict[str, Any]]:
         )
         if result.stdout.strip():
             data = json.loads(result.stdout)
-            return data.get('violations', [])
+            return cast(List[Dict[str, Any]], data.get('violations', []))
     except Exception:
         pass
     return []
@@ -140,7 +140,7 @@ def _run_hotspots(path: Path) -> List[Dict[str, Any]]:
         if result.stdout.strip():
             data = json.loads(result.stdout)
             hotspots = data.get('hotspots', data.get('files', []))
-            return hotspots[:10]  # Top 10
+            return cast(List[Dict[str, Any]], hotspots[:10])  # Top 10
     except Exception:
         pass
     return []
@@ -156,7 +156,7 @@ def _run_complexity(path: Path) -> List[Dict[str, Any]]:
         )
         if result.stdout.strip():
             data = json.loads(result.stdout)
-            return data.get('elements', data.get('results', []))[:10]
+            return cast(List[Dict[str, Any]], data.get('elements', data.get('results', []))[:10])
     except Exception:
         pass
     return []

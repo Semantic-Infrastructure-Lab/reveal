@@ -370,7 +370,7 @@ class XlsxAdapter(ResourceAdapter):
         if self.file_path:
             self.analyzer = XlsxAnalyzer(str(self.file_path))
 
-    def get_structure(self) -> Dict[str, Any]:
+    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
         """Get workbook structure or sheet data based on query params.
 
         Returns:
@@ -662,7 +662,7 @@ class XlsxAdapter(ResourceAdapter):
         # TODO: Implement cross-sheet search
         raise NotImplementedError("Search functionality coming soon")
 
-    def get_element(self, element_name: str) -> Optional[Dict[str, Any]]:
+    def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Get specific sheet by name.
 
         Args:

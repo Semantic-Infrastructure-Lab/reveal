@@ -1,7 +1,7 @@
 """Tree-sitter based analyzer for multi-language support."""
 
 import os
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, cast
 from .base import FileAnalyzer
 from .core import suppress_treesitter_warnings
 
@@ -125,6 +125,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
     def __init__(self, path: str):
         super().__init__(path)
         self.tree: Optional[Any] = None
+        self._node_cache: Optional[Dict[str, List[Any]]] = None  # None = unbuilt; {} = built but empty
+        self._content_bytes: Optional[bytes] = None
 
         if self.language:
             self._parse_tree()
@@ -167,7 +169,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             _parse_cache[self._cache_key] = {'tree': self.tree}
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract structure using tree-sitter.
 
         Args:
@@ -502,9 +504,9 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if not self.tree:
             return []
 
-        # Build cache on first access (lazy initialization)
-        if not hasattr(self, '_node_cache'):
-            self._node_cache: Dict[str, List[Any]] = {}
+        # Build cache on first access (lazy initialization); None sentinel means unbuilt
+        if self._node_cache is None:
+            self._node_cache = {}
             stack = [self.tree.root_node]
             while stack:
                 node = stack.pop()
@@ -518,7 +520,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             if hasattr(self, '_cache_key') and self._cache_key in _parse_cache:
                 _parse_cache[self._cache_key]['node_cache'] = self._node_cache
 
-        return self._node_cache.get(node_type, [])
+        return (self._node_cache or {}).get(node_type, [])
 
     def _get_node_text(self, node) -> str:
         """Get the source text for a node.
@@ -530,10 +532,12 @@ class TreeSitterAnalyzer(FileAnalyzer):
         entire file on every call (hot path: called once per symbol/function/class).
         """
         try:
-            content_bytes = self._content_bytes  # type: ignore[attr-defined]
+            if self._content_bytes is None:
+                raise AttributeError
+            content_bytes = self._content_bytes
         except AttributeError:
             content_bytes = self.content.encode('utf-8')
-            self._content_bytes = content_bytes  # type: ignore[attr-defined]
+            self._content_bytes = content_bytes
         return content_bytes[node.start_byte:node.end_byte].decode('utf-8')
 
     def _get_node_name(self, node) -> Optional[str]:
@@ -639,7 +643,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if not node:
             return 0
         _, depth = self._calculate_complexity_and_depth(node)
-        return depth
+        return int(depth)
 
     def _calculate_complexity(self, node) -> int:
         """Calculate cyclomatic complexity for a function node.
@@ -649,7 +653,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if not node:
             return 1
         complexity, _ = self._calculate_complexity_and_depth(node)
-        return complexity
+        return int(complexity)
 
     def _calculate_complexity_and_depth(self, node) -> tuple:
         """Compute cyclomatic complexity and max nesting depth in one iterative pass.
@@ -723,7 +727,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             for child in n.children:
                 child_type = child.type
                 # Count decision points (skip keyword children of their containers)
-                if child_type in decision_types and (n_type, child_type) not in keyword_pairs:
+                if child_type in decision_types and (n_type is None or (n_type, child_type) not in keyword_pairs):
                     decision_count += 1
                 # Increase depth when entering a nesting construct
                 child_depth = depth + 1 if child_type in nesting_types else depth

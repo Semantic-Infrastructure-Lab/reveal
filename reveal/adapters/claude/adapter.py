@@ -408,7 +408,7 @@ class ClaudeAdapter(ResourceAdapter):
 
         # Apply name filter if provided
         if name_filter:
-            sessions = [s for s in sessions if name_filter in s['session'].lower()]
+            sessions = [s for s in sessions if name_filter in str(s['session']).lower()]
 
         base.update({
             'session_count': len(sessions),

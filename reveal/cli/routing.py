@@ -12,7 +12,7 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
@@ -779,7 +779,8 @@ def _show_directory_meta(path: Path, args: 'Namespace') -> None:
             print(f"Oldest:     {meta['oldest_file']}")
         if ext_counts:
             print(f"\nBy extension:")
-            for ext, count in meta['by_extension'].items():
+            by_ext: Dict[str, int] = meta['by_extension']  # type: ignore[assignment]  # meta is dict[str, object]
+            for ext, count in by_ext.items():
                 print(f"  .{ext:<12} {count:>6,}")
 
 

@@ -187,7 +187,7 @@ def _fetch_and_analyze_git_file(git_ref: str, file_path: str) -> Dict[str, Any]:
         if not analyzer_class:
             return {}
         structure = analyzer_class(temp_path).get_structure()
-        return structure.get('structure', structure)
+        return cast(Dict[str, Any], structure.get('structure', structure))
     finally:
         os.unlink(temp_path)
 

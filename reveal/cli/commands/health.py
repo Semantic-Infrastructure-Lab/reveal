@@ -58,11 +58,12 @@ def _detect_targets() -> List[str]:
     2. Known source directories (src/, lib/, app/, or a top-level Python package)
     3. Current directory (fallback)
     """
-    # 1. Check .reveal.yaml for configured targets
+    # 1. Check .reveal.yaml for configured targets under `health.targets`
     try:
         from reveal.config import get_config
         config = get_config(Path('.'))
-        health_targets = config.get('health', {}).get('targets', [])
+        raw: dict = config._config
+        health_targets = raw.get('health', {}).get('targets', [])
         if health_targets:
             return [str(t) for t in health_targets]
     except Exception:
@@ -158,7 +159,7 @@ def _check_uri(scheme: str, uri: str, args: Namespace):
     """Run URI-adapter health check."""
     import subprocess
 
-    _URI_FLAGS = {
+    _URI_FLAGS: dict[str, list[str]] = {
         'ssl': ['--check', '--advanced'],
         'mysql': ['--check', '--advanced'],
         'domain': ['--check'],

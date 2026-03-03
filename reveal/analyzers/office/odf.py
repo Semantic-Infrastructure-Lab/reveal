@@ -132,7 +132,7 @@ class OdtAnalyzer(OdfAnalyzer):
     def _build_odf_result(self, sections: List[Dict[str, Any]], tables: List[Dict[str, Any]],
                          para_count: int, word_count: int,
                          head: Optional[int], tail: Optional[int],
-                         range: Optional[tuple]) -> Dict[str, List[Dict[str, Any]]]:
+                         range: Optional[tuple]) -> Dict[str, Any]:
         """Build the final ODF structure result.
 
         Args:
@@ -147,7 +147,7 @@ class OdtAnalyzer(OdfAnalyzer):
         Returns:
             Result dictionary
         """
-        result: Dict[str, List[Dict[str, Any]]] = {}
+        result: Dict[str, Any] = {}
 
         if sections:
             sections = self._apply_semantic_slice(sections, head, tail, range)
@@ -173,7 +173,7 @@ class OdtAnalyzer(OdfAnalyzer):
         return result
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract document structure: headings, paragraphs, tables."""
         if self.parse_error:
             return {'error': [{'message': self.parse_error}]}
@@ -295,7 +295,7 @@ class OdsAnalyzer(OdfAnalyzer):
     """Analyzer for LibreOffice/OpenOffice Calc spreadsheets (.ods)."""
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract spreadsheet structure: sheets, dimensions."""
         if self.parse_error:
             return {'error': [{'message': self.parse_error}]}
@@ -324,7 +324,7 @@ class OdsAnalyzer(OdfAnalyzer):
             sheet_info['line'] = idx + 1
             sheets.append(sheet_info)
 
-        result: Dict[str, List[Dict[str, Any]]] = {
+        result: Dict[str, Any] = {
             'contract_version': '1.0',
             'type': 'ods_structure',
             'source': str(self.path),
@@ -444,7 +444,7 @@ class OdpAnalyzer(OdfAnalyzer):
     """Analyzer for LibreOffice/OpenOffice Impress presentations (.odp)."""
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract presentation structure: slides with titles."""
         if self.parse_error:
             return {'error': [{'message': self.parse_error}]}
@@ -471,7 +471,7 @@ class OdpAnalyzer(OdfAnalyzer):
             slide_info = self._analyze_slide(page, idx + 1)
             slides.append(slide_info)
 
-        result: Dict[str, List[Dict[str, Any]]] = {
+        result: Dict[str, Any] = {
             'contract_version': '1.0',
             'type': 'odp_structure',
             'source': str(self.path),

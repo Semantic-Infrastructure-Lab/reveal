@@ -66,7 +66,7 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         return None, None
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract YAML top-level keys using tree-sitter."""
         if not self.tree:
             return {}
@@ -168,7 +168,7 @@ class JsonAnalyzer(TreeSitterAnalyzer):
         return None, None
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract JSON top-level keys using tree-sitter."""
         if not self.tree:
             return {}

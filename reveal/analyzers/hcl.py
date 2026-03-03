@@ -14,7 +14,7 @@ class HCLAnalyzer(TreeSitterAnalyzer):
     language = 'hcl'
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+                      range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
         """Extract HCL/Terraform structure."""
         if not self.tree:
             return {}

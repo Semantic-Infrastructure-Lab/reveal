@@ -44,7 +44,7 @@ class TomlAnalyzer(TreeSitterAnalyzer):
         sections.append(section_info)
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
-                      range: Optional[tuple] = None, outline: bool = False, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
+                      range: Optional[tuple] = None, outline: bool = False, **kwargs) -> Dict[str, Any]:
         """Extract TOML sections and top-level keys using tree-sitter."""
         if not self.tree:
             return {}
