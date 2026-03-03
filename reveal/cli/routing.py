@@ -684,6 +684,10 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
     """
     from ..tree_view import show_directory_tree
 
+    # Deprecation hint for --check flag (before any path handling)
+    if getattr(args, 'check', False):
+        print("hint: --check is deprecated; use `reveal check <path>` instead", file=sys.stderr)
+
     # Validate adapter-specific flags
     if getattr(args, 'hotspots', False):
         print("❌ Error: --hotspots only works with stats:// adapter", file=sys.stderr)
@@ -694,6 +698,38 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
         print(file=sys.stderr)
         print("Learn more: reveal help://stats", file=sys.stderr)
         sys.exit(1)
+
+    # Nginx/cPanel flags are adapter-specific: guard against use on non-nginx files
+    _NGINX_FLAGS = {
+        'check_acl': '--check-acl',
+        'validate_nginx_acme': '--validate-nginx-acme',
+        'check_conflicts': '--check-conflicts',
+        'cpanel_certs': '--cpanel-certs',
+        'diagnose': '--diagnose',
+    }
+    # Source-code and data extensions that are clearly not nginx configs
+    _NON_NGINX_EXTENSIONS = {
+        '.py', '.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs',
+        '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.cc', '.h', '.hpp',
+        '.cs', '.php', '.swift', '.kt', '.scala', '.lua',
+        '.sh', '.bash', '.zsh', '.fish', '.ps1',
+        '.md', '.rst', '.txt',
+        '.json', '.yaml', '.yml', '.toml', '.xml',
+        '.html', '.htm', '.css', '.scss', '.sass',
+        '.sql', '.csv',
+    }
+    _path_ext = Path(path_str).suffix.lower() if '.' in Path(path_str).name else ''
+    if _path_ext in _NON_NGINX_EXTENSIONS:
+        for attr, flag in _NGINX_FLAGS.items():
+            if getattr(args, attr, False):
+                print(f"❌ Error: {flag} only works with nginx config files", file=sys.stderr)
+                print(file=sys.stderr)
+                print("Examples:", file=sys.stderr)
+                print(f"  reveal nginx.conf {flag}                    # with a .conf file", file=sys.stderr)
+                print(f"  reveal nginx://nginx.conf?{attr.replace('_', '-')}=true  # URI param", file=sys.stderr)
+                print(file=sys.stderr)
+                print("Learn more: reveal help://nginx", file=sys.stderr)
+                sys.exit(1)
 
     # Parse path and check existence
     path, element_from_path = _parse_file_line_syntax(path_str)

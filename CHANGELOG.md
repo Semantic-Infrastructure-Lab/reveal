@@ -12,6 +12,16 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.56.0] - 2026-03-03
+
+### Added (session celestial-mage-0303)
+- **`reveal check` subcommand** — canonical entry point for quality checks. `reveal check ./src` replaces `reveal ./src --check`. Clean namespace, own `--help`, own `--rules`/`--explain`. 8 flags removed from global `--help` (`--check`, `--select`, `--ignore`, `--only-failures`, `--recursive`, `--config`, `--no-group`, `--advanced`).
+- **`_build_global_options_parser()`** — shared parent parser. Subcommands inherit `--format`, `--copy`, `--verbose`, `--no-breadcrumbs`, `--disable-breadcrumbs` via `parents=` without re-declaration. Foundation for all future subcommands.
+- **`reveal check --help`** — subcommand-specific help with examples and rule category reference.
+- **`--check` deprecation hint** — `reveal ./src --check` still works, but prints `hint: --check is deprecated; use reveal check <path>` to stderr. Non-breaking transition.
+- **Nginx/cPanel error-with-hint guards** — `--diagnose`, `--check-acl`, `--validate-nginx-acme`, `--check-conflicts`, `--cpanel-certs` now fail with a helpful error message when used on non-nginx files (e.g., `.py`, `.js`, `.md`). Follows the `--hotspots` pattern. Flags still work on `.conf` files.
+- **Subcommands in `reveal --help`** — epilog now shows `reveal check <path>` as the modern form.
+
 ## [0.55.0] - 2026-03-03
 
 ### Added (sessions enigmatic-wave-0303, solar-observatory-0303)

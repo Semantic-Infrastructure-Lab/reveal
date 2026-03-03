@@ -128,11 +128,21 @@ stdin: Reads file paths from stdin (one per line) - works with find, git, ls, et
 '''
 
 
+def _build_subcommands_section() -> str:
+    """Build the subcommands reference section."""
+    return '''
+Subcommands (reveal <subcommand> --help for details):
+  reveal check <path>     Run quality rules on a file or directory
+                          (replaces: reveal <path> --check)
+'''
+
+
 def build_help_epilog() -> str:
     """Build dynamic help with conditional jq examples."""
     has_jq = shutil.which('jq') is not None
 
-    help_text = _build_core_examples()
+    help_text = _build_subcommands_section()
+    help_text += _build_core_examples()
     if has_jq:
         help_text += _build_jq_examples()
     help_text += _build_adapter_examples()
@@ -168,17 +178,34 @@ def _add_basic_arguments(parser: argparse.ArgumentParser, version: str) -> None:
                         help='Show comprehensive agent guide (complete examples, patterns, troubleshooting)')
 
 
+def _build_global_options_parser() -> argparse.ArgumentParser:
+    """Build a parent parser with flags inherited by all subcommands.
+
+    These flags are universal — they make sense for every subcommand and for
+    the main path-based interface. Using parents=[_build_global_options_parser()]
+    ensures subcommands inherit them without re-declaration.
+
+    Call this function once per consumer (argparse parents= consumes the instance).
+    """
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default='text',
+                   help='Output format (text, json, typed [typed JSON with types/relationships], grep)')
+    p.add_argument('--copy', '-c', action='store_true',
+                   help='Copy output to clipboard (also prints normally)')
+    p.add_argument('--verbose', '-v', action='store_true',
+                   help='Show detailed output (e.g., all results instead of truncated summary for imports://)')
+    p.add_argument('--no-breadcrumbs', '-q', '--quiet', action='store_true',
+                   help='Disable breadcrumb navigation hints (scripting mode)')
+    p.add_argument('--disable-breadcrumbs', action='store_true',
+                   help='Permanently disable breadcrumbs in user config')
+    return p
+
+
 def _add_input_output_options(parser: argparse.ArgumentParser) -> None:
     """Add input/output and formatting options."""
     parser.add_argument('--stdin', action='store_true',
                         help='Read paths/URIs from stdin (one per line) - supports files and any URI scheme (ssl://, claude://, etc.)')
     parser.add_argument('--meta', action='store_true', help='Show metadata only')
-    parser.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default='text',
-                        help='Output format (text, json, typed [typed JSON with types/relationships], grep)')
-    parser.add_argument('--copy', '-c', action='store_true',
-                        help='Copy output to clipboard (also prints normally)')
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help='Show detailed output (e.g., all results instead of truncated summary for imports://)')
 
 
 def _add_type_aware_options(parser: argparse.ArgumentParser) -> None:
@@ -222,10 +249,6 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
                         help='Identify quality hotspots (requires stats:// adapter, shows worst 10 files by quality)')
     parser.add_argument('--code-only', action='store_true',
                         help='Exclude data/config files from analysis (requires stats:// adapter, filters .json>10KB, .yaml, .xml, .csv, .toml)')
-    parser.add_argument('--no-breadcrumbs', '-q', '--quiet', action='store_true',
-                        help='Disable breadcrumb navigation hints (scripting mode)')
-    parser.add_argument('--disable-breadcrumbs', action='store_true',
-                        help='Permanently disable breadcrumbs in user config')
 
 
 def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
@@ -400,10 +423,13 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     Returns:
         Configured ArgumentParser instance
     """
+    global_opts = _build_global_options_parser()
+
     parser = argparse.ArgumentParser(
         description='Reveal: Explore code semantically - The simplest way to understand code',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=build_help_epilog()
+        epilog=build_help_epilog(),
+        parents=[global_opts],
     )
 
     _add_basic_arguments(parser, version)

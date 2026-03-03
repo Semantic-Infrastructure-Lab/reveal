@@ -40,6 +40,26 @@ from .cli import (
 )
 
 
+def _handle_check_command() -> bool:
+    """Handle 'reveal check' subcommand.
+
+    Uses sys.argv inspection (like _handle_scaffold_command) to avoid the
+    argparse conflict between optional positional args and subparsers.
+
+    Returns:
+        bool: True if check command was handled, False otherwise
+    """
+    if len(sys.argv) < 2 or sys.argv[1] != 'check':
+        return False
+
+    from reveal.cli.commands.check import create_check_parser, run_check
+    parser = create_check_parser()
+    args = parser.parse_args(sys.argv[2:])
+    check_for_updates()
+    run_check(args)
+    return True
+
+
 def _handle_scaffold_command() -> bool:
     """Handle 'reveal scaffold' subcommands.
 
@@ -163,7 +183,9 @@ def main() -> None:
     """Main CLI entry point."""
     _setup_windows_console()
 
-    # Handle scaffold subcommands early (before copy mode setup)
+    # Handle subcommands early (before copy mode setup and argparse)
+    if _handle_check_command():
+        return
     if _handle_scaffold_command():
         return
 
