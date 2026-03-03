@@ -26,8 +26,10 @@ _APPROX_CHARS_PER_TOKEN = 4
 
 def create_pack_parser() -> argparse.ArgumentParser:
     """Create parser for reveal pack subcommand."""
+    from reveal.cli.parser import _build_global_options_parser
     parser = argparse.ArgumentParser(
         prog='reveal pack',
+        parents=[_build_global_options_parser()],
         description='Curate a token-budgeted context snapshot for LLM consumption.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -60,17 +62,6 @@ def create_pack_parser() -> argparse.ArgumentParser:
         '--focus',
         metavar='TOPIC',
         help='Emphasize files matching this name pattern (e.g., auth, api, models)'
-    )
-    parser.add_argument(
-        '--format',
-        choices=['text', 'json'],
-        default='text',
-        help='Output format (default: text)'
-    )
-    parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Show budget allocation details'
     )
     return parser
 

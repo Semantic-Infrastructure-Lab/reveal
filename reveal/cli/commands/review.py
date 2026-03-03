@@ -11,8 +11,10 @@ from typing import Dict, Any, List, Optional, Tuple
 
 def create_review_parser() -> argparse.ArgumentParser:
     """Create parser for reveal review subcommand."""
+    from reveal.cli.parser import _build_global_options_parser
     parser = argparse.ArgumentParser(
         prog='reveal review',
+        parents=[_build_global_options_parser()],
         description='Assess code quality and structural changes before a PR merge.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -29,21 +31,10 @@ def create_review_parser() -> argparse.ArgumentParser:
         help='Path to review, or git range like main..feature'
     )
     parser.add_argument(
-        '--format',
-        choices=['text', 'json'],
-        default='text',
-        help='Output format (default: text)'
-    )
-    parser.add_argument(
         '--select',
         metavar='RULES',
         default='B,S,I,C,M',
         help='Rule categories (default: B,S,I,C,M)'
-    )
-    parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Show full details for each issue'
     )
     return parser
 

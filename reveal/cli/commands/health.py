@@ -9,8 +9,10 @@ from typing import List
 
 def create_health_parser() -> argparse.ArgumentParser:
     """Create parser for reveal health subcommand."""
+    from reveal.cli.parser import _build_global_options_parser
     parser = argparse.ArgumentParser(
         prog='reveal health',
+        parents=[_build_global_options_parser()],
         description='Unified health check across code, SSL, databases, and DNS.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -33,12 +35,6 @@ def create_health_parser() -> argparse.ArgumentParser:
         nargs='*',
         metavar='TARGET',
         help='Paths or URIs to check (e.g., ./src, ssl://example.com, mysql://host/db)'
-    )
-    parser.add_argument(
-        '--format',
-        choices=['text', 'json'],
-        default='text',
-        help='Output format (default: text)'
     )
     parser.add_argument(
         '--select',
