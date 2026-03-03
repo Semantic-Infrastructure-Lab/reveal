@@ -23,6 +23,11 @@ _ENTRY_POINT_PATTERNS = {
 
 _APPROX_CHARS_PER_TOKEN = 4
 
+# Whole-component key directory/stem names that indicate architectural importance.
+# Matched against path segments only (not substrings) to avoid false positives
+# like 'main' inside 'maintainability' or 'core' inside 'decorator'.
+_KEY_DIR_SEGMENTS = {'main', 'core', 'api', 'routes', 'models', 'schema', 'auth', 'config'}
+
 
 def create_pack_parser() -> argparse.ArgumentParser:
     """Create parser for reveal pack subcommand."""
@@ -144,6 +149,9 @@ def _compute_priority(path: Path, rel: Path, focus: Optional[str]) -> float:
     """Score a file's priority for inclusion in the pack."""
     name = path.name.lower()
     rel_str = str(rel).lower()
+    # Path segments without extension, for whole-component matching
+    rel_parts = {p.lower() for p in rel.parts}
+    rel_stem = path.stem.lower()
     score = 0.0
 
     # Entry points: highest priority
@@ -159,10 +167,10 @@ def _compute_priority(path: Path, rel: Path, focus: Optional[str]) -> float:
     if focus and focus.lower() in rel_str:
         score += 8.0
 
-    # Key directories
-    for keyword in ('main', 'core', 'api', 'routes', 'models', 'schema', 'auth', 'config'):
-        if keyword in rel_str:
-            score += 2.0
+    # Key directories — match whole path components only to avoid substring false
+    # positives (e.g. 'main' inside 'maintainability', 'core' inside 'decorator')
+    if rel_parts & _KEY_DIR_SEGMENTS or rel_stem in _KEY_DIR_SEGMENTS:
+        score += 2.0
 
     # Penalize test/vendor/docs files
     for penalty in ('test_', '_test', '/tests/', '/vendor/', '/docs/', '/.', '__pycache__'):

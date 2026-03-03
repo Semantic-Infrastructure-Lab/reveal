@@ -41,13 +41,56 @@ def create_health_parser() -> argparse.ArgumentParser:
         metavar='RULES',
         help='Rule categories to check (e.g., B,S,I,C)'
     )
+    parser.add_argument(
+        '--all',
+        action='store_true',
+        dest='health_all',
+        help='Check all resources detectable in context (current dir + configured targets)'
+    )
     return parser
+
+
+def _detect_targets() -> List[str]:
+    """Detect health check targets from context.
+
+    Priority:
+    1. `health.targets` in .reveal.yaml (user-configured)
+    2. Known source directories (src/, lib/, app/, or a top-level Python package)
+    3. Current directory (fallback)
+    """
+    # 1. Check .reveal.yaml for configured targets
+    try:
+        from reveal.config import get_config
+        config = get_config(Path('.'))
+        health_targets = config.get('health', {}).get('targets', [])
+        if health_targets:
+            return [str(t) for t in health_targets]
+    except Exception:
+        pass
+
+    # 2. Look for common source directories
+    _SOURCE_DIRS = ['src', 'lib', 'app']
+    for name in _SOURCE_DIRS:
+        if Path(name).is_dir():
+            return [name]
+
+    # 2b. Top-level Python package (dir with __init__.py, not tests/docs)
+    _SKIP = {'tests', 'test', 'docs', 'doc', 'vendor', 'node_modules', '.git'}
+    for d in sorted(Path('.').iterdir()):
+        if d.is_dir() and d.name not in _SKIP and not d.name.startswith('.'):
+            if (d / '__init__.py').exists():
+                return [str(d)]
+
+    # 3. Fallback
+    return ['.']
 
 
 def run_health(args: Namespace) -> None:
     """Run unified health check across all specified targets."""
     targets = args.targets
-    if not targets:
+    if getattr(args, 'health_all', False):
+        targets = _detect_targets()
+    elif not targets:
         _print_usage_and_exit()
 
     overall_exit = 0

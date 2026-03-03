@@ -12,12 +12,14 @@ target type — no need to know which adapter to use.
 
 ```
 reveal health TARGET [TARGET ...]
+reveal health --all
 ```
 
 ## CLI Flags
 
 | Flag | Description |
 |------|-------------|
+| `--all` | Check all resources detectable in context (source dir or configured targets) |
 | `--format json` | Machine-readable output |
 | `--verbose` | Show detailed check results |
 
@@ -44,9 +46,14 @@ reveal health TARGET [TARGET ...]
 reveal health .                         # Local directory health
 reveal health ssl://example.com         # SSL cert health
 reveal health domain://example.com      # Domain + DNS health
+reveal health --all                     # Auto-detect: source dir + configured targets
 
 # Composable: check multiple targets
 reveal health ./src ssl://api.example.com mysql://localhost
+
+# Configure targets in .reveal.yaml for `--all`:
+# health:
+#   targets: [src/, ssl://api.example.com]
 
 # CI/CD: fail on warnings or failures
 reveal health . --format json | jq '.exit_code == 0'
