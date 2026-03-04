@@ -186,8 +186,12 @@ info "Creating git commit and tag..."
 # Stage changes
 git add pyproject.toml CHANGELOG.md
 
-# Commit
-git commit -m "chore: Bump version to $NEW_VERSION" || error "Failed to create commit"
+# Commit only if there are staged changes (version may have been pre-bumped)
+if git diff --staged --quiet; then
+    info "Version already at $NEW_VERSION, skipping bump commit..."
+else
+    git commit -m "chore: Bump version to $NEW_VERSION" || error "Failed to create commit"
+fi
 
 # Create annotated tag
 git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION
