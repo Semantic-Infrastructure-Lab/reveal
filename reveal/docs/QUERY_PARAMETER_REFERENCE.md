@@ -248,20 +248,26 @@ reveal 'claude://conversation.json?summary&tools'
 
 ---
 
-## Adapters Without Query Parameters
+## Adapters Without Query Parameters (Current State)
 
-The following adapters do not currently support query parameters:
+The following adapters use **element paths** for navigation — query params are not needed because the element path covers the use case:
 
-- **diff://** - Comparison adapter (uses element path for filtering)
-- **env://** - Environment variables (use element name: `env://VAR_NAME`)
-- **sqlite://** - SQLite inspection (use element name: `sqlite://db.sqlite/table_name`)
-- **mysql://** - MySQL inspection (use element name: `mysql://host/database/table`)
-- **ssl://** - SSL certificate inspection (use element name: `ssl://domain.com/san`)
-- **python://** - Python environment (use element name: `python://packages`)
-- **domain://** - Domain inspection (use element name: `domain://example.com/dns`)
-- **reveal://** - Reveal introspection (use element name: `reveal://adapters`)
+- **env://** - `env://VAR_NAME` (element = variable name)
+- **sqlite://** - `sqlite://db.sqlite/table_name` (element = table)
+- **mysql://** - `mysql://host/database/table` (element = table)
+- **python://** - `python://packages` (element = topic)
+- **reveal://** - `reveal://adapters` (element = topic)
+- **diff://** - Element path selects comparison side
 
-These adapters use **element paths** instead of query parameters for filtering.
+The following adapters have **adapter-specific options expressed as CLI flags** rather than query params. This is a known design tension — the direction is to migrate these to URI query params so options travel with the resource:
+
+| Adapter | Current (CLI flag) | Target (query param) |
+|---------|-------------------|----------------------|
+| `cpanel://` | `reveal cpanel://USER/ssl --dns-verified` | `reveal 'cpanel://USER/ssl?dns-verified'` |
+| `ssl://` | `reveal ssl://host --expiring-within 30` | `reveal 'ssl://host?expiring-within=30'` |
+| `claude://` | `reveal claude:// --base-path /path` | `reveal 'claude://?base-path=/path'` |
+
+The `ast://` adapter is the **reference implementation** — all filtering options are query parameters. New URI adapters should follow this pattern. See [ADAPTER_CONSISTENCY.md](ADAPTER_CONSISTENCY.md#adapter-specific-flags-vs-query-parameters) for the full rationale.
 
 ---
 

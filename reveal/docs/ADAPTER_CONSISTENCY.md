@@ -5,14 +5,14 @@ category: reference
 # Adapter Consistency Guide
 
 **Audience**: Users and adapter authors
-**Last Updated**: 2026-02-07 (Phase 3: Unified Query Infrastructure)
+**Last Updated**: 2026-03-03 (jeruya-0303 — flag taxonomy, adapter-specific flag architecture)
 **See Also**: [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md), [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md)
 
 ---
 
 ## Overview
 
-Reveal has 16 URI adapters that follow a **3-tier UX model** for consistency:
+Reveal has 20 URI adapters that follow a **3-tier UX model** for consistency:
 
 1. **Resource Identity** (URI) - What to inspect
 2. **Operations** (Flags) - What to do with it
@@ -62,19 +62,49 @@ json://config.json/database     # Specific JSON key
 
 Operations are **what you do** with the resource.
 
-### Universal Operations
+### Flag Taxonomy
 
-These work across all adapters (where applicable):
+Not all flags in `reveal --help` are universal. There are three distinct categories:
 
+**Global flags** — work everywhere, inherited by all subcommands:
+```bash
+--format {text,json,typed,grep}   # Output format
+--copy                             # Copy to clipboard
+--verbose                          # Detailed output
+--no-breadcrumbs                   # Scripting mode
+```
+
+**Universal operation flags** — apply across all adapters and file targets:
 ```bash
 --check              # Health/validation check
 --advanced           # Advanced mode (requires --check)
---format json        # Output format (json, text, compact, grep)
---select=fields      # Select specific fields
 --only-failures      # Show only failures (requires --check)
+--batch              # Batch mode (process multiple URIs from stdin)
+--fields FIELDS      # Select specific output fields (token efficiency)
+--max-items N        # Budget: stop after N results
+--max-bytes N        # Budget: stop after N bytes
+--head N / --tail N  # Semantic slicing
+--sort FIELD         # Sort results
 ```
 
-### Examples
+**Adapter-specific flags** — only meaningful for a specific adapter or file type:
+```bash
+--dns-verified       # cpanel:// only — exclude NXDOMAIN from SSL counts
+--expiring-within N  # ssl:// only — filter by cert expiry
+--validate-nginx     # ssl:// only — cross-validate against nginx config
+--diagnose           # nginx file only — scan error log for ACME failures
+--validate-nginx-acme # nginx file only — full ACME pipeline audit
+--cpanel-certs       # nginx file only — compare disk certs vs live
+--check-acl          # nginx file only — nobody ACL on root directives
+--check-conflicts    # nginx file only — location block conflict detection
+--links / --frontmatter / --section  # markdown file only
+--metadata / --semantic / --scripts  # HTML file only
+--base-path DIR      # claude:// only — override session directory
+```
+
+> **Why this matters**: The flat `--help` output doesn't distinguish these tiers. Adapter-specific flags are silently ignored when applied to the wrong target. See [Adapter-Specific Flags vs Query Parameters](#adapter-specific-flags-vs-query-parameters) for the architectural direction.
+
+### Universal Operations — Examples
 
 **SSL Certificate Health Check**:
 ```bash
@@ -348,14 +378,64 @@ git://repo?type=history     # Query by type
 
 ---
 
+## Adapter-Specific Flags vs Query Parameters
+
+### The architectural direction
+
+Adapter-specific CLI flags are a known design tension. Because `argparse` uses a flat namespace, every adapter's options appear in `reveal --help` alongside truly universal flags — with no enforcement that they apply to the right target.
+
+**The principle:**
+
+| Target type | Adapter-specific options → |
+|-------------|---------------------------|
+| **URI adapter** (`cpanel://`, `ssl://`, `domain://`) | Query parameters in the URI |
+| **File target** (nginx config, `.md`, `.py`) | CLI flags (stay as-is) |
+
+**Why:** A URI is self-contained — its options should travel with it. This makes pipelines and batch mode cleaner:
+
+```bash
+# Current (adapter-specific option as global flag — pollutes --help)
+reveal cpanel://USERNAME/ssl --dns-verified
+
+# Direction: option in the URI (self-contained, batchable)
+reveal 'cpanel://USERNAME/ssl?dns-verified'
+
+# Pipeline benefit — options travel with each URI
+echo -e "cpanel://user1/ssl?dns-verified\ncpanel://user2/ssl" | reveal --stdin --batch
+```
+
+**`ast://` already proves this pattern:**
+```bash
+reveal 'ast://src?complexity>10&type=function&sort=-lines'
+# --search, --type, --sort are convenience shorthands for the same query params
+```
+
+### Current state vs target
+
+| Flag | Current | Target |
+|------|---------|--------|
+| `--dns-verified` | `cpanel://U/ssl --dns-verified` | `cpanel://U/ssl?dns-verified` |
+| `--expiring-within N` | `ssl://host --expiring-within 30` | `ssl://host?expiring-within=30` |
+| `--validate-nginx` | `ssl://host --validate-nginx` | stay as flag (cross-tool operation) |
+| `--diagnose` | `reveal /etc/nginx/foo.conf --diagnose` | stay as flag (file target) |
+| `--base-path DIR` | `claude:// --base-path /path` | `claude://?base-path=/path` |
+
+### For adapter authors
+
+New URI adapters should accept a `query_string` parameter in `__init__` and parse their specific options from it. The routing layer already splits on `?` for ast/json-style adapters; other adapters receive options via the full URI.
+
+Document adapter-specific query params in `get_schema()` under `query_params` and in `get_help()` under `examples`.
+
+---
+
 ## Future Enhancements
 
 Planned improvements:
 
-1. **Universal --batch flag** - Explicit batch mode with aggregation
-2. **Standardized query operators** - Same syntax across all adapters
-3. **Element discovery hints** - Show available elements in overview
-4. **Field selection everywhere** - All adapters support --select
+1. **Query params for URI adapters** - Migrate adapter-specific flags to URI query params (cpanel, ssl, domain, claude)
+2. **Argument groups in --help** - Surface the existing flag taxonomy visually in `--help` output
+3. **Flag applicability warnings** - Warn when an adapter-specific flag is applied to a non-matching target
+4. **Element discovery hints** - Show available elements in overview
 
 ---
 

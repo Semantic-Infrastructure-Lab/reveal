@@ -67,6 +67,7 @@ reveal file.py --search test --type function --sort=-line_count
 - ✅ Basic type filtering
 - ✅ Sorting results
 - ✅ Quick grep-like workflows
+- ✅ File target options (`--links` on markdown, `--diagnose` on nginx files)
 
 **Use URI syntax for** (20% of queries):
 - ✅ Multiple conditions: `?complexity>10&lines>50`
@@ -74,6 +75,9 @@ reveal file.py --search test --type function --sort=-line_count
 - ✅ Boolean logic: `?type=function|method`
 - ✅ Cross-directory queries: `ast://./src?name=*test*`
 - ✅ Adapter-specific params: `git://.?author=John&since=2024-01-01`
+- ✅ Batch/pipeline workflows where options must travel with the URI
+
+> **Architectural note**: For URI adapters (`cpanel://`, `ssl://`, `domain://`, etc.), adapter-specific options belong in the URI query string — not as CLI flags. File target options (`--diagnose`, `--links`, `--frontmatter`) stay as CLI flags. See [ADAPTER_CONSISTENCY.md](ADAPTER_CONSISTENCY.md#adapter-specific-flags-vs-query-parameters).
 
 ### Comparison Table
 
