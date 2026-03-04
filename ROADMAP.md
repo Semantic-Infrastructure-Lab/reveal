@@ -227,7 +227,7 @@ This document outlines reveal's development priorities and future direction. For
 ### Stability & Polish
 - Output contract v1.1 enforcement
 - Performance optimization for large codebases
-- `autossl://` adapter — parse `/var/cpanel/logs/autossl/TIMESTAMP/` per-domain outcomes
+- `autossl://` adapter — ✅ shipped in v0.58.0
 - `--full-audit` — `reveal cpanel://USERNAME --full-audit` composing ssl+acl+nginx in one pass
 - U6 follow-on — IP-match verification (resolves but to different server)
 
@@ -315,11 +315,12 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 
 ## Adapter Status
 
-### Implemented (19)
+### Implemented (20)
 | Adapter | Description |
 |---------|-------------|
 | `ast://` | Query code as database (complexity, size, type filters) |
 | `claude://` | Claude conversation analysis |
+| `autossl://` | cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures |
 | `cpanel://` | cPanel user environments — domains, SSL certs, ACL health |
 | `diff://` | Compare files or git revisions |
 | `domain://` | Domain registration, DNS records, health status |

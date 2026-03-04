@@ -12,6 +12,11 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.58.0] - 2026-03-03
+
+### Added (session opal-tint-0303)
+- **`autossl://` adapter** — inspect cPanel AutoSSL run logs at `/var/cpanel/logs/autossl/`. `reveal autossl://` lists available runs; `reveal autossl://latest` parses the most recent run, showing per-user/per-domain TLS outcomes (ok/incomplete/defective), defect codes (CERT_HAS_EXPIRED, DEPTH_ZERO_SELF_SIGNED_CERT), and DCV impediment codes (TOTAL_DCV_FAILURE, NO_UNSECURED_DOMAIN_PASSED_DCV). `reveal autossl://TIMESTAMP` parses a specific run. `--format=json` for scripting. 20th URI adapter.
+
 ## [0.57.0] - 2026-03-03
 
 ### Added (session zaheye-0303)

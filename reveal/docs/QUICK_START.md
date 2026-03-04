@@ -279,7 +279,7 @@ reveal 'ast://./src?complexity>10'
 
 ## Advanced: URI Adapters
 
-Reveal has **19 URI adapters** for specialized queries:
+Reveal has **20 URI adapters** for specialized queries:
 
 ```bash
 # Query code structure
@@ -298,6 +298,8 @@ reveal 'diff://file1.py:file2.py'
 reveal 'stats://.'
 
 # SSL certificate inspection
+reveal autossl://latest         # cPanel AutoSSL run results (per-domain TLS status)
+
 reveal ssl://example.com              # Overview
 reveal ssl://example.com --check      # Health check
 

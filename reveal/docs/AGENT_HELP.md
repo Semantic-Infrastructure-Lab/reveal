@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.57.0
+**Version:** 0.58.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -27,7 +27,7 @@ This is the complete offline reference for reveal (~12,000 tokens). Both `--agen
 AI agents can now query reveal's capabilities via machine-readable schemas:
 
 ```bash
-# Discover adapter schemas (ALL 19 adapters now supported)
+# Discover adapter schemas (ALL 20 adapters now supported)
 reveal help://schemas/<adapter> --format=json
 
 # File & Analysis Adapters
