@@ -6,8 +6,8 @@ category: reference
 
 **Complete catalog of all user-facing documentation**
 
-**Last Updated**: 2026-03-02
-**Total**: 40 markdown files, ~37,900 lines
+**Last Updated**: 2026-03-03
+**Total**: 44 markdown files, ~38,600 lines
 
 ---
 
@@ -16,7 +16,7 @@ category: reference
 - **New users** → [QUICK_START.md](QUICK_START.md) → [RECIPES.md](RECIPES.md)
 - **Adapters** → See [Adapter Guides](#adapter-guides-16-files) below
 - **nginx / cPanel operator** → [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md)
-- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2289 lines)
+- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2391 lines)
 - **Developers** → [Development Guides](#development-guides-3-files)
 
 ---
@@ -26,11 +26,11 @@ category: reference
 | File | Lines | Description |
 |------|-------|-------------|
 | [README.md](README.md) | 147 | Documentation overview and navigation |
-| [QUICK_START.md](QUICK_START.md) | 343 | 5-minute introduction for new users |
+| [QUICK_START.md](QUICK_START.md) | 374 | 5-minute introduction for new users |
 | [RECIPES.md](RECIPES.md) | 1023 | Task-based workflows and common patterns |
 | [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) | 1386 | Complete codebase review workflows |
 
-**Total**: ~2,900 lines
+**Total**: ~3,140 lines
 
 ---
 
@@ -99,6 +99,21 @@ Core reference and technical specifications:
 
 ---
 
+## Subcommand Guides (4 files)
+
+Reference guides for `reveal check`, `review`, `health`, `pack`, and `dev` subcommands:
+
+| File | Lines | Description |
+|------|-------|-------------|
+| [DEV_GUIDE.md](DEV_GUIDE.md) | 46 | `reveal dev` — scaffold adapters, rules, inspect config |
+| [HEALTH_GUIDE.md](HEALTH_GUIDE.md) | 66 | `reveal health` — unified health check with exit codes |
+| [PACK_GUIDE.md](PACK_GUIDE.md) | 61 | `reveal pack` — token-budgeted context snapshot |
+| [REVIEW_GUIDE.md](REVIEW_GUIDE.md) | 66 | `reveal review` — PR review workflow |
+
+**Total**: ~239 lines
+
+---
+
 ## Development Guides (3 files)
 
 For contributors and adapter authors:
@@ -119,25 +134,26 @@ Complete reference for AI agent integration:
 
 | File | Lines | Description |
 |------|-------|-------------|
-| [AGENT_HELP.md](AGENT_HELP.md) | 2296 | Complete AI agent reference (~62KB) |
+| [AGENT_HELP.md](AGENT_HELP.md) | 2391 | Complete AI agent reference (~62KB) |
 
-**Total**: 2,296 lines
+**Total**: 2,391 lines
 
 ---
 
 ## Documentation Statistics
 
 **By Category**:
-- Adapter Guides: 16 files, ~24,500 lines (65%)
-- Reference: 11 files, ~6,300 lines (17%)
+- Adapter Guides: 16 files, ~24,500 lines (63%)
+- Reference: 11 files, ~6,300 lines (16%)
 - Analyzer Guides: 5 files, ~2,555 lines (7%)
-- User Guides: 4 files, ~2,900 lines (8%)
-- AI Agent: 1 file, ~2,296 lines (6%)
+- User Guides: 4 files, ~3,140 lines (8%)
+- Subcommand Guides: 4 files, ~239 lines (1%)
+- AI Agent: 1 file, ~2,391 lines (6%)
 - Development: 3 files, ~1,230 lines (3%)
 
-**Total**: 40 files, ~37,900 lines
+**Total**: 44 files, ~40,355 lines
 
-**Last Updated**: 2026-03-02 (Session: drizzling-pressure-0302)
+**Last Updated**: 2026-03-03 (Session: gapozi-0303)
 
 ---
 
@@ -163,5 +179,5 @@ Internal maintainer documentation (planning, research, architecture) is maintain
 
 ---
 
-**Last Updated**: 2026-03-02 (Session: drizzling-pressure-0302)
+**Last Updated**: 2026-03-03 (Session: gapozi-0303)
 **Navigation**: [README](README.md) | [Project Root](../../README.md)

@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-03 (prism-tone-0303 — v0.57.0 release)
+> **Last updated**: 2026-03-03 (opal-tint-0303 — v0.58.0 release)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 

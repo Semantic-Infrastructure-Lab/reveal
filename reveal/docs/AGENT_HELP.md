@@ -27,7 +27,7 @@ This is the complete offline reference for reveal (~12,000 tokens). Both `--agen
 AI agents can now query reveal's capabilities via machine-readable schemas:
 
 ```bash
-# Discover adapter schemas (ALL 20 adapters now supported)
+# Discover adapter schemas (19 of 20 adapters; cpanel uses help://cpanel instead)
 reveal help://schemas/<adapter> --format=json
 
 # File & Analysis Adapters
@@ -49,7 +49,7 @@ reveal help://schemas/ssl --format=json        # SSL certificates
 reveal help://schemas/domain --format=json     # Domain DNS/WHOIS
 reveal help://schemas/git --format=json        # Git repositories
 reveal help://schemas/claude --format=json     # Claude conversations
-reveal help://schemas/cpanel --format=json     # cPanel user environments
+reveal help://schemas/autossl --format=json    # cPanel AutoSSL run logs
 
 # Meta Adapters
 reveal help://schemas/reveal --format=json     # Self-inspection

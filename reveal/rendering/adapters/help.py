@@ -7,9 +7,9 @@ from reveal.utils import safe_json_dumps
 
 
 # Module constants for help list mode
-STABLE_ADAPTERS = {'help', 'env', 'ast', 'python'}
-BETA_ADAPTERS = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git', 'ssl', 'domain', 'xlsx'}
-PROJECT_ADAPTERS = {'reveal', 'claude'}
+STABLE_ADAPTERS = {'help', 'env', 'ast', 'python', 'reveal'}
+BETA_ADAPTERS = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git', 'ssl', 'domain', 'xlsx', 'cpanel', 'autossl'}
+PROJECT_ADAPTERS = {'claude'}
 
 GUIDE_CATEGORIES = {
     'getting_started': ['quick-start'],
@@ -404,11 +404,8 @@ def _render_help_section(data: Dict[str, Any]) -> None:
 # Section renderers - each handles one aspect of help documentation
 def _render_help_detail_header(scheme: str, data: Dict[str, Any]) -> None:
     """Render help header with scheme, description, and metadata for detail mode."""
-    # Stability classification
-    stable_adapters = {'help', 'env', 'ast', 'python', 'reveal'}
-    beta_adapters = {'diff', 'imports', 'sqlite', 'mysql', 'stats', 'json', 'markdown', 'git', 'cpanel'}
-
-    stability = "Stable 🟢" if scheme in stable_adapters else "Beta 🟡" if scheme in beta_adapters else "Experimental 🔴"
+    # Stability classification — use module-level constants as single source of truth
+    stability = "Stable 🟢" if scheme in STABLE_ADAPTERS else "Beta 🟡" if scheme in BETA_ADAPTERS else "Project 🎓" if scheme in PROJECT_ADAPTERS else "Experimental 🔴"
 
     # File-based analyzers have a different type label
     adapter_type = data.get('type', '')

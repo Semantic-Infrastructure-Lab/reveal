@@ -89,6 +89,76 @@ class AutosslAdapter(ResourceAdapter):
         return None
 
     @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Machine-readable schema for AI agent integration."""
+        return {
+            'adapter': 'autossl',
+            'description': 'Inspect cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures',
+            'uri_syntax': 'autossl://[TIMESTAMP]',
+            'query_params': {},
+            'elements': {},
+            'cli_flags': ['--format=json'],
+            'supports_batch': False,
+            'output_types': [
+                {
+                    'type': 'autossl_runs',
+                    'description': 'List of available AutoSSL run timestamps',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'autossl_runs'},
+                            'run_count': {'type': 'integer'},
+                            'runs': {'type': 'array', 'items': {'type': 'string'}},
+                        },
+                    },
+                },
+                {
+                    'type': 'autossl_run',
+                    'description': 'Parsed AutoSSL run — per-user/domain TLS outcomes',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'autossl_run'},
+                            'run_timestamp': {'type': 'string'},
+                            'provider': {'type': 'string'},
+                            'domain_count': {'type': 'integer'},
+                            'summary': {
+                                'type': 'object',
+                                'description': 'Counts keyed by tls_status: ok/incomplete/defective',
+                            },
+                            'users': {
+                                'type': 'array',
+                                'items': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'username': {'type': 'string'},
+                                        'domain_count': {'type': 'integer'},
+                                        'domains': {
+                                            'type': 'array',
+                                            'items': {
+                                                'type': 'object',
+                                                'properties': {
+                                                    'domain': {'type': 'string'},
+                                                    'tls_status': {
+                                                        'type': 'string',
+                                                        'enum': ['ok', 'incomplete', 'defective'],
+                                                    },
+                                                    'cert_expiry_days': {'type': ['number', 'null']},
+                                                    'defect_codes': {'type': 'array', 'items': {'type': 'string'}},
+                                                    'impediments': {'type': 'array'},
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            ],
+        }
+
+    @staticmethod
     def get_help() -> Dict[str, Any]:
         return {
             'name': 'autossl',
