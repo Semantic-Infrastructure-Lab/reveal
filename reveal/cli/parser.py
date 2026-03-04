@@ -150,32 +150,22 @@ def build_help_epilog() -> str:
     return help_text
 
 
-def _add_basic_arguments(parser: argparse.ArgumentParser, version: str) -> None:
-    """Add positional arguments and basic flags."""
-    # Positional arguments
-    parser.add_argument('path', nargs='?', help='File or directory to reveal')
-    parser.add_argument('element', nargs='?', help='Element to extract (function, class, etc.)')
+def _add_global_options(target) -> None:
+    """Add global output flags to a parser or argument group.
 
-    # Basic flags
-    parser.add_argument('--version', action='version', version=f'reveal {version}')
-    parser.add_argument('--list-supported', '-l', action='store_true',
-                        help='List all supported file types')
-    parser.add_argument('--languages', action='store_true',
-                        help='List all supported languages with explicit vs fallback analyzers')
-    parser.add_argument('--adapters', action='store_true',
-                        help='List all URI adapters (env://, ast://, git://, etc.)')
-    parser.add_argument('--explain-file', action='store_true',
-                        help='Explain how reveal will analyze a file (shows analyzer, fallback status, capabilities)')
-    parser.add_argument('--capabilities', action='store_true',
-                        help='Show file capabilities as JSON (for agents: what can be extracted, what rules apply)')
-    parser.add_argument('--show-ast', action='store_true',
-                        help='Show tree-sitter AST for a file (for tree-sitter based analyzers)')
-    parser.add_argument('--language-info', type=str, metavar='LANG',
-                        help='Show detailed information about a language (e.g., --language-info python or --language-info .py)')
-    parser.add_argument('--agent-help', action='store_true',
-                        help='Show agent usage guide (llms.txt-style brief reference)')
-    parser.add_argument('--agent-help-full', action='store_true',
-                        help='Show comprehensive agent guide (complete examples, patterns, troubleshooting)')
+    Called by both _build_global_options_parser() (for subcommand inheritance)
+    and create_argument_parser() (for the main parser's named group).
+    """
+    target.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default='text',
+                        help='Output format (text, json, typed [typed JSON with types/relationships], grep)')
+    target.add_argument('--copy', '-c', action='store_true',
+                        help='Copy output to clipboard (also prints normally)')
+    target.add_argument('--verbose', '-v', action='store_true',
+                        help='Show detailed output (e.g., all results instead of truncated summary for imports://)')
+    target.add_argument('--no-breadcrumbs', '-q', '--quiet', action='store_true',
+                        help='Disable breadcrumb navigation hints (scripting mode)')
+    target.add_argument('--disable-breadcrumbs', action='store_true',
+                        help='Permanently disable breadcrumbs in user config')
 
 
 def _build_global_options_parser() -> argparse.ArgumentParser:
@@ -188,17 +178,37 @@ def _build_global_options_parser() -> argparse.ArgumentParser:
     Call this function once per consumer (argparse parents= consumes the instance).
     """
     p = argparse.ArgumentParser(add_help=False)
-    p.add_argument('--format', choices=['text', 'json', 'typed', 'grep'], default='text',
-                   help='Output format (text, json, typed [typed JSON with types/relationships], grep)')
-    p.add_argument('--copy', '-c', action='store_true',
-                   help='Copy output to clipboard (also prints normally)')
-    p.add_argument('--verbose', '-v', action='store_true',
-                   help='Show detailed output (e.g., all results instead of truncated summary for imports://)')
-    p.add_argument('--no-breadcrumbs', '-q', '--quiet', action='store_true',
-                   help='Disable breadcrumb navigation hints (scripting mode)')
-    p.add_argument('--disable-breadcrumbs', action='store_true',
-                   help='Permanently disable breadcrumbs in user config')
+    _add_global_options(p)
     return p
+
+
+def _add_positional_arguments(parser: argparse.ArgumentParser, version: str) -> None:
+    """Add positional arguments and --version (must go on the parser, not a group)."""
+    parser.add_argument('path', nargs='?', help='File or directory to reveal')
+    parser.add_argument('element', nargs='?', help='Element to extract (function, class, etc.)')
+    parser.add_argument('--version', action='version', version=f'reveal {version}')
+
+
+def _add_discovery_options(group) -> None:
+    """Add discovery flags (what reveal can analyze and how)."""
+    group.add_argument('--list-supported', '-l', action='store_true',
+                       help='List all supported file types')
+    group.add_argument('--languages', action='store_true',
+                       help='List all supported languages with explicit vs fallback analyzers')
+    group.add_argument('--adapters', action='store_true',
+                       help='List all URI adapters (env://, ast://, git://, etc.)')
+    group.add_argument('--explain-file', action='store_true',
+                       help='Explain how reveal will analyze a file (shows analyzer, fallback status, capabilities)')
+    group.add_argument('--capabilities', action='store_true',
+                       help='Show file capabilities as JSON (for agents: what can be extracted, what rules apply)')
+    group.add_argument('--show-ast', action='store_true',
+                       help='Show tree-sitter AST for a file (for tree-sitter based analyzers)')
+    group.add_argument('--language-info', type=str, metavar='LANG',
+                       help='Show detailed information about a language (e.g., --language-info python or --language-info .py)')
+    group.add_argument('--agent-help', action='store_true',
+                       help='Show agent usage guide (llms.txt-style brief reference)')
+    group.add_argument('--agent-help-full', action='store_true',
+                       help='Show comprehensive agent guide (complete examples, patterns, troubleshooting)')
 
 
 def _add_input_output_options(parser: argparse.ArgumentParser) -> None:
@@ -429,28 +439,68 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     Returns:
         Configured ArgumentParser instance
     """
-    global_opts = _build_global_options_parser()
-
     parser = argparse.ArgumentParser(
         description='Reveal: Explore code semantically - The simplest way to understand code',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=build_help_epilog(),
-        parents=[global_opts],
     )
 
-    _add_basic_arguments(parser, version)
-    _add_input_output_options(parser)
-    _add_type_aware_options(parser)
-    _add_display_options(parser)
-    _add_pattern_detection_options(parser)
-    _add_universal_operation_flags(parser)
-    _add_universal_filter_flags(parser)
-    _add_navigation_options(parser)
-    _add_markdown_options(parser)
-    _add_html_options(parser)
-    _add_schema_validation_options(parser)
-    _add_ssl_options(parser)
-    _add_extraction_options(parser)
+    # Positionals and --version go on the parser directly (not in any group)
+    _add_positional_arguments(parser, version)
+
+    # ── Global ────────────────────────────────────────────────────────────────
+    # These flags work with every target and every subcommand.
+    g_output = parser.add_argument_group('Output  [global — work with every target]')
+    _add_global_options(g_output)
+    _add_input_output_options(g_output)
+
+    # ── Discovery ─────────────────────────────────────────────────────────────
+    g_discovery = parser.add_argument_group('Discovery')
+    _add_discovery_options(g_discovery)
+
+    # ── Navigation ────────────────────────────────────────────────────────────
+    g_nav = parser.add_argument_group('Navigation  [semantic slicing and element search]')
+    _add_navigation_options(g_nav)
+
+    # ── Display ───────────────────────────────────────────────────────────────
+    g_display = parser.add_argument_group('Display  [tree depth, filtering, layout]')
+    _add_display_options(g_display)
+
+    # ── Type-aware output ─────────────────────────────────────────────────────
+    g_typed = parser.add_argument_group('Type-aware output')
+    _add_type_aware_options(g_typed)
+
+    # ── Quality checks ────────────────────────────────────────────────────────
+    g_quality = parser.add_argument_group('Quality checks  [--check, rules, config]')
+    _add_pattern_detection_options(g_quality)
+
+    # ── Universal adapter options ─────────────────────────────────────────────
+    # These work across all URI adapters (ssl://, domain://, mysql://, etc.)
+    g_universal = parser.add_argument_group(
+        'Universal adapter options  [work with any URI adapter]'
+    )
+    _add_universal_operation_flags(g_universal)
+    _add_universal_filter_flags(g_universal)
+
+    # ── File-type specific ────────────────────────────────────────────────────
+    g_md = parser.add_argument_group('Markdown  [file-specific: --links, --frontmatter, --section]')
+    _add_markdown_options(g_md)
+
+    g_html = parser.add_argument_group('HTML  [file-specific: --metadata, --semantic, --scripts]')
+    _add_html_options(g_html)
+
+    g_schema = parser.add_argument_group('Schema validation  [--validate-schema, --list-schemas]')
+    _add_schema_validation_options(g_schema)
+
+    # ── Adapter-specific ──────────────────────────────────────────────────────
+    # Only meaningful for a specific URI adapter. Silently ignored on wrong targets.
+    g_ssl = parser.add_argument_group('SSL adapter  [ssl:// specific options]')
+    _add_ssl_options(g_ssl)
+
+    g_nginx = parser.add_argument_group(
+        'Nginx / cPanel adapter  [nginx config files and cpanel:// URIs]'
+    )
+    _add_extraction_options(g_nginx)
 
     return parser
 
@@ -495,3 +545,4 @@ def _create_argument_parser():  # noqa: E302 (backward compat alias)
 
 
 _validate_navigation_args = validate_navigation_args
+_add_basic_arguments = _add_positional_arguments  # renamed in amethyst-prism-0303
