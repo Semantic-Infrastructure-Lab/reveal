@@ -27,7 +27,7 @@ This is the complete offline reference for reveal (~12,000 tokens). Both `--agen
 AI agents can now query reveal's capabilities via machine-readable schemas:
 
 ```bash
-# Discover adapter schemas (19 of 20 adapters; cpanel uses help://cpanel instead)
+# Discover adapter schemas (all 20 adapters support this)
 reveal help://schemas/<adapter> --format=json
 
 # File & Analysis Adapters
