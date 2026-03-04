@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.58.0
+**Version:** 0.59.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -2371,6 +2371,8 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
+- **v0.59.0** - `--help` argument groups (12 named sections, no more flag wall); all 20 adapters support `help://schemas/`; CLI flag taxonomy documented
+- **v0.58.0** - `autossl://` adapter (20th URI adapter); cPanel AutoSSL run log inspection
 - **v0.57.0** - `reveal dev/review/health/pack` subcommands; error-with-hint guards; claude:// workflow filtering, /messages route, truncation fix
 - **v0.56.0** - `reveal check` subcommand; parser foundation with shared global opts
 - **v0.55.0** - `--files`, `--ext`, `--sort`/`--desc`/`--asc`, `--meta` on directories

@@ -12,6 +12,17 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.59.0] - 2026-03-03
+
+### Added (sessions jeruya-0303, amethyst-prism-0303)
+- **`CpanelAdapter.get_schema()`** — all 20 URI adapters now support `help://schemas/<adapter>`. Covers all 4 cpanel output types (`cpanel_user`, `cpanel_domains`, `cpanel_ssl`, `cpanel_acl`) with triggered_by, description, and full JSON Schema properties. `reveal help://schemas/cpanel --format=json` now works.
+- **`--help` argument groups** — replaced the flat 70+ flag wall with 12 named sections surfacing the flag taxonomy documented in ADAPTER_CONSISTENCY.md: Output [global], Discovery, Navigation, Display, Type-aware output, Quality checks, Universal adapter options, Markdown, HTML, Schema validation, SSL adapter, Nginx/cPanel adapter. No behavior change; extracted `_add_global_options()` helper so subcommand parsers still inherit globals via `parents=`.
+
+### Documentation (session jeruya-0303)
+- **CLI flag taxonomy** — ADAPTER_CONSISTENCY.md updated with explicit three-tier breakdown: global / universal / adapter-specific flags, plus new "Adapter-Specific Flags vs Query Parameters" section with architectural principle, current-vs-target migration table, and guidance for adapter authors.
+- **QUERY_PARAMETER_REFERENCE.md** — fixed stale "Adapters Without Query Parameters" section: split into adapters using element paths (correct) vs adapters with flags-as-workaround (migration candidates: cpanel://, ssl://, claude://). Named `ast://` as the reference implementation.
+- **QUERY_SYNTAX_GUIDE.md** — added architectural note in "when to use flags" section cross-linking to ADAPTER_CONSISTENCY.md.
+
 ## [0.58.0] - 2026-03-03
 
 ### Added (session opal-tint-0303)

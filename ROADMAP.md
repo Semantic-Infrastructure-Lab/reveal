@@ -1,11 +1,19 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-03 (opal-tint-0303 — v0.58.0 release)
+> **Last updated**: 2026-03-03 (amethyst-prism-0303 — v0.59.0 release)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.59.0
+- ✅ **`--help` argument groups** — replaced the flat 70+ flag wall with 12 named sections (Output, Discovery, Navigation, Display, Type-aware output, Quality checks, Universal adapter options, Markdown, HTML, Schema validation, SSL adapter, Nginx/cPanel adapter); taxonomy documented in ADAPTER_CONSISTENCY.md is now visible in the tool itself
+- ✅ **`CpanelAdapter.get_schema()`** — all 20 URI adapters now fully support `help://schemas/<adapter>`; covers all 4 cpanel output types
+- ✅ **CLI flag taxonomy docs** — ADAPTER_CONSISTENCY.md documents global/universal/adapter-specific tiers and the architectural principle: URI adapter options → query params, file target options → CLI flags
+
+### v0.58.0
+- ✅ **`autossl://` adapter** — inspect cPanel AutoSSL run logs at `/var/cpanel/logs/autossl/`. Lists runs, parses latest or specific run, shows per-user/per-domain TLS outcomes with defect codes and DCV impediment codes. 20th URI adapter.
 
 ### v0.57.0
 - ✅ **`reveal check <path>`** — canonical quality check subcommand replacing `--check` flag; own `--help`, `--rules`, `--explain`
