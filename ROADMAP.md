@@ -220,7 +220,7 @@ This document outlines reveal's development priorities and future direction. For
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: 4,587 passing (as of v0.54.7)
+- Test count: 4,590 passing (as of v0.57.0)
 - UX Phases 3/4/5: ✅ **ALL COMPLETE** (query operators, field selection, element discovery)
 - Target: 80%+ coverage for core adapters
 
@@ -236,63 +236,10 @@ This document outlines reveal's development priorities and future direction. For
 ## Post-v1.0 Features
 
 > **Status**: Strategic backlog. Not prioritized for implementation yet.
-> See `internal-docs/design/SUBCOMMANDS_DESIGN.md` for the full design.
 
-### Subcommands (Intent-Based Workflows)
+### Additional Subcommands
 
-Reveal's URI model (`reveal <path|uri> [flags]`) is powerful for resource exploration. Subcommands address a complementary need: encoding *user intent* as first-class CLI verbs that orchestrate multiple adapters into unified workflows.
-
-**Design principle**: URIs explore resources. Subcommands accomplish goals.
-
-#### Tier 1 (Highest Value)
-
-**`reveal check`** — formalize the existing `--check` flag as a proper subcommand
-```bash
-reveal check ./src
-reveal check ./src --select=B,S --only-failures
-```
-Low effort, high ergonomics gain. Makes linting discoverable in `reveal --help`.
-
----
-
-**`reveal review`** — code review workflow for PRs and health checks
-```bash
-reveal review ./src                  # Health + quality review
-reveal review main..feature          # PR structural diff + quality
-reveal review main..feature --format json  # CI/CD gate (exit codes)
-```
-Orchestrates: `diff://`, `stats://`, `ast://`, `imports://`, `--check`. Five commands today; one command tomorrow.
-
----
-
-**`reveal pack`** — curated, token-budgeted context for LLM consumption
-```bash
-reveal pack ./src --budget 2000-tokens
-reveal pack ./api --budget 500-lines
-```
-Formalizes "give me enough context but not too much." Critical for agentic workflows.
-
----
-
-**`reveal health`** — unified health check across any resource type
-```bash
-reveal health ./src                  # Code quality health
-reveal health ssl://example.com      # SSL cert health
-reveal health mysql://prod/db        # DB health
-```
-Consistent pass/warn/fail model with exit codes for CI/CD monitoring.
-
----
-
-**`reveal dev`** — developer tooling namespace
-```bash
-reveal dev new-adapter payments --uri pay
-reveal dev new-rule R914 "deep nesting"
-reveal dev inspect-config
-```
-Wraps the planned scaffold commands + config introspection into a coherent namespace.
-
-#### Tier 2 (Post-v1.0)
+Five subcommands (`check`, `review`, `pack`, `health`, `dev`) shipped in v0.57.0. Remaining subcommand ideas:
 
 ```bash
 reveal overview              # Auto-generated repo summary
@@ -368,11 +315,12 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 
 ## Adapter Status
 
-### Implemented (16)
+### Implemented (19)
 | Adapter | Description |
 |---------|-------------|
 | `ast://` | Query code as database (complexity, size, type filters) |
 | `claude://` | Claude conversation analysis |
+| `cpanel://` | cPanel user environments — domains, SSL certs, ACL health |
 | `diff://` | Compare files or git revisions |
 | `domain://` | Domain registration, DNS records, health status |
 | `env://` | Environment variable inspection |
@@ -380,18 +328,19 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 | `help://` | Built-in documentation |
 | `imports://` | Dependency analysis, circular detection |
 | `json://` | JSON/JSONL deep inspection |
+| `markdown://` | Markdown document inspection and related-file discovery |
 | `mysql://` | MySQL database schema inspection |
 | `python://` | Python runtime inspection |
 | `reveal://` | Reveal's own codebase |
 | `sqlite://` | SQLite database inspection |
 | `ssl://` | SSL/TLS certificate inspection |
 | `stats://` | Codebase statistics |
+| `xlsx://` | Excel spreadsheet inspection and data extraction |
 
 ### Planned
 | Adapter | Notes |
 |---------|-------|
-| `nginx://` | Nginx config structured querying (Tier 3) |
-| `calls://` | Call graph analysis (post-v1.0) |
+| `calls://` | Call graph analysis — who calls what (post-v1.0) |
 
 ---
 
