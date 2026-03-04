@@ -2,8 +2,16 @@
 
 import json
 import os
+import sys
 import pytest
 from unittest.mock import patch
+
+# AutoSSL is a cPanel/Linux-only feature; timestamps like 2026-01-01T00:00:00Z
+# contain colons which are illegal in Windows directory names.
+pytestmark = pytest.mark.skipif(
+    sys.platform == 'win32',
+    reason="autossl is a cPanel/Linux-only feature; colon timestamps invalid on Windows paths",
+)
 
 from reveal.adapters.autossl.adapter import AutosslAdapter
 from reveal.adapters.autossl.parser import (
