@@ -1,0 +1,90 @@
+# nginx:// Adapter Help Data
+# Domain-centric nginx vhost inspection
+
+name: nginx_uri
+type: uri_adapter
+description: 'Inspect nginx vhost configuration by domain name — ports, upstreams, auth, locations'
+syntax: 'nginx://<domain>[/<element>]'
+
+features:
+  - 'Domain-centric: find the config file that handles a given domain automatically'
+  - 'Vhost summary: ports, upstream servers, auth directives, location blocks'
+  - 'Upstream reachability: TCP connectivity check to proxy_pass targets'
+  - 'Symlink awareness: shows whether config is in sites-enabled as a symlink'
+  - 'Site overview: list all enabled nginx sites (reveal nginx://)'
+  - 'Zero dependencies: uses stdlib only'
+
+examples:
+  - uri: 'nginx://smd-ops.mytia.net'
+    description: 'Full vhost summary — config file, ports, upstream, auth, locations'
+
+  - uri: 'nginx://smd-ops.mytia.net/ports'
+    description: 'Listening ports (80/443, SSL, redirect-to-https)'
+
+  - uri: 'nginx://smd-ops.mytia.net/upstream'
+    description: 'proxy_pass targets with TCP reachability check'
+
+  - uri: 'nginx://smd-ops.mytia.net/auth'
+    description: 'auth_basic and auth_request directives'
+
+  - uri: 'nginx://smd-ops.mytia.net/locations'
+    description: 'All location blocks with targets'
+
+  - uri: 'nginx://smd-ops.mytia.net/config'
+    description: 'Raw server block(s) for this domain'
+
+  - uri: 'nginx://'
+    description: 'Overview of all enabled nginx sites'
+
+try_now:
+  - "reveal nginx://"
+  - "reveal nginx://localhost"
+
+workflows:
+  - name: "After nginx config change"
+    steps:
+      - "reveal nginx://smd-ops.mytia.net          # verify config was applied"
+      - "reveal nginx://smd-ops.mytia.net/ports    # check SSL block is present"
+      - "reveal nginx://smd-ops.mytia.net/upstream # verify upstream still reachable"
+      - "reveal ssl://smd-ops.mytia.net --check    # verify SSL cert intact"
+
+  - name: "Diagnose unexpected redirect"
+    steps:
+      - "reveal nginx://smd-ops.mytia.net          # see all location blocks"
+      - "reveal nginx://smd-ops.mytia.net/locations # inspect location targets"
+      - "reveal domain://smd-ops.mytia.net --check  # verify DNS + HTTP response"
+
+  - name: "Auth audit"
+    steps:
+      - "reveal nginx://smd-ops.mytia.net/auth     # check auth_basic on/off"
+      - "reveal nginx://smd-ops.mytia.net/config   # view raw config to verify"
+
+anti_patterns:
+  - bad: "ssh tia-proxy 'nginx -T | grep -B2 -A5 domain'"
+    good: "reveal nginx://domain"
+    why: "One command, structured output, no SSH required for local nginx"
+
+  - bad: "ssh tia-proxy 'ls -la /etc/nginx/sites-enabled/domain'"
+    good: "reveal nginx://domain  # shows config_file + symlink info"
+    why: "Symlink status included in vhost summary"
+
+  - bad: "reveal /etc/nginx/sites-enabled/domain.conf"
+    good: "reveal nginx://domain  # finds the file for you"
+    why: "No need to know the filename — nginx:// resolves it by server_name"
+
+notes:
+  - 'Searches /etc/nginx/sites-enabled/ and /etc/nginx/conf.d/ by default'
+  - 'For SSH-accessed nginx (remote servers), use file-path form: reveal /etc/nginx/... --check'
+  - 'Upstream reachability checks TCP only (3s timeout) — not HTTP response'
+  - 'For SSL cert status: reveal ssl://domain --check'
+  - 'For running N001-N007 rules: reveal /path/to/nginx.conf --check'
+
+output_formats:
+  - text
+  - json
+
+see_also:
+  - 'reveal help://ssl - SSL certificate inspection'
+  - 'reveal help://domain - Domain DNS and health checks'
+  - 'reveal help://nginx - File-based nginx config analysis (N001-N007 rules)'
+  - 'reveal domain://example.com --check - DNS + HTTP + SSL health check'

@@ -29,6 +29,7 @@ from .stats import StatsAdapter
 from .xlsx import XlsxAdapter
 from .cpanel import CpanelAdapter
 from .autossl import AutosslAdapter
+from .nginx import NginxUriAdapter
 
 # Optional adapters (require extra dependencies)
 try:
@@ -67,6 +68,7 @@ __all__ = [
     'XlsxAdapter',
     'CpanelAdapter',
     'AutosslAdapter',
+    'NginxUriAdapter',
 ]
 if _git_available:
     __all__.append('GitAdapter')

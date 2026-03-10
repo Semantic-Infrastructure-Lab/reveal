@@ -1502,7 +1502,8 @@ class TestAdapter(ResourceAdapter):
         result = adapter.get_element('nginx')
         self.assertIsNotNone(result, "help://nginx returned None (Element not found)")
         self.assertIn('examples', result)
-        self.assertEqual(result.get('type'), 'file_analyzer')
+        # nginx:// is now a URI adapter (domain-centric vhost inspection)
+        self.assertIn(result.get('type'), ('file_analyzer', 'uri_adapter'))
 
 
 class TestV018RendererRegistration(unittest.TestCase):

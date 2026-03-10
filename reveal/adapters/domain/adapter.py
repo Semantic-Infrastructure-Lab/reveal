@@ -117,6 +117,132 @@ def _check_ssl_certificate(domain: str, advanced: bool = False) -> Dict[str, Any
         return _build_ssl_failure_result(f'SSL check failed: {e}')
 
 
+def _check_http_response(domain: str) -> Dict[str, Any]:
+    """Make actual HTTP/HTTPS requests and report status codes and redirect chain.
+
+    Args:
+        domain: Domain name to check
+
+    Returns:
+        HTTP response check result dict
+    """
+    import urllib.request
+    import urllib.error
+    import ssl as ssl_module
+
+    def _follow_chain(url: str, max_redirects: int = 5) -> Dict[str, Any]:
+        """Follow redirect chain, returning final status and chain."""
+        chain = []
+        current = url
+        ctx = ssl_module.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl_module.CERT_NONE
+
+        for _ in range(max_redirects + 1):
+            try:
+                req = urllib.request.Request(current, headers={'User-Agent': 'reveal-cli/1.0'})
+                # Don't auto-follow redirects so we can record the chain
+                opener = urllib.request.build_opener(
+                    urllib.request.HTTPSHandler(context=ctx),
+                    urllib.request.HTTPRedirectHandler(),
+                )
+                # Temporarily override redirect to capture it
+                class _NoRedirect(urllib.request.HTTPRedirectHandler):
+                    def redirect_request(self, req, fp, code, msg, headers, newurl):
+                        return None
+                no_redir_opener = urllib.request.build_opener(
+                    urllib.request.HTTPSHandler(context=ctx),
+                    _NoRedirect(),
+                )
+                try:
+                    resp = no_redir_opener.open(req, timeout=8)
+                    code = resp.getcode()
+                    chain.append({'url': current, 'status': code})
+                    return {'status': code, 'chain': chain, 'final_url': current}
+                except urllib.error.HTTPError as e:
+                    code = e.code
+                    chain.append({'url': current, 'status': code})
+                    if code in (301, 302, 303, 307, 308) and 'Location' in e.headers:
+                        location = e.headers['Location']
+                        # Resolve relative redirects
+                        if location.startswith('/'):
+                            from urllib.parse import urlparse
+                            parsed = urlparse(current)
+                            location = f"{parsed.scheme}://{parsed.netloc}{location}"
+                        current = location
+                    else:
+                        return {'status': code, 'chain': chain, 'final_url': current}
+            except urllib.error.URLError as e:
+                return {'status': None, 'chain': chain, 'error': str(e.reason), 'final_url': current}
+            except Exception as e:
+                return {'status': None, 'chain': chain, 'error': str(e), 'final_url': current}
+
+        return {'status': None, 'chain': chain, 'error': 'Too many redirects', 'final_url': current}
+
+    checks = []
+    for scheme in ('http', 'https'):
+        url = f"{scheme}://{domain}/"
+        result = _follow_chain(url)
+        status_code = result.get('status')
+        error = result.get('error')
+        chain = result.get('chain', [])
+        final_url = result.get('final_url', url)
+
+        if error:
+            check_status = 'failure'
+            message = f"{scheme.upper()} ({80 if scheme == 'http' else 443}): connection failed — {error}"
+        elif status_code is None:
+            check_status = 'failure'
+            message = f"{scheme.upper()}: no response"
+        elif status_code < 400:
+            check_status = 'pass'
+            if len(chain) > 1:
+                redirect_to = final_url
+                message = f"{scheme.upper()} ({80 if scheme == 'http' else 443}): {chain[0]['status']} → {redirect_to} ({status_code})"
+            else:
+                message = f"{scheme.upper()} ({80 if scheme == 'http' else 443}): {status_code} OK"
+        elif status_code >= 500:
+            check_status = 'failure'
+            message = f"{scheme.upper()} ({80 if scheme == 'http' else 443}): {status_code} server error"
+        else:
+            check_status = 'warning'
+            message = f"{scheme.upper()} ({80 if scheme == 'http' else 443}): {status_code}"
+
+        checks.append({
+            'name': f'http_{scheme}_response',
+            'status': check_status,
+            'value': str(status_code) if status_code else 'error',
+            'threshold': '2xx or 3xx',
+            'message': message,
+            'severity': 'medium',
+            'redirect_chain': [f"{h['url']} → {h['status']}" for h in chain] if len(chain) > 1 else [],
+        })
+
+    # Aggregate: if both pass, return single summary; otherwise keep both
+    all_pass = all(c['status'] == 'pass' for c in checks)
+    if all_pass and len(checks) == 2 and not any(c['redirect_chain'] for c in checks):
+        return {
+            'name': 'http_response',
+            'status': 'pass',
+            'value': 'reachable',
+            'threshold': '2xx or 3xx',
+            'message': f"HTTP/HTTPS responding (HTTP {checks[0]['value']}, HTTPS {checks[1]['value']})",
+            'severity': 'medium',
+        }
+
+    # Detailed result if there's a redirect chain or failure
+    combined_status = 'pass' if all_pass else ('failure' if any(c['status'] == 'failure' for c in checks) else 'warning')
+    return {
+        'name': 'http_response',
+        'status': combined_status,
+        'value': f"HTTP {checks[0]['value']}, HTTPS {checks[1]['value']}",
+        'threshold': '2xx or 3xx',
+        'message': '; '.join(c['message'] for c in checks),
+        'severity': 'medium',
+        'http_checks': checks,
+    }
+
+
 def _calculate_overall_status(checks: List[Dict[str, Any]]) -> str:
     """Calculate overall status from check results.
 
@@ -176,6 +302,15 @@ def _generate_domain_next_steps(checks: List[Dict[str, Any]], domain: str) -> Li
     # SSL certificate issues
     if any(c['name'] == 'ssl_certificate' and c['status'] in ('failure', 'warning') for c in checks):
         next_steps.append(f"Inspect SSL certificate: reveal ssl://{domain} --check-advanced")
+
+    # HTTP response failures
+    if any(c['name'] == 'http_response' and c['status'] == 'failure' for c in checks):
+        next_steps.append(f"Check nginx config: reveal nginx://{domain}")
+        next_steps.append(f"Verify nginx upstream is reachable: reveal nginx://{domain}/upstream")
+
+    # HTTP redirect to unexpected service
+    if any(c['name'] == 'http_response' and c['status'] == 'warning' for c in checks):
+        next_steps.append(f"Inspect nginx vhost config: reveal nginx://{domain}")
 
     # Default next steps if all passed
     if not next_steps:
@@ -572,6 +707,7 @@ class DomainAdapter(ResourceAdapter):
         # Run all checks
         checks = _run_dns_checks(self.domain)
         checks.append(_check_ssl_certificate(self.domain, advanced))
+        checks.append(_check_http_response(self.domain))
 
         # Calculate metrics
         overall_status = _calculate_overall_status(checks)

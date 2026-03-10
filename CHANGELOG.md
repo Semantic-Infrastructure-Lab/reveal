@@ -12,6 +12,12 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.60.0] - 2026-03-10
+
+### Added (session earthly-phoenix-0310)
+- **`nginx://` URI adapter** — domain-centric nginx vhost inspection (21st adapter). Closes the documented-but-unimplemented gap (Issue 3 in REVEAL_ISSUES_REPORT.md, v0.54.4). `reveal nginx://domain` finds the config file by `server_name`, parses it, and shows a structured summary: config file + symlink status, ports (80/443, SSL, redirect), upstream servers + TCP reachability, auth directives, location blocks with targets. Sub-paths: `/ports`, `/upstream`, `/auth`, `/locations`, `/config`. `reveal nginx://` lists all enabled sites. Searches `/etc/nginx/sites-enabled/` and `/etc/nginx/conf.d/` automatically. Zero extra dependencies.
+- **`domain://` HTTP response check** — `--check` now makes actual HTTP/HTTPS requests and reports status codes + redirect chains, closing the gap where `--check` validated DNS and SSL cert but never hit the endpoint. Shows `HTTP (80): 301 → https://... (200)` style output. On failure or wrong-service redirect, suggests `reveal nginx://domain` as next step. Sourced from `docs/tools/reveal/REVEAL_NGINX_RUNTIME_FEEDBACK.md` (session zayiyu-0310).
+
 ## [0.59.0] - 2026-03-03
 
 ### Added (sessions jeruya-0303, amethyst-prism-0303)
