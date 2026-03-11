@@ -240,6 +240,13 @@ reveal 'markdown://docs/?updated=2026-01..2026-02'  # Range query
 reveal 'markdown://docs/?priority>=5&sort=-priority&limit=10'
 ```
 
+**Body text search** (markdown-specific):
+```bash
+reveal 'markdown://docs/?body-contains=nginx'                     # Body mentions "nginx"
+reveal 'markdown://docs/?body-contains=nginx&body-contains=ssl'   # Body mentions both (AND)
+reveal 'markdown://docs/?type=guide&body-contains=nginx&limit=5'  # Combine with frontmatter + limit
+```
+
 **Field existence** (markdown-specific):
 ```bash
 reveal 'markdown://docs/?!published'                # No published date

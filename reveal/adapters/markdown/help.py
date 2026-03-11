@@ -10,9 +10,10 @@ def get_schema() -> Dict[str, Any]:
     """
     return {
         'adapter': 'markdown',
-        'description': 'Query markdown files by frontmatter fields (exact match, wildcards, missing fields)',
+        'description': 'Query markdown files by frontmatter fields (exact match, wildcards, missing fields) and body text',
         'uri_syntax': 'markdown://[path/]?[filters]',
         'query_params': {
+            'body-contains=term': 'Case-insensitive substring search in body text (after frontmatter). Multiple body-contains= params are AND\'d.',
             'field=value': 'Exact match (or substring for list fields)',
             'field=*pattern*': 'Glob-style wildcard matching',
             '!field': 'Find files missing this field',
@@ -101,6 +102,18 @@ def get_schema() -> Dict[str, Any]:
                 'description': 'Wildcard matching (glob-style)',
                 'cli_flag': '?type=*guide*',
                 'output_type': 'markdown_query'
+            },
+            {
+                'uri': "markdown://docs/?body-contains=nginx",
+                'description': 'Body text search — files whose body mentions "nginx"',
+                'cli_flag': '?body-contains=nginx',
+                'output_type': 'markdown_query'
+            },
+            {
+                'uri': "markdown://docs/?body-contains=nginx&body-contains=ssl",
+                'description': 'Body text search — AND logic, both terms must appear',
+                'cli_flag': '?body-contains=nginx&body-contains=ssl',
+                'output_type': 'markdown_query'
             }
         ]
     }
@@ -161,9 +174,18 @@ def get_help() -> Dict[str, Any]:
                 'uri': 'markdown://docs/?status=active --format=json',
                 'description': 'JSON output for scripting'
             },
+            {
+                'uri': "markdown://docs/?body-contains=nginx",
+                'description': 'Find docs whose body mentions nginx (case-insensitive)'
+            },
+            {
+                'uri': "markdown://docs/?type=guide&body-contains=nginx&limit=5",
+                'description': 'Combine body text search with frontmatter filter and limit'
+            },
         ],
         'features': [
             'Recursive directory traversal',
+            'Body text search: body-contains=term (case-insensitive substring, AND across multiple)',
             'Exact match: field=value',
             'Wildcard match: field=*pattern* (glob-style)',
             'Missing field: !field',
@@ -196,7 +218,10 @@ def get_help() -> Dict[str, Any]:
         },
         'notes': [
             'Searches recursively in specified directory',
-            'Only processes files with valid YAML frontmatter',
+            'body-contains= searches text after frontmatter (body), not frontmatter fields',
+            'body-contains= is case-insensitive; multiple values are AND\'d',
+            'body-contains= matches files without frontmatter too',
+            'Only frontmatter fields require valid YAML frontmatter to filter',
             'Field values in lists are matched if any item matches',
             'Numeric comparisons work on numeric frontmatter fields',
             'Use sort/limit/offset for pagination and result control',

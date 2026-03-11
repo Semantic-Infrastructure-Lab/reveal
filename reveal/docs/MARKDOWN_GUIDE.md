@@ -860,6 +860,26 @@ These flags apply specifically to markdown files:
 
 For adapter-specific flags via URI params: `reveal 'markdown:///path/?type=guide'`
 
+### Body Text Search (`?body-contains=`)
+
+Search file body content (text after frontmatter) rather than frontmatter fields:
+
+```bash
+# Find docs mentioning "nginx" in the body
+reveal 'markdown://docs/?body-contains=nginx'
+
+# AND — both terms must appear
+reveal 'markdown://docs/?body-contains=nginx&body-contains=ssl'
+
+# Combine with frontmatter filter + limit
+reveal 'markdown://docs/?type=guide&body-contains=nginx&limit=10'
+```
+
+- Case-insensitive substring match
+- Multiple `body-contains=` params are AND'd (all must appear)
+- Files without frontmatter are also matched
+- Combines with all frontmatter filters and result control (`sort=`, `limit=`, `offset=`)
+
 ## Notes
 
 - **Accurate Parsing**: Tree-sitter ensures `#` in code fences aren't treated as headings

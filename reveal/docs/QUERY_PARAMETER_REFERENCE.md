@@ -177,6 +177,13 @@ reveal 'markdown://docs/?priority=high&status=draft' # High-priority drafts
 reveal 'markdown://docs/?title=*api*'    # Titles containing "api"
 ```
 
+**Body Text Search** (markdown-specific, not frontmatter):
+```bash
+reveal 'markdown://docs/?body-contains=nginx'                    # Body mentions "nginx"
+reveal 'markdown://docs/?body-contains=nginx&body-contains=ssl'  # Both terms (AND)
+```
+`body-contains=` is case-insensitive substring match. Multiple values are AND'd. Combines with frontmatter filters and result control (`sort=`, `limit=`).
+
 ---
 
 ### stats:// - Code Statistics
