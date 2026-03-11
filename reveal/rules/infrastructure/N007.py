@@ -93,7 +93,6 @@ class N007(BaseRule):
             # Try cryptography library first (gives direct AIA access)
             try:
                 from cryptography import x509
-                from cryptography.hazmat.primitives.serialization import Encoding
                 loaded = x509.load_der_x509_certificate(cert)
                 try:
                     aia = loaded.extensions.get_extension_for_class(
