@@ -16,6 +16,9 @@ _FILTER_SHORTHANDS = {
     'imports': '?type=import',
 }
 
+# All keys that ast:// actually understands
+_KNOWN_FILTER_KEYS = {'type', 'name', 'complexity', 'size', 'lines', 'decorator'}
+
 
 def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
     """Render AST query results.
@@ -86,12 +89,15 @@ def _render_ast_element(elem: Dict[str, Any]) -> None:
 
 
 def _suggest_filter_correction(query: str) -> None:
-    """If the query looks like a known shorthand, suggest the correct syntax."""
+    """Emit hints when the query contains known shorthands or unrecognized filter keys."""
     if not query or query == 'none':
         return
     import re
-    # format_query produces "field op value" — bare existence filters look like "field??"
-    fields = re.findall(r'^(\w+)', query)
+    # format_query produces "key op value" parts joined by " AND "
+    # Extract the leading identifier from each part to get the field names used.
+    parts = [p.strip() for p in query.split(' AND ')]
+    fields = [m.group(1) for p in parts for m in [re.match(r'^(\w+)', p)] if m]
+
     for field in fields:
         correction = _FILTER_SHORTHANDS.get(field.lower())
         if correction:
@@ -99,3 +105,13 @@ def _suggest_filter_correction(query: str) -> None:
             print(f"Hint: '{field}' is not a valid filter. Did you mean '{correction}'?")
             print(f"  reveal 'ast://path/{correction}'")
             return
+
+    # Check for unknown keys not in any known set
+    unknown = [f for f in fields if f.lower() not in _KNOWN_FILTER_KEYS and f.lower() not in _FILTER_SHORTHANDS]
+    if unknown:
+        valid = ', '.join(sorted(_KNOWN_FILTER_KEYS))
+        print()
+        for key in unknown:
+            print(f"Hint: '{key}' is not a recognized filter key.")
+        print(f"  Valid keys: {valid}")
+        print(f"  Run `reveal help://ast` for filter reference.")

@@ -131,7 +131,14 @@ def _extract_by_syntax(analyzer, element: str, syntax: dict):
         if syntax['end_line']:
             return _extract_line_range(analyzer, syntax['start_line'], syntax['end_line'])
         else:
-            return _extract_element_at_line(analyzer, syntax['start_line'])
+            result = _extract_element_at_line(analyzer, syntax['start_line'])
+            if result is not None:
+                return result
+            # Line not inside any named element (e.g., imports, module-level code).
+            # Fall back to a context window so bare integers always show something useful.
+            target = syntax['start_line']
+            context = 10
+            return _extract_line_range(analyzer, max(1, target - context), target + context)
 
     elif syntax_type == 'hierarchical':
         from ..treesitter import TreeSitterAnalyzer
@@ -446,9 +453,10 @@ def _extract_line_range(analyzer, start_line: int, end_line: int):
         with open(analyzer.path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
 
-        # Validate range
-        if start_line < 1 or end_line > len(lines) or start_line > end_line:
+        # Validate range; clamp end_line to actual file length
+        if start_line < 1 or start_line > len(lines) or start_line > end_line:
             return None
+        end_line = min(end_line, len(lines))
 
         # Extract lines (convert to 0-indexed)
         extracted = lines[start_line - 1:end_line]

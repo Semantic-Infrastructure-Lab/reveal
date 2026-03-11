@@ -519,7 +519,7 @@ class TestLineBasedExtraction:
             os.unlink(temp_path)
 
     def test_extract_line_range_invalid_end(self):
-        """Test _extract_line_range with end line beyond file."""
+        """Test _extract_line_range clamps end line to actual file length."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
             f.write('line1\nline2\nline3\n')
             f.flush()
@@ -529,8 +529,12 @@ class TestLineBasedExtraction:
             analyzer = Mock()
             analyzer.path = temp_path
 
-            result = _extract_line_range(analyzer, 1, 100)  # end_line > len(lines)
-            assert result is None
+            # end_line > len(lines) should clamp to file length, not fail
+            result = _extract_line_range(analyzer, 1, 100)
+            assert result is not None
+            assert result['line_start'] == 1
+            assert result['line_end'] == 3  # clamped to actual file length
+            assert result['source'] == 'line1\nline2\nline3'
         finally:
             os.unlink(temp_path)
 
@@ -541,6 +545,23 @@ class TestLineBasedExtraction:
 
         result = _extract_line_range(analyzer, 1, 10)
         assert result is None
+
+    def test_extract_line_range_clamps_end_beyond_file(self):
+        """Test _extract_line_range clamps end_line to file length (BACK-001 fallback)."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write('a = 1\nb = 2\nc = 3\n')
+            f.flush()
+            temp_path = f.name
+
+        try:
+            analyzer = Mock()
+            analyzer.path = temp_path
+            # Context window may extend past EOF — should clamp gracefully
+            result = _extract_line_range(analyzer, 1, 9999)
+            assert result is not None
+            assert result['line_end'] == 3
+        finally:
+            os.unlink(temp_path)
 
 
 # ============================================================================

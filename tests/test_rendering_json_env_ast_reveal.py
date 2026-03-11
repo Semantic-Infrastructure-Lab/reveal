@@ -343,6 +343,60 @@ class TestRenderAstStructure(unittest.TestCase):
         self.assertIn('AST Query: .', output)
         self.assertNotIn('Filter:', output)
 
+    def test_unknown_filter_key_hint(self):
+        """Should hint on unrecognized filter keys (BACK-005)."""
+        data = {
+            'path': '.',
+            'query': 'badkey==foo',
+            'total_files': 5,
+            'total_results': 0,
+            'results': []
+        }
+        output = capture_stdout(render_ast_structure, data, 'text')
+        self.assertIn("Hint: 'badkey' is not a recognized filter key.", output)
+        self.assertIn('Valid keys:', output)
+        self.assertIn('reveal help://ast', output)
+
+    def test_unknown_filter_key_multi(self):
+        """Should hint on multiple unrecognized filter keys."""
+        data = {
+            'path': '.',
+            'query': 'foo==bar AND baz>10',
+            'total_files': 3,
+            'total_results': 0,
+            'results': []
+        }
+        output = capture_stdout(render_ast_structure, data, 'text')
+        self.assertIn("'foo'", output)
+        self.assertIn("'baz'", output)
+        self.assertIn('Valid keys:', output)
+
+    def test_known_shorthand_hint_still_fires(self):
+        """Known shorthand hints (BACK-005 pre-existing) should still work."""
+        data = {
+            'path': '.',
+            'query': 'functions??',
+            'total_files': 3,
+            'total_results': 0,
+            'results': []
+        }
+        output = capture_stdout(render_ast_structure, data, 'text')
+        self.assertIn("'functions' is not a valid filter", output)
+        self.assertIn('?type=function', output)
+
+    def test_no_hint_on_valid_keys_with_zero_results(self):
+        """Should NOT show hint when valid keys are used but yield no results."""
+        data = {
+            'path': '.',
+            'query': 'type==nonexistent',
+            'total_files': 5,
+            'total_results': 0,
+            'results': []
+        }
+        output = capture_stdout(render_ast_structure, data, 'text')
+        self.assertNotIn('Hint:', output)
+        self.assertNotIn('Valid keys:', output)
+
 
 class TestRenderEnvStructure(unittest.TestCase):
     """Test environment variables structure rendering."""
