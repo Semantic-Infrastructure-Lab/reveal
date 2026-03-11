@@ -253,6 +253,13 @@ class TestAdapterContracts(unittest.TestCase):
                 self.assertIsInstance(schema, dict, f"{scheme}.get_schema() must return a dict")
                 self.assertIn('adapter', schema, f"{scheme} schema missing 'adapter' key")
                 self.assertIn('output_types', schema, f"{scheme} schema missing 'output_types' key")
+                self.assertIn('example_queries', schema, f"{scheme} schema missing 'example_queries' key")
+                self.assertIn('notes', schema, f"{scheme} schema missing 'notes' key")
+                self.assertIsInstance(schema['notes'], list, f"{scheme} schema 'notes' must be a list")
+                self.assertGreater(len(schema['notes']), 0, f"{scheme} schema 'notes' must have at least one entry")
+                # Verify example_queries use 'uri' key (not 'query')
+                for i, ex in enumerate(schema['example_queries']):
+                    self.assertIn('uri', ex, f"{scheme} example_queries[{i}] missing 'uri' key (use 'uri' not 'query')")
 
     def test_adapters_inherit_from_resource_adapter(self):
         """Verify all adapters inherit from ResourceAdapter (optional check)."""
