@@ -436,6 +436,12 @@ class PythonAdapter(ResourceAdapter):
                     'output_type': 'python_runtime'
                 },
                 {
+                    'uri': 'python://env',
+                    'description': 'Python environment configuration (paths, flags, encoding)',
+                    'element': 'env',
+                    'output_type': 'python_runtime'
+                },
+                {
                     'uri': 'python://venv',
                     'description': 'Virtual environment status',
                     'element': 'venv',

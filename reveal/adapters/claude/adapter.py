@@ -655,6 +655,18 @@ class ClaudeAdapter(ResourceAdapter):
                     'output_type': 'claude_message'
                 },
                 {
+                    'uri': 'claude://session/infernal-earth-0118/timeline',
+                    'description': 'Chronological message timeline with timestamps and turn types',
+                    'element': 'timeline',
+                    'output_type': 'claude_timeline'
+                },
+                {
+                    'uri': 'claude://session/infernal-earth-0118/context',
+                    'description': 'Context window usage and changes over the session',
+                    'element': 'context',
+                    'output_type': 'claude_context'
+                },
+                {
                     'uri': 'claude://session/infernal-earth-0118?search=path traversal',
                     'description': 'Search all content (text, thinking, tool inputs) for a term',
                     'query_param': '?search=<term>',

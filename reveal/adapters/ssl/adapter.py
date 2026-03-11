@@ -160,6 +160,21 @@ class SSLAdapter(ResourceAdapter):
                     'output_type': 'ssl_chain'
                 },
                 {
+                    'uri': 'ssl://example.com/issuer',
+                    'description': 'Certificate issuer (CA name, org)',
+                    'output_type': 'ssl_issuer'
+                },
+                {
+                    'uri': 'ssl://example.com/dates',
+                    'description': 'Validity dates (not_before, not_after, days remaining)',
+                    'output_type': 'ssl_dates'
+                },
+                {
+                    'uri': 'ssl://example.com/full',
+                    'description': 'Complete certificate dump (all fields)',
+                    'output_type': 'ssl_full'
+                },
+                {
                     'uri': 'ssl://example.com --check',
                     'description': 'Run health checks (expiry, validation)',
                     'cli_flag': '--check',

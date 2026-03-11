@@ -153,6 +153,18 @@ class MySQLAdapter(ResourceAdapter):
                     'description': 'InnoDB buffer pool status',
                     'element': 'innodb',
                     'output_type': 'mysql_health'
+                },
+                {
+                    'uri': 'mysql://localhost/performance',
+                    'description': 'Query performance metrics (slow queries, throughput)',
+                    'element': 'performance',
+                    'output_type': 'mysql_performance'
+                },
+                {
+                    'uri': 'mysql://localhost/variables',
+                    'description': 'Server configuration variables',
+                    'element': 'variables',
+                    'output_type': 'mysql_variables'
                 }
             ],
             'notes': [
