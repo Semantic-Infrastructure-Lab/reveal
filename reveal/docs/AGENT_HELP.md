@@ -384,7 +384,8 @@ reveal app.py DatabaseHandler.connect  # Extract method within class
 reveal app.py Outer.Inner.method       # Multiple nesting levels
 
 # By line number (from grep, error messages, stack traces)
-reveal app.py :73                      # Element containing line 73
+reveal app.py 73                       # Element at line 73 (or ±10 context window)
+reveal app.py :73                      # Same — bare integer and :N are equivalent
 reveal app.py :42-80                   # Exact line range
 
 # By position (ordinal)
@@ -399,7 +400,7 @@ reveal app.py class:1                  # First class
 **When to use each:**
 - **Name** - You know what you're looking for
 - **Hierarchical** - You see `Class.method` in outline or structure
-- **Line number** - Error message says "line 73" or grep found `:73:`
+- **Line number** - Error message says "line 73" or grep found `:73:` — bare integer works too
 - **Ordinal** - You ran `reveal file.py` and want "the 3rd one"
 - **Type+position** - You want "2nd function" specifically
 
@@ -2211,7 +2212,7 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Hierarchical view | `reveal file.py --outline` |
 | Extract by name | `reveal file.py func_name` |
 | Extract class method | `reveal file.py Class.method` |
-| Extract at line | `reveal file.py :73` |
+| Extract at line | `reveal file.py 73` or `reveal file.py :73` |
 | Extract Nth element | `reveal file.py @3` |
 | Extract 2nd function | `reveal file.py function:2` |
 | Quality check | `reveal file.py --check` |
