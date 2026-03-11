@@ -605,8 +605,9 @@ def _render_adapter_schema(data: Dict[str, Any]) -> None:
     """Render help://schemas/<adapter> — machine-readable adapter schema."""
     if 'error' in data:
         available = data.get('available_adapters', [])
-        if available:
-            # Listing mode — not a real error
+        adapter = data.get('adapter', '')
+        if not adapter and available:
+            # Bare help://schemas — list all adapters
             print("# Adapter Schemas")
             print()
             print("**Usage:** `reveal help://schemas/<adapter>`")
@@ -621,6 +622,7 @@ def _render_adapter_schema(data: Dict[str, Any]) -> None:
             print("  reveal help://schemas/git")
             print()
         else:
+            # Unknown adapter — show error with available list
             print(f"Error: {data['message']}", file=sys.stderr)
             sys.exit(1)
         return

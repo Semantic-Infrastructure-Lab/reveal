@@ -412,6 +412,32 @@ class TestHelpAdapter(unittest.TestCase):
         self.assertIn('Example Queries', output)
         self.assertIn('Notes', output)
 
+    def test_schemas_unknown_adapter_has_error(self):
+        """help://schemas/unknown returns error dict with available_adapters."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('schemas/unknown_adapter_xyz')
+        self.assertIsNotNone(result)
+        self.assertIn('error', result)
+        self.assertIn('available_adapters', result)
+        self.assertEqual(result['adapter'], 'unknown_adapter_xyz')
+
+    def test_schemas_unknown_adapter_renders_to_stderr(self):
+        """Rendering help://schemas/unknown exits with error (not listing)."""
+        import io
+        import sys
+        from contextlib import redirect_stderr
+        from reveal.rendering.adapters.help import render_help
+
+        adapter = HelpAdapter()
+        result = adapter.get_element('schemas/unknown_adapter_xyz')
+        buf = io.StringIO()
+        with redirect_stderr(buf):
+            try:
+                render_help(result, 'text')
+            except SystemExit as e:
+                self.assertEqual(e.code, 1)
+        self.assertIn('unknown_adapter_xyz', buf.getvalue())
+
     # --- help://examples/* ---
 
     def test_examples_bare_returns_error_with_tasks(self):
