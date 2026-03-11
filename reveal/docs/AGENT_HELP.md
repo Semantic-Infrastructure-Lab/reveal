@@ -891,6 +891,62 @@ reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --expiri
 
 ---
 
+### Task: "Inspect nginx vhost configuration"
+
+The `nginx://` adapter provides domain-centric nginx vhost inspection — structured view of ports, upstreams, auth, and location blocks. No nginx binary required; reads config files directly.
+
+**Pattern:**
+```bash
+# Overview: all enabled vhosts on this server
+reveal nginx://
+
+# Full vhost summary: ports, upstreams, auth, locations
+reveal nginx://example.com
+
+# Specific sub-view
+reveal nginx://example.com/ports      # Listening ports (80/443, SSL, redirect)
+reveal nginx://example.com/upstream   # proxy_pass targets + TCP reachability
+reveal nginx://example.com/auth       # auth_basic / auth_request directives
+reveal nginx://example.com/locations  # Location blocks with routing targets
+reveal nginx://example.com/config     # Full raw server block(s)
+
+# JSON for programmatic use
+reveal nginx://example.com --format=json
+```
+
+**nginx:// views:**
+- `nginx://` — overview: all enabled sites with config file paths
+- `nginx://domain` — full vhost summary for a specific domain
+- `nginx://domain/ports` — port listeners (HTTP, HTTPS, redirect rules)
+- `nginx://domain/upstream` — backend servers with TCP connectivity check
+- `nginx://domain/auth` — auth_basic realm, auth_request paths
+- `nginx://domain/locations` — location blocks with proxy/static/return routing
+- `nginx://domain/config` — raw server block text from the config file
+
+**When to use which view:**
+
+| Scenario | Command |
+|----------|---------|
+| "Is this domain configured?" | `reveal nginx://example.com` |
+| "What port does it listen on?" | `.../ports` |
+| "Where does it proxy to?" | `.../upstream` |
+| "Is it password-protected?" | `.../auth` |
+| "What's the raw config?" | `.../config` |
+| "Show all sites on this server" | `reveal nginx://` |
+
+**Combine with other adapters:**
+```bash
+# After nginx upstream check, verify the backend service
+reveal nginx://example.com/upstream  # shows proxy_pass target
+reveal domain://api.example.com      # inspect the upstream domain
+
+# Validate nginx config + SSL in one workflow
+reveal nginx://example.com           # check vhost config
+reveal ssl://example.com --check     # verify cert health
+```
+
+---
+
 ### Task: "Audit a cPanel user environment"
 
 The `cpanel://` adapter provides a first-class view of a cPanel user's web environment.
