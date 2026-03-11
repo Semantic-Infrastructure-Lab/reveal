@@ -12,6 +12,20 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - v0.60.x (session toxic-onslaught-0310)
+
+### Fixed
+- **BACK-001: bare integer / `:N` line nav now consistent** — `reveal file.py 73` and `reveal file.py :73` previously errored with "No element found" when the target line was outside any named element (imports, module-level code). Now falls back to a ±10-line context window so every line reference returns something useful. `_extract_line_range` also now clamps `end_line` to file length instead of failing.
+- **BACK-005: `ast://` unknown filter key now hints** — `reveal 'ast://src/?badkey=foo'` previously returned silent 0 results. Now emits "not a recognized filter key — valid keys: complexity, decorator, lines, name, size, type". Known-shorthand hints (`?functions → ?type=function`) unchanged.
+- **BACK-008: `git://dir/` error message** — terse error when a directory path is given now explains expected repo-root form with absolute path example.
+- **BACK-010: explicit `level` field in `ImportStatement`** — relative import levels now tracked explicitly rather than inferred, improving code clarity in the resolver.
+- **BACK-011: `analyzer` passed directly to `_handle_outline_mode`** — removed redundant re-resolution that previously used `None`.
+
+### Documentation
+- **AGENT_HELP.md** — bare integer line nav (`reveal file.py 73`) added to line-number section and quick-reference table.
+
+---
+
 ## [0.60.0] - 2026-03-10
 
 ### Added (session earthly-phoenix-0310)
