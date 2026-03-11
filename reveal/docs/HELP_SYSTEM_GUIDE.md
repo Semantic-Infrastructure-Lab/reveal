@@ -81,6 +81,10 @@ reveal help://                # List all topics
 reveal help://ast             # Learn about ast:// adapter
 reveal help://adapters        # Summary of all adapters
 reveal help://agent           # Same as --agent-help (static guide)
+reveal help://schemas         # Machine-readable adapter schemas (AI agents)
+reveal help://schemas/ast     # Schema for ast:// (query params, output types)
+reveal help://examples        # Canonical query recipes by task
+reveal help://examples/quality  # Recipes for code quality analysis
 ```
 
 **Audience:** Humans exploring capabilities, developers
@@ -123,10 +127,17 @@ reveal help://anti-patterns      # Common mistakes
 ### For AI Agents:
 ```bash
 # Bootstrap understanding
-reveal --agent-help              # Get task-based patterns
+reveal --agent-help              # Get task-based patterns (~2,200 tokens)
 
-# (AI agents typically don't explore help://)
-# The --agent-help guide has all the patterns needed
+# Discover adapter capabilities programmatically
+reveal help://schemas            # List all adapters with schemas
+reveal help://schemas/ast        # Query parameters, output types, examples for ast://
+reveal help://schemas/ast --format=json  # Machine-readable (preferred for agents)
+
+# Get canonical task-oriented query recipes
+reveal help://examples           # List all task categories
+reveal help://examples/quality   # Recipes for code quality analysis
+reveal help://examples/security  # Recipes for security analysis
 ```
 
 ---
