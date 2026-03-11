@@ -1,11 +1,15 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-03 (amethyst-prism-0303 — v0.59.0 release)
+> **Last updated**: 2026-03-10 (spinning-asteroid-0310 — v0.60.0 release)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.60.0
+- ✅ **`nginx://` URI adapter** — domain-centric nginx vhost inspection (21st adapter). `reveal nginx://domain` shows config file + symlink status, ports (80/443, SSL, redirect), upstream servers + TCP reachability, auth directives, location blocks. Sub-paths: `/ports`, `/upstream`, `/auth`, `/locations`, `/config`. `reveal nginx://` lists all enabled sites. Searched against `/etc/nginx/sites-enabled/` and `/etc/nginx/conf.d/` automatically. Zero extra dependencies. Validated against 44 real vhosts on tia-proxy — 0 errors.
+- ✅ **`domain://` HTTP response check** — `--check` now makes actual HTTP/HTTPS requests and reports status codes + redirect chains (e.g. `HTTP (80): 301 → https://... (200)`). On failure, suggests `reveal nginx://domain` as next diagnostic step.
 
 ### v0.59.0
 - ✅ **`--help` argument groups** — replaced the flat 70+ flag wall with 12 named sections (Output, Discovery, Navigation, Display, Type-aware output, Quality checks, Universal adapter options, Markdown, HTML, Schema validation, SSL adapter, Nginx/cPanel adapter); taxonomy documented in ADAPTER_CONSISTENCY.md is now visible in the tool itself
@@ -228,7 +232,7 @@ This document outlines reveal's development priorities and future direction. For
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: 4,590 passing (as of v0.57.0)
+- Test count: 4,632 passing (as of v0.60.0)
 - UX Phases 3/4/5: ✅ **ALL COMPLETE** (query operators, field selection, element discovery)
 - Target: 80%+ coverage for core adapters
 
@@ -236,6 +240,8 @@ This document outlines reveal's development priorities and future direction. For
 - Output contract v1.1 enforcement
 - Performance optimization for large codebases
 - `autossl://` adapter — ✅ shipped in v0.58.0
+- `nginx://` adapter — ✅ shipped in v0.60.0 (21st adapter; validated on 44 real vhosts)
+- `domain://` HTTP response check — ✅ shipped in v0.60.0
 - `--full-audit` — `reveal cpanel://USERNAME --full-audit` composing ssl+acl+nginx in one pass
 - U6 follow-on — IP-match verification (resolves but to different server)
 
@@ -323,15 +329,15 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 
 ## Adapter Status
 
-### Implemented (20)
+### Implemented (21)
 | Adapter | Description |
 |---------|-------------|
 | `ast://` | Query code as database (complexity, size, type filters) |
-| `claude://` | Claude conversation analysis |
 | `autossl://` | cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures |
+| `claude://` | Claude conversation analysis |
 | `cpanel://` | cPanel user environments — domains, SSL certs, ACL health |
 | `diff://` | Compare files or git revisions |
-| `domain://` | Domain registration, DNS records, health status |
+| `domain://` | Domain registration, DNS records, health status + HTTP response check |
 | `env://` | Environment variable inspection |
 | `git://` | Repository history, blame, commits |
 | `help://` | Built-in documentation |
@@ -339,6 +345,7 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 | `json://` | JSON/JSONL deep inspection |
 | `markdown://` | Markdown document inspection and related-file discovery |
 | `mysql://` | MySQL database schema inspection |
+| `nginx://` | Nginx vhost inspection — config file, ports, upstreams, auth, locations |
 | `python://` | Python runtime inspection |
 | `reveal://` | Reveal's own codebase |
 | `sqlite://` | SQLite database inspection |
