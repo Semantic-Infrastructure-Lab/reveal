@@ -260,6 +260,17 @@ class TestAdapterContracts(unittest.TestCase):
                 # Verify example_queries use 'uri' key (not 'query')
                 for i, ex in enumerate(schema['example_queries']):
                     self.assertIn('uri', ex, f"{scheme} example_queries[{i}] missing 'uri' key (use 'uri' not 'query')")
+                # Verify output_type references in example_queries resolve to defined output_types
+                # Allow cross-adapter references (e.g., domain/ssl delegates to ssl://)
+                cross_adapter_types = {'ssl_certificate'}
+                defined_types = {ot['type'] for ot in schema.get('output_types', [])}
+                for i, ex in enumerate(schema['example_queries']):
+                    ot = ex.get('output_type')
+                    if ot and ot not in defined_types and ot not in cross_adapter_types:
+                        self.fail(
+                            f"{scheme} example_queries[{i}] references undefined output_type "
+                            f"'{ot}' (defined: {sorted(defined_types)})"
+                        )
 
     def test_adapters_inherit_from_resource_adapter(self):
         """Verify all adapters inherit from ResourceAdapter (optional check)."""
