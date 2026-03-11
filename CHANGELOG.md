@@ -40,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed (session kilonova-throne-0311 continued)
 - **3 unused imports removed via `imports://` self-scan** — `import sys` (dev.py), `import subprocess` (pack.py), `import socket` (N007.py) were genuinely unused. Discovered by running `reveal 'imports://reveal/?unused'` on the reveal codebase itself. (session kilonova-throne-0311)
+- **`help://examples` (no slash) now shows task list** — previously "Element not found"; now "Specify a task. Available: ...". `help://examples/` improved from "Unknown task ''" to "Specify a task". (session kilonova-throne-0311)
+- **`help://schemas/` now lists available adapters** — previously "No adapter named ''"; now "Specify an adapter. Available: ...". (session kilonova-throne-0311)
+- **`help://schemas/help` now gives explicit error** — "HelpAdapter does not provide a machine-readable schema. This is expected for meta-adapters like help://". Previously returned None → "Element not found". (session kilonova-throne-0311)
+- **`help://schemas/badname` error includes adapter list** — "No adapter named 'xlxs'. Available: ast, autossl, ..." with `available_adapters` array in JSON output. AI agents can now programmatically discover valid adapter names from any schema error. (session kilonova-throne-0311)
 
 ### Documentation
 - **AGENT_HELP.md** — bare integer line nav (`reveal file.py 73`) added to line-number section and quick-reference table.
