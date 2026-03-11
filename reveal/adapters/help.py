@@ -618,9 +618,19 @@ class HelpAdapter(ResourceAdapter):
 
         try:
             schema_data = adapter_class.get_schema()
-            if schema_data:
-                schema_data['adapter'] = adapter_name  # Ensure adapter is included
-                schema_data['type'] = 'adapter_schema'
+            if not schema_data:
+                # Adapter has get_schema() but returns None (e.g., help:// meta-adapter)
+                return {
+                    'type': 'adapter_schema',
+                    'adapter': adapter_name,
+                    'error': 'No schema available',
+                    'message': (
+                        f'{adapter_class.__name__} does not provide a machine-readable schema. '
+                        f'This is expected for meta-adapters like help://'
+                    )
+                }
+            schema_data['adapter'] = adapter_name  # Ensure adapter is included
+            schema_data['type'] = 'adapter_schema'
             return schema_data  # type: ignore[no-any-return]
         except Exception as e:
             return {
