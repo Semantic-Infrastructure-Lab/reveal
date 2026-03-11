@@ -408,6 +408,9 @@ def _add_ssl_options(parser: argparse.ArgumentParser) -> None:
                         help='Only show certificates expiring within N days (e.g., 7, 30)')
     parser.add_argument('--validate-nginx', action='store_true',
                         help='Cross-validate SSL certificates against nginx configuration')
+    parser.add_argument('--local-certs', action='store_true', dest='local_certs',
+                        help='Validate SSL cert files referenced in nginx config locally (no network); '
+                             'requires ssl://nginx:///path/to/config --check')
 
 
 def _add_extraction_options(parser: argparse.ArgumentParser) -> None:

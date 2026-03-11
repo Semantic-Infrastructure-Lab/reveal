@@ -348,6 +348,11 @@ class SSLRenderer(TypeDispatchRenderer):
             cls._render_ssl_batch_check(result, only_failures, summary, expiring_days)
             return
 
+        # Route to cert file validation renderer
+        if result_type == 'ssl_cert_file_validation':
+            cls._render_ssl_cert_file_validation(result, only_failures)
+            return
+
         # Single host check
         cls._render_single_host_header(result['host'], result['port'],
                                         result['status'], result['summary'])
@@ -692,6 +697,71 @@ class SSLRenderer(TypeDispatchRenderer):
             print("Remediation Steps:")
             for step in result['next_steps']:
                 print(f"  • {step}")
+            print()
+
+        print(f"Exit code: {result['exit_code']}")
+
+    @staticmethod
+    def _render_ssl_cert_file_validation(result: dict, only_failures: bool = False) -> None:
+        """Render local SSL cert file validation results from nginx config."""
+        if 'error' in result and 'results' not in result:
+            print(f"\nError: {result['error']}")
+            return
+
+        source = result.get('source', 'unknown')
+        status = result.get('status', 'unknown')
+        status_icon = '\u2705' if status == 'pass' else ('\u26a0\ufe0f' if status == 'warning' else '\u274c')
+
+        print(f"\nSSL Certificate File Validation: {source}")
+        print(f"Status: {status_icon} {status.upper()}")
+
+        summary = result.get('summary', {})
+        total = summary.get('total', result.get('certs_checked', 0))
+        passed = summary.get('passed', 0)
+        warnings = summary.get('warnings', 0)
+        failures = summary.get('failures', 0)
+        print(f"Certs checked: {total}  ({passed} passed, {warnings} warnings, {failures} failed)")
+        print()
+
+        all_results = result.get('results', [])
+        if only_failures:
+            all_results = [r for r in all_results if r['status'] in ('failure', 'warning')]
+
+        failures_list = [r for r in all_results if r['status'] == 'failure']
+        warnings_list = [r for r in all_results if r['status'] == 'warning']
+        passes_list = [r for r in all_results if r['status'] == 'pass']
+
+        if failures_list:
+            print('\u274c Failed:')
+            for r in failures_list:
+                domains_str = ', '.join(r.get('domains', [])) or '(no server_name)'
+                print(f"  {r['cert_path']}")
+                print(f"    Domains: {domains_str}")
+                if 'error' in r:
+                    print(f"    Error: {r['error']}")
+                elif 'issue' in r:
+                    print(f"    Issue: {r['issue']}")
+            print()
+
+        if warnings_list:
+            print('\u26a0\ufe0f  Expiring soon:')
+            for r in warnings_list:
+                domains_str = ', '.join(r.get('domains', [])) or '(no server_name)'
+                print(f"  {r['cert_path']}")
+                print(f"    Domains: {domains_str}")
+                print(f"    Expires: {r.get('not_after', '?')} ({r.get('days_until_expiry', '?')} days)")
+                print(f"    Issue: {r.get('issue', '')}")
+            print()
+
+        if passes_list and not only_failures:
+            print('\u2705 Healthy:')
+            for r in passes_list:
+                domains_str = ', '.join(r.get('domains', [])) or '(no server_name)'
+                cn = r.get('common_name', '?')
+                days = r.get('days_until_expiry', '?')
+                expires = r.get('not_after', '?')
+                print(f"  {r['cert_path']}")
+                print(f"    CN: {cn}  |  Expires: {expires} ({days} days)  |  Domains: {domains_str}")
             print()
 
         print(f"Exit code: {result['exit_code']}")

@@ -1283,5 +1283,387 @@ class TestSSLFileMode(unittest.TestCase):
         assert 'ssl://example.com' in steps or 'ssl://' in steps
 
 
+class TestNginxLocalCertValidation(unittest.TestCase):
+    """Tests for BACK-007: ssl://nginx:///path --check --local-certs.
+
+    Validates SSL cert files referenced in nginx ssl_certificate directives
+    directly from disk — no network connection required.
+    """
+
+    def _make_real_cert(self, days_valid: int = 90) -> bytes:
+        """Generate a real self-signed PEM certificate for testing."""
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives.serialization import Encoding
+        from cryptography.hazmat.backends import default_backend
+        from datetime import timedelta
+
+        key = rsa.generate_private_key(
+            public_exponent=65537, key_size=2048, backend=default_backend()
+        )
+        subject = issuer = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, 'test.example.com'),
+        ])
+        now = datetime.now(timezone.utc)
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - timedelta(days=1))
+            .not_valid_after(now + timedelta(days=days_valid))
+            .add_extension(
+                x509.SubjectAlternativeName([x509.DNSName('test.example.com')]),
+                critical=False,
+            )
+            .sign(key, hashes.SHA256(), default_backend())
+        )
+        return cert.public_bytes(Encoding.PEM)
+
+    def _write_cert_file(self, tmp_dir: str, name: str, pem_bytes: bytes) -> str:
+        """Write PEM bytes to a temp file and return the path."""
+        import os
+        path = os.path.join(tmp_dir, name)
+        with open(path, 'wb') as f:
+            f.write(pem_bytes)
+        return path
+
+    def test_nginx_extract_ssl_cert_paths_basic(self):
+        """NginxAnalyzer.extract_ssl_cert_paths() returns cert and key paths."""
+        import tempfile
+        import os
+
+        config = '''
+server {
+    listen 443 ssl;
+    server_name secure.example.com;
+    ssl_certificate /etc/ssl/certs/example.pem;
+    ssl_certificate_key /etc/ssl/private/example.key;
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            config_file = f.name
+
+        try:
+            from reveal.analyzers.nginx import NginxAnalyzer
+            analyzer = NginxAnalyzer(config_file)
+            entries = analyzer.extract_ssl_cert_paths()
+
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(entries[0]['cert_path'], '/etc/ssl/certs/example.pem')
+            self.assertEqual(entries[0]['key_path'], '/etc/ssl/private/example.key')
+            self.assertIn('secure.example.com', entries[0]['domains'])
+        finally:
+            os.unlink(config_file)
+
+    def test_nginx_extract_ssl_cert_paths_no_ssl(self):
+        """extract_ssl_cert_paths() returns empty list for non-SSL server blocks."""
+        import tempfile
+        import os
+
+        config = '''
+server {
+    listen 80;
+    server_name www.example.com;
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            config_file = f.name
+
+        try:
+            from reveal.analyzers.nginx import NginxAnalyzer
+            analyzer = NginxAnalyzer(config_file)
+            entries = analyzer.extract_ssl_cert_paths()
+            self.assertEqual(entries, [])
+        finally:
+            os.unlink(config_file)
+
+    def test_nginx_extract_ssl_cert_paths_multiple_blocks(self):
+        """extract_ssl_cert_paths() returns one entry per server block with ssl_certificate."""
+        import tempfile
+        import os
+
+        config = '''
+server {
+    listen 443 ssl;
+    server_name a.example.com;
+    ssl_certificate /certs/a.pem;
+    ssl_certificate_key /certs/a.key;
+}
+
+server {
+    listen 443 ssl;
+    server_name b.example.com;
+    ssl_certificate /certs/b.pem;
+}
+
+server {
+    listen 80;
+    server_name c.example.com;
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False) as f:
+            f.write(config)
+            config_file = f.name
+
+        try:
+            from reveal.analyzers.nginx import NginxAnalyzer
+            analyzer = NginxAnalyzer(config_file)
+            entries = analyzer.extract_ssl_cert_paths()
+
+            self.assertEqual(len(entries), 2)
+            cert_paths = [e['cert_path'] for e in entries]
+            self.assertIn('/certs/a.pem', cert_paths)
+            self.assertIn('/certs/b.pem', cert_paths)
+            # b.pem entry has no key_path
+            b_entry = next(e for e in entries if e['cert_path'] == '/certs/b.pem')
+            self.assertIsNone(b_entry['key_path'])
+        finally:
+            os.unlink(config_file)
+
+    def test_validate_cert_file_healthy(self):
+        """_validate_cert_file() returns pass for a healthy cert."""
+        import tempfile
+        import os
+
+        pem = self._make_real_cert(days_valid=90)
+        with tempfile.TemporaryDirectory() as tmp:
+            cert_path = self._write_cert_file(tmp, 'cert.pem', pem)
+
+            adapter = SSLAdapter.__new__(SSLAdapter)
+            adapter._nginx_path = '/etc/nginx/nginx.conf'
+
+            result = adapter._validate_cert_file(cert_path, ['example.com'], 30, 7)
+
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['cert_path'], cert_path)
+        self.assertIn('example.com', result['domains'])
+        self.assertGreater(result['days_until_expiry'], 0)
+        self.assertNotIn('issue', result)
+        self.assertNotIn('error', result)
+
+    def test_validate_cert_file_warning(self):
+        """_validate_cert_file() returns warning for cert expiring within warn_days."""
+        import tempfile
+
+        pem = self._make_real_cert(days_valid=20)  # < 30 day warn threshold
+        with tempfile.TemporaryDirectory() as tmp:
+            cert_path = self._write_cert_file(tmp, 'cert.pem', pem)
+
+            adapter = SSLAdapter.__new__(SSLAdapter)
+            result = adapter._validate_cert_file(cert_path, ['example.com'], 30, 7)
+
+        self.assertEqual(result['status'], 'warning')
+        self.assertIn('issue', result)
+        self.assertIn('WARNING', result['issue'])
+
+    def test_validate_cert_file_critical(self):
+        """_validate_cert_file() returns failure for cert expiring within critical_days."""
+        import tempfile
+
+        pem = self._make_real_cert(days_valid=3)  # < 7 day critical threshold
+        with tempfile.TemporaryDirectory() as tmp:
+            cert_path = self._write_cert_file(tmp, 'cert.pem', pem)
+
+            adapter = SSLAdapter.__new__(SSLAdapter)
+            result = adapter._validate_cert_file(cert_path, ['example.com'], 30, 7)
+
+        self.assertEqual(result['status'], 'failure')
+        self.assertIn('CRITICAL', result['issue'])
+
+    def test_validate_cert_file_not_found(self):
+        """_validate_cert_file() returns failure when cert file does not exist."""
+        adapter = SSLAdapter.__new__(SSLAdapter)
+        result = adapter._validate_cert_file('/nonexistent/cert.pem', ['example.com'], 30, 7)
+
+        self.assertEqual(result['status'], 'failure')
+        self.assertIn('not found', result['error'])
+        self.assertEqual(result['cert_path'], '/nonexistent/cert.pem')
+
+    def test_check_nginx_cert_files_healthy(self):
+        """_check_nginx_cert_files() returns pass when all certs are healthy."""
+        import tempfile
+        import os
+
+        pem = self._make_real_cert(days_valid=90)
+        with tempfile.TemporaryDirectory() as tmp:
+            cert_path = self._write_cert_file(tmp, 'cert.pem', pem)
+            config = f'''
+server {{
+    listen 443 ssl;
+    server_name secure.example.com;
+    ssl_certificate {cert_path};
+    ssl_certificate_key /etc/ssl/private/key.pem;
+}}
+'''
+            config_file = os.path.join(tmp, 'nginx.conf')
+            with open(config_file, 'w') as f:
+                f.write(config)
+
+            adapter = SSLAdapter(f'ssl://nginx://{config_file}')
+            result = adapter._check_nginx_cert_files(warn_days=30, critical_days=7)
+
+        self.assertEqual(result['type'], 'ssl_cert_file_validation')
+        self.assertEqual(result['status'], 'pass')
+        self.assertEqual(result['certs_checked'], 1)
+        self.assertEqual(result['summary']['failures'], 0)
+        self.assertEqual(result['exit_code'], 0)
+
+    def test_check_nginx_cert_files_missing_cert(self):
+        """_check_nginx_cert_files() returns failure when cert file is missing."""
+        import tempfile
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config = '''
+server {
+    listen 443 ssl;
+    server_name secure.example.com;
+    ssl_certificate /nonexistent/cert.pem;
+}
+'''
+            config_file = os.path.join(tmp, 'nginx.conf')
+            with open(config_file, 'w') as f:
+                f.write(config)
+
+            adapter = SSLAdapter(f'ssl://nginx://{config_file}')
+            result = adapter._check_nginx_cert_files()
+
+        self.assertEqual(result['status'], 'failure')
+        self.assertEqual(result['summary']['failures'], 1)
+        self.assertEqual(result['exit_code'], 2)
+        self.assertIn('not found', result['results'][0]['error'])
+
+    def test_check_nginx_cert_files_no_ssl_directives(self):
+        """_check_nginx_cert_files() returns error when no ssl_certificate found."""
+        import tempfile
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            config = '''
+server {
+    listen 80;
+    server_name www.example.com;
+}
+'''
+            config_file = os.path.join(tmp, 'nginx.conf')
+            with open(config_file, 'w') as f:
+                f.write(config)
+
+            adapter = SSLAdapter(f'ssl://nginx://{config_file}')
+            result = adapter._check_nginx_cert_files()
+
+        self.assertIn('error', result)
+        self.assertEqual(result['certs_checked'], 0)
+        self.assertEqual(result['exit_code'], 1)
+
+    def test_check_local_certs_no_nginx_path(self):
+        """check(local_certs=True) returns error when not in nginx mode."""
+        adapter = SSLAdapter('ssl://example.com')
+        result = adapter.check(local_certs=True)
+
+        self.assertEqual(result['type'], 'ssl_cert_file_validation')
+        self.assertIn('error', result)
+        self.assertEqual(result['exit_code'], 2)
+
+    def test_check_local_certs_dispatches_to_cert_file_check(self):
+        """check(local_certs=True) dispatches to _check_nginx_cert_files()."""
+        adapter = SSLAdapter('ssl://nginx:///etc/nginx/nginx.conf')
+        with patch.object(adapter, '_check_nginx_cert_files', return_value={'type': 'ssl_cert_file_validation', 'status': 'pass'}) as mock:
+            result = adapter.check(local_certs=True)
+
+        mock.assert_called_once_with(30, 7)
+        self.assertEqual(result['status'], 'pass')
+
+    def test_render_ssl_cert_file_validation_pass(self):
+        """_render_ssl_cert_file_validation renders healthy results."""
+        import io
+        from contextlib import redirect_stdout
+
+        result = {
+            'type': 'ssl_cert_file_validation',
+            'source': '/etc/nginx/nginx.conf',
+            'status': 'pass',
+            'certs_checked': 1,
+            'summary': {'total': 1, 'passed': 1, 'warnings': 0, 'failures': 0},
+            'results': [{
+                'cert_path': '/etc/ssl/certs/example.pem',
+                'domains': ['secure.example.com'],
+                'common_name': 'secure.example.com',
+                'issuer': 'Test CA',
+                'not_after': '2026-12-01',
+                'days_until_expiry': 265,
+                'status': 'pass',
+            }],
+            'exit_code': 0,
+        }
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            SSLRenderer._render_ssl_cert_file_validation(result)
+        output = buf.getvalue()
+
+        self.assertIn('SSL Certificate File Validation', output)
+        self.assertIn('PASS', output)
+        self.assertIn('/etc/ssl/certs/example.pem', output)
+        self.assertIn('secure.example.com', output)
+
+    def test_render_ssl_cert_file_validation_failure(self):
+        """_render_ssl_cert_file_validation renders failure results."""
+        import io
+        from contextlib import redirect_stdout
+
+        result = {
+            'type': 'ssl_cert_file_validation',
+            'source': '/etc/nginx/nginx.conf',
+            'status': 'failure',
+            'certs_checked': 1,
+            'summary': {'total': 1, 'passed': 0, 'warnings': 0, 'failures': 1},
+            'results': [{
+                'cert_path': '/nonexistent/cert.pem',
+                'domains': ['example.com'],
+                'status': 'failure',
+                'error': 'Certificate file not found: /nonexistent/cert.pem',
+            }],
+            'exit_code': 2,
+        }
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            SSLRenderer._render_ssl_cert_file_validation(result)
+        output = buf.getvalue()
+
+        self.assertIn('FAILURE', output)
+        self.assertIn('/nonexistent/cert.pem', output)
+        self.assertIn('not found', output)
+
+    def test_render_check_dispatches_cert_file_validation(self):
+        """render_check() routes ssl_cert_file_validation type to correct renderer."""
+        import io
+        from contextlib import redirect_stdout
+
+        result = {
+            'type': 'ssl_cert_file_validation',
+            'source': '/etc/nginx/nginx.conf',
+            'status': 'pass',
+            'certs_checked': 0,
+            'summary': {'total': 0, 'passed': 0, 'warnings': 0, 'failures': 0},
+            'results': [],
+            'exit_code': 0,
+        }
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            SSLRenderer.render_check(result)
+        output = buf.getvalue()
+
+        self.assertIn('SSL Certificate File Validation', output)
+
+
 if __name__ == '__main__':
     unittest.main()

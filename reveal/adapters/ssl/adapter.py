@@ -546,7 +546,8 @@ class SSLAdapter(ResourceAdapter):
         """Run SSL health checks.
 
         Args:
-            **kwargs: Check options (warn_days, critical_days, advanced, only_failures, validate_nginx)
+            **kwargs: Check options (warn_days, critical_days, advanced, only_failures,
+                      validate_nginx, local_certs)
 
         Returns:
             Health check result dict
@@ -556,6 +557,17 @@ class SSLAdapter(ResourceAdapter):
         advanced = kwargs.get('advanced', False)
         only_failures = kwargs.get('only_failures', False)
         validate_nginx = kwargs.get('validate_nginx', False)
+        local_certs = kwargs.get('local_certs', False)
+
+        # Handle local cert file validation from nginx config (no network)
+        if local_certs:
+            if not self._nginx_path:
+                return {
+                    'type': 'ssl_cert_file_validation',
+                    'error': 'No nginx config path specified. Use ssl://nginx:///path/to/config --check --local-certs',
+                    'exit_code': 2,
+                }
+            return self._check_nginx_cert_files(warn_days, critical_days)
 
         # Handle nginx validation mode
         if validate_nginx:
@@ -600,6 +612,137 @@ class SSLAdapter(ResourceAdapter):
             domains, warn_days, critical_days, advanced, only_failures,
             source=self._nginx_path
         )
+
+    def _check_nginx_cert_files(
+            self, warn_days: int = 30, critical_days: int = 7
+    ) -> Dict[str, Any]:
+        """Validate SSL cert files referenced in nginx config (local, no network).
+
+        Parses ssl_certificate directives from the nginx config and validates
+        each referenced cert file directly on disk — no network connection required.
+
+        Args:
+            warn_days: Days until expiry to trigger warning
+            critical_days: Days until expiry to trigger critical
+
+        Returns:
+            ssl_cert_file_validation result dict
+        """
+        import glob as glob_module
+        from reveal.analyzers.nginx import NginxAnalyzer
+
+        all_entries: List[Dict[str, Any]] = []
+        paths = glob_module.glob(self._nginx_path) if '*' in self._nginx_path else [self._nginx_path]
+        for path in paths:
+            try:
+                analyzer = NginxAnalyzer(path)
+                entries = analyzer.extract_ssl_cert_paths()
+                all_entries.extend(entries)
+            except Exception:
+                pass
+
+        if not all_entries:
+            return {
+                'type': 'ssl_cert_file_validation',
+                'source': self._nginx_path,
+                'error': 'No ssl_certificate directives found in nginx config',
+                'certs_checked': 0,
+                'exit_code': 1,
+            }
+
+        # Deduplicate by cert_path (one report per unique cert file)
+        seen: set = set()
+        results = []
+        for entry in all_entries:
+            cert_path = entry['cert_path']
+            if cert_path in seen:
+                continue
+            seen.add(cert_path)
+            results.append(self._validate_cert_file(
+                cert_path, entry['domains'], warn_days, critical_days
+            ))
+
+        total = len(results)
+        failures = sum(1 for r in results if r['status'] == 'failure')
+        warnings = sum(1 for r in results if r['status'] == 'warning')
+        passed = total - failures - warnings
+        overall = 'pass' if failures == 0 and warnings == 0 else (
+            'warning' if failures == 0 else 'failure'
+        )
+        return {
+            'type': 'ssl_cert_file_validation',
+            'source': self._nginx_path,
+            'certs_checked': total,
+            'status': overall,
+            'summary': {
+                'total': total,
+                'passed': passed,
+                'warnings': warnings,
+                'failures': failures,
+            },
+            'results': results,
+            'exit_code': 0 if failures == 0 else 2,
+        }
+
+    def _validate_cert_file(
+            self, cert_path: str, domains: List[str], warn_days: int, critical_days: int
+    ) -> Dict[str, Any]:
+        """Validate a single SSL certificate file from disk.
+
+        Args:
+            cert_path: Absolute path to the certificate file
+            domains: Domain names from the nginx server_name directive
+            warn_days: Days until expiry to trigger warning
+            critical_days: Days until expiry to trigger critical
+
+        Returns:
+            Validation result dict with status, cert metadata, and optional issue/error
+        """
+        from pathlib import Path as _Path
+
+        if not _Path(cert_path).exists():
+            return {
+                'cert_path': cert_path,
+                'domains': domains,
+                'status': 'failure',
+                'error': f'Certificate file not found: {cert_path}',
+            }
+
+        try:
+            from .certificate import load_certificate_from_file as _load_cert_file
+            cert, _chain = _load_cert_file(cert_path)
+            days = cert.days_until_expiry
+            if days < 0:
+                status = 'failure'
+                issue = f'EXPIRED {abs(days)} days ago'
+            elif days < critical_days:
+                status = 'failure'
+                issue = f'Expires in {days} days (CRITICAL)'
+            elif days < warn_days:
+                status = 'warning'
+                issue = f'Expires in {days} days (WARNING)'
+            else:
+                status = 'pass'
+                issue = None
+            result: Dict[str, Any] = {
+                'cert_path': cert_path,
+                'domains': domains,
+                'common_name': cert.common_name,
+                'issuer': cert.issuer_name,
+                'not_after': cert.not_after.strftime('%Y-%m-%d'),
+                'days_until_expiry': days,
+                'status': status,
+            }
+            if issue:
+                result['issue'] = issue
+            return result
+        except (ValueError, OSError) as e:
+            return {
+                'cert_path': cert_path,
+                'domains': domains,
+                'status': 'failure',
+                'error': str(e),
+            }
 
     def _check_all_domains(self, domains: List[str], warn_days: int,
                            critical_days: int, advanced: bool) -> List[Dict[str, Any]]:

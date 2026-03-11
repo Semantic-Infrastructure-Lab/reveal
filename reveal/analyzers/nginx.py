@@ -112,6 +112,8 @@ class NginxAnalyzer(FileAnalyzer):
             'port': 'unknown',
             'domains': [],  # All domains from server_name directive
             'is_ssl': False,
+            'cert_path': None,  # Path from ssl_certificate directive
+            'key_path': None,   # Path from ssl_certificate_key directive
         }
         # Look ahead for server_name and listen
         for j in range(line_num, min(line_num + 30, len(self.lines) + 1)):
@@ -132,6 +134,15 @@ class NginxAnalyzer(FileAnalyzer):
                     # Check if SSL
                     if '443' in port or 'ssl' in next_line.lower():
                         server_info['is_ssl'] = True
+            elif next_line.startswith('ssl_certificate_key '):
+                match = re.match(r'ssl_certificate_key\s+(.*?);', next_line)
+                if match:
+                    server_info['key_path'] = match.group(1).strip()
+            elif next_line.startswith('ssl_certificate '):
+                match = re.match(r'ssl_certificate\s+(.*?);', next_line)
+                if match:
+                    server_info['cert_path'] = match.group(1).strip()
+                server_info['is_ssl'] = True
             elif 'ssl_certificate' in next_line:
                 server_info['is_ssl'] = True
             if next_line == '}' and j > line_num:
@@ -514,6 +525,27 @@ class NginxAnalyzer(FileAnalyzer):
                 domains.add(domain)
 
         return sorted(domains)
+
+    def extract_ssl_cert_paths(self) -> List[Dict[str, Any]]:
+        """Extract ssl_certificate and ssl_certificate_key paths from nginx config.
+
+        Returns:
+            List of dicts for each SSL server block with an ssl_certificate directive:
+            [{'cert_path': '/path/to/cert.pem', 'key_path': '/path/to/key.pem', 'domains': [...]}]
+            key_path is None if ssl_certificate_key is not present in that block.
+        """
+        structure = self.get_structure()
+        results = []
+        for server in structure.get('servers', []):
+            cert_path = server.get('cert_path')
+            if not cert_path:
+                continue
+            results.append({
+                'cert_path': cert_path,
+                'key_path': server.get('key_path'),
+                'domains': server.get('domains', []),
+            })
+        return results
 
     def _parse_location_root(self, line_num: int) -> Optional[str]:
         """Return the root or alias directive value from a location block body."""
