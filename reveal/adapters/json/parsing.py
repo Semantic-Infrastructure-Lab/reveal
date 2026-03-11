@@ -13,11 +13,16 @@ def parse_path(path: str) -> Tuple[Path, List[str | int], Optional[Tuple[Optiona
     Handles: file.json, file.json/key, file.json/arr[0:3]
 
     Args:
-        path: Full path string (file + optional JSON path)
+        path: Full path string (file + optional JSON path).
+              May include 'json://' prefix which is stripped automatically.
 
     Returns:
         Tuple of (file_path, json_path_components, slice_spec)
     """
+    # Strip json:// scheme prefix if present (from _try_full_uri_init routing)
+    if isinstance(path, str) and path.startswith('json://'):
+        path = path[7:]
+
     # Expand ~ to home directory first
     path = os.path.expanduser(path)
 

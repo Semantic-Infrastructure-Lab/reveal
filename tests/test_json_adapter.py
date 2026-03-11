@@ -534,5 +534,51 @@ class TestJsonAdapterFiltering(unittest.TestCase):
         self.assertEqual(len(users), 0)
 
 
+class TestJsonAdapterSchemePrefix(unittest.TestCase):
+    """BACK-016: json:// prefix in error messages.
+
+    When _try_full_uri_init passes json:///path to JsonAdapter,
+    parse_path must strip the json:// prefix so errors show plain paths.
+    """
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_parse_path_strips_json_scheme_prefix(self):
+        """parse_path('json:///path/file.json') should strip 'json://' prefix."""
+        from reveal.adapters.json.parsing import parse_path
+        json_file = os.path.join(self.tmpdir, 'data.json')
+        Path(json_file).write_text('{"key": "value"}')
+        # Full URI form (as passed by _try_full_uri_init)
+        file_path, json_path, slice_spec = parse_path(f'json://{json_file}')
+        self.assertEqual(str(file_path), json_file)
+        self.assertEqual(json_path, [])
+        self.assertIsNone(slice_spec)
+
+    def test_json_adapter_accepts_full_uri_form(self):
+        """JsonAdapter('json:///path/file.json') must work correctly."""
+        json_file = os.path.join(self.tmpdir, 'data.json')
+        Path(json_file).write_text('{"key": "value"}')
+        adapter = JsonAdapter(f'json://{json_file}')
+        result = adapter.get_structure()
+        self.assertEqual(result['value'], {'key': 'value'})
+
+    def test_non_json_file_error_shows_plain_path(self):
+        """Error for non-JSON file must NOT include 'json:' scheme prefix in path."""
+        py_file = os.path.join(self.tmpdir, 'script.py')
+        Path(py_file).write_text('x = 1\n')
+        with self.assertRaises((ValueError, FileNotFoundError)) as ctx:
+            JsonAdapter(f'json://{py_file}')
+        error_msg = str(ctx.exception)
+        # The path in the error should not start with 'json:/'
+        self.assertNotIn('json:/', error_msg, (
+            f"Error message should not contain 'json:/' prefix: {error_msg}"
+        ))
+
+
 if __name__ == '__main__':
     unittest.main()
