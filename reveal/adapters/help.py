@@ -660,7 +660,7 @@ class HelpAdapter(ResourceAdapter):
                 'recipes': [
                     {
                         'goal': 'Find authentication functions',
-                        'query': 'ast://src?name~=auth&kind=function',
+                        'query': 'ast://src?name~=auth&type=function',
                         'description': 'Locate authentication-related code',
                         'output_type': 'ast_query_results'
                     },
@@ -691,14 +691,14 @@ class HelpAdapter(ResourceAdapter):
                     },
                     {
                         'goal': 'Find entry points',
-                        'query': 'ast://src?name=main&kind=function',
-                        'description': 'Locate main() functions',
+                        'query': 'ast://src?name=main*&type=function',
+                        'description': 'Locate main() and main_* entry point functions',
                         'output_type': 'ast_query_results'
                     },
                     {
-                        'goal': 'List public API',
-                        'query': 'ast://src?visibility=public&kind=function',
-                        'description': 'Find all public functions',
+                        'goal': 'List all classes',
+                        'query': 'ast://src?type=class&sort=name',
+                        'description': 'Enumerate class hierarchy for structural overview',
                         'output_type': 'ast_query_results'
                     },
                     {
@@ -716,7 +716,7 @@ class HelpAdapter(ResourceAdapter):
                 'recipes': [
                     {
                         'goal': 'Find error handlers',
-                        'query': 'ast://src?name~=error&kind=function',
+                        'query': 'ast://src?name~=error&type=function',
                         'description': 'Locate error handling code',
                         'output_type': 'ast_query_results'
                     },
@@ -728,7 +728,7 @@ class HelpAdapter(ResourceAdapter):
                     },
                     {
                         'goal': 'Find large functions',
-                        'query': 'ast://src?lines>100&kind=function',
+                        'query': 'ast://src?lines>100&type=function',
                         'description': 'Locate potentially problematic large functions',
                         'output_type': 'ast_query_results'
                     }
@@ -752,9 +752,9 @@ class HelpAdapter(ResourceAdapter):
                         'output_type': 'ast_query_results'
                     },
                     {
-                        'goal': 'Find undocumented code',
-                        'query': 'ast://src?has_docstring=false&kind=function',
-                        'description': 'Functions missing documentation',
+                        'goal': 'Find long functions lacking simplicity',
+                        'query': 'ast://src?type=function&lines>50&sort=-lines',
+                        'description': 'Large functions sorted by size — prime documentation/refactor targets',
                         'output_type': 'ast_query_results'
                     }
                 ]
