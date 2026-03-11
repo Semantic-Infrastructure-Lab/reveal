@@ -206,6 +206,8 @@ def _render_navigation_section() -> None:
     print()
     print("**Discover adapters:**")
     print("  reveal help://adapters      # Summary of all URI adapters")
+    print("  reveal help://schemas       # Machine-readable schemas (AI agents)")
+    print("  reveal help://examples      # Canonical query recipes by task")
     print()
     print("**Learn specific feature:**")
     print("  reveal help://ast           # Deep dive on ast://")
