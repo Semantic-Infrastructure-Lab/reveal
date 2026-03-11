@@ -333,6 +333,196 @@ class NginxUriAdapter(ResourceAdapter):
         from ..help_data import load_help_data
         return load_help_data('nginx_uri') or {}
 
+    @staticmethod
+    def get_schema() -> Dict[str, Any]:
+        """Machine-readable schema for nginx:// adapter — AI agent integration."""
+        return {
+            'adapter': 'nginx',
+            'description': 'Domain-centric nginx vhost inspection — ports, upstreams, auth, locations',
+            'uri_syntax': 'nginx://[<domain>[/<element>]]',
+            'query_params': {},  # No query parameters
+            'elements': {
+                'ports': 'Listening ports (80/443, SSL, redirect)',
+                'upstream': 'proxy_pass targets and reachability checks',
+                'auth': 'auth_basic / auth_request directives',
+                'locations': 'Location blocks with routing targets',
+                'config': 'Full raw server block(s) for this domain',
+            },
+            'cli_flags': [],  # nginx:// has no extra CLI flags
+            'supports_batch': False,
+            'supports_advanced': False,
+            'output_types': [
+                {
+                    'type': 'nginx_sites_overview',
+                    'description': 'List of all enabled nginx vhosts',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'nginx_sites_overview'},
+                            'sites': {
+                                'type': 'array',
+                                'items': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'file': {'type': 'string'},
+                                        'domains': {'type': 'array', 'items': {'type': 'string'}},
+                                        'is_symlink': {'type': 'boolean'},
+                                        'enabled': {'type': 'boolean'},
+                                    }
+                                }
+                            },
+                            'next_steps': {'type': 'array'},
+                        }
+                    }
+                },
+                {
+                    'type': 'nginx_vhost_summary',
+                    'description': 'Full vhost summary — ports, upstreams, auth, locations, warnings',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'nginx_vhost_summary'},
+                            'domain': {'type': 'string'},
+                            'config_file': {'type': 'string'},
+                            'symlink': {'type': 'object'},
+                            'ports': {'type': 'array'},
+                            'upstreams': {'type': 'object'},
+                            'auth': {'type': 'object'},
+                            'locations': {'type': 'array'},
+                            'warnings': {'type': 'array', 'items': {'type': 'string'}},
+                            'next_steps': {'type': 'array'},
+                        }
+                    }
+                },
+                {
+                    'type': 'nginx_vhost_not_found',
+                    'description': 'Domain not found in any nginx config',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'nginx_vhost_not_found'},
+                            'domain': {'type': 'string'},
+                            'searched': {'type': 'array'},
+                            'next_steps': {'type': 'array'},
+                        }
+                    }
+                },
+                {
+                    'type': 'nginx_vhost_ports',
+                    'description': 'Listening ports for domain',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'nginx_vhost_ports'},
+                            'domain': {'type': 'string'},
+                            'config_file': {'type': 'string'},
+                            'ports': {'type': 'array'},
+                        }
+                    }
+                },
+                {
+                    'type': 'nginx_vhost_upstream',
+                    'description': 'Upstream proxy_pass targets with reachability',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'nginx_vhost_upstream'},
+                            'domain': {'type': 'string'},
+                            'config_file': {'type': 'string'},
+                            'upstreams': {'type': 'object'},
+                        }
+                    }
+                },
+                {
+                    'type': 'nginx_vhost_auth',
+                    'description': 'Auth directives (auth_basic, auth_request)',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'nginx_vhost_auth'},
+                            'domain': {'type': 'string'},
+                            'config_file': {'type': 'string'},
+                            'auth': {'type': 'object'},
+                        }
+                    }
+                },
+                {
+                    'type': 'nginx_vhost_locations',
+                    'description': 'Location blocks with routing targets',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'nginx_vhost_locations'},
+                            'domain': {'type': 'string'},
+                            'config_file': {'type': 'string'},
+                            'locations': {'type': 'array'},
+                        }
+                    }
+                },
+                {
+                    'type': 'nginx_vhost_config',
+                    'description': 'Raw server block config text',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'nginx_vhost_config'},
+                            'domain': {'type': 'string'},
+                            'config_file': {'type': 'string'},
+                            'server_block': {'type': 'string'},
+                        }
+                    }
+                },
+            ],
+            'example_queries': [
+                {
+                    'uri': 'nginx://',
+                    'description': 'Overview of all enabled nginx vhosts',
+                    'output_type': 'nginx_sites_overview',
+                },
+                {
+                    'uri': 'nginx://example.com',
+                    'description': 'Full vhost summary (ports, upstreams, auth, locations)',
+                    'output_type': 'nginx_vhost_summary',
+                },
+                {
+                    'uri': 'nginx://example.com/ports',
+                    'description': 'Listening ports only',
+                    'element': 'ports',
+                    'output_type': 'nginx_vhost_ports',
+                },
+                {
+                    'uri': 'nginx://example.com/upstream',
+                    'description': 'proxy_pass targets with TCP reachability check',
+                    'element': 'upstream',
+                    'output_type': 'nginx_vhost_upstream',
+                },
+                {
+                    'uri': 'nginx://example.com/auth',
+                    'description': 'Auth directives (auth_basic, auth_request)',
+                    'element': 'auth',
+                    'output_type': 'nginx_vhost_auth',
+                },
+                {
+                    'uri': 'nginx://example.com/locations',
+                    'description': 'Location block routing table',
+                    'element': 'locations',
+                    'output_type': 'nginx_vhost_locations',
+                },
+                {
+                    'uri': 'nginx://example.com/config',
+                    'description': 'Raw nginx server block text',
+                    'element': 'config',
+                    'output_type': 'nginx_vhost_config',
+                },
+            ],
+            'notes': [
+                'Searches /etc/nginx/sites-enabled, /etc/nginx/conf.d, and common alternatives',
+                'Domain lookup: matches server_name directives (exact + wildcard)',
+                'Upstream reachability: TCP socket check to each backend',
+                'Complements file-path analysis: reveal /etc/nginx/conf.d/domain.conf --check',
+            ],
+        }
+
     def __init__(self, connection_string: str = "", **kwargs):
         if not connection_string:
             raise TypeError("NginxUriAdapter requires a connection string")
