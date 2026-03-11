@@ -57,10 +57,12 @@ reveal help://schemas/cpanel --format=json     # cPanel user environments
 reveal help://schemas/reveal --format=json     # Self-inspection
 
 # Get canonical query recipes for common tasks
-reveal help://examples/security --format=json  # Security analysis recipes
-reveal help://examples/codebase --format=json  # Codebase exploration recipes
-reveal help://examples/debugging --format=json # Debugging recipes
-reveal help://examples/quality --format=json   # Code quality recipes
+reveal help://examples/codebase --format=json        # Codebase exploration recipes
+reveal help://examples/debugging --format=json       # Debugging recipes
+reveal help://examples/documentation --format=json   # Markdown/doc search recipes
+reveal help://examples/infrastructure --format=json  # nginx, SSL, domain recipes
+reveal help://examples/quality --format=json         # Code quality recipes
+reveal help://examples/security --format=json        # Security analysis recipes
 ```
 
 **What you get:**
