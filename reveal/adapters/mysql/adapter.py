@@ -116,6 +116,36 @@ class MySQLAdapter(ResourceAdapter):
                             'total_size_mb': {'type': 'number'}
                         }
                     }
+                },
+                {
+                    'type': 'mysql_performance',
+                    'description': 'Query performance metrics (slow queries, throughput)',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'mysql_performance'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string', 'const': 'database'},
+                            'slow_queries': {'type': 'integer'},
+                            'queries_per_second': {'type': 'number'},
+                            'top_tables': {'type': 'array'}
+                        }
+                    }
+                },
+                {
+                    'type': 'mysql_variables',
+                    'description': 'Server configuration variables',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'mysql_variables'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string', 'const': 'database'},
+                            'variables': {'type': 'object'}
+                        }
+                    }
                 }
             ],
             'example_queries': [

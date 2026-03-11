@@ -136,6 +136,56 @@ class SSLAdapter(ResourceAdapter):
                             'certificates': {'type': 'array'}
                         }
                     }
+                },
+                {
+                    'type': 'ssl_subject',
+                    'description': 'Certificate subject details (CN, org, country)',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'ssl_subject'},
+                            'host': {'type': 'string'},
+                            'subject': {'type': 'object'}
+                        }
+                    }
+                },
+                {
+                    'type': 'ssl_issuer',
+                    'description': 'Certificate issuer details (CA name, org)',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'ssl_issuer'},
+                            'host': {'type': 'string'},
+                            'issuer': {'type': 'object'}
+                        }
+                    }
+                },
+                {
+                    'type': 'ssl_dates',
+                    'description': 'Validity dates (not_before, not_after, days remaining)',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'ssl_dates'},
+                            'host': {'type': 'string'},
+                            'valid_from': {'type': 'string'},
+                            'valid_until': {'type': 'string'},
+                            'days_until_expiry': {'type': 'integer'}
+                        }
+                    }
+                },
+                {
+                    'type': 'ssl_full',
+                    'description': 'Complete certificate dump (all fields)',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'ssl_full'},
+                            'host': {'type': 'string'},
+                            'certificate': {'type': 'object'}
+                        }
+                    }
                 }
             ],
             'example_queries': [

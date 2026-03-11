@@ -580,6 +580,103 @@ class ClaudeAdapter(ResourceAdapter):
                             'count': {'type': 'integer'}
                         }
                     }
+                },
+                {
+                    'type': 'claude_user_messages',
+                    'description': 'User messages: initial prompt + tool-result turn summaries',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'claude_user_messages'},
+                            'session_name': {'type': 'string'},
+                            'messages': {'type': 'array'}
+                        }
+                    }
+                },
+                {
+                    'type': 'claude_assistant_messages',
+                    'description': 'Assistant messages: text responses (thinking/tool blocks excluded)',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'claude_assistant_messages'},
+                            'session_name': {'type': 'string'},
+                            'messages': {'type': 'array'}
+                        }
+                    }
+                },
+                {
+                    'type': 'claude_thinking',
+                    'description': 'All thinking blocks with content previews and token estimates',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'claude_thinking'},
+                            'session_name': {'type': 'string'},
+                            'blocks': {'type': 'array'},
+                            'total_tokens': {'type': 'integer'}
+                        }
+                    }
+                },
+                {
+                    'type': 'claude_message',
+                    'description': 'Single message by zero-based index with full content',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'claude_message'},
+                            'session_name': {'type': 'string'},
+                            'index': {'type': 'integer'},
+                            'role': {'type': 'string', 'enum': ['user', 'assistant']},
+                            'content': {'type': 'array'}
+                        }
+                    }
+                },
+                {
+                    'type': 'claude_timeline',
+                    'description': 'Chronological message timeline with timestamps and turn types',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'claude_timeline'},
+                            'session_name': {'type': 'string'},
+                            'events': {'type': 'array'}
+                        }
+                    }
+                },
+                {
+                    'type': 'claude_context',
+                    'description': 'Context window usage and changes over the session',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'claude_context'},
+                            'session_name': {'type': 'string'},
+                            'snapshots': {'type': 'array'},
+                            'peak_tokens': {'type': 'integer'}
+                        }
+                    }
+                },
+                {
+                    'type': 'claude_search_results',
+                    'description': 'Search results across all session content (text, thinking, tool inputs)',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'claude_search_results'},
+                            'session_name': {'type': 'string'},
+                            'query': {'type': 'string'},
+                            'matches': {'type': 'array'},
+                            'total': {'type': 'integer'}
+                        }
+                    }
                 }
             ],
             'example_queries': [

@@ -416,6 +416,58 @@ class DomainAdapter(ResourceAdapter):
                             }
                         }
                     }
+                },
+                {
+                    'type': 'domain_whois',
+                    'description': 'WHOIS registration data — registrar, dates, nameservers',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'domain_whois'},
+                            'source': {'type': 'string'},
+                            'domain': {'type': 'string'},
+                            'registrar': {'type': 'string'},
+                            'creation_date': {'type': 'string'},
+                            'expiration_date': {'type': 'string'},
+                            'nameservers': {'type': 'array'},
+                            'status': {'type': 'array'}
+                        }
+                    }
+                },
+                {
+                    'type': 'domain_registrar',
+                    'description': 'Registrar name and key dates from WHOIS',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'domain_registrar'},
+                            'source': {'type': 'string'},
+                            'domain': {'type': 'string'},
+                            'registrar': {'type': 'string'},
+                            'creation_date': {'type': 'string'},
+                            'expiration_date': {'type': 'string'}
+                        }
+                    }
+                },
+                {
+                    'type': 'domain_health',
+                    'description': 'Domain health check results (HTTP status, redirect chain)',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'domain_health'},
+                            'source': {'type': 'string'},
+                            'domain': {'type': 'string'},
+                            'http_status': {'type': 'integer'},
+                            'https_status': {'type': 'integer'},
+                            'redirect_chain': {'type': 'array'},
+                            'checks_passed': {'type': 'integer'},
+                            'checks_failed': {'type': 'integer'}
+                        }
+                    }
                 }
             ],
             'example_queries': [

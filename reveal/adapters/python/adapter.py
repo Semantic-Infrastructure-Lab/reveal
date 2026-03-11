@@ -421,6 +421,21 @@ class PythonAdapter(ResourceAdapter):
                             'recommendations': {'type': 'array'}
                         }
                     }
+                },
+                {
+                    'type': 'python_bytecode',
+                    'description': 'Bytecode analysis — stale .pyc files newer than their source',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'contract_version': {'type': 'string'},
+                            'type': {'type': 'string', 'const': 'python_bytecode'},
+                            'source': {'type': 'string'},
+                            'source_type': {'type': 'string'},
+                            'stale_files': {'type': 'array', 'items': {'type': 'string'}},
+                            'count': {'type': 'integer'}
+                        }
+                    }
                 }
             ],
             'example_queries': [

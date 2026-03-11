@@ -227,6 +227,28 @@ class XlsxAdapter(ResourceAdapter):
                             'dimension': {'type': 'string'}
                         }
                     }
+                },
+                {
+                    'type': 'xlsx_search',
+                    'description': 'Cross-sheet search results with matching rows grouped by sheet',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'xlsx_search'},
+                            'query': {'type': 'string'},
+                            'total_matches': {'type': 'integer'},
+                            'sheets': {
+                                'type': 'array',
+                                'items': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'sheet_name': {'type': 'string'},
+                                        'matches': {'type': 'array'}
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             ],
             'notes': [

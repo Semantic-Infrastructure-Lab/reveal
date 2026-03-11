@@ -68,6 +68,20 @@ def get_schema() -> Dict[str, Any]:
                         'total': {'type': 'integer'}
                     }
                 }
+            },
+            {
+                'type': 'code_element',
+                'description': 'Extracted function or class from reveal\'s own source code',
+                'schema': {
+                    'type': 'object',
+                    'properties': {
+                        'contract_version': {'type': 'string'},
+                        'type': {'type': 'string', 'const': 'code_element'},
+                        'source': {'type': 'string'},
+                        'element': {'type': 'string'},
+                        'content': {'type': 'string'}
+                    }
+                }
             }
         ],
         'example_queries': [
