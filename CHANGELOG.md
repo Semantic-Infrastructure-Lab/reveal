@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - v0.60.x (sessions toxic-onslaught-0310, ethereal-leviathan-0310)
 
 ### Added
+- **BACK-003: XLSX cross-sheet search** — `reveal xlsx://file.xlsx?search=pattern` scans every sheet in the workbook and returns matching rows (case-insensitive) with sheet name, row number, and cell content grouped by sheet. `?search=X&limit=N` caps total results. Result type `xlsx_search`; JSON output supported. Also fixes a silent bug in `XlsxAnalyzer._get_cell_value`: inline-string cells (`t="inlineStr"`, used by openpyxl and similar) returned empty string — now resolved correctly. 18 new tests.
 - **BACK-006: WHOIS integration for `domain://`** — `reveal domain://example.com/whois` now returns full WHOIS data (registrar, creation/expiry dates, nameservers, status, DNSSEC). Domain overview (`reveal domain://example.com`) now includes a Registration section showing registrar + dates. `/registrar` element also enriched with WHOIS fields. `python-whois` is an optional dep (`pip install reveal[whois]`); if absent, all three outputs degrade gracefully with an install hint. 11 new tests.
 
 ### Fixed
