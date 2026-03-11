@@ -111,6 +111,13 @@ def get_schema() -> Dict[str, Any]:
                 'description': 'Extract specific function from reveal\'s source',
                 'output_type': 'code_element'
             }
+        ],
+        'notes': [
+            'reveal:// is reveal\'s self-inspection adapter — introspects its own internals',
+            '--check runs V-series validation rules; --only-failures shows just failed checks',
+            '--select=V001,V002 runs only specified rules (use reveal://rules to list all)',
+            'reveal://config shows configuration with source transparency (file, env, default)',
+            'Useful for verifying adapter registration, help completeness, and output contract compliance',
         ]
     }
 

@@ -140,6 +140,13 @@ class EnvAdapter(ResourceAdapter):
                     'output_type': 'environment'
                 }
             ],
+            'notes': [
+                'Sensitive values are auto-redacted based on name patterns (PASSWORD, SECRET, TOKEN, KEY, etc.)',
+                'Redacted values shown as *** — use --show-secrets to reveal (requires explicit flag)',
+                'env:// groups all vars by category: System, Python, Node, Application, Custom',
+                'env://VAR_NAME returns the single variable with sensitivity classification',
+                '--format=json exposes per-variable sensitive flag for programmatic filtering',
+            ],
             'security_features': [
                 'Automatic sensitive value redaction',
                 'Pattern-based detection: PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH',
