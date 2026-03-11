@@ -97,8 +97,10 @@ class ImportsRenderer:
         total_imports = metadata.get('total_imports', 0)
         has_cycles = metadata.get('has_cycles', False)
 
+        display_path = result.get('source', resource)
+
         print(f"\n{'='*60}")
-        print(f"Import Analysis: {resource}")
+        print(f"Import Analysis: {display_path}")
         print(f"{'='*60}\n")
         print(f"  Total Files:   {total_files}")
         print(f"  Total Imports: {total_imports}")
