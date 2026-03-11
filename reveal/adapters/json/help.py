@@ -215,6 +215,15 @@ def get_schema() -> Dict[str, Any]:
                 }
             }
         ],
+        'notes': [
+            'Paths use / separator (like URLs); array indices are 0-based (e.g., /users/0)',
+            '?schema infers types from actual data values — useful for exploring unknown JSON',
+            '?flatten / ?gron outputs flat "json.key = value" lines — pipe to grep for search',
+            'Filtering (=, >, <, !=, ~=, ..) applies to arrays of objects only',
+            'Field names in filters support dot notation for nested access (e.g., user.name)',
+            'Result control (sort, limit, offset) only applies when filtering arrays',
+            'Array slices use Python-style [start:end] syntax — end index is exclusive',
+        ],
         'example_queries': [
             {
                 'uri': 'json://package.json',

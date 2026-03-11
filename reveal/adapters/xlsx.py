@@ -229,6 +229,14 @@ class XlsxAdapter(ResourceAdapter):
                     }
                 }
             ],
+            'notes': [
+                'Requires openpyxl — install with: pip install openpyxl',
+                'Sheet can be specified by name or 0-based integer index (sheet=0 for first sheet)',
+                '?range=A1:C10 uses standard A1 notation; omit to get the entire sheet',
+                '?search=term is case-insensitive and searches all sheets simultaneously',
+                '?formulas=true shows raw formulas instead of computed cell values',
+                '?format=csv exports the sheet as CSV — pipe to other tools or save to file',
+            ],
             'example_queries': [
                 {
                     'uri': 'xlsx:///path/to/file.xlsx',

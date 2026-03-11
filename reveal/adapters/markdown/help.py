@@ -66,6 +66,15 @@ def get_schema() -> Dict[str, Any]:
                 }
             }
         ],
+        'notes': [
+            'Searches recursively in the specified directory (or current dir if omitted)',
+            'body-contains= searches body text after frontmatter; multiple values are AND\'d',
+            '!field finds files missing a specific frontmatter field — useful for doc quality audits',
+            'List fields match if any item in the list matches (e.g., tags=python matches [python, web])',
+            'All filter conditions are AND\'d; OR logic across different fields is not supported',
+            'Numeric comparisons (>, <, >=, <=, ..) require numeric frontmatter field values',
+            'Files without frontmatter are included in results unless a frontmatter filter is applied',
+        ],
         'example_queries': [
             {
                 'uri': 'markdown://',

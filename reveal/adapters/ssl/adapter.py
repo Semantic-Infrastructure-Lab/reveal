@@ -171,6 +171,13 @@ class SSLAdapter(ResourceAdapter):
                     'cli_flag': '--expiring-within',
                     'output_type': 'ssl_certificate'
                 }
+            ],
+            'notes': [
+                'Default port is 443; use ssl://host:PORT for non-standard ports',
+                '--expiring-within=N flags certs expiring within N days',
+                '--check uses exit codes for CI: 0=pass, 1=warning (expiring soon), 2=critical (expired)',
+                'Reads live certificate from TLS handshake — requires network access',
+                'For offline validation from nginx config path: reveal ssl://nginx:///path --local-certs',
             ]
         }
 

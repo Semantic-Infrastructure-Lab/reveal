@@ -219,6 +219,13 @@ class StatsAdapter(ResourceAdapter):
                     'cli_flag': '--only-failures',
                     'output_type': 'stats_summary'
                 }
+            ],
+            'notes': [
+                'quality_score is 0-100: 100 = no issues; weighted by severity (error/warning/info)',
+                '--only-failures filters to files with quality_score < 100 (has at least one issue)',
+                'Complexity is heuristic-based (average functions per 100 lines) — not cyclomatic complexity',
+                'hotspots=true adds a ranked list of files most in need of refactoring',
+                'Both files and directories are supported; directories show aggregate + per-file breakdown',
             ]
         }
 

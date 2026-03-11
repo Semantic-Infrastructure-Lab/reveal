@@ -342,5 +342,13 @@ def get_schema() -> Dict[str, Any]:
                 'description': 'Long but simple functions',
                 'output_type': 'ast_query'
             }
+        ],
+        'notes': [
+            "Quote URIs with > or < operators: 'ast://path?lines>50' (shell interprets > as redirect)",
+            'Operators: = (equals), != (not equals), > < (numeric), ~= (regex/glob), .. (range)',
+            'Result control: sort=field, sort=-field (descending), limit=N, offset=M',
+            'Supports 50+ languages via tree-sitter (Python, JS, TS, Rust, Go, Java, C, C++, ...)',
+            'Complexity is heuristic-based (line count proxy); tree-sitter-based calculation planned',
+            'type= shorthand: ?functions → ?type=function, ?classes → ?type=class, ?methods → ?type=method',
         ]
     }
