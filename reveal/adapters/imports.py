@@ -432,9 +432,14 @@ class ImportsAdapter(ResourceAdapter):
                 },
                 {
                     'uri': 'imports://src?violations',
-                    'description': 'Check layer violations',
+                    'description': 'Check layer violations (requires .reveal.yaml layers config)',
                     'cli_flag': '?violations',
                     'output_type': 'layer_violations'
+                },
+                {
+                    'uri': 'imports://src/main.py',
+                    'description': 'Analyze imports for a single file (no cycle detection)',
+                    'output_type': 'import_summary'
                 }
             ],
             'notes': [

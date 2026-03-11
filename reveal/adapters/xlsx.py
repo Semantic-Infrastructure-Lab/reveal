@@ -249,6 +249,16 @@ class XlsxAdapter(ResourceAdapter):
                     'uri': 'xlsx:///path/to/file.xlsx?sheet=Sales&format=csv',
                     'description': 'Export sheet as CSV',
                     'output_type': 'xlsx_sheet'
+                },
+                {
+                    'uri': 'xlsx:///path/to/file.xlsx?search=revenue',
+                    'description': 'Search all sheets for matching rows (case-insensitive)',
+                    'output_type': 'xlsx_search'
+                },
+                {
+                    'uri': 'xlsx:///path/to/file.xlsx?search=error&limit=20',
+                    'description': 'Cross-sheet search with result limit',
+                    'output_type': 'xlsx_search'
                 }
             ]
         }
