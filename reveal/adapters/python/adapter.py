@@ -470,6 +470,18 @@ class PythonAdapter(ResourceAdapter):
                     'description': 'Auto-detect common environment issues',
                     'element': 'doctor',
                     'output_type': 'python_doctor'
+                },
+                {
+                    'uri': 'python://imports',
+                    'description': 'All currently loaded modules (sys.modules)',
+                    'element': 'imports',
+                    'output_type': 'python_runtime'
+                },
+                {
+                    'uri': 'python://debug/bytecode',
+                    'description': 'Find stale .pyc files (newer than source)',
+                    'element': 'debug/bytecode',
+                    'output_type': 'python_bytecode'
                 }
             ],
             'notes': [
