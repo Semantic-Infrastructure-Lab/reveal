@@ -917,6 +917,9 @@ class TestStatsRenderer:
         assert 'Statistics' in output or 'Files:' in output
         assert 'Lines:' in output or 'Functions:' in output
 
+        # Path should show actual directory, not literal "."
+        assert str(tmp_path) in output
+
     def test_renderer_json_format(self, tmp_path):
         """Renderer should support JSON output."""
         from reveal.adapters.stats import StatsRenderer

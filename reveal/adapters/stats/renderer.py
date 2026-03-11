@@ -48,7 +48,7 @@ class StatsRenderer:
 
         # Text format - directory stats
         if 'summary' in result:
-            path = result.get('path', '.')
+            path = result.get('source', result.get('path', '.'))
             s = result['summary']
             print(f"Codebase Statistics: {path}\n")
             print(f"Files:      {s['total_files']}")
