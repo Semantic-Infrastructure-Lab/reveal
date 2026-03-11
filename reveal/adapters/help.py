@@ -245,6 +245,9 @@ class HelpAdapter(ResourceAdapter):
             return self._get_adapter_schema(adapter_name)
 
         # Check for examples route: help://examples/security
+        # Bare 'examples' and 'examples/' show the task list (same as passing empty task)
+        if topic == 'examples' or topic == 'examples/':
+            return self._get_example_recipes('')
         if topic.startswith('examples/'):
             task_name = topic.split('/', 1)[1]
             return self._get_example_recipes(task_name)
@@ -818,11 +821,16 @@ class HelpAdapter(ResourceAdapter):
 
         if task_name not in recipes:
             available = ', '.join(sorted(recipes.keys()))
+            if not task_name:
+                # Bare help://examples or help://examples/ — list available tasks
+                error_msg = f"Specify a task. Available: {available}"
+            else:
+                error_msg = f"Unknown task '{task_name}'. Available: {available}"
             return {
                 'type': 'query_recipes',
                 'task': task_name,
-                'error': 'Unknown task',
-                'message': f"Unknown task '{task_name}'. Available: {available}",
+                'error': 'Unknown task' if task_name else 'No task specified',
+                'message': error_msg,
                 'available_tasks': list(recipes.keys())
             }
 
