@@ -3,6 +3,7 @@
 
 name: nginx_uri
 type: uri_adapter
+stability: beta
 description: 'Inspect nginx vhost configuration by domain name — ports, upstreams, auth, locations'
 syntax: 'nginx://<domain>[/<element>]'
 

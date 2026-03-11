@@ -38,6 +38,34 @@ _NGINX_MAIN_CONFIGS = [
     '/usr/local/etc/nginx/nginx.conf',
 ]
 
+# Nginx includes all files in sites-enabled/, but only *.conf in conf.d/.
+# Skip backup/temp files regardless.
+_BACKUP_SUFFIXES = ('.bak', '.backup', '.old', '.disabled', '.orig', '~')
+
+
+def _iter_nginx_configs(search_dir: str):
+    """Yield config file paths from a nginx config directory.
+
+    Mirrors nginx's own include logic:
+    - sites-enabled: all files (no extension filter)
+    - conf.d and others: *.conf only
+
+    Skips backup/temp files in both cases.
+    """
+    is_sites_enabled = 'sites-enabled' in search_dir
+    pattern = os.path.join(search_dir, '*')
+    for path in sorted(glob.glob(pattern)):
+        if not os.path.isfile(path):
+            continue
+        name = os.path.basename(path)
+        # Skip backup/temp files
+        if any(name.endswith(s) or ('.backup' in name) for s in _BACKUP_SUFFIXES):
+            continue
+        # conf.d and other dirs: only .conf files
+        if not is_sites_enabled and not name.endswith('.conf'):
+            continue
+        yield path
+
 
 def _find_config_for_domain(domain: str) -> Optional[str]:
     """Scan nginx config directories for the file that handles domain.
@@ -47,7 +75,7 @@ def _find_config_for_domain(domain: str) -> Optional[str]:
     for search_dir in _NGINX_SEARCH_DIRS:
         if not os.path.isdir(search_dir):
             continue
-        for conf_file in sorted(glob.glob(os.path.join(search_dir, '*.conf'))):
+        for conf_file in _iter_nginx_configs(search_dir):
             try:
                 content = Path(conf_file).read_text(errors='replace')
             except OSError:
@@ -75,9 +103,10 @@ def _resolve_symlink_info(path: str) -> Dict[str, Any]:
 
 def _parse_server_block_for_domain(content: str, domain: str) -> Optional[str]:
     """Extract the server block(s) relevant to domain from nginx config content."""
-    # Match all server blocks (handles one level of nesting for location blocks)
+    # Match all server blocks; handles 3 levels of brace nesting to cover
+    # nested location blocks (server → location → location ~* inside location /).
     SERVER_BLOCK_RE = re.compile(
-        r'(server\s*\{(?:[^{}]|\{[^{}]*\})*\})',
+        r'(server\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\})',
         re.MULTILINE | re.DOTALL
     )
     matching = []
@@ -364,7 +393,7 @@ class NginxUriAdapter(ResourceAdapter):
         for search_dir in _NGINX_SEARCH_DIRS:
             if not os.path.isdir(search_dir):
                 continue
-            for conf_file in sorted(glob.glob(os.path.join(search_dir, '*.conf'))):
+            for conf_file in _iter_nginx_configs(search_dir):
                 try:
                     content = Path(conf_file).read_text(errors='replace')
                 except OSError:

@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`nginx://` URI adapter** — domain-centric nginx vhost inspection (21st adapter). Closes the documented-but-unimplemented gap (Issue 3 in REVEAL_ISSUES_REPORT.md, v0.54.4). `reveal nginx://domain` finds the config file by `server_name`, parses it, and shows a structured summary: config file + symlink status, ports (80/443, SSL, redirect), upstream servers + TCP reachability, auth directives, location blocks with targets. Sub-paths: `/ports`, `/upstream`, `/auth`, `/locations`, `/config`. `reveal nginx://` lists all enabled sites. Searches `/etc/nginx/sites-enabled/` and `/etc/nginx/conf.d/` automatically. Zero extra dependencies.
 - **`domain://` HTTP response check** — `--check` now makes actual HTTP/HTTPS requests and reports status codes + redirect chains, closing the gap where `--check` validated DNS and SSL cert but never hit the endpoint. Shows `HTTP (80): 301 → https://... (200)` style output. On failure or wrong-service redirect, suggests `reveal nginx://domain` as next step. Sourced from `docs/tools/reveal/REVEAL_NGINX_RUNTIME_FEEDBACK.md` (session zayiyu-0310).
 
+### Fixed (session spinning-asteroid-0310)
+- **`nginx://` glob pattern** — `_find_config_for_domain` and overview mode used `*.conf` glob, missing all extension-less files in `sites-enabled/` (42 of 44 vhosts on tia-proxy). Now uses `_iter_nginx_configs()` which mirrors nginx's own include logic: `sites-enabled/` takes all files; `conf.d/` takes `*.conf` only; backup/temp files (`.bak`, `.backup-*`, `.old`) are excluded everywhere. Found during tia-proxy validation.
+- **`nginx://` nested location parsing** — `_parse_server_block_for_domain` regex handled only 1 level of brace nesting, causing the SSL server block to be missed when config used nested `location ~*` inside `location /`. Extended to 3 levels of nesting. Symptom: adapter reported "No HTTPS listener" for configs that had `listen 443 ssl`. Found during tia-proxy validation (frono.mytia.net).
+- **`nginx://` stability promoted to Beta** — adapter validated against 44 real vhosts on tia-proxy; 0 errors, all domains resolved correctly. Stability updated from Experimental → Beta.
+
 ## [0.59.0] - 2026-03-03
 
 ### Added (sessions jeruya-0303, amethyst-prism-0303)
