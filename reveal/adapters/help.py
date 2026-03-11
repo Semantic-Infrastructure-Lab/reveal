@@ -722,8 +722,8 @@ class HelpAdapter(ResourceAdapter):
                     },
                     {
                         'goal': 'Check recent changes',
-                        'query': 'git://src?since=7days',
-                        'description': 'Review changes in last week',
+                        'query': 'git://.?type=history',
+                        'description': 'Review recent commit history',
                         'output_type': 'git_log'
                     },
                     {
