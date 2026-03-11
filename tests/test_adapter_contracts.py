@@ -324,5 +324,86 @@ class TestAdapterErrorConsistency(unittest.TestCase):
         self.assertIn("pip install", str(cm.exception))
 
 
+class TestHelpSystemContracts(unittest.TestCase):
+    """Contracts for help:// meta-adapter routes: schemas, examples, and rendering."""
+
+    def _collect_defined_output_types(self):
+        """Return all output_type names defined across all adapter schemas."""
+        from reveal.adapters.help import HelpAdapter
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+        h = HelpAdapter()
+        defined = set()
+        schema_exempt = {'help', 'demo'}
+        for scheme in _ADAPTER_REGISTRY:
+            if scheme in schema_exempt:
+                continue
+            result = h.get_element(f'schemas/{scheme}')
+            if result and 'output_types' in result:
+                for otype in result['output_types']:
+                    if isinstance(otype, dict):
+                        defined.add(otype['type'])
+                    else:
+                        defined.add(str(otype))
+        return defined
+
+    def test_recipe_output_types_resolve_to_schema_types(self):
+        """Every output_type in help://examples/* must match a type defined in some adapter schema.
+
+        Prevents recipe/schema drift: if you rename an output_type in a schema,
+        any recipe referencing the old name should fail here.
+        """
+        from reveal.adapters.help import HelpAdapter
+        h = HelpAdapter()
+        defined_types = self._collect_defined_output_types()
+        tasks = ['security', 'codebase', 'debugging', 'infrastructure', 'quality', 'documentation']
+        for task in tasks:
+            with self.subTest(task=task):
+                result = h.get_element(f'examples/{task}')
+                self.assertIsNotNone(result, f'examples/{task} returned None')
+                for i, recipe in enumerate(result.get('recipes', [])):
+                    ot = recipe.get('output_type', '')
+                    if ot:
+                        self.assertIn(
+                            ot, defined_types,
+                            f"examples/{task} recipe[{i}] '{recipe.get('goal','')}' "
+                            f"references undefined output_type '{ot}'. "
+                            f"Check adapter schemas for correct type name."
+                        )
+
+    def test_all_example_tasks_have_recipes(self):
+        """Every task in help://examples/ has at least one recipe."""
+        from reveal.adapters.help import HelpAdapter
+        h = HelpAdapter()
+        listing = h.get_element('examples')
+        for task in listing.get('available_tasks', []):
+            with self.subTest(task=task):
+                result = h.get_element(f'examples/{task}')
+                self.assertGreater(
+                    len(result.get('recipes', [])), 0,
+                    f'examples/{task} has no recipes'
+                )
+
+    def test_all_adapter_schemas_render_without_error(self):
+        """Every help://schemas/<adapter> must render to text without raising."""
+        import io
+        from contextlib import redirect_stdout
+        from reveal.adapters.help import HelpAdapter
+        from reveal.adapters.base import _ADAPTER_REGISTRY
+        from reveal.rendering.adapters.help import render_help
+        h = HelpAdapter()
+        schema_exempt = {'help', 'demo'}
+        for scheme in sorted(_ADAPTER_REGISTRY):
+            if scheme in schema_exempt:
+                continue
+            with self.subTest(scheme=scheme):
+                result = h.get_element(f'schemas/{scheme}')
+                self.assertIsNotNone(result, f'schemas/{scheme} returned None')
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    render_help(result, 'text')
+                output = buf.getvalue()
+                self.assertIn(f'{scheme}://', output, f'schemas/{scheme} rendered output missing scheme header')
+
+
 if __name__ == '__main__':
     unittest.main()

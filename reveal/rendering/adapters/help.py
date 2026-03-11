@@ -646,17 +646,20 @@ def _render_adapter_schema(data: Dict[str, Any]) -> None:
     if query_params:
         print("## Query Parameters")
         for name, param in query_params.items():
-            ptype = param.get('type', '')
-            pdesc = param.get('description', '')
-            ops = param.get('operators', [])
-            examples = param.get('examples', [])
-            op_str = f"  operators: {' '.join(ops)}" if ops else ''
-            ex_str = f"  e.g. {', '.join(examples[:2])}" if examples else ''
-            print(f"  {name} ({ptype}) — {pdesc}")
-            if op_str:
-                print(f"  {op_str}")
-            if ex_str:
-                print(f"    {ex_str}")
+            if isinstance(param, str):
+                print(f"  {name} — {param}")
+            else:
+                ptype = param.get('type', '')
+                pdesc = param.get('description', '')
+                ops = param.get('operators', [])
+                examples = param.get('examples', [])
+                op_str = f"  operators: {' '.join(ops)}" if ops else ''
+                ex_str = f"  e.g. {', '.join(examples[:2])}" if examples else ''
+                print(f"  {name} ({ptype}) — {pdesc}")
+                if op_str:
+                    print(f"  {op_str}")
+                if ex_str:
+                    print(f"    {ex_str}")
         print()
 
     if operators:
