@@ -36,12 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added (session kilonova-throne-0311 continued)
 - **`autossl://` and `cpanel://` schemas enriched with `example_queries` + `notes`** — both schemas were missing `example_queries` entirely, an AI-agent discoverability gap. autossl gets 4 examples + 5 notes; cpanel gets 6 examples + 4 notes. (session kilonova-throne-0311)
 - **Adapter contract tests expanded from 14 → 20 adapters** — `tests/test_adapter_contracts.py` now tracks all non-demo adapters: autossl, cpanel, domain, nginx, ssl, xlsx added. New `test_all_adapters_have_get_schema` verifies that all 20 adapters return a valid schema dict with `adapter` and `output_types` keys. Tests: 4,755 → 4,756. (session kilonova-throne-0311)
+- **Schema `example_queries` enrichment sweep** — all 19 adapters (excluding meta `help://`) now have complete example coverage: `domain://` added `/whois` + `/registrar` (was missing 2 of 4 elements); `python://` added `imports` + `debug/bytecode` (listed in elements but absent from examples); `env://` expanded from 3 → 5 (json format + jq pipeline); `xlsx://` added `?search=` cross-sheet examples (BACK-003 feature); `imports://` added single-file scan example. (session kilonova-throne-0311)
 
 ### Fixed (session kilonova-throne-0311 continued)
 - **3 unused imports removed via `imports://` self-scan** — `import sys` (dev.py), `import subprocess` (pack.py), `import socket` (N007.py) were genuinely unused. Discovered by running `reveal 'imports://reveal/?unused'` on the reveal codebase itself. (session kilonova-throne-0311)
 
 ### Documentation
 - **AGENT_HELP.md** — bare integer line nav (`reveal file.py 73`) added to line-number section and quick-reference table.
+- **AGENT_HELP.md — 'Inspect nginx vhost configuration' task section (16th)** — Covers all 7 `nginx://` views, "when to use" table, and cross-adapter workflow (nginx + ssl, nginx + domain). (session kilonova-throne-0311)
 - **`help://examples/` — `infrastructure` and `documentation` recipe categories** — `reveal help://examples/infrastructure` returns 6 recipes for nginx vhost inspection, nginx overview, upstream health, SSL cert check, nginx SSL from config path, and domain health. `reveal help://examples/documentation` returns 5 recipes for markdown body-contains search, frontmatter filter, body+sort combo, link validation, and outline view. Error listing for unknown tasks now includes all 6 categories. (session kilonova-throne-0311)
 
 ---
