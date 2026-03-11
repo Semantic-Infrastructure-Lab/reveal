@@ -27,6 +27,12 @@ This is the complete offline reference for reveal (~12,000 tokens). Both `--agen
 AI agents can now query reveal's capabilities via machine-readable schemas:
 
 ```bash
+# List all available adapter schemas
+reveal help://schemas                               # listing: ast, ssl, git, ...
+
+# List all available task recipe categories
+reveal help://examples                             # listing: quality, security, ...
+
 # Discover adapter schemas (all 21 adapters support this)
 reveal help://schemas/<adapter> --format=json
 
