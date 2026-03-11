@@ -565,8 +565,27 @@ def _render_help_see_also(data: Dict[str, Any]) -> None:
 def _render_query_recipes(data: Dict[str, Any]) -> None:
     """Render help://examples/<task> — canonical query recipes for a task."""
     if 'error' in data:
-        print(f"Error: {data['message']}", file=sys.stderr)
-        sys.exit(1)
+        available = data.get('available_tasks', [])
+        task = data.get('task', '')
+        if not task and available:
+            # Bare help://examples — list all task categories
+            print("# Query Recipes")
+            print()
+            print("**Usage:** `reveal help://examples/<task>`")
+            print()
+            print("## Available Tasks")
+            for name in sorted(available):
+                print(f"  {name}")
+            print()
+            print("## Examples")
+            print("  reveal help://examples/quality")
+            print("  reveal help://examples/security")
+            print("  reveal help://examples/codebase")
+            print()
+        else:
+            print(f"Error: {data['message']}", file=sys.stderr)
+            sys.exit(1)
+        return
 
     task = data.get('task', '')
     description = data.get('description', '')
