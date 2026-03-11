@@ -38,6 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Adapter contract tests expanded from 14 → 20 adapters** — `tests/test_adapter_contracts.py` now tracks all non-demo adapters: autossl, cpanel, domain, nginx, ssl, xlsx added. New `test_all_adapters_have_get_schema` verifies that all 20 adapters return a valid schema dict with `adapter` and `output_types` keys. Tests: 4,755 → 4,756. (session kilonova-throne-0311)
 - **Schema `example_queries` enrichment sweep** — all 19 adapters (excluding meta `help://`) now have complete example coverage: `domain://` added `/whois` + `/registrar` (was missing 2 of 4 elements); `python://` added `imports` + `debug/bytecode` (listed in elements but absent from examples); `env://` expanded from 3 → 5 (json format + jq pipeline); `xlsx://` added `?search=` cross-sheet examples (BACK-003 feature); `imports://` added single-file scan example. (session kilonova-throne-0311)
 
+### Added (session kilonova-throne-0311, continued)
+- **All 19 non-demo/help adapter schemas now have `notes` arrays** — 8 schemas were missing notes: ast, ssl, stats, json, markdown, xlsx, env, reveal. Notes surface adapter-specific behavior, gotchas, and usage patterns to AI agents consuming `help://schemas/<adapter>`. Each adapter now has 4–7 notes. (session kilonova-throne-0311)
+- **Schema contract tests enforce `notes`, `example_queries`, and `uri` key** — `test_all_adapters_have_get_schema` now asserts: `notes` is a non-empty list; `example_queries` exists; each example uses `uri` key (not `query`). Prevents regressions on new adapters shipping with incomplete schemas. (session kilonova-throne-0311)
+
+### Fixed (session kilonova-throne-0311, continued)
+- **6 invalid `ast://` filter params in `help://examples` recipes** — `kind=function` (not a real ast:// filter) replaced with `type=function` in 5 recipes. `visibility=public` recipe replaced with `type=class&sort=name`. `has_docstring=false` recipe replaced with `type=function&lines>50&sort=-lines`. (session kilonova-throne-0311)
+- **Invalid `git://src?since=7days` in debugging recipe** — `since` is not a `git://` query param; replaced with `git://.?type=history`. (session kilonova-throne-0311)
+
 ### Fixed (session kilonova-throne-0311 continued)
 - **3 unused imports removed via `imports://` self-scan** — `import sys` (dev.py), `import subprocess` (pack.py), `import socket` (N007.py) were genuinely unused. Discovered by running `reveal 'imports://reveal/?unused'` on the reveal codebase itself. (session kilonova-throne-0311)
 - **`help://examples` (no slash) now shows task list** — previously "Element not found"; now "Specify a task. Available: ...". `help://examples/` improved from "Unknown task ''" to "Specify a task". (session kilonova-throne-0311)
