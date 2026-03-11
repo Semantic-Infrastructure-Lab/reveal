@@ -116,18 +116,28 @@ class EnvAdapter(ResourceAdapter):
             'example_queries': [
                 {
                     'uri': 'env://',
-                    'description': 'List all environment variables grouped by category',
+                    'description': 'All environment variables grouped by category (System, Python, Node, Application, Custom)',
                     'output_type': 'environment'
                 },
                 {
                     'uri': 'env://PATH',
-                    'description': 'Get PATH variable value and metadata',
+                    'description': 'Get specific variable value, category, and sensitivity flag',
                     'output_type': 'env_variable'
                 },
                 {
                     'uri': 'env://DATABASE_URL',
-                    'description': 'Get database URL (sensitive values automatically redacted)',
+                    'description': 'Sensitive variable — value automatically redacted to *** unless --show-secrets',
                     'output_type': 'env_variable'
+                },
+                {
+                    'uri': 'env:// --format=json',
+                    'description': 'Machine-readable: all vars with sensitive flag and category',
+                    'output_type': 'environment'
+                },
+                {
+                    'uri': "env:// --format=json | jq '.categories.Application'",
+                    'description': 'Extract just Application-category variables',
+                    'output_type': 'environment'
                 }
             ],
             'security_features': [
