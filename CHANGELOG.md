@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - v0.60.x (sessions toxic-onslaught-0310, ethereal-leviathan-0310, psychic-frenzy-0310, mystical-sword-0311, kilonova-throne-0311)
+## [Unreleased] - v0.60.x (sessions toxic-onslaught-0310, ethereal-leviathan-0310, psychic-frenzy-0310, mystical-sword-0311, kilonova-throne-0311, eternal-launch-0311)
 
 ### Added
 - **BACK-014: `nginx://` adapter `get_schema()` — completes 21/21 adapter schema coverage** — `reveal help://schemas/nginx` now works. Schema covers all 8 output types (`nginx_sites_overview`, `nginx_vhost_summary`, `nginx_vhost_not_found`, `nginx_vhost_ports`, `nginx_vhost_upstream`, `nginx_vhost_auth`, `nginx_vhost_locations`, `nginx_vhost_config`), 5 elements, 7 example queries. `AGENT_HELP.md` updated from "20 of 21" to "all 21 adapters"; nginx and cpanel added to schemas listing. (session kilonova-throne-0311)
@@ -56,6 +56,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`help://schemas/` now lists available adapters** — previously "No adapter named ''"; now "Specify an adapter. Available: ...". (session kilonova-throne-0311)
 - **`help://schemas/help` now gives explicit error** — "HelpAdapter does not provide a machine-readable schema. This is expected for meta-adapters like help://". Previously returned None → "Element not found". (session kilonova-throne-0311)
 - **`help://schemas/badname` error includes adapter list** — "No adapter named 'xlxs'. Available: ast, autossl, ..." with `available_adapters` array in JSON output. AI agents can now programmatically discover valid adapter names from any schema error. (session kilonova-throne-0311)
+
+### Fixed (session eternal-launch-0311)
+- **`help://examples/*` and `help://schemas/*` rendered as stubs** — `query_recipes` and `adapter_schema` result types were not registered in `render_help()`'s dispatch table, so both fell through to `_render_help_adapter_specific` which produced only a header stub (no content). Added `_render_query_recipes` (shows task + recipe list with goal/query/description/output_type) and `_render_adapter_schema` (shows uri_syntax, query_params, elements, output_types, example_queries, cli_flags, notes). Both registered. (session eternal-launch-0311)
+- **`help://schemas` (no trailing slash) routed to wrong static guide** — bare `schemas` matched `SCHEMA_VALIDATION_HELP.md` before hitting the schemas listing route. Added `topic == 'schemas'` check alongside existing `topic == 'schemas/'`. (session eternal-launch-0311)
+- **`help://schemas` bare and `help://examples` bare showed stderr errors, not listings** — both routes returned an error dict with `available_adapters`/`available_tasks`. Renderers now treat these as listing mode (no adapter/task name supplied); unknown adapter/task names still exit(1). (session eternal-launch-0311)
+- **`help://schemas/unknown_adapter` showed listing, not error** — renderer's `if available_adapters:` check didn't distinguish "bare listing" from "unknown name listing". Fixed: only show listing when `adapter == ''`; unknown names show error + exit(1). (session eternal-launch-0311)
+- **5 recipe output_type names didn't match schema definitions** — `ast_query_results` → `ast_query` (12 occurrences), `git_log` → `git_ref`, `stats_results` → `stats_summary`, `links` → `markdown_query`, `outline` → `markdown_query`. The contract test `test_recipe_output_types_resolve_to_schema_types` now enforces alignment. (session eternal-launch-0311)
+- **`_render_adapter_schema` crashed on markdown/cpanel query_params** — those adapters use flat string values in `query_params` (e.g. `'body-contains=term': 'description...'`). Renderer now handles both dict and string param values. (session eternal-launch-0311)
+
+### Tests (session eternal-launch-0311)
+- **16 new `TestHelpAdapter` tests** — cover all new/fixed routes: `help://schemas` listing, `help://schemas/ast` data and rendering, `help://schemas/unknown_adapter` error + stderr, `help://examples` listing, `help://examples/quality` data and rendering, all 6 task categories validation. Tests: 4,768 → 4,770. (session eternal-launch-0311)
+- **`TestHelpSystemContracts` — 3 new contract tests** — `test_recipe_output_types_resolve_to_schema_types` prevents recipe/schema drift; `test_all_example_tasks_have_recipes` guards empty categories; `test_all_adapter_schemas_render_without_error` catches renderer regressions across all adapters. (session eternal-launch-0311)
 
 ### Documentation
 - **AGENT_HELP.md** — bare integer line nav (`reveal file.py 73`) added to line-number section and quick-reference table.
