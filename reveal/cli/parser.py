@@ -14,7 +14,7 @@ Examples:
   reveal app.py                  # Show structure with metrics
   reveal app.py --meta           # File metadata
 
-  # Semantic navigation - iterative deepening! (NEW in v0.12!)
+  # Semantic navigation - iterative deepening!
   reveal conversation.jsonl --head 10    # First 10 records
   reveal conversation.jsonl --tail 5     # Last 5 records
   reveal conversation.jsonl --range 48-52 # Records 48-52 (1-indexed)

@@ -141,7 +141,7 @@ reveal src/app.py --head 5
 reveal src/app.py --tail 3
 
 # Show functions 10-20
-reveal src/app.py --range 10:20
+reveal src/app.py --range 10-20
 ```
 
 ---
@@ -175,7 +175,7 @@ Reveal includes intent-based subcommands for common workflows:
 ```bash
 # Quality check (replaces --check flag)
 reveal check src/
-reveal check src/ --rules complexity,maintainability
+reveal check src/ --select C,M    # Complexity + maintainability rules only
 reveal check src/ --format json   # CI/CD gating
 
 # PR review (diff + check + hotspots in one pass)
@@ -332,8 +332,8 @@ reveal help://ssl        # Learn about ssl:// adapter
 reveal --help                    # CLI help
 reveal --agent-help              # AI agent quick reference
 reveal help://                   # List all help topics
-reveal help://markdown-guide     # Specific guide
-reveal help://cool-tricks        # Power user workflows
+reveal help://markdown           # Markdown analysis guide
+reveal help://tricks             # Power user workflows
 reveal help://anti-patterns      # What NOT to do
 ```
 
@@ -345,7 +345,7 @@ reveal help://anti-patterns      # What NOT to do
 2. **Progressive disclosure** - Directory → File → Element
 3. **Token efficiency** - 10-150x fewer tokens than cat/grep
 4. **Line numbers** - All output is `file:line` format (vim compatible)
-5. **Zero config** - Works out of the box on 42+ languages
+5. **Zero config** - Works out of the box on 80+ languages
 
 ---
 

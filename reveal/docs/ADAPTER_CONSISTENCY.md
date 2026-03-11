@@ -159,10 +159,12 @@ Display flags filter **the view** of the same resource:
 
 ```bash
 --only-failures      # Hide successful checks
---limit=10           # Show first 10 items
---offset=20          # Skip first 20 items
---select=fields      # Show specific fields only
+--fields FIELDS      # Show specific output fields only (e.g. --fields domain,expiry)
+--max-items N        # Stop after N results
+--head N / --tail N  # Semantic slicing
 ```
+
+> **Note**: `limit` and `offset` are URI query parameters (`ast://src?limit=10&offset=20`), not CLI flags. The CLI equivalent for `limit` is `--max-items N`.
 
 ---
 
@@ -253,7 +255,7 @@ cat uris.txt | reveal --stdin --check
 #   mysql://localhost/db
 ```
 
-**Coming Soon**: `--batch` flag for explicit batch mode with aggregation.
+Use `--batch` for explicit batch mode with aggregation across multiple URIs.
 
 ---
 
@@ -263,16 +265,18 @@ Select specific fields to reduce output size:
 
 ```bash
 # SSL - only show domain and expiry
-reveal ssl://example.com --select=domain,expiry,days_until_expiry
+reveal ssl://example.com --fields domain,expiry,days_until_expiry
 
 # Stats - only show path and quality score
-reveal stats://src --select=path,quality_score,hotspot_score
+reveal stats://src --fields path,quality_score,hotspot_score
 
 # Git - only show commit info
-reveal git://repo/file.py --select=hash,author,date,message
+reveal git://repo/file.py --fields hash,author,date,message
 ```
 
 **Benefit**: 5-10x token reduction for AI agents and scripting.
+
+> **Note**: `--fields` selects output columns. `--select` is different — it selects quality rule *categories* (e.g. `--select B,S` runs only Bug and Security rules).
 
 ---
 
@@ -334,11 +338,11 @@ reveal ssl://example.com --format=json | jq '.expiry'
 reveal stats://src --format=json | jq '.files[] | select(.quality_score < 7)'
 ```
 
-### 4. Use --select for Efficiency
+### 4. Use --fields for Efficiency
 ```bash
 # Reduce tokens when you know what you need
-reveal ssl://example.com --select=domain,expiry
-reveal stats://src --select=path,quality_score
+reveal ssl://example.com --fields domain,expiry
+reveal stats://src --fields path,quality_score
 ```
 
 ### 5. Batch Process with stdin
@@ -361,7 +365,7 @@ Some adapters have unique flags:
 
 **mysql://**:
 ```bash
---select=connections,replication  # Specific health checks
+--fields connections,replication  # Specific health checks
 ```
 
 **stats://**:

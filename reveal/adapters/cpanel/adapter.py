@@ -516,23 +516,23 @@ class CpanelAdapter(ResourceAdapter):
             ],
             'examples': [
                 {
-                    'uri': 'reveal cpanel://USERNAME',
+                    'uri': 'cpanel://USERNAME',
                     'description': 'Overview: domain count, SSL summary, nginx config path',
                 },
                 {
-                    'uri': 'reveal cpanel://USERNAME/domains',
+                    'uri': 'cpanel://USERNAME/domains',
                     'description': 'All domains with docroots and type (addon/subdomain/main)',
                 },
                 {
-                    'uri': 'reveal cpanel://USERNAME/ssl',
+                    'uri': 'cpanel://USERNAME/ssl',
                     'description': 'Disk cert health per SSL domain',
                 },
                 {
-                    'uri': 'reveal cpanel://USERNAME/acl-check',
+                    'uri': 'cpanel://USERNAME/acl-check',
                     'description': 'nobody ACL check on every domain docroot (required for ACME renewal)',
                 },
                 {
-                    'uri': 'reveal cpanel://USERNAME/ssl --format=json',
+                    'uri': 'cpanel://USERNAME/ssl --format=json',
                     'description': 'JSON output for scripting',
                 },
             ],

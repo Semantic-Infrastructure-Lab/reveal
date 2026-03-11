@@ -27,7 +27,7 @@ This is the complete offline reference for reveal (~12,000 tokens). Both `--agen
 AI agents can now query reveal's capabilities via machine-readable schemas:
 
 ```bash
-# Discover adapter schemas (all 20 adapters support this)
+# Discover adapter schemas (20 of 21 adapters support this — nginx:// URI adapter excluded)
 reveal help://schemas/<adapter> --format=json
 
 # File & Analysis Adapters
@@ -314,20 +314,20 @@ reveal file.py --check --select B,S    # Bugs & security only
 reveal file.py --check --select C,E    # Complexity & errors only
 
 # Specific file types
-reveal check nginx.conf                # Nginx validation (N001-N006)
+reveal check nginx.conf                # Nginx validation (N001-N007)
 reveal check Dockerfile                # Docker best practices (S701)
 ```
 
 **Available rule categories:**
 - **B** (bugs) - Common code bugs and anti-patterns (B001-B006)
 - **C** (complexity) - Code complexity metrics (C901, C902, C905)
-- **D** (duplicates) - Duplicate code detection (D001, D002)
+- **D** (duplicates) - Duplicate code detection (D001; D002 exists but is disabled by default — enable with `--select D002`)
 - **E** (errors) - Line length and formatting (E501)
 - **F** (frontmatter) - Markdown front matter validation (F001-F005)
 - **I** (imports) - Import analysis and dependencies (I001-I005)
 - **L** (links) - Link validation and documentation (L001-L005)
-- **M** (maintainability) - Code maintainability checks (M101-M104)
-- **N** (nginx) - Nginx configuration validation (N001-N006)
+- **M** (maintainability) - Code maintainability checks (M101-M105)
+- **N** (nginx) - Nginx configuration validation (N001-N007)
 - **R** (refactoring) - Refactoring opportunities (R913)
 - **S** (security) - Security vulnerabilities (S701)
 - **T** (types) - Type annotation issues (T004)
@@ -348,13 +348,13 @@ Quality Issues (3):
     def headers(self): ...  # ❌ Too complex for a property
     Suggestion: Consider converting to a regular method: def get_headers(self)
 
-  C002: High cyclomatic complexity (line 67)
+  C901: High cyclomatic complexity (line 67)
     Function: authenticate_user (complexity: 12)
     Suggestion: Consider breaking into smaller functions
 
-  S001: Potential SQL injection (line 89)
-    query = f"SELECT * FROM users WHERE id={user_id}"
-    Suggestion: Use parameterized queries
+  B006: Broad exception handler with silent pass (line 89)
+    except Exception: pass
+    Suggestion: Log or re-raise — silent pass hides bugs
 ```
 
 **Pipeline usage:**
@@ -675,13 +675,14 @@ done
 **Pattern:**
 ```bash
 # Nginx configuration
-reveal nginx.conf --check              # N001-N006 rules
+reveal nginx.conf --check              # N001-N007 rules
 # - N001: Duplicate backends (upstreams with same server:port)
 # - N002: Missing SSL certificates
 # - N003: Missing proxy headers
 # - N004: ACME challenge path inconsistency (cert renewal failures)
 # - N005: Timeout/buffer values outside safe operational ranges
 # - N006: send_timeout too short relative to client_max_body_size (HIGH)
+# - N007: ssl_stapling on but no OCSP URL in cert (stapling silently ineffective)
 
 # Tip: large generated configs (e.g. cPanel) collapse repeated rules by default
 reveal ea-nginx.conf --check          # 2,685 N003s shown as one summary line
@@ -1479,9 +1480,9 @@ reveal src/processor.py process_request
 reveal src/processor.py --check
 
 # Output:
-# C002: High complexity (complexity: 15)
-# B001: Except block catches all exceptions
-# E001: Unreachable code detected
+# C901: High cyclomatic complexity (complexity: 15)
+# B001: Bare except clause catches all exceptions
+# C902: Function too long (78 lines)
 ```
 
 **Result:** Complex function has multiple issues, good refactoring candidate.
@@ -1546,8 +1547,8 @@ reveal src/auth.py --check
 
 # Output:
 # B003: @property too complex (>15 lines)
-# S001: Potential SQL injection
-# C002: High complexity
+# B006: Broad exception handler with silent pass
+# C901: High cyclomatic complexity
 
 # 5. Extract problematic function
 reveal src/auth.py authenticate_user
@@ -1877,17 +1878,6 @@ class MyClass:
 
 ### Security Issues (S)
 
-**S001: Potential SQL injection**
-```python
-# ❌ Bad
-query = f"SELECT * FROM users WHERE id={user_id}"
-db.execute(query)
-
-# ✅ Good
-query = "SELECT * FROM users WHERE id=?"
-db.execute(query, (user_id,))
-```
-
 **S701: Docker security best practices**
 ```dockerfile
 # ❌ Bad - Running as root
@@ -1907,30 +1897,16 @@ CMD ["python", "app.py"]
 
 ### Complexity (C)
 
-**C001: Too many arguments**
-```python
-# ❌ Bad - 8 arguments
-def process(a, b, c, d, e, f, g, h):
-    pass
-
-# ✅ Good - Use dataclass or dict
-from dataclasses import dataclass
-
-@dataclass
-class ProcessConfig:
-    a: str
-    b: int
-    # ...
-
-def process(config: ProcessConfig):
-    pass
-```
-
-**C002: High cyclomatic complexity**
+**C901: High cyclomatic complexity**
 - Complexity > 10 suggests function is too complex
 - Consider breaking into smaller functions
+- Use `reveal --explain C901` for thresholds
 
-**C003: Deep nesting**
+**C902: Function too long**
+- Function exceeds maximum line count
+- Consider breaking into smaller, focused functions
+
+**C905: Nesting depth too high**
 ```python
 # ❌ Bad - Depth 5
 def process():
@@ -1950,6 +1926,8 @@ def process():
     # ...
 ```
 
+> **Note**: Too-many-arguments is rule **R913**, not a C rule.
+
 ---
 
 ### Error Handling (E)
@@ -1968,8 +1946,8 @@ def process():
 
 **D002: Similar code (structural similarity)**
 - Similar but not identical code
-- Experimental - high false positive rate currently
-- Being improved in future versions
+- **Disabled by default** (high false positive rate) — enable explicitly with `--select D002`
+- Use D001 for reliable duplicate detection
 
 ---
 
@@ -2065,6 +2043,15 @@ http {
 *Fires when any of `send_timeout`, `proxy_read_timeout`, `proxy_send_timeout` is < 60s
 and `client_max_body_size` exceeds 10m.*
 
+**N007: ssl_stapling enabled but no OCSP responder URL** *(INFO)*
+```nginx
+# ❌ Ineffective - self-signed/internal CA cert has no OCSP URL
+ssl_stapling on;
+ssl_certificate /etc/nginx/ssl/internal.crt;  # no AIA OCSP entry
+# nginx silently skips stapling — no error logged
+```
+*Typically affects self-signed or internal CA certs. Let's Encrypt certs are unaffected.*
+
 ---
 
 ### Validation (V)
@@ -2077,25 +2064,19 @@ and `client_max_body_size` exceeds 10m.*
 
 ### Refactoring Opportunities (R)
 
-**R001: Long function (>50 lines)**
-- Consider breaking into smaller functions
-- Each function should do one thing
-
-**R002: Many local variables (>10)**
-- Suggests function is doing too much
-- Consider extracting helper functions
-
-**R003: God object (>20 methods)**
-- Class has too many responsibilities
-- Consider breaking into multiple classes
+**R913: Too many arguments**
+- Function has too many parameters — consider a config object or dataclass
+- Use `reveal --explain R913` for the threshold
 
 ---
 
 ### URL Issues (U)
 
-**U001: Broken URL (HTTP 404)**
-**U002: Invalid URL format**
-**U003: Unreachable URL (connection timeout)**
+**U501: GitHub URL uses insecure http:// protocol**
+- Use `https://` for all GitHub URLs
+
+**U502: URL doesn't match canonical project URL**
+- URL references a non-canonical host or path for this project
 
 ---
 
@@ -2371,7 +2352,8 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
-- **v0.59.0** - `--help` argument groups (12 named sections, no more flag wall); all 20 adapters support `help://schemas/`; CLI flag taxonomy documented
+- **v0.60.0** - `nginx://` URI adapter (21st adapter); nginx vhost inspection by domain name; nginx bug fixes (glob + nesting); N007 rule
+- **v0.59.0** - `--help` argument groups (12 named sections, no more flag wall); 20 adapters support `help://schemas/`; CLI flag taxonomy documented
 - **v0.58.0** - `autossl://` adapter (20th URI adapter); cPanel AutoSSL run log inspection
 - **v0.57.0** - `reveal dev/review/health/pack` subcommands; error-with-hint guards; claude:// workflow filtering, /messages route, truncation fix
 - **v0.56.0** - `reveal check` subcommand; parser foundation with shared global opts

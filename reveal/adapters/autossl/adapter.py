@@ -177,19 +177,19 @@ class AutosslAdapter(ResourceAdapter):
             ],
             'examples': [
                 {
-                    'uri': 'reveal autossl://',
+                    'uri': 'autossl://',
                     'description': 'List available run timestamps (newest first)',
                 },
                 {
-                    'uri': 'reveal autossl://latest',
+                    'uri': 'autossl://latest',
                     'description': 'Parse most recent AutoSSL run — per-user/domain summary',
                 },
                 {
-                    'uri': 'reveal autossl://2026-03-03T23:26:01Z',
+                    'uri': 'autossl://2026-03-03T23:26:01Z',
                     'description': 'Parse a specific AutoSSL run by timestamp',
                 },
                 {
-                    'uri': "reveal autossl://latest --format=json | jq '[.users[].domains[] | select(.tls_status==\"defective\")]'",
+                    'uri': "autossl://latest --format=json | jq '[.users[].domains[] | select(.tls_status==\"defective\")]'",
                     'description': 'Extract all defective domains as JSON',
                 },
             ],
