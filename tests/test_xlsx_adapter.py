@@ -469,5 +469,212 @@ class TestXlsxAdapterEdgeCases:
         assert result['type'] == 'xlsx_sheet'
 
 
+class TestXlsxAdapterCrossSheetSearch:
+    """Tests for cross-sheet search functionality (BACK-003)."""
+
+    @pytest.fixture
+    def multi_sheet_xlsx(self, tmp_path):
+        """Create a multi-sheet xlsx file for testing."""
+        import openpyxl
+        wb = openpyxl.Workbook()
+
+        # Sheet 1: Customers
+        ws1 = wb.active
+        ws1.title = "Customers"
+        ws1.append(["ID", "Name", "Email"])
+        ws1.append([1, "Alice Smith", "alice@example.com"])
+        ws1.append([2, "Bob Jones", "bob@example.com"])
+        ws1.append([3, "Charlie Brown", "charlie@example.com"])
+
+        # Sheet 2: Orders
+        ws2 = wb.create_sheet("Orders")
+        ws2.append(["OrderID", "CustomerID", "Product", "Amount"])
+        ws2.append([101, 1, "Widget", 29.99])
+        ws2.append([102, 2, "Gadget", 49.99])
+        ws2.append([103, 1, "Widget Pro", 79.99])
+
+        # Sheet 3: Products
+        ws3 = wb.create_sheet("Products")
+        ws3.append(["SKU", "Name", "Price"])
+        ws3.append(["W001", "Widget", 29.99])
+        ws3.append(["G001", "Gadget", 49.99])
+        ws3.append(["WP001", "Widget Pro", 79.99])
+
+        path = tmp_path / "test_multi.xlsx"
+        wb.save(path)
+        return path
+
+    def test_search_returns_search_type(self, multi_sheet_xlsx):
+        """search=X returns xlsx_search result type."""
+        uri = f"xlsx://{multi_sheet_xlsx}?search=Widget"
+        adapter = XlsxAdapter(uri)
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_search'
+
+    def test_search_finds_matches_across_sheets(self, multi_sheet_xlsx):
+        """search=X scans all sheets and finds matches."""
+        uri = f"xlsx://{multi_sheet_xlsx}?search=Widget"
+        adapter = XlsxAdapter(uri)
+        result = adapter.get_structure()
+
+        assert result['total_matches'] > 0
+        # Widget appears in Orders and Products sheets
+        sheet_names = [sr['sheet_name'] for sr in result['sheet_results']]
+        assert 'Orders' in sheet_names
+        assert 'Products' in sheet_names
+
+    def test_search_case_insensitive(self, multi_sheet_xlsx):
+        """search is case-insensitive."""
+        uri_lower = f"xlsx://{multi_sheet_xlsx}?search=widget"
+        uri_upper = f"xlsx://{multi_sheet_xlsx}?search=WIDGET"
+        adapter_lower = XlsxAdapter(uri_lower)
+        adapter_upper = XlsxAdapter(uri_upper)
+        result_lower = adapter_lower.get_structure()
+        result_upper = adapter_upper.get_structure()
+        assert result_lower['total_matches'] == result_upper['total_matches']
+
+    def test_search_no_matches(self, multi_sheet_xlsx):
+        """search returns zero matches for absent term."""
+        uri = f"xlsx://{multi_sheet_xlsx}?search=ZZZNOMATCH"
+        adapter = XlsxAdapter(uri)
+        result = adapter.get_structure()
+        assert result['total_matches'] == 0
+        assert result['sheets_with_matches'] == 0
+        assert result['sheet_results'] == []
+
+    def test_search_groups_by_sheet(self, multi_sheet_xlsx):
+        """search results are grouped by sheet."""
+        uri = f"xlsx://{multi_sheet_xlsx}?search=Widget"
+        adapter = XlsxAdapter(uri)
+        result = adapter.get_structure()
+        for sr in result['sheet_results']:
+            assert 'sheet_name' in sr
+            assert 'matches' in sr
+            assert isinstance(sr['matches'], list)
+
+    def test_search_includes_row_number(self, multi_sheet_xlsx):
+        """Each match includes the 1-based row number."""
+        uri = f"xlsx://{multi_sheet_xlsx}?search=Alice"
+        adapter = XlsxAdapter(uri)
+        result = adapter.get_structure()
+        assert result['total_matches'] >= 1
+        match = result['sheet_results'][0]['matches'][0]
+        assert 'row_num' in match
+        assert isinstance(match['row_num'], int)
+        assert match['row_num'] >= 1
+
+    def test_search_includes_cells(self, multi_sheet_xlsx):
+        """Each match includes the full row cells."""
+        uri = f"xlsx://{multi_sheet_xlsx}?search=Alice"
+        adapter = XlsxAdapter(uri)
+        result = adapter.get_structure()
+        match = result['sheet_results'][0]['matches'][0]
+        assert 'cells' in match
+        assert isinstance(match['cells'], list)
+        assert any('Alice' in str(c) for c in match['cells'])
+
+    def test_search_limit_respected(self, multi_sheet_xlsx):
+        """?limit=N caps total search results."""
+        uri = f"xlsx://{multi_sheet_xlsx}?search=Widget&limit=1"
+        adapter = XlsxAdapter(uri)
+        result = adapter.get_structure()
+        assert result['total_matches'] == 1
+
+    def test_search_includes_pattern_in_result(self, multi_sheet_xlsx):
+        """Result always echoes the search pattern."""
+        uri = f"xlsx://{multi_sheet_xlsx}?search=Gadget"
+        adapter = XlsxAdapter(uri)
+        result = adapter.get_structure()
+        assert result['pattern'] == 'Gadget'
+
+
+class TestXlsxSearchRenderer:
+    """Tests for the search result renderer (BACK-003)."""
+
+    def _capture(self, result, format='text'):
+        old = sys.stdout
+        sys.stdout = buf = StringIO()
+        try:
+            XlsxRenderer.render_structure(result, format=format)
+        finally:
+            sys.stdout = old
+        return buf.getvalue()
+
+    def _make_result(self, pattern='test', total=2, sheet_results=None):
+        if sheet_results is None:
+            sheet_results = [
+                {
+                    'sheet_name': 'Sheet1',
+                    'matches': [
+                        {'row_num': 3, 'cells': ['foo', 'test value', 'bar']},
+                        {'row_num': 7, 'cells': ['alpha', 'test again', 'beta']},
+                    ],
+                }
+            ]
+        return {
+            'type': 'xlsx_search',
+            'pattern': pattern,
+            'total_matches': total,
+            'sheets_with_matches': len(sheet_results),
+            'sheet_results': sheet_results,
+        }
+
+    def test_render_shows_match_count(self):
+        output = self._capture(self._make_result())
+        assert '2 matches' in output
+        assert '"test"' in output
+
+    def test_render_shows_sheet_name(self):
+        output = self._capture(self._make_result())
+        assert 'Sheet1' in output
+
+    def test_render_shows_row_numbers(self):
+        output = self._capture(self._make_result())
+        assert 'row' in output
+        assert '3' in output
+        assert '7' in output
+
+    def test_render_shows_cell_values(self):
+        output = self._capture(self._make_result())
+        assert 'test value' in output
+
+    def test_render_no_matches(self):
+        result = self._make_result(total=0, sheet_results=[])
+        result['total_matches'] = 0
+        output = self._capture(result)
+        assert 'No matches' in output
+
+    def test_render_json_format(self):
+        import json
+        result = self._make_result()
+        output = self._capture(result, format='json')
+        parsed = json.loads(output)
+        assert parsed['type'] == 'xlsx_search'
+        assert parsed['pattern'] == 'test'
+
+
+@pytest.mark.skipif(not SAMPLE_XLSX.exists(), reason="Test file not available")
+class TestXlsxCrossSheetSearchIntegration:
+    """Integration tests against the real QA Items.xlsx file."""
+
+    def test_search_returns_xlsx_search_type(self):
+        uri = f"xlsx://{SAMPLE_XLSX}?search=2018"
+        adapter = XlsxAdapter(uri)
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_search'
+
+    def test_search_spans_multiple_sheets(self):
+        uri = f"xlsx://{SAMPLE_XLSX}?search=2018"
+        adapter = XlsxAdapter(uri)
+        result = adapter.get_structure()
+        assert result['sheets_with_matches'] > 1
+
+    def test_search_no_match(self):
+        uri = f"xlsx://{SAMPLE_XLSX}?search=ZZZNEVEREXISTSZZZ"
+        adapter = XlsxAdapter(uri)
+        result = adapter.get_structure()
+        assert result['total_matches'] == 0
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

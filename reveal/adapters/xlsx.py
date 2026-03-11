@@ -29,9 +29,12 @@ class XlsxRenderer:
             print(safe_json_dumps(result))
             return
 
-        # Check if this is a sheet data result or workbook overview
-        if result.get('type') == 'xlsx_sheet':
+        # Dispatch by result type
+        result_type = result.get('type')
+        if result_type == 'xlsx_sheet':
             XlsxRenderer._render_sheet_data(result, preferred_format)
+        elif result_type == 'xlsx_search':
+            XlsxRenderer._render_search_results(result, preferred_format)
         else:
             XlsxRenderer._render_workbook(result, preferred_format)
 
@@ -97,6 +100,38 @@ class XlsxRenderer:
         for i, row in enumerate(rows_data, 1):
             row_str = ' | '.join(str(cell) if cell is not None else '' for cell in row)
             print(f"{i:6}  {row_str}")
+
+    @staticmethod
+    def _render_search_results(result: dict, format: str) -> None:
+        """Render cross-sheet search results."""
+        if format == 'json':
+            from ..utils import safe_json_dumps
+            print(safe_json_dumps(result))
+            return
+
+        pattern = result.get('pattern', '')
+        total = result.get('total_matches', 0)
+        sheets_count = result.get('sheets_with_matches', 0)
+        sheet_results = result.get('sheet_results', [])
+
+        if total == 0:
+            print(f'No matches for "{pattern}"')
+            return
+
+        noun = 'match' if total == 1 else 'matches'
+        sheet_noun = 'sheet' if sheets_count == 1 else 'sheets'
+        print(f'{total} {noun} for "{pattern}" across {sheets_count} {sheet_noun}:\n')
+
+        for sr in sheet_results:
+            sheet_name = sr['sheet_name']
+            matches = sr['matches']
+            print(f'  [{sheet_name}] — {len(matches)} match{"es" if len(matches) != 1 else ""}')
+            for m in matches:
+                row_num = m['row_num']
+                cells = m['cells']
+                row_str = ' | '.join(str(c) if c is not None else '' for c in cells)
+                print(f'    row {row_num:>4}:  {row_str}')
+            print()
 
     @staticmethod
     def render_element(result: dict, format: str = 'text') -> None:
@@ -651,16 +686,50 @@ class XlsxAdapter(ResourceAdapter):
         return index - 1
 
     def _search_sheets(self, pattern: str) -> Dict[str, Any]:
-        """Search for pattern across all sheets.
+        """Search for pattern across all sheets (case-insensitive).
 
         Args:
             pattern: Search text
 
         Returns:
-            Dict with search results
+            Dict with search results grouped by sheet
         """
-        # TODO: Implement cross-sheet search
-        raise NotImplementedError("Search functionality coming soon")
+        if self.analyzer is None:
+            raise ValueError("Analyzer not initialized")
+
+        matches = self.analyzer.search_all_sheets(pattern)
+
+        # Apply limit if specified
+        limit_param = self.query_params.get('limit')
+        if limit_param:
+            try:
+                matches = matches[:int(limit_param)]
+            except ValueError:
+                pass
+
+        # Group by sheet
+        sheets_seen: Dict[str, List[Dict[str, Any]]] = {}
+        for m in matches:
+            sname = m['sheet_name']
+            sheets_seen.setdefault(sname, []).append(m)
+
+        sheet_results = [
+            {'sheet_name': sname, 'matches': rows}
+            for sname, rows in sheets_seen.items()
+        ]
+
+        result_data = {
+            'pattern': pattern,
+            'total_matches': len(matches),
+            'sheets_with_matches': len(sheet_results),
+            'sheet_results': sheet_results,
+        }
+
+        return ResultBuilder.create(
+            result_type='xlsx_search',
+            source=self.file_path or Path('unknown'),
+            data=result_data
+        )
 
     def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Get specific sheet by name.

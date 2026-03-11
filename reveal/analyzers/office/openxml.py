@@ -391,15 +391,25 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
         return preview
 
     def _get_cell_value(self, cell: ET.Element) -> str:
-        """Get cell value, handling shared strings."""
+        """Get cell value, handling shared strings, inline strings, and numbers."""
         xl = self.NAMESPACES['xl']
         cell_type = cell.get('t', '')
-        value_elem = cell.find(f'{{{xl}}}v')
 
+        # Inline string (t="inlineStr") — used by openpyxl and some other generators.
+        # Value lives in <is><t> rather than <v>.
+        if cell_type == 'inlineStr':
+            is_elem = cell.find(f'{{{xl}}}is')
+            if is_elem is not None:
+                t_elem = is_elem.find(f'{{{xl}}}t')
+                if t_elem is not None and t_elem.text:
+                    return t_elem.text
+            return ''
+
+        value_elem = cell.find(f'{{{xl}}}v')
         if value_elem is None or value_elem.text is None:
             return ''
 
-        if cell_type == 's':  # Shared string
+        if cell_type == 's':  # Shared string index
             try:
                 idx = int(value_elem.text)
                 if 0 <= idx < len(self.shared_strings):
@@ -407,6 +417,48 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             except ValueError:
                 pass
         return value_elem.text
+
+    def search_all_sheets(self, pattern: str) -> List[Dict[str, Any]]:
+        """Search for a pattern across all sheets, returning matching rows.
+
+        Reads all rows in every sheet (no preview cap). Case-insensitive.
+
+        Args:
+            pattern: Substring to search for (case-insensitive)
+
+        Returns:
+            List of dicts: {sheet_name, row_num, cells: List[str]}
+            in sheet-then-row order.
+        """
+        results: List[Dict[str, Any]] = []
+        if self.content_tree is None:
+            return results
+
+        xl = self.NAMESPACES['xl']
+        sheets_elem = self.content_tree.find(f'{{{xl}}}sheets')
+        if sheets_elem is None:
+            return results
+
+        pattern_lower = pattern.lower()
+
+        for idx, sheet_elem in enumerate(sheets_elem.findall(f'{{{xl}}}sheet')):
+            sheet_name = sheet_elem.get('name', f'Sheet{idx + 1}')
+            sheet_path = f'xl/worksheets/sheet{idx + 1}.xml'
+            sheet_tree = self._read_xml(sheet_path)
+            if sheet_tree is None:
+                continue
+
+            for row_elem in sheet_tree.iter(f'{{{xl}}}row'):
+                row_num = int(row_elem.get('r', 0))
+                cells = [self._get_cell_value(c) for c in row_elem.iter(f'{{{xl}}}c')]
+                if any(pattern_lower in cell.lower() for cell in cells):
+                    results.append({
+                        'sheet_name': sheet_name,
+                        'row_num': row_num,
+                        'cells': cells,
+                    })
+
+        return results
 
 
 @register('.pptx', name='PowerPoint Presentation', icon='📽️')
