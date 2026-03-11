@@ -156,6 +156,35 @@ class AutosslAdapter(ResourceAdapter):
                     },
                 },
             ],
+            'example_queries': [
+                {
+                    'query': 'reveal autossl://',
+                    'description': 'List all available AutoSSL run timestamps on this server',
+                    'output_type': 'autossl_runs',
+                },
+                {
+                    'query': 'reveal autossl://2024-01-15_03-00-00',
+                    'description': 'Inspect a specific AutoSSL run — per-user/domain TLS outcomes',
+                    'output_type': 'autossl_run',
+                },
+                {
+                    'query': "reveal autossl:// --format=json | jq '.runs[-1]'",
+                    'description': 'Get timestamp of the most recent AutoSSL run',
+                    'output_type': 'autossl_runs',
+                },
+                {
+                    'query': "reveal autossl://$(reveal autossl:// --format=json | jq -r '.runs[-1]')",
+                    'description': 'Inspect the most recent AutoSSL run directly',
+                    'output_type': 'autossl_run',
+                },
+            ],
+            'notes': [
+                'Reads /var/cpanel/logs/autossl/ directly — no WHM API or credentials required',
+                'Timestamps are in YYYY-MM-DD_HH-MM-SS format matching log filenames',
+                'tls_status values: ok (cert valid), incomplete (pending), defective (failed)',
+                'defect_codes explain why AutoSSL failed: DCV_ERROR, RATE_LIMIT, etc.',
+                'Only available on cPanel servers — adapter errors cleanly on non-cPanel systems',
+            ],
         }
 
     @staticmethod

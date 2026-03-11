@@ -495,6 +495,44 @@ class CpanelAdapter(ResourceAdapter):
                     },
                 },
             ],
+            'example_queries': [
+                {
+                    'query': 'reveal cpanel://johndoe',
+                    'description': 'Overview: domain count, SSL summary, nginx config path',
+                    'output_type': 'cpanel_user',
+                },
+                {
+                    'query': 'reveal cpanel://johndoe/domains',
+                    'description': 'List all domains with docroots and type (main/addon/subdomain)',
+                    'output_type': 'cpanel_domains',
+                },
+                {
+                    'query': 'reveal cpanel://johndoe/ssl',
+                    'description': 'Disk cert health per domain — sorted by severity',
+                    'output_type': 'cpanel_ssl',
+                },
+                {
+                    'query': 'reveal cpanel://johndoe/ssl --dns-verified',
+                    'description': 'SSL cert health excluding NXDOMAIN (dead) domains',
+                    'output_type': 'cpanel_ssl',
+                },
+                {
+                    'query': 'reveal cpanel://johndoe/acl-check',
+                    'description': 'nobody ACL status on every docroot — needed for ACME cert renewal',
+                    'output_type': 'cpanel_acl',
+                },
+                {
+                    'query': "reveal cpanel://johndoe --format=json | jq '.ssl_summary'",
+                    'description': 'Machine-readable SSL summary counts',
+                    'output_type': 'cpanel_user',
+                },
+            ],
+            'notes': [
+                'Reads /var/cpanel/userdata/<username>/ directly — no WHM API or credentials required',
+                'SSL cert data comes from /var/cpanel/ssl/apache_tls/ (disk-based, not live connection)',
+                'acl-check validates nobody can read each docroot — required for Let\'s Encrypt / AutoSSL',
+                '--dns-verified excludes NXDOMAIN domains to avoid false positives on deleted subdomains',
+            ],
         }
 
     @staticmethod
