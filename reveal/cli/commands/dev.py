@@ -1,7 +1,6 @@
 """reveal dev — developer tooling subcommand."""
 
 import argparse
-import sys
 from argparse import Namespace
 from pathlib import Path
 

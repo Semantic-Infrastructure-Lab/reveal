@@ -21,7 +21,6 @@ Fix: either remove ssl_stapling or obtain a certificate with an OCSP URL.
 
 import re
 import ssl
-import socket
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity

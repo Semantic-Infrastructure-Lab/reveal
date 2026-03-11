@@ -2,7 +2,6 @@
 
 import argparse
 import json
-import subprocess
 import sys
 from argparse import Namespace
 from pathlib import Path
