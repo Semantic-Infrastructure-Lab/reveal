@@ -18,6 +18,12 @@ from reveal.adapters import (
     env, ast, help, python, json, git, mysql, sqlite,
     imports, diff, reveal, stats, markdown, claude
 )
+from reveal.adapters.autossl.adapter import AutosslAdapter  # noqa: F401
+from reveal.adapters.cpanel.adapter import CpanelAdapter  # noqa: F401
+from reveal.adapters.domain.adapter import DomainAdapter  # noqa: F401
+from reveal.adapters.nginx.adapter import NginxUriAdapter  # noqa: F401
+from reveal.adapters.ssl.adapter import SSLAdapter  # noqa: F401
+from reveal.adapters.xlsx import XlsxAdapter  # noqa: F401
 
 
 class TestAdapterContracts(unittest.TestCase):
@@ -27,10 +33,11 @@ class TestAdapterContracts(unittest.TestCase):
         """Set up test fixtures."""
         # Get all registered adapters
         self.all_schemes = list_supported_schemes()
-        # Expected adapters (14 total)
+        # Expected adapters (21 total as of v0.60.x)
         self.expected_schemes = {
             'env', 'ast', 'help', 'python', 'json', 'git', 'mysql', 'sqlite',
-            'imports', 'diff', 'reveal', 'stats', 'markdown', 'claude'
+            'imports', 'diff', 'reveal', 'stats', 'markdown', 'claude',
+            'autossl', 'cpanel', 'domain', 'nginx', 'ssl', 'xlsx',
         }
 
     def test_all_adapters_are_registered(self):
@@ -216,6 +223,36 @@ class TestAdapterContracts(unittest.TestCase):
                     self.fail(
                         f"{scheme} adapter raised unexpected exception: {type(e).__name__}: {e}"
                     )
+
+    def test_all_adapters_have_get_schema(self):
+        """Verify all 21 adapters implement get_schema() for AI agent discoverability.
+
+        get_schema() provides machine-readable schema for each adapter, enabling
+        AI agents to understand what queries are possible.
+
+        Exception: help:// is a meta-adapter that provides schemas for all other
+        adapters but can't self-describe (circular). It intentionally returns None
+        from the base default.
+        """
+        # help:// is a meta-adapter that provides schemas for others — exempt from self-schema
+        schema_exempt = {'help'}
+
+        for scheme in self.expected_schemes - schema_exempt:
+            with self.subTest(scheme=scheme):
+                adapter_class = get_adapter_class(scheme)
+                self.assertIsNotNone(
+                    adapter_class,
+                    f"{scheme} adapter not found in registry"
+                )
+                self.assertTrue(
+                    hasattr(adapter_class, 'get_schema'),
+                    f"{scheme} adapter missing get_schema() method"
+                )
+                # Verify it's callable and returns a dict with required keys
+                schema = adapter_class.get_schema()
+                self.assertIsInstance(schema, dict, f"{scheme}.get_schema() must return a dict")
+                self.assertIn('adapter', schema, f"{scheme} schema missing 'adapter' key")
+                self.assertIn('output_types', schema, f"{scheme} schema missing 'output_types' key")
 
     def test_adapters_inherit_from_resource_adapter(self):
         """Verify all adapters inherit from ResourceAdapter (optional check)."""
