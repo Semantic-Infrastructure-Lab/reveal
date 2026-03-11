@@ -240,6 +240,16 @@ class HelpAdapter(ResourceAdapter):
         """
         topic = element_name  # Alias for readability
         # Check for schemas route: help://schemas/ssl
+        # Bare 'schemas/' lists available adapters
+        if topic == 'schemas/':
+            adapters = sorted(_ADAPTER_REGISTRY.keys())
+            return {
+                'type': 'adapter_schema',
+                'adapter': '',
+                'error': 'No adapter specified',
+                'message': f"Specify an adapter. Available: {', '.join(adapters)}",
+                'available_adapters': adapters,
+            }
         if topic.startswith('schemas/'):
             adapter_name = topic.split('/', 1)[1]
             return self._get_adapter_schema(adapter_name)
