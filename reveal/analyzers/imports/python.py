@@ -187,13 +187,16 @@ class PythonExtractor(LanguageExtractor):
         """
         is_relative = False
         module_name = ''
+        level = 0
 
         for child in node.children:
             if child.type == 'relative_import':
                 # Relative import: from . import x, from ..parent import y
                 is_relative = True
                 for subchild in child.children:
-                    if subchild.type == 'dotted_name':
+                    if subchild.type == '.':
+                        level += 1
+                    elif subchild.type == 'dotted_name':
                         module_name = analyzer._get_node_text(subchild)
             elif (child.type == 'dotted_name' and child.prev_sibling and
                   analyzer._get_node_text(child.prev_sibling) == 'from'):
@@ -201,7 +204,7 @@ class PythonExtractor(LanguageExtractor):
                 module_name = analyzer._get_node_text(child)
                 break
 
-        return module_name, is_relative
+        return module_name, is_relative, level
 
     def _parse_imported_names(self, node, analyzer) -> tuple:
         """Parse imported names and determine import type.
@@ -248,7 +251,7 @@ class PythonExtractor(LanguageExtractor):
         source_line = source_lines[node.start_point[0]].rstrip() if node.start_point[0] < len(source_lines) else ""
 
         # Extract module name and imported names
-        module_name, is_relative = self._extract_from_module_name(node, analyzer)
+        module_name, is_relative, level = self._extract_from_module_name(node, analyzer)
         imported_names, import_type = self._parse_imported_names(node, analyzer)
 
         return [ImportStatement(
@@ -260,7 +263,8 @@ class PythonExtractor(LanguageExtractor):
             import_type=import_type,
             alias=None,  # from imports don't have module-level aliases
             is_type_checking=is_type_checking,
-            source_line=source_line
+            source_line=source_line,
+            level=level,
         )]
 
     def extract_symbols(self, file_path: Path) -> Set[str]:

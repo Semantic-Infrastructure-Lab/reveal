@@ -51,8 +51,9 @@ def get_file_at_ref(
         else:
             raise ValueError(
                 f"Path is not a file: {subpath}\n"
-                f"  git:// requires a file path or no path.\n"
-                f"  For repo overview use: reveal git://"
+                f"  git:// expects a file path, not a directory.\n"
+                f"  For repo overview: reveal git://\n"
+                f"  For a specific repo: reveal 'git:///path/to/repo'"
             )
 
     except (KeyError, pygit2.GitError) as e:

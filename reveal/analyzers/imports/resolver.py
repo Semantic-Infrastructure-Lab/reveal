@@ -42,14 +42,17 @@ def _resolve_relative(import_stmt: ImportStatement, base_path: Path) -> Optional
         from .. import models     -> ../models.py
         from ..models import User -> ../models.py or ../models/__init__.py
     """
-    # Count levels (dots): '.' = 1, '..' = 2, etc.
-    # In ImportFrom node, level=1 means '.', level=2 means '..'
-    # Since we stored is_relative=True, we need to infer level from context
-    # For now, assume single-level relative imports (from . import X)
-    # TODO: Track level explicitly in ImportStatement
-
-    parts = import_stmt.module_name.split('.')
+    # Navigate up the directory tree according to the import level.
+    # level=1 means '.', level=2 means '..', etc.
+    parts = import_stmt.module_name.split('.') if import_stmt.module_name else []
     target_path = base_path
+    for _ in range(max(0, import_stmt.level - 1)):
+        target_path = target_path.parent
+
+    if not parts:
+        # Pure relative import: `from . import x` — the module is the package itself
+        init = target_path / "__init__.py"
+        return init if init.exists() else None
 
     # Try module.py
     module_file = target_path / f"{parts[0]}.py"

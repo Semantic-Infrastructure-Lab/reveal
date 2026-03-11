@@ -556,11 +556,12 @@ def _build_outline_hierarchy(structure: Dict[str, List[Dict[str, Any]]]):
     return build_hierarchy(structure)
 
 
-def _handle_outline_mode(structure: Dict[str, List[Dict[str, Any]]],
+def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[str, Any]]],
                          path: Path, is_fallback: bool, fallback_lang: str, config=None) -> None:
     """Handle outline mode rendering.
 
     Args:
+        analyzer: File analyzer instance
         structure: Structure dict from analyzer
         path: File path
         is_fallback: Whether using fallback analyzer
@@ -577,12 +578,7 @@ def _handle_outline_mode(structure: Dict[str, List[Dict[str, Any]]],
 
     # Navigation hints
     print()
-    file_type = get_file_type_from_analyzer(None)  # TODO: pass analyzer if needed
-    # Infer file type from path extension for now
-    suffix = path.suffix.lstrip('.')
-    type_map = {'py': 'python', 'js': 'javascript', 'ts': 'typescript',
-                'rs': 'rust', 'go': 'go', 'sh': 'bash', 'md': 'markdown'}
-    file_type = type_map.get(suffix, suffix)
+    file_type = get_file_type_from_analyzer(analyzer)
     print_breadcrumbs("typed", str(path), file_type=file_type, config=config)
 
 
@@ -668,7 +664,7 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
 
     # Handle outline mode
     if args and getattr(args, 'outline', False):
-        _handle_outline_mode(structure, path, is_fallback, fallback_lang, config=config)  # type: ignore[arg-type]
+        _handle_outline_mode(analyzer, structure, path, is_fallback, fallback_lang, config=config)  # type: ignore[arg-type]
         return
 
     # Handle standard output (JSON or text)
