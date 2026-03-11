@@ -522,9 +522,13 @@ class DomainAdapter(ResourceAdapter):
         # Get SSL summary (delegate to ssl:// adapter)
         ssl_summary = self._get_ssl_summary()
 
+        # Get WHOIS summary (optional — degrades gracefully if python-whois absent)
+        whois_summary = self._get_whois_summary()
+
         # Build next steps
         next_steps = [
             f"DNS details: reveal domain://{self.domain}/dns",
+            f"WHOIS details: reveal domain://{self.domain}/whois",
             f"SSL details: reveal ssl://{self.domain}",
             f"Health check: reveal domain://{self.domain} --check",
         ]
@@ -542,6 +546,7 @@ class DomainAdapter(ResourceAdapter):
                 'error': dns_summary.get('error'),
             },
             'ssl': ssl_summary,
+            'whois': whois_summary,
             'next_steps': next_steps,
         }
 
@@ -619,14 +624,65 @@ class DomainAdapter(ResourceAdapter):
             }
 
     def _get_whois_info(self) -> Dict[str, Any]:
-        """Get WHOIS information (TODO: requires python-whois)."""
+        """Get WHOIS registration information via python-whois."""
+        assert self.domain is not None
+        try:
+            import whois  # optional dependency
+        except ImportError:
+            return {
+                'type': 'domain_whois',
+                'domain': self.domain,
+                'error': 'python-whois not installed',
+                'next_steps': [
+                    'Install python-whois: pip install python-whois',
+                    f"View DNS instead: reveal domain://{self.domain}/dns",
+                ],
+            }
+
+        try:
+            w = whois.whois(self.domain)
+        except Exception as e:
+            return {
+                'type': 'domain_whois',
+                'domain': self.domain,
+                'error': f"WHOIS lookup failed: {e}",
+            }
+
+        def _normalize_date(d: Any) -> Optional[str]:
+            """Return ISO date string from a datetime or list of datetimes."""
+            if isinstance(d, list):
+                d = d[0] if d else None
+            if d is None:
+                return None
+            try:
+                return d.strftime('%Y-%m-%d')
+            except AttributeError:
+                return str(d)
+
+        def _normalize_list(v: Any) -> List[str]:
+            """Return a flat list of strings."""
+            if v is None:
+                return []
+            if isinstance(v, str):
+                return [v]
+            return [str(item) for item in v]
+
+        name_servers = sorted(
+            ns.lower() for ns in _normalize_list(w.name_servers)
+        )
+
         return {
             'type': 'domain_whois',
             'domain': self.domain,
-            'error': 'WHOIS lookup not yet implemented (requires python-whois)',
+            'registrar': w.registrar or None,
+            'creation_date': _normalize_date(w.creation_date),
+            'expiration_date': _normalize_date(w.expiration_date),
+            'name_servers': name_servers,
+            'status': _normalize_list(w.status),
+            'dnssec': w.dnssec or None,
             'next_steps': [
-                'Install python-whois: pip install python-whois',
-                f"View DNS instead: reveal domain://{self.domain}/dns",
+                f"View DNS records: reveal domain://{self.domain}/dns",
+                f"View SSL details: reveal ssl://{self.domain}",
             ],
         }
 
@@ -654,18 +710,40 @@ class DomainAdapter(ResourceAdapter):
             }
 
     def _get_registrar_info(self) -> Dict[str, Any]:
-        """Get registrar and nameserver information."""
+        """Get registrar and nameserver information via WHOIS + DNS."""
         assert self.domain is not None
         dns_summary = get_dns_summary(self.domain)
+        whois_info = self._get_whois_info()
 
-        return {
+        result: Dict[str, Any] = {
             'type': 'domain_registrar',
             'domain': self.domain,
             'nameservers': dns_summary.get('nameservers', []),
-            'note': 'Full registrar info requires WHOIS lookup (not yet implemented)',
             'next_steps': [
                 f"View DNS records: reveal domain://{self.domain}/dns",
+                f"View full WHOIS: reveal domain://{self.domain}/whois",
             ],
+        }
+
+        if not whois_info.get('error'):
+            result['registrar'] = whois_info.get('registrar')
+            result['creation_date'] = whois_info.get('creation_date')
+            result['expiration_date'] = whois_info.get('expiration_date')
+        else:
+            result['note'] = whois_info['error']
+
+        return result
+
+    def _get_whois_summary(self) -> Dict[str, Any]:
+        """Get abbreviated WHOIS data for domain overview (registrar + expiry only)."""
+        info = self._get_whois_info()
+        if info.get('error'):
+            return {'available': False, 'error': info['error']}
+        return {
+            'available': True,
+            'registrar': info.get('registrar'),
+            'creation_date': info.get('creation_date'),
+            'expiration_date': info.get('expiration_date'),
         }
 
     def _get_ssl_summary(self) -> Dict[str, Any]:

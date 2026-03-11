@@ -82,11 +82,28 @@ class DomainRenderer(TypeDispatchRenderer):
         print(f"💡 Try: {example}")
 
     @staticmethod
+    def _print_whois_section(whois: dict) -> None:
+        """Print WHOIS summary section."""
+        print("\nRegistration:")
+        if not whois.get('available'):
+            err = whois.get('error', 'WHOIS unavailable')
+            print(f"  {err}")
+            return
+        registrar = whois.get('registrar') or 'Unknown'
+        expiry = whois.get('expiration_date') or 'Unknown'
+        created = whois.get('creation_date') or 'Unknown'
+        print(f"  Registrar:  {registrar}")
+        print(f"  Created:    {created}")
+        print(f"  Expires:    {expiry}")
+
+    @staticmethod
     def _render_domain_overview(result: dict) -> None:
         """Render domain overview."""
         DomainRenderer._print_domain_header(result['domain'])
         DomainRenderer._print_dns_section(result['dns'])
         DomainRenderer._print_ssl_section(result['ssl'])
+        if result.get('whois'):
+            DomainRenderer._print_whois_section(result['whois'])
 
         # Use existing remediation helper if available
         if result.get('next_steps'):
@@ -135,15 +152,49 @@ class DomainRenderer(TypeDispatchRenderer):
         print(f"\nWHOIS Information for {domain}:\n")
 
         if result.get('error'):
-            print(f"Error: {result['error']}\n")
-
+            print(f"  Error: {result['error']}\n")
             if result.get('next_steps'):
                 print("Next Steps:")
                 for step in result['next_steps']:
                     print(f"  \u2022 {step}")
+            return
+
+        # Registrar
+        registrar = result.get('registrar') or 'Unknown'
+        print(f"  Registrar:    {registrar}")
+
+        # Dates
+        creation = result.get('creation_date') or 'Unknown'
+        expiry = result.get('expiration_date') or 'Unknown'
+        print(f"  Created:      {creation}")
+        print(f"  Expires:      {expiry}")
+
+        # Nameservers
+        name_servers = result.get('name_servers', [])
+        if name_servers:
+            print(f"  Name Servers: {name_servers[0]}")
+            for ns in name_servers[1:]:
+                print(f"                {ns}")
         else:
-            # TODO: Implement when python-whois is integrated
-            print("  [WHOIS data would display here]")
+            print("  Name Servers: None")
+
+        # Status
+        status_list = result.get('status', [])
+        if status_list:
+            # Strip URL suffix from status strings for readability
+            status_display = status_list[0].split(' ')[0] if status_list else 'Unknown'
+            print(f"  Status:       {status_display}")
+
+        # DNSSEC
+        dnssec = result.get('dnssec') or 'Unknown'
+        print(f"  DNSSEC:       {dnssec}")
+
+        # Next steps
+        if result.get('next_steps'):
+            print(f"\n{'-'*60}")
+            print("Next Steps:")
+            for step in result['next_steps']:
+                print(f"  \u2022 {step}")
 
     @staticmethod
     def _render_domain_ssl_status(result: dict) -> None:
@@ -197,6 +248,16 @@ class DomainRenderer(TypeDispatchRenderer):
         domain = result['domain']
 
         print(f"\nRegistrar Information for {domain}:\n")
+
+        # WHOIS-sourced fields (present when python-whois is installed)
+        if result.get('registrar'):
+            print(f"  Registrar:  {result['registrar']}")
+        if result.get('creation_date'):
+            print(f"  Created:    {result['creation_date']}")
+        if result.get('expiration_date'):
+            print(f"  Expires:    {result['expiration_date']}")
+        if result.get('registrar') or result.get('creation_date'):
+            print()
 
         nameservers = result.get('nameservers', [])
         if nameservers:

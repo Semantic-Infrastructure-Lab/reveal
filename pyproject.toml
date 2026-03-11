@@ -67,6 +67,10 @@ database = [
 git = [
     "pygit2>=1.14.0",  # Stable libgit2 bindings with Python 3.10-3.12 support
 ]
+# Domain registration data (domain:// /whois element and registrar info)
+whois = [
+    "python-whois>=0.9.0",  # WHOIS lookup; graceful degradation if absent
+]
 
 [project.urls]
 Homepage = "https://github.com/Semantic-Infrastructure-Lab/reveal"

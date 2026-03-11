@@ -161,13 +161,23 @@ class TestDomainAdapterElements(unittest.TestCase):
 
     @patch('reveal.adapters.domain.adapter.DomainAdapter._get_whois_info')
     def test_get_element_whois(self, mock_whois):
-        """Test getting WHOIS element (not yet implemented)."""
-        mock_whois.return_value = {}
+        """Test getting WHOIS element returns data dict."""
+        mock_whois.return_value = {
+            'type': 'domain_whois',
+            'domain': 'example.com',
+            'registrar': 'Example Registrar',
+            'creation_date': '2000-01-01',
+            'expiration_date': '2030-01-01',
+            'name_servers': ['ns1.example.com'],
+            'status': ['clientTransferProhibited'],
+            'dnssec': 'unsigned',
+        }
         adapter = DomainAdapter("domain://example.com/whois")
         element = adapter.get_element('whois')
 
-        # WHOIS not implemented yet, should return empty dict
-        self.assertEqual(element, {})
+        self.assertIsNotNone(element)
+        self.assertEqual(element['registrar'], 'Example Registrar')
+        self.assertEqual(element['expiration_date'], '2030-01-01')
 
     @patch('reveal.adapters.domain.adapter.DomainAdapter._get_registrar_info')
     def test_get_element_registrar(self, mock_registrar):
@@ -556,6 +566,240 @@ class TestDomainRenderer(unittest.TestCase):
         self.assertIn('192.0.2.1', output)
         self.assertIn('mail.example.com', output)
         self.assertIn('ns1.example.com', output)
+
+
+class TestDomainAdapterWhois(unittest.TestCase):
+    """Test WHOIS integration in domain:// adapter (BACK-006)."""
+
+    def _make_mock_whois(self):
+        """Build a mock whois.WhoisEntry-like object."""
+        from datetime import datetime, timezone
+        w = MagicMock()
+        w.registrar = 'Gandi SAS'
+        w.creation_date = datetime(1995, 3, 27, 5, 0, tzinfo=timezone.utc)
+        w.expiration_date = datetime(2033, 3, 28, 5, 0, tzinfo=timezone.utc)
+        w.name_servers = ['ns1.example.com', 'NS2.EXAMPLE.COM']
+        w.status = 'clientTransferProhibited https://icann.org/epp#clientTransferProhibited'
+        w.dnssec = 'unsigned'
+        return w
+
+    def test_whois_import_error(self):
+        """_get_whois_info returns error dict when python-whois not installed."""
+        import sys
+        from unittest.mock import patch
+        adapter = DomainAdapter("domain://example.com/whois")
+        with patch.dict('sys.modules', {'whois': None}):
+            result = adapter._get_whois_info()
+
+        self.assertEqual(result['type'], 'domain_whois')
+        self.assertIn('error', result)
+        self.assertIn('python-whois', result['error'])
+
+    def test_whois_success(self):
+        """_get_whois_info returns populated dict when python-whois succeeds."""
+        mock_whois_module = MagicMock()
+        mock_whois_module.whois.return_value = self._make_mock_whois()
+
+        adapter = DomainAdapter("domain://example.com/whois")
+        with patch.dict('sys.modules', {'whois': mock_whois_module}):
+            result = adapter._get_whois_info()
+
+        self.assertEqual(result['type'], 'domain_whois')
+        self.assertEqual(result['domain'], 'example.com')
+        self.assertEqual(result['registrar'], 'Gandi SAS')
+        self.assertEqual(result['creation_date'], '1995-03-27')
+        self.assertEqual(result['expiration_date'], '2033-03-28')
+        # Name servers should be lowercased and sorted
+        self.assertIn('ns1.example.com', result['name_servers'])
+        self.assertIn('ns2.example.com', result['name_servers'])
+        self.assertFalse(result.get('error'))
+
+    def test_whois_lookup_exception(self):
+        """_get_whois_info returns error dict when WHOIS lookup raises."""
+        mock_whois_module = MagicMock()
+        mock_whois_module.whois.side_effect = Exception("Network timeout")
+
+        adapter = DomainAdapter("domain://example.com/whois")
+        with patch.dict('sys.modules', {'whois': mock_whois_module}):
+            result = adapter._get_whois_info()
+
+        self.assertIn('error', result)
+        self.assertIn('Network timeout', result['error'])
+
+    def test_whois_date_list_normalization(self):
+        """_get_whois_info normalizes list-type dates to first entry."""
+        from datetime import datetime, timezone
+        mock_w = self._make_mock_whois()
+        mock_w.creation_date = [
+            datetime(2000, 1, 1, tzinfo=timezone.utc),
+            datetime(2000, 1, 2, tzinfo=timezone.utc),
+        ]
+        mock_w.expiration_date = [datetime(2030, 6, 15, tzinfo=timezone.utc)]
+
+        mock_whois_module = MagicMock()
+        mock_whois_module.whois.return_value = mock_w
+
+        adapter = DomainAdapter("domain://example.com")
+        with patch.dict('sys.modules', {'whois': mock_whois_module}):
+            result = adapter._get_whois_info()
+
+        self.assertEqual(result['creation_date'], '2000-01-01')
+        self.assertEqual(result['expiration_date'], '2030-06-15')
+
+    @patch('reveal.adapters.domain.adapter.DomainAdapter._get_whois_info')
+    @patch('reveal.adapters.domain.adapter.DomainAdapter._get_ssl_summary')
+    @patch('reveal.adapters.domain.dns.get_dns_summary')
+    def test_overview_includes_whois_summary(self, mock_dns, mock_ssl, mock_whois):
+        """get_structure() includes whois summary when available."""
+        mock_dns.return_value = {'nameservers': [], 'a_records': [], 'has_mx': False}
+        mock_ssl.return_value = {'has_certificate': False}
+        mock_whois.return_value = {
+            'type': 'domain_whois',
+            'domain': 'example.com',
+            'registrar': 'Test Registrar',
+            'creation_date': '2000-01-01',
+            'expiration_date': '2030-01-01',
+            'name_servers': [],
+            'status': [],
+            'dnssec': 'unsigned',
+        }
+
+        adapter = DomainAdapter("domain://example.com")
+        result = adapter.get_structure()
+
+        self.assertIn('whois', result)
+        self.assertTrue(result['whois']['available'])
+        self.assertEqual(result['whois']['registrar'], 'Test Registrar')
+        self.assertEqual(result['whois']['expiration_date'], '2030-01-01')
+
+    @patch('reveal.adapters.domain.adapter.DomainAdapter._get_whois_info')
+    @patch('reveal.adapters.domain.adapter.DomainAdapter._get_ssl_summary')
+    @patch('reveal.adapters.domain.dns.get_dns_summary')
+    def test_overview_whois_unavailable(self, mock_dns, mock_ssl, mock_whois):
+        """get_structure() includes whois with available=False when python-whois absent."""
+        mock_dns.return_value = {'nameservers': [], 'a_records': [], 'has_mx': False}
+        mock_ssl.return_value = {'has_certificate': False}
+        mock_whois.return_value = {
+            'type': 'domain_whois',
+            'domain': 'example.com',
+            'error': 'python-whois not installed',
+        }
+
+        adapter = DomainAdapter("domain://example.com")
+        result = adapter.get_structure()
+
+        self.assertIn('whois', result)
+        self.assertFalse(result['whois']['available'])
+
+    @patch('reveal.adapters.domain.adapter.DomainAdapter._get_whois_info')
+    @patch('reveal.adapters.domain.dns.get_dns_summary')
+    def test_registrar_info_includes_whois_fields(self, mock_dns, mock_whois):
+        """_get_registrar_info() includes WHOIS-sourced registrar and dates."""
+        mock_dns.return_value = {'nameservers': ['ns1.example.com'], 'a_records': []}
+        mock_whois.return_value = {
+            'type': 'domain_whois',
+            'domain': 'example.com',
+            'registrar': 'GoDaddy',
+            'creation_date': '2005-06-01',
+            'expiration_date': '2035-06-01',
+            'name_servers': ['ns1.example.com'],
+            'status': [],
+            'dnssec': 'unsigned',
+        }
+
+        adapter = DomainAdapter("domain://example.com/registrar")
+        result = adapter._get_registrar_info()
+
+        self.assertEqual(result['registrar'], 'GoDaddy')
+        self.assertEqual(result['creation_date'], '2005-06-01')
+        self.assertEqual(result['expiration_date'], '2035-06-01')
+        self.assertNotIn('note', result)
+
+
+class TestDomainWhoisRenderer(unittest.TestCase):
+    """Test WHOIS renderer output (BACK-006)."""
+
+    def _capture(self, fn, *args, **kwargs):
+        from io import StringIO
+        buf = StringIO()
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            fn(*args, **kwargs)
+        finally:
+            sys.stdout = old
+        return buf.getvalue()
+
+    def test_render_whois_full(self):
+        """Renderer shows all WHOIS fields when data is present."""
+        from reveal.adapters.domain.renderer import DomainRenderer
+        result = {
+            'type': 'domain_whois',
+            'domain': 'example.com',
+            'registrar': 'Gandi SAS',
+            'creation_date': '1995-03-27',
+            'expiration_date': '2033-03-28',
+            'name_servers': ['ns1.example.com', 'ns2.example.com'],
+            'status': ['clientTransferProhibited'],
+            'dnssec': 'unsigned',
+        }
+        output = self._capture(DomainRenderer.render_structure, result, format='text')
+
+        self.assertIn('Gandi SAS', output)
+        self.assertIn('1995-03-27', output)
+        self.assertIn('2033-03-28', output)
+        self.assertIn('ns1.example.com', output)
+        self.assertIn('ns2.example.com', output)
+        self.assertIn('clientTransferProhibited', output)
+        self.assertIn('unsigned', output)
+
+    def test_render_whois_error(self):
+        """Renderer shows error message when WHOIS lookup failed."""
+        from reveal.adapters.domain.renderer import DomainRenderer
+        result = {
+            'type': 'domain_whois',
+            'domain': 'example.com',
+            'error': 'python-whois not installed',
+            'next_steps': ['pip install python-whois'],
+        }
+        output = self._capture(DomainRenderer.render_structure, result, format='text')
+
+        self.assertIn('python-whois not installed', output)
+        self.assertIn('pip install python-whois', output)
+
+    def test_render_overview_shows_whois_section(self):
+        """Domain overview renderer shows Registration section with WHOIS."""
+        from reveal.adapters.domain.renderer import DomainRenderer
+        result = {
+            'type': 'domain_overview',
+            'domain': 'example.com',
+            'dns': {'nameservers': [], 'a_records': [], 'has_mx': False, 'error': None},
+            'ssl': {'has_certificate': False},
+            'whois': {
+                'available': True,
+                'registrar': 'Test Registrar Inc',
+                'creation_date': '2001-09-11',
+                'expiration_date': '2031-09-11',
+            },
+        }
+        output = self._capture(DomainRenderer.render_structure, result, format='text')
+
+        self.assertIn('Registration:', output)
+        self.assertIn('Test Registrar Inc', output)
+        self.assertIn('2031-09-11', output)
+
+    def test_render_overview_no_whois_section_when_absent(self):
+        """Domain overview renderer omits Registration section when whois not in result."""
+        from reveal.adapters.domain.renderer import DomainRenderer
+        result = {
+            'type': 'domain_overview',
+            'domain': 'example.com',
+            'dns': {'nameservers': [], 'a_records': [], 'has_mx': False, 'error': None},
+            'ssl': {'has_certificate': False},
+        }
+        output = self._capture(DomainRenderer.render_structure, result, format='text')
+
+        self.assertNotIn('Registration:', output)
 
 
 if __name__ == '__main__':
