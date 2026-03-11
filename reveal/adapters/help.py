@@ -598,11 +598,13 @@ class HelpAdapter(ResourceAdapter):
         """
         adapter_class: Optional[type[Any]] = _ADAPTER_REGISTRY.get(adapter_name)
         if not adapter_class:
+            available = sorted(_ADAPTER_REGISTRY.keys())
             return {
                 'type': 'adapter_schema',
                 'adapter': adapter_name,
                 'error': 'Unknown adapter',
-                'message': f"No adapter named '{adapter_name}'"
+                'message': f"No adapter named '{adapter_name}'. Available: {', '.join(available)}",
+                'available_adapters': available,
             }
 
         if not hasattr(adapter_class, 'get_schema'):
