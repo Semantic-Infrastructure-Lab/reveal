@@ -194,6 +194,8 @@ class TestRenderHelpListMode(unittest.TestCase):
         self.assertIn('reveal help://', output)
         self.assertIn('reveal --agent-help', output)
         self.assertIn('reveal help://adapters', output)
+        self.assertIn('reveal help://schemas', output)
+        self.assertIn('reveal help://examples', output)
 
 
 class TestRenderHelpStaticGuide(unittest.TestCase):
