@@ -1,7 +1,7 @@
 """High-level operations for markdown adapter."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from . import files, filtering, results
 
@@ -11,7 +11,8 @@ def get_structure(
     query: str,
     filters: list,
     query_filters: list,
-    result_control: Any
+    result_control: Any,
+    body_contains: Optional[list] = None,
 ) -> Dict[str, Any]:
     """Query markdown files and return matching results.
 
@@ -21,6 +22,7 @@ def get_structure(
         filters: Legacy filters
         query_filters: New query filters
         result_control: ResultControl object with sort/limit/offset
+        body_contains: Optional list of terms that must appear in body text
 
     Returns:
         Dict containing matched files with frontmatter summary
@@ -31,9 +33,12 @@ def get_structure(
     # Build results for matching files
     for path in all_files:
         frontmatter = files.extract_frontmatter(path)
-        if filtering.matches_all_filters(frontmatter, filters, query_filters):
-            result = results.build_result_item(path, frontmatter)
-            matched_results.append(result)
+        if not filtering.matches_all_filters(frontmatter, filters, query_filters):
+            continue
+        if body_contains and not filtering.matches_body_contains(path, body_contains):
+            continue
+        result = results.build_result_item(path, frontmatter)
+        matched_results.append(result)
 
     # Apply result control (sort, limit, offset)
     total_matches = len(matched_results)

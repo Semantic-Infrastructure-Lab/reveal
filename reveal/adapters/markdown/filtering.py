@@ -1,9 +1,25 @@
 """Filtering logic for markdown adapter."""
 
 import fnmatch
+from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 
 from . import query as query_module
+
+
+def matches_body_contains(path: Path, terms: List[str]) -> bool:
+    """Check if file body text contains all terms (case-insensitive).
+
+    Args:
+        path: Path to markdown file
+        terms: List of strings that must all appear in the body
+
+    Returns:
+        True if all terms are found in the body text
+    """
+    from . import files
+    body = files.read_body_text(path).lower()
+    return all(term.lower() in body for term in terms)
 
 
 def matches_filter(frontmatter: Optional[Dict[str, Any]],

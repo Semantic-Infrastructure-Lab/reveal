@@ -390,3 +390,108 @@ class TestEdgeCases:
         result = adapter.get_structure()
         # limit=0 means no results
         assert len(result['results']) == 0
+
+
+class TestBodyContainsFilter:
+    """Tests for ?body-contains= body text search."""
+
+    @pytest.fixture
+    def body_docs(self, tmp_path):
+        """Create docs with distinct body content for body-contains testing."""
+        (tmp_path / "nginx.md").write_text("""---
+title: Nginx Config
+type: guide
+---
+
+# Nginx Configuration
+
+This document covers nginx server blocks and SSL termination.
+""")
+        (tmp_path / "postgres.md").write_text("""---
+title: Postgres Setup
+type: guide
+---
+
+# Postgres Configuration
+
+This document covers postgres connection pooling and replication.
+""")
+        (tmp_path / "both.md").write_text("""---
+title: Full Stack
+type: reference
+---
+
+# Full Stack Guide
+
+This doc mentions nginx reverse proxy and postgres as the backend.
+""")
+        (tmp_path / "no_fm.md").write_text("""# Plain File
+
+No frontmatter here but mentions nginx configuration.
+""")
+        return tmp_path
+
+    def test_body_contains_single_term(self, body_docs):
+        """Single body-contains term filters to matching files."""
+        adapter = MarkdownQueryAdapter(str(body_docs), query='body-contains=nginx')
+        result = adapter.get_structure()
+        titles = {r['title'] for r in result['results'] if r.get('title')}
+        assert 'Nginx Config' in titles
+        assert 'Full Stack' in titles
+        # postgres-only doc should not appear
+        assert 'Postgres Setup' not in titles
+
+    def test_body_contains_multiple_terms_and(self, body_docs):
+        """Multiple body-contains terms are AND'd — must all appear."""
+        adapter = MarkdownQueryAdapter(str(body_docs), query='body-contains=nginx&body-contains=postgres')
+        result = adapter.get_structure()
+        titles = {r['title'] for r in result['results'] if r.get('title')}
+        # Only 'both.md' mentions both
+        assert titles == {'Full Stack'}
+
+    def test_body_contains_case_insensitive(self, body_docs):
+        """body-contains search is case-insensitive."""
+        adapter = MarkdownQueryAdapter(str(body_docs), query='body-contains=NGINX')
+        result = adapter.get_structure()
+        titles = {r['title'] for r in result['results'] if r.get('title')}
+        assert 'Nginx Config' in titles
+        assert 'Full Stack' in titles
+
+    def test_body_contains_no_match(self, body_docs):
+        """body-contains with no matching files returns empty results."""
+        adapter = MarkdownQueryAdapter(str(body_docs), query='body-contains=kubernetes')
+        result = adapter.get_structure()
+        assert len(result['results']) == 0
+
+    def test_body_contains_with_frontmatter_filter(self, body_docs):
+        """body-contains can be combined with frontmatter filters."""
+        adapter = MarkdownQueryAdapter(str(body_docs), query='type=reference&body-contains=nginx')
+        result = adapter.get_structure()
+        titles = {r['title'] for r in result['results'] if r.get('title')}
+        # Full Stack is type=reference and mentions nginx
+        assert titles == {'Full Stack'}
+
+    def test_body_contains_no_frontmatter_file(self, body_docs):
+        """body-contains matches files even without frontmatter."""
+        adapter = MarkdownQueryAdapter(str(body_docs), query='body-contains=nginx')
+        result = adapter.get_structure()
+        paths = [r['path'] for r in result['results']]
+        assert any('no_fm' in p for p in paths)
+
+    def test_body_contains_parsed_from_query(self, body_docs):
+        """body-contains terms are stored in adapter.body_contains."""
+        adapter = MarkdownQueryAdapter(str(body_docs), query='body-contains=nginx&body-contains=ssl')
+        assert adapter.body_contains == ['nginx', 'ssl']
+
+    def test_body_contains_does_not_leak_into_frontmatter_filters(self, body_docs):
+        """body-contains= is stripped before frontmatter filter parsing."""
+        adapter = MarkdownQueryAdapter(str(body_docs), query='body-contains=nginx&type=guide')
+        # Should have no frontmatter filter for 'body-contains' field
+        filter_fields = {f[0] for f in adapter.filters}
+        assert 'body-contains' not in filter_fields
+
+    def test_body_contains_with_result_control(self, body_docs):
+        """body-contains works alongside sort/limit result control."""
+        adapter = MarkdownQueryAdapter(str(body_docs), query='body-contains=nginx&limit=1')
+        result = adapter.get_structure()
+        assert len(result['results']) == 1

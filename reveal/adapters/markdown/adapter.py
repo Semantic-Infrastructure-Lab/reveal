@@ -62,6 +62,20 @@ class MarkdownQueryAdapter(ResourceAdapter):
             filter_query = ''
             self.result_control = ResultControl()
 
+        # Extract body-contains= params before passing to filter parsers
+        self.body_contains = []
+        if filter_query:
+            remaining_parts = []
+            for part in filter_query.split('&'):
+                stripped = part.strip()
+                if stripped.startswith('body-contains='):
+                    term = stripped[len('body-contains='):]
+                    if term:
+                        self.body_contains.append(term)
+                else:
+                    remaining_parts.append(part)
+            filter_query = '&'.join(remaining_parts)
+
         # Parse query filters conditionally (only if new operators present)
         # This prevents legacy parameters from being misinterpreted
         self.query_filters = []
@@ -91,7 +105,8 @@ class MarkdownQueryAdapter(ResourceAdapter):
             self.query or '',
             self.filters,
             self.query_filters,
-            self.result_control
+            self.result_control,
+            self.body_contains or None,
         )
         return {
             'contract_version': '1.0',

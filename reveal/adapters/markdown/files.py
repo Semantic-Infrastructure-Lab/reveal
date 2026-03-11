@@ -33,6 +33,31 @@ def find_markdown_files(base_path: Path) -> List[Path]:
     return sorted(files)
 
 
+def read_body_text(path: Path) -> str:
+    """Read the body text of a markdown file (content after frontmatter).
+
+    Args:
+        path: Path to markdown file
+
+    Returns:
+        Body text as string, or full content if no frontmatter
+    """
+    try:
+        content = path.read_text(encoding='utf-8')
+    except Exception:
+        return ''
+
+    if not content.startswith('---'):
+        return content
+
+    end_match = re.search(r'\n---\s*\n', content[3:])
+    if not end_match:
+        return content
+
+    body_start = 3 + end_match.end()
+    return content[body_start:]
+
+
 def extract_frontmatter(path: Path) -> Optional[Dict[str, Any]]:
     """Extract YAML frontmatter from a markdown file.
 
