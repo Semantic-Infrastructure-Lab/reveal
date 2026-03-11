@@ -421,24 +421,36 @@ class DomainAdapter(ResourceAdapter):
             'example_queries': [
                 {
                     'uri': 'domain://example.com',
-                    'description': 'Domain overview (registrar, DNS, SSL status)',
+                    'description': 'Domain overview — registrar, DNS summary, SSL status',
                     'output_type': 'domain_overview'
                 },
                 {
                     'uri': 'domain://example.com/dns',
-                    'description': 'All DNS records',
+                    'description': 'All DNS records (A, MX, NS, TXT, CNAME, etc.)',
                     'element': 'dns',
                     'output_type': 'domain_dns'
                 },
                 {
                     'uri': 'domain://example.com/ssl',
-                    'description': 'SSL certificate status (delegates to ssl://)',
+                    'description': 'SSL certificate details (delegates to ssl:// adapter)',
                     'element': 'ssl',
                     'output_type': 'ssl_certificate'
                 },
                 {
+                    'uri': 'domain://example.com/whois',
+                    'description': 'WHOIS registration data — registrar, dates, nameservers (requires python-whois)',
+                    'element': 'whois',
+                    'output_type': 'domain_whois'
+                },
+                {
+                    'uri': 'domain://example.com/registrar',
+                    'description': 'Registrar name, creation/expiry dates from WHOIS',
+                    'element': 'registrar',
+                    'output_type': 'domain_registrar'
+                },
+                {
                     'uri': 'domain://example.com --check',
-                    'description': 'Health checks (DNS propagation, SSL, expiry)',
+                    'description': 'Full health check: DNS propagation + HTTP response + SSL expiry',
                     'cli_flag': '--check',
                     'output_type': 'domain_health'
                 }
