@@ -562,6 +562,174 @@ def _render_help_see_also(data: Dict[str, Any]) -> None:
         print()
 
 
+def _render_query_recipes(data: Dict[str, Any]) -> None:
+    """Render help://examples/<task> — canonical query recipes for a task."""
+    if 'error' in data:
+        print(f"Error: {data['message']}", file=sys.stderr)
+        sys.exit(1)
+
+    task = data.get('task', '')
+    description = data.get('description', '')
+    recipes = data.get('recipes', [])
+
+    print(f"# Query Recipes: {task}")
+    print()
+    print(f"**Task:** {description}")
+    print()
+
+    if recipes:
+        print("## Recipes")
+        print()
+        for recipe in recipes:
+            goal = recipe.get('goal', '')
+            query = recipe.get('query', '')
+            desc = recipe.get('description', '')
+            output_type = recipe.get('output_type', '')
+            print(f"**{goal}**")
+            print(f"  {query}")
+            if desc:
+                print(f"  -> {desc}")
+            if output_type:
+                print(f"  Output: {output_type}")
+            print()
+
+    print("---")
+    print()
+    print("## See Also")
+    print("  reveal help://examples              # list all task categories")
+    print("  reveal help://schemas/<adapter>     # adapter parameter reference")
+    print()
+
+
+def _render_adapter_schema(data: Dict[str, Any]) -> None:
+    """Render help://schemas/<adapter> — machine-readable adapter schema."""
+    if 'error' in data:
+        available = data.get('available_adapters', [])
+        if available:
+            # Listing mode — not a real error
+            print("# Adapter Schemas")
+            print()
+            print("**Usage:** `reveal help://schemas/<adapter>`")
+            print()
+            print("## Available Adapters")
+            for name in available:
+                print(f"  {name}")
+            print()
+            print("## Examples")
+            print("  reveal help://schemas/ast")
+            print("  reveal help://schemas/ssl")
+            print("  reveal help://schemas/git")
+            print()
+        else:
+            print(f"Error: {data['message']}", file=sys.stderr)
+            sys.exit(1)
+        return
+
+    adapter = data.get('adapter', '')
+    description = data.get('description', '')
+    uri_syntax = data.get('uri_syntax', '')
+    query_params = data.get('query_params', {})
+    operators = data.get('operators', {})
+    elements = data.get('elements', {})
+    cli_flags = data.get('cli_flags', [])
+    output_types = data.get('output_types', {})
+    example_queries = data.get('example_queries', [])
+    notes = data.get('notes', [])
+
+    print(f"# {adapter}:// Schema")
+    print()
+    print(f"**Description:** {description}")
+    if uri_syntax:
+        print(f"**Syntax:** `{uri_syntax}`")
+    print()
+
+    if query_params:
+        print("## Query Parameters")
+        for name, param in query_params.items():
+            ptype = param.get('type', '')
+            pdesc = param.get('description', '')
+            ops = param.get('operators', [])
+            examples = param.get('examples', [])
+            op_str = f"  operators: {' '.join(ops)}" if ops else ''
+            ex_str = f"  e.g. {', '.join(examples[:2])}" if examples else ''
+            print(f"  {name} ({ptype}) — {pdesc}")
+            if op_str:
+                print(f"  {op_str}")
+            if ex_str:
+                print(f"    {ex_str}")
+        print()
+
+    if operators:
+        print("## Operators")
+        for op, desc in operators.items():
+            print(f"  {op:4} - {desc}")
+        print()
+
+    if elements:
+        print("## Elements (reveal <adapter>://<path>/<element>)")
+        if isinstance(elements, dict):
+            for name, elem in elements.items():
+                edesc = elem.get('description', '') if isinstance(elem, dict) else elem
+                print(f"  /{name:20} — {edesc}")
+        else:
+            for elem in elements:
+                if isinstance(elem, dict):
+                    print(f"  /{elem.get('name', ''):20} — {elem.get('description', '')}")
+                else:
+                    print(f"  {elem}")
+        print()
+
+    if output_types:
+        print("## Output Types")
+        if isinstance(output_types, dict):
+            for name, otype in output_types.items():
+                odesc = otype.get('description', '') if isinstance(otype, dict) else otype
+                print(f"  {name:30} — {odesc}")
+        else:
+            for otype in output_types:
+                name = otype.get('type', '')
+                odesc = otype.get('description', '')
+                print(f"  {name:30} — {odesc}")
+        print()
+
+    if example_queries:
+        print("## Example Queries")
+        for ex in example_queries:
+            uri = ex.get('uri', '')
+            desc = ex.get('description', '')
+            otype = ex.get('output_type', '')
+            print(f"  {uri}")
+            if desc:
+                print(f"    -> {desc}")
+            if otype:
+                print(f"    output_type: {otype}")
+        print()
+
+    if cli_flags:
+        print("## CLI Flags")
+        for flag in cli_flags:
+            if isinstance(flag, dict):
+                print(f"  {flag['flag']}")
+                if flag.get('description'):
+                    print(f"    {flag['description']}")
+            else:
+                print(f"  {flag}")
+        print()
+
+    if notes:
+        print("## Notes")
+        for note in notes:
+            print(f"  * {note}")
+        print()
+
+    print("---")
+    print()
+    print("## See Also")
+    print(f"  reveal help://{adapter}            # full help with workflows and examples")
+    print("  reveal help://schemas               # list all adapter schemas")
+    print()
+
+
 def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
     """Render adapter-specific help documentation.
 
@@ -615,6 +783,8 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
         'static_guide': _render_help_static_guide,
         'adapter_summary': _render_help_adapter_summary,
         'help_section': _render_help_section,
+        'query_recipes': _render_query_recipes,
+        'adapter_schema': _render_adapter_schema,
     }
 
     renderer = renderers.get(help_type)

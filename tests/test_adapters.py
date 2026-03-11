@@ -347,6 +347,123 @@ class TestHelpAdapter(unittest.TestCase):
         self.assertIn('description', help_data)
         self.assertIn('examples', help_data)
 
+    # --- help://schemas/* ---
+
+    def test_schemas_bare_returns_listing(self):
+        """help://schemas returns listing dict (not an error)."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('schemas')
+        self.assertIsNotNone(result)
+        self.assertEqual(result['type'], 'adapter_schema')
+        self.assertIn('available_adapters', result)
+        self.assertIn('ast', result['available_adapters'])
+        self.assertIn('ssl', result['available_adapters'])
+
+    def test_schemas_trailing_slash_returns_listing(self):
+        """help://schemas/ (trailing slash) behaves same as bare schemas."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('schemas/')
+        self.assertIsNotNone(result)
+        self.assertIn('available_adapters', result)
+
+    def test_schemas_adapter_returns_schema(self):
+        """help://schemas/ast returns full ast schema."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('schemas/ast')
+        self.assertIsNotNone(result)
+        self.assertEqual(result['type'], 'adapter_schema')
+        self.assertEqual(result['adapter'], 'ast')
+        self.assertIn('query_params', result)
+        self.assertIn('output_types', result)
+        self.assertIn('example_queries', result)
+        self.assertIn('notes', result)
+
+    def test_schemas_rendered_listing(self):
+        """Rendered help://schemas listing contains expected headers."""
+        import io
+        from contextlib import redirect_stdout
+        from reveal.rendering.adapters.help import render_help
+
+        adapter = HelpAdapter()
+        result = adapter.get_element('schemas')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            render_help(result, 'text')
+        output = buf.getvalue()
+        self.assertIn('Adapter Schemas', output)
+        self.assertIn('ast', output)
+        self.assertIn('ssl', output)
+
+    def test_schemas_rendered_adapter(self):
+        """Rendered help://schemas/ast contains expected sections."""
+        import io
+        from contextlib import redirect_stdout
+        from reveal.rendering.adapters.help import render_help
+
+        adapter = HelpAdapter()
+        result = adapter.get_element('schemas/ast')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            render_help(result, 'text')
+        output = buf.getvalue()
+        self.assertIn('ast:// Schema', output)
+        self.assertIn('Query Parameters', output)
+        self.assertIn('Output Types', output)
+        self.assertIn('Example Queries', output)
+        self.assertIn('Notes', output)
+
+    # --- help://examples/* ---
+
+    def test_examples_bare_returns_error_with_tasks(self):
+        """help://examples returns error listing available tasks."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('examples')
+        self.assertIsNotNone(result)
+        self.assertEqual(result['type'], 'query_recipes')
+        self.assertIn('available_tasks', result)
+        self.assertIn('quality', result['available_tasks'])
+        self.assertIn('security', result['available_tasks'])
+
+    def test_examples_task_returns_recipes(self):
+        """help://examples/quality returns valid recipe list."""
+        adapter = HelpAdapter()
+        result = adapter.get_element('examples/quality')
+        self.assertIsNotNone(result)
+        self.assertEqual(result['type'], 'query_recipes')
+        self.assertEqual(result['task'], 'quality')
+        self.assertIn('recipes', result)
+        self.assertGreater(len(result['recipes']), 0)
+        for recipe in result['recipes']:
+            self.assertIn('goal', recipe)
+            self.assertIn('query', recipe)
+            self.assertIn('output_type', recipe)
+
+    def test_examples_all_tasks_valid(self):
+        """All help://examples/<task> routes return valid data."""
+        adapter = HelpAdapter()
+        tasks = ['security', 'codebase', 'debugging', 'infrastructure', 'quality', 'documentation']
+        for task in tasks:
+            result = adapter.get_element(f'examples/{task}')
+            self.assertIsNotNone(result, f'examples/{task} returned None')
+            self.assertEqual(result['type'], 'query_recipes', f'examples/{task} wrong type')
+            self.assertGreater(len(result.get('recipes', [])), 0, f'examples/{task} has no recipes')
+
+    def test_examples_rendered(self):
+        """Rendered help://examples/quality shows recipes."""
+        import io
+        from contextlib import redirect_stdout
+        from reveal.rendering.adapters.help import render_help
+
+        adapter = HelpAdapter()
+        result = adapter.get_element('examples/quality')
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            render_help(result, 'text')
+        output = buf.getvalue()
+        self.assertIn('Query Recipes: quality', output)
+        self.assertIn('Recipes', output)
+        self.assertIn('Find', output)
+
 
 class TestPythonAdapter(unittest.TestCase):
     """Test Python runtime adapter."""

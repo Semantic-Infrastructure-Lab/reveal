@@ -241,7 +241,7 @@ class HelpAdapter(ResourceAdapter):
         topic = element_name  # Alias for readability
         # Check for schemas route: help://schemas/ssl
         # Bare 'schemas/' lists available adapters
-        if topic == 'schemas/':
+        if topic == 'schemas' or topic == 'schemas/':
             adapters = sorted(_ADAPTER_REGISTRY.keys())
             return {
                 'type': 'adapter_schema',
