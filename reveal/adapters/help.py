@@ -733,6 +733,86 @@ class HelpAdapter(ResourceAdapter):
                         'output_type': 'ast_query_results'
                     }
                 ]
+            },
+            'infrastructure': {
+                'type': 'query_recipes',
+                'task': 'infrastructure',
+                'description': 'Server infrastructure inspection — nginx, SSL, domains',
+                'recipes': [
+                    {
+                        'goal': 'Inspect nginx vhost',
+                        'query': 'nginx://example.com',
+                        'description': 'Ports, upstreams, auth, locations for a domain',
+                        'output_type': 'nginx_vhost_summary'
+                    },
+                    {
+                        'goal': 'List all nginx vhosts',
+                        'query': 'nginx://',
+                        'description': 'Overview of all enabled nginx sites',
+                        'output_type': 'nginx_sites_overview'
+                    },
+                    {
+                        'goal': 'Check nginx upstream health',
+                        'query': 'nginx://example.com/upstream',
+                        'description': 'TCP reachability of proxy_pass backends',
+                        'output_type': 'nginx_vhost_upstream'
+                    },
+                    {
+                        'goal': 'Check SSL certificate',
+                        'query': 'ssl://example.com --check',
+                        'description': 'Certificate health, expiry, chain validity',
+                        'output_type': 'ssl_certificate'
+                    },
+                    {
+                        'goal': 'Validate nginx SSL certs from config',
+                        'query': 'ssl://nginx:///etc/nginx/conf.d/*.conf --check --local-certs',
+                        'description': 'Check cert files referenced by nginx (no network)',
+                        'output_type': 'ssl_certificate'
+                    },
+                    {
+                        'goal': 'Domain health check',
+                        'query': 'domain://example.com --check',
+                        'description': 'DNS propagation, SSL status, registration info',
+                        'output_type': 'domain_health'
+                    }
+                ]
+            },
+            'documentation': {
+                'type': 'query_recipes',
+                'task': 'documentation',
+                'description': 'Documentation search and analysis — markdown, front matter',
+                'recipes': [
+                    {
+                        'goal': 'Find docs by topic in body',
+                        'query': "reveal 'markdown://docs/?body-contains=nginx'",
+                        'description': 'Search doc body text (after frontmatter)',
+                        'output_type': 'markdown_query'
+                    },
+                    {
+                        'goal': 'Find all guides',
+                        'query': "reveal 'markdown://docs/?type=guide'",
+                        'description': 'Filter by frontmatter field value',
+                        'output_type': 'markdown_query'
+                    },
+                    {
+                        'goal': 'Find recent docs about deployment',
+                        'query': "reveal 'markdown://docs/?body-contains=deploy&sort=-modified&limit=10'",
+                        'description': 'Body search with recency sort',
+                        'output_type': 'markdown_query'
+                    },
+                    {
+                        'goal': 'Validate internal links',
+                        'query': 'reveal docs/README.md --links --link-type internal',
+                        'description': 'Find broken internal links in a doc',
+                        'output_type': 'links'
+                    },
+                    {
+                        'goal': 'Get document outline',
+                        'query': 'reveal docs/README.md --outline',
+                        'description': 'Hierarchical heading tree',
+                        'output_type': 'outline'
+                    }
+                ]
             }
         }
 
