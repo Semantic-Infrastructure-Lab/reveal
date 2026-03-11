@@ -12,7 +12,10 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - v0.60.x (session toxic-onslaught-0310)
+## [Unreleased] - v0.60.x (sessions toxic-onslaught-0310, ethereal-leviathan-0310)
+
+### Added
+- **BACK-006: WHOIS integration for `domain://`** — `reveal domain://example.com/whois` now returns full WHOIS data (registrar, creation/expiry dates, nameservers, status, DNSSEC). Domain overview (`reveal domain://example.com`) now includes a Registration section showing registrar + dates. `/registrar` element also enriched with WHOIS fields. `python-whois` is an optional dep (`pip install reveal[whois]`); if absent, all three outputs degrade gracefully with an install hint. 11 new tests.
 
 ### Fixed
 - **BACK-001: bare integer / `:N` line nav now consistent** — `reveal file.py 73` and `reveal file.py :73` previously errored with "No element found" when the target line was outside any named element (imports, module-level code). Now falls back to a ±10-line context window so every line reference returns something useful. `_extract_line_range` also now clamps `end_line` to file length instead of failing.
