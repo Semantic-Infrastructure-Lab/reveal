@@ -662,7 +662,7 @@ class HelpAdapter(ResourceAdapter):
                         'goal': 'Find authentication functions',
                         'query': 'ast://src?name~=auth&type=function',
                         'description': 'Locate authentication-related code',
-                        'output_type': 'ast_query_results'
+                        'output_type': 'ast_query'
                     },
                     {
                         'goal': 'Check SSL certificate expiry',
@@ -674,7 +674,7 @@ class HelpAdapter(ResourceAdapter):
                         'goal': 'Find SQL query construction',
                         'query': 'ast://src?name~=query&complexity>5',
                         'description': 'Locate complex database queries (SQL injection risk)',
-                        'output_type': 'ast_query_results'
+                        'output_type': 'ast_query'
                     }
                 ]
             },
@@ -693,19 +693,19 @@ class HelpAdapter(ResourceAdapter):
                         'goal': 'Find entry points',
                         'query': 'ast://src?name=main*&type=function',
                         'description': 'Locate main() and main_* entry point functions',
-                        'output_type': 'ast_query_results'
+                        'output_type': 'ast_query'
                     },
                     {
                         'goal': 'List all classes',
                         'query': 'ast://src?type=class&sort=name',
                         'description': 'Enumerate class hierarchy for structural overview',
-                        'output_type': 'ast_query_results'
+                        'output_type': 'ast_query'
                     },
                     {
                         'goal': 'Find complex code',
                         'query': 'ast://src?complexity>15',
                         'description': 'Locate high-complexity functions',
-                        'output_type': 'ast_query_results'
+                        'output_type': 'ast_query'
                     }
                 ]
             },
@@ -718,19 +718,19 @@ class HelpAdapter(ResourceAdapter):
                         'goal': 'Find error handlers',
                         'query': 'ast://src?name~=error&type=function',
                         'description': 'Locate error handling code',
-                        'output_type': 'ast_query_results'
+                        'output_type': 'ast_query'
                     },
                     {
                         'goal': 'Check recent changes',
                         'query': 'git://.?type=history',
                         'description': 'Review recent commit history',
-                        'output_type': 'git_log'
+                        'output_type': 'git_ref'
                     },
                     {
                         'goal': 'Find large functions',
                         'query': 'ast://src?lines>100&type=function',
                         'description': 'Locate potentially problematic large functions',
-                        'output_type': 'ast_query_results'
+                        'output_type': 'ast_query'
                     }
                 ]
             },
@@ -743,19 +743,19 @@ class HelpAdapter(ResourceAdapter):
                         'goal': 'Find quality hotspots',
                         'query': 'stats://src --only-failures',
                         'description': 'Show only files with quality issues',
-                        'output_type': 'stats_results'
+                        'output_type': 'stats_summary'
                     },
                     {
                         'goal': 'Check code complexity',
                         'query': 'ast://src?complexity>10',
                         'description': 'High complexity functions',
-                        'output_type': 'ast_query_results'
+                        'output_type': 'ast_query'
                     },
                     {
                         'goal': 'Find long functions lacking simplicity',
                         'query': 'ast://src?type=function&lines>50&sort=-lines',
                         'description': 'Large functions sorted by size — prime documentation/refactor targets',
-                        'output_type': 'ast_query_results'
+                        'output_type': 'ast_query'
                     }
                 ]
             },
@@ -829,13 +829,13 @@ class HelpAdapter(ResourceAdapter):
                         'goal': 'Validate internal links',
                         'query': 'reveal docs/README.md --links --link-type internal',
                         'description': 'Find broken internal links in a doc',
-                        'output_type': 'links'
+                        'output_type': 'markdown_query'
                     },
                     {
                         'goal': 'Get document outline',
                         'query': 'reveal docs/README.md --outline',
                         'description': 'Hierarchical heading tree',
-                        'output_type': 'outline'
+                        'output_type': 'markdown_query'
                     }
                 ]
             }
