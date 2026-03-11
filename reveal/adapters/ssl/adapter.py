@@ -160,6 +160,11 @@ class SSLAdapter(ResourceAdapter):
                     'output_type': 'ssl_chain'
                 },
                 {
+                    'uri': 'ssl://example.com/subject',
+                    'description': 'Certificate subject (CN, org, country)',
+                    'output_type': 'ssl_subject'
+                },
+                {
                     'uri': 'ssl://example.com/issuer',
                     'description': 'Certificate issuer (CA name, org)',
                     'output_type': 'ssl_issuer'
