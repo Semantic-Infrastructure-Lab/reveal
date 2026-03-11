@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 - **AGENT_HELP.md** — bare integer line nav (`reveal file.py 73`) added to line-number section and quick-reference table.
+- **`help://examples/` — `infrastructure` and `documentation` recipe categories** — `reveal help://examples/infrastructure` returns 6 recipes for nginx vhost inspection, nginx overview, upstream health, SSL cert check, nginx SSL from config path, and domain health. `reveal help://examples/documentation` returns 5 recipes for markdown body-contains search, frontmatter filter, body+sort combo, link validation, and outline view. Error listing for unknown tasks now includes all 6 categories. (session kilonova-throne-0311)
 
 ---
 
