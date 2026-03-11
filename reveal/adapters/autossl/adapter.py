@@ -158,22 +158,22 @@ class AutosslAdapter(ResourceAdapter):
             ],
             'example_queries': [
                 {
-                    'query': 'reveal autossl://',
+                    'uri': 'reveal autossl://',
                     'description': 'List all available AutoSSL run timestamps on this server',
                     'output_type': 'autossl_runs',
                 },
                 {
-                    'query': 'reveal autossl://2024-01-15_03-00-00',
+                    'uri': 'reveal autossl://2024-01-15_03-00-00',
                     'description': 'Inspect a specific AutoSSL run — per-user/domain TLS outcomes',
                     'output_type': 'autossl_run',
                 },
                 {
-                    'query': "reveal autossl:// --format=json | jq '.runs[-1]'",
+                    'uri': "reveal autossl:// --format=json | jq '.runs[-1]'",
                     'description': 'Get timestamp of the most recent AutoSSL run',
                     'output_type': 'autossl_runs',
                 },
                 {
-                    'query': "reveal autossl://$(reveal autossl:// --format=json | jq -r '.runs[-1]')",
+                    'uri': "reveal autossl://$(reveal autossl:// --format=json | jq -r '.runs[-1]')",
                     'description': 'Inspect the most recent AutoSSL run directly',
                     'output_type': 'autossl_run',
                 },
