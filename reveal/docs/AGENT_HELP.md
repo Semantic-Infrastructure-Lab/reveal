@@ -71,6 +71,7 @@ reveal help://examples/security --format=json        # Security analysis recipes
 - **Example queries**: Canonical examples for each adapter
 - **CLI flags**: Available command-line flags
 - **Elements**: Available element-based queries
+- **Notes**: Adapter-specific gotchas, behavior details, and usage patterns
 
 **Use case:** Generate valid queries from schema without hardcoding adapter syntax.
 
@@ -97,6 +98,11 @@ reveal help://examples/security --format=json        # Security analysis recipes
       "description": "Find complex functions",
       "output_type": "ast_query"
     }
+  ],
+  "notes": [
+    "Quote URIs with > or < operators: 'ast://path?lines>50' (shell interprets > as redirect)",
+    "Operators: = (equals), != (not equals), > < (numeric), ~= (regex/glob), .. (range)",
+    "Result control: sort=field, sort=-field (descending), limit=N, offset=M"
   ]
 }
 ```
