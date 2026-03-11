@@ -503,6 +503,107 @@ Link to [guide](/user_guide) with wrong separator.
             self.assertIsNotNone(detections[0].suggestion)
             self.assertIn('similar', detections[0].suggestion.lower())
 
+    def test_django_project_no_false_positives(self):
+        """Django projects: absolute routes should not trigger L003 (BACK-012)."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(self.temp_dir)
+            # Create Django project markers
+            self.create_file("manage.py", "import django\nos.environ.setdefault('DJANGO_SETTINGS_MODULE', 'mysite.settings')")
+
+            content = """
+# Django API Docs
+
+Routes available:
+- [Users](/api/users/)
+- [Auth](/accounts/login/)
+- [Admin](/admin/)
+"""
+            path = self.create_file("docs/api.md", content)
+            rule = L003()  # new instance picks up cwd-based framework detection
+            detections = rule.check(path, None, content)
+
+            # Django routes should not produce false positives
+            self.assertEqual(len(detections), 0)
+        finally:
+            os.chdir(old_cwd)
+
+    def test_flask_project_no_false_positives(self):
+        """Flask projects: absolute routes should not trigger L003 (BACK-012)."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(self.temp_dir)
+            # Create Flask project markers
+            self.create_file("app.py", "from flask import Flask\napp = Flask(__name__)")
+
+            content = """
+# Flask API Docs
+
+Routes available:
+- [Home](/)
+- [Users](/users/<int:id>)
+- [Login](/auth/login)
+"""
+            path = self.create_file("docs/routes.md", content)
+            rule = L003()
+            detections = rule.check(path, None, content)
+
+            # Flask routes should not produce false positives
+            self.assertEqual(len(detections), 0)
+        finally:
+            os.chdir(old_cwd)
+
+    def test_django_detection(self):
+        """Django should be detected when manage.py with django imports exists."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(self.temp_dir)
+            self.create_file("manage.py", "import django\n# Django manage.py")
+            rule = L003()
+            self.assertEqual(rule.framework, 'django')
+        finally:
+            os.chdir(old_cwd)
+
+    def test_flask_detection(self):
+        """Flask should be detected when app.py with Flask import exists."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(self.temp_dir)
+            self.create_file("app.py", "from flask import Flask\napp = Flask(__name__)")
+            rule = L003()
+            self.assertEqual(rule.framework, 'flask')
+        finally:
+            os.chdir(old_cwd)
+
+    def test_default_framework_is_static(self):
+        """Unknown projects should default to 'static', not 'fasthtml'."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(self.temp_dir)
+            # No framework markers at all
+            rule = L003()
+            self.assertEqual(rule.framework, 'static')
+        finally:
+            os.chdir(old_cwd)
+
+    def test_django_takes_priority_over_flask(self):
+        """If both manage.py and flask exist, Django should win (manage.py is authoritative)."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(self.temp_dir)
+            self.create_file("manage.py", "import django\n# manage.py")
+            self.create_file("app.py", "from flask import Flask")
+            rule = L003()
+            self.assertEqual(rule.framework, 'django')
+        finally:
+            os.chdir(old_cwd)
+
 
 class TestLinkValidationIntegration(unittest.TestCase):
     """Integration tests for all link validation rules."""

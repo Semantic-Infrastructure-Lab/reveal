@@ -124,17 +124,69 @@ class L003(BaseRule):
 
         return False
 
+    def _has_django_indicators(self, cwd: Path) -> bool:
+        """Check if directory has Django framework indicators.
+
+        Args:
+            cwd: Current working directory
+
+        Returns:
+            True if Django indicators found
+        """
+        # Django projects always have manage.py
+        if not (cwd / "manage.py").exists():
+            return False
+
+        # Check for Django imports in manage.py or settings.py
+        for candidate in [cwd / "manage.py", cwd / "settings.py"]:
+            if candidate.exists():
+                try:
+                    if 'django' in candidate.read_text(encoding='utf-8').lower():
+                        return True
+                except Exception:
+                    pass
+
+        return False
+
+    def _has_flask_indicators(self, cwd: Path) -> bool:
+        """Check if directory has Flask framework indicators.
+
+        Args:
+            cwd: Current working directory
+
+        Returns:
+            True if Flask indicators found
+        """
+        # Check Python files for Flask imports
+        for py_file in list(cwd.glob("*.py"))[:10]:  # cap at 10 to stay fast
+            try:
+                content = py_file.read_text(encoding='utf-8')
+                if 'from flask import' in content or 'Flask(__name__)' in content:
+                    return True
+            except Exception:
+                continue
+
+        return False
+
     def _detect_framework(self) -> str:
         """Auto-detect framework type based on project structure.
 
         Returns:
-            Framework name ('fasthtml', 'jekyll', 'hugo', 'static')
+            Framework name ('fasthtml', 'jekyll', 'hugo', 'django', 'flask', 'static')
         """
         cwd = Path.cwd()
 
         # Check for FastHTML
         if self._has_fasthtml_indicators(cwd):
             return 'fasthtml'
+
+        # Check for Django (manage.py is authoritative)
+        if self._has_django_indicators(cwd):
+            return 'django'
+
+        # Check for Flask
+        if self._has_flask_indicators(cwd):
+            return 'flask'
 
         # Check for Jekyll
         if (cwd / "_config.yml").exists() or (cwd / "Gemfile").exists():
@@ -144,8 +196,8 @@ class L003(BaseRule):
         if (cwd / "config.toml").exists() or (cwd / "hugo.toml").exists():
             return 'hugo'
 
-        # Default to FastHTML
-        return 'fasthtml'
+        # Default to static site (safest for unknown projects)
+        return 'static'
 
     def _find_docs_root(self, file_path: str) -> Path:
         """Find documentation root directory.
@@ -196,6 +248,10 @@ class L003(BaseRule):
             return self._check_jekyll_route(relative_path)
         elif self.framework == 'hugo':
             return self._check_hugo_route(relative_path)
+        elif self.framework in ('django', 'flask'):
+            # Dynamic routes cannot be validated without running the server;
+            # skip absolute-path checking to avoid false positives.
+            return (False, "", None)
         else:
             return self._check_static_route(relative_path)
 
@@ -428,6 +484,10 @@ class L003(BaseRule):
             return "Check _posts/ directory or frontmatter permalinks"
         elif self.framework == 'hugo':
             return "Check content/ directory or index.md files"
+        elif self.framework == 'django':
+            return "Django URL routes are dynamic - verify in urls.py"
+        elif self.framework == 'flask':
+            return "Flask URL routes are dynamic - verify route in app definitions"
         return ""
 
     def _suggest_fix(
