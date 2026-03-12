@@ -1354,8 +1354,8 @@ reveal 'ast://./src?complexity>10'
 # Method 2: Pipeline with jq (more control)
 find src/ -name "*.py" | reveal --stdin --format=json | \
   jq -r '.structure.functions[] |
-         select(.depth > 10) |
-         "\(.file_path):\(.line_number) - \(.name) (complexity: \(.depth))"' | \
+         select(.complexity > 10) |
+         "\(.file):\(.line) - \(.name) (complexity: \(.complexity))"' | \
   sort -t: -k3 -nr
 
 # Output:

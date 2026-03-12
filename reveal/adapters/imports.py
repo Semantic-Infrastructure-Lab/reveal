@@ -446,7 +446,8 @@ class ImportsAdapter(ResourceAdapter):
                 'Supports multiple languages via plugin architecture',
                 'Circular dependencies can indicate architectural issues',
                 'Layer violations require .reveal.yaml configuration',
-                'Unused import detection works with Python, JavaScript, Go, etc.'
+                'Unused import detection works with Python, JavaScript, Go, etc.',
+                'False positives: imports that trigger side effects (e.g. decorator-based registration) will be flagged as unused — these are intentional and safe to ignore'
             ]
         }
 

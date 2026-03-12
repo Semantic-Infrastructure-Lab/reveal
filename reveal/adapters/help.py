@@ -741,8 +741,8 @@ class HelpAdapter(ResourceAdapter):
                 'recipes': [
                     {
                         'goal': 'Find quality hotspots',
-                        'query': 'stats://src --only-failures',
-                        'description': 'Show only files with quality issues',
+                        'query': 'stats://src?hotspots=true',
+                        'description': 'Ranked list of files with quality issues',
                         'output_type': 'stats_summary'
                     },
                     {

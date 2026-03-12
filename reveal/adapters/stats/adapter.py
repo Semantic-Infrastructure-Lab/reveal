@@ -83,7 +83,7 @@ class StatsAdapter(ResourceAdapter):
             },
             'operators': {},  # No operators, uses query params
             'elements': {},  # No element-based queries
-            'cli_flags': ['--only-failures'],
+            'cli_flags': ['--hotspots', '--format=json'],
             'supports_batch': False,
             'supports_advanced': True,
             'output_types': [
@@ -214,15 +214,13 @@ class StatsAdapter(ResourceAdapter):
                     'output_type': 'stats_file'
                 },
                 {
-                    'uri': 'stats://./src --only-failures',
-                    'description': 'Show only files with quality issues',
-                    'cli_flag': '--only-failures',
+                    'uri': 'stats://./src?hotspots=true',
+                    'description': 'Ranked list of files with quality issues',
                     'output_type': 'stats_summary'
                 }
             ],
             'notes': [
                 'quality_score is 0-100: 100 = no issues; weighted by severity (error/warning/info)',
-                '--only-failures filters to files with quality_score < 100 (has at least one issue)',
                 'Complexity is heuristic-based (average functions per 100 lines) — not cyclomatic complexity',
                 'hotspots=true adds a ranked list of files most in need of refactoring',
                 'Both files and directories are supported; directories show aggregate + per-file breakdown',

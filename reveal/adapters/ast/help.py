@@ -347,8 +347,9 @@ def get_schema() -> Dict[str, Any]:
             "Quote URIs with > or < operators: 'ast://path?lines>50' (shell interprets > as redirect)",
             'Operators: = (equals), != (not equals), > < (numeric), ~= (regex/glob), .. (range)',
             'Result control: sort=field, sort=-field (descending), limit=N, offset=M',
+            'Sort note: text output groups results by file; use --format=json or --format=grep for globally sorted output',
             'Supports 50+ languages via tree-sitter (Python, JS, TS, Rust, Go, Java, C, C++, ...)',
-            'Complexity is heuristic-based (line count proxy); tree-sitter-based calculation planned',
+            'Complexity is proper McCabe cyclomatic complexity for tree-sitter languages; falls back to line-count heuristic for unsupported languages',
             'type= shorthand: ?functions → ?type=function, ?classes → ?type=class, ?methods → ?type=method',
         ]
     }

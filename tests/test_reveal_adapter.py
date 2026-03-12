@@ -204,6 +204,23 @@ class TestRevealAdapterGetRules:
             codes = [r['code'] for r in rules]
             assert codes == sorted(codes)
 
+    def test_rules_exclude_utility_modules(self):
+        """Rule discovery should not include utility helper modules.
+
+        Utility files like utils.py and adapter_utils.py live alongside
+        rule files but are not rules themselves. They must be excluded.
+        """
+        adapter = RevealAdapter()
+        rules = adapter._get_rules()
+
+        codes = [r['code'] for r in rules]
+        assert 'utils' not in codes, "utils.py should not appear as a rule"
+        assert 'adapter_utils' not in codes, "adapter_utils.py should not appear as a rule"
+
+        # All rule codes should start with an uppercase letter (e.g. V001, B001)
+        for rule in rules:
+            assert rule['code'][0].isupper(), f"Rule code '{rule['code']}' must start uppercase"
+
 
 class TestRevealAdapterGetStructure:
     """Test full structure retrieval."""

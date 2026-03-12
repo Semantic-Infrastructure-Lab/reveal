@@ -272,7 +272,7 @@ reveal 'ast://./src?type=function' --format=json | \
          "\(.file) - \(.name) (complexity: \(.complexity), lines: \(.lines))"'
 
 # Find god functions (both metrics high)
-reveal 'ast://./src?complexity>30|lines>150'
+reveal 'ast://./src?complexity>30&lines>150'
 
 # Simple but long - candidate for splitting or inlining
 reveal 'ast://./src?complexity<5&lines>50'

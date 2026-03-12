@@ -166,6 +166,9 @@ def get_rules(reveal_root: Path) -> List[Dict[str, Any]]:
         for rule_file in category_dir.glob('*.py'):
             if rule_file.stem.startswith('_'):
                 continue
+            # Skip utility modules — rule files always start with uppercase (e.g. V001, B001)
+            if not rule_file.stem[0].isupper():
+                continue
 
             rules.append({
                 'code': rule_file.stem,
