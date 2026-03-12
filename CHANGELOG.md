@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - v0.60.x (sessions toxic-onslaught-0310, ethereal-leviathan-0310, psychic-frenzy-0310, mystical-sword-0311, kilonova-throne-0311, eternal-launch-0311, turbo-ultimatum-0311, pattering-wind-0311)
+## [Unreleased] - v0.60.x (sessions toxic-onslaught-0310, ethereal-leviathan-0310, psychic-frenzy-0310, mystical-sword-0311, kilonova-throne-0311, eternal-launch-0311, turbo-ultimatum-0311, pattering-wind-0311, fluorescent-dawn-0311)
 
 ### Added
 - **BACK-014: `nginx://` adapter `get_schema()` — completes 21/21 adapter schema coverage** — `reveal help://schemas/nginx` now works. Schema covers all 8 output types (`nginx_sites_overview`, `nginx_vhost_summary`, `nginx_vhost_not_found`, `nginx_vhost_ports`, `nginx_vhost_upstream`, `nginx_vhost_auth`, `nginx_vhost_locations`, `nginx_vhost_config`), 5 elements, 7 example queries. `AGENT_HELP.md` updated from "20 of 21" to "all 21 adapters"; nginx and cpanel added to schemas listing. (session kilonova-throne-0311)
@@ -85,6 +85,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AGENT_HELP.md** — bare integer line nav (`reveal file.py 73`) added to line-number section and quick-reference table.
 - **AGENT_HELP.md — 'Inspect nginx vhost configuration' task section (16th)** — Covers all 7 `nginx://` views, "when to use" table, and cross-adapter workflow (nginx + ssl, nginx + domain). (session kilonova-throne-0311)
 - **`help://examples/` — `infrastructure` and `documentation` recipe categories** — `reveal help://examples/infrastructure` returns 6 recipes for nginx vhost inspection, nginx overview, upstream health, SSL cert check, nginx SSL from config path, and domain health. `reveal help://examples/documentation` returns 5 recipes for markdown body-contains search, frontmatter filter, body+sort combo, link validation, and outline view. Error listing for unknown tasks now includes all 6 categories. (session kilonova-throne-0311)
+
+### Refactored (session fluorescent-dawn-0311)
+- **Help file blobs decomposed; nginx parse functions extracted; renderer tests added** — Quality 97.4 → 97.7/100; tests 4771 → 4816. Three changes:
+  - `adapters/reveal/help.py` and `adapters/markdown/help.py` (both 55/100): large data blobs extracted to module-level constants (`_SCHEMA_OUTPUT_TYPES`, `_SCHEMA_EXAMPLE_QUERIES`, `_HELP_EXAMPLES`, `_HELP_WORKFLOWS`, `_SCHEMA_QUERY_PARAMS`). Both files exit the 55/100 hotspot list.
+  - `analyzers/nginx.py`: `_parse_server_block` (complexity 19) → `_apply_server_block_line` helper isolates per-line dispatch; `_parse_block_directives` (complexity 16) → `_accumulate_pending` + `_try_capture_direct_directive` helpers.
+  - `adapters/nginx/renderer.py`: 45 new tests in `tests/adapters/test_nginx_renderer.py` via `capsys`, covering all 13 render methods (was 14.8% covered).
 
 ### Refactored (session pattering-wind-0311)
 - **9 high-complexity functions decomposed across 8 files** — functions with complexity>15 dropped from 30 → 3. All 4771 tests pass. Quality: 97.3 → 97.4/100. Functions: 2280 → 2327.
