@@ -165,26 +165,18 @@ class L001(BaseRule):
         return (False, "")
 
     def _check_file_case_mismatch(self, target: Path) -> Tuple[bool, str]:
-        """Check for case mismatch in file path.
-
-        Args:
-            target: Target file path
-
-        Returns:
-            Tuple of (is_broken, reason)
-        """
+        """Check for case mismatch in file path (case-insensitive FS detection)."""
         try:
-            # Get actual filename from parent directory by comparing lowercase names
-            if target.parent.exists():
-                for actual_file in target.parent.iterdir():
-                    # Compare lowercase names (works on case-insensitive filesystems)
-                    if actual_file.name.lower() == target.name.lower():
-                        # Found the file - check if case matches exactly
-                        if actual_file.name != target.name:
-                            return (True, "case_mismatch")
-                        break
+            if not target.parent.exists():
+                return (False, "")
+            for actual_file in target.parent.iterdir():
+                if actual_file.name.lower() != target.name.lower():
+                    continue
+                if actual_file.name != target.name:
+                    return (True, "case_mismatch")
+                break
         except Exception:
-            pass  # If we can't check, assume it's ok
+            pass
         return (False, "")
 
     def _validate_target_file(self, target: Path, anchor: Optional[str]) -> Tuple[bool, str]:

@@ -47,6 +47,21 @@ def _merge_quality_section(config: Dict[str, Any], loaded: Dict[str, Any], key: 
         config_section.update(loaded_section)
 
 
+def _apply_yaml_config_file(config_path: Path, config: Dict[str, Any]) -> bool:
+    """Load a YAML config file and merge into config. Returns True if merged."""
+    import yaml
+    if not config_path.exists():
+        return False
+    with open(config_path) as f:
+        loaded_raw = yaml.safe_load(f)
+    if not loaded_raw or not isinstance(loaded_raw, dict):
+        return False
+    loaded: Dict[str, Any] = loaded_raw
+    for key in ['thresholds', 'penalties']:
+        _merge_quality_section(config, loaded, key)
+    return True
+
+
 def get_quality_config(path: Path) -> Dict[str, Any]:
     """Load quality scoring configuration.
 
@@ -69,20 +84,11 @@ def get_quality_config(path: Path) -> Dict[str, Any]:
     ]
 
     try:
-        import yaml
         for config_path in config_paths:
-            if config_path.exists():
-                with open(config_path) as f:
-                    loaded_raw = yaml.safe_load(f)
-                if loaded_raw and isinstance(loaded_raw, dict):
-                    loaded: Dict[str, Any] = loaded_raw
-                    for key in ['thresholds', 'penalties']:
-                        _merge_quality_section(config, loaded, key)
-                    break
-    except ImportError:
-        pass  # yaml not available, use defaults
-    except Exception:
-        pass  # Any config error, use defaults
+            if _apply_yaml_config_file(config_path, config):
+                break
+    except (ImportError, Exception):
+        pass  # yaml not available or config error, use defaults
 
     return config
 

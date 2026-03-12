@@ -51,27 +51,48 @@ def get_error_context(messages: List[Dict], error_msg_index: int,
             if not isinstance(content, dict):
                 continue
 
-            # Found the tool_use that led to this error
             if content.get('type') == 'tool_use' and content.get('id') == tool_use_id:
                 context['tool_name'] = content.get('name')
                 tool_input = content.get('input', {})
-                if isinstance(tool_input, dict):
-                    context['tool_input_preview'] = _get_tool_input_preview(tool_input)
+                context['tool_input_preview'] = _get_tool_input_preview(tool_input) if isinstance(tool_input, dict) else None
 
-            # Look for thinking in the same message
             if content.get('type') == 'thinking':
                 thinking = content.get('thinking', '')
-                # Get the last ~200 chars which is usually the decision
-                if len(thinking) > 200:
-                    context['thinking_preview'] = '...' + thinking[-200:]
-                else:
-                    context['thinking_preview'] = thinking
+                context['thinking_preview'] = ('...' + thinking[-200:]) if len(thinking) > 200 else thinking
 
         # If we found the tool_use, we're done
         if context['tool_name']:
             break
 
     return context
+
+
+def _classify_tool_result(content, msg, i, messages, strong_patterns, exit_code_pattern):
+    """Check a content block for errors and return an error dict or None."""
+    if not isinstance(content, dict) or content.get('type') != 'tool_result':
+        return None
+    result_content = str(content.get('content', ''))
+    is_error = content.get('is_error', False)
+    exit_match = exit_code_pattern.search(result_content)
+    has_exit_error = exit_match and int(exit_match.group(1)) > 0
+    has_strong_pattern = bool(strong_patterns.search(result_content))
+    if is_error:
+        error_type = 'is_error_flag'
+    elif has_exit_error:
+        error_type = 'exit_code'
+    elif has_strong_pattern:
+        error_type = 'pattern_match'
+    else:
+        return None
+    tool_use_id = content.get('tool_use_id')
+    return {
+        'message_index': i,
+        'tool_use_id': tool_use_id,
+        'error_type': error_type,
+        'content_preview': result_content[:300],
+        'timestamp': msg.get('timestamp'),
+        'context': get_error_context(messages, i, tool_use_id),
+    }
 
 
 def get_errors(messages: List[Dict], session_name: str,
@@ -105,45 +126,12 @@ def get_errors(messages: List[Dict], session_name: str,
     exit_code_pattern = Patterns.EXIT_CODE
 
     for i, msg in enumerate(messages):
-        # Tool results are in 'user' type messages (results returned to assistant)
-        if msg.get('type') == 'user':
-            for content in msg.get('message', {}).get('content', []):
-                # Skip non-dict content (plain text messages)
-                if not isinstance(content, dict):
-                    continue
-                if content.get('type') == 'tool_result':
-                    result_content = str(content.get('content', ''))
-
-                    # Priority 1: Explicit is_error flag (definitive)
-                    is_error = content.get('is_error', False)
-
-                    # Priority 2: Exit code > 0 (definitive for Bash)
-                    exit_match = exit_code_pattern.search(result_content)
-                    has_exit_error = exit_match and int(exit_match.group(1)) > 0
-
-                    # Priority 3: Strong error patterns at line start
-                    has_strong_pattern = bool(strong_patterns.search(result_content))
-
-                    error_type = None
-                    if is_error:
-                        error_type = 'is_error_flag'
-                    elif has_exit_error:
-                        error_type = 'exit_code'
-                    elif has_strong_pattern:
-                        error_type = 'pattern_match'
-
-                    if error_type:
-                        tool_use_id = content.get('tool_use_id')
-                        context = get_error_context(messages, i, tool_use_id)
-
-                        errors.append({
-                            'message_index': i,
-                            'tool_use_id': tool_use_id,
-                            'error_type': error_type,
-                            'content_preview': result_content[:300],
-                            'timestamp': msg.get('timestamp'),
-                            'context': context
-                        })
+        if msg.get('type') != 'user':
+            continue
+        for content in msg.get('message', {}).get('content', []):
+            error = _classify_tool_result(content, msg, i, messages, strong_patterns, exit_code_pattern)
+            if error:
+                errors.append(error)
 
     base.update({
         'session': session_name,

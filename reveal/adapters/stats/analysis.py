@@ -7,6 +7,16 @@ from typing import Dict, Any, Optional, List, cast
 from ...registry import get_analyzer
 
 
+def _is_excluded_code_only(file_path: Path) -> bool:
+    """Return True if file should be excluded in code_only mode."""
+    suffix = file_path.suffix.lower()
+    if suffix in {'.xml', '.csv', '.sql'}:
+        return True
+    if suffix in {'.yaml', '.yml', '.toml'}:
+        return True
+    return suffix == '.json' and _is_large_json(file_path)
+
+
 def _is_large_json(file_path: Path) -> bool:
     """Return True if file_path is a JSON file larger than 10KB."""
     try:
@@ -25,10 +35,6 @@ def find_analyzable_files(directory: Path, code_only: bool = False) -> List[Path
     Returns:
         List of analyzable file paths
     """
-    # Data/config extensions to exclude when code_only=True
-    DATA_EXTENSIONS = {'.xml', '.csv', '.sql'}
-    CONFIG_EXTENSIONS = {'.yaml', '.yml', '.toml'}
-
     analyzable = []
     for root, dirs, files in os.walk(directory):
         # Skip common ignore directories
@@ -45,20 +51,8 @@ def find_analyzable_files(directory: Path, code_only: bool = False) -> List[Path
                 continue
 
             # Apply code_only filter
-            if code_only:
-                suffix = file_path.suffix.lower()
-
-                # Exclude data files
-                if suffix in DATA_EXTENSIONS:
-                    continue
-
-                # Exclude config files
-                if suffix in CONFIG_EXTENSIONS:
-                    continue
-
-                # Exclude large JSON files (>10KB, likely data not code)
-                if suffix == '.json' and _is_large_json(file_path):
-                    continue
+            if code_only and _is_excluded_code_only(file_path):
+                continue
 
             analyzable.append(file_path)
 

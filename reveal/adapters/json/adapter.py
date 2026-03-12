@@ -20,6 +20,16 @@ from .queries import (
     apply_result_control,
     navigate_to_path
 )
+def _parse_filters_safe(filter_query: str) -> list:
+    """Parse query filters, returning empty list on failure."""
+    if not filter_query:
+        return []
+    try:
+        return parse_query_filters(filter_query)
+    except Exception:
+        return []
+
+
 from .introspection import (
     get_type_str,
     get_schema_result,
@@ -71,15 +81,7 @@ class JsonAdapter(ResourceAdapter):
             if not is_legacy_mode:
                 # Parse result control first (removes sort/limit/offset from query)
                 filter_query, self.result_control = parse_result_control(query_string)
-
-                # Parse query filters if there's a filter query
-                # (JSON adapter has no legacy filter syntax, so parse all non-legacy queries)
-                if filter_query:
-                    try:
-                        self.query_filters = parse_query_filters(filter_query)
-                    except Exception:
-                        # If parsing fails, fall back to empty filters
-                        self.query_filters = []
+                self.query_filters = _parse_filters_safe(filter_query)
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Get JSON data with optional query processing.

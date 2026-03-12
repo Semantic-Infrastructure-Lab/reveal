@@ -230,9 +230,8 @@ class BaseRule(ABC):
     # Optional: brief compliant code example shown via --explain
     compliant_example: str = ""
 
-    # For tracking current file during check (set by registry)
-    _current_file: Optional[str] = None
-    _config: Optional[Any] = None  # Lazy-loaded config instance
+    def __init__(self) -> None:
+        self._config: Optional[Any] = None  # Lazy-loaded per-instance
 
     def get_config(self):
         """Get configuration instance (lazy-loaded).
@@ -412,14 +411,6 @@ class BaseRule(ABC):
         """Get full rule description."""
         return f"{self.code}: {self.message}"
 
-    @property
-    def current_file(self) -> Optional[str]:
-        """Get the current file being checked (for use in check methods)."""
-        return self._current_file
-
-    def set_current_file(self, file_path: str):
-        """Set the current file being checked (called by registry)."""
-        self._current_file = file_path
 
 
 T = 'T'

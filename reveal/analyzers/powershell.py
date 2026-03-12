@@ -82,42 +82,42 @@ class PowerShellAnalyzer(TreeSitterAnalyzer):
                     return text[start:start + i + 1]
         return ''
 
+    def _get_inline_params(self, node) -> Optional[str]:
+        """Return inline params string if function Name($x, $y) form, else None."""
+        for child in node.children:
+            if child.type != 'script_block_expression':
+                continue
+            text = self._get_node_text(child).strip()
+            if not text.startswith('('):
+                continue
+            paren_end = text.find(')')
+            if paren_end > 0:
+                return text[:paren_end + 1]
+        return None
+
+    def _get_param_block(self, node) -> Optional[str]:
+        """Return param block string from script_block body, or None."""
+        for child in node.children:
+            if child.type != 'script_block':
+                continue
+            block_text = self._get_node_text(child)
+            if 'param(' not in block_text.lower():
+                break
+            param_start = block_text.lower().find('param(')
+            if param_start >= 0:
+                param_block = self._find_paren_block(block_text, param_start)
+                if param_block:
+                    return ' ' + param_block
+            break
+        return None
+
     def _get_signature(self, node) -> str:
-        """Get function signature for PowerShell.
-
-        PowerShell functions have several forms:
-        - function Name { ... }              -> no signature params
-        - function Name { param($x) ... }    -> params in body
-        - function Name($x, $y) { ... }      -> params after name
-
-        The base implementation returns the full first line when no parens found,
-        which causes name duplication. We handle the PowerShell-specific syntax.
-        """
-        # Look for script_block_expression or param_block in children
-        for child in node.children:
-            # Check for inline parameters: function Name($x, $y)
-            if child.type == 'script_block_expression':
-                text = self._get_node_text(child).strip()
-                if text.startswith('('):
-                    # Extract just the params part
-                    paren_end = text.find(')')
-                    if paren_end > 0:
-                        return text[:paren_end + 1]
-
-        # Look for param block inside script_block
-        for child in node.children:
-            if child.type == 'script_block':
-                block_text = self._get_node_text(child)
-                if 'param(' in block_text.lower():
-                    param_start = block_text.lower().find('param(')
-                    if param_start >= 0:
-                        param_block = self._find_paren_block(block_text, param_start)
-                        if param_block:
-                            return ' ' + param_block
-                    break
-
-        # No parameters found - return empty (don't return name again)
-        return ''
+        """Get function signature for PowerShell (inline params or param block)."""
+        inline = self._get_inline_params(node)
+        if inline:
+            return inline
+        param_block = self._get_param_block(node)
+        return param_block if param_block is not None else ''
 
     def _extract_structs(self) -> List[dict]:
         """Extract PowerShell classes (structs in PowerShell 5.0+).

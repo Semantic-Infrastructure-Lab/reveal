@@ -41,17 +41,16 @@ def _check_nobody_access(path: str) -> Dict[str, Any]:
         if check.is_dir():
             mode = os.stat(check).st_mode
             can_traverse = bool(mode & 0o001)  # other-execute
-            if not can_traverse:
-                # Check extended ACL as fallback (Linux only)
-                if not _acl_grants_nobody(str(check), 'x'):
-                    return {
-                        'status': 'denied',
-                        'message': (
-                            f'nobody cannot traverse {check} '
-                            f'(mode {oct(mode)[-3:]}, no ACL entry)'
-                        ),
-                        'failing_path': str(check),
-                    }
+            # Check extended ACL as fallback (Linux only)
+            if not can_traverse and not _acl_grants_nobody(str(check), 'x'):
+                return {
+                    'status': 'denied',
+                    'message': (
+                        f'nobody cannot traverse {check} '
+                        f'(mode {oct(mode)[-3:]}, no ACL entry)'
+                    ),
+                    'failing_path': str(check),
+                }
 
     # Final target: need read (+ execute for directories)
     mode = os.stat(p).st_mode
@@ -59,16 +58,15 @@ def _check_nobody_access(path: str) -> Dict[str, Any]:
         can_read = bool(mode & 0o005)  # other r-x
     else:
         can_read = bool(mode & 0o004)  # other r--
-    if not can_read:
-        if not _acl_grants_nobody(str(p), 'r'):
-            return {
-                'status': 'denied',
-                'message': (
-                    f'nobody cannot read {p} '
-                    f'(mode {oct(mode)[-3:]}, no ACL entry)'
-                ),
-                'failing_path': str(p),
-            }
+    if not can_read and not _acl_grants_nobody(str(p), 'r'):
+        return {
+            'status': 'denied',
+            'message': (
+                f'nobody cannot read {p} '
+                f'(mode {oct(mode)[-3:]}, no ACL entry)'
+            ),
+            'failing_path': str(p),
+        }
 
     return {'status': 'ok', 'message': 'nobody has read access', 'failing_path': None}
 
@@ -88,10 +86,8 @@ def _acl_grants_nobody(path: str, perm: str) -> bool:
             return False
         for line in result.stdout.splitlines():
             # Lines like: user:nobody:r-x  or  other::r-x
-            if line.startswith(('user:nobody:', 'other::')):
-                perms = line.split(':', 2)[-1] if ':' in line else ''
-                if perm in perms:
-                    return True
+            if line.startswith(('user:nobody:', 'other::')) and perm in line.split(':', 2)[-1]:
+                return True
     except Exception:
         pass
     return False
@@ -259,6 +255,27 @@ class NginxAnalyzer(FileAnalyzer):
 
         return directives
 
+    def _try_capture_main_directive(
+        self, stripped: str, opens: int, directives: Dict[str, str]
+    ) -> Tuple[Optional[str], List[str]]:
+        """Capture a top-level directive at main context (depth 0).
+
+        Returns (pending_key, pending_parts) if a multi-line directive was started,
+        else (None, []).
+        """
+        if opens != 0:
+            return None, []
+        if ';' in stripped:
+            match = re.match(r'^([\w_-]+)\s+(.+?)\s*;', stripped)
+            if match:
+                directives[match.group(1)] = match.group(2)
+            return None, []
+        # Multi-line start
+        match = re.match(r'^([\w_-]+)\s+(.+)', stripped)
+        if match:
+            return match.group(1), [match.group(2).rstrip()]
+        return None, []
+
     def _parse_main_directives(self) -> Dict[str, str]:
         """Parse key-value directives at the main (outermost) context — depth 0.
 
@@ -293,17 +310,9 @@ class NginxAnalyzer(FileAnalyzer):
             closes = stripped.count('}')
 
             if depth == 0 and not stripped.startswith('}'):
-                if opens == 0 and ';' in stripped:
-                    # Single-line top-level directive
-                    match = re.match(r'^([\w_-]+)\s+(.+?)\s*;', stripped)
-                    if match:
-                        directives[match.group(1)] = match.group(2)
-                elif opens == 0:
-                    # Possible start of multi-line top-level directive
-                    match = re.match(r'^([\w_-]+)\s+(.+)', stripped)
-                    if match:
-                        pending_key = match.group(1)
-                        pending_parts = [match.group(2).rstrip()]
+                pending_key, pending_parts = self._try_capture_main_directive(
+                    stripped, opens, directives
+                )
 
             depth += opens - closes
 
@@ -335,13 +344,8 @@ class NginxAnalyzer(FileAnalyzer):
                 continue
 
             if stripped.startswith('server '):
-                match = re.match(r'server\s+(\S+)(.*?)\s*;', stripped)
-                if match:
-                    addr = match.group(1)
-                    params = match.group(2).strip()
-                    entry: Dict[str, str] = {'address': addr}
-                    if params:
-                        entry['params'] = params
+                entry = self._build_upstream_server_entry(stripped)
+                if entry:
                     servers.append(entry)
             elif ';' in stripped:
                 m = re.match(r'^([\w_-]+)\s+(.+?)\s*;', stripped)
@@ -349,6 +353,19 @@ class NginxAnalyzer(FileAnalyzer):
                     settings[m.group(1)] = m.group(2)
 
         return {'servers': servers, 'settings': settings}
+
+    @staticmethod
+    def _build_upstream_server_entry(stripped: str) -> Optional[Dict[str, str]]:
+        """Parse an upstream server directive into an entry dict, or None."""
+        match = re.match(r'server\s+(\S+)(.*?)\s*;', stripped)
+        if not match:
+            return None
+        addr = match.group(1)
+        params = match.group(2).strip()
+        entry: Dict[str, str] = {'address': addr}
+        if params:
+            entry['params'] = params
+        return entry
 
     def _try_parse_map_block(self, stripped: str) -> Optional[Dict[str, str]]:
         """Try to parse map block source/target variables from line."""
@@ -395,6 +412,20 @@ class NginxAnalyzer(FileAnalyzer):
                 loc_info = self._parse_location_block(line_num, location_path, current_server)
                 locations.append(loc_info)
 
+    def _process_map_block(self, maps: List, stripped: str, line_num: int) -> None:
+        """Process map block if detected, appending to maps list."""
+        if 'map ' not in stripped or '{' not in stripped:
+            return
+        map_info = self._try_parse_map_block(stripped)
+        if map_info:
+            maps.append({
+                'line_start': line_num,
+                'line_end': line_num,
+                'name': f"{map_info['source']} → {map_info['target']}",
+                'source_var': map_info['source'],
+                'target_var': map_info['target'],
+            })
+
     def _process_upstream_block(self, upstreams: List, stripped: str, line_num: int) -> None:
         """Process upstream block if detected, extracting server entries and settings."""
         if 'upstream ' in stripped and '{' in stripped:
@@ -440,16 +471,7 @@ class NginxAnalyzer(FileAnalyzer):
             else:
                 self._process_location_block(locations, stripped, i, in_server, brace_depth, current_server)
                 self._process_upstream_block(upstreams, stripped, i)
-                if 'map ' in stripped and '{' in stripped:
-                    map_info = self._try_parse_map_block(stripped)
-                    if map_info:
-                        maps.append({
-                            'line_start': i,
-                            'line_end': i,
-                            'name': f"{map_info['source']} → {map_info['target']}",
-                            'source_var': map_info['source'],
-                            'target_var': map_info['target'],
-                        })
+                self._process_map_block(maps, stripped, i)
 
             # Reset server context when we exit server block
             if in_server and brace_depth == 0:
@@ -718,6 +740,87 @@ class NginxAnalyzer(FileAnalyzer):
 
         return results
 
+    @staticmethod
+    def _make_prefix_overlap_conflict(
+        server_name: str, shorter_loc: Dict, longer_loc: Dict, shorter: str, longer: str
+    ) -> Dict[str, Any]:
+        """Build a prefix_overlap conflict dict."""
+        note = (
+            f'"{shorter_loc["path"]}" (line {shorter_loc["line"]}) is a '
+            f'prefix of "{longer_loc["path"]}" (line {longer_loc["line"]}) — '
+            f'nginx picks the longer match; requests to "{shorter}/" that '
+            f'don\'t match "{longer}" fall through to the shorter block'
+        )
+        return {
+            'server': server_name,
+            'location_a': {'line': shorter_loc['line'], 'path': shorter_loc['path']},
+            'location_b': {'line': longer_loc['line'], 'path': longer_loc['path']},
+            'type': 'prefix_overlap',
+            'severity': 'info',
+            'note': note,
+        }
+
+    @staticmethod
+    def _make_regex_shadow_conflict(
+        server_name: str, ploc: Dict, rloc: Dict
+    ) -> Dict[str, Any]:
+        """Build a regex_shadows_prefix conflict dict."""
+        note = (
+            f'regex location "{rloc["path"]}" (line {rloc["line"]}) '
+            f'may match requests also handled by prefix '
+            f'"{ploc["path"]}" (line {ploc["line"]}) — '
+            f'regex locations are evaluated after longest-prefix match; '
+            f'verify intended priority'
+        )
+        return {
+            'server': server_name,
+            'location_a': {'line': ploc['line'], 'path': ploc['path']},
+            'location_b': {'line': rloc['line'], 'path': rloc['path']},
+            'type': 'regex_shadows_prefix',
+            'severity': 'warning',
+            'note': note,
+        }
+
+    @staticmethod
+    def _regex_matches_prefix(raw_pattern: str, prefix_path: str) -> bool:
+        """Return True if raw_pattern matches prefix_path or prefix_path+'/'."""
+        try:
+            test_paths = [prefix_path, prefix_path + '/']
+            return any(re.search(raw_pattern, tp, re.IGNORECASE) for tp in test_paths)
+        except re.error:
+            return False
+
+    def _check_prefix_conflicts(
+        self, prefix_locs: List[Dict], server_name: str
+    ) -> List[Dict[str, Any]]:
+        """Return prefix-overlap conflicts among non-regex locations."""
+        conflicts = []
+        for i, loc_a in enumerate(prefix_locs):
+            for loc_b in prefix_locs[i + 1:]:
+                pa = loc_a['path'].rstrip('/')
+                pb = loc_b['path'].rstrip('/')
+                shorter, longer = (pa, pb) if len(pa) <= len(pb) else (pb, pa)
+                shorter_loc = loc_a if loc_a['path'].rstrip('/') == shorter else loc_b
+                longer_loc = loc_a if shorter_loc is loc_b else loc_b
+                if shorter and longer.startswith(shorter) and shorter != longer:
+                    conflicts.append(self._make_prefix_overlap_conflict(
+                        server_name, shorter_loc, longer_loc, shorter, longer
+                    ))
+        return conflicts
+
+    def _check_regex_prefix_conflicts(
+        self, regex_locs: List[Dict], prefix_locs: List[Dict], server_name: str
+    ) -> List[Dict[str, Any]]:
+        """Return regex_shadows_prefix conflicts between regex and non-regex locations."""
+        conflicts = []
+        for rloc in regex_locs:
+            raw_pattern = re.sub(r'^~\*?\s+', '', rloc['path'])
+            for ploc in prefix_locs:
+                prefix_path = ploc['path'].rstrip('/')
+                if prefix_path and self._regex_matches_prefix(raw_pattern, prefix_path):
+                    conflicts.append(self._make_regex_shadow_conflict(server_name, ploc, rloc))
+        return conflicts
+
     def detect_location_conflicts(self) -> List[Dict[str, Any]]:
         """Detect nginx location blocks where prefix-overlap could cause routing surprises (N2).
 
@@ -735,78 +838,20 @@ class NginxAnalyzer(FileAnalyzer):
             severity    – 'warning' or 'info'
             note        – human-readable explanation
         """
+        from collections import defaultdict
+
         structure = self.get_structure()
-        locations = structure.get('locations', [])
         conflicts: List[Dict[str, Any]] = []
 
-        # Group by server
-        from collections import defaultdict
         by_server: Dict[str, List[Dict]] = defaultdict(list)
-        for loc in locations:
+        for loc in structure.get('locations', []):
             by_server[loc.get('server', 'unknown')].append(loc)
 
         for server_name, locs in by_server.items():
-            # Separate regex vs non-regex
-            regex_locs = [l for l in locs if re.match(r'^~\*?\s+', l['path'])]
-            prefix_locs = [l for l in locs if not re.match(r'^~\*?\s+', l['path'])]
-
-            # Check prefix-prefix overlaps
-            for i, loc_a in enumerate(prefix_locs):
-                for loc_b in prefix_locs[i + 1:]:
-                    pa = loc_a['path'].rstrip('/')
-                    pb = loc_b['path'].rstrip('/')
-                    shorter, longer = (pa, pb) if len(pa) <= len(pb) else (pb, pa)
-                    shorter_loc = loc_a if loc_a['path'].rstrip('/') == shorter else loc_b
-                    longer_loc = loc_a if shorter_loc is loc_b else loc_b
-
-                    if shorter and longer.startswith(shorter):
-                        # Only flag if they differ (not identical paths)
-                        if shorter != longer:
-                            note = (
-                                f'"{shorter_loc["path"]}" (line {shorter_loc["line"]}) is a '
-                                f'prefix of "{longer_loc["path"]}" (line {longer_loc["line"]}) — '
-                                f'nginx picks the longer match; requests to "{shorter}/" that '
-                                f'don\'t match "{longer}" fall through to the shorter block'
-                            )
-                            conflicts.append({
-                                'server': server_name,
-                                'location_a': {'line': shorter_loc['line'], 'path': shorter_loc['path']},
-                                'location_b': {'line': longer_loc['line'], 'path': longer_loc['path']},
-                                'type': 'prefix_overlap',
-                                'severity': 'info',
-                                'note': note,
-                            })
-
-            # Check regex vs prefix conflicts
-            for rloc in regex_locs:
-                raw_pattern = re.sub(r'^~\*?\s+', '', rloc['path'])
-                for ploc in prefix_locs:
-                    prefix_path = ploc['path'].rstrip('/')
-                    if not prefix_path:
-                        continue
-                    # Check if the regex pattern could match the prefix path
-                    try:
-                        # Test both bare path and path/ so that patterns like
-                        # /static/.* match against the /static prefix location
-                        test_paths = [prefix_path, prefix_path + '/']
-                        if any(re.search(raw_pattern, tp, re.IGNORECASE) for tp in test_paths):
-                            note = (
-                                f'regex location "{rloc["path"]}" (line {rloc["line"]}) '
-                                f'may match requests also handled by prefix '
-                                f'"{ploc["path"]}" (line {ploc["line"]}) — '
-                                f'regex locations are evaluated after longest-prefix match; '
-                                f'verify intended priority'
-                            )
-                            conflicts.append({
-                                'server': server_name,
-                                'location_a': {'line': ploc['line'], 'path': ploc['path']},
-                                'location_b': {'line': rloc['line'], 'path': rloc['path']},
-                                'type': 'regex_shadows_prefix',
-                                'severity': 'warning',
-                                'note': note,
-                            })
-                    except re.error:
-                        pass  # Skip malformed regex patterns
+            regex_locs = [loc for loc in locs if re.match(r'^~\*?\s+', loc['path'])]
+            prefix_locs = [loc for loc in locs if not re.match(r'^~\*?\s+', loc['path'])]
+            conflicts.extend(self._check_prefix_conflicts(prefix_locs, server_name))
+            conflicts.extend(self._check_regex_prefix_conflicts(regex_locs, prefix_locs, server_name))
 
         return conflicts
 
@@ -814,9 +859,9 @@ class NginxAnalyzer(FileAnalyzer):
         """Find line number of server block with given server_name."""
         for i, line in enumerate(self.lines, 1):
             if 'server {' in line or line.strip().startswith('server {'):
-                for j in range(i, min(i + 20, len(self.lines) + 1)):
-                    if f'server_name {name}' in self.lines[j-1]:
-                        return i
+                block = self.lines[i-1:min(i + 19, len(self.lines))]
+                if any(f'server_name {name}' in ln for ln in block):
+                    return i
         return None
 
     def _find_block_line(self, pattern: str) -> Optional[int]:
@@ -886,6 +931,24 @@ class NginxAnalyzer(FileAnalyzer):
         return parts[0] if parts else None
 
     @staticmethod
+    def _find_matched_domains(line_domain: Optional[str], domains: set, line: str) -> set:
+        """Return the set of domains from *domains* that match this log line."""
+        if line_domain and line_domain in domains:
+            return {line_domain}
+        return {d for d in domains if d in line}
+
+    @staticmethod
+    def _record_hit(hits: Dict, domain: str, pattern_key: str, timestamp: str, line: str) -> None:
+        """Create or update a hit entry in the hits accumulator."""
+        key = (domain, pattern_key)
+        if key not in hits:
+            hits[key] = {'domain': domain, 'pattern': pattern_key, 'count': 0,
+                         'last_seen': timestamp, 'sample': line[:120]}
+        hits[key]['count'] += 1
+        if timestamp > hits[key]['last_seen']:
+            hits[key]['last_seen'] = timestamp
+
+    @staticmethod
     def _scan_log_for_patterns(
         recent_lines: list, domains: set, patterns: list
     ) -> Dict[tuple, Dict]:
@@ -899,25 +962,13 @@ class NginxAnalyzer(FileAnalyzer):
             for pattern_key, regex in patterns:
                 if not regex.search(line):
                     continue
-                matched_domains: set = set()
-                if line_domain and line_domain in domains:
-                    matched_domains.add(line_domain)
-                else:
-                    for d in domains:
-                        if d in line:
-                            matched_domains.add(d)
+                matched_domains = NginxAnalyzer._find_matched_domains(line_domain, domains, line)
                 if not matched_domains:
                     continue
                 ts_match = re.match(r'^(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})', line)
                 timestamp = ts_match.group(1) if ts_match else ''
                 for d in matched_domains:
-                    key = (d, pattern_key)
-                    if key not in hits:
-                        hits[key] = {'domain': d, 'pattern': pattern_key, 'count': 0,
-                                     'last_seen': timestamp, 'sample': line[:120]}
-                    hits[key]['count'] += 1
-                    if timestamp > hits[key]['last_seen']:
-                        hits[key]['last_seen'] = timestamp
+                    NginxAnalyzer._record_hit(hits, d, pattern_key, timestamp, line)
         return hits
 
     def diagnose_acme_errors(

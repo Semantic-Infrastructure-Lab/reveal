@@ -72,17 +72,20 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                 return self._get_node_text(p)
         return None
 
+    def _iter_param_decl_names(self, param_decl_list) -> List[str]:
+        """Yield parameter names from a ParamDeclList node."""
+        for param_child in param_decl_list.children:
+            if param_child.type == 'ParamDecl':
+                name = self._get_param_name(param_child)
+                if name:
+                    yield name
+
     def _extract_param_names(self, fn_proto) -> List[str]:
         """Extract parameter names from FnProto node."""
-        params = []
         for fn_child in fn_proto.children:
             if fn_child.type == 'ParamDeclList':
-                for param_child in fn_child.children:
-                    if param_child.type == 'ParamDecl':
-                        name = self._get_param_name(param_child)
-                        if name:
-                            params.append(name)
-        return params
+                return list(self._iter_param_decl_names(fn_child))
+        return []
 
     def _build_function_signature(self, fn_name: str, params: List[str]) -> str:
         """Build function signature string."""
@@ -167,14 +170,20 @@ class ZigAnalyzer(TreeSitterAnalyzer):
                 return [self._get_node_text(field_child)]
         return []
 
+    def _extract_fields_from_auto(self, cont_decl_auto) -> List[str]:
+        """Extract field names from a ContainerDeclAuto node."""
+        fields = []
+        for member in cont_decl_auto.children:
+            if member.type == 'ContainerField':
+                fields.extend(self._extract_container_field_names(member))
+        return fields
+
     def _extract_container_members(self, container_decl) -> List[str]:
         """Extract member field names from a ContainerDecl."""
         members = []
         for cont_child in container_decl.children:
             if cont_child.type == 'ContainerDeclAuto':
-                for member in cont_child.children:
-                    if member.type == 'ContainerField':
-                        members.extend(self._extract_container_field_names(member))
+                members.extend(self._extract_fields_from_auto(cont_child))
         return members
 
     def _build_container_info(
@@ -222,28 +231,19 @@ class ZigAnalyzer(TreeSitterAnalyzer):
 
         return containers
 
+    def _get_test_name(self, test_node) -> Optional[str]:
+        """Extract the name string from a TestDecl node, or None."""
+        for child in test_node.children:
+            if child.type == 'STRINGLITERALSINGLE':
+                name = self._get_node_text(child)
+                return name[1:-1] if name.startswith('"') and name.endswith('"') else name
+        return None
+
     def _extract_tests(self) -> List[Dict[str, Any]]:
         """Extract test blocks."""
         tests = []
-
-        test_nodes = self._find_nodes_by_type('TestDecl')
-
-        for test_node in test_nodes:
-            test_name = None
-
-            # Look for the test name (string literal)
-            for child in test_node.children:
-                if child.type == 'STRINGLITERALSINGLE':
-                    test_name = self._get_node_text(child)
-                    # Remove quotes
-                    if test_name.startswith('"') and test_name.endswith('"'):
-                        test_name = test_name[1:-1]
-                    break
-
+        for test_node in self._find_nodes_by_type('TestDecl'):
+            test_name = self._get_test_name(test_node)
             if test_name:
-                tests.append({
-                    'line': test_node.start_point[0] + 1,
-                    'name': test_name,
-                })
-
+                tests.append({'line': test_node.start_point[0] + 1, 'name': test_name})
         return tests

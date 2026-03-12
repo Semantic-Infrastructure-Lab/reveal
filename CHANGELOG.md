@@ -92,6 +92,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `analyzers/nginx.py`: `_parse_server_block` (complexity 19) → `_apply_server_block_line` helper isolates per-line dispatch; `_parse_block_directives` (complexity 16) → `_accumulate_pending` + `_try_capture_direct_directive` helpers.
   - `adapters/nginx/renderer.py`: 45 new tests in `tests/adapters/test_nginx_renderer.py` via `capsys`, covering all 13 render methods (was 14.8% covered).
 
+### Refactored (session fluorescent-dawn-0311, continued)
+- **Nesting depth hotspots eliminated — quality 99.5 → 99.8/100** — 40+ depth>4 functions across the codebase reduced to depth≤4. All 4816 tests pass. Functions: 2431 → 2436 (helpers extracted). Key fixes by file:
+  - `adapters/python/modules.py`: `_annotate_editable()` extracted (was inline try/with/if at depth 6 inside `get_pip_package_metadata`)
+  - `adapters/json/introspection.py`: `_key_to_path()` extracted, eliminating if/else at depth 5 inside `_flatten_recursive`
+  - `adapters/json/adapter.py`: `_parse_filters_safe()` extracted, collapsing try/if nesting in `__init__`
+  - `adapters/stats/queries.py`: `_apply_yaml_config_file()` extracted, reducing `get_quality_config` from depth 6 → 4
+  - `adapters/stats/analysis.py`: `_is_excluded_code_only()` extracted, collapsing triple-if code_only block in `find_analyzable_files`
+  - `rendering/adapters/markdown_query.py`: `_print_frontmatter_item()` extracted from `_render_single_file` list-value loop
+  - `display/filtering.py`: `GitignoreParser._parse()` refactored using `read_text()` + `splitlines()` (eliminates try/with/for nesting)
+  - `display/metadata.py`: `_format_display_key()` extracted, replacing nested key-format if/else
+  - `adapters/markdown/adapter.py`: `_extract_body_contains()` extracted from `__init__` body-contains loop
+
 ### Refactored (session pattering-wind-0311)
 - **9 high-complexity functions decomposed across 8 files** — functions with complexity>15 dropped from 30 → 3. All 4771 tests pass. Quality: 97.3 → 97.4/100. Functions: 2280 → 2327.
   - `autossl/parser.py`: `parse_run` (complexity 49) → `_process_indent0/1/2/3`, `_parse_log_lines`, `_build_user_list`

@@ -96,9 +96,8 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
         """Find identifier text inside the first child of the given type."""
         for child in node.children:
             if child.type == child_type:
-                for grandchild in child.children:
-                    if grandchild.type == 'identifier':
-                        return self._get_node_text(grandchild)
+                id_node = next((gc for gc in child.children if gc.type == 'identifier'), None)
+                return self._get_node_text(id_node) if id_node else None
         return None
 
     def _find_identifier_text(self, node: Any) -> Optional[str]:
@@ -153,13 +152,15 @@ class ProtobufAnalyzer(TreeSitterAnalyzer):
         request_type = None
         response_type = None
         for child in rpc_node.children:
-            if child.type == 'message_or_enum_type':
-                type_text = self._find_identifier_text(child)
-                if type_text:
-                    if request_type is None:
-                        request_type = type_text
-                    else:
-                        response_type = type_text
+            if child.type != 'message_or_enum_type':
+                continue
+            type_text = self._find_identifier_text(child)
+            if not type_text:
+                continue
+            if request_type is None:
+                request_type = type_text
+            else:
+                response_type = type_text
         return request_type, response_type
 
     def _get_rpc_streaming(self, rpc_node: Any) -> Tuple[bool, bool]:

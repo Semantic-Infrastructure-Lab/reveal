@@ -88,6 +88,13 @@ def flatten_value(value: Any, base_path: str = 'json') -> List[str]:
     return lines
 
 
+def _key_to_path(path: str, k: str) -> str:
+    """Format key as dot notation or bracket notation based on key format."""
+    if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', k):
+        return f'{path}.{k}'
+    return f'{path}["{k}"]'
+
+
 def _flatten_recursive(value: Any, path: str, lines: List[str]) -> None:
     """Recursively flatten JSON to assignment format.
 
@@ -97,16 +104,9 @@ def _flatten_recursive(value: Any, path: str, lines: List[str]) -> None:
         lines: List to append flattened lines to
     """
     if isinstance(value, dict):
-        if not value:
-            lines.append(f'{path} = {{}}')
-        else:
-            lines.append(f'{path} = {{}}')
-            for k, v in value.items():
-                # Use dot notation for simple keys, bracket for complex
-                if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', k):
-                    _flatten_recursive(v, f'{path}.{k}', lines)
-                else:
-                    _flatten_recursive(v, f'{path}["{k}"]', lines)
+        lines.append(f'{path} = {{}}')
+        for k, v in value.items():
+            _flatten_recursive(v, _key_to_path(path, k), lines)
     elif isinstance(value, list):
         lines.append(f'{path} = []')
         for i, v in enumerate(value):

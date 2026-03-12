@@ -82,23 +82,9 @@ class S701(BaseRule):
 
             # Check for missing tag (defaults to :latest)
             elif re.match(r'^\s*FROM\s+[a-zA-Z0-9_/-]+\s*(?:#|$)', line, re.IGNORECASE):
-                # Extract image name
-                parts = line.strip().split()
-                if len(parts) >= 2:
-                    image = parts[1]
-                    # Skip multi-stage builds (FROM ... AS ...)
-                    if 'AS' not in line.upper():
-                        detections.append(Detection(
-                            file_path=file_path,
-                            line=i,
-                            rule_code=self.code,
-                            message=f"Docker image missing tag (defaults to :latest): {image}",
-                            column=1,
-                            suggestion=f"Pin to specific version: FROM {image}:1.0.0",
-                            context=line.strip(),
-                            severity=self.severity,
-                            category=self.category
-                        ))
+                detection = self._check_missing_tag(file_path, i, line)
+                if detection:
+                    detections.append(detection)
 
         return detections
 
@@ -117,3 +103,23 @@ class S701(BaseRule):
                 category=self.category
             )]
         return []
+
+    def _check_missing_tag(self, file_path: str, line_num: int, line: str) -> Optional[Detection]:
+        """Return a Detection if this FROM line has a missing tag (no multi-stage)."""
+        parts = line.strip().split()
+        if len(parts) < 2:
+            return None
+        image = parts[1]
+        if 'AS' in line.upper():
+            return None
+        return Detection(
+            file_path=file_path,
+            line=line_num,
+            rule_code=self.code,
+            message=f"Docker image missing tag (defaults to :latest): {image}",
+            column=1,
+            suggestion=f"Pin to specific version: FROM {image}:1.0.0",
+            context=line.strip(),
+            severity=self.severity,
+            category=self.category,
+        )

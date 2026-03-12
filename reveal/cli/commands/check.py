@@ -102,6 +102,9 @@ def run_check(args: Namespace) -> None:
     `--check` flag via handle_file_or_directory() in routing.py.
     Both paths end up here; logic lives exactly once.
     """
+    from reveal.utils import check_for_updates
+    check_for_updates()
+
     # Introspection flags exit early
     if getattr(args, 'rules', False):
         from reveal.cli.handlers import handle_rules_list

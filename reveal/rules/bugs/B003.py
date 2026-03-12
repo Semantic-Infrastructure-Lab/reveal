@@ -25,7 +25,7 @@ class B003(BaseRule):
     # Properties over this line count are flagged
     MAX_PROPERTY_LINES = 15
 
-    thresholds = {"max_lines": 15}
+    thresholds = {"max_lines": MAX_PROPERTY_LINES}
     compliant_example = """\
 @property
 def status(self) -> str:

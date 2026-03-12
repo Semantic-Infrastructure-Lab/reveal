@@ -226,20 +226,20 @@ def load_layer_config(start_path: Path) -> Optional[LayerConfig]:
         # This ensures existing .reveal.yaml files still work during migration
         import yaml
 
-        current = start_path if start_path.is_dir() else start_path.parent
+        def _load_yaml_config(config_file: Path) -> Optional[LayerConfig]:
+            try:
+                with open(config_file, encoding='utf-8') as f:
+                    config_dict = yaml.safe_load(f)
+                return LayerConfig.from_dict(config_dict) if config_dict else None
+            except Exception as load_error:
+                logger.warning(f"Failed to load .reveal.yaml from {config_file}: {load_error}")
+                return None
 
+        current = start_path if start_path.is_dir() else start_path.parent
         while current != current.parent:
             config_file = current / ".reveal.yaml"
             if config_file.exists():
-                try:
-                    with open(config_file, encoding='utf-8') as f:
-                        config_dict = yaml.safe_load(f)
-                    if config_dict:
-                        return LayerConfig.from_dict(config_dict)
-                except Exception as load_error:
-                    logger.warning(f"Failed to load .reveal.yaml from {config_file}: {load_error}")
-                    return None
-
+                return _load_yaml_config(config_file)
             current = current.parent
 
         return None

@@ -124,6 +124,23 @@ def get_message(messages: List[Dict], msg_id: int, session_name: str,
     return base
 
 
+def _iter_thinking_blocks(content: list, msg_index: int, timestamp: Any):
+    """Yield thinking block dicts from one message's content list."""
+    for block in content:
+        try:
+            if isinstance(block, dict) and block.get('type') == 'thinking':
+                thinking = block.get('thinking', '')
+                yield {
+                    'message_index': msg_index,
+                    'content': thinking,
+                    'char_count': len(thinking),
+                    'token_estimate': len(thinking) // 4,
+                    'timestamp': timestamp,
+                }
+        except Exception:
+            continue
+
+
 def get_thinking_blocks(messages: List[Dict], session_name: str,
                         contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Extract all thinking blocks.
@@ -146,19 +163,7 @@ def get_thinking_blocks(messages: List[Dict], session_name: str,
             content = msg.get('message', {}).get('content', [])
             if not isinstance(content, list):
                 continue
-            for block in content:
-                try:
-                    if isinstance(block, dict) and block.get('type') == 'thinking':
-                        thinking = block.get('thinking', '')
-                        thinking_blocks.append({
-                            'message_index': i,
-                            'content': thinking,
-                            'char_count': len(thinking),
-                            'token_estimate': len(thinking) // 4,
-                            'timestamp': msg.get('timestamp')
-                        })
-                except Exception:
-                    continue
+            thinking_blocks.extend(_iter_thinking_blocks(content, i, msg.get('timestamp')))
 
     base.update({
         'session': session_name,
@@ -196,6 +201,32 @@ def _search_block(block: Dict, lower_term: str, term: str, i: int, role: str, ts
     return None
 
 
+def _extract_text_parts(content: list) -> List[str]:
+    """Return non-empty text strings from a list of content blocks."""
+    parts = []
+    for block in content:
+        if isinstance(block, dict) and block.get('type') == 'text':
+            t = block.get('text', '').strip()
+            if t:
+                parts.append(t)
+    return parts
+
+
+def _collect_block_matches(
+    blocks: list, lower_term: str, term: str, msg_index: int, role: str, ts: str
+) -> list:
+    """Search all blocks for term and return list of match dicts."""
+    matches = []
+    for block in blocks:
+        try:
+            match = _search_block(block, lower_term, term, msg_index, role, ts)
+            if match:
+                matches.append(match)
+        except Exception:
+            continue
+    return matches
+
+
 def search_messages(messages: List[Dict], term: str, session_name: str,
                     contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Search all message content for a term (case-insensitive).
@@ -225,13 +256,7 @@ def search_messages(messages: List[Dict], term: str, session_name: str,
         blocks = _content_to_blocks(msg.get('message', {}).get('content', []))
         ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
 
-        for block in blocks:
-            try:
-                match = _search_block(block, lower_term, term, i, role, ts)
-                if match:
-                    matches.append(match)
-            except Exception:
-                continue
+        matches.extend(_collect_block_matches(blocks, lower_term, term, i, role, ts))
 
     base.update({
         'session': session_name,
@@ -276,12 +301,7 @@ def get_messages(messages: List[Dict], session_name: str,
             continue
 
         # Collect only text blocks (skip tool_use, tool_result, thinking)
-        text_parts = []
-        for block in content:
-            if isinstance(block, dict) and block.get('type') == 'text':
-                t = block.get('text', '').strip()
-                if t:
-                    text_parts.append(t)
+        text_parts = _extract_text_parts(content)
 
         if not text_parts:
             continue

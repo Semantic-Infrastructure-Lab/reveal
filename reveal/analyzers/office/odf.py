@@ -515,15 +515,14 @@ class OdpAnalyzer(OdfAnalyzer):
         # Try to find title
         title = slide_name
         for frame in frames:
-            # Check for title frame
             frame_class = frame.get(f'{{{presentation_ns}}}class', '')
-            if 'title' in frame_class.lower():
-                text = self._get_element_text(frame)
-                if text.strip():
-                    title = text.strip()[:60]
-                    if len(text.strip()) > 60:
-                        title += '...'
-                    break
+            if 'title' not in frame_class.lower():
+                continue
+            text = self._get_element_text(frame).strip()
+            if text:
+                clipped = text[:60]
+                title = (clipped + '...') if len(text) > 60 else clipped
+                break
 
         # Count text elements
         text_count = 0

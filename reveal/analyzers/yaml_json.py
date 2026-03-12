@@ -34,6 +34,14 @@ class YamlAnalyzer(TreeSitterAnalyzer):
                 )
         return pairs
 
+    def _get_document_mapping_pairs(self, doc_node) -> List[Any]:
+        """Return mapping pairs from a YAML document node."""
+        pairs: List[Any] = []
+        for child in doc_node.children:
+            if child.type == 'block_node':
+                pairs.extend(self._get_mapping_pairs(child))
+        return pairs
+
     def _find_yaml_pairs(self) -> List[Any]:
         """Find top-level block_mapping_pair nodes in the document.
 
@@ -45,9 +53,7 @@ class YamlAnalyzer(TreeSitterAnalyzer):
         pairs: List[Any] = []
         for node in self.tree.root_node.children:
             if node.type == 'document':
-                for child in node.children:
-                    if child.type == 'block_node':
-                        pairs.extend(self._get_mapping_pairs(child))
+                pairs.extend(self._get_document_mapping_pairs(node))
         return pairs
 
     def _extract_key_info(self, pair_node):
@@ -146,9 +152,7 @@ class JsonAnalyzer(TreeSitterAnalyzer):
             return pairs
         for node in self.tree.root_node.children:
             if node.type == 'object':
-                for child in node.children:
-                    if child.type == 'pair':
-                        pairs.append(child)
+                pairs.extend(c for c in node.children if c.type == 'pair')
         return pairs
 
     def _extract_key_info(self, pair_node):

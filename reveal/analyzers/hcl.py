@@ -162,14 +162,20 @@ class HCLAnalyzer(TreeSitterAnalyzer):
                 value = self._get_node_text(attr_child)
         return key, value
 
+    def _extract_body_attributes(self, body_node) -> Dict[str, str]:
+        """Extract key-value attributes from a body node."""
+        attributes = {}
+        for child in body_node.children:
+            if child.type != 'attribute':
+                continue
+            key, value = self._parse_attribute_node(child)
+            if key:
+                attributes[key] = value or ''
+        return attributes
+
     def _extract_block_attributes(self, block_node) -> Dict[str, str]:
         """Extract key-value attributes from a block's body."""
-        attributes = {}
         for child in block_node.children:
             if child.type == 'body':
-                for body_child in child.children:
-                    if body_child.type == 'attribute':
-                        key, value = self._parse_attribute_node(body_child)
-                        if key:
-                            attributes[key] = value or ''
-        return attributes
+                return self._extract_body_attributes(child)
+        return {}

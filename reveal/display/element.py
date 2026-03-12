@@ -184,19 +184,24 @@ def _try_treesitter_extraction(analyzer, element: str):
     """
     for element_type in ['class', 'function', 'struct', 'section', 'server', 'location', 'upstream']:
         node_types = ELEMENT_TYPE_MAP.get(element_type, [element_type])
-
         for node_type in node_types:
-            nodes = analyzer._find_nodes_by_type(node_type)
-            for node in nodes:
-                node_name = analyzer._get_node_name(node)
-                if node_name == element:
-                    return {
-                        'name': element,
-                        'line_start': node.start_point[0] + 1,
-                        'line_end': node.end_point[0] + 1,
-                        'source': analyzer._get_node_text(node),
-                    }
+            node = _find_named_node(analyzer, node_type, element)
+            if node:
+                return {
+                    'name': element,
+                    'line_start': node.start_point[0] + 1,
+                    'line_end': node.end_point[0] + 1,
+                    'source': analyzer._get_node_text(node),
+                }
     return None
+
+
+def _find_named_node(analyzer, node_type: str, name: str):
+    """Find first node of node_type whose name matches name, or None."""
+    return next(
+        (n for n in analyzer._find_nodes_by_type(node_type) if analyzer._get_node_name(n) == name),
+        None
+    )
 
 
 def _try_grep_extraction(analyzer, element: str):
@@ -352,18 +357,15 @@ def _extract_element_at_line(analyzer, target_line: int):
     smallest_span = float('inf')
 
     for node_type in ALL_ELEMENT_NODE_TYPES:
-        nodes = analyzer._find_nodes_by_type(node_type)
-        for node in nodes:
+        for node in analyzer._find_nodes_by_type(node_type):
             start = node.start_point[0] + 1  # 1-indexed
             end = node.end_point[0] + 1
-
-            # Check if target line is within this element
-            if start <= target_line <= end:
-                span = end - start
-                # Prefer smallest containing element (most specific)
-                if span < smallest_span:
-                    smallest_span = span
-                    best_match = node
+            if not (start <= target_line <= end):
+                continue
+            span = end - start
+            if span < smallest_span:
+                smallest_span = span
+                best_match = node
 
     if not best_match:
         return None

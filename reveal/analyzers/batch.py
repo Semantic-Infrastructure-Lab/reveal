@@ -86,37 +86,27 @@ class BatchAnalyzer(FileAnalyzer):
             'stats': stats,  # Named 'stats' to be skipped by _render_text_categories
         }
 
-    def _extract_labels(self) -> List[Dict[str, Any]]:
-        """Extract all labels from batch file.
+    def _find_label_end(self, lines: List[str], label_idx: int) -> int:
+        """Return the 1-based line number where the label block ends."""
+        for j in range(label_idx, len(lines)):
+            if j > label_idx - 1 and self.LABEL_PATTERN.match(lines[j].strip()):
+                return j
+        return len(lines)
 
-        Returns:
-            List of label dictionaries with name, line, and end_line
-        """
+    def _extract_labels(self) -> List[Dict[str, Any]]:
+        """Extract all labels from batch file."""
         labels = []
         lines = self.content.split('\n')
 
         for i, line in enumerate(lines, start=1):
             match = self.LABEL_PATTERN.match(line.strip())
-            if match:
-                label_name = match.group(1).lower()
-                # Skip special labels
-                if label_name in ('eof',):
-                    continue
-
-                # Find end of label (next label or end of file)
-                end_line = len(lines)
-                for j in range(i, len(lines)):
-                    next_line = lines[j].strip()
-                    if j > i - 1 and self.LABEL_PATTERN.match(next_line):
-                        end_line = j
-                        break
-
-                labels.append({
-                    'name': label_name,
-                    'line': i,
-                    'line_end': end_line,
-                    'line_count': end_line - i,
-                })
+            if not match:
+                continue
+            label_name = match.group(1).lower()
+            if label_name in ('eof',):
+                continue
+            end_line = self._find_label_end(lines, i)
+            labels.append({'name': label_name, 'line': i, 'line_end': end_line, 'line_count': end_line - i})
 
         return labels
 

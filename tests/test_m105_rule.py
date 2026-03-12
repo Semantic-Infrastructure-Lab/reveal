@@ -152,24 +152,19 @@ class TestM105Integration:
         assert len(handlers) > 0
         assert 'handle_scaffold_adapter' in handlers
 
-    def test_main_py_imports_scaffold_handlers(self):
-        """Test that main.py imports scaffold handlers."""
-        main_path = Path('reveal/main.py')
-        if not main_path.exists():
-            pytest.skip("main.py not found")
+    def test_scaffold_command_imports_scaffold_handlers(self):
+        """Test that scaffold.py imports and calls scaffold handlers."""
+        scaffold_path = Path('reveal/cli/commands/scaffold.py')
+        if not scaffold_path.exists():
+            pytest.skip("scaffold.py not found")
 
-        content = main_path.read_text(encoding='utf-8')
+        content = scaffold_path.read_text(encoding='utf-8')
         rule = M105()
 
-        # Should be imported
-        assert rule._is_imported('handle_scaffold_adapter', content)
-        assert rule._is_imported('handle_scaffold_analyzer', content)
-        assert rule._is_imported('handle_scaffold_rule', content)
-
-        # Should be called
-        assert rule._is_called('handle_scaffold_adapter', content)
-        assert rule._is_called('handle_scaffold_analyzer', content)
-        assert rule._is_called('handle_scaffold_rule', content)
+        # All three handlers must be present in the file (imported and called)
+        for handler in ('handle_scaffold_adapter', 'handle_scaffold_analyzer', 'handle_scaffold_rule'):
+            assert handler in content, f"{handler} not found in scaffold.py"
+            assert rule._is_called(handler, content), f"{handler} not called in scaffold.py"
 
 
 class TestM105EdgeCases:

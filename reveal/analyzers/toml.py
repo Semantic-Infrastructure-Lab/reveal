@@ -82,47 +82,29 @@ class TomlAnalyzer(TreeSitterAnalyzer):
                 return self.content[child.start_byte:child.end_byte]
         return ''
 
+    def _find_section_end_line(self, node) -> int:
+        """Return end line for a section node (stops at next table or EOF)."""
+        end_line = node.end_point[0] + 1
+        for sibling in self.tree.root_node.children:
+            if sibling.start_point[0] <= node.start_point[0]:
+                continue
+            if sibling.type in ['table', 'table_array_element']:
+                return sibling.start_point[0]
+            if sibling.type == 'pair':
+                end_line = max(end_line, sibling.end_point[0] + 1)
+        return end_line
+
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
-        """Extract a TOML section by name.
-
-        Args:
-            element_type: 'section' or 'key'
-            name: Section/key name to find
-
-        Returns:
-            Dict with section content and line range
-        """
+        """Extract a TOML section by name."""
         if not self.tree:
             return super().extract_element(element_type, name)
-
-        # Search for matching section
         for node in self.tree.root_node.children:
-            if node.type in ['table', 'table_array_element']:
-                section_name = self._extract_table_name(node)
-
-                if section_name == name:
-                    # Find end of section (next section or EOF)
-                    start_line = node.start_point[0] + 1
-                    end_line = node.end_point[0] + 1
-
-                    # Include all pairs until next table
-                    for sibling in self.tree.root_node.children:
-                        if sibling.start_point[0] <= node.start_point[0]:
-                            continue
-                        if sibling.type in ['table', 'table_array_element']:
-                            end_line = sibling.start_point[0]
-                            break
-                        if sibling.type == 'pair':
-                            end_line = max(end_line, sibling.end_point[0] + 1)
-
-                    source = '\n'.join(self.lines[start_line-1:end_line])
-
-                    return {
-                        'name': name,
-                        'line_start': start_line,
-                        'line_end': end_line,
-                        'source': source,
-                    }
-
-        # Fall back to grep-based search
+            if node.type not in ['table', 'table_array_element']:
+                continue
+            if self._extract_table_name(node) != name:
+                continue
+            start_line = node.start_point[0] + 1
+            end_line = self._find_section_end_line(node)
+            source = '\n'.join(self.lines[start_line - 1:end_line])
+            return {'name': name, 'line_start': start_line, 'line_end': end_line, 'source': source}
         return super().extract_element(element_type, name)

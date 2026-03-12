@@ -100,6 +100,17 @@ class M104(BaseRule, ASTParsingMixin):
 
         return None
 
+    def _check_assign_node(self, node: ast.Assign, file_path: str) -> List[Detection]:
+        """Check a single ast.Assign node for hardcoded list targets."""
+        results = []
+        for target in node.targets:
+            if not (isinstance(target, ast.Name) and isinstance(node.value, ast.List)):
+                continue
+            detection = self._check_list_assignment(file_path, target.id, node.value, node.lineno)
+            if detection:
+                results.append(detection)
+        return results
+
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
@@ -109,21 +120,9 @@ class M104(BaseRule, ASTParsingMixin):
         if tree is None:
             return detections
 
-        # Find all list assignments
         for node in self._ast_walk(tree):
-            # Module-level or class-level list assignments
             if isinstance(node, ast.Assign):
-                for target in node.targets:
-                    if isinstance(target, ast.Name) and isinstance(node.value, ast.List):
-                        detection = self._check_list_assignment(
-                            file_path, target.id, node.value, node.lineno
-                        )
-                        if detection:
-                            detections.append(detection)
-
-            # Dict with list values (common pattern for mappings)
-            # Flag dicts that have many list values - these are often lookup tables
-            # that should be derived from a single source of truth
+                detections.extend(self._check_assign_node(node, file_path))
             if isinstance(node, ast.Dict):
                 detection = self._check_dict_with_list_values(node, file_path)
                 if detection:

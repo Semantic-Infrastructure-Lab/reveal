@@ -87,18 +87,19 @@ def _is_nginx_path(file_path: Path) -> bool:
     return '/nginx/' in path_str or '/etc/nginx/' in path_str
 
 
+def _get_nginx_analyzer_class() -> type:
+    """Lazy-load and return NginxAnalyzer class."""
+    from .analyzers.nginx import NginxAnalyzer
+    return NginxAnalyzer
+
+
 def _try_conf_detection(path: str, file_path: Path, ext: str) -> Optional[type]:
     """Try to detect analyzer for .conf files (nginx vs INI)."""
     if ext != '.conf':
         return None
 
-    if _is_nginx_path(file_path):
-        from .analyzers.nginx import NginxAnalyzer
-        return NginxAnalyzer
-
-    if _is_nginx_content(path):
-        from .analyzers.nginx import NginxAnalyzer
-        return NginxAnalyzer
+    if _is_nginx_path(file_path) or _is_nginx_content(path):
+        return _get_nginx_analyzer_class()
 
     return None
 
@@ -121,8 +122,7 @@ def _try_filename_lookup(file_path: Path) -> Optional[type]:
 def _try_nginx_path_detection(file_path: Path) -> Optional[type]:
     """Try to detect nginx by path patterns."""
     if _is_nginx_path(file_path):
-        from .analyzers.nginx import NginxAnalyzer
-        return NginxAnalyzer
+        return _get_nginx_analyzer_class()
     return None
 
 

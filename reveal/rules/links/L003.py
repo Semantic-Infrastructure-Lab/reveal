@@ -139,12 +139,13 @@ class L003(BaseRule):
 
         # Check for Django imports in manage.py or settings.py
         for candidate in [cwd / "manage.py", cwd / "settings.py"]:
-            if candidate.exists():
-                try:
-                    if 'django' in candidate.read_text(encoding='utf-8').lower():
-                        return True
-                except Exception:
-                    pass
+            if not candidate.exists():
+                continue
+            try:
+                if 'django' in candidate.read_text(encoding='utf-8').lower():
+                    return True
+            except Exception:
+                pass
 
         return False
 

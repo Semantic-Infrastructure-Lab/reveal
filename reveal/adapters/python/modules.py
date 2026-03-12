@@ -30,6 +30,22 @@ def find_module_import_location(module_name: str) -> Dict[str, Any]:
         return {"import_location": None, "status": "error", "error": str(e)}
 
 
+def _annotate_editable(dist_path, pip_package: dict) -> None:
+    """Detect editable install from direct_url.json and annotate pip_package dict."""
+    try:
+        direct_url_path = dist_path.parent / "direct_url.json"
+        if not direct_url_path.exists():
+            return
+        import json
+        with open(direct_url_path, encoding='utf-8') as f:
+            direct_url = json.load(f)
+        editable = direct_url.get("dir_info", {}).get("editable", False)
+        pip_package["editable"] = editable
+        pip_package["install_type"] = "editable" if editable else "normal"
+    except Exception:
+        pass  # install_type already set to "normal"
+
+
 def get_pip_package_metadata(module_name: str) -> Optional[Dict[str, Any]]:
     """Get pip package metadata including editable install detection."""
     try:
@@ -49,18 +65,7 @@ def get_pip_package_metadata(module_name: str) -> Optional[Dict[str, Any]]:
 
         # Check for editable install
         if dist_path:
-            try:
-                direct_url_path = dist_path.parent / "direct_url.json"
-                if direct_url_path.exists():
-                    import json
-
-                    with open(direct_url_path, encoding='utf-8') as f:
-                        direct_url = json.load(f)
-                        editable = direct_url.get("dir_info", {}).get("editable", False)
-                        pip_package["editable"] = editable
-                        pip_package["install_type"] = "editable" if editable else "normal"
-            except Exception:
-                pass  # install_type already set to "normal"
+            _annotate_editable(dist_path, pip_package)
 
         return pip_package
     except Exception:

@@ -164,15 +164,11 @@ class ClaudeRenderer(TypeDispatchRenderer):
                     tool_input = tool_input[:67] + '...'
                 print(f"      Input: {tool_input}")
 
-            # Show error preview
-            preview = err.get('content_preview', '')
-            # Find first line with actual error content
-            lines = preview.split('\n')
-            for line in lines[:3]:
+            # Show error preview — first non-empty line
+            for line in err.get('content_preview', '').split('\n')[:3]:
                 if line.strip():
-                    if len(line) > 70:
-                        line = line[:67] + '...'
-                    print(f"      Error: {line}")
+                    display = line[:67] + '...' if len(line) > 70 else line
+                    print(f"      Error: {display}")
                     break
             print()
 
@@ -197,10 +193,7 @@ class ClaudeRenderer(TypeDispatchRenderer):
             if files:
                 print(f"{op}:")
                 for file_path, count in sorted(files.items(), key=lambda x: -x[1])[:15]:
-                    # Shorten long paths for display
-                    display_path = file_path
-                    if len(file_path) > 70:
-                        display_path = '...' + file_path[-67:]
+                    display_path = '...' + file_path[-67:] if len(file_path) > 70 else file_path
                     print(f"  {count:2}x {display_path}")
                 if len(files) > 15:
                     print(f"  ... and {len(files) - 15} more files")
@@ -444,6 +437,20 @@ class ClaudeRenderer(TypeDispatchRenderer):
             print()
 
     @staticmethod
+    def _render_raw_block(block: dict) -> None:
+        """Print one content block from a raw message (text, tool_use, thinking, etc.)."""
+        btype = block.get('type', '?')
+        if btype == 'text':
+            print(block.get('text', ''))
+        elif btype == 'tool_use':
+            print(f"[tool_use: {block.get('name', '?')}]")
+        elif btype == 'thinking':
+            preview = block.get('thinking', '')[:200]
+            print(f"[thinking: {preview}...]")
+        else:
+            print(f"[{btype}]")
+
+    @staticmethod
     def _render_claude_message(result: dict) -> None:
         """Render a single message by index."""
         session = result.get('session', 'unknown')
@@ -467,18 +474,8 @@ class ClaudeRenderer(TypeDispatchRenderer):
             msg = result.get('message', {})
             content = msg.get('content', [])
             if isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict):
-                        btype = block.get('type', '?')
-                        if btype == 'text':
-                            print(block.get('text', ''))
-                        elif btype == 'tool_use':
-                            print(f"[tool_use: {block.get('name', '?')}]")
-                        elif btype == 'thinking':
-                            preview = block.get('thinking', '')[:200]
-                            print(f"[thinking: {preview}...]")
-                        else:
-                            print(f"[{btype}]")
+                for block in (b for b in content if isinstance(b, dict)):
+                    ClaudeRenderer._render_raw_block(block)
             elif isinstance(content, str):
                 print(content)
 

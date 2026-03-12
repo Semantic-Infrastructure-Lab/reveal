@@ -107,29 +107,21 @@ class GitignoreParser:
             gitignore_path: Path to .gitignore file
         """
         try:
-            with open(gitignore_path, 'r', encoding='utf-8', errors='ignore') as f:
-                for line in f:
-                    line = line.strip()
-
-                    # Skip empty lines and comments
-                    if not line or line.startswith('#'):
-                        continue
-
-                    # Handle negation patterns
-                    negate = False
-                    if line.startswith('!'):
-                        negate = True
-                        line = line[1:]
-
-                    # Store pattern with metadata
-                    self.patterns.append({
-                        'pattern': line,
-                        'negate': negate,
-                        'dir_only': line.endswith('/')
-                    })
+            content = gitignore_path.read_text(encoding='utf-8', errors='ignore')
         except (IOError, OSError):
-            # If we can't read .gitignore, just continue without it
-            pass
+            return
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            negate = line.startswith('!')
+            if negate:
+                line = line[1:]
+            self.patterns.append({
+                'pattern': line,
+                'negate': negate,
+                'dir_only': line.endswith('/')
+            })
 
     def matches(self, path: Path) -> bool:
         """Check if path matches any gitignore pattern.

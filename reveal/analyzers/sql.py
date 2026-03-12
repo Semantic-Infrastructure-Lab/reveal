@@ -16,18 +16,16 @@ class SQLAnalyzer(TreeSitterAnalyzer):
 
     def _find_identifier_child(self, node) -> Optional[str]:
         """Find the first identifier child's text (searches recursively)."""
-        # Check direct children first
-        for child in node.children:
-            if child.type == 'identifier':
-                return self._get_node_text(child)
-
+        direct = next((c for c in node.children if c.type == 'identifier'), None)
+        if direct:
+            return self._get_node_text(direct)
         # In new grammar, identifier is often nested in object_reference
         for child in node.children:
-            if child.type == 'object_reference':
-                for grandchild in child.children:
-                    if grandchild.type == 'identifier':
-                        return self._get_node_text(grandchild)
-
+            if child.type != 'object_reference':
+                continue
+            nested = next((gc for gc in child.children if gc.type == 'identifier'), None)
+            if nested:
+                return self._get_node_text(nested)
         return None
 
     def _node_to_function_dict(self, node, name: str) -> Dict[str, Any]:

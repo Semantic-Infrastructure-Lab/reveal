@@ -13,6 +13,113 @@ from .doctor import run_doctor
 from .help import get_help
 from .renderer import PythonRenderer
 
+_SCHEMA_ELEMENTS = {
+    'version': 'Python version and build details',
+    'env': 'Python environment configuration',
+    'venv': 'Virtual environment status',
+    'packages': 'All installed packages',
+    'packages/<name>': 'Specific package details',
+    'module/<name>': 'Module import location and conflicts',
+    'imports': 'Currently loaded modules',
+    'syspath': 'sys.path analysis with conflict detection',
+    'doctor': 'Auto-detect common environment issues',
+    'debug/bytecode': 'Bytecode issues'
+}
+
+_SCHEMA_OUTPUT_TYPES = [
+    {
+        'type': 'python_runtime',
+        'description': 'Python environment overview',
+        'schema': {'type': 'object', 'properties': {
+            'contract_version': {'type': 'string'},
+            'type': {'type': 'string', 'const': 'python_runtime'},
+            'source': {'type': 'string'},
+            'source_type': {'type': 'string', 'const': 'runtime'},
+            'version': {'type': 'string'},
+            'implementation': {'type': 'string'},
+            'executable': {'type': 'string'},
+            'virtual_env': {'type': 'object'},
+            'packages_count': {'type': 'integer'},
+            'modules_loaded': {'type': 'integer'},
+            'platform': {'type': 'string'},
+            'architecture': {'type': 'string'}
+        }},
+        'example': {
+            'contract_version': '1.0', 'type': 'python_runtime',
+            'source': '/usr/bin/python3', 'source_type': 'runtime',
+            'version': '3.11.5', 'implementation': 'CPython',
+            'executable': '/usr/bin/python3',
+            'virtual_env': {'active': True, 'path': '/home/user/venv', 'type': 'venv'},
+            'packages_count': 142, 'modules_loaded': 89,
+            'platform': 'linux', 'architecture': 'x86_64'
+        }
+    },
+    {
+        'type': 'python_packages',
+        'description': 'Installed Python packages',
+        'schema': {'type': 'object', 'properties': {
+            'contract_version': {'type': 'string'},
+            'type': {'type': 'string', 'const': 'python_packages'},
+            'source': {'type': 'string'}, 'source_type': {'type': 'string'},
+            'packages': {'type': 'array'}, 'count': {'type': 'integer'}
+        }}
+    },
+    {
+        'type': 'python_module',
+        'description': 'Module import location and conflicts',
+        'schema': {'type': 'object', 'properties': {
+            'contract_version': {'type': 'string'},
+            'type': {'type': 'string', 'const': 'python_module'},
+            'source': {'type': 'string'}, 'source_type': {'type': 'string'},
+            'module_name': {'type': 'string'}, 'location': {'type': 'string'},
+            'conflicts': {'type': 'array'}
+        }}
+    },
+    {
+        'type': 'python_doctor',
+        'description': 'Environment health check results',
+        'schema': {'type': 'object', 'properties': {
+            'contract_version': {'type': 'string'},
+            'type': {'type': 'string', 'const': 'python_doctor'},
+            'source': {'type': 'string'}, 'source_type': {'type': 'string'},
+            'issues': {'type': 'array'}, 'recommendations': {'type': 'array'}
+        }}
+    },
+    {
+        'type': 'python_bytecode',
+        'description': 'Bytecode analysis — stale .pyc files newer than their source',
+        'schema': {'type': 'object', 'properties': {
+            'contract_version': {'type': 'string'},
+            'type': {'type': 'string', 'const': 'python_bytecode'},
+            'source': {'type': 'string'}, 'source_type': {'type': 'string'},
+            'stale_files': {'type': 'array', 'items': {'type': 'string'}},
+            'count': {'type': 'integer'}
+        }}
+    },
+]
+
+_SCHEMA_EXAMPLE_QUERIES = [
+    {'uri': 'python://', 'description': 'Python environment overview', 'output_type': 'python_runtime'},
+    {'uri': 'python://version', 'description': 'Detailed Python version information', 'element': 'version', 'output_type': 'python_runtime'},
+    {'uri': 'python://env', 'description': 'Python environment configuration (paths, flags, encoding)', 'element': 'env', 'output_type': 'python_runtime'},
+    {'uri': 'python://venv', 'description': 'Virtual environment status', 'element': 'venv', 'output_type': 'python_runtime'},
+    {'uri': 'python://packages', 'description': 'All installed packages', 'element': 'packages', 'output_type': 'python_packages'},
+    {'uri': 'python://packages/requests', 'description': 'Specific package details', 'element': 'packages/requests', 'output_type': 'python_packages'},
+    {'uri': 'python://module/numpy', 'description': 'Module import location and conflicts', 'element': 'module/numpy', 'output_type': 'python_module'},
+    {'uri': 'python://syspath', 'description': 'sys.path analysis with conflict detection', 'element': 'syspath', 'output_type': 'python_runtime'},
+    {'uri': 'python://doctor', 'description': 'Auto-detect common environment issues', 'element': 'doctor', 'output_type': 'python_doctor'},
+    {'uri': 'python://imports', 'description': 'All currently loaded modules (sys.modules)', 'element': 'imports', 'output_type': 'python_runtime'},
+    {'uri': 'python://debug/bytecode', 'description': 'Find stale .pyc files (newer than source)', 'element': 'debug/bytecode', 'output_type': 'python_bytecode'},
+]
+
+_SCHEMA_NOTES = [
+    'Inspects the currently running Python interpreter',
+    'Virtual environment detection (venv, virtualenv, conda)',
+    'Package conflict detection',
+    'Doctor mode identifies common environment issues',
+    'No external dependencies required'
+]
+
 
 @register_adapter("python")
 @register_renderer(PythonRenderer)
@@ -324,194 +431,14 @@ class PythonAdapter(ResourceAdapter):
             'adapter': 'python',
             'description': 'Python runtime inspection with package management, virtual environment detection, and module analysis',
             'uri_syntax': 'python://[element[/subelement]]',
-            'query_params': {},  # No query parameters
-            'elements': {
-                'version': 'Python version and build details',
-                'env': 'Python environment configuration',
-                'venv': 'Virtual environment status',
-                'packages': 'All installed packages',
-                'packages/<name>': 'Specific package details',
-                'module/<name>': 'Module import location and conflicts',
-                'imports': 'Currently loaded modules',
-                'syspath': 'sys.path analysis with conflict detection',
-                'doctor': 'Auto-detect common environment issues',
-                'debug/bytecode': 'Bytecode issues'
-            },
+            'query_params': {},
+            'elements': _SCHEMA_ELEMENTS,
             'cli_flags': [],
             'supports_batch': False,
             'supports_advanced': False,
-            'output_types': [
-                {
-                    'type': 'python_runtime',
-                    'description': 'Python environment overview',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'python_runtime'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string', 'const': 'runtime'},
-                            'version': {'type': 'string'},
-                            'implementation': {'type': 'string'},
-                            'executable': {'type': 'string'},
-                            'virtual_env': {'type': 'object'},
-                            'packages_count': {'type': 'integer'},
-                            'modules_loaded': {'type': 'integer'},
-                            'platform': {'type': 'string'},
-                            'architecture': {'type': 'string'}
-                        }
-                    },
-                    'example': {
-                        'contract_version': '1.0',
-                        'type': 'python_runtime',
-                        'source': '/usr/bin/python3',
-                        'source_type': 'runtime',
-                        'version': '3.11.5',
-                        'implementation': 'CPython',
-                        'executable': '/usr/bin/python3',
-                        'virtual_env': {'active': True, 'path': '/home/user/venv', 'type': 'venv'},
-                        'packages_count': 142,
-                        'modules_loaded': 89,
-                        'platform': 'linux',
-                        'architecture': 'x86_64'
-                    }
-                },
-                {
-                    'type': 'python_packages',
-                    'description': 'Installed Python packages',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'python_packages'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'packages': {'type': 'array'},
-                            'count': {'type': 'integer'}
-                        }
-                    }
-                },
-                {
-                    'type': 'python_module',
-                    'description': 'Module import location and conflicts',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'python_module'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'module_name': {'type': 'string'},
-                            'location': {'type': 'string'},
-                            'conflicts': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'python_doctor',
-                    'description': 'Environment health check results',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'python_doctor'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'issues': {'type': 'array'},
-                            'recommendations': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'python_bytecode',
-                    'description': 'Bytecode analysis — stale .pyc files newer than their source',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'python_bytecode'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'stale_files': {'type': 'array', 'items': {'type': 'string'}},
-                            'count': {'type': 'integer'}
-                        }
-                    }
-                }
-            ],
-            'example_queries': [
-                {
-                    'uri': 'python://',
-                    'description': 'Python environment overview',
-                    'output_type': 'python_runtime'
-                },
-                {
-                    'uri': 'python://version',
-                    'description': 'Detailed Python version information',
-                    'element': 'version',
-                    'output_type': 'python_runtime'
-                },
-                {
-                    'uri': 'python://env',
-                    'description': 'Python environment configuration (paths, flags, encoding)',
-                    'element': 'env',
-                    'output_type': 'python_runtime'
-                },
-                {
-                    'uri': 'python://venv',
-                    'description': 'Virtual environment status',
-                    'element': 'venv',
-                    'output_type': 'python_runtime'
-                },
-                {
-                    'uri': 'python://packages',
-                    'description': 'All installed packages',
-                    'element': 'packages',
-                    'output_type': 'python_packages'
-                },
-                {
-                    'uri': 'python://packages/requests',
-                    'description': 'Specific package details',
-                    'element': 'packages/requests',
-                    'output_type': 'python_packages'
-                },
-                {
-                    'uri': 'python://module/numpy',
-                    'description': 'Module import location and conflicts',
-                    'element': 'module/numpy',
-                    'output_type': 'python_module'
-                },
-                {
-                    'uri': 'python://syspath',
-                    'description': 'sys.path analysis with conflict detection',
-                    'element': 'syspath',
-                    'output_type': 'python_runtime'
-                },
-                {
-                    'uri': 'python://doctor',
-                    'description': 'Auto-detect common environment issues',
-                    'element': 'doctor',
-                    'output_type': 'python_doctor'
-                },
-                {
-                    'uri': 'python://imports',
-                    'description': 'All currently loaded modules (sys.modules)',
-                    'element': 'imports',
-                    'output_type': 'python_runtime'
-                },
-                {
-                    'uri': 'python://debug/bytecode',
-                    'description': 'Find stale .pyc files (newer than source)',
-                    'element': 'debug/bytecode',
-                    'output_type': 'python_bytecode'
-                }
-            ],
-            'notes': [
-                'Inspects the currently running Python interpreter',
-                'Virtual environment detection (venv, virtualenv, conda)',
-                'Package conflict detection',
-                'Doctor mode identifies common environment issues',
-                'No external dependencies required'
-            ]
+            'output_types': _SCHEMA_OUTPUT_TYPES,
+            'example_queries': _SCHEMA_EXAMPLE_QUERIES,
+            'notes': _SCHEMA_NOTES,
         }
 
     @staticmethod

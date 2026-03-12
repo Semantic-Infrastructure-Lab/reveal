@@ -21,6 +21,15 @@ from ..base import BaseRule, Detection, RulePrefix, Severity
 from . import get_validation_schema, validate_type
 
 
+_TYPE_ALIASES = {'bool': 'boolean', 'int': 'integer', 'str': 'string'}
+
+
+def _python_type_name(value) -> str:
+    """Return a schema-friendly type name for a Python value."""
+    name = type(value).__name__
+    return _TYPE_ALIASES.get(name, name)
+
+
 class F004(BaseRule):
     """Detect field type mismatches in front matter."""
 
@@ -73,15 +82,7 @@ class F004(BaseRule):
 
                 # Validate type
                 if not validate_type(value, expected_type):
-                    # Get actual type name
-                    actual_type = type(value).__name__
-                    if actual_type == 'bool':
-                        actual_type = 'boolean'
-                    elif actual_type == 'int':
-                        actual_type = 'integer'
-                    elif actual_type == 'str':
-                        actual_type = 'string'
-
+                    actual_type = _python_type_name(value)
                     detections.append(self.create_detection(
                         file_path=file_path,
                         line=line,

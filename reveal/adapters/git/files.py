@@ -89,17 +89,14 @@ def get_file_history(
         walker = repo.walk(commit.id, pygit2.GIT_SORT_TIME)  # type: ignore[arg-type]
 
         for commit in walker:
-            # Check if this commit touched the file
-            if commit_touches_file_func(repo, commit, subpath):
-                commit_dict = format_commit_func(commit)
-                # Apply query filters
-                if matches_all_filters_func(commit_dict):
-                    commits.append(commit_dict)
-
-                    # Legacy limit parameter support (for backward compatibility)
-                    # Note: Prefer using ?limit=N in query string for result control
-                    if len(commits) >= limit:
-                        break
+            if not commit_touches_file_func(repo, commit, subpath):
+                continue
+            commit_dict = format_commit_func(commit)
+            if not matches_all_filters_func(commit_dict):
+                continue
+            commits.append(commit_dict)
+            if len(commits) >= limit:
+                break
 
         # Apply result control (sort, limit, offset) from query params
         from ...utils.query import apply_result_control
@@ -290,21 +287,19 @@ def commit_touches_file(
             # Initial commit - file exists, so it was added
             return True
 
-        # Check if file changed from any parent
         for parent in commit.parents:
-            try:
-                parent_tree = parent.tree
-                parent_entry = parent_tree[filepath]
-                parent_oid = parent_entry.id
-
-                # If OID changed, file was modified
-                if current_oid != parent_oid:
-                    return True
-            except KeyError:
-                # File didn't exist in parent - it was added
+            if _parent_has_different_file(parent, filepath, current_oid):
                 return True
-
         return False
 
     except Exception:
         return False
+
+
+def _parent_has_different_file(parent, filepath: str, current_oid) -> bool:
+    """Return True if parent commit has a different (or missing) version of filepath."""
+    try:
+        parent_entry = parent.tree[filepath]
+        return current_oid != parent_entry.id
+    except KeyError:
+        return True

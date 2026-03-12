@@ -144,6 +144,65 @@ class XlsxRenderer:
         print(f"Error accessing Excel file: {error}", file=sys.stderr)
 
 
+_SCHEMA_QUERY_PARAMS = {
+    'sheet': {'type': 'string|integer', 'description': 'Sheet to extract (name or 0-based index)', 'examples': ['sheet=Sales', 'sheet=0']},
+    'range': {'type': 'string', 'description': 'Cell range in A1 notation (e.g., A1:C10)', 'examples': ['range=A1:C10', 'range=B5:D20']},
+    'search': {'type': 'string', 'description': 'Search for text across all sheets', 'examples': ['search=revenue', 'search=total']},
+    'format': {'type': 'string', 'description': 'Output format (text, json, csv)', 'examples': ['format=csv', 'format=json']},
+    'limit': {'type': 'integer', 'description': 'Maximum number of rows to return', 'examples': ['limit=100', 'limit=50']},
+    'formulas': {'type': 'boolean', 'description': 'Show formulas instead of values', 'examples': ['formulas=true']},
+}
+
+_SCHEMA_OUTPUT_TYPES = [
+    {
+        'type': 'xlsx_workbook',
+        'description': 'Workbook overview with sheet list',
+        'schema': {'type': 'object', 'properties': {
+            'type': {'type': 'string', 'const': 'xlsx_workbook'},
+            'file': {'type': 'string'}, 'sheets': {'type': 'array'},
+        }},
+    },
+    {
+        'type': 'xlsx_sheet',
+        'description': 'Sheet data with rows and columns',
+        'schema': {'type': 'object', 'properties': {
+            'type': {'type': 'string', 'const': 'xlsx_sheet'},
+            'sheet_name': {'type': 'string'}, 'rows': {'type': 'array'},
+            'dimension': {'type': 'string'},
+        }},
+    },
+    {
+        'type': 'xlsx_search',
+        'description': 'Cross-sheet search results with matching rows grouped by sheet',
+        'schema': {'type': 'object', 'properties': {
+            'type': {'type': 'string', 'const': 'xlsx_search'},
+            'query': {'type': 'string'}, 'total_matches': {'type': 'integer'},
+            'sheets': {'type': 'array', 'items': {'type': 'object', 'properties': {
+                'sheet_name': {'type': 'string'}, 'matches': {'type': 'array'},
+            }}},
+        }},
+    },
+]
+
+_SCHEMA_NOTES = [
+    'Requires openpyxl — install with: pip install openpyxl',
+    'Sheet can be specified by name or 0-based integer index (sheet=0 for first sheet)',
+    '?range=A1:C10 uses standard A1 notation; omit to get the entire sheet',
+    '?search=term is case-insensitive and searches all sheets simultaneously',
+    '?formulas=true shows raw formulas instead of computed cell values',
+    '?format=csv exports the sheet as CSV — pipe to other tools or save to file',
+]
+
+_SCHEMA_EXAMPLE_QUERIES = [
+    {'uri': 'xlsx:///path/to/file.xlsx', 'description': 'List all sheets in workbook', 'output_type': 'xlsx_workbook'},
+    {'uri': 'xlsx:///path/to/file.xlsx?sheet=0', 'description': 'Extract first sheet', 'output_type': 'xlsx_sheet'},
+    {'uri': 'xlsx:///path/to/file.xlsx?sheet=Sales&range=A1:C10', 'description': 'Extract cell range from specific sheet', 'output_type': 'xlsx_sheet'},
+    {'uri': 'xlsx:///path/to/file.xlsx?sheet=Sales&format=csv', 'description': 'Export sheet as CSV', 'output_type': 'xlsx_sheet'},
+    {'uri': 'xlsx:///path/to/file.xlsx?search=revenue', 'description': 'Search all sheets for matching rows (case-insensitive)', 'output_type': 'xlsx_search'},
+    {'uri': 'xlsx:///path/to/file.xlsx?search=error&limit=20', 'description': 'Cross-sheet search with result limit', 'output_type': 'xlsx_search'},
+]
+
+
 @register_adapter('xlsx')
 @register_renderer(XlsxRenderer)
 class XlsxAdapter(ResourceAdapter):
@@ -166,131 +225,14 @@ class XlsxAdapter(ResourceAdapter):
             'adapter': 'xlsx',
             'description': 'Excel spreadsheet inspection and data extraction',
             'uri_syntax': 'xlsx:///path/to/file.xlsx[?query_params]',
-            'query_params': {
-                'sheet': {
-                    'type': 'string|integer',
-                    'description': 'Sheet to extract (name or 0-based index)',
-                    'examples': ['sheet=Sales', 'sheet=0']
-                },
-                'range': {
-                    'type': 'string',
-                    'description': 'Cell range in A1 notation (e.g., A1:C10)',
-                    'examples': ['range=A1:C10', 'range=B5:D20']
-                },
-                'search': {
-                    'type': 'string',
-                    'description': 'Search for text across all sheets',
-                    'examples': ['search=revenue', 'search=total']
-                },
-                'format': {
-                    'type': 'string',
-                    'description': 'Output format (text, json, csv)',
-                    'examples': ['format=csv', 'format=json']
-                },
-                'limit': {
-                    'type': 'integer',
-                    'description': 'Maximum number of rows to return',
-                    'examples': ['limit=100', 'limit=50']
-                },
-                'formulas': {
-                    'type': 'boolean',
-                    'description': 'Show formulas instead of values',
-                    'examples': ['formulas=true']
-                }
-            },
-            'elements': {},  # Dynamic - sheets determined by file
+            'query_params': _SCHEMA_QUERY_PARAMS,
+            'elements': {},
             'cli_flags': [],
             'supports_batch': False,
             'supports_advanced': False,
-            'output_types': [
-                {
-                    'type': 'xlsx_workbook',
-                    'description': 'Workbook overview with sheet list',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'xlsx_workbook'},
-                            'file': {'type': 'string'},
-                            'sheets': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'xlsx_sheet',
-                    'description': 'Sheet data with rows and columns',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'xlsx_sheet'},
-                            'sheet_name': {'type': 'string'},
-                            'rows': {'type': 'array'},
-                            'dimension': {'type': 'string'}
-                        }
-                    }
-                },
-                {
-                    'type': 'xlsx_search',
-                    'description': 'Cross-sheet search results with matching rows grouped by sheet',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'xlsx_search'},
-                            'query': {'type': 'string'},
-                            'total_matches': {'type': 'integer'},
-                            'sheets': {
-                                'type': 'array',
-                                'items': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'sheet_name': {'type': 'string'},
-                                        'matches': {'type': 'array'}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            ],
-            'notes': [
-                'Requires openpyxl — install with: pip install openpyxl',
-                'Sheet can be specified by name or 0-based integer index (sheet=0 for first sheet)',
-                '?range=A1:C10 uses standard A1 notation; omit to get the entire sheet',
-                '?search=term is case-insensitive and searches all sheets simultaneously',
-                '?formulas=true shows raw formulas instead of computed cell values',
-                '?format=csv exports the sheet as CSV — pipe to other tools or save to file',
-            ],
-            'example_queries': [
-                {
-                    'uri': 'xlsx:///path/to/file.xlsx',
-                    'description': 'List all sheets in workbook',
-                    'output_type': 'xlsx_workbook'
-                },
-                {
-                    'uri': 'xlsx:///path/to/file.xlsx?sheet=0',
-                    'description': 'Extract first sheet',
-                    'output_type': 'xlsx_sheet'
-                },
-                {
-                    'uri': 'xlsx:///path/to/file.xlsx?sheet=Sales&range=A1:C10',
-                    'description': 'Extract cell range from specific sheet',
-                    'output_type': 'xlsx_sheet'
-                },
-                {
-                    'uri': 'xlsx:///path/to/file.xlsx?sheet=Sales&format=csv',
-                    'description': 'Export sheet as CSV',
-                    'output_type': 'xlsx_sheet'
-                },
-                {
-                    'uri': 'xlsx:///path/to/file.xlsx?search=revenue',
-                    'description': 'Search all sheets for matching rows (case-insensitive)',
-                    'output_type': 'xlsx_search'
-                },
-                {
-                    'uri': 'xlsx:///path/to/file.xlsx?search=error&limit=20',
-                    'description': 'Cross-sheet search with result limit',
-                    'output_type': 'xlsx_search'
-                }
-            ]
+            'output_types': _SCHEMA_OUTPUT_TYPES,
+            'notes': _SCHEMA_NOTES,
+            'example_queries': _SCHEMA_EXAMPLE_QUERIES,
         }
 
     @staticmethod

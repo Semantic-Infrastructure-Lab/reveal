@@ -5,6 +5,105 @@ import sys
 from typing import Dict, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer
 
+_SCHEMA_OUTPUT_TYPES = [
+    {
+        'type': 'environment',
+        'description': 'All environment variables categorized by type',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'environment'},
+                'source': {'type': 'string', 'const': 'system'},
+                'source_type': {'type': 'string', 'const': 'runtime'},
+                'total_count': {'type': 'integer'},
+                'categories': {
+                    'type': 'object',
+                    'properties': {
+                        'System': {'type': 'array'},
+                        'Python': {'type': 'array'},
+                        'Node': {'type': 'array'},
+                        'Application': {'type': 'array'},
+                        'Custom': {'type': 'array'}
+                    }
+                }
+            }
+        },
+        'example': {
+            'contract_version': '1.0',
+            'type': 'environment',
+            'source': 'system',
+            'source_type': 'runtime',
+            'total_count': 42,
+            'categories': {
+                'System': [
+                    {'name': 'PATH', 'value': '/usr/local/bin:/usr/bin', 'sensitive': False, 'length': 25},
+                    {'name': 'HOME', 'value': '/home/user', 'sensitive': False, 'length': 10}
+                ],
+                'Python': [
+                    {'name': 'PYTHONPATH', 'value': '/opt/python', 'sensitive': False, 'length': 11}
+                ]
+            }
+        }
+    },
+    {
+        'type': 'env_variable',
+        'description': 'Specific environment variable details',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'name': {'type': 'string'},
+                'value': {'type': 'string'},
+                'category': {'type': 'string', 'enum': ['System', 'Python', 'Node', 'Application', 'Custom']},
+                'sensitive': {'type': 'boolean'},
+                'length': {'type': 'integer'}
+            }
+        }
+    }
+]
+
+_SCHEMA_EXAMPLE_QUERIES = [
+    {
+        'uri': 'env://',
+        'description': 'All environment variables grouped by category (System, Python, Node, Application, Custom)',
+        'output_type': 'environment'
+    },
+    {
+        'uri': 'env://PATH',
+        'description': 'Get specific variable value, category, and sensitivity flag',
+        'output_type': 'env_variable'
+    },
+    {
+        'uri': 'env://DATABASE_URL',
+        'description': 'Sensitive variable — value automatically redacted to *** unless --show-secrets',
+        'output_type': 'env_variable'
+    },
+    {
+        'uri': 'env:// --format=json',
+        'description': 'Machine-readable: all vars with sensitive flag and category',
+        'output_type': 'environment'
+    },
+    {
+        'uri': "env:// --format=json | jq '.categories.Application'",
+        'description': 'Extract just Application-category variables',
+        'output_type': 'environment'
+    }
+]
+
+_SCHEMA_NOTES = [
+    'Sensitive values are auto-redacted based on name patterns (PASSWORD, SECRET, TOKEN, KEY, etc.)',
+    'Redacted values shown as *** — use --show-secrets to reveal (requires explicit flag)',
+    'env:// groups all vars by category: System, Python, Node, Application, Custom',
+    'env://VAR_NAME returns the single variable with sensitivity classification',
+    '--format=json exposes per-variable sensitive flag for programmatic filtering',
+]
+
+_SCHEMA_SECURITY_FEATURES = [
+    'Automatic sensitive value redaction',
+    'Pattern-based detection: PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH',
+    'Redacted values shown as ***'
+]
+
 
 class EnvRenderer:
     """Renderer for environment variable results."""
@@ -52,106 +151,15 @@ class EnvAdapter(ResourceAdapter):
             'adapter': 'env',
             'description': 'Environment variable inspection with auto-categorization and sensitive value redaction',
             'uri_syntax': 'env://[variable_name]',
-            'query_params': {},  # No query parameters
-            'elements': {},  # Variable names are not fixed elements
+            'query_params': {},
+            'elements': {},
             'cli_flags': [],
             'supports_batch': False,
             'supports_advanced': False,
-            'output_types': [
-                {
-                    'type': 'environment',
-                    'description': 'All environment variables categorized by type',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'environment'},
-                            'source': {'type': 'string', 'const': 'system'},
-                            'source_type': {'type': 'string', 'const': 'runtime'},
-                            'total_count': {'type': 'integer'},
-                            'categories': {
-                                'type': 'object',
-                                'properties': {
-                                    'System': {'type': 'array'},
-                                    'Python': {'type': 'array'},
-                                    'Node': {'type': 'array'},
-                                    'Application': {'type': 'array'},
-                                    'Custom': {'type': 'array'}
-                                }
-                            }
-                        }
-                    },
-                    'example': {
-                        'contract_version': '1.0',
-                        'type': 'environment',
-                        'source': 'system',
-                        'source_type': 'runtime',
-                        'total_count': 42,
-                        'categories': {
-                            'System': [
-                                {'name': 'PATH', 'value': '/usr/local/bin:/usr/bin', 'sensitive': False, 'length': 25},
-                                {'name': 'HOME', 'value': '/home/user', 'sensitive': False, 'length': 10}
-                            ],
-                            'Python': [
-                                {'name': 'PYTHONPATH', 'value': '/opt/python', 'sensitive': False, 'length': 11}
-                            ]
-                        }
-                    }
-                },
-                {
-                    'type': 'env_variable',
-                    'description': 'Specific environment variable details',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'name': {'type': 'string'},
-                            'value': {'type': 'string'},
-                            'category': {'type': 'string', 'enum': ['System', 'Python', 'Node', 'Application', 'Custom']},
-                            'sensitive': {'type': 'boolean'},
-                            'length': {'type': 'integer'}
-                        }
-                    }
-                }
-            ],
-            'example_queries': [
-                {
-                    'uri': 'env://',
-                    'description': 'All environment variables grouped by category (System, Python, Node, Application, Custom)',
-                    'output_type': 'environment'
-                },
-                {
-                    'uri': 'env://PATH',
-                    'description': 'Get specific variable value, category, and sensitivity flag',
-                    'output_type': 'env_variable'
-                },
-                {
-                    'uri': 'env://DATABASE_URL',
-                    'description': 'Sensitive variable — value automatically redacted to *** unless --show-secrets',
-                    'output_type': 'env_variable'
-                },
-                {
-                    'uri': 'env:// --format=json',
-                    'description': 'Machine-readable: all vars with sensitive flag and category',
-                    'output_type': 'environment'
-                },
-                {
-                    'uri': "env:// --format=json | jq '.categories.Application'",
-                    'description': 'Extract just Application-category variables',
-                    'output_type': 'environment'
-                }
-            ],
-            'notes': [
-                'Sensitive values are auto-redacted based on name patterns (PASSWORD, SECRET, TOKEN, KEY, etc.)',
-                'Redacted values shown as *** — use --show-secrets to reveal (requires explicit flag)',
-                'env:// groups all vars by category: System, Python, Node, Application, Custom',
-                'env://VAR_NAME returns the single variable with sensitivity classification',
-                '--format=json exposes per-variable sensitive flag for programmatic filtering',
-            ],
-            'security_features': [
-                'Automatic sensitive value redaction',
-                'Pattern-based detection: PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH',
-                'Redacted values shown as ***'
-            ]
+            'output_types': _SCHEMA_OUTPUT_TYPES,
+            'example_queries': _SCHEMA_EXAMPLE_QUERIES,
+            'notes': _SCHEMA_NOTES,
+            'security_features': _SCHEMA_SECURITY_FEATURES,
         }
 
     @staticmethod

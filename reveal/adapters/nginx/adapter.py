@@ -43,6 +43,180 @@ _NGINX_MAIN_CONFIGS = [
 _BACKUP_SUFFIXES = ('.bak', '.backup', '.old', '.disabled', '.orig', '~')
 
 
+_SCHEMA_OUTPUT_TYPES = [
+    {
+        'type': 'nginx_sites_overview',
+        'description': 'List of all enabled nginx vhosts',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'nginx_sites_overview'},
+                'sites': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'file': {'type': 'string'},
+                            'domains': {'type': 'array', 'items': {'type': 'string'}},
+                            'is_symlink': {'type': 'boolean'},
+                            'enabled': {'type': 'boolean'},
+                        }
+                    }
+                },
+                'next_steps': {'type': 'array'},
+            }
+        }
+    },
+    {
+        'type': 'nginx_vhost_summary',
+        'description': 'Full vhost summary — ports, upstreams, auth, locations, warnings',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'nginx_vhost_summary'},
+                'domain': {'type': 'string'},
+                'config_file': {'type': 'string'},
+                'symlink': {'type': 'object'},
+                'ports': {'type': 'array'},
+                'upstreams': {'type': 'object'},
+                'auth': {'type': 'object'},
+                'locations': {'type': 'array'},
+                'warnings': {'type': 'array', 'items': {'type': 'string'}},
+                'next_steps': {'type': 'array'},
+            }
+        }
+    },
+    {
+        'type': 'nginx_vhost_not_found',
+        'description': 'Domain not found in any nginx config',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'nginx_vhost_not_found'},
+                'domain': {'type': 'string'},
+                'searched': {'type': 'array'},
+                'next_steps': {'type': 'array'},
+            }
+        }
+    },
+    {
+        'type': 'nginx_vhost_ports',
+        'description': 'Listening ports for domain',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'nginx_vhost_ports'},
+                'domain': {'type': 'string'},
+                'config_file': {'type': 'string'},
+                'ports': {'type': 'array'},
+            }
+        }
+    },
+    {
+        'type': 'nginx_vhost_upstream',
+        'description': 'Upstream proxy_pass targets with reachability',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'nginx_vhost_upstream'},
+                'domain': {'type': 'string'},
+                'config_file': {'type': 'string'},
+                'upstreams': {'type': 'object'},
+            }
+        }
+    },
+    {
+        'type': 'nginx_vhost_auth',
+        'description': 'Auth directives (auth_basic, auth_request)',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'nginx_vhost_auth'},
+                'domain': {'type': 'string'},
+                'config_file': {'type': 'string'},
+                'auth': {'type': 'object'},
+            }
+        }
+    },
+    {
+        'type': 'nginx_vhost_locations',
+        'description': 'Location blocks with routing targets',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'nginx_vhost_locations'},
+                'domain': {'type': 'string'},
+                'config_file': {'type': 'string'},
+                'locations': {'type': 'array'},
+            }
+        }
+    },
+    {
+        'type': 'nginx_vhost_config',
+        'description': 'Raw server block config text',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'nginx_vhost_config'},
+                'domain': {'type': 'string'},
+                'config_file': {'type': 'string'},
+                'server_block': {'type': 'string'},
+            }
+        }
+    },
+]
+
+_SCHEMA_EXAMPLE_QUERIES = [
+    {
+        'uri': 'nginx://',
+        'description': 'Overview of all enabled nginx vhosts',
+        'output_type': 'nginx_sites_overview',
+    },
+    {
+        'uri': 'nginx://example.com',
+        'description': 'Full vhost summary (ports, upstreams, auth, locations)',
+        'output_type': 'nginx_vhost_summary',
+    },
+    {
+        'uri': 'nginx://example.com/ports',
+        'description': 'Listening ports only',
+        'element': 'ports',
+        'output_type': 'nginx_vhost_ports',
+    },
+    {
+        'uri': 'nginx://example.com/upstream',
+        'description': 'proxy_pass targets with TCP reachability check',
+        'element': 'upstream',
+        'output_type': 'nginx_vhost_upstream',
+    },
+    {
+        'uri': 'nginx://example.com/auth',
+        'description': 'Auth directives (auth_basic, auth_request)',
+        'element': 'auth',
+        'output_type': 'nginx_vhost_auth',
+    },
+    {
+        'uri': 'nginx://example.com/locations',
+        'description': 'Location block routing table',
+        'element': 'locations',
+        'output_type': 'nginx_vhost_locations',
+    },
+    {
+        'uri': 'nginx://example.com/config',
+        'description': 'Raw nginx server block text',
+        'element': 'config',
+        'output_type': 'nginx_vhost_config',
+    },
+]
+
+_SCHEMA_NOTES = [
+    'Searches /etc/nginx/sites-enabled, /etc/nginx/conf.d, and common alternatives',
+    'Domain lookup: matches server_name directives (exact + wildcard)',
+    'Upstream reachability: TCP socket check to each backend',
+    'Complements file-path analysis: reveal /etc/nginx/conf.d/domain.conf --check',
+]
+
+
 def _iter_nginx_configs(search_dir: str):
     """Yield config file paths from a nginx config directory.
 
@@ -67,6 +241,18 @@ def _iter_nginx_configs(search_dir: str):
         yield path
 
 
+def _config_file_has_domain(conf_file: str, domain: str) -> bool:
+    """Return True if the config file has a server_name directive for domain."""
+    try:
+        content = Path(conf_file).read_text(errors='replace')
+    except OSError:
+        return False
+    return any(
+        domain in m.group(1).split()
+        for m in re.finditer(r'server_name\s+([^;]+);', content)
+    )
+
+
 def _find_config_for_domain(domain: str) -> Optional[str]:
     """Scan nginx config directories for the file that handles domain.
 
@@ -76,16 +262,19 @@ def _find_config_for_domain(domain: str) -> Optional[str]:
         if not os.path.isdir(search_dir):
             continue
         for conf_file in _iter_nginx_configs(search_dir):
-            try:
-                content = Path(conf_file).read_text(errors='replace')
-            except OSError:
-                continue
-            # Check if any server_name directive mentions this domain
-            for m in re.finditer(r'server_name\s+([^;]+);', content):
-                names = m.group(1).split()
-                if domain in names:
-                    return conf_file
+            if _config_file_has_domain(conf_file, domain):
+                return conf_file
     return None
+
+
+def _extract_domains_from_content(content: str) -> List[str]:
+    """Extract unique domain names from nginx server_name directives in content."""
+    domains: List[str] = []
+    for m in re.finditer(r'server_name\s+([^;]+);', content):
+        for name in m.group(1).split():
+            if name not in ('_', 'localhost') and '.' in name and name not in domains:
+                domains.append(name)
+    return domains
 
 
 def _resolve_symlink_info(path: str) -> Dict[str, Any]:
@@ -351,176 +540,9 @@ class NginxUriAdapter(ResourceAdapter):
             'cli_flags': [],  # nginx:// has no extra CLI flags
             'supports_batch': False,
             'supports_advanced': False,
-            'output_types': [
-                {
-                    'type': 'nginx_sites_overview',
-                    'description': 'List of all enabled nginx vhosts',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'nginx_sites_overview'},
-                            'sites': {
-                                'type': 'array',
-                                'items': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'file': {'type': 'string'},
-                                        'domains': {'type': 'array', 'items': {'type': 'string'}},
-                                        'is_symlink': {'type': 'boolean'},
-                                        'enabled': {'type': 'boolean'},
-                                    }
-                                }
-                            },
-                            'next_steps': {'type': 'array'},
-                        }
-                    }
-                },
-                {
-                    'type': 'nginx_vhost_summary',
-                    'description': 'Full vhost summary — ports, upstreams, auth, locations, warnings',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'nginx_vhost_summary'},
-                            'domain': {'type': 'string'},
-                            'config_file': {'type': 'string'},
-                            'symlink': {'type': 'object'},
-                            'ports': {'type': 'array'},
-                            'upstreams': {'type': 'object'},
-                            'auth': {'type': 'object'},
-                            'locations': {'type': 'array'},
-                            'warnings': {'type': 'array', 'items': {'type': 'string'}},
-                            'next_steps': {'type': 'array'},
-                        }
-                    }
-                },
-                {
-                    'type': 'nginx_vhost_not_found',
-                    'description': 'Domain not found in any nginx config',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'nginx_vhost_not_found'},
-                            'domain': {'type': 'string'},
-                            'searched': {'type': 'array'},
-                            'next_steps': {'type': 'array'},
-                        }
-                    }
-                },
-                {
-                    'type': 'nginx_vhost_ports',
-                    'description': 'Listening ports for domain',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'nginx_vhost_ports'},
-                            'domain': {'type': 'string'},
-                            'config_file': {'type': 'string'},
-                            'ports': {'type': 'array'},
-                        }
-                    }
-                },
-                {
-                    'type': 'nginx_vhost_upstream',
-                    'description': 'Upstream proxy_pass targets with reachability',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'nginx_vhost_upstream'},
-                            'domain': {'type': 'string'},
-                            'config_file': {'type': 'string'},
-                            'upstreams': {'type': 'object'},
-                        }
-                    }
-                },
-                {
-                    'type': 'nginx_vhost_auth',
-                    'description': 'Auth directives (auth_basic, auth_request)',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'nginx_vhost_auth'},
-                            'domain': {'type': 'string'},
-                            'config_file': {'type': 'string'},
-                            'auth': {'type': 'object'},
-                        }
-                    }
-                },
-                {
-                    'type': 'nginx_vhost_locations',
-                    'description': 'Location blocks with routing targets',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'nginx_vhost_locations'},
-                            'domain': {'type': 'string'},
-                            'config_file': {'type': 'string'},
-                            'locations': {'type': 'array'},
-                        }
-                    }
-                },
-                {
-                    'type': 'nginx_vhost_config',
-                    'description': 'Raw server block config text',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'nginx_vhost_config'},
-                            'domain': {'type': 'string'},
-                            'config_file': {'type': 'string'},
-                            'server_block': {'type': 'string'},
-                        }
-                    }
-                },
-            ],
-            'example_queries': [
-                {
-                    'uri': 'nginx://',
-                    'description': 'Overview of all enabled nginx vhosts',
-                    'output_type': 'nginx_sites_overview',
-                },
-                {
-                    'uri': 'nginx://example.com',
-                    'description': 'Full vhost summary (ports, upstreams, auth, locations)',
-                    'output_type': 'nginx_vhost_summary',
-                },
-                {
-                    'uri': 'nginx://example.com/ports',
-                    'description': 'Listening ports only',
-                    'element': 'ports',
-                    'output_type': 'nginx_vhost_ports',
-                },
-                {
-                    'uri': 'nginx://example.com/upstream',
-                    'description': 'proxy_pass targets with TCP reachability check',
-                    'element': 'upstream',
-                    'output_type': 'nginx_vhost_upstream',
-                },
-                {
-                    'uri': 'nginx://example.com/auth',
-                    'description': 'Auth directives (auth_basic, auth_request)',
-                    'element': 'auth',
-                    'output_type': 'nginx_vhost_auth',
-                },
-                {
-                    'uri': 'nginx://example.com/locations',
-                    'description': 'Location block routing table',
-                    'element': 'locations',
-                    'output_type': 'nginx_vhost_locations',
-                },
-                {
-                    'uri': 'nginx://example.com/config',
-                    'description': 'Raw nginx server block text',
-                    'element': 'config',
-                    'output_type': 'nginx_vhost_config',
-                },
-            ],
-            'notes': [
-                'Searches /etc/nginx/sites-enabled, /etc/nginx/conf.d, and common alternatives',
-                'Domain lookup: matches server_name directives (exact + wildcard)',
-                'Upstream reachability: TCP socket check to each backend',
-                'Complements file-path analysis: reveal /etc/nginx/conf.d/domain.conf --check',
-            ],
+            'output_types': _SCHEMA_OUTPUT_TYPES,
+            'example_queries': _SCHEMA_EXAMPLE_QUERIES,
+            'notes': _SCHEMA_NOTES,
         }
 
     def __init__(self, connection_string: str = "", **kwargs):
@@ -589,12 +611,7 @@ class NginxUriAdapter(ResourceAdapter):
                 except OSError:
                     continue
 
-                domains = []
-                for m in re.finditer(r'server_name\s+([^;]+);', content):
-                    for name in m.group(1).split():
-                        if name not in ('_', 'localhost') and '.' in name and name not in domains:
-                            domains.append(name)
-
+                domains = _extract_domains_from_content(content)
                 symlink_info = _resolve_symlink_info(conf_file)
                 sites.append({
                     'file': conf_file,

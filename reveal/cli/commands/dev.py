@@ -5,6 +5,24 @@ from argparse import Namespace
 from pathlib import Path
 
 
+def create_dev_parser() -> argparse.ArgumentParser:
+    """Create and return the argument parser for 'reveal dev'."""
+    parser = argparse.ArgumentParser(
+        prog='reveal dev',
+        description='Developer tooling: scaffold adapters, analyzers, and rules; inspect config.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  reveal dev new-adapter payments --uri pay  # Scaffold new adapter\n"
+            "  reveal dev new-analyzer kotlin --ext .kt   # Scaffold new analyzer\n"
+            "  reveal dev new-rule C001 deep-nesting      # Scaffold new rule\n"
+            "  reveal dev inspect-config                  # Show effective .reveal.yaml\n"
+        )
+    )
+    add_arguments(parser)
+    return parser
+
+
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     """Add reveal dev subcommand arguments."""
     sub = parser.add_subparsers(dest='dev_command', metavar='COMMAND')

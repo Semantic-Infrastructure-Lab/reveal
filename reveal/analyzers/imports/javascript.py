@@ -177,12 +177,10 @@ class JavaScriptExtractor(LanguageExtractor):
 
         for child in import_clause.children:
             if child.type == 'namespace_import':
-                # import * as foo from 'module'
                 import_type = 'namespace_import'
                 imported_names = ['*']
-                for subchild in child.children:
-                    if subchild.type == 'identifier':
-                        alias = analyzer._get_node_text(subchild)
+                id_node = next((sc for sc in child.children if sc.type == 'identifier'), None)
+                alias = analyzer._get_node_text(id_node) if id_node else None
 
             elif child.type == 'named_imports':
                 # import { foo, bar } from 'module'
@@ -255,12 +253,12 @@ class JavaScriptExtractor(LanguageExtractor):
         Returns:
             Module path string or None
         """
-        for child in node.children:
-            if child.type == 'arguments':
-                for arg in child.children:
-                    if arg.type == 'string':
-                        text = analyzer._get_node_text(arg)
-                        return str(text).strip('"\'') if text is not None else None
+        args_node = next((c for c in node.children if c.type == 'arguments'), None)
+        if args_node:
+            str_node = next((a for a in args_node.children if a.type == 'string'), None)
+            if str_node:
+                text = analyzer._get_node_text(str_node)
+                return str(text).strip('"\'') if text is not None else None
         return None
 
     def _build_dynamic_import_statement(

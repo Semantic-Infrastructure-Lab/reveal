@@ -67,12 +67,11 @@ def get_recent_commits(
 
         for commit in walker:
             commit_dict = format_commit_func(commit)
-            # Apply query filters
-            if matches_all_filters_func(commit_dict):
-                commits.append(commit_dict)
-                # Legacy limit for backward compatibility
-                if len(commits) >= limit:
-                    break
+            if not matches_all_filters_func(commit_dict):
+                continue
+            commits.append(commit_dict)
+            if len(commits) >= limit:
+                break
     except Exception:
         pass  # return whatever commits were collected before the error
 
@@ -103,12 +102,11 @@ def get_commit_history(
 
         for commit in walker:
             commit_dict = format_commit_func(commit)
-            # Apply query filters
-            if matches_all_filters_func(commit_dict):
-                commits.append(commit_dict)
-                # Legacy limit for backward compatibility
-                if len(commits) >= limit:
-                    break
+            if not matches_all_filters_func(commit_dict):
+                continue
+            commits.append(commit_dict)
+            if len(commits) >= limit:
+                break
     except Exception:
         pass  # return whatever commits were collected before the error
 

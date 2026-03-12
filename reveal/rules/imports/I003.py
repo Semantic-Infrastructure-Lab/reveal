@@ -128,20 +128,22 @@ class I003(BaseRule):
         current = cache_key
         result: tuple[Optional[Any], Optional[Path]] = (None, None)
 
+        def _try_load(config_file: Path):
+            try:
+                from ...analyzers.imports import LayerConfig
+                with open(config_file, encoding='utf-8') as f:
+                    config_dict = yaml.safe_load(f)
+                return (LayerConfig.from_dict(config_dict), config_file.parent) if config_dict else None
+            except Exception as e:
+                logger.warning(f"Failed to load .reveal.yaml from {config_file}: {e}")
+                return None
+
         while current != current.parent:
             config_file = current / ".reveal.yaml"
             if config_file.exists():
-                try:
-                    from ...analyzers.imports import LayerConfig
-                    with open(config_file, encoding='utf-8') as f:
-                        config_dict = yaml.safe_load(f)
-                    if config_dict:
-                        result = (LayerConfig.from_dict(config_dict), current)
-                        break
-                except Exception as e:
-                    logger.warning(f"Failed to load .reveal.yaml from {config_file}: {e}")
-                    break
-
+                loaded = _try_load(config_file)
+                result = loaded if loaded is not None else result
+                break
             current = current.parent
 
         _config_cache[cache_key] = result

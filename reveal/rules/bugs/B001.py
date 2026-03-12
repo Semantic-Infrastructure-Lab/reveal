@@ -20,6 +20,15 @@ class B001(BaseRule, ASTParsingMixin):
     file_patterns = ['.py']
     version = "1.0.0"
 
+    @staticmethod
+    def _get_except_context(content: str, node) -> Optional[str]:
+        """Return the first line of an except handler's source."""
+        try:
+            src = ast.get_source_segment(content, node)
+            return src.split('\n')[0] if src else None
+        except Exception:
+            return None
+
     def check(self,
              file_path: str,
              structure: Optional[Dict[str, Any]],
@@ -41,19 +50,9 @@ class B001(BaseRule, ASTParsingMixin):
 
         # Walk the AST looking for bare except handlers
         for node in self._ast_walk(tree):
-            if isinstance(node, ast.ExceptHandler):
-                # Bare except has type=None
-                if node.type is None:
-                    # Get context (the except line)
-                    try:
-                        context = ast.get_source_segment(content, node)
-                        if context:
-                            # Just show first line of context
-                            context = context.split('\n')[0]
-                    except Exception:
-                        context = None
-
-                    detections.append(self.create_detection(
+            if isinstance(node, ast.ExceptHandler) and node.type is None:
+                context = self._get_except_context(content, node)
+                detections.append(self.create_detection(
                         file_path=file_path,
                         line=node.lineno,
                         column=node.col_offset + 1,  # AST is 0-indexed, display is 1-indexed

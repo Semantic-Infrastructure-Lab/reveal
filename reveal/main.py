@@ -14,6 +14,24 @@ from . import __version__
 from .utils import copy_to_clipboard, check_for_updates
 from .config import disable_breadcrumbs_permanently
 
+
+class TeeWriter:
+    """Write to both original stdout and a capture buffer (for --copy mode)."""
+    def __init__(self, original: Any, capture: io.StringIO) -> None:
+        self.original = original
+        self.capture = capture
+
+    def write(self, data: str) -> None:
+        self.original.write(data)
+        self.capture.write(data)
+
+    def flush(self) -> None:
+        self.original.flush()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.original, name)
+
+
 from .cli import (
     create_argument_parser,
     validate_navigation_args,
@@ -32,165 +50,45 @@ from .cli import (
     handle_list_schemas,
     handle_stdin_mode,
     handle_decorator_stats,
-    handle_scaffold_adapter,
-    handle_scaffold_analyzer,
-    handle_scaffold_rule,
     handle_uri,
     handle_file_or_directory,
     handle_file,
 )
 
 
-def _handle_check_command() -> bool:
-    """Handle 'reveal check' subcommand.
+def _dispatch_subcommand() -> bool:
+    """Dispatch to a named subcommand using a table-driven lookup.
 
-    Uses sys.argv inspection (like _handle_scaffold_command) to avoid the
-    argparse conflict between optional positional args and subparsers.
-
-    Returns:
-        bool: True if check command was handled, False otherwise
-    """
-    if len(sys.argv) < 2 or sys.argv[1] != 'check':
-        return False
-
-    from reveal.cli.commands.check import create_check_parser, run_check
-    parser = create_check_parser()
-    args = parser.parse_args(sys.argv[2:])
-    check_for_updates()
-    run_check(args)
-    return True
-
-
-def _handle_dev_command() -> bool:
-    """Handle 'reveal dev' subcommand.
+    Uses sys.argv inspection before argparse runs to avoid conflicts between
+    optional positional args and subparsers.
 
     Returns:
-        bool: True if dev command was handled, False otherwise
+        True if a subcommand was matched and executed.
     """
-    import argparse as _argparse
-
-    if len(sys.argv) < 2 or sys.argv[1] != 'dev':
+    if len(sys.argv) < 2:
         return False
 
-    parser = _argparse.ArgumentParser(
-        prog='reveal dev',
-        description='Developer tooling: scaffold adapters, analyzers, and rules; inspect config.',
-        formatter_class=_argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            "Examples:\n"
-            "  reveal dev new-adapter payments --uri pay  # Scaffold new adapter\n"
-            "  reveal dev new-analyzer kotlin --ext .kt   # Scaffold new analyzer\n"
-            "  reveal dev new-rule C001 deep-nesting      # Scaffold new rule\n"
-            "  reveal dev inspect-config                  # Show effective .reveal.yaml\n"
-        )
-    )
+    name = sys.argv[1]
 
-    from reveal.cli.commands.dev import add_arguments, run_dev
-    add_arguments(parser)
-    args = parser.parse_args(sys.argv[2:])
-    run_dev(args)
-    return True
+    # Import lazily so startup cost is paid only when the subcommand is used.
+    # Each entry: subcommand name -> (parser_factory, runner)
+    _SUBCOMMANDS = {
+        'check':    ('reveal.cli.commands.check',    'create_check_parser',    'run_check'),
+        'dev':      ('reveal.cli.commands.dev',      'create_dev_parser',      'run_dev'),
+        'health':   ('reveal.cli.commands.health',   'create_health_parser',   'run_health'),
+        'pack':     ('reveal.cli.commands.pack',     'create_pack_parser',     'run_pack'),
+        'review':   ('reveal.cli.commands.review',   'create_review_parser',   'run_review'),
+        'scaffold': ('reveal.cli.commands.scaffold', 'create_scaffold_parser', 'run_scaffold'),
+    }
 
-
-def _handle_review_command() -> bool:
-    """Handle 'reveal review' subcommand.
-
-    Returns:
-        bool: True if review command was handled, False otherwise
-    """
-    if len(sys.argv) < 2 or sys.argv[1] != 'review':
+    if name not in _SUBCOMMANDS:
         return False
 
-    from reveal.cli.commands.review import create_review_parser, run_review
-    parser = create_review_parser()
-    args = parser.parse_args(sys.argv[2:])
-    run_review(args)
-    return True
-
-
-def _handle_health_command() -> bool:
-    """Handle 'reveal health' subcommand.
-
-    Returns:
-        bool: True if health command was handled, False otherwise
-    """
-    if len(sys.argv) < 2 or sys.argv[1] != 'health':
-        return False
-
-    from reveal.cli.commands.health import create_health_parser, run_health
-    parser = create_health_parser()
-    args = parser.parse_args(sys.argv[2:])
-    run_health(args)
-    return True
-
-
-def _handle_pack_command() -> bool:
-    """Handle 'reveal pack' subcommand.
-
-    Returns:
-        bool: True if pack command was handled, False otherwise
-    """
-    if len(sys.argv) < 2 or sys.argv[1] != 'pack':
-        return False
-
-    from reveal.cli.commands.pack import create_pack_parser, run_pack
-    parser = create_pack_parser()
-    args = parser.parse_args(sys.argv[2:])
-    run_pack(args)
-    return True
-
-
-def _handle_scaffold_command() -> bool:
-    """Handle 'reveal scaffold' subcommands.
-
-    Returns:
-        bool: True if scaffold command was handled, False otherwise
-    """
-    import argparse
-
-    if len(sys.argv) < 2 or sys.argv[1] != 'scaffold':
-        return False
-
-    # Create scaffold subcommand parser
-    parser = argparse.ArgumentParser(
-        prog='reveal scaffold',
-        description='Scaffold new reveal components (adapters, analyzers, rules)',
-        formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-
-    subparsers = parser.add_subparsers(dest='component', help='Component type to scaffold')
-    subparsers.required = True
-
-    # Adapter subcommand
-    adapter_parser = subparsers.add_parser('adapter', help='Scaffold a new adapter')
-    adapter_parser.add_argument('name', help='Adapter name (e.g., github, docker)')
-    adapter_parser.add_argument('uri', help='URI scheme (e.g., github://, docker://)')
-    adapter_parser.add_argument('--force', action='store_true', help='Overwrite existing files')
-
-    # Analyzer subcommand
-    analyzer_parser = subparsers.add_parser('analyzer', help='Scaffold a new analyzer')
-    analyzer_parser.add_argument('name', help='Analyzer name (e.g., kotlin, dart)')
-    analyzer_parser.add_argument('extension', help='File extension (e.g., .kt, .dart)')
-    analyzer_parser.add_argument('--force', action='store_true', help='Overwrite existing files')
-
-    # Rule subcommand
-    rule_parser = subparsers.add_parser('rule', help='Scaffold a new quality rule')
-    rule_parser.add_argument('code', help='Rule code (e.g., C001, X001)')
-    rule_parser.add_argument('name', help='Rule name (e.g., "custom-pattern-check")')
-    rule_parser.add_argument('--category', default='custom', help='Rule category (default: custom)')
-    rule_parser.add_argument('--force', action='store_true', help='Overwrite existing files')
-
-    # Parse scaffold subcommand args (skip 'reveal scaffold' from argv)
-    args = parser.parse_args(sys.argv[2:])
-
-    # Dispatch to appropriate handler
-    if args.component == 'adapter':
-        handle_scaffold_adapter(args.name, args.uri, args.force)
-    elif args.component == 'analyzer':
-        handle_scaffold_analyzer(args.name, args.extension, args.force)
-    elif args.component == 'rule':
-        handle_scaffold_rule(args.code, args.name, args.category, args.force)
-
+    module_path, parser_fn, runner_fn = _SUBCOMMANDS[name]
+    import importlib
+    mod = importlib.import_module(module_path)
+    args = getattr(mod, parser_fn)().parse_args(sys.argv[2:])
+    getattr(mod, runner_fn)(args)
     return True
 
 
@@ -219,23 +117,6 @@ def _setup_copy_mode() -> Optional[Tuple[Any, io.StringIO, Any]]:
 
     captured_output = io.StringIO()
     original_stdout = sys.stdout
-
-    class TeeWriter:
-        """Write to both original stdout and capture buffer."""
-        def __init__(self, original: Any, capture: io.StringIO) -> None:
-            self.original = original
-            self.capture = capture
-
-        def write(self, data: str) -> None:
-            self.original.write(data)
-            self.capture.write(data)
-
-        def flush(self) -> None:
-            self.original.flush()
-
-        def __getattr__(self, name: str) -> Any:
-            return getattr(self.original, name)
-
     return TeeWriter(original_stdout, captured_output), captured_output, original_stdout
 
 
@@ -284,17 +165,7 @@ def main() -> None:
     _preprocess_sort_arg()
 
     # Handle subcommands early (before copy mode setup and argparse)
-    if _handle_check_command():
-        return
-    if _handle_dev_command():
-        return
-    if _handle_health_command():
-        return
-    if _handle_review_command():
-        return
-    if _handle_pack_command():
-        return
-    if _handle_scaffold_command():
+    if _dispatch_subcommand():
         return
 
     copy_setup = _setup_copy_mode()

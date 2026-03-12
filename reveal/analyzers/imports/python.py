@@ -109,16 +109,10 @@ class PythonExtractor(LanguageExtractor):
         """
         current = node.parent
         while current:
-            # Check if this is an 'if' statement
-            if current.type == 'if_statement':
-                # Get the condition node (first child after 'if')
-                if current.children and len(current.children) > 1:
-                    condition = current.children[1]  # Skip 'if' keyword
-                    # Check if condition contains 'TYPE_CHECKING'
-                    # This handles: TYPE_CHECKING, typing.TYPE_CHECKING, etc.
-                    condition_text = self._get_node_text_from_tree(condition, current)
-                    if 'TYPE_CHECKING' in condition_text:
-                        return True
+            if current.type == 'if_statement' and len(current.children) > 1:
+                condition_text = self._get_node_text_from_tree(current.children[1], current)
+                if 'TYPE_CHECKING' in condition_text:
+                    return True
             current = current.parent
         return False
 
@@ -191,20 +185,25 @@ class PythonExtractor(LanguageExtractor):
 
         for child in node.children:
             if child.type == 'relative_import':
-                # Relative import: from . import x, from ..parent import y
                 is_relative = True
-                for subchild in child.children:
-                    if subchild.type == '.':
-                        level += 1
-                    elif subchild.type == 'dotted_name':
-                        module_name = analyzer._get_node_text(subchild)
+                module_name, level = self._parse_relative_import(child, analyzer)
             elif (child.type == 'dotted_name' and child.prev_sibling and
                   analyzer._get_node_text(child.prev_sibling) == 'from'):
-                # Absolute import: from pathlib import Path
                 module_name = analyzer._get_node_text(child)
                 break
 
         return module_name, is_relative, level
+
+    def _parse_relative_import(self, rel_node, analyzer) -> tuple:
+        """Extract module name and dot-level from a relative_import node."""
+        level = 0
+        module_name = ''
+        for subchild in rel_node.children:
+            if subchild.type == '.':
+                level += 1
+            elif subchild.type == 'dotted_name':
+                module_name = analyzer._get_node_text(subchild)
+        return module_name, level
 
     def _parse_imported_names(self, node, analyzer) -> tuple:
         """Parse imported names and determine import type.

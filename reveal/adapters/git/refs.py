@@ -64,71 +64,74 @@ def get_head_info(repo: 'pygit2.Repository') -> Dict[str, Any]:
         return {'branch': None, 'commit': None, 'detached': False}
 
 
+def _get_branch_info(repo, branch_name) -> 'Dict[str, Any] | None':
+    """Return branch info dict for branch_name, or None on error."""
+    import pygit2
+    try:
+        branch = repo.branches.get(branch_name)
+        if not branch or not branch.target:
+            return None
+        commit = cast('pygit2.Commit', repo[branch.target])
+        return {
+            'name': branch_name,
+            'commit': str(commit.id)[:7],
+            'message': commit.message.split('\n')[0][:80],
+            'author': commit.author.name,
+            'date': datetime.fromtimestamp(commit.commit_time).strftime('%Y-%m-%d'),
+            'timestamp': commit.commit_time,
+        }
+    except (KeyError, pygit2.GitError):
+        return None
+
+
 def list_branches(repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, Any]]:
     """List repository branches."""
-    import pygit2
-
     branches = []
-
     try:
         for branch_name in repo.branches.local:
-            try:
-                branch = repo.branches.get(branch_name)
-                if not branch or not branch.target:
-                    continue
-
-                commit = cast('pygit2.Commit', repo[branch.target])
-                branches.append({
-                    'name': branch_name,
-                    'commit': str(commit.id)[:7],
-                    'message': commit.message.split('\n')[0][:80],
-                    'author': commit.author.name,
-                    'date': datetime.fromtimestamp(commit.commit_time).strftime('%Y-%m-%d'),
-                    'timestamp': commit.commit_time,
-                })
-            except (KeyError, pygit2.GitError):
-                continue
+            info = _get_branch_info(repo, branch_name)
+            if info:
+                branches.append(info)
     except Exception:
-        pass  # return whatever branches were collected before the error
-
+        pass
     return sorted(branches, key=lambda b: cast(int, b.get('timestamp', 0)), reverse=True)[:limit]
+
+
+def _get_tag_info(repo, ref_name) -> 'Dict[str, Any] | None':
+    """Return tag info dict for ref_name, or None on error."""
+    import pygit2
+    try:
+        ref = repo.references.get(ref_name)
+        if not ref:
+            return None
+        tag_name = ref_name.replace('refs/tags/', '')
+        target = repo[ref.target]
+        while hasattr(target, 'peel') and not isinstance(target, pygit2.Commit):
+            target = target.peel(pygit2.Commit)  # type: ignore[assignment]
+        if not isinstance(target, pygit2.Commit):
+            return None
+        commit_target = cast('pygit2.Commit', target)
+        return {
+            'name': tag_name,
+            'commit': str(commit_target.id)[:7],
+            'message': commit_target.message.split('\n')[0][:80],
+            'date': datetime.fromtimestamp(commit_target.commit_time).strftime('%Y-%m-%d'),
+            'timestamp': commit_target.commit_time,
+        }
+    except (KeyError, pygit2.GitError, AttributeError):
+        return None
 
 
 def list_tags(repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, Any]]:
     """List repository tags."""
-    import pygit2
-
     tags = []
-
     try:
         for ref_name in repo.references:
             if not ref_name.startswith('refs/tags/'):
                 continue
-
-            try:
-                ref = repo.references.get(ref_name)
-                if not ref:
-                    continue
-
-                tag_name = ref_name.replace('refs/tags/', '')
-                target = repo[ref.target]
-
-                # Peel to commit
-                while hasattr(target, 'peel') and not isinstance(target, pygit2.Commit):
-                    target = target.peel(pygit2.Commit)  # type: ignore[assignment]
-
-                if isinstance(target, pygit2.Commit):
-                    commit_target = cast('pygit2.Commit', target)
-                    tags.append({
-                        'name': tag_name,
-                        'commit': str(commit_target.id)[:7],
-                        'message': commit_target.message.split('\n')[0][:80],
-                        'date': datetime.fromtimestamp(commit_target.commit_time).strftime('%Y-%m-%d'),
-                        'timestamp': commit_target.commit_time,
-                    })
-            except (KeyError, pygit2.GitError, AttributeError):
-                continue
+            info = _get_tag_info(repo, ref_name)
+            if info:
+                tags.append(info)
     except Exception:
-        pass  # return whatever tags were collected before the error
-
+        pass
     return sorted(tags, key=lambda t: cast(int, t.get('timestamp', 0)), reverse=True)[:limit]

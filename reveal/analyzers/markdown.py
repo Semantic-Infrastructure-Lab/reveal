@@ -418,17 +418,12 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 link_info['column'] = 1  # No column tracking in regex fallback
 
                 # Apply type filter
-                if link_type and link_type != 'all':
-                    if link_info['type'] != link_type:
-                        continue
+                if link_type and link_type != 'all' and link_info['type'] != link_type:
+                    continue
 
-                # Apply domain filter (for external links)
-                if domain:
-                    if link_info['type'] == 'external':
-                        if domain not in url:
-                            continue
-                    else:
-                        continue  # Domain filter only applies to external links
+                # Apply domain filter (for external links only)
+                if domain and (link_info['type'] != 'external' or domain not in url):
+                    continue
 
                 links.append(link_info)
 
@@ -641,38 +636,28 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         block_lines: List[str] = []
 
         for i, line in enumerate(self.lines, 1):
-            # Start of code block
-            if line.strip().startswith('```'):
-                if not in_block:
-                    # Beginning of block
-                    in_block = True
-                    block_start = i
-                    # Extract language tag (everything after ```)
-                    lang_tag = line.strip()[3:].strip()
-                    block_lang = lang_tag if lang_tag else 'text'
-                    block_lines = []
-                else:
-                    # End of block
-                    in_block = False
-
-                    # Apply language filter
-                    if language and block_lang != language:
-                        continue
-
-                    # Calculate line count
-                    line_count = len(block_lines)
-
-                    code_blocks.append({
-                        'line_start': block_start,
-                        'line_end': i,
-                        'language': block_lang,
-                        'source': '\n'.join(block_lines),
-                        'line_count': line_count,
-                        'type': 'fenced',
-                    })
-            elif in_block:
-                # Inside code block - accumulate lines
-                block_lines.append(line)
+            if not line.strip().startswith('```'):
+                if in_block:
+                    block_lines.append(line)
+                continue
+            if not in_block:
+                in_block = True
+                block_start = i
+                lang_tag = line.strip()[3:].strip()
+                block_lang = lang_tag if lang_tag else 'text'
+                block_lines = []
+                continue
+            in_block = False
+            if language and block_lang != language:
+                continue
+            code_blocks.append({
+                'line_start': block_start,
+                'line_end': i,
+                'language': block_lang,
+                'source': '\n'.join(block_lines),
+                'line_count': len(block_lines),
+                'type': 'fenced',
+            })
 
         # Extract inline code if requested
         if include_inline:
@@ -841,10 +826,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             for fname in ('uri', 'path', 'href', 'url', 'file'):
                 if fname in entry and isinstance(entry[fname], str):
                     path = cast(str, entry[fname])
-                    # Strip doc:// prefix if present
-                    if path.startswith('doc://'):
-                        path = path[6:]  # Remove 'doc://'
-                    return path
+                    return path[6:] if path.startswith('doc://') else path
         return None
 
     def _process_related_path(
@@ -910,6 +892,20 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             logging.debug(f"Failed to analyze related file {resolved}: {e}")
             return {'path': rel_path, 'resolved_path': str(resolved), 'exists': True, 'error': str(e), 'headings': [], 'related': []}
 
+    def _collect_paths_from_field(self, value: Any, related_paths: List[str]) -> None:
+        """Add paths extracted from one frontmatter field value into related_paths."""
+        if isinstance(value, list):
+            for item in value:
+                path = self._normalize_related_entry(item)
+                if path:
+                    related_paths.append(path)
+        elif isinstance(value, str):
+            related_paths.append(value)
+        elif isinstance(value, dict):
+            path = self._normalize_related_entry(value)
+            if path:
+                related_paths.append(path)
+
     def _find_related_paths(self, frontmatter_data: Dict[str, Any]) -> List[str]:
         """Extract related document paths from frontmatter data.
 
@@ -922,22 +918,12 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             List of related document paths
         """
         related_fields = ['related', 'related_docs', 'see_also', 'references']
-        related_paths = []
+        related_paths: List[str] = []
 
         for fname in related_fields:
             value = frontmatter_data.get(fname)
             if value:
-                if isinstance(value, list):
-                    for item in value:
-                        path = self._normalize_related_entry(item)
-                        if path:
-                            related_paths.append(path)
-                elif isinstance(value, str):
-                    related_paths.append(value)
-                elif isinstance(value, dict):
-                    path = self._normalize_related_entry(value)
-                    if path:
-                        related_paths.append(path)
+                self._collect_paths_from_field(value, related_paths)
 
         return related_paths
 

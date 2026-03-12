@@ -169,12 +169,8 @@ def _detect_source_root() -> Path:
                                capture_output=True, text=True)
         if result.returncode == 0:
             root = Path(result.stdout.strip())
-            # Prefer src/ if it exists
-            for candidate in ['src', 'lib', 'app']:
-                d = root / candidate
-                if d.is_dir():
-                    return d
-            return root
+            subdir = next((root / c for c in ['src', 'lib', 'app'] if (root / c).is_dir()), None)
+            return subdir if subdir else root
     except Exception:
         pass
     return Path('.')

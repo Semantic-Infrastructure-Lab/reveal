@@ -23,6 +23,15 @@ class R913(BaseRule, ASTParsingMixin):
     # Threshold for "too many" (configurable in future)
     MAX_ARGS = 5
 
+    @staticmethod
+    def _get_def_line(content: str, node) -> str:
+        """Extract the def line from source, falling back to a placeholder."""
+        try:
+            src = ast.get_source_segment(content, node)
+            return src.split('\n')[0] if src else f"def {node.name}(...)"
+        except Exception:
+            return f"def {node.name}(...)"
+
     def check(self,
              file_path: str,
              structure: Optional[Dict[str, Any]],
@@ -59,20 +68,8 @@ class R913(BaseRule, ASTParsingMixin):
                 # (they're often used to reduce argument lists)
 
                 if total_args > self.MAX_ARGS:
-                    # Build argument list for context
-                    arg_names = [a.arg for a in args.args]
-                    if args.kwonlyargs:
-                        arg_names.extend([a.arg for a in args.kwonlyargs])
-
-                    # Get the function signature as context
-                    try:
-                        context = ast.get_source_segment(content, node)
-                        if context:
-                            # Just show the def line
-                            context = context.split('\n')[0]
-                    except Exception:
-                        context = f"def {node.name}(...)"
-
+                    arg_names = [a.arg for a in args.args] + [a.arg for a in args.kwonlyargs]
+                    context = self._get_def_line(content, node)
                     suggestion = (
                         f"Reduce to {self.MAX_ARGS} or fewer arguments. "
                         f"Consider: 1) Using a config object/dataclass, "

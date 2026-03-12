@@ -42,18 +42,18 @@ def _parse_cpanel_userdata(path: str) -> Dict[str, str]:
     Returns:
         Dict of directive name → value.
     """
-    result: Dict[str, str] = {}
     try:
-        with open(path, 'r', encoding='utf-8', errors='replace') as fh:
-            for line in fh:
-                line = line.rstrip()
-                if not line or line.startswith('#') or line.startswith('-'):
-                    continue
-                m = re.match(r'^(\w+):\s*(.*)', line)
-                if m:
-                    result[m.group(1)] = m.group(2).strip()
+        text = open(path, 'r', encoding='utf-8', errors='replace').read()
     except OSError:
-        pass
+        return {}
+    result: Dict[str, str] = {}
+    for line in text.split('\n'):
+        line = line.rstrip()
+        if not line or line.startswith('#') or line.startswith('-'):
+            continue
+        m = re.match(r'^(\w+):\s*(.*)', line)
+        if m:
+            result[m.group(1)] = m.group(2).strip()
     return result
 
 
@@ -154,6 +154,103 @@ def _dns_resolves(domain: str) -> bool:
         return True
     except socket.gaierror:
         return False
+
+
+_SCHEMA_ELEMENTS = {
+    '(none)': 'Overview: domain count, SSL summary, nginx config path',
+    'domains': 'All addon/subdomain domains with docroots and type',
+    'ssl': 'Disk cert health per domain from /var/cpanel/ssl/apache_tls/',
+    'acl-check': 'nobody ACL status on every domain docroot',
+}
+
+_SCHEMA_OUTPUT_TYPES = [
+    {
+        'type': 'cpanel_user',
+        'description': 'Overview of a cPanel user — domain count, SSL summary, nginx config presence',
+        'triggered_by': 'cpanel://USERNAME (no element)',
+        'schema': {'type': 'object', 'properties': {
+            'type': {'type': 'string', 'const': 'cpanel_user'},
+            'username': {'type': 'string'},
+            'userdata_dir': {'type': 'string'},
+            'userdata_accessible': {'type': 'boolean'},
+            'domain_count': {'type': 'integer'},
+            'nginx_config': {'type': ['string', 'null']},
+            'ssl_summary': {'type': 'object', 'description': 'Counts keyed by status: ok/expiring/critical/expired/missing/error'},
+            'next_steps': {'type': 'array', 'items': {'type': 'string'}},
+        }},
+    },
+    {
+        'type': 'cpanel_domains',
+        'description': 'All domains for a cPanel user with docroots and type',
+        'triggered_by': 'cpanel://USERNAME/domains',
+        'schema': {'type': 'object', 'properties': {
+            'type': {'type': 'string', 'const': 'cpanel_domains'},
+            'username': {'type': 'string'},
+            'domain_count': {'type': 'integer'},
+            'domains': {'type': 'array', 'items': {'type': 'object', 'properties': {
+                'domain': {'type': 'string'},
+                'docroot': {'type': 'string'},
+                'type': {'type': 'string', 'enum': ['main', 'addon', 'subdomain']},
+            }}},
+        }},
+    },
+    {
+        'type': 'cpanel_ssl',
+        'description': 'Disk cert health per domain — sorted by severity (failures first)',
+        'triggered_by': 'cpanel://USERNAME/ssl',
+        'schema': {'type': 'object', 'properties': {
+            'type': {'type': 'string', 'const': 'cpanel_ssl'},
+            'username': {'type': 'string'},
+            'cpanel_ssl_dir': {'type': 'string'},
+            'cert_count': {'type': 'integer'},
+            'dns_verified': {'type': 'boolean'},
+            'summary': {'type': 'object', 'description': 'Counts keyed by status: ok/expiring/critical/expired/missing/error'},
+            'dns_excluded': {'type': 'object', 'description': 'Counts of NXDOMAIN-excluded domains by status (only when dns_verified=true)'},
+            'certs': {'type': 'array', 'items': {'type': 'object', 'properties': {
+                'domain': {'type': 'string'},
+                'status': {'type': 'string', 'enum': ['ok', 'expiring', 'critical', 'expired', 'missing', 'error']},
+                'expiry_days': {'type': ['number', 'null']},
+                'dns_resolves': {'type': 'boolean', 'description': 'Only present when dns_verified=true'},
+            }}},
+            'next_steps': {'type': 'array', 'items': {'type': 'string'}},
+        }},
+    },
+    {
+        'type': 'cpanel_acl',
+        'description': 'nobody ACL status on every domain docroot — required for ACME renewal',
+        'triggered_by': 'cpanel://USERNAME/acl-check',
+        'schema': {'type': 'object', 'properties': {
+            'type': {'type': 'string', 'const': 'cpanel_acl'},
+            'username': {'type': 'string'},
+            'domain_count': {'type': 'integer'},
+            'has_failures': {'type': 'boolean'},
+            'summary': {'type': 'object', 'description': 'Counts keyed by acl_status: ok/denied/no_docroot/unknown'},
+            'domains': {'type': 'array', 'items': {'type': 'object', 'properties': {
+                'domain': {'type': 'string'},
+                'docroot': {'type': 'string'},
+                'acl_status': {'type': 'string', 'enum': ['ok', 'denied', 'no_docroot', 'unknown']},
+                'acl_detail': {'type': 'object'},
+            }}},
+            'next_steps': {'type': 'array', 'items': {'type': 'string'}},
+        }},
+    },
+]
+
+_SCHEMA_EXAMPLE_QUERIES = [
+    {'uri': 'reveal cpanel://johndoe', 'description': 'Overview: domain count, SSL summary, nginx config path', 'output_type': 'cpanel_user'},
+    {'uri': 'reveal cpanel://johndoe/domains', 'description': 'List all domains with docroots and type (main/addon/subdomain)', 'output_type': 'cpanel_domains'},
+    {'uri': 'reveal cpanel://johndoe/ssl', 'description': 'Disk cert health per domain — sorted by severity', 'output_type': 'cpanel_ssl'},
+    {'uri': 'reveal cpanel://johndoe/ssl --dns-verified', 'description': 'SSL cert health excluding NXDOMAIN (dead) domains', 'output_type': 'cpanel_ssl'},
+    {'uri': 'reveal cpanel://johndoe/acl-check', 'description': 'nobody ACL status on every docroot — needed for ACME cert renewal', 'output_type': 'cpanel_acl'},
+    {'uri': "reveal cpanel://johndoe --format=json | jq '.ssl_summary'", 'description': 'Machine-readable SSL summary counts', 'output_type': 'cpanel_user'},
+]
+
+_SCHEMA_NOTES = [
+    'Reads /var/cpanel/userdata/<username>/ directly — no WHM API or credentials required',
+    'SSL cert data comes from /var/cpanel/ssl/apache_tls/ (disk-based, not live connection)',
+    "acl-check validates nobody can read each docroot — required for Let's Encrypt / AutoSSL",
+    '--dns-verified excludes NXDOMAIN domains to avoid false positives on deleted subdomains',
+]
 
 
 @register_adapter('cpanel')
@@ -364,175 +461,13 @@ class CpanelAdapter(ResourceAdapter):
             'adapter': 'cpanel',
             'description': 'Inspect cPanel user environments — domains, SSL certs, ACL health',
             'uri_syntax': 'cpanel://USERNAME[/element]',
-            'query_params': {
-                '--dns-verified': 'Exclude NXDOMAIN domains from SSL summary counts',
-            },
-            'elements': {
-                '(none)': 'Overview: domain count, SSL summary, nginx config path',
-                'domains': 'All addon/subdomain domains with docroots and type',
-                'ssl': 'Disk cert health per domain from /var/cpanel/ssl/apache_tls/',
-                'acl-check': 'nobody ACL status on every domain docroot',
-            },
+            'query_params': {'--dns-verified': 'Exclude NXDOMAIN domains from SSL summary counts'},
+            'elements': _SCHEMA_ELEMENTS,
             'cli_flags': ['--format=json', '--dns-verified'],
             'supports_batch': False,
-            'output_types': [
-                {
-                    'type': 'cpanel_user',
-                    'description': 'Overview of a cPanel user — domain count, SSL summary, nginx config presence',
-                    'triggered_by': 'cpanel://USERNAME (no element)',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'cpanel_user'},
-                            'username': {'type': 'string'},
-                            'userdata_dir': {'type': 'string'},
-                            'userdata_accessible': {'type': 'boolean'},
-                            'domain_count': {'type': 'integer'},
-                            'nginx_config': {'type': ['string', 'null']},
-                            'ssl_summary': {
-                                'type': 'object',
-                                'description': 'Counts keyed by status: ok/expiring/critical/expired/missing/error',
-                            },
-                            'next_steps': {'type': 'array', 'items': {'type': 'string'}},
-                        },
-                    },
-                },
-                {
-                    'type': 'cpanel_domains',
-                    'description': 'All domains for a cPanel user with docroots and type',
-                    'triggered_by': 'cpanel://USERNAME/domains',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'cpanel_domains'},
-                            'username': {'type': 'string'},
-                            'domain_count': {'type': 'integer'},
-                            'domains': {
-                                'type': 'array',
-                                'items': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'domain': {'type': 'string'},
-                                        'docroot': {'type': 'string'},
-                                        'type': {'type': 'string', 'enum': ['main', 'addon', 'subdomain']},
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-                {
-                    'type': 'cpanel_ssl',
-                    'description': 'Disk cert health per domain — sorted by severity (failures first)',
-                    'triggered_by': 'cpanel://USERNAME/ssl',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'cpanel_ssl'},
-                            'username': {'type': 'string'},
-                            'cpanel_ssl_dir': {'type': 'string'},
-                            'cert_count': {'type': 'integer'},
-                            'dns_verified': {'type': 'boolean'},
-                            'summary': {
-                                'type': 'object',
-                                'description': 'Counts keyed by status: ok/expiring/critical/expired/missing/error',
-                            },
-                            'dns_excluded': {
-                                'type': 'object',
-                                'description': 'Counts of NXDOMAIN-excluded domains by status (only when dns_verified=true)',
-                            },
-                            'certs': {
-                                'type': 'array',
-                                'items': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'domain': {'type': 'string'},
-                                        'status': {
-                                            'type': 'string',
-                                            'enum': ['ok', 'expiring', 'critical', 'expired', 'missing', 'error'],
-                                        },
-                                        'expiry_days': {'type': ['number', 'null']},
-                                        'dns_resolves': {'type': 'boolean', 'description': 'Only present when dns_verified=true'},
-                                    },
-                                },
-                            },
-                            'next_steps': {'type': 'array', 'items': {'type': 'string'}},
-                        },
-                    },
-                },
-                {
-                    'type': 'cpanel_acl',
-                    'description': 'nobody ACL status on every domain docroot — required for ACME renewal',
-                    'triggered_by': 'cpanel://USERNAME/acl-check',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'type': {'type': 'string', 'const': 'cpanel_acl'},
-                            'username': {'type': 'string'},
-                            'domain_count': {'type': 'integer'},
-                            'has_failures': {'type': 'boolean'},
-                            'summary': {
-                                'type': 'object',
-                                'description': 'Counts keyed by acl_status: ok/denied/no_docroot/unknown',
-                            },
-                            'domains': {
-                                'type': 'array',
-                                'items': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'domain': {'type': 'string'},
-                                        'docroot': {'type': 'string'},
-                                        'acl_status': {
-                                            'type': 'string',
-                                            'enum': ['ok', 'denied', 'no_docroot', 'unknown'],
-                                        },
-                                        'acl_detail': {'type': 'object'},
-                                    },
-                                },
-                            },
-                            'next_steps': {'type': 'array', 'items': {'type': 'string'}},
-                        },
-                    },
-                },
-            ],
-            'example_queries': [
-                {
-                    'uri': 'reveal cpanel://johndoe',
-                    'description': 'Overview: domain count, SSL summary, nginx config path',
-                    'output_type': 'cpanel_user',
-                },
-                {
-                    'uri': 'reveal cpanel://johndoe/domains',
-                    'description': 'List all domains with docroots and type (main/addon/subdomain)',
-                    'output_type': 'cpanel_domains',
-                },
-                {
-                    'uri': 'reveal cpanel://johndoe/ssl',
-                    'description': 'Disk cert health per domain — sorted by severity',
-                    'output_type': 'cpanel_ssl',
-                },
-                {
-                    'uri': 'reveal cpanel://johndoe/ssl --dns-verified',
-                    'description': 'SSL cert health excluding NXDOMAIN (dead) domains',
-                    'output_type': 'cpanel_ssl',
-                },
-                {
-                    'uri': 'reveal cpanel://johndoe/acl-check',
-                    'description': 'nobody ACL status on every docroot — needed for ACME cert renewal',
-                    'output_type': 'cpanel_acl',
-                },
-                {
-                    'uri': "reveal cpanel://johndoe --format=json | jq '.ssl_summary'",
-                    'description': 'Machine-readable SSL summary counts',
-                    'output_type': 'cpanel_user',
-                },
-            ],
-            'notes': [
-                'Reads /var/cpanel/userdata/<username>/ directly — no WHM API or credentials required',
-                'SSL cert data comes from /var/cpanel/ssl/apache_tls/ (disk-based, not live connection)',
-                'acl-check validates nobody can read each docroot — required for Let\'s Encrypt / AutoSSL',
-                '--dns-verified excludes NXDOMAIN domains to avoid false positives on deleted subdomains',
-            ],
+            'output_types': _SCHEMA_OUTPUT_TYPES,
+            'example_queries': _SCHEMA_EXAMPLE_QUERIES,
+            'notes': _SCHEMA_NOTES,
         }
 
     @staticmethod

@@ -18,10 +18,11 @@ def _iter_assistant_content(messages: List[Dict]) -> Generator[Tuple[int, Dict, 
 def _iter_user_content(messages: List[Dict]) -> Generator[Tuple[int, Dict, Dict], None, None]:
     """Yield (msg_index, msg, content_block) for each content block in user messages."""
     for i, msg in enumerate(messages):
-        if msg.get('type') == 'user':
-            for content in msg.get('message', {}).get('content', []):
-                if isinstance(content, dict):
-                    yield i, msg, content
+        if msg.get('type') != 'user':
+            continue
+        for content in msg.get('message', {}).get('content', []):
+            if isinstance(content, dict):
+                yield i, msg, content
 
 
 def is_tool_error(content: Dict) -> bool:

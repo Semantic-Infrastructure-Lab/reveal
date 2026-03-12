@@ -7,6 +7,13 @@ from reveal.base import FileAnalyzer
 from reveal.utils import safe_json_dumps, print_breadcrumbs
 
 
+def _format_display_key(key: str) -> str:
+    """Format a metadata key for display (parts_count -> Parts, created -> Created)."""
+    if key.endswith('_count'):
+        return key.replace('_count', '').replace('_', ' ').title()
+    return key.replace('_', ' ').title()
+
+
 def show_metadata(analyzer: FileAnalyzer, output_format: str, config=None):
     """Show file metadata."""
     meta = analyzer.get_metadata()
@@ -27,11 +34,7 @@ def show_metadata(analyzer: FileAnalyzer, output_format: str, config=None):
         # Show other metadata fields (like parts_count for Office docs)
         for key, value in meta.items():
             if key not in ('name', 'path', 'size', 'size_human', 'lines', 'encoding'):
-                # Format key nicely (parts_count -> Parts, created -> Created)
-                if key.endswith('_count'):
-                    display_key = key.replace('_count', '').replace('_', ' ').title()
-                else:
-                    display_key = key.replace('_', ' ').title()
+                display_key = _format_display_key(key)
                 print(f"{display_key}: {value:,}" if isinstance(value, int) else f"{display_key}: {value}")
 
         print_breadcrumbs('metadata', meta['path'], config=config)

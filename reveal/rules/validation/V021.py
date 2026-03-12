@@ -123,18 +123,13 @@ class V021(BaseRule):
         """Check if file imports the 're' module."""
         try:
             tree = ast.parse(content)
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        if alias.name == 're':
-                            return True
-                elif isinstance(node, ast.ImportFrom):
-                    if node.module == 're':
-                        return True
+            return any(
+                (isinstance(n, ast.Import) and any(a.name == 're' for a in n.names)) or
+                (isinstance(n, ast.ImportFrom) and n.module == 're')
+                for n in ast.walk(tree)
+            )
         except SyntaxError:
-            # Fallback to simple string search
             return 'import re' in content or 'from re import' in content
-        return False
 
     def _infer_language(self, file_path: Path, content: str) -> Optional[str]:
         """Infer language name from analyzer file."""

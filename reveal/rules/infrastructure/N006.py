@@ -106,11 +106,7 @@ class N006(BaseRule):
         # Also pull from parsed structure when available (main_directives or
         # the http-level directives dict).
         if structure:
-            for key in ('main_directives', 'directives'):
-                extra = structure.get(key) or {}
-                for name, value in extra.items():
-                    if name not in directives:
-                        directives[name] = value
+            self._merge_structure_directives(structure, directives)
 
         body_size_raw = directives.get(_SIZE_DIRECTIVE)
         if not body_size_raw:
@@ -151,6 +147,14 @@ class N006(BaseRule):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _merge_structure_directives(structure: dict, directives: Dict[str, str]) -> None:
+        """Merge directives from parsed structure into the directives dict (no overwrite)."""
+        for key in ('main_directives', 'directives'):
+            for name, value in (structure.get(key) or {}).items():
+                if name not in directives:
+                    directives[name] = value
 
     @staticmethod
     def _find_directive_line(content: str, directive: str) -> int:

@@ -850,6 +850,14 @@ reveal ssl://file:///var/cpanel/ssl/apache_tls/example.com/combined
 reveal ssl://file:///etc/letsencrypt/live/example.com/fullchain.pem
 ```
 
+**Local cert validation (no network required):**
+```bash
+# Validate certs referenced in a nginx config directly on disk
+reveal ssl://nginx:///etc/nginx/nginx.conf --check --local-certs
+# Reports expiry status per cert file — no live connection needed
+# Useful for servers without outbound HTTPS or for pre-deployment checks
+```
+
 **Nginx SSL audit (composable pipeline):**
 ```bash
 # See nginx config with SSL status indicators
@@ -951,6 +959,10 @@ reveal nginx://example.com --format=json
 # After nginx upstream check, verify the backend service
 reveal nginx://example.com/upstream  # shows proxy_pass target
 reveal domain://api.example.com      # inspect the upstream domain
+
+# domain:// also supports WHOIS lookup
+reveal domain://example.com/whois    # registrar, creation/expiry dates, nameservers
+reveal domain://example.com/registrar  # registrar + WHOIS fields (requires: pip install reveal[whois])
 
 # Validate nginx config + SSL in one workflow
 reveal nginx://example.com           # check vhost config
@@ -1057,6 +1069,15 @@ reveal doc.md --code --language python
 
 # Get YAML frontmatter
 reveal doc.md --frontmatter
+
+# Search file body text (text after frontmatter)
+reveal 'markdown://docs/?body-contains=nginx'
+
+# Combine body search with frontmatter filter and sort
+reveal 'markdown://docs/?type=guide&body-contains=nginx&sort=-modified'
+
+# Multiple body-contains terms are AND'd (all must appear)
+reveal 'markdown://docs/?body-contains=auth&body-contains=token'
 
 # Navigate related documents (from front matter)
 reveal doc.md --related
@@ -1482,7 +1503,19 @@ Markdown, Jupyter notebooks (.ipynb)
 ### Office Documents
 Excel (.xlsx), Word (.docx), PowerPoint (.pptx)
 
-**Features:** Structure view, metadata, content extraction
+**Features:** Structure view, metadata, content extraction, cross-sheet search
+
+**xlsx:// cross-sheet search:**
+```bash
+# Search all sheets in a workbook (case-insensitive)
+reveal 'xlsx://file.xlsx?search=pattern'
+
+# Cap results
+reveal 'xlsx://file.xlsx?search=error&limit=20'
+
+# JSON output for scripting
+reveal 'xlsx://file.xlsx?search=pattern' --format=json
+```
 
 **Check supported types:** `reveal --list-supported`
 

@@ -26,18 +26,17 @@ def copy_to_clipboard(text: str) -> bool:
     ]
 
     for cmd in clipboard_cmds:
-        if shutil.which(cmd[0]):
-            try:
-                process = subprocess.Popen(
-                    cmd,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL
-                )
-                process.communicate(input=text.encode('utf-8'))
-                if process.returncode == 0:
-                    return True
-            except (subprocess.SubprocessError, OSError):
-                continue
+        if not shutil.which(cmd[0]):
+            continue
+        try:
+            process = subprocess.Popen(
+                cmd, stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            process.communicate(input=text.encode('utf-8'))
+            if process.returncode == 0:
+                return True
+        except (subprocess.SubprocessError, OSError):
+            continue
 
     return False

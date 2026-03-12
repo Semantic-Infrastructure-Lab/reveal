@@ -7,6 +7,103 @@ from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from .renderer import SqliteRenderer
 
+_SCHEMA_OUTPUT_TYPES = [
+    {
+        'type': 'sqlite_database',
+        'description': 'Database overview with tables, indices, and size info',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'sqlite_database'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string', 'const': 'database'},
+                'db_path': {'type': 'string'},
+                'size_bytes': {'type': 'integer'},
+                'tables': {'type': 'array'},
+                'indices': {'type': 'array'},
+                'version': {'type': 'string'}
+            }
+        },
+        'example': {
+            'contract_version': '1.0',
+            'type': 'sqlite_database',
+            'source': '/path/to/app.db',
+            'source_type': 'database',
+            'db_path': '/path/to/app.db',
+            'size_bytes': 524288,
+            'tables': ['users', 'posts', 'comments'],
+            'indices': ['idx_users_email', 'idx_posts_created'],
+            'version': '3.35.5'
+        }
+    },
+    {
+        'type': 'sqlite_table',
+        'description': 'Table schema with columns, types, and indices',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'sqlite_table'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string', 'const': 'table'},
+                'table_name': {'type': 'string'},
+                'columns': {'type': 'array'},
+                'indices': {'type': 'array'},
+                'row_count': {'type': 'integer'}
+            }
+        }
+    },
+    {
+        'type': 'sqlite_health',
+        'description': 'Database health check results',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'sqlite_health'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string', 'const': 'database'},
+                'integrity': {'type': 'boolean'},
+                'corruption': {'type': 'boolean'},
+                'detections': {'type': 'array'}
+            }
+        }
+    }
+]
+
+_SCHEMA_EXAMPLE_QUERIES = [
+    {
+        'uri': 'sqlite:///path/to/app.db',
+        'description': 'Database overview with tables and indices',
+        'output_type': 'sqlite_database'
+    },
+    {
+        'uri': 'sqlite:///path/to/app.db/users',
+        'description': 'Table schema for users table',
+        'element': 'users',
+        'output_type': 'sqlite_table'
+    },
+    {
+        'uri': 'sqlite:///path/to/app.db --check',
+        'description': 'Run integrity checks on database',
+        'cli_flag': '--check',
+        'output_type': 'sqlite_health'
+    },
+    {
+        'uri': 'sqlite://./relative/path/data.db',
+        'description': 'Relative path to database',
+        'output_type': 'sqlite_database'
+    }
+]
+
+_SCHEMA_NOTES = [
+    'Opens databases in read-only mode for safety',
+    'Supports both absolute (///) and relative (//) paths',
+    'Health checks include integrity verification',
+    'Built-in SQLite module, no external dependencies'
+]
+
 
 @register_adapter('sqlite')
 @register_renderer(SqliteRenderer)
@@ -31,107 +128,14 @@ class SQLiteAdapter(ResourceAdapter):
             'adapter': 'sqlite',
             'description': 'SQLite database inspection with schema exploration and health checks',
             'uri_syntax': 'sqlite:///path/to/db.db[/table]',
-            'query_params': {},  # No query parameters
-            'elements': {},  # Table names are dynamic based on database schema
-            'cli_flags': [
-                '--check'  # Run database health checks
-            ],
+            'query_params': {},
+            'elements': {},
+            'cli_flags': ['--check'],
             'supports_batch': False,
             'supports_advanced': False,
-            'output_types': [
-                {
-                    'type': 'sqlite_database',
-                    'description': 'Database overview with tables, indices, and size info',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'sqlite_database'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string', 'const': 'database'},
-                            'db_path': {'type': 'string'},
-                            'size_bytes': {'type': 'integer'},
-                            'tables': {'type': 'array'},
-                            'indices': {'type': 'array'},
-                            'version': {'type': 'string'}
-                        }
-                    },
-                    'example': {
-                        'contract_version': '1.0',
-                        'type': 'sqlite_database',
-                        'source': '/path/to/app.db',
-                        'source_type': 'database',
-                        'db_path': '/path/to/app.db',
-                        'size_bytes': 524288,
-                        'tables': ['users', 'posts', 'comments'],
-                        'indices': ['idx_users_email', 'idx_posts_created'],
-                        'version': '3.35.5'
-                    }
-                },
-                {
-                    'type': 'sqlite_table',
-                    'description': 'Table schema with columns, types, and indices',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'sqlite_table'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string', 'const': 'table'},
-                            'table_name': {'type': 'string'},
-                            'columns': {'type': 'array'},
-                            'indices': {'type': 'array'},
-                            'row_count': {'type': 'integer'}
-                        }
-                    }
-                },
-                {
-                    'type': 'sqlite_health',
-                    'description': 'Database health check results',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'sqlite_health'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string', 'const': 'database'},
-                            'integrity': {'type': 'boolean'},
-                            'corruption': {'type': 'boolean'},
-                            'detections': {'type': 'array'}
-                        }
-                    }
-                }
-            ],
-            'example_queries': [
-                {
-                    'uri': 'sqlite:///path/to/app.db',
-                    'description': 'Database overview with tables and indices',
-                    'output_type': 'sqlite_database'
-                },
-                {
-                    'uri': 'sqlite:///path/to/app.db/users',
-                    'description': 'Table schema for users table',
-                    'element': 'users',
-                    'output_type': 'sqlite_table'
-                },
-                {
-                    'uri': 'sqlite:///path/to/app.db --check',
-                    'description': 'Run integrity checks on database',
-                    'cli_flag': '--check',
-                    'output_type': 'sqlite_health'
-                },
-                {
-                    'uri': 'sqlite://./relative/path/data.db',
-                    'description': 'Relative path to database',
-                    'output_type': 'sqlite_database'
-                }
-            ],
-            'notes': [
-                'Opens databases in read-only mode for safety',
-                'Supports both absolute (///) and relative (//) paths',
-                'Health checks include integrity verification',
-                'Built-in SQLite module, no external dependencies'
-            ]
+            'output_types': _SCHEMA_OUTPUT_TYPES,
+            'example_queries': _SCHEMA_EXAMPLE_QUERIES,
+            'notes': _SCHEMA_NOTES,
         }
 
     @staticmethod
@@ -196,15 +200,16 @@ class SQLiteAdapter(ResourceAdapter):
         db_parts = []
         table_found = False
         for i, part in enumerate(parts):
-            if not table_found:
-                db_parts.append(part)
-                # Check if this part ends with .db or is the last part
-                if part.endswith('.db') or part.endswith('.sqlite') or part.endswith('.sqlite3'):
-                    # Everything after this is the table name
-                    if i + 1 < len(parts):
-                        self.table = '/'.join(parts[i+1:])
-                        table_found = True
-                    break
+            if table_found:
+                break
+            db_parts.append(part)
+            is_db = part.endswith('.db') or part.endswith('.sqlite') or part.endswith('.sqlite3')
+            if not is_db:
+                continue
+            if i + 1 < len(parts):
+                self.table = '/'.join(parts[i+1:])
+                table_found = True
+            break
 
         self.db_path = '/'.join(db_parts) if db_parts else path_part
 

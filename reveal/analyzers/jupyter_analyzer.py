@@ -120,29 +120,21 @@ class JupyterAnalyzer(FileAnalyzer):
         return result
 
     def _find_cell_line(self, cell_index: int) -> int:
-        """
-        Find approximate line number where a cell starts in the JSON.
-
-        This searches for cell markers in the original source.
-        """
-        # Look for "cell_type" string followed by the type for this cell
-        if cell_index < len(self.cells):
-            cell = self.cells[cell_index]
-            cell_type = cell.get('cell_type', '')
-
-            # Count how many cells of this type we've seen before
-            cells_before = sum(1 for c in self.cells[:cell_index] if c.get('cell_type') == cell_type)
-
-            # Search for the nth occurrence of this cell_type in the file
-            count = 0
-            search_str = f'"cell_type": "{cell_type}"'
-            for i, line in enumerate(self.lines, 1):
-                if search_str in line:
-                    if count == cells_before:
-                        return i
-                    count += 1
-
-        return 1  # Fallback
+        """Find approximate line number where a cell starts in the JSON."""
+        if cell_index >= len(self.cells):
+            return 1
+        cell = self.cells[cell_index]
+        cell_type = cell.get('cell_type', '')
+        cells_before = sum(1 for c in self.cells[:cell_index] if c.get('cell_type') == cell_type)
+        count = 0
+        search_str = f'"cell_type": "{cell_type}"'
+        for i, line in enumerate(self.lines, 1):
+            if search_str not in line:
+                continue
+            if count == cells_before:
+                return i
+            count += 1
+        return 1
 
     def generate_preview(self) -> List[Tuple[int, str]]:
         """Generate Jupyter notebook preview."""

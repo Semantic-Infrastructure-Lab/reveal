@@ -24,6 +24,16 @@ def render_markdown_query(data: Dict[str, Any], output_format: str,
         _render_query_results(data, output_format)
 
 
+def _print_frontmatter_item(key: str, value: Any) -> None:
+    """Print a single frontmatter key/value, expanding lists."""
+    if isinstance(value, list):
+        print(f"  {key}:")
+        for item in value:
+            print(f"    - {item}")
+    else:
+        print(f"  {key}: {value}")
+
+
 def _render_single_file(data: Dict[str, Any], output_format: str) -> None:
     """Render single file frontmatter details.
 
@@ -47,12 +57,7 @@ def _render_single_file(data: Dict[str, Any], output_format: str) -> None:
     if data.get('frontmatter'):
         print("Front Matter:")
         for key, value in data['frontmatter'].items():
-            if isinstance(value, list):
-                print(f"  {key}:")
-                for item in value:
-                    print(f"    - {item}")
-            else:
-                print(f"  {key}: {value}")
+            _print_frontmatter_item(key, value)
     else:
         print("No front matter found")
 

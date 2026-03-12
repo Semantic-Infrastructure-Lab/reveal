@@ -205,10 +205,9 @@ class V020(BaseRule):
     def _find_line_matching(self, file_path: Path, pattern: str) -> int:
         """Find the first line number (1-indexed) containing *pattern*, or 1."""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                for i, line in enumerate(f, start=1):
-                    if pattern in line:
-                        return i
+            for i, line in enumerate(Path(file_path).read_text(encoding='utf-8').splitlines(), start=1):
+                if pattern in line:
+                    return i
         except OSError:
             pass
         return 1

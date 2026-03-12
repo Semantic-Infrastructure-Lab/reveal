@@ -12,6 +12,30 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
 
+def _passes_ext_filter(target: str, ext_filter: Optional[str]) -> bool:
+    """Return True if target passes the extension filter (or no filter is set)."""
+    if not ext_filter:
+        return True
+    allowed = {e.strip().lower().lstrip('.') for e in ext_filter.split(',') if e.strip()}
+    return Path(target).suffix.lower().lstrip('.') in allowed
+
+
+def _normalize_patterns(patterns) -> list:
+    """Normalize file patterns to a list."""
+    return [patterns] if isinstance(patterns, str) else patterns
+
+
+def _collect_decorator_counts(structure: dict) -> Dict[str, int]:
+    """Count all decorator occurrences in a file structure dict."""
+    counts: Dict[str, int] = {}
+    for category in ('functions', 'classes'):
+        for item in structure.get(category, []):
+            for dec in item.get('decorators', []):
+                dec_name = dec.split('(')[0]
+                counts[dec_name] = counts.get(dec_name, 0) + 1
+    return counts
+
+
 def handle_list_supported(list_supported_types_func):
     """Handle --list-supported flag.
 
@@ -260,10 +284,7 @@ def handle_rules_list(version: str):
             # Show file patterns if not universal
             patterns = rule.get('file_patterns', ['*'])
             if patterns and patterns != ['*']:
-                # Handle both list and string patterns
-                if isinstance(patterns, str):
-                    patterns = [patterns]
-                print(f"             Files: {', '.join(patterns)}")
+                print(f"             Files: {', '.join(_normalize_patterns(patterns))}")
         print()
 
     print(f"Total: {len(rules)} rules")
@@ -468,12 +489,8 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
                              batch_results, ssl_check_results)
         else:
             # Apply --ext filter for file paths
-            ext_filter = getattr(args, 'ext', None)
-            if ext_filter:
-                allowed = {e.strip().lower().lstrip('.') for e in ext_filter.split(',') if e.strip()}
-                if Path(target).suffix.lower().lstrip('.') not in allowed:
-                    continue
-            _process_stdin_file(target, args, handle_file_func)
+            if _passes_ext_filter(target, getattr(args, 'ext', None)):
+                _process_stdin_file(target, args, handle_file_func)
 
     # Render aggregated batch results
     if batch_results:
@@ -840,17 +857,7 @@ def _extract_decorators_from_file(file_path: str):
         if not structure:
             return None
 
-        decorators_found: Dict[str, int] = {}  # decorator_name -> count in this file
-
-        # Check functions and classes for decorators
-        for category in ['functions', 'classes']:
-            for item in structure.get(category, []):
-                decorators = item.get('decorators', [])
-                for dec in decorators:
-                    # Normalize decorator (just the name, not args)
-                    dec_name = dec.split('(')[0]
-                    decorators_found[dec_name] = decorators_found.get(dec_name, 0) + 1
-
+        decorators_found = _collect_decorator_counts(structure)
         return (decorators_found, len(decorators_found) > 0)
 
     except Exception:
@@ -958,8 +965,8 @@ def _scan_python_files(target_path):
             )
             if processed:
                 total_files += 1
-                if has_decorators:
-                    total_decorated += 1
+            if processed and has_decorators:
+                total_decorated += 1
 
     return decorator_counts, decorator_files, total_files, total_decorated
 

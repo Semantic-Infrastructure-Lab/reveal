@@ -78,6 +78,16 @@ class SSLFetcher:
         """
         self.timeout = timeout
 
+    def _get_peer_cert(self, ssock) -> dict:
+        """Get peer cert dict from an open SSL socket, with binary fallback."""
+        cert = ssock.getpeercert(binary_form=False)
+        if cert:
+            return cert
+        binary_cert = ssock.getpeercert(binary_form=True)
+        if binary_cert:
+            return self._parse_binary_cert(binary_cert)
+        raise ssl.SSLError("No certificate received from server")
+
     def fetch_certificate(
         self, host: str, port: int = 443
     ) -> Tuple[CertificateInfo, List[CertificateInfo]]:
@@ -102,24 +112,10 @@ class SSLFetcher:
 
         with socket.create_connection((host, port), timeout=self.timeout) as sock:
             with context.wrap_socket(sock, server_hostname=host) as ssock:
-                # Get the peer certificate
-                cert = ssock.getpeercert(binary_form=False)
-                if not cert:  # None or empty dict {} (happens with CERT_NONE)
-                    # Binary form fallback for when verification is off
-                    binary_cert = ssock.getpeercert(binary_form=True)
-                    if binary_cert:
-                        cert = self._parse_binary_cert(binary_cert)
-                    else:
-                        raise ssl.SSLError("No certificate received from server")
-
-                leaf = self._parse_certificate(cert)
-
-                # Try to get the certificate chain
-                chain: List[CertificateInfo] = []
+                leaf = self._parse_certificate(self._get_peer_cert(ssock))
                 # Note: Python's ssl module doesn't easily expose the full chain
                 # We'd need PyOpenSSL for that. For now, just return the leaf.
-
-                return leaf, chain
+                return leaf, []
 
     def fetch_certificate_with_verification(
         self, host: str, port: int = 443
@@ -201,6 +197,23 @@ class SSLFetcher:
             signature_algorithm=cert.get('signatureAlgorithm'),
         )
 
+    @staticmethod
+    def _extract_san_from_cert(cert: Any) -> List[Tuple[str, str]]:
+        """Extract Subject Alternative Names from a parsed x509 cert object."""
+        san: List[Tuple[str, str]] = []
+        try:
+            san_ext = cert.extensions.get_extension_for_oid(
+                x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME
+            )
+            for name in san_ext.value:  # type: ignore[attr-defined]
+                if isinstance(name, x509.DNSName):
+                    san.append(('DNS', name.value))
+                elif isinstance(name, x509.IPAddress):
+                    san.append(('IP Address', str(name.value)))
+        except x509.ExtensionNotFound:
+            pass
+        return san
+
     def _parse_binary_cert(self, binary_cert: bytes) -> Dict:
         """Parse binary certificate when getpeercert() returns None.
 
@@ -229,18 +242,7 @@ class SSLFetcher:
                 issuer.append(((oid_name, attr.value),))
 
             # Extract SANs
-            san = []
-            try:
-                san_ext = cert.extensions.get_extension_for_oid(
-                    x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME
-                )
-                for name in san_ext.value:  # type: ignore[attr-defined]
-                    if isinstance(name, x509.DNSName):
-                        san.append(('DNS', name.value))
-                    elif isinstance(name, x509.IPAddress):
-                        san.append(('IP Address', str(name.value)))
-            except x509.ExtensionNotFound:
-                pass
+            san = self._extract_san_from_cert(cert)
 
             # Format dates like ssl module does: 'Jan  5 12:00:00 2026 GMT'
             not_before = cert.not_valid_before_utc.strftime('%b %d %H:%M:%S %Y GMT')
@@ -575,161 +577,96 @@ def check_ssl_health(
         return _build_ssl_health_error_result(host, port, e, advanced)
 
 
-def _run_advanced_checks(
-    host: str, port: int, cert: CertificateInfo, timeout: float = 10.0
-) -> Dict[str, Any]:
-    """Run advanced SSL health checks.
-
-    Args:
-        host: Hostname
-        port: Port number
-        cert: Certificate info
-        timeout: Connection timeout in seconds
-
-    Returns:
-        Dict with checks list and has_failures flag
-    """
-    checks = []
-    has_failures = False
-
-    # Check 1: TLS protocol version
+def _check_tls_version(host: str, port: int, timeout: float) -> Tuple[Dict[str, Any], bool]:
+    """Connect to host and return a TLS version check dict and a has_failures flag."""
     try:
         context = ssl.create_default_context()
         with socket.create_connection((host, port), timeout=timeout) as sock:
             with context.wrap_socket(sock, server_hostname=host) as ssock:
                 tls_version = ssock.version()
-
-                # TLS 1.2+ is required, TLS 1.3 is ideal
-                if tls_version in ('TLSv1.3',):
-                    status = 'pass'
-                    message = f'Using {tls_version} (recommended)'
-                elif tls_version in ('TLSv1.2',):
-                    status = 'pass'
-                    message = f'Using {tls_version} (acceptable)'
-                else:
-                    status = 'warning'
-                    message = f'Using {tls_version} (outdated, upgrade to TLS 1.2+)'
-                    has_failures = True
-
-                checks.append({
-                    'name': 'tls_version',
-                    'status': status,
-                    'value': tls_version,
-                    'threshold': 'TLS 1.2+',
-                    'message': message,
-                    'severity': 'medium',
-                })
+        if tls_version in ('TLSv1.3',):
+            status, message, failed = 'pass', f'Using {tls_version} (recommended)', False
+        elif tls_version in ('TLSv1.2',):
+            status, message, failed = 'pass', f'Using {tls_version} (acceptable)', False
+        else:
+            status, message, failed = 'warning', f'Using {tls_version} (outdated, upgrade to TLS 1.2+)', True
+        return {'name': 'tls_version', 'status': status, 'value': tls_version,
+                'threshold': 'TLS 1.2+', 'message': message, 'severity': 'medium'}, failed
     except Exception as e:
-        checks.append({
-            'name': 'tls_version',
-            'status': 'warning',
-            'value': 'Unknown',
-            'threshold': 'TLS 1.2+',
-            'message': f'Could not determine TLS version: {e}',
-            'severity': 'low',
-        })
+        return {'name': 'tls_version', 'status': 'warning', 'value': 'Unknown',
+                'threshold': 'TLS 1.2+', 'message': f'Could not determine TLS version: {e}',
+                'severity': 'low'}, False
 
-    # Check 2: Certificate type (wildcard, self-signed)
-    is_wildcard = any(san.startswith('*.') for san in cert.san)
+
+def _check_self_signed(cert: CertificateInfo):
+    """Return (check_dict, is_failed) for self-signed detection."""
     is_self_signed = cert.subject.get('commonName') == cert.issuer.get('commonName')
-
     if is_self_signed:
-        checks.append({
-            'name': 'self_signed',
-            'status': 'warning',
-            'value': 'Self-signed',
-            'threshold': 'CA-signed',
-            'message': 'Certificate is self-signed (not trusted by browsers)',
-            'severity': 'high',
-        })
-        has_failures = True
-    else:
-        checks.append({
-            'name': 'self_signed',
-            'status': 'pass',
-            'value': 'CA-signed',
-            'threshold': 'CA-signed',
-            'message': 'Certificate signed by trusted CA',
-            'severity': 'info',
-        })
+        return {'name': 'self_signed', 'status': 'warning', 'value': 'Self-signed',
+                'threshold': 'CA-signed', 'message': 'Certificate is self-signed (not trusted by browsers)',
+                'severity': 'high'}, True
+    return {'name': 'self_signed', 'status': 'pass', 'value': 'CA-signed',
+            'threshold': 'CA-signed', 'message': 'Certificate signed by trusted CA',
+            'severity': 'info'}, False
 
-    # Check 3: Wildcard certificate detection
+
+def _check_cert_type(cert: CertificateInfo, is_wildcard: bool) -> Dict[str, Any]:
+    """Return check_dict for wildcard vs single-domain detection."""
     if is_wildcard:
-        checks.append({
-            'name': 'certificate_type',
-            'status': 'info',
-            'value': 'Wildcard',
-            'threshold': 'N/A',
-            'message': f'Wildcard certificate (covers *.{cert.common_name.lstrip("*.")})',
-            'severity': 'info',
-        })
-    else:
-        checks.append({
-            'name': 'certificate_type',
-            'status': 'info',
-            'value': 'Single domain',
-            'threshold': 'N/A',
-            'message': f'Single domain certificate ({len(cert.san)} SANs)',
-            'severity': 'info',
-        })
+        return {'name': 'certificate_type', 'status': 'info', 'value': 'Wildcard',
+                'threshold': 'N/A', 'message': f'Wildcard certificate (covers *.{cert.common_name.lstrip("*.")})',
+                'severity': 'info'}
+    return {'name': 'certificate_type', 'status': 'info', 'value': 'Single domain',
+            'threshold': 'N/A', 'message': f'Single domain certificate ({len(cert.san)} SANs)',
+            'severity': 'info'}
 
-    # Check 4: Issuer type (Let's Encrypt detection)
-    issuer_name = cert.issuer_name.lower()
-    if "let's encrypt" in issuer_name:
-        checks.append({
-            'name': 'issuer_type',
-            'status': 'info',
-            'value': "Let's Encrypt",
-            'threshold': 'N/A',
-            'message': "Let's Encrypt certificate (auto-renews every 90 days)",
-            'severity': 'info',
-        })
-    else:
-        checks.append({
-            'name': 'issuer_type',
-            'status': 'info',
-            'value': cert.issuer_name,
-            'threshold': 'N/A',
-            'message': f'Issued by {cert.issuer_name}',
-            'severity': 'info',
-        })
 
-    # Check 5: Key strength (requires connecting again to get key info)
-    # Note: Python's ssl module doesn't easily expose key size without PyOpenSSL
-    # We'll add a basic check based on signature algorithm
+def _check_issuer_type(cert: CertificateInfo) -> Dict[str, Any]:
+    """Return check_dict for issuer type (Let's Encrypt detection)."""
+    if "let's encrypt" in cert.issuer_name.lower():
+        return {'name': 'issuer_type', 'status': 'info', 'value': "Let's Encrypt",
+                'threshold': 'N/A', 'message': "Let's Encrypt certificate (auto-renews every 90 days)",
+                'severity': 'info'}
+    return {'name': 'issuer_type', 'status': 'info', 'value': cert.issuer_name,
+            'threshold': 'N/A', 'message': f'Issued by {cert.issuer_name}', 'severity': 'info'}
+
+
+def _check_signature_algorithm(cert: CertificateInfo):
+    """Return (check_dict, is_failed) for signature algorithm strength."""
     sig_algo = cert.signature_algorithm or ''
-    if 'sha256' in sig_algo.lower() or 'sha384' in sig_algo.lower() or 'sha512' in sig_algo.lower():
-        checks.append({
-            'name': 'signature_algorithm',
-            'status': 'pass',
-            'value': sig_algo,
-            'threshold': 'SHA-256+',
-            'message': f'Using secure signature algorithm ({sig_algo})',
-            'severity': 'medium',
-        })
-    elif 'sha1' in sig_algo.lower():
-        checks.append({
-            'name': 'signature_algorithm',
-            'status': 'warning',
-            'value': sig_algo,
-            'threshold': 'SHA-256+',
-            'message': f'Using weak signature algorithm ({sig_algo}), should upgrade to SHA-256+',
-            'severity': 'medium',
-        })
-        has_failures = True
-    else:
-        checks.append({
-            'name': 'signature_algorithm',
-            'status': 'info',
-            'value': sig_algo or 'Unknown',
-            'threshold': 'SHA-256+',
-            'message': f'Signature algorithm: {sig_algo or "Unknown"}',
-            'severity': 'low',
-        })
+    sig_lower = sig_algo.lower()
+    if 'sha256' in sig_lower or 'sha384' in sig_lower or 'sha512' in sig_lower:
+        return {'name': 'signature_algorithm', 'status': 'pass', 'value': sig_algo,
+                'threshold': 'SHA-256+', 'message': f'Using secure signature algorithm ({sig_algo})',
+                'severity': 'medium'}, False
+    if 'sha1' in sig_lower:
+        return {'name': 'signature_algorithm', 'status': 'warning', 'value': sig_algo,
+                'threshold': 'SHA-256+', 'message': f'Using weak signature algorithm ({sig_algo}), should upgrade to SHA-256+',
+                'severity': 'medium'}, True
+    return {'name': 'signature_algorithm', 'status': 'info', 'value': sig_algo or 'Unknown',
+            'threshold': 'SHA-256+', 'message': f'Signature algorithm: {sig_algo or "Unknown"}',
+            'severity': 'low'}, False
 
+
+def _run_advanced_checks(
+    host: str, port: int, cert: CertificateInfo, timeout: float = 10.0
+) -> Dict[str, Any]:
+    """Run advanced SSL health checks."""
+    tls_check, tls_failed = _check_tls_version(host, port, timeout)
+    is_wildcard = any(san.startswith('*.') for san in cert.san)
+    self_signed_check, self_signed_failed = _check_self_signed(cert)
+    sig_check, sig_failed = _check_signature_algorithm(cert)
+
+    checks = [
+        tls_check,
+        self_signed_check,
+        _check_cert_type(cert, is_wildcard),
+        _check_issuer_type(cert),
+        sig_check,
+    ]
     return {
         'checks': checks,
-        'has_failures': has_failures,
+        'has_failures': tls_failed or self_signed_failed or sig_failed,
     }
 
 

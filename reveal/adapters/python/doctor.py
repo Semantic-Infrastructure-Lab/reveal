@@ -121,14 +121,13 @@ def check_editable_installs() -> List[Dict[str, Any]]:
     try:
         import importlib.metadata
 
-        editable_count = 0
-        for dist in importlib.metadata.distributions():
+        def _is_editable(dist) -> bool:
             try:
-                # Check for direct_url.json which indicates editable install
-                if dist.read_text("direct_url.json"):
-                    editable_count += 1
+                return bool(dist.read_text("direct_url.json"))
             except (FileNotFoundError, TypeError):
-                pass
+                return False
+
+        editable_count = sum(1 for dist in importlib.metadata.distributions() if _is_editable(dist))
 
         if editable_count > 0:
             info.append(

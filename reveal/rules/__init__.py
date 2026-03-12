@@ -427,6 +427,13 @@ class RuleRegistry:
         sorted_rules = sorted(rules, key=lambda r: r.code)
         return [cls._rule_to_dict(rule_class) for rule_class in sorted_rules]
 
+    @staticmethod
+    def _apply_rule_config(rule, rule_config: dict) -> None:
+        """Apply config key-value pairs to a rule instance."""
+        for key, value in rule_config.items():
+            if hasattr(rule, key):
+                setattr(rule, key, value)
+
     @classmethod
     def check_file(cls,
                    file_path: str,
@@ -475,17 +482,12 @@ class RuleRegistry:
             try:
                 # Instantiate rule and run check
                 rule = rule_class()
-                rule.set_current_file(file_path)
 
                 # Pass config values to rule if it needs them
-                # Access the raw config dict to get rule-specific config
                 rules_config = file_config._config.get('rules', {})
                 rule_config = rules_config.get(rule_class.code, {})
                 if rule_config and isinstance(rule_config, dict):
-                    # Update rule's config values
-                    for key, value in rule_config.items():
-                        if hasattr(rule, key):
-                            setattr(rule, key, value)
+                    cls._apply_rule_config(rule, rule_config)
 
                 rule_detections = rule.check(file_path, structure, content)
                 detections.extend(rule_detections)

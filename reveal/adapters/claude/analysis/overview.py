@@ -7,6 +7,17 @@ from datetime import datetime
 from .tools import calculate_tool_success_rate
 
 
+def _extract_text_from_content(content: Any) -> str:
+    """Extract plain text from str or list-of-content-blocks content."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        for item in content:
+            if isinstance(item, dict) and item.get('type') == 'text':
+                return item.get('text', '').strip()
+    return ''
+
+
 def _extract_session_title(messages: List[Dict]) -> Optional[str]:
     """Extract a display title from the first user message with text content.
 
@@ -16,20 +27,19 @@ def _extract_session_title(messages: List[Dict]) -> Optional[str]:
     for msg in messages:
         if msg.get('type') != 'user':
             continue
-        content = msg.get('message', {}).get('content', '')
-        if isinstance(content, str):
-            text = content.strip()
-        elif isinstance(content, list):
-            text = ''
-            for item in content:
-                if isinstance(item, dict) and item.get('type') == 'text':
-                    text = item.get('text', '').strip()
-                    break
-        else:
-            continue
+        text = _extract_text_from_content(msg.get('message', {}).get('content', ''))
         if text:
             return text.split('\n')[0].strip()[:100] or None
     return None
+
+
+def _measure_content_block(block: Dict[str, Any]) -> tuple:
+    """Return (text_size, is_thinking) for one assistant content block."""
+    if block.get('type') == 'text':
+        return len(block.get('text', '')), False
+    if block.get('type') == 'thinking':
+        return len(block.get('thinking', '')), True
+    return 0, False
 
 
 def analyze_message_sizes(messages: List[Dict]) -> Dict[str, Any]:
@@ -45,15 +55,15 @@ def analyze_message_sizes(messages: List[Dict]) -> Dict[str, Any]:
     thinking_blocks = 0
 
     for msg in messages:
-        if msg.get('type') == 'assistant':
-            msg_size = 0
-            for content in msg.get('message', {}).get('content', []):
-                if content.get('type') == 'text':
-                    msg_size += len(content.get('text', ''))
-                elif content.get('type') == 'thinking':
-                    msg_size += len(content.get('thinking', ''))
-                    thinking_blocks += 1
-            sizes.append(msg_size)
+        if msg.get('type') != 'assistant':
+            continue
+        msg_size = 0
+        for content in msg.get('message', {}).get('content', []):
+            size, is_thinking = _measure_content_block(content)
+            msg_size += size
+            if is_thinking:
+                thinking_blocks += 1
+        sizes.append(msg_size)
 
     return {
         'avg': sum(sizes) // len(sizes) if sizes else 0,
@@ -75,6 +85,24 @@ def _calculate_session_duration(messages: List[Dict]) -> Any:
     return None
 
 
+def _process_content_list(
+    content_list: List[Dict], tools_used: Dict, file_operations: Dict
+) -> int:
+    """Process assistant content blocks; return total thinking chars accumulated."""
+    _file_ops = {'Read', 'Write', 'Edit'}
+    thinking_chars = 0
+    for content in content_list:
+        ctype = content.get('type')
+        if ctype == 'tool_use':
+            tool_name = content.get('name')
+            tools_used[tool_name] += 1
+            if tool_name in _file_ops:
+                file_operations[tool_name] += 1
+        elif ctype == 'thinking':
+            thinking_chars += len(content.get('thinking', ''))
+    return thinking_chars
+
+
 def _collect_message_stats(messages: List[Dict]) -> Dict[str, Any]:
     """Collect tool usage, file operations, and thinking stats from messages."""
     tools_used: Dict[str, int] = defaultdict(int)
@@ -89,14 +117,9 @@ def _collect_message_stats(messages: List[Dict]) -> Dict[str, Any]:
             user_messages += 1
         elif msg_type == 'assistant':
             assistant_messages += 1
-            for content in msg.get('message', {}).get('content', []):
-                if content.get('type') == 'tool_use':
-                    tool_name = content.get('name')
-                    tools_used[tool_name] += 1
-                    if tool_name in ('Read', 'Write', 'Edit'):
-                        file_operations[tool_name] += 1
-                elif content.get('type') == 'thinking':
-                    thinking_chars += len(content.get('thinking', ''))
+            thinking_chars += _process_content_list(
+                msg.get('message', {}).get('content', []), tools_used, file_operations
+            )
 
     return {
         'tools_used': dict(tools_used),

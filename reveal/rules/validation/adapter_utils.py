@@ -139,12 +139,12 @@ def find_class_definition_line(file_path: Path, class_name: str) -> int:
         >>> print(f"GitAdapter defined at line {line}")
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            for i, line in enumerate(f, start=1):
-                if f'class {class_name}' in line:
-                    return i
+        lines = Path(file_path).read_text(encoding='utf-8').split('\n')
     except OSError:
-        pass
+        return 1
+    for i, line in enumerate(lines, start=1):
+        if f'class {class_name}' in line:
+            return i
     return 1
 
 
@@ -163,12 +163,12 @@ def find_method_definition_line(file_path: Path, method_name: str) -> int:
         >>> print(f"get_element defined at line {line}")
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            for i, line in enumerate(f, start=1):
-                if f'def {method_name}' in line:
-                    return i
+        lines = Path(file_path).read_text(encoding='utf-8').split('\n')
     except OSError:
-        pass
+        return 1
+    for i, line in enumerate(lines, start=1):
+        if f'def {method_name}' in line:
+            return i
     return 1
 
 

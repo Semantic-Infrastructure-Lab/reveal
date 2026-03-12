@@ -166,25 +166,17 @@ def _try_parse_single_char_operators(part: str, coerce_numeric: bool) -> Optiona
         QueryFilter if operator matched, None otherwise
     """
     for op in ['>', '<', '=']:
-        if op in part:
-            field, value = part.split(op, 1)
-            field = field.strip()
-            value = value.strip()
-
-            # Special handling for = operator
-            if op == '=':
-                special_filter = _parse_equals_special_cases(field, value)
-                if special_filter:
-                    return special_filter
-
-            # Normal operator handling
-            final_value: Union[bool, int, float, str]
-            if coerce_numeric:
-                final_value = coerce_value(value)
-            else:
-                final_value = value
-
-            return QueryFilter(field, op, final_value)
+        if op not in part:
+            continue
+        field, value = part.split(op, 1)
+        field = field.strip()
+        value = value.strip()
+        if op == '=':
+            special_filter = _parse_equals_special_cases(field, value)
+            if special_filter:
+                return special_filter
+        final_value: Union[bool, int, float, str] = coerce_value(value) if coerce_numeric else value
+        return QueryFilter(field, op, final_value)
     return None
 
 

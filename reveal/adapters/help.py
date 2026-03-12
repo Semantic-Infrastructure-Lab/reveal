@@ -5,6 +5,75 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer, _ADAPTER_REGISTRY
 
+_EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
+    'security': {
+        'type': 'query_recipes',
+        'task': 'security',
+        'description': 'Security analysis and vulnerability detection',
+        'recipes': [
+            {'goal': 'Find authentication functions', 'query': 'ast://src?name~=auth&type=function', 'description': 'Locate authentication-related code', 'output_type': 'ast_query'},
+            {'goal': 'Check SSL certificate expiry', 'query': 'ssl://example.com --expiring-within=30', 'description': 'Find certificates expiring soon', 'output_type': 'ssl_certificate'},
+            {'goal': 'Find SQL query construction', 'query': 'ast://src?name~=query&complexity>5', 'description': 'Locate complex database queries (SQL injection risk)', 'output_type': 'ast_query'},
+        ]
+    },
+    'codebase': {
+        'type': 'query_recipes',
+        'task': 'codebase',
+        'description': 'Codebase exploration and understanding',
+        'recipes': [
+            {'goal': 'Get project overview', 'query': 'reveal src/', 'description': 'Progressive disclosure: structure first', 'output_type': 'reveal_structure'},
+            {'goal': 'Find entry points', 'query': 'ast://src?name=main*&type=function', 'description': 'Locate main() and main_* entry point functions', 'output_type': 'ast_query'},
+            {'goal': 'List all classes', 'query': 'ast://src?type=class&sort=name', 'description': 'Enumerate class hierarchy for structural overview', 'output_type': 'ast_query'},
+            {'goal': 'Find complex code', 'query': 'ast://src?complexity>15', 'description': 'Locate high-complexity functions', 'output_type': 'ast_query'},
+        ]
+    },
+    'debugging': {
+        'type': 'query_recipes',
+        'task': 'debugging',
+        'description': 'Debugging and error investigation',
+        'recipes': [
+            {'goal': 'Find error handlers', 'query': 'ast://src?name~=error&type=function', 'description': 'Locate error handling code', 'output_type': 'ast_query'},
+            {'goal': 'Check recent changes', 'query': 'git://.?type=history', 'description': 'Review recent commit history', 'output_type': 'git_ref'},
+            {'goal': 'Find large functions', 'query': 'ast://src?lines>100&type=function', 'description': 'Locate potentially problematic large functions', 'output_type': 'ast_query'},
+        ]
+    },
+    'quality': {
+        'type': 'query_recipes',
+        'task': 'quality',
+        'description': 'Code quality and hotspot analysis',
+        'recipes': [
+            {'goal': 'Find quality hotspots', 'query': 'stats://src?hotspots=true', 'description': 'Ranked list of files with quality issues', 'output_type': 'stats_summary'},
+            {'goal': 'Check code complexity', 'query': 'ast://src?complexity>10', 'description': 'High complexity functions', 'output_type': 'ast_query'},
+            {'goal': 'Find long functions lacking simplicity', 'query': 'ast://src?type=function&lines>50&sort=-lines', 'description': 'Large functions sorted by size — prime documentation/refactor targets', 'output_type': 'ast_query'},
+        ]
+    },
+    'infrastructure': {
+        'type': 'query_recipes',
+        'task': 'infrastructure',
+        'description': 'Server infrastructure inspection — nginx, SSL, domains',
+        'recipes': [
+            {'goal': 'Inspect nginx vhost', 'query': 'nginx://example.com', 'description': 'Ports, upstreams, auth, locations for a domain', 'output_type': 'nginx_vhost_summary'},
+            {'goal': 'List all nginx vhosts', 'query': 'nginx://', 'description': 'Overview of all enabled nginx sites', 'output_type': 'nginx_sites_overview'},
+            {'goal': 'Check nginx upstream health', 'query': 'nginx://example.com/upstream', 'description': 'TCP reachability of proxy_pass backends', 'output_type': 'nginx_vhost_upstream'},
+            {'goal': 'Check SSL certificate', 'query': 'ssl://example.com --check', 'description': 'Certificate health, expiry, chain validity', 'output_type': 'ssl_certificate'},
+            {'goal': 'Validate nginx SSL certs from config', 'query': 'ssl://nginx:///etc/nginx/conf.d/*.conf --check --local-certs', 'description': 'Check cert files referenced by nginx (no network)', 'output_type': 'ssl_certificate'},
+            {'goal': 'Domain health check', 'query': 'domain://example.com --check', 'description': 'DNS propagation, SSL status, registration info', 'output_type': 'domain_health'},
+        ]
+    },
+    'documentation': {
+        'type': 'query_recipes',
+        'task': 'documentation',
+        'description': 'Documentation search and analysis — markdown, front matter',
+        'recipes': [
+            {'goal': 'Find docs by topic in body', 'query': "reveal 'markdown://docs/?body-contains=nginx'", 'description': 'Search doc body text (after frontmatter)', 'output_type': 'markdown_query'},
+            {'goal': 'Find all guides', 'query': "reveal 'markdown://docs/?type=guide'", 'description': 'Filter by frontmatter field value', 'output_type': 'markdown_query'},
+            {'goal': 'Find recent docs about deployment', 'query': "reveal 'markdown://docs/?body-contains=deploy&sort=-modified&limit=10'", 'description': 'Body search with recency sort', 'output_type': 'markdown_query'},
+            {'goal': 'Validate internal links', 'query': 'reveal docs/README.md --links --link-type internal', 'description': 'Find broken internal links in a doc', 'output_type': 'markdown_query'},
+            {'goal': 'Get document outline', 'query': 'reveal docs/README.md --outline', 'description': 'Hierarchical heading tree', 'output_type': 'markdown_query'},
+        ]
+    }
+}
+
 
 class HelpRenderer:
     """Renderer for help system results."""
@@ -199,13 +268,12 @@ class HelpAdapter(ResourceAdapter):
 
             # Also check for *GUIDE.md pattern (without underscore before GUIDE)
             for guide in docs_dir.glob('*GUIDE.md'):
-                # Skip if already discovered via *_GUIDE.md pattern
-                if guide.name not in discovered.values():
-                    # Convert filename to topic name
-                    # HTMLGUIDE.md -> html (unlikely but handle it)
-                    topic = guide.stem.lower().replace('guide', '').replace('_', '-').strip('-')
-                    if topic:  # Only add non-empty topics
-                        discovered[topic] = guide.name
+                if guide.name in discovered.values():
+                    continue
+                # HTMLGUIDE.md -> html (unlikely but handle it)
+                topic = guide.stem.lower().replace('guide', '').replace('_', '-').strip('-')
+                if topic:
+                    discovered[topic] = guide.name
 
         # Merge: discovered guides + STATIC_HELP (STATIC_HELP takes precedence)
         # This allows STATIC_HELP to:
@@ -643,217 +711,15 @@ class HelpAdapter(ResourceAdapter):
             }
 
     def _get_example_recipes(self, task_name: str) -> Optional[Dict[str, Any]]:
-        """Get canonical query recipes for a specific task.
-
-        Args:
-            task_name: Task category (e.g., 'security', 'codebase', 'debugging')
-
-        Returns:
-            Recipe dict with example queries or error if task not found
-        """
-        # Define canonical query recipes for common agent tasks
-        recipes = {
-            'security': {
-                'type': 'query_recipes',
-                'task': 'security',
-                'description': 'Security analysis and vulnerability detection',
-                'recipes': [
-                    {
-                        'goal': 'Find authentication functions',
-                        'query': 'ast://src?name~=auth&type=function',
-                        'description': 'Locate authentication-related code',
-                        'output_type': 'ast_query'
-                    },
-                    {
-                        'goal': 'Check SSL certificate expiry',
-                        'query': 'ssl://example.com --expiring-within=30',
-                        'description': 'Find certificates expiring soon',
-                        'output_type': 'ssl_certificate'
-                    },
-                    {
-                        'goal': 'Find SQL query construction',
-                        'query': 'ast://src?name~=query&complexity>5',
-                        'description': 'Locate complex database queries (SQL injection risk)',
-                        'output_type': 'ast_query'
-                    }
-                ]
-            },
-            'codebase': {
-                'type': 'query_recipes',
-                'task': 'codebase',
-                'description': 'Codebase exploration and understanding',
-                'recipes': [
-                    {
-                        'goal': 'Get project overview',
-                        'query': 'reveal src/',
-                        'description': 'Progressive disclosure: structure first',
-                        'output_type': 'reveal_structure'
-                    },
-                    {
-                        'goal': 'Find entry points',
-                        'query': 'ast://src?name=main*&type=function',
-                        'description': 'Locate main() and main_* entry point functions',
-                        'output_type': 'ast_query'
-                    },
-                    {
-                        'goal': 'List all classes',
-                        'query': 'ast://src?type=class&sort=name',
-                        'description': 'Enumerate class hierarchy for structural overview',
-                        'output_type': 'ast_query'
-                    },
-                    {
-                        'goal': 'Find complex code',
-                        'query': 'ast://src?complexity>15',
-                        'description': 'Locate high-complexity functions',
-                        'output_type': 'ast_query'
-                    }
-                ]
-            },
-            'debugging': {
-                'type': 'query_recipes',
-                'task': 'debugging',
-                'description': 'Debugging and error investigation',
-                'recipes': [
-                    {
-                        'goal': 'Find error handlers',
-                        'query': 'ast://src?name~=error&type=function',
-                        'description': 'Locate error handling code',
-                        'output_type': 'ast_query'
-                    },
-                    {
-                        'goal': 'Check recent changes',
-                        'query': 'git://.?type=history',
-                        'description': 'Review recent commit history',
-                        'output_type': 'git_ref'
-                    },
-                    {
-                        'goal': 'Find large functions',
-                        'query': 'ast://src?lines>100&type=function',
-                        'description': 'Locate potentially problematic large functions',
-                        'output_type': 'ast_query'
-                    }
-                ]
-            },
-            'quality': {
-                'type': 'query_recipes',
-                'task': 'quality',
-                'description': 'Code quality and hotspot analysis',
-                'recipes': [
-                    {
-                        'goal': 'Find quality hotspots',
-                        'query': 'stats://src?hotspots=true',
-                        'description': 'Ranked list of files with quality issues',
-                        'output_type': 'stats_summary'
-                    },
-                    {
-                        'goal': 'Check code complexity',
-                        'query': 'ast://src?complexity>10',
-                        'description': 'High complexity functions',
-                        'output_type': 'ast_query'
-                    },
-                    {
-                        'goal': 'Find long functions lacking simplicity',
-                        'query': 'ast://src?type=function&lines>50&sort=-lines',
-                        'description': 'Large functions sorted by size — prime documentation/refactor targets',
-                        'output_type': 'ast_query'
-                    }
-                ]
-            },
-            'infrastructure': {
-                'type': 'query_recipes',
-                'task': 'infrastructure',
-                'description': 'Server infrastructure inspection — nginx, SSL, domains',
-                'recipes': [
-                    {
-                        'goal': 'Inspect nginx vhost',
-                        'query': 'nginx://example.com',
-                        'description': 'Ports, upstreams, auth, locations for a domain',
-                        'output_type': 'nginx_vhost_summary'
-                    },
-                    {
-                        'goal': 'List all nginx vhosts',
-                        'query': 'nginx://',
-                        'description': 'Overview of all enabled nginx sites',
-                        'output_type': 'nginx_sites_overview'
-                    },
-                    {
-                        'goal': 'Check nginx upstream health',
-                        'query': 'nginx://example.com/upstream',
-                        'description': 'TCP reachability of proxy_pass backends',
-                        'output_type': 'nginx_vhost_upstream'
-                    },
-                    {
-                        'goal': 'Check SSL certificate',
-                        'query': 'ssl://example.com --check',
-                        'description': 'Certificate health, expiry, chain validity',
-                        'output_type': 'ssl_certificate'
-                    },
-                    {
-                        'goal': 'Validate nginx SSL certs from config',
-                        'query': 'ssl://nginx:///etc/nginx/conf.d/*.conf --check --local-certs',
-                        'description': 'Check cert files referenced by nginx (no network)',
-                        'output_type': 'ssl_certificate'
-                    },
-                    {
-                        'goal': 'Domain health check',
-                        'query': 'domain://example.com --check',
-                        'description': 'DNS propagation, SSL status, registration info',
-                        'output_type': 'domain_health'
-                    }
-                ]
-            },
-            'documentation': {
-                'type': 'query_recipes',
-                'task': 'documentation',
-                'description': 'Documentation search and analysis — markdown, front matter',
-                'recipes': [
-                    {
-                        'goal': 'Find docs by topic in body',
-                        'query': "reveal 'markdown://docs/?body-contains=nginx'",
-                        'description': 'Search doc body text (after frontmatter)',
-                        'output_type': 'markdown_query'
-                    },
-                    {
-                        'goal': 'Find all guides',
-                        'query': "reveal 'markdown://docs/?type=guide'",
-                        'description': 'Filter by frontmatter field value',
-                        'output_type': 'markdown_query'
-                    },
-                    {
-                        'goal': 'Find recent docs about deployment',
-                        'query': "reveal 'markdown://docs/?body-contains=deploy&sort=-modified&limit=10'",
-                        'description': 'Body search with recency sort',
-                        'output_type': 'markdown_query'
-                    },
-                    {
-                        'goal': 'Validate internal links',
-                        'query': 'reveal docs/README.md --links --link-type internal',
-                        'description': 'Find broken internal links in a doc',
-                        'output_type': 'markdown_query'
-                    },
-                    {
-                        'goal': 'Get document outline',
-                        'query': 'reveal docs/README.md --outline',
-                        'description': 'Hierarchical heading tree',
-                        'output_type': 'markdown_query'
-                    }
-                ]
-            }
-        }
-
-        if task_name not in recipes:
-            available = ', '.join(sorted(recipes.keys()))
-            if not task_name:
-                # Bare help://examples or help://examples/ — list available tasks
-                error_msg = f"Specify a task. Available: {available}"
-            else:
-                error_msg = f"Unknown task '{task_name}'. Available: {available}"
+        """Get canonical query recipes for a specific task."""
+        if task_name not in _EXAMPLE_RECIPES:
+            available = ', '.join(sorted(_EXAMPLE_RECIPES.keys()))
+            error_msg = f"Specify a task. Available: {available}" if not task_name else f"Unknown task '{task_name}'. Available: {available}"
             return {
                 'type': 'query_recipes',
                 'task': task_name,
                 'error': 'Unknown task' if task_name else 'No task specified',
                 'message': error_msg,
-                'available_tasks': list(recipes.keys())
+                'available_tasks': list(_EXAMPLE_RECIPES.keys())
             }
-
-        return recipes[task_name]
+        return _EXAMPLE_RECIPES[task_name]

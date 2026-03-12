@@ -86,44 +86,34 @@ class V003(BaseRule):
 
         # Check each analyzer for common features
         for analyzer_name, analyzer_info in analyzers.items():
-            analyzer_path = analyzer_info['path']
-            is_structured = analyzer_name in self.STRUCTURED_FORMATS
-
-            # Create context for this analyzer
             ctx = AnalyzerContext(
                 analyzer_name=analyzer_name,
-                analyzer_path=analyzer_path,
-                reveal_root=reveal_root
+                analyzer_path=analyzer_info['path'],
+                reveal_root=reveal_root,
             )
-
-            try:
-                content = analyzer_path.read_text(encoding='utf-8')
-
-                # Check for get_structure (required for all)
-                has_get_structure = (
-                    'def get_structure' in content or
-                    'TreeSitterAnalyzer' in content or
-                    'FileAnalyzer' in content
-                )
-
-                if not has_get_structure:
-                    detections.append(self._create_missing_structure_detection(ctx))
-
-                # Check for hierarchical support (for structured formats)
-                if is_structured:
-                    has_hierarchy_support = self._check_hierarchy_support(content)
-
-                    if not has_hierarchy_support:
-                        line_num = self._find_class_line(content)
-                        detections.append(
-                            self._create_missing_outline_detection(ctx, line_num)
-                        )
-
-            except Exception:
-                # Skip files we can't read
-                continue
+            is_structured = analyzer_name in self.STRUCTURED_FORMATS
+            detections.extend(self._check_analyzer_features(ctx, is_structured))
 
         return detections
+
+    def _check_analyzer_features(self, ctx: AnalyzerContext, is_structured: bool) -> List[Detection]:
+        """Check one analyzer file for missing feature support."""
+        results: List[Detection] = []
+        try:
+            content = ctx.analyzer_path.read_text(encoding='utf-8')
+            has_get_structure = (
+                'def get_structure' in content or
+                'TreeSitterAnalyzer' in content or
+                'FileAnalyzer' in content
+            )
+            if not has_get_structure:
+                results.append(self._create_missing_structure_detection(ctx))
+            if is_structured and not self._check_hierarchy_support(content):
+                line_num = self._find_class_line(content)
+                results.append(self._create_missing_outline_detection(ctx, line_num))
+        except Exception:
+            pass
+        return results
 
     def _create_missing_structure_detection(
         self, ctx: AnalyzerContext

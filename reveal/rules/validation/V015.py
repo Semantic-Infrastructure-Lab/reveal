@@ -84,37 +84,31 @@ class V015(BaseRule):
 
         return detections
 
-    def _count_registered_rules(self) -> Optional[int]:
-        """Count actual registered rules (excludes utils.py, __init__.py).
+    @staticmethod
+    def _count_category_rules(category_dir) -> int:
+        """Count rule files in a category directory (excludes utils and __init__)."""
+        count = 0
+        for rule_file in category_dir.glob('*.py'):
+            stem = rule_file.stem
+            if stem in ('utils', '__init__') or stem.startswith('_') or stem.endswith('_utils'):
+                continue
+            count += 1
+        return count
 
-        Counts actual rule files in reveal/rules/ directory tree.
-        """
+    def _count_registered_rules(self) -> Optional[int]:
+        """Count actual registered rules (excludes utils.py, __init__.py)."""
         try:
-            # Find reveal root
             reveal_root = find_reveal_root()
             if not reveal_root:
                 return None
-
             rules_dir = reveal_root / 'rules'
             if not rules_dir.exists():
                 return None
-
-            # Count rule files (exclude utils.py and __init__.py)
             count = 0
             for category_dir in rules_dir.iterdir():
                 if not category_dir.is_dir() or category_dir.name.startswith('_'):
                     continue
-
-                for rule_file in category_dir.glob('*.py'):
-                    # Skip utils and __init__
-                    if rule_file.stem in ('utils', '__init__'):
-                        continue
-                    # Skip files starting with _ or ending with _utils
-                    if rule_file.stem.startswith('_') or rule_file.stem.endswith('_utils'):
-                        continue
-
-                    count += 1
-
+                count += self._count_category_rules(category_dir)
             return count
         except Exception:
             return None

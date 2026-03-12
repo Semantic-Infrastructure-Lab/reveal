@@ -21,6 +21,158 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
 from ..analyzers.imports import ImportGraph, ImportStatement
 
+_SCHEMA_QUERY_PARAMS = {
+    'unused': {
+        'type': 'flag',
+        'description': 'Find unused imports in codebase',
+        'examples': ['imports://src?unused']
+    },
+    'circular': {
+        'type': 'flag',
+        'description': 'Detect circular dependencies',
+        'examples': ['imports://src?circular']
+    },
+    'violations': {
+        'type': 'flag',
+        'description': 'Check for layer violations (requires config)',
+        'examples': ['imports://src?violations']
+    }
+}
+
+_SCHEMA_OUTPUT_TYPES = [
+    {
+        'type': 'import_summary',
+        'description': 'Overview of all imports in codebase',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'import_summary'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string'},
+                'metadata': {
+                    'type': 'object',
+                    'properties': {
+                        'total_files': {'type': 'integer'},
+                        'total_imports': {'type': 'integer'},
+                        'has_cycles': {'type': 'boolean'}
+                    }
+                }
+            }
+        }
+    },
+    {
+        'type': 'unused_imports',
+        'description': 'List of unused imports with file locations',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'unused_imports'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string'},
+                'count': {'type': 'integer'},
+                'unused': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'file': {'type': 'string'},
+                            'line': {'type': 'integer'},
+                            'module': {'type': 'string'}
+                        }
+                    }
+                }
+            }
+        }
+    },
+    {
+        'type': 'circular_dependencies',
+        'description': 'Detected circular import cycles',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'circular_dependencies'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string'},
+                'count': {'type': 'integer'},
+                'cycles': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'array',
+                        'items': {'type': 'string'}
+                    }
+                }
+            }
+        }
+    },
+    {
+        'type': 'layer_violations',
+        'description': 'Architectural layer violations',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'layer_violations'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string'},
+                'count': {'type': 'integer'},
+                'violations': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'file': {'type': 'string'},
+                            'line': {'type': 'integer'},
+                            'message': {'type': 'string'}
+                        }
+                    }
+                }
+            }
+        }
+    }
+]
+
+_SCHEMA_EXAMPLE_QUERIES = [
+    {
+        'uri': 'imports://src',
+        'description': 'Analyze all imports in src directory',
+        'output_type': 'import_summary'
+    },
+    {
+        'uri': 'imports://src?unused',
+        'description': 'Find unused imports',
+        'cli_flag': '?unused',
+        'output_type': 'unused_imports'
+    },
+    {
+        'uri': 'imports://src?circular',
+        'description': 'Detect circular dependencies',
+        'cli_flag': '?circular',
+        'output_type': 'circular_dependencies'
+    },
+    {
+        'uri': 'imports://src?violations',
+        'description': 'Check layer violations (requires .reveal.yaml layers config)',
+        'cli_flag': '?violations',
+        'output_type': 'layer_violations'
+    },
+    {
+        'uri': 'imports://src/main.py',
+        'description': 'Analyze imports for a single file (no cycle detection)',
+        'output_type': 'import_summary'
+    }
+]
+
+_SCHEMA_NOTES = [
+    'Supports multiple languages via plugin architecture',
+    'Circular dependencies can indicate architectural issues',
+    'Layer violations require .reveal.yaml configuration',
+    'Unused import detection works with Python, JavaScript, Go, etc.',
+    'False positives: imports that trigger side effects (e.g. decorator-based registration) will be flagged as unused — these are intentional and safe to ignore'
+]
+
 
 class ImportsRenderer:
     """Renderer for import analysis results."""
@@ -294,161 +446,15 @@ class ImportsAdapter(ResourceAdapter):
             'adapter': 'imports',
             'description': 'Import graph analysis for detecting unused imports, circular dependencies, and layer violations',
             'uri_syntax': 'imports://<path>[?query]',
-            'query_params': {
-                'unused': {
-                    'type': 'flag',
-                    'description': 'Find unused imports in codebase',
-                    'examples': ['imports://src?unused']
-                },
-                'circular': {
-                    'type': 'flag',
-                    'description': 'Detect circular dependencies',
-                    'examples': ['imports://src?circular']
-                },
-                'violations': {
-                    'type': 'flag',
-                    'description': 'Check for layer violations (requires config)',
-                    'examples': ['imports://src?violations']
-                }
-            },
-            'elements': {},  # File names can be used as elements
-            'cli_flags': [
-                '--verbose'  # Show detailed results
-            ],
+            'query_params': _SCHEMA_QUERY_PARAMS,
+            'elements': {},
+            'cli_flags': ['--verbose'],
             'supports_batch': False,
             'supports_advanced': False,
             'supported_languages': get_supported_languages(),
-            'output_types': [
-                {
-                    'type': 'import_summary',
-                    'description': 'Overview of all imports in codebase',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'import_summary'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'metadata': {
-                                'type': 'object',
-                                'properties': {
-                                    'total_files': {'type': 'integer'},
-                                    'total_imports': {'type': 'integer'},
-                                    'has_cycles': {'type': 'boolean'}
-                                }
-                            }
-                        }
-                    }
-                },
-                {
-                    'type': 'unused_imports',
-                    'description': 'List of unused imports with file locations',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'unused_imports'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'count': {'type': 'integer'},
-                            'unused': {
-                                'type': 'array',
-                                'items': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'file': {'type': 'string'},
-                                        'line': {'type': 'integer'},
-                                        'module': {'type': 'string'}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                {
-                    'type': 'circular_dependencies',
-                    'description': 'Detected circular import cycles',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'circular_dependencies'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'count': {'type': 'integer'},
-                            'cycles': {
-                                'type': 'array',
-                                'items': {
-                                    'type': 'array',
-                                    'items': {'type': 'string'}
-                                }
-                            }
-                        }
-                    }
-                },
-                {
-                    'type': 'layer_violations',
-                    'description': 'Architectural layer violations',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'layer_violations'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'count': {'type': 'integer'},
-                            'violations': {
-                                'type': 'array',
-                                'items': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'file': {'type': 'string'},
-                                        'line': {'type': 'integer'},
-                                        'message': {'type': 'string'}
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            ],
-            'example_queries': [
-                {
-                    'uri': 'imports://src',
-                    'description': 'Analyze all imports in src directory',
-                    'output_type': 'import_summary'
-                },
-                {
-                    'uri': 'imports://src?unused',
-                    'description': 'Find unused imports',
-                    'cli_flag': '?unused',
-                    'output_type': 'unused_imports'
-                },
-                {
-                    'uri': 'imports://src?circular',
-                    'description': 'Detect circular dependencies',
-                    'cli_flag': '?circular',
-                    'output_type': 'circular_dependencies'
-                },
-                {
-                    'uri': 'imports://src?violations',
-                    'description': 'Check layer violations (requires .reveal.yaml layers config)',
-                    'cli_flag': '?violations',
-                    'output_type': 'layer_violations'
-                },
-                {
-                    'uri': 'imports://src/main.py',
-                    'description': 'Analyze imports for a single file (no cycle detection)',
-                    'output_type': 'import_summary'
-                }
-            ],
-            'notes': [
-                'Supports multiple languages via plugin architecture',
-                'Circular dependencies can indicate architectural issues',
-                'Layer violations require .reveal.yaml configuration',
-                'Unused import detection works with Python, JavaScript, Go, etc.',
-                'False positives: imports that trigger side effects (e.g. decorator-based registration) will be flagged as unused — these are intentional and safe to ignore'
-            ]
+            'output_types': _SCHEMA_OUTPUT_TYPES,
+            'example_queries': _SCHEMA_EXAMPLE_QUERIES,
+            'notes': _SCHEMA_NOTES,
         }
 
     @staticmethod
