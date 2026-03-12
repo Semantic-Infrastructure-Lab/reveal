@@ -690,34 +690,43 @@ class SSLAdapter(ResourceAdapter):
             source=self._nginx_path
         )
 
-    def _check_nginx_cert_files(
-            self, warn_days: int = 30, critical_days: int = 7
-    ) -> Dict[str, Any]:
-        """Validate SSL cert files referenced in nginx config (local, no network).
-
-        Parses ssl_certificate directives from the nginx config and validates
-        each referenced cert file directly on disk — no network connection required.
-
-        Args:
-            warn_days: Days until expiry to trigger warning
-            critical_days: Days until expiry to trigger critical
-
-        Returns:
-            ssl_cert_file_validation result dict
-        """
+    def _collect_cert_entries(self) -> List[Dict[str, Any]]:
+        """Glob nginx path and collect ssl_certificate entries across all matching files."""
         import glob as glob_module
         from reveal.analyzers.nginx import NginxAnalyzer
-
-        all_entries: List[Dict[str, Any]] = []
+        entries: List[Dict[str, Any]] = []
         paths = glob_module.glob(self._nginx_path) if '*' in self._nginx_path else [self._nginx_path]
         for path in paths:
             try:
                 analyzer = NginxAnalyzer(path)
-                entries = analyzer.extract_ssl_cert_paths()
-                all_entries.extend(entries)
+                entries.extend(analyzer.extract_ssl_cert_paths())
             except Exception:
                 pass
+        return entries
 
+    @staticmethod
+    def _build_cert_validation_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Build summary counts from a list of validated cert results."""
+        total = len(results)
+        failures = sum(1 for r in results if r['status'] == 'failure')
+        warnings = sum(1 for r in results if r['status'] == 'warning')
+        passed = total - failures - warnings
+        overall = 'pass' if failures == 0 and warnings == 0 else (
+            'warning' if failures == 0 else 'failure'
+        )
+        return {
+            'total': total,
+            'passed': passed,
+            'warnings': warnings,
+            'failures': failures,
+            'overall': overall,
+        }
+
+    def _check_nginx_cert_files(
+            self, warn_days: int = 30, critical_days: int = 7
+    ) -> Dict[str, Any]:
+        """Validate SSL cert files referenced in nginx config (local, no network)."""
+        all_entries = self._collect_cert_entries()
         if not all_entries:
             return {
                 'type': 'ssl_cert_file_validation',
@@ -727,38 +736,23 @@ class SSLAdapter(ResourceAdapter):
                 'exit_code': 1,
             }
 
-        # Deduplicate by cert_path (one report per unique cert file)
         seen: set = set()
         results = []
         for entry in all_entries:
             cert_path = entry['cert_path']
-            if cert_path in seen:
-                continue
-            seen.add(cert_path)
-            results.append(self._validate_cert_file(
-                cert_path, entry['domains'], warn_days, critical_days
-            ))
+            if cert_path not in seen:
+                seen.add(cert_path)
+                results.append(self._validate_cert_file(cert_path, entry['domains'], warn_days, critical_days))
 
-        total = len(results)
-        failures = sum(1 for r in results if r['status'] == 'failure')
-        warnings = sum(1 for r in results if r['status'] == 'warning')
-        passed = total - failures - warnings
-        overall = 'pass' if failures == 0 and warnings == 0 else (
-            'warning' if failures == 0 else 'failure'
-        )
+        summary = self._build_cert_validation_summary(results)
         return {
             'type': 'ssl_cert_file_validation',
             'source': self._nginx_path,
-            'certs_checked': total,
-            'status': overall,
-            'summary': {
-                'total': total,
-                'passed': passed,
-                'warnings': warnings,
-                'failures': failures,
-            },
+            'certs_checked': summary['total'],
+            'status': summary['overall'],
+            'summary': {k: v for k, v in summary.items() if k != 'overall'},
             'results': results,
-            'exit_code': 0 if failures == 0 else 2,
+            'exit_code': 0 if summary['failures'] == 0 else 2,
         }
 
     def _validate_cert_file(

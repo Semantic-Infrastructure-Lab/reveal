@@ -731,24 +731,19 @@ def _validate_path_exists(path: Path, path_str: str) -> None:
         sys.exit(1)
 
 
-def _show_directory_meta(path: Path, args: 'Namespace') -> None:
-    """Show metadata summary for a directory.
+def _collect_dir_stats(path: Path) -> tuple:
+    """Walk a directory and collect file count, size, mtime, extension counts.
 
-    Args:
-        path: Directory path
-        args: Parsed arguments (uses args.format for JSON output)
+    Returns:
+        (ext_counts, total_files, total_size, newest_mtime, oldest_mtime)
     """
     import os
-    import datetime
     from collections import defaultdict
-    from ..utils import safe_json_dumps
-
     ext_counts: dict = defaultdict(int)
     total_files = 0
     total_size = 0
     newest_mtime = 0.0
     oldest_mtime = float('inf')
-
     for root, _dirs, files in os.walk(path):
         for fname in files:
             fpath = Path(root) / fname
@@ -760,40 +755,52 @@ def _show_directory_meta(path: Path, args: 'Namespace') -> None:
                     newest_mtime = stat.st_mtime
                 if stat.st_mtime < oldest_mtime:
                     oldest_mtime = stat.st_mtime
-                ext = fpath.suffix.lower().lstrip('.') or '(no ext)'
-                ext_counts[ext] += 1
+                ext_counts[fpath.suffix.lower().lstrip('.') or '(no ext)'] += 1
             except OSError:
                 continue
+    return ext_counts, total_files, total_size, newest_mtime, oldest_mtime
 
-    from ..utils import format_size
+
+def _render_dir_meta_text(meta: dict) -> None:
+    """Print directory metadata in human-readable text format."""
+    print(f"Directory: {meta['name']}\n")
+    print(f"Path:       {meta['path']}")
+    print(f"Files:      {meta['total_files']:,}")
+    print(f"Size:       {meta['size_human']}")
+    if meta['modified']:
+        print(f"Modified:   {meta['modified']}")
+    if meta['oldest_file']:
+        print(f"Oldest:     {meta['oldest_file']}")
+    if meta['by_extension']:
+        print(f"\nBy extension:")
+        for ext, count in meta['by_extension'].items():
+            print(f"  .{ext:<12} {count:>6,}")
+
+
+def _show_directory_meta(path: Path, args: 'Namespace') -> None:
+    """Show metadata summary for a directory.
+
+    Args:
+        path: Directory path
+        args: Parsed arguments (uses args.format for JSON output)
+    """
+    import datetime
+    from ..utils import safe_json_dumps, format_size
+
+    ext_counts, total_files, total_size, newest_mtime, oldest_mtime = _collect_dir_stats(path)
     meta = {
-        'path': str(path),
-        'name': path.name,
-        'total_files': total_files,
-        'total_size': total_size,
+        'path': str(path), 'name': path.name,
+        'total_files': total_files, 'total_size': total_size,
         'size_human': format_size(total_size),
         'modified': datetime.datetime.fromtimestamp(newest_mtime).isoformat(timespec='seconds') if newest_mtime else None,
         'oldest_file': datetime.datetime.fromtimestamp(oldest_mtime).isoformat(timespec='seconds') if oldest_mtime != float('inf') else None,
         'by_extension': dict(sorted(ext_counts.items(), key=lambda x: -x[1])),
     }
-
     output_format = getattr(args, 'format', 'text')
     if output_format == 'json':
         print(safe_json_dumps(meta))
     else:
-        print(f"Directory: {meta['name']}\n")
-        print(f"Path:       {meta['path']}")
-        print(f"Files:      {meta['total_files']:,}")
-        print(f"Size:       {meta['size_human']}")
-        if meta['modified']:
-            print(f"Modified:   {meta['modified']}")
-        if meta['oldest_file']:
-            print(f"Oldest:     {meta['oldest_file']}")
-        if ext_counts:
-            print(f"\nBy extension:")
-            by_ext: Dict[str, int] = meta['by_extension']  # type: ignore[assignment]  # meta is dict[str, object]
-            for ext, count in by_ext.items():
-                print(f"  .{ext:<12} {count:>6,}")
+        _render_dir_meta_text(meta)
 
 
 def _parse_ext_arg(ext_arg: Optional[str]) -> Optional[list]:

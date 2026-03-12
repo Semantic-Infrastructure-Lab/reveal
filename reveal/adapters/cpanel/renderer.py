@@ -96,6 +96,25 @@ class CpanelRenderer:
             print(f"  {d['domain']:<{col_domain}}  {d.get('type', ''):<{col_type}}  {d.get('docroot', '')}")
 
     @staticmethod
+    def _format_cert_detail(cert: dict, nxdomain: bool) -> str:
+        """Format the status detail string for one cert row."""
+        s = cert['status']
+        if s == 'ok':
+            detail = f"✅ {cert.get('days_until_expiry')}d  ({cert.get('not_after', '')})"
+        elif s in ('expiring', 'critical'):
+            detail = f"⚠️  {cert.get('days_until_expiry')}d  ({cert.get('not_after', '')})"
+        elif s == 'expired':
+            days = abs(cert.get('days_until_expiry', 0) or 0)
+            detail = f"❌ EXPIRED {days}d ago  ({cert.get('not_after', '')})"
+        elif s == 'missing':
+            detail = f"⚫ no cert at {cert.get('cert_path', '')}"
+        else:
+            detail = f"❌ {cert.get('error', s)}"
+        if nxdomain:
+            detail += "  [nxdomain]"
+        return detail
+
+    @staticmethod
     def _render_ssl(r: Dict[str, Any]) -> None:
         username = r.get('username', '?')
         certs = r.get('certs', [])
@@ -123,21 +142,8 @@ class CpanelRenderer:
         print(f"  {'domain':<{col_domain}}  status")
         print("  " + "─" * (col_domain + 40))
         for c in certs:
-            s = c['status']
             nxdomain = dns_verified and not c.get('dns_resolves', True)
-            if s == 'ok':
-                detail = f"✅ {c.get('days_until_expiry')}d  ({c.get('not_after', '')})"
-            elif s in ('expiring', 'critical'):
-                detail = f"⚠️  {c.get('days_until_expiry')}d  ({c.get('not_after', '')})"
-            elif s == 'expired':
-                days = abs(c.get('days_until_expiry', 0) or 0)
-                detail = f"❌ EXPIRED {days}d ago  ({c.get('not_after', '')})"
-            elif s == 'missing':
-                detail = f"⚫ no cert at {c.get('cert_path', '')}"
-            else:
-                detail = f"❌ {c.get('error', s)}"
-            if nxdomain:
-                detail += "  [nxdomain]"
+            detail = CpanelRenderer._format_cert_detail(c, nxdomain)
             print(f"  {c['domain']:<{col_domain}}  {detail}")
 
         steps = r.get('next_steps', [])

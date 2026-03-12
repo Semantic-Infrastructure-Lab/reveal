@@ -48,54 +48,51 @@ class D001(BaseRule):
         """
         if not structure or 'functions' not in structure:
             return []
-
         functions = structure['functions']
         if len(functions) < 2:
-            return []  # Need at least 2 functions to have duplicates
-
-        # Assign each function to its containing class (by line range) so that
-        # methods with the same name/body in *different* classes (e.g. setUp in
-        # multiple TestCase subclasses) are not flagged as duplicates.
-        # Functions outside any class share the module-level scope (None).
+            return []
         classes = structure.get('classes', [])
+        scope_hashes = self._build_scope_hashes(functions, classes, content)
+        return self._emit_duplicates(scope_hashes, file_path)
+
+    def _build_scope_hashes(
+        self, functions: list, classes: list, content: str
+    ) -> Dict[str, Dict[str, list]]:
+        """Hash each function body grouped by containing class scope."""
+        from collections import defaultdict
 
         def class_for(line: int) -> Optional[str]:
             for cls in classes:
                 if cls.get('line', 0) <= line <= cls.get('line_end', 0):
-                    return str(cls.get("name")) if cls.get("name") is not None else None
+                    return str(cls.get('name')) if cls.get('name') is not None else None
             return None
 
-        # hash -> [(func_name, line, body_length), ...] keyed by scope
-        from collections import defaultdict
-        scope_hashes: Dict[str, Dict[str, List[tuple]]] = defaultdict(lambda: defaultdict(list))
-        detections: List[Detection] = []
-
+        scope_hashes: Dict[str, Dict[str, list]] = defaultdict(lambda: defaultdict(list))
         for func in functions:
             func_body = self._extract_function_body(func, content)
             if not func_body or len(func_body.strip()) < 10:
                 continue
-
             normalized = self._normalize(func_body)
             if not normalized:
                 continue
-
             func_hash = sha256(normalized.encode('utf-8')).hexdigest()[:16]
             scope = class_for(func.get('line', 0)) or '__module__'
             scope_hashes[scope][func_hash].append((
-                func.get('name', '<unknown>'),
-                func.get('line', 0),
-                len(func_body)
+                func.get('name', '<unknown>'), func.get('line', 0), len(func_body)
             ))
+        return scope_hashes
 
-        # Report duplicates within each scope
+    def _emit_duplicates(
+        self, scope_hashes: Dict[str, Dict[str, list]], file_path: str
+    ) -> List[Detection]:
+        """Report duplicate functions found within each scope."""
+        detections: List[Detection] = []
         for _scope, hash_to_funcs in scope_hashes.items():
             for func_hash, instances in hash_to_funcs.items():
                 if len(instances) < 2:
                     continue
-
                 instances.sort(key=lambda x: x[1])
                 original = instances[0]
-
                 for duplicate in instances[1:]:
                     detections.append(Detection(
                         file_path=file_path,
@@ -107,7 +104,6 @@ class D001(BaseRule):
                         suggestion=f"Refactor to share implementation with {original[0]}",
                         context=f"{duplicate[2]} chars, hash {func_hash}"
                     ))
-
         return detections
 
     def _extract_function_body(self, func: Dict, content: str) -> str:

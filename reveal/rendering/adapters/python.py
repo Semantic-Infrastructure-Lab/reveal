@@ -216,30 +216,24 @@ def _handle_python_error(data: Dict[str, Any]) -> None:
     sys.exit(1)
 
 
-def _detect_python_element_type(data: Dict[str, Any]) -> str:
-    """Detect Python element type from data structure.
+_PYTHON_ELEMENT_CHECKS = [
+    (('packages', 'count'), 'packages'),
+    (('loaded', 'count'), 'modules'),
+    (('health_score', 'checks_performed'), 'doctor'),
+    (('status', 'issues'), 'bytecode'),
+    (('sys_path',), 'env_config'),
+    (('executable', 'compiler'), 'version'),
+    (('active',), 'venv_status'),
+    (('name', 'version', 'location'), 'package_details'),
+]
 
-    Returns:
-        Element type identifier string.
-    """
-    if 'packages' in data and 'count' in data:
-        return 'packages'
-    elif 'loaded' in data and 'count' in data:
-        return 'modules'
-    elif 'health_score' in data and 'checks_performed' in data:
-        return 'doctor'
-    elif 'status' in data and 'issues' in data:
-        return 'bytecode'
-    elif 'sys_path' in data:
-        return 'env_config'
-    elif 'executable' in data and 'compiler' in data:
-        return 'version'
-    elif 'active' in data:
-        return 'venv_status'
-    elif 'name' in data and 'version' in data and 'location' in data:
-        return 'package_details'
-    else:
-        return 'unknown'
+
+def _detect_python_element_type(data: Dict[str, Any]) -> str:
+    """Detect Python element type from data structure."""
+    for required_keys, type_name in _PYTHON_ELEMENT_CHECKS:
+        if all(k in data for k in required_keys):
+            return type_name
+    return 'unknown'
 
 
 # Dispatch table mapping element types to renderers

@@ -63,6 +63,15 @@ class NginxUriRenderer(TypeDispatchRenderer):
                 print(f"  HTTP  ({port}): ✅{redir}")
 
     @staticmethod
+    def _format_upstream_server_line(srv: str, reach: dict) -> str:
+        """Format one upstream server line with reachability status."""
+        reachable = reach.get('reachable')
+        icon = '✅' if reachable else ('❌' if reachable is False else '?')
+        status = 'reachable' if reachable else 'unreachable'
+        error = f" — {reach['error']}" if not reachable and reach.get('error') else ''
+        return f"  server {srv}    {icon} {status}{error}"
+
+    @staticmethod
     def _print_upstreams(upstreams: dict) -> None:
         if not upstreams:
             print("Upstream: (no proxy_pass found)")
@@ -76,10 +85,7 @@ class NginxUriRenderer(TypeDispatchRenderer):
                 servers = [r['address'] for r in reach_list]
             for i, srv in enumerate(servers):
                 reach = reach_list[i] if i < len(reach_list) else {}
-                reachable = reach.get('reachable')
-                icon = '✅' if reachable else ('❌' if reachable is False else '?')
-                error = f" — {reach['error']}" if not reachable and reach.get('error') else ''
-                print(f"  server {srv}    {icon} {'reachable' if reachable else 'unreachable'}{error}")
+                print(NginxUriRenderer._format_upstream_server_line(srv, reach))
 
     @staticmethod
     def _print_auth(auth: dict) -> None:

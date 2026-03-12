@@ -885,6 +885,41 @@ class NginxAnalyzer(FileAnalyzer):
         parts = raw.split()
         return parts[0] if parts else None
 
+    @staticmethod
+    def _scan_log_for_patterns(
+        recent_lines: list, domains: set, patterns: list
+    ) -> Dict[tuple, Dict]:
+        """Scan log lines for ACME/SSL error patterns, grouped by (domain, pattern)."""
+        hits: Dict[tuple, Dict] = {}
+        for raw_line in recent_lines:
+            line = raw_line.rstrip()
+            server_match = re.search(r'server:\s+([^\s,]+)', line)
+            line_domain = server_match.group(1).lower() if server_match else None
+
+            for pattern_key, regex in patterns:
+                if not regex.search(line):
+                    continue
+                matched_domains: set = set()
+                if line_domain and line_domain in domains:
+                    matched_domains.add(line_domain)
+                else:
+                    for d in domains:
+                        if d in line:
+                            matched_domains.add(d)
+                if not matched_domains:
+                    continue
+                ts_match = re.match(r'^(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})', line)
+                timestamp = ts_match.group(1) if ts_match else ''
+                for d in matched_domains:
+                    key = (d, pattern_key)
+                    if key not in hits:
+                        hits[key] = {'domain': d, 'pattern': pattern_key, 'count': 0,
+                                     'last_seen': timestamp, 'sample': line[:120]}
+                    hits[key]['count'] += 1
+                    if timestamp > hits[key]['last_seen']:
+                        hits[key]['last_seen'] = timestamp
+        return hits
+
     def diagnose_acme_errors(
         self, log_path: str, tail_lines: int = 5000
     ) -> List[Dict[str, Any]]:
@@ -939,50 +974,5 @@ class NginxAnalyzer(FileAnalyzer):
 
         recent_lines = all_lines[-tail_lines:]
 
-        # Group results: key = (domain, pattern_key)
-        hits: Dict[tuple, Dict] = {}
-
-        for raw_line in recent_lines:
-            line = raw_line.rstrip()
-
-            # Try to extract server name from nginx error log line.
-            # Format: 2026/02/15 03:21:17 [error] … server: example.com, request: …
-            server_match = re.search(r'server:\s+([^\s,]+)', line)
-            line_domain = server_match.group(1).lower() if server_match else None
-
-            for pattern_key, regex in PATTERNS:
-                if not regex.search(line):
-                    continue
-
-                # Which domains does this line belong to?
-                matched_domains: set = set()
-                if line_domain and line_domain in domains:
-                    matched_domains.add(line_domain)
-                else:
-                    # Fallback: scan line for any known domain substring
-                    for d in domains:
-                        if d in line:
-                            matched_domains.add(d)
-
-                if not matched_domains:
-                    continue
-
-                # Extract timestamp (first token: YYYY/MM/DD HH:MM:SS)
-                ts_match = re.match(r'^(\d{4}/\d{2}/\d{2}\s+\d{2}:\d{2}:\d{2})', line)
-                timestamp = ts_match.group(1) if ts_match else ''
-
-                for d in matched_domains:
-                    key = (d, pattern_key)
-                    if key not in hits:
-                        hits[key] = {
-                            'domain': d,
-                            'pattern': pattern_key,
-                            'count': 0,
-                            'last_seen': timestamp,
-                            'sample': line[:120],
-                        }
-                    hits[key]['count'] += 1
-                    if timestamp > hits[key]['last_seen']:
-                        hits[key]['last_seen'] = timestamp
-
+        hits = self._scan_log_for_patterns(recent_lines, domains, PATTERNS)
         return sorted(hits.values(), key=lambda r: (r['domain'], r['pattern']))

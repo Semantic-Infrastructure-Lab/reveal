@@ -288,55 +288,27 @@ def _handle_check_conflicts(analyzer) -> None:
         sys.exit(2)
 
 
-def _handle_diagnose(analyzer, log_path: Optional[str] = None) -> None:
-    """Diagnose ACME / SSL failures from the nginx error log (S3 -- --diagnose).
-
-    Parses the last 5,000 lines of the nginx error log for Permission Denied /
-    ENOENT errors on /.well-known/ paths and SSL cert load failures, grouped by
-    SSL domain present in the config.
-    """
-    if not hasattr(analyzer, 'diagnose_acme_errors'):
-        print(f"Error: --diagnose not supported for {type(analyzer).__name__}",
-              file=sys.stderr)
-        print("This option is available for nginx config files.", file=sys.stderr)
-        sys.exit(1)
-
+def _resolve_log_path(analyzer, explicit_path: Optional[str]) -> Optional[str]:
+    """Resolve nginx error log path: explicit > config directive > default locations."""
     import os
+    if explicit_path:
+        return explicit_path
+    resolved = analyzer.get_error_log_path()
+    if resolved:
+        return resolved
+    for candidate in ['/var/log/nginx/error.log', '/usr/local/nginx/logs/error.log']:
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
-    # Resolve log path: arg > config directive > cPanel default > nginx default
-    resolved_path = log_path
-    if not resolved_path:
-        resolved_path = analyzer.get_error_log_path()
-    if not resolved_path:
-        # cPanel nginx writes to this path by default
-        for candidate in [
-            '/var/log/nginx/error.log',
-            '/usr/local/nginx/logs/error.log',
-        ]:
-            if os.path.exists(candidate):
-                resolved_path = candidate
-                break
 
-    if not resolved_path or not os.path.exists(resolved_path):
-        print(f"⚠️  No nginx error log found.", file=sys.stderr)
-        if resolved_path:
-            print(f"   Checked: {resolved_path}", file=sys.stderr)
-        print("   Use --log-path /path/to/error.log to specify the log file.",
-              file=sys.stderr)
-        sys.exit(1)
-
-    hits = analyzer.diagnose_acme_errors(resolved_path)
-
-    if not hits:
-        print(f"✅ No ACME/SSL errors found in {resolved_path} (last 5,000 lines).")
-        return
-
+def _render_diagnose_table(hits: list, resolved_path: str) -> bool:
+    """Print the diagnose results table. Returns True if there are hard failures."""
     LABELS = {
         'permission_denied': '❌ Permission Denied',
         'not_found':         '⚠️  Not Found (ENOENT)',
         'ssl_error':         '❌ SSL Error',
     }
-
     col_domain = max(len(r['domain']) for r in hits)
     col_pattern = max(len(LABELS.get(r['pattern'], r['pattern'])) for r in hits)
 
@@ -363,7 +335,32 @@ def _handle_diagnose(analyzer, log_path: Optional[str] = None) -> None:
             print(f"  [{r['domain']} / {r['pattern']}]")
             print(f"    {r['sample']}")
             seen.add(key)
+    return has_failures
 
+
+def _handle_diagnose(analyzer, log_path: Optional[str] = None) -> None:
+    """Diagnose ACME / SSL failures from the nginx error log."""
+    if not hasattr(analyzer, 'diagnose_acme_errors'):
+        print(f"Error: --diagnose not supported for {type(analyzer).__name__}", file=sys.stderr)
+        print("This option is available for nginx config files.", file=sys.stderr)
+        sys.exit(1)
+
+    import os
+
+    resolved_path = _resolve_log_path(analyzer, log_path)
+    if not resolved_path or not os.path.exists(resolved_path):
+        print(f"⚠️  No nginx error log found.", file=sys.stderr)
+        if resolved_path:
+            print(f"   Checked: {resolved_path}", file=sys.stderr)
+        print("   Use --log-path /path/to/error.log to specify the log file.", file=sys.stderr)
+        sys.exit(1)
+
+    hits = analyzer.diagnose_acme_errors(resolved_path)
+    if not hits:
+        print(f"✅ No ACME/SSL errors found in {resolved_path} (last 5,000 lines).")
+        return
+
+    has_failures = _render_diagnose_table(hits, resolved_path)
     if has_failures:
         sys.exit(2)
 
