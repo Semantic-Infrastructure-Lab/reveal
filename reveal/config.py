@@ -391,30 +391,28 @@ class RevealConfig:
         return result
 
     @classmethod
+    def _reveal_yaml_is_root(cls, config_file: Path) -> bool:
+        """Return True if the .reveal.yaml file at path declares root:true."""
+        if not yaml:
+            return False
+        try:
+            with open(config_file, encoding='utf-8') as f:
+                config = yaml.safe_load(f) or {}
+            return bool(config.get('root'))
+        except (OSError, yaml.YAMLError):
+            return False
+
+    @classmethod
     def _find_project_root_uncached(cls, start_path: Path) -> Path:
         """Filesystem traversal for _find_project_root (no caching)."""
         current = start_path
-
         while current != current.parent:
-            # Check for .reveal.yaml with root:true
             config_file = current / '.reveal.yaml'
-            if config_file.exists():
-                try:
-                    if yaml:
-                        with open(config_file, encoding='utf-8') as f:
-                            config = yaml.safe_load(f) or {}
-                        if config.get('root'):
-                            return current.resolve()
-                except (OSError, yaml.YAMLError):
-                    pass
-
-            # Check for .git (common project root marker)
+            if config_file.exists() and cls._reveal_yaml_is_root(config_file):
+                return current.resolve()
             if (current / '.git').exists():
                 return current.resolve()
-
             current = current.parent
-
-        # Fallback to start_path
         return start_path.resolve()
 
     @classmethod
@@ -483,6 +481,19 @@ class RevealConfig:
         return merged
 
     @classmethod
+    def _try_load_pyproject_reveal(cls, pyproject: Path) -> Optional[Dict[str, Any]]:
+        """Load [tool.reveal] section from a pyproject.toml, returning None on error."""
+        if not pyproject.exists() or not tomllib:
+            return None
+        try:
+            with open(pyproject, 'rb') as f:
+                data = tomllib.load(f)
+            return data.get('tool', {}).get('reveal')
+        except Exception as e:
+            logger.debug(f"Failed to load {pyproject}: {e}")
+            return None
+
+    @classmethod
     def _discover_project_configs(cls, start_path: Path) -> List[Dict[str, Any]]:
         """Walk up directory tree finding .reveal.yaml files.
 
@@ -503,58 +514,41 @@ class RevealConfig:
                     if config.get('root'):
                         break
 
-            # Check pyproject.toml [tool.reveal]
-            pyproject = current / 'pyproject.toml'
-            if pyproject.exists() and tomllib:
-                try:
-                    with open(pyproject, 'rb') as f:
-                        data = tomllib.load(f)
-                    reveal_config = data.get('tool', {}).get('reveal')
-                    if reveal_config:
-                        configs.append(reveal_config)
-                        if reveal_config.get('root'):
-                            break
-                except Exception as e:
-                    logger.debug(f"Failed to load {pyproject}: {e}")
+            pyproject_config = cls._try_load_pyproject_reveal(current / 'pyproject.toml')
+            if pyproject_config:
+                configs.append(pyproject_config)
+                if pyproject_config.get('root'):
+                    break
 
             current = current.parent
 
         return configs
 
     @classmethod
+    def _validate_config_schema(cls, config: Dict[str, Any], path: Path) -> None:
+        """Validate config against schema if jsonschema is available (warns, never raises)."""
+        if not jsonschema:
+            return
+        try:
+            jsonschema.validate(config, CONFIG_SCHEMA)
+        except jsonschema.ValidationError as e:
+            logger.warning(f"Invalid config in {path}: {e.message}")
+
+    @classmethod
     def _load_file(cls, path: Path) -> Optional[Dict[str, Any]]:
-        """Load and validate a config file.
-
-        Args:
-            path: Path to YAML config file
-
-        Returns:
-            Loaded config dict or None if error
-        """
+        """Load and validate a config file."""
         if not path.exists():
             return None
-
+        if not yaml:
+            logger.warning(f"PyYAML not installed, cannot load {path}")
+            return None
         try:
-            if yaml:
-                with open(path, encoding='utf-8') as f:
-                    config = yaml.safe_load(f)
-
-                if config is None:
-                    return {}
-
-                # Validate schema if jsonschema available
-                if jsonschema:
-                    try:
-                        jsonschema.validate(config, CONFIG_SCHEMA)
-                    except jsonschema.ValidationError as e:
-                        logger.warning(f"Invalid config in {path}: {e.message}")
-                        # Continue anyway (don't fail on validation)
-
-                return cast(Dict[str, Any], config)
-            else:
-                logger.warning(f"PyYAML not installed, cannot load {path}")
-                return None
-
+            with open(path, encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+            if config is None:
+                return {}
+            cls._validate_config_schema(config, path)
+            return cast(Dict[str, Any], config)
         except Exception as e:
             logger.error(f"Failed to load config {path}: {e}")
             return None

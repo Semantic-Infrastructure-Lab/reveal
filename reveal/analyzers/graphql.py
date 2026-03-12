@@ -94,45 +94,31 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
         return fields
 
     def _extract_implements(self, type_def: Any) -> List[str]:
-        """Extract implemented interfaces from type definition.
-
-        Args:
-            type_def: object_type_definition node
-
-        Returns:
-            List of interface names
-        """
-        implements = []
+        """Extract implemented interfaces from type definition."""
         for child in type_def.children:
             if child.type == 'implements_interfaces':
-                for iface_child in child.children:
-                    if iface_child.type == 'named_type':
-                        iface_name = self._get_name_from_node(iface_child)
-                        if iface_name:
-                            implements.append(iface_name)
-        return implements
+                return [
+                    name for c in child.children
+                    if c.type == 'named_type'
+                    for name in [self._get_name_from_node(c)] if name
+                ]
+        return []
+
+    def _format_argument(self, arg_child: Any) -> Optional[str]:
+        """Format one input_value_definition as 'name: type' or 'name'."""
+        arg_name = self._get_name_from_node(arg_child)
+        if not arg_name:
+            return None
+        arg_type = self._get_field_type(arg_child)
+        return f"{arg_name}: {arg_type}" if arg_type else arg_name
 
     def _extract_arguments(self, args_def_node: Any) -> List[str]:
-        """Extract arguments from arguments_definition node.
-
-        Args:
-            args_def_node: arguments_definition node
-
-        Returns:
-            List of argument strings (e.g., ["id: ID!", "name: String"])
-        """
-        args = []
-        for arg_child in args_def_node.children:
-            if arg_child.type == 'input_value_definition':
-                arg_name = self._get_name_from_node(arg_child)
-                if arg_name:
-                    # Get argument type
-                    arg_type = self._get_field_type(arg_child)
-                    if arg_type:
-                        args.append(f"{arg_name}: {arg_type}")
-                    else:
-                        args.append(arg_name)
-        return args
+        """Extract arguments from arguments_definition node."""
+        return [
+            fmt for child in args_def_node.children
+            if child.type == 'input_value_definition'
+            for fmt in [self._format_argument(child)] if fmt is not None
+        ]
 
     def _get_field_type(self, field_node: Any) -> Optional[str]:
         """Get the return type from a field node.
@@ -205,41 +191,31 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
 
         return types
 
+    @staticmethod
+    def _build_field_signature(field_name: str, args: List[str], return_type: Optional[str]) -> str:
+        """Build a field/operation signature string."""
+        sig = f"{field_name}({', '.join(args)})" if args else field_name
+        return f"{sig}: {return_type}" if return_type else sig
+
     def _extract_operations(self, operation_type: str) -> List[Dict[str, Any]]:
         """Extract Query, Mutation, or Subscription operations."""
         operations = []
-        type_defs = self._find_nodes_by_type('object_type_definition')
-
-        for type_def in type_defs:
-            name = self._get_name_from_node(type_def)
-            if name != operation_type:
+        for type_def in self._find_nodes_by_type('object_type_definition'):
+            if self._get_name_from_node(type_def) != operation_type:
                 continue
-
-            # Extract fields (operations)
             fields_def = self._get_fields_definition(type_def)
             if not fields_def:
                 continue
-
             for field_child in fields_def.children:
-                if field_child.type == 'field_definition':
-                    field_name, args, return_type = self._extract_field_info(field_child)
-
-                    if field_name:
-                        # Build signature
-                        if args:
-                            signature = f"{field_name}({', '.join(args)})"
-                        else:
-                            signature = field_name
-
-                        if return_type:
-                            signature += f": {return_type}"
-
-                        operations.append({
-                            'line': field_child.start_point[0] + 1,
-                            'name': field_name,
-                            'signature': signature,
-                        })
-
+                if field_child.type != 'field_definition':
+                    continue
+                field_name, args, return_type = self._extract_field_info(field_child)
+                if field_name:
+                    operations.append({
+                        'line': field_child.start_point[0] + 1,
+                        'name': field_name,
+                        'signature': self._build_field_signature(field_name, args, return_type),
+                    })
         return operations
 
     def _extract_enums(self) -> List[Dict[str, Any]]:
@@ -266,21 +242,14 @@ class GraphQLAnalyzer(TreeSitterAnalyzer):
         return enums
 
     def _extract_enum_values(self, enum_values_def) -> List[str]:
-        """Extract enum values from enum_values_definition node.
-
-        Args:
-            enum_values_def: enum_values_definition node
-
-        Returns:
-            List of enum value names
-        """
-        values = []
-        for val_child in enum_values_def.children:
-            if val_child.type == 'enum_value_definition':
-                for v in val_child.children:
-                    if v.type == 'enum_value':
-                        values.append(self._get_node_text(v))
-        return values
+        """Extract enum values from enum_values_definition node."""
+        return [
+            self._get_node_text(v)
+            for val_child in enum_values_def.children
+            if val_child.type == 'enum_value_definition'
+            for v in val_child.children
+            if v.type == 'enum_value'
+        ]
 
     def _extract_interfaces(self) -> List[Dict[str, Any]]:
         """Extract interface type definitions."""
