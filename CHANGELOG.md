@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - v0.60.x (sessions toxic-onslaught-0310, ethereal-leviathan-0310, psychic-frenzy-0310, mystical-sword-0311, kilonova-throne-0311, eternal-launch-0311, turbo-ultimatum-0311)
+## [Unreleased] - v0.60.x (sessions toxic-onslaught-0310, ethereal-leviathan-0310, psychic-frenzy-0310, mystical-sword-0311, kilonova-throne-0311, eternal-launch-0311, turbo-ultimatum-0311, pattering-wind-0311)
 
 ### Added
 - **BACK-014: `nginx://` adapter `get_schema()` — completes 21/21 adapter schema coverage** — `reveal help://schemas/nginx` now works. Schema covers all 8 output types (`nginx_sites_overview`, `nginx_vhost_summary`, `nginx_vhost_not_found`, `nginx_vhost_ports`, `nginx_vhost_upstream`, `nginx_vhost_auth`, `nginx_vhost_locations`, `nginx_vhost_config`), 5 elements, 7 example queries. `AGENT_HELP.md` updated from "20 of 21" to "all 21 adapters"; nginx and cpanel added to schemas listing. (session kilonova-throne-0311)
@@ -85,6 +85,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AGENT_HELP.md** — bare integer line nav (`reveal file.py 73`) added to line-number section and quick-reference table.
 - **AGENT_HELP.md — 'Inspect nginx vhost configuration' task section (16th)** — Covers all 7 `nginx://` views, "when to use" table, and cross-adapter workflow (nginx + ssl, nginx + domain). (session kilonova-throne-0311)
 - **`help://examples/` — `infrastructure` and `documentation` recipe categories** — `reveal help://examples/infrastructure` returns 6 recipes for nginx vhost inspection, nginx overview, upstream health, SSL cert check, nginx SSL from config path, and domain health. `reveal help://examples/documentation` returns 5 recipes for markdown body-contains search, frontmatter filter, body+sort combo, link validation, and outline view. Error listing for unknown tasks now includes all 6 categories. (session kilonova-throne-0311)
+
+### Refactored (session pattering-wind-0311)
+- **9 high-complexity functions decomposed across 8 files** — functions with complexity>15 dropped from 30 → 3. All 4771 tests pass. Quality: 97.3 → 97.4/100. Functions: 2280 → 2327.
+  - `autossl/parser.py`: `parse_run` (complexity 49) → `_process_indent0/1/2/3`, `_parse_log_lines`, `_build_user_list`
+  - `adapters/domain/adapter.py`: `_check_http_response` (40) → `_NoRedirect`, `_follow_redirect_chain`, `_classify_http_check`, `_aggregate_http_checks`
+  - `rendering/adapters/help.py`: `_render_adapter_schema` (40) → 9 `_render_schema_*` section helpers
+  - `cli/routing.py`: `_apply_claude_display_hints` (38) → `_apply_slice`, `_apply_workflow_filters`, `_apply_session_list_filters`, `_apply_messages_slice`; `handle_file_or_directory` (28) → 4 guard functions + 2 routing helpers; eliminates duplicate head/tail/range slice logic
+  - `file_handler.py`: `_handle_cpanel_certs` (40) → `_load_disk_cert`, `_load_live_cert`, `_cert_match_label`, `_format_disk/live/match_col`; `_handle_validate_nginx_acme` (23) → `_format_acl_col`, `_format_acme_ssl_col`, `_fetch_acme_ssl_data`
+  - `adapters/ssl/renderer.py`: `_render_ssl_cert_file_validation` (28) → `_render_cert_file_failures/warnings/passes` static methods
+  - `cli/commands/review.py`: `_render_report` (26) → 5 section renderers
+  - `tree_view.py`: `show_file_list` (27) → `_collect_matching_files`, `_sort_files`
 
 ---
 
