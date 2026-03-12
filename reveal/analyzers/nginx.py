@@ -104,50 +104,49 @@ class NginxAnalyzer(FileAnalyzer):
     Extracts server blocks, locations, upstreams, and key directives.
     """
 
+    def _apply_server_block_line(self, line: str, info: Dict[str, Any]) -> None:
+        """Apply one line's directives to server_info in-place."""
+        if line.startswith('server_name '):
+            m = re.match(r'server_name\s+(.*?);', line)
+            if m:
+                domains = [d.strip() for d in m.group(1).split() if d.strip()]
+                info['domains'] = domains
+                info['name'] = domains[0] if domains else 'unknown'
+        elif line.startswith('listen '):
+            m = re.match(r'listen\s+(\S+)', line)
+            if m:
+                port = m.group(1).rstrip(';')
+                info['port'] = self._format_port(port)
+                if '443' in port or 'ssl' in line.lower():
+                    info['is_ssl'] = True
+        elif line.startswith('ssl_certificate_key '):
+            m = re.match(r'ssl_certificate_key\s+(.*?);', line)
+            if m:
+                info['key_path'] = m.group(1).strip()
+        elif line.startswith('ssl_certificate '):
+            m = re.match(r'ssl_certificate\s+(.*?);', line)
+            if m:
+                info['cert_path'] = m.group(1).strip()
+            info['is_ssl'] = True
+        elif 'ssl_certificate' in line:
+            info['is_ssl'] = True
+
     def _parse_server_block(self, line_num: int) -> Dict[str, Any]:
         """Parse server block starting at line_num."""
         server_info = {
             'line': line_num,
             'name': 'unknown',
             'port': 'unknown',
-            'domains': [],  # All domains from server_name directive
+            'domains': [],
             'is_ssl': False,
-            'cert_path': None,  # Path from ssl_certificate directive
-            'key_path': None,   # Path from ssl_certificate_key directive
+            'cert_path': None,
+            'key_path': None,
         }
-        # Look ahead for server_name and listen
         for j in range(line_num, min(line_num + 30, len(self.lines) + 1)):
             next_line = self.lines[j-1].strip()
-            if next_line.startswith('server_name '):
-                match = re.match(r'server_name\s+(.*?);', next_line)
-                if match:
-                    # Parse all domains (space-separated)
-                    domains_str = match.group(1)
-                    domains = [d.strip() for d in domains_str.split() if d.strip()]
-                    server_info['domains'] = domains
-                    server_info['name'] = domains[0] if domains else 'unknown'
-            elif next_line.startswith('listen '):
-                match = re.match(r'listen\s+(\S+)', next_line)
-                if match:
-                    port = match.group(1).rstrip(';')
-                    server_info['port'] = self._format_port(port)
-                    # Check if SSL
-                    if '443' in port or 'ssl' in next_line.lower():
-                        server_info['is_ssl'] = True
-            elif next_line.startswith('ssl_certificate_key '):
-                match = re.match(r'ssl_certificate_key\s+(.*?);', next_line)
-                if match:
-                    server_info['key_path'] = match.group(1).strip()
-            elif next_line.startswith('ssl_certificate '):
-                match = re.match(r'ssl_certificate\s+(.*?);', next_line)
-                if match:
-                    server_info['cert_path'] = match.group(1).strip()
-                server_info['is_ssl'] = True
-            elif 'ssl_certificate' in next_line:
-                server_info['is_ssl'] = True
+            self._apply_server_block_line(next_line, server_info)
             if next_line == '}' and j > line_num:
                 break
-        # Add signature for display (shows port after name)
         server_info['signature'] = f" [{server_info['port']}]"
         return server_info
 
@@ -182,6 +181,41 @@ class NginxAnalyzer(FileAnalyzer):
                     break
         return loc_info
 
+    @staticmethod
+    def _accumulate_pending(
+        stripped: str, pending_key: str, pending_parts: List[str], directives: Dict[str, str]
+    ) -> tuple:
+        """Accumulate one continuation line into a multi-line directive.
+
+        Returns (pending_key, pending_parts) — both reset to (None, []) when ';' terminates.
+        """
+        pending_parts.append(stripped.rstrip(';').rstrip())
+        if ';' in stripped:
+            directives[pending_key] = ' '.join(pending_parts)
+            return None, []
+        return pending_key, pending_parts
+
+    @staticmethod
+    def _try_capture_direct_directive(
+        stripped: str, depth: int, directives: Dict[str, str], pending_key: Optional[str], pending_parts: List[str]
+    ) -> tuple:
+        """Capture a direct-child directive at depth 1, starting multi-line if needed.
+
+        Returns updated (pending_key, pending_parts).
+        """
+        if depth != 1 or stripped.count('{') > 0 or stripped.startswith('}'):
+            return pending_key, pending_parts
+        m = re.match(r'^([\w_-]+)\s+(.+)', stripped)
+        if not m:
+            return pending_key, pending_parts
+        key, rest = m.group(1), m.group(2)
+        if ';' in stripped:
+            directives[key] = rest.rstrip(';').rstrip()
+        else:
+            pending_key = key
+            pending_parts = [rest.rstrip()]
+        return pending_key, pending_parts
+
     def _parse_block_directives(self, block_name: str) -> Dict[str, str]:
         """Parse key-value directives from a top-level named block (e.g. http, events).
 
@@ -209,34 +243,19 @@ class NginxAnalyzer(FileAnalyzer):
                 depth += stripped.count('{') - stripped.count('}')
                 continue
 
-            if in_block:
-                # Accumulating a multi-line directive value
-                if pending_key is not None:
-                    pending_parts.append(stripped.rstrip(';').rstrip())
-                    if ';' in stripped:
-                        directives[pending_key] = ' '.join(pending_parts)
-                        pending_key = None
-                        pending_parts = []
-                    continue  # don't update depth for continuation lines
+            if not in_block:
+                continue
 
-                opens = stripped.count('{')
-                closes = stripped.count('}')
+            if pending_key is not None:
+                pending_key, pending_parts = self._accumulate_pending(stripped, pending_key, pending_parts, directives)
+                continue
 
-                if depth == 1 and opens == 0 and not stripped.startswith('}'):
-                    match = re.match(r'^([\w_-]+)\s+(.+)', stripped)
-                    if match:
-                        key, rest = match.group(1), match.group(2)
-                        if ';' in stripped:
-                            # Single-line directive
-                            directives[key] = rest.rstrip(';').rstrip()
-                        else:
-                            # Start of multi-line directive
-                            pending_key = key
-                            pending_parts = [rest.rstrip()]
-
-                depth += opens - closes
-                if depth <= 0:
-                    break  # exited the block
+            pending_key, pending_parts = self._try_capture_direct_directive(
+                stripped, depth, directives, pending_key, pending_parts
+            )
+            depth += stripped.count('{') - stripped.count('}')
+            if depth <= 0:
+                break
 
         return directives
 
