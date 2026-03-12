@@ -622,43 +622,29 @@ def _render_query_recipes(data: Dict[str, Any]) -> None:
     print()
 
 
-def _render_adapter_schema(data: Dict[str, Any]) -> None:
-    """Render help://schemas/<adapter> — machine-readable adapter schema."""
-    if 'error' in data:
-        available = data.get('available_adapters', [])
-        adapter = data.get('adapter', '')
-        if not adapter and available:
-            # Bare help://schemas — list all adapters
-            print("# Adapter Schemas")
-            print()
-            print("**Usage:** `reveal help://schemas/<adapter>`")
-            print()
-            print("## Available Adapters")
-            for name in available:
-                print(f"  {name}")
-            print()
-            print("## Examples")
-            print("  reveal help://schemas/ast")
-            print("  reveal help://schemas/ssl")
-            print("  reveal help://schemas/git")
-            print()
-        else:
-            # Unknown adapter — show error with available list
-            print(f"Error: {data['message']}", file=sys.stderr)
-            sys.exit(1)
-        return
-
+def _render_schema_error(data: Dict[str, Any]) -> None:
+    available = data.get('available_adapters', [])
     adapter = data.get('adapter', '')
-    description = data.get('description', '')
-    uri_syntax = data.get('uri_syntax', '')
-    query_params = data.get('query_params', {})
-    operators = data.get('operators', {})
-    elements = data.get('elements', {})
-    cli_flags = data.get('cli_flags', [])
-    output_types = data.get('output_types', {})
-    example_queries = data.get('example_queries', [])
-    notes = data.get('notes', [])
+    if not adapter and available:
+        print("# Adapter Schemas")
+        print()
+        print("**Usage:** `reveal help://schemas/<adapter>`")
+        print()
+        print("## Available Adapters")
+        for name in available:
+            print(f"  {name}")
+        print()
+        print("## Examples")
+        print("  reveal help://schemas/ast")
+        print("  reveal help://schemas/ssl")
+        print("  reveal help://schemas/git")
+        print()
+    else:
+        print(f"Error: {data['message']}", file=sys.stderr)
+        sys.exit(1)
 
+
+def _render_schema_header(adapter: str, description: str, uri_syntax: str) -> None:
     print(f"# {adapter}:// Schema")
     print()
     print(f"**Description:** {description}")
@@ -666,94 +652,128 @@ def _render_adapter_schema(data: Dict[str, Any]) -> None:
         print(f"**Syntax:** `{uri_syntax}`")
     print()
 
-    if query_params:
-        print("## Query Parameters")
-        for name, param in query_params.items():
-            if isinstance(param, str):
-                print(f"  {name} — {param}")
-            else:
-                ptype = param.get('type', '')
-                pdesc = param.get('description', '')
-                ops = param.get('operators', [])
-                examples = param.get('examples', [])
-                op_str = f"  operators: {' '.join(ops)}" if ops else ''
-                ex_str = f"  e.g. {', '.join(examples[:2])}" if examples else ''
-                print(f"  {name} ({ptype}) — {pdesc}")
-                if op_str:
-                    print(f"  {op_str}")
-                if ex_str:
-                    print(f"    {ex_str}")
-        print()
 
-    if operators:
-        print("## Operators")
-        for op, desc in operators.items():
-            print(f"  {op:4} - {desc}")
-        print()
-
-    if elements:
-        print("## Elements (reveal <adapter>://<path>/<element>)")
-        if isinstance(elements, dict):
-            for name, elem in elements.items():
-                edesc = elem.get('description', '') if isinstance(elem, dict) else elem
-                print(f"  /{name:20} — {edesc}")
+def _render_schema_query_params(query_params: Dict[str, Any]) -> None:
+    if not query_params:
+        return
+    print("## Query Parameters")
+    for name, param in query_params.items():
+        if isinstance(param, str):
+            print(f"  {name} — {param}")
         else:
-            for elem in elements:
-                if isinstance(elem, dict):
-                    print(f"  /{elem.get('name', ''):20} — {elem.get('description', '')}")
-                else:
-                    print(f"  {elem}")
-        print()
+            ptype = param.get('type', '')
+            pdesc = param.get('description', '')
+            ops = param.get('operators', [])
+            examples = param.get('examples', [])
+            print(f"  {name} ({ptype}) — {pdesc}")
+            if ops:
+                print(f"    operators: {' '.join(ops)}")
+            if examples:
+                print(f"    e.g. {', '.join(examples[:2])}")
+    print()
 
-    if output_types:
-        print("## Output Types")
-        if isinstance(output_types, dict):
-            for name, otype in output_types.items():
-                odesc = otype.get('description', '') if isinstance(otype, dict) else otype
-                print(f"  {name:30} — {odesc}")
-        else:
-            for otype in output_types:
-                name = otype.get('type', '')
-                odesc = otype.get('description', '')
-                print(f"  {name:30} — {odesc}")
-        print()
 
-    if example_queries:
-        print("## Example Queries")
-        for ex in example_queries:
-            uri = ex.get('uri', '')
-            desc = ex.get('description', '')
-            otype = ex.get('output_type', '')
-            print(f"  {uri}")
-            if desc:
-                print(f"    -> {desc}")
-            if otype:
-                print(f"    output_type: {otype}")
-        print()
+def _render_schema_operators(operators: Dict[str, Any]) -> None:
+    if not operators:
+        return
+    print("## Operators")
+    for op, desc in operators.items():
+        print(f"  {op:4} - {desc}")
+    print()
 
-    if cli_flags:
-        print("## CLI Flags")
-        for flag in cli_flags:
-            if isinstance(flag, dict):
-                print(f"  {flag['flag']}")
-                if flag.get('description'):
-                    print(f"    {flag['description']}")
+
+def _render_schema_elements(elements: Any) -> None:
+    if not elements:
+        return
+    print("## Elements (reveal <adapter>://<path>/<element>)")
+    if isinstance(elements, dict):
+        for name, elem in elements.items():
+            edesc = elem.get('description', '') if isinstance(elem, dict) else elem
+            print(f"  /{name:20} — {edesc}")
+    else:
+        for elem in elements:
+            if isinstance(elem, dict):
+                print(f"  /{elem.get('name', ''):20} — {elem.get('description', '')}")
             else:
-                print(f"  {flag}")
-        print()
+                print(f"  {elem}")
+    print()
 
-    if notes:
-        print("## Notes")
-        for note in notes:
-            print(f"  * {note}")
-        print()
 
+def _render_schema_output_types(output_types: Any) -> None:
+    if not output_types:
+        return
+    print("## Output Types")
+    if isinstance(output_types, dict):
+        for name, otype in output_types.items():
+            odesc = otype.get('description', '') if isinstance(otype, dict) else otype
+            print(f"  {name:30} — {odesc}")
+    else:
+        for otype in output_types:
+            print(f"  {otype.get('type', ''):30} — {otype.get('description', '')}")
+    print()
+
+
+def _render_schema_example_queries(example_queries: list) -> None:
+    if not example_queries:
+        return
+    print("## Example Queries")
+    for ex in example_queries:
+        print(f"  {ex.get('uri', '')}")
+        if ex.get('description'):
+            print(f"    -> {ex['description']}")
+        if ex.get('output_type'):
+            print(f"    output_type: {ex['output_type']}")
+    print()
+
+
+def _render_schema_cli_flags(cli_flags: list) -> None:
+    if not cli_flags:
+        return
+    print("## CLI Flags")
+    for flag in cli_flags:
+        if isinstance(flag, dict):
+            print(f"  {flag['flag']}")
+            if flag.get('description'):
+                print(f"    {flag['description']}")
+        else:
+            print(f"  {flag}")
+    print()
+
+
+def _render_schema_notes(notes: list) -> None:
+    if not notes:
+        return
+    print("## Notes")
+    for note in notes:
+        print(f"  * {note}")
+    print()
+
+
+def _render_schema_footer(adapter: str) -> None:
     print("---")
     print()
     print("## See Also")
     print(f"  reveal help://{adapter}            # full help with workflows and examples")
     print("  reveal help://schemas               # list all adapter schemas")
     print()
+
+
+def _render_adapter_schema(data: Dict[str, Any]) -> None:
+    """Render help://schemas/<adapter> — machine-readable adapter schema."""
+    if 'error' in data:
+        _render_schema_error(data)
+        return
+
+    adapter = data.get('adapter', '')
+    _render_schema_header(adapter, data.get('description', ''), data.get('uri_syntax', ''))
+    _render_schema_query_params(data.get('query_params', {}))
+    _render_schema_operators(data.get('operators', {}))
+    _render_schema_elements(data.get('elements', {}))
+    _render_schema_output_types(data.get('output_types', {}))
+    _render_schema_example_queries(data.get('example_queries', []))
+    _render_schema_cli_flags(data.get('cli_flags', []))
+    _render_schema_notes(data.get('notes', []))
+    _render_schema_footer(adapter)
 
 
 def _render_help_adapter_specific(data: Dict[str, Any]) -> None:

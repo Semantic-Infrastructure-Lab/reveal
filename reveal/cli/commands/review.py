@@ -180,70 +180,63 @@ def _detect_source_root() -> Path:
     return Path('.')
 
 
-def _render_report(report: Dict[str, Any], verbose: bool) -> None:
-    """Render the review report as text."""
-    print()
-    print(f"Review: {report['target']}")
-    print("━" * 50)
+def _render_diff_section(diff: Dict[str, Any]) -> None:
+    if not diff or diff.get('status') != 'ok':
+        return
+    changed = diff.get('changed_files', [])
+    count = diff.get('count', len(changed))
+    print(f"\nStructural changes: {count} files modified")
+    if changed and len(changed) <= 10:
+        for f in changed:
+            print(f"  {f}")
+    elif count > 10:
+        for f in changed[:5]:
+            print(f"  {f}")
+        print(f"  ... and {count - 5} more")
 
-    # Diff section
-    diff = report['sections'].get('diff', {})
-    if diff and diff.get('status') == 'ok':
-        changed = diff.get('changed_files', [])
-        count = diff.get('count', len(changed))
-        print(f"\nStructural changes: {count} files modified")
-        if changed and len(changed) <= 10:
-            for f in changed:
-                print(f"  {f}")
-        elif count > 10:
-            for f in changed[:5]:
-                print(f"  {f}")
-            print(f"  ... and {count - 5} more")
 
-    # Violations
-    violations = report['sections'].get('violations', [])
-    if violations:
-        by_sev: Dict[str, list] = {}
-        for v in violations:
-            sev = v.get('severity', 'warning')
-            by_sev.setdefault(sev, []).append(v)
-
-        print(f"\nIssues found ({len(violations)}):")
-        for sev, items in sorted(by_sev.items(), key=lambda x: {'error': 0, 'warning': 1, 'info': 2}.get(x[0], 3)):
-            label = {'error': 'Critical', 'warning': 'Warning', 'info': 'Info'}.get(sev, sev.title())
-            print(f"  {label:10} [{len(items)}]  ", end='')
-            codes = list(set(i.get('rule', '?') for i in items[:3]))
-            print(', '.join(codes) + ('...' if len(items) > 3 else ''))
-            if verbose:
-                for item in items[:5]:
-                    loc = f"{item.get('file', '')}:{item.get('line', '')}"
-                    print(f"    {item.get('rule', '')} {loc}: {item.get('message', '')}")
-    else:
+def _render_violations_section(violations: list, verbose: bool) -> None:
+    if not violations:
         print("\nNo violations found ✅")
+        return
+    by_sev: Dict[str, list] = {}
+    for v in violations:
+        by_sev.setdefault(v.get('severity', 'warning'), []).append(v)
 
-    # Hotspots
-    hotspots = report['sections'].get('hotspots', [])
-    if hotspots:
-        print("\nHotspots needing attention:")
-        for h in hotspots[:5]:
-            name = h.get('file', h.get('path', '?'))
-            quality = h.get('quality_score', h.get('quality', h.get('score', '?')))
-            complexity = h.get('complexity', h.get('max_complexity', ''))
-            cx_str = f"  complexity: {complexity}" if complexity else ""
-            print(f"  {name:40} quality: {quality}{cx_str}")
+    print(f"\nIssues found ({len(violations)}):")
+    _sev_order = {'error': 0, 'warning': 1, 'info': 2}
+    for sev, items in sorted(by_sev.items(), key=lambda x: _sev_order.get(x[0], 3)):
+        label = {'error': 'Critical', 'warning': 'Warning', 'info': 'Info'}.get(sev, sev.title())
+        codes = list(set(i.get('rule', '?') for i in items[:3]))
+        print(f"  {label:10} [{len(items)}]  " + ', '.join(codes) + ('...' if len(items) > 3 else ''))
+        if verbose:
+            for item in items[:5]:
+                loc = f"{item.get('file', '')}:{item.get('line', '')}"
+                print(f"    {item.get('rule', '')} {loc}: {item.get('message', '')}")
 
-    # Complexity
-    complex_fns = report['sections'].get('complexity', [])
-    if complex_fns:
-        print("\nComplex functions:")
-        for fn in complex_fns[:5]:
-            name = fn.get('name', '?')
-            cx = fn.get('complexity', '?')
-            loc = fn.get('file', fn.get('path', ''))
-            print(f"  {name} (complexity: {cx})  {loc}")
 
-    # Overall recommendation
-    violations = report['sections'].get('violations', [])
+def _render_hotspots_section(hotspots: list) -> None:
+    if not hotspots:
+        return
+    print("\nHotspots needing attention:")
+    for h in hotspots[:5]:
+        name = h.get('file', h.get('path', '?'))
+        quality = h.get('quality_score', h.get('quality', h.get('score', '?')))
+        complexity = h.get('complexity', h.get('max_complexity', ''))
+        cx_str = f"  complexity: {complexity}" if complexity else ""
+        print(f"  {name:40} quality: {quality}{cx_str}")
+
+
+def _render_complexity_section(complex_fns: list) -> None:
+    if not complex_fns:
+        return
+    print("\nComplex functions:")
+    for fn in complex_fns[:5]:
+        loc = fn.get('file', fn.get('path', ''))
+        print(f"  {fn.get('name', '?')} (complexity: {fn.get('complexity', '?')})  {loc}")
+
+
+def _render_recommendation(violations: list) -> None:
     critical = sum(1 for v in violations if v.get('severity') in ('error', 'critical'))
     print()
     if critical > 0:
@@ -253,3 +246,17 @@ def _render_report(report: Dict[str, Any], verbose: bool) -> None:
     else:
         print("Recommendation: No blocking issues. Ready for review. ✅")
     print()
+
+
+def _render_report(report: Dict[str, Any], verbose: bool) -> None:
+    """Render the review report as text."""
+    sections = report['sections']
+    print()
+    print(f"Review: {report['target']}")
+    print("━" * 50)
+    _render_diff_section(sections.get('diff', {}))
+    violations = sections.get('violations', [])
+    _render_violations_section(violations, verbose)
+    _render_hotspots_section(sections.get('hotspots', []))
+    _render_complexity_section(sections.get('complexity', []))
+    _render_recommendation(violations)

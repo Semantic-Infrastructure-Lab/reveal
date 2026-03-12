@@ -518,6 +518,85 @@ def _apply_budget_constraints(result: dict, args: 'Namespace') -> dict:
     return result
 
 
+def _apply_slice(items: list, args: 'Namespace') -> list:
+    """Slice a list by --head, --tail, or --range args. Returns original list if none set."""
+    head = getattr(args, 'head', None)
+    tail = getattr(args, 'tail', None)
+    rng = getattr(args, 'range', None)
+    if head:
+        return items[:head]
+    if tail:
+        return items[-tail:]
+    if rng:
+        start, end = rng  # already parsed as (int, int) by parser
+        return items[start - 1:end]
+    return items
+
+
+def _apply_workflow_filters(result: dict, args: 'Namespace') -> None:
+    """Apply --type, --search, and --head/--tail/--range to claude_workflow results."""
+    workflow = result.get('workflow')
+    if workflow is None:
+        return
+    total_before = len(workflow)
+
+    type_filter = getattr(args, 'type', None)
+    if type_filter:
+        workflow = [s for s in workflow if (s.get('tool') or '').lower() == type_filter.lower()]
+
+    search_term = getattr(args, 'search', None)
+    if search_term:
+        lower = search_term.lower()
+        workflow = [
+            s for s in workflow
+            if lower in (s.get('detail') or '').lower()
+            or lower in (s.get('tool') or '').lower()
+        ]
+
+    workflow = _apply_slice(workflow, args)
+    result['workflow'] = workflow
+    result['displayed_steps'] = len(workflow)
+    if len(workflow) < total_before:
+        result['filtered_from'] = total_before
+
+
+def _apply_session_list_filters(result: dict, args: 'Namespace') -> None:
+    """Apply --search, --since, --head/--all filters to claude_session_list results."""
+    sessions = result.get('recent_sessions')
+    if sessions is None:
+        return
+
+    search_term = getattr(args, 'search', None)
+    if search_term:
+        lower = search_term.lower()
+        sessions = [s for s in sessions if lower in s.get('session', '').lower()]
+
+    since = getattr(args, 'since', None)
+    if since:
+        sessions = [s for s in sessions if s.get('modified', '') >= since]
+
+    if not getattr(args, 'all', False):
+        head = getattr(args, 'head', None)
+        sessions = sessions[:head if head else 20]
+
+    result['recent_sessions'] = sessions
+    result['displayed_count'] = len(sessions)
+
+    for s in sessions:
+        if 'title' not in s and s.get('path'):
+            s['title'] = _read_session_title_cheap(s['path'])
+
+
+def _apply_messages_slice(result: dict, args: 'Namespace') -> None:
+    """Apply --head/--tail/--range slicing to claude_messages results."""
+    msgs = result.get('messages')
+    if msgs is None:
+        return
+    msgs = _apply_slice(msgs, args)
+    result['messages'] = msgs
+    result['total_turns'] = len(msgs)
+
+
 def _apply_claude_display_hints(result: dict, args: 'Namespace') -> dict:
     """Inject display hints and apply filtering for claude:// adapter results.
 
@@ -531,7 +610,6 @@ def _apply_claude_display_hints(result: dict, args: 'Namespace') -> dict:
     if not result_type.startswith('claude_'):
         return result
 
-    # Build _display hints for the renderer
     result['_display'] = {
         'max_snippet_chars': getattr(args, 'max_snippet_chars', None),
         'verbose': getattr(args, 'verbose', False),
@@ -540,88 +618,12 @@ def _apply_claude_display_hints(result: dict, args: 'Namespace') -> dict:
         'range': getattr(args, 'range', None),
     }
 
-    # Apply workflow-specific filtering
-    if result_type == 'claude_workflow' and 'workflow' in result:
-        workflow = result['workflow']
-        total_before = len(workflow)
-
-        # --type: filter by tool name (case-insensitive)
-        type_filter = getattr(args, 'type', None)
-        if type_filter:
-            workflow = [s for s in workflow if (s.get('tool') or '').lower() == type_filter.lower()]
-
-        # --search: grep detail and tool fields
-        search_term = getattr(args, 'search', None)
-        if search_term:
-            lower = search_term.lower()
-            workflow = [
-                s for s in workflow
-                if lower in (s.get('detail') or '').lower()
-                or lower in (s.get('tool') or '').lower()
-            ]
-
-        # --head / --tail / --range slicing
-        head = getattr(args, 'head', None)
-        tail = getattr(args, 'tail', None)
-        rng = getattr(args, 'range', None)
-        if head:
-            workflow = workflow[:head]
-        elif tail:
-            workflow = workflow[-tail:]
-        elif rng:
-            start, end = rng  # already parsed as (int, int) by parser
-            workflow = workflow[start - 1:end]
-
-        result['workflow'] = workflow
-        result['displayed_steps'] = len(workflow)
-        if len(workflow) < total_before:
-            result['filtered_from'] = total_before
-
-    # Apply session-listing filters (--head, --all, --since, --search)
-    if result_type == 'claude_session_list' and 'recent_sessions' in result:
-        sessions = result['recent_sessions']
-
-        # --search: filter by session name substring (CLI flag overrides ?filter= query param)
-        search_term = getattr(args, 'search', None)
-        if search_term:
-            lower = search_term.lower()
-            sessions = [s for s in sessions if lower in s.get('session', '').lower()]
-
-        # --since DATE: filter by modified date
-        since = getattr(args, 'since', None)
-        if since:
-            sessions = [s for s in sessions if s.get('modified', '') >= since]
-
-        # --head / --all: apply display limit (default 20)
-        show_all = getattr(args, 'all', False)
-        head = getattr(args, 'head', None)
-        if not show_all:
-            limit = head if head else 20
-            sessions = sessions[:limit]
-
-        result['recent_sessions'] = sessions
-        result['displayed_count'] = len(sessions)
-
-        # Add title for displayed sessions (read first user message, cheap)
-        for s in sessions:
-            if 'title' not in s and s.get('path'):
-                s['title'] = _read_session_title_cheap(s['path'])
-
-    # Apply messages-specific slicing (--head/--tail/--range)
-    if result_type == 'claude_messages' and 'messages' in result:
-        msgs = result['messages']
-        head = getattr(args, 'head', None)
-        tail = getattr(args, 'tail', None)
-        rng = getattr(args, 'range', None)
-        if head:
-            msgs = msgs[:head]
-        elif tail:
-            msgs = msgs[-tail:]
-        elif rng:
-            start, end = rng
-            msgs = msgs[start - 1:end]
-        result['messages'] = msgs
-        result['total_turns'] = len(msgs)
+    if result_type == 'claude_workflow':
+        _apply_workflow_filters(result, args)
+    elif result_type == 'claude_session_list':
+        _apply_session_list_filters(result, args)
+    elif result_type == 'claude_messages':
+        _apply_messages_slice(result, args)
 
     return result
 
@@ -825,72 +827,72 @@ def _build_ast_query_from_flags(path: Path, args: 'Namespace') -> str:
     return f"ast://{path}?{query_string}"
 
 
-def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
-    """Handle regular file or directory path.
+_NGINX_ADAPTER_FLAGS = {
+    'check_acl': '--check-acl',
+    'validate_nginx_acme': '--validate-nginx-acme',
+    'check_conflicts': '--check-conflicts',
+    'cpanel_certs': '--cpanel-certs',
+    'diagnose': '--diagnose',
+}
+_SSL_ADAPTER_FLAGS = {
+    'expiring_within': '--expiring-within',
+    'summary': '--summary',
+    'validate_nginx': '--validate-nginx',
+}
+_NON_NGINX_EXTENSIONS = {
+    '.py', '.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs',
+    '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.cc', '.h', '.hpp',
+    '.cs', '.php', '.swift', '.kt', '.scala', '.lua',
+    '.sh', '.bash', '.zsh', '.fish', '.ps1',
+    '.md', '.rst', '.txt',
+    '.json', '.yaml', '.yml', '.toml', '.xml',
+    '.html', '.htm', '.css', '.scss', '.sass',
+    '.sql', '.csv',
+}
+_NON_MARKDOWN_EXTENSIONS = {
+    '.py', '.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs',
+    '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.cc', '.h', '.hpp',
+    '.cs', '.php', '.swift', '.kt', '.scala', '.lua',
+    '.sh', '.bash', '.zsh', '.fish', '.ps1',
+    '.json', '.yaml', '.yml', '.toml', '.xml',
+    '.html', '.htm', '.css', '.scss', '.sass',
+    '.sql', '.csv', '.conf', '.ini',
+}
 
-    Args:
-        path_str: Path string to file or directory
-        args: Parsed arguments
-    """
-    from ..tree_view import show_directory_tree
 
-    # Deprecation hint for --check flag — delegate to canonical implementation
-    if getattr(args, 'check', False):
-        print("hint: --check is deprecated; use `reveal check <path>` instead", file=sys.stderr)
-        from ..cli.commands.check import run_check
-        run_check(args)
+def _guard_hotspots_flag(args: 'Namespace', path_str: str) -> None:
+    if not getattr(args, 'hotspots', False):
         return
+    print("❌ Error: --hotspots only works with stats:// adapter", file=sys.stderr)
+    print(file=sys.stderr)
+    print("Examples:", file=sys.stderr)
+    print(f"  reveal stats://{path_str}?hotspots=true    # URI param (preferred)", file=sys.stderr)
+    print(f"  reveal stats://{path_str} --hotspots        # Flag (legacy)", file=sys.stderr)
+    print(file=sys.stderr)
+    print("Learn more: reveal help://stats", file=sys.stderr)
+    sys.exit(1)
 
-    # Validate adapter-specific flags
-    if getattr(args, 'hotspots', False):
-        print("❌ Error: --hotspots only works with stats:// adapter", file=sys.stderr)
-        print(file=sys.stderr)
-        print("Examples:", file=sys.stderr)
-        print(f"  reveal stats://{path_str}?hotspots=true    # URI param (preferred)", file=sys.stderr)
-        print(f"  reveal stats://{path_str} --hotspots        # Flag (legacy)", file=sys.stderr)
-        print(file=sys.stderr)
-        print("Learn more: reveal help://stats", file=sys.stderr)
-        sys.exit(1)
 
-    # Nginx/cPanel flags are adapter-specific: guard against use on non-nginx files
-    _NGINX_FLAGS = {
-        'check_acl': '--check-acl',
-        'validate_nginx_acme': '--validate-nginx-acme',
-        'check_conflicts': '--check-conflicts',
-        'cpanel_certs': '--cpanel-certs',
-        'diagnose': '--diagnose',
-    }
-    # Source-code and data extensions that are clearly not nginx configs
-    _NON_NGINX_EXTENSIONS = {
-        '.py', '.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs',
-        '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.cc', '.h', '.hpp',
-        '.cs', '.php', '.swift', '.kt', '.scala', '.lua',
-        '.sh', '.bash', '.zsh', '.fish', '.ps1',
-        '.md', '.rst', '.txt',
-        '.json', '.yaml', '.yml', '.toml', '.xml',
-        '.html', '.htm', '.css', '.scss', '.sass',
-        '.sql', '.csv',
-    }
-    _path_ext = Path(path_str).suffix.lower() if '.' in Path(path_str).name else ''
-    if _path_ext in _NON_NGINX_EXTENSIONS:
-        for attr, flag in _NGINX_FLAGS.items():
-            if getattr(args, attr, False):
-                print(f"❌ Error: {flag} only works with nginx config files", file=sys.stderr)
-                print(file=sys.stderr)
-                print("Examples:", file=sys.stderr)
-                print(f"  reveal nginx.conf {flag}                    # with a .conf file", file=sys.stderr)
-                print(f"  reveal nginx://nginx.conf?{attr.replace('_', '-')}=true  # URI param", file=sys.stderr)
-                print(file=sys.stderr)
-                print("Learn more: reveal help://nginx", file=sys.stderr)
-                sys.exit(1)
+def _guard_nginx_flags(args: 'Namespace', path_str: str) -> None:
+    """Exit with error if nginx-specific flags are used on non-nginx file extensions."""
+    path_ext = Path(path_str).suffix.lower() if '.' in Path(path_str).name else ''
+    if path_ext not in _NON_NGINX_EXTENSIONS:
+        return
+    for attr, flag in _NGINX_ADAPTER_FLAGS.items():
+        if getattr(args, attr, False):
+            print(f"❌ Error: {flag} only works with nginx config files", file=sys.stderr)
+            print(file=sys.stderr)
+            print("Examples:", file=sys.stderr)
+            print(f"  reveal nginx.conf {flag}                    # with a .conf file", file=sys.stderr)
+            print(f"  reveal nginx://nginx.conf?{attr.replace('_', '-')}=true  # URI param", file=sys.stderr)
+            print(file=sys.stderr)
+            print("Learn more: reveal help://nginx", file=sys.stderr)
+            sys.exit(1)
 
-    # SSL batch flags are adapter-specific: guard against use on local paths
-    _SSL_FLAGS = {
-        'expiring_within': '--expiring-within',
-        'summary': '--summary',
-        'validate_nginx': '--validate-nginx',
-    }
-    for attr, flag in _SSL_FLAGS.items():
+
+def _guard_ssl_flags(args: 'Namespace') -> None:
+    """Exit with error if ssl:// adapter flags are used on plain file paths."""
+    for attr, flag in _SSL_ADAPTER_FLAGS.items():
         if getattr(args, attr, False):
             print(f"❌ Error: {flag} only works with the ssl:// adapter", file=sys.stderr)
             print(file=sys.stderr)
@@ -901,89 +903,94 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
             print("Learn more: reveal help://ssl", file=sys.stderr)
             sys.exit(1)
 
-    # Markdown --related cluster flags: only meaningful alongside --related or --related-all.
-    # Guard against use on non-markdown files when those flags are actively triggered.
-    _related_active = getattr(args, 'related', False) or getattr(args, 'related_all', False)
-    if _related_active:
-        _NON_MARKDOWN_EXTENSIONS = {
-            '.py', '.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs',
-            '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.cc', '.h', '.hpp',
-            '.cs', '.php', '.swift', '.kt', '.scala', '.lua',
-            '.sh', '.bash', '.zsh', '.fish', '.ps1',
-            '.json', '.yaml', '.yml', '.toml', '.xml',
-            '.html', '.htm', '.css', '.scss', '.sass',
-            '.sql', '.csv', '.conf', '.ini',
-        }
-        _md_ext = Path(path_str).suffix.lower() if '.' in Path(path_str).name else ''
-        if _md_ext in _NON_MARKDOWN_EXTENSIONS:
-            flag = '--related-all' if getattr(args, 'related_all', False) else '--related'
-            print(f"❌ Error: {flag} only works with markdown files", file=sys.stderr)
-            print(file=sys.stderr)
-            print("Examples:", file=sys.stderr)
-            print(f"  reveal docs/ --related          # on a markdown directory", file=sys.stderr)
-            print(f"  reveal doc.md --related         # on a .md file", file=sys.stderr)
-            print(file=sys.stderr)
-            print("Learn more: reveal help://markdown", file=sys.stderr)
-            sys.exit(1)
 
-    # Parse path and check existence
+def _guard_related_flags(args: 'Namespace', path_str: str) -> None:
+    """Exit with error if --related/--related-all are used on non-markdown files."""
+    if not (getattr(args, 'related', False) or getattr(args, 'related_all', False)):
+        return
+    md_ext = Path(path_str).suffix.lower() if '.' in Path(path_str).name else ''
+    if md_ext not in _NON_MARKDOWN_EXTENSIONS:
+        return
+    flag = '--related-all' if getattr(args, 'related_all', False) else '--related'
+    print(f"❌ Error: {flag} only works with markdown files", file=sys.stderr)
+    print(file=sys.stderr)
+    print("Examples:", file=sys.stderr)
+    print(f"  reveal docs/ --related          # on a markdown directory", file=sys.stderr)
+    print(f"  reveal doc.md --related         # on a .md file", file=sys.stderr)
+    print(file=sys.stderr)
+    print("Learn more: reveal help://markdown", file=sys.stderr)
+    sys.exit(1)
+
+
+def _handle_directory_path(path: Path, args: 'Namespace') -> None:
+    """Route a resolved directory path to directory-meta, file-list, or tree view."""
+    from ..tree_view import show_directory_tree, show_file_list
+    if getattr(args, 'meta', False):
+        _show_directory_meta(path, args)
+        return
+    sort_by = getattr(args, 'sort', None)
+    include_extensions = _parse_ext_arg(getattr(args, 'ext', None))
+    if getattr(args, 'files', False):
+        # --files defaults to newest-first; --asc flips it
+        sort_desc = not getattr(args, 'asc', False)
+        print(show_file_list(str(path),
+                             respect_gitignore=args.respect_gitignore,
+                             exclude_patterns=args.exclude,
+                             sort_by=sort_by, sort_desc=sort_desc,
+                             include_extensions=include_extensions))
+    else:
+        sort_desc = getattr(args, 'desc', False)
+        print(show_directory_tree(str(path), depth=args.depth,
+                                  max_entries=args.max_entries, fast=args.fast,
+                                  respect_gitignore=args.respect_gitignore,
+                                  exclude_patterns=args.exclude,
+                                  dir_limit=getattr(args, 'dir_limit', 0),
+                                  sort_by=sort_by, sort_desc=sort_desc,
+                                  include_extensions=include_extensions))
+
+
+def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Namespace') -> None:
+    """Route a resolved file path — to ast query if convenience flags set, else normal handler."""
+    if getattr(args, 'search', None) or getattr(args, 'sort', None) or getattr(args, 'type', None):
+        handle_uri(_build_ast_query_from_flags(path, args), args.element, args)
+        return
+
+    element = element_from_path or args.element
+    if not element and getattr(args, 'section', None):
+        if path.suffix.lower() in ('.md', '.markdown'):
+            element = args.section
+        else:
+            print("Error: --section only works with markdown files (.md, .markdown)", file=sys.stderr)
+            print(f"For other files, use: reveal {path} \"element_name\"", file=sys.stderr)
+            sys.exit(1)
+    handle_file(str(path), element, args.meta, args.format, args)
+
+
+def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
+    """Handle regular file or directory path.
+
+    Args:
+        path_str: Path string to file or directory
+        args: Parsed arguments
+    """
+    if getattr(args, 'check', False):
+        print("hint: --check is deprecated; use `reveal check <path>` instead", file=sys.stderr)
+        from ..cli.commands.check import run_check
+        run_check(args)
+        return
+
+    _guard_hotspots_flag(args, path_str)
+    _guard_nginx_flags(args, path_str)
+    _guard_ssl_flags(args)
+    _guard_related_flags(args, path_str)
+
     path, element_from_path = _parse_file_line_syntax(path_str)
     _validate_path_exists(path, path_str)
 
     if path.is_dir():
-        # --meta on a directory: show directory metadata summary
-        if getattr(args, 'meta', False):
-            _show_directory_meta(path, args)
-            return
-        # --files: flat sorted file list with timestamps (replaces find|sort)
-        if getattr(args, 'files', False):
-            from ..tree_view import show_file_list
-            sort_by = getattr(args, 'sort', None)
-            # --files defaults to newest-first; --desc has no effect (already desc by default)
-            sort_desc = not getattr(args, 'asc', False)
-            include_extensions = _parse_ext_arg(getattr(args, 'ext', None))
-            output = show_file_list(str(path),
-                                    respect_gitignore=args.respect_gitignore,
-                                    exclude_patterns=args.exclude,
-                                    sort_by=sort_by, sort_desc=sort_desc,
-                                    include_extensions=include_extensions)
-            print(output)
-            return
-        else:
-            sort_by = getattr(args, 'sort', None)
-            sort_desc = getattr(args, 'desc', False)
-            include_extensions = _parse_ext_arg(getattr(args, 'ext', None))
-            output = show_directory_tree(str(path), depth=args.depth,
-                                         max_entries=args.max_entries, fast=args.fast,
-                                         respect_gitignore=args.respect_gitignore,
-                                         exclude_patterns=args.exclude,
-                                         dir_limit=getattr(args, 'dir_limit', 0),
-                                         sort_by=sort_by, sort_desc=sort_desc,
-                                         include_extensions=include_extensions)
-            print(output)
+        _handle_directory_path(path, args)
     elif path.is_file():
-        # Check if convenience flags are set (--search, --sort, --type)
-        has_convenience_flags = (
-            getattr(args, 'search', None) or
-            getattr(args, 'sort', None) or
-            getattr(args, 'type', None)
-        )
-
-        if has_convenience_flags:
-            # Convert to AST query for ergonomic within-file filtering
-            ast_uri = _build_ast_query_from_flags(path, args)
-            handle_uri(ast_uri, args.element, args)
-        else:
-            # Normal file handling
-            element = element_from_path or args.element
-            if not element and getattr(args, 'section', None):
-                if path.suffix.lower() in ('.md', '.markdown'):
-                    element = args.section
-                else:
-                    print("Error: --section only works with markdown files (.md, .markdown)", file=sys.stderr)
-                    print(f"For other files, use: reveal {path_str} \"element_name\"", file=sys.stderr)
-                    sys.exit(1)
-            handle_file(str(path), element, args.meta, args.format, args)
+        _handle_file_path(path, element_from_path, args)
     else:
         print(f"Error: {path_str} is neither file nor directory", file=sys.stderr)
         sys.exit(1)

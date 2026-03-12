@@ -160,6 +160,52 @@ def _handle_check_acl(analyzer) -> None:
         sys.exit(exit_code)
 
 
+def _format_acl_col(acl_status: str) -> tuple:
+    """Return (column_str, is_failure)."""
+    if acl_status == 'ok':
+        return "✅ ACL ok", False
+    if acl_status == 'denied':
+        return "❌ ACL DENIED", True
+    return f"⚠️  ACL {acl_status}", False
+
+
+def _format_acme_ssl_col(ssl_status: str, ssl_days, ssl_not_after: str) -> tuple:
+    """Return (column_str, is_failure)."""
+    if ssl_status == 'healthy':
+        col = f"✅ {ssl_days}d"
+        if ssl_not_after:
+            try:
+                from datetime import datetime
+                dt = datetime.fromisoformat(ssl_not_after.replace('Z', '+00:00'))
+                col += f"  ({dt.strftime('%b %d, %Y')})"
+            except (ValueError, TypeError):
+                pass
+        return col, False
+    if ssl_status in ('warning', 'critical'):
+        return f"⚠️  expires in {ssl_days}d", False
+    if ssl_status == 'expired':
+        return f"❌ EXPIRED {abs(ssl_days or 0)} days ago", True
+    if ssl_status == 'error':
+        return f"❌ {ssl_not_after}", True
+    return ssl_status, False
+
+
+def _fetch_acme_ssl_data(rows: list, check_ssl_health) -> list:
+    """Enrich ACME rows with live SSL data for each domain."""
+    results = []
+    for r in rows:
+        try:
+            ssl_result = check_ssl_health(r['domain'], warn_days=30, critical_days=7)
+            leaf = ssl_result.get('leaf', {})
+            results.append({**r, 'ssl_status': ssl_result.get('status', 'unknown'),
+                            'ssl_days': leaf.get('days_until_expiry'),
+                            'ssl_not_after': leaf.get('not_after', '')})
+        except Exception as exc:
+            results.append({**r, 'ssl_status': 'error', 'ssl_days': None,
+                            'ssl_not_after': str(exc)[:60]})
+    return results
+
+
 def _handle_validate_nginx_acme(analyzer, args=None) -> None:
     """Full ACME pipeline audit: acme root + ACL + live SSL per domain (--validate-nginx-acme)."""
     if not hasattr(analyzer, 'extract_acme_roots'):
@@ -169,7 +215,6 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
         sys.exit(1)
 
     only_failures = getattr(args, 'only_failures', False)
-
     from .adapters.ssl.certificate import check_ssl_health
 
     rows = analyzer.extract_acme_roots()
@@ -177,27 +222,10 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
         print("No ACME challenge location blocks found.")
         return
 
-    # Fetch live SSL for each domain
-    results = []
-    for r in rows:
-        domain = r['domain']
-        try:
-            ssl_result = check_ssl_health(domain, warn_days=30, critical_days=7)
-            ssl_status = ssl_result.get('status', 'unknown')
-            leaf = ssl_result.get('leaf', {})
-            ssl_days = leaf.get('days_until_expiry')
-            ssl_not_after = leaf.get('not_after', '')
-        except Exception as exc:
-            ssl_status = 'error'
-            ssl_days = None
-            ssl_not_after = str(exc)[:60]
-        results.append({**r, 'ssl_status': ssl_status, 'ssl_days': ssl_days,
-                        'ssl_not_after': ssl_not_after})
-
+    results = _fetch_acme_ssl_data(rows, check_ssl_health)
     col_domain = max(len(r['domain']) for r in results)
     col_path = max(len(r['acme_path']) for r in results)
 
-    # Header
     header = (f"  {'domain':<{col_domain}}  {'acme root path':<{col_path}}"
               f"  {'acl':<14}  ssl status")
     print(header)
@@ -206,51 +234,18 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
     has_failures = False
     printed = 0
     for r in results:
-        acl_status = r['acl_status']
-        is_acl_failure = acl_status in ('denied', 'not_found')
-        if acl_status == 'ok':
-            acl_col = "✅ ACL ok"
-        elif acl_status == 'denied':
-            acl_col = "❌ ACL DENIED"
-            has_failures = True
-        else:
-            acl_col = f"⚠️  ACL {acl_status}"
+        acl_col, acl_fail = _format_acl_col(r['acl_status'])
+        ssl_col, ssl_fail = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'])
+        has_failures = has_failures or acl_fail or ssl_fail
 
-        ssl_status = r['ssl_status']
-        is_ssl_failure = ssl_status in ('expired', 'error')
-        if ssl_status == 'healthy':
-            days = r['ssl_days']
-            ssl_col = f"✅ {days}d"
-            if r['ssl_not_after']:
-                try:
-                    from datetime import datetime
-                    dt = datetime.fromisoformat(r['ssl_not_after'].replace('Z', '+00:00'))
-                    ssl_col += f"  ({dt.strftime('%b %d, %Y')})"
-                except (ValueError, TypeError):
-                    pass
-        elif ssl_status in ('warning', 'critical'):
-            days = r['ssl_days']
-            ssl_col = f"⚠️  expires in {days}d"
-        elif ssl_status == 'expired':
-            days = abs(r['ssl_days'] or 0)
-            ssl_col = f"❌ EXPIRED {days} days ago"
-            has_failures = True
-        elif ssl_status == 'error':
-            ssl_col = f"❌ {r['ssl_not_after']}"
-            has_failures = True
-        else:
-            ssl_col = ssl_status
-
-        if only_failures and not (is_acl_failure or is_ssl_failure):
+        if only_failures and not (acl_fail or ssl_fail):
             continue
-
         print(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}"
               f"  {acl_col:<14}  {ssl_col}")
         printed += 1
 
     if only_failures and printed == 0:
         print("✅ No failures found.")
-
     if has_failures:
         sys.exit(2)
 
@@ -373,6 +368,98 @@ def _handle_diagnose(analyzer, log_path: Optional[str] = None) -> None:
         sys.exit(2)
 
 
+def _load_disk_cert(cert_path: str, load_certificate_from_file) -> dict:
+    """Load on-disk cert. Returns dict with status/expiry/serial/not_after keys."""
+    import os
+    if not os.path.exists(cert_path):
+        return {'status': 'missing', 'expiry': None, 'serial': None, 'not_after': None}
+    try:
+        disk_leaf, _ = load_certificate_from_file(cert_path)
+        return {
+            'status': 'ok',
+            'expiry': disk_leaf.days_until_expiry,
+            'serial': disk_leaf.serial_number,
+            'not_after': disk_leaf.not_after,
+        }
+    except Exception as exc:
+        return {'status': f"error: {str(exc)[:40]}", 'expiry': None, 'serial': None, 'not_after': None}
+
+
+def _load_live_cert(domain: str, check_ssl_health) -> dict:
+    """Fetch live cert via network. Returns dict with status/expiry/serial/not_after keys."""
+    try:
+        ssl_result = check_ssl_health(domain, warn_days=30, critical_days=7)
+        leaf_data = ssl_result.get('leaf', {})
+        not_after = None
+        not_after_str = leaf_data.get('not_after', '')
+        if not_after_str:
+            try:
+                from datetime import datetime
+                not_after = datetime.fromisoformat(not_after_str.replace('Z', '+00:00'))
+            except (ValueError, TypeError):
+                pass
+        return {
+            'status': ssl_result.get('status', 'unknown'),
+            'expiry': leaf_data.get('days_until_expiry'),
+            'serial': leaf_data.get('serial_number'),
+            'not_after': not_after,
+        }
+    except Exception as exc:
+        return {'status': f"error: {str(exc)[:40]}", 'expiry': None, 'serial': None, 'not_after': None}
+
+
+def _cert_match_label(disk: dict, live: dict) -> str:
+    if disk['serial'] and live['serial']:
+        return 'match' if disk['serial'] == live['serial'] else 'STALE'
+    if disk['status'] == 'missing':
+        return 'no-disk'
+    return '?'
+
+
+def _format_disk_col(disk: dict) -> tuple:
+    """Return (column_str, is_failure)."""
+    status = disk['status']
+    if status == 'missing':
+        return "⚫ not found", False
+    if status == 'ok':
+        days = disk['expiry']
+        date_str = disk['not_after'].strftime('%b %d, %Y') if disk['not_after'] else ''
+        if days is not None and days < 0:
+            return f"❌ EXPIRED {abs(days)}d ago", True
+        if days is not None and days < 30:
+            return f"⚠️  {days}d  ({date_str})", False
+        return (f"✅ {days}d  ({date_str})" if days is not None else "✅ ok"), False
+    return f"❌ {status}", True
+
+
+def _format_live_col(live: dict) -> tuple:
+    """Return (column_str, is_failure)."""
+    status = live['status']
+    days = live['expiry']
+    not_after = live['not_after']
+    if status == 'healthy':
+        date_str = not_after.strftime('%b %d, %Y') if not_after else ''
+        return (f"✅ {days}d  ({date_str})" if days is not None else "✅ ok"), False
+    if status in ('warning', 'critical'):
+        return f"⚠️  {days}d", False
+    if status == 'expired':
+        return f"❌ EXPIRED {abs(days or 0)}d ago", True
+    if status and status.startswith('error'):
+        return f"⚠️  {status}", False  # can't reach live cert → unknown, not definitive
+    return str(status), False
+
+
+def _format_match_col(match: str) -> tuple:
+    """Return (column_str, is_failure)."""
+    if match == 'match':
+        return "✅ same cert", False
+    if match == 'STALE':
+        return "⚠️  STALE (reload nginx)", True
+    if match == 'no-disk':
+        return "⚫ no disk cert", False
+    return f"? {match}", False
+
+
 def _handle_cpanel_certs(analyzer) -> None:
     """Compare cPanel on-disk certs against live certs per domain (S4 -- --cpanel-certs).
 
@@ -395,130 +482,31 @@ def _handle_cpanel_certs(analyzer) -> None:
         return
 
     CPANEL_CERT_DIR = "/var/cpanel/ssl/apache_tls"
-
     rows = []
     for domain in domains:
         cert_path = f"{CPANEL_CERT_DIR}/{domain}/combined"
-
-        # --- disk cert ---
-        disk_expiry = None
-        disk_serial = None
-        disk_status = None
-        disk_not_after = None
-        if not __import__('os').path.exists(cert_path):
-            disk_status = 'missing'
-        else:
-            try:
-                disk_leaf, _ = load_certificate_from_file(cert_path)
-                disk_expiry = disk_leaf.days_until_expiry
-                disk_serial = disk_leaf.serial_number
-                disk_not_after = disk_leaf.not_after
-                disk_status = 'ok'
-            except Exception as exc:
-                disk_status = f"error: {str(exc)[:40]}"
-
-        # --- live cert ---
-        live_expiry = None
-        live_serial = None
-        live_status = None
-        live_not_after = None
-        try:
-            ssl_result = check_ssl_health(domain, warn_days=30, critical_days=7)
-            live_ssl_status = ssl_result.get('status', 'unknown')
-            leaf_data = ssl_result.get('leaf', {})
-            live_expiry = leaf_data.get('days_until_expiry')
-            live_serial = leaf_data.get('serial_number')
-            live_not_after_str = leaf_data.get('not_after', '')
-            if live_not_after_str:
-                try:
-                    from datetime import datetime
-                    live_not_after = datetime.fromisoformat(
-                        live_not_after_str.replace('Z', '+00:00')
-                    )
-                except (ValueError, TypeError):
-                    pass
-            live_status = live_ssl_status
-        except Exception as exc:
-            live_status = f"error: {str(exc)[:40]}"
-
-        # --- match determination ---
-        if disk_serial and live_serial:
-            match = 'match' if disk_serial == live_serial else 'STALE'
-        elif disk_status == 'missing':
-            match = 'no-disk'
-        else:
-            match = '?'
-
+        disk = _load_disk_cert(cert_path, load_certificate_from_file)
+        live = _load_live_cert(domain, check_ssl_health)
+        match = _cert_match_label(disk, live)
         rows.append({
             'domain': domain,
             'cert_path': cert_path,
-            'disk_status': disk_status,
-            'disk_expiry': disk_expiry,
-            'disk_not_after': disk_not_after,
-            'live_status': live_status,
-            'live_expiry': live_expiry,
-            'live_not_after': live_not_after,
+            'disk': disk,
+            'live': live,
             'match': match,
         })
 
     col_domain = max(len(r['domain']) for r in rows)
-
-    header = (f"  {'domain':<{col_domain}}  {'disk cert':<28}  {'live cert':<28}  match")
+    header = f"  {'domain':<{col_domain}}  {'disk cert':<28}  {'live cert':<28}  match"
     print(header)
     print("  " + "─" * (len(header) - 2))
 
     has_failures = False
     for r in rows:
-        # disk column
-        ds = r['disk_status']
-        if ds == 'missing':
-            disk_col = "⚫ not found"
-        elif ds == 'ok':
-            days = r['disk_expiry']
-            na = r['disk_not_after']
-            date_str = na.strftime('%b %d, %Y') if na else ''
-            if days is not None and days < 0:
-                disk_col = f"❌ EXPIRED {abs(days)}d ago"
-                has_failures = True
-            elif days is not None and days < 30:
-                disk_col = f"⚠️  {days}d  ({date_str})"
-            else:
-                disk_col = f"✅ {days}d  ({date_str})" if days is not None else "✅ ok"
-        else:
-            disk_col = f"❌ {ds}"
-            has_failures = True
-
-        # live column
-        ls = r['live_status']
-        if ls in ('healthy',):
-            days = r['live_expiry']
-            na = r['live_not_after']
-            date_str = na.strftime('%b %d, %Y') if na else ''
-            live_col = f"✅ {days}d  ({date_str})" if days is not None else "✅ ok"
-        elif ls in ('warning', 'critical'):
-            days = r['live_expiry']
-            live_col = f"⚠️  {days}d"
-        elif ls == 'expired':
-            days = abs(r['live_expiry'] or 0)
-            live_col = f"❌ EXPIRED {days}d ago"
-            has_failures = True
-        elif ls and ls.startswith('error'):
-            live_col = f"⚠️  {ls}"  # can't reach live cert → unknown, not a definitive failure
-        else:
-            live_col = str(ls)
-
-        # match column
-        match = r['match']
-        if match == 'match':
-            match_col = "✅ same cert"
-        elif match == 'STALE':
-            match_col = "⚠️  STALE (reload nginx)"
-            has_failures = True
-        elif match == 'no-disk':
-            match_col = "⚫ no disk cert"
-        else:
-            match_col = f"? {match}"
-
+        disk_col, disk_fail = _format_disk_col(r['disk'])
+        live_col, live_fail = _format_live_col(r['live'])
+        match_col, match_fail = _format_match_col(r['match'])
+        has_failures = has_failures or disk_fail or live_fail or match_fail
         print(f"  {r['domain']:<{col_domain}}  {disk_col:<28}  {live_col:<28}  {match_col}")
 
     print()

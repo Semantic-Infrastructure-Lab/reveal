@@ -108,6 +108,153 @@ def _extract_defect_code(defect_str: str) -> str:
     return m.group(1) if m else defect_str[:60]
 
 
+_STATUS_ORDER: Dict[str, int] = {'defective': 0, 'incomplete': 1, 'ok': 2}
+
+
+def _process_indent0(contents: str, state: Dict[str, Any], users: Dict[str, Any]) -> None:
+    """DCV phase start: 'Processing "USERNAME"'s local DCV results …'"""
+    m = _RE_USER_DCV.search(contents)
+    if m:
+        state['current_user'] = m.group(1)
+        state['phase'] = 'dcv'
+        users.setdefault(state['current_user'], {'domains': {}})
+        state['current_domain'] = None
+
+
+def _process_indent1(contents: str, state: Dict[str, Any], users: Dict[str, Any]) -> None:
+    """Per-user analyzing or per-domain DCV tracking."""
+    if state['phase'] == 'analyzing':
+        m = _RE_USER_ANALYZING.search(contents)
+        if m:
+            state['current_user'] = m.group(1)
+            users.setdefault(state['current_user'], {'domains': {}})
+            state['current_domain'] = None
+        elif _RE_USER_COMPLETE.search(contents):
+            state['current_domain'] = None
+    elif state['phase'] == 'dcv' and state['current_user'] is not None:
+        m = _RE_DOMAIN_DCV.search(contents)
+        if m:
+            state['current_domain'] = m.group(1)
+
+
+def _process_indent2(contents: str, state: Dict[str, Any], users: Dict[str, Any]) -> None:
+    """Domain detection (analyzing) or DCV impediments (dcv phase)."""
+    current_user = state['current_user']
+    if state['phase'] == 'analyzing' and current_user is not None:
+        m = _RE_DOMAIN.search(contents)
+        if m:
+            state['current_domain'] = m.group(1)
+            users[current_user]['domains'].setdefault(
+                state['current_domain'], _new_domain_entry(state['current_domain'])
+            )
+    elif state['phase'] == 'dcv' and current_user is not None and state['current_domain'] is not None:
+        if contents.startswith('Impediment:'):
+            entry = users[current_user]['domains'].setdefault(
+                state['current_domain'], _new_domain_entry(state['current_domain'])
+            )
+            m = _RE_IMPEDIMENT.match(contents)
+            if m:
+                entry['impediments'].append({'code': m.group(1), 'detail': m.group(2).rstrip('.')})
+
+
+def _process_indent3(contents: str, rtype: str, state: Dict[str, Any], users: Dict[str, Any]) -> None:
+    """Domain detail fields: TLS status, expiry, defects, impediments."""
+    current_user = state['current_user']
+    current_domain = state['current_domain']
+    if state['phase'] != 'analyzing' or current_user is None or current_domain is None:
+        return
+    entry = users[current_user]['domains'].get(current_domain)
+    if entry is None:
+        return
+
+    if 'TLS Status:' in contents:
+        entry['tls_status'] = 'ok' if rtype == 'success' else ('defective' if rtype == 'error' else 'incomplete')
+    elif 'Certificate expiry:' in contents:
+        entry['cert_expiry_raw'] = contents
+        m = _RE_EXPIRY_DAYS.search(contents)
+        if m:
+            days = float(m.group(1))
+            entry['cert_expiry_days'] = -days if m.group(2) == 'ago' else days
+    elif contents.startswith('Defect:'):
+        m = _RE_DEFECT.match(contents)
+        if m:
+            entry['defects'].append(m.group(1))
+    elif 'User-excluded' in contents:
+        entry['user_excluded'] = True
+    elif contents.startswith('Impediment:'):
+        # Some impediments appear at indent=3 during analyzing phase
+        m = _RE_IMPEDIMENT.match(contents)
+        if m:
+            entry['impediments'].append({'code': m.group(1), 'detail': m.group(2).rstrip('.')})
+
+
+def _parse_log_lines(json_path: str) -> tuple:
+    """Read the NDJSON log file, return (users dict, run_start, run_end)."""
+    users: Dict[str, Dict[str, Any]] = {}
+    state: Dict[str, Any] = {
+        'current_user': None,
+        'current_domain': None,
+        'phase': 'analyzing',
+        'run_start': None,
+        'run_end': None,
+    }
+    _dispatch = {0: _process_indent0, 1: _process_indent1, 2: _process_indent2}
+
+    with open(json_path, 'r', encoding='utf-8', errors='replace') as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            ts = rec.get('timestamp', '')
+            if state['run_start'] is None:
+                state['run_start'] = ts
+            state['run_end'] = ts
+
+            indent = rec.get('indent', 0)
+            contents = rec.get('contents', '')
+
+            if indent in _dispatch:
+                _dispatch[indent](contents, state, users)
+            elif indent == 3:
+                _process_indent3(contents, rec.get('type', 'out'), state, users)
+
+    return users, state['run_start'], state['run_end']
+
+
+def _build_user_list(users: Dict[str, Any]) -> tuple:
+    """Build sorted per-user domain lists and compute overall summary. Returns (user_list, overall)."""
+    overall: Dict[str, int] = {}
+    user_list = []
+
+    for uname, udata in users.items():
+        domains_list = sorted(
+            udata['domains'].values(),
+            key=lambda d: (_STATUS_ORDER.get(d.get('tls_status') or 'unknown', 3), d['domain']),
+        )
+        for d in domains_list:
+            d['defect_codes'] = [_extract_defect_code(x) for x in d['defects']]
+
+        user_summary: Dict[str, int] = {}
+        for d in domains_list:
+            status = d.get('tls_status') or ('dcv_failed' if d.get('impediments') else 'unknown')
+            user_summary[status] = user_summary.get(status, 0) + 1
+            overall[status] = overall.get(status, 0) + 1
+
+        user_list.append({
+            'username': uname,
+            'domain_count': len(domains_list),
+            'summary': user_summary,
+            'domains': domains_list,
+        })
+
+    return user_list, overall
+
+
 def parse_run(timestamp: str, log_dir: str = AUTOSSL_LOG_DIR) -> Dict[str, Any]:
     """Parse the NDJSON log for an autossl run.
 
@@ -140,120 +287,8 @@ def parse_run(timestamp: str, log_dir: str = AUTOSSL_LOG_DIR) -> Dict[str, Any]:
     json_path = os.path.join(run_dir, 'json')
     meta = get_run_metadata(timestamp, log_dir)
 
-    # username → {domains: {domain_name: entry}}
-    users: Dict[str, Dict[str, Any]] = {}
-    current_user: Optional[str] = None
-    current_domain: Optional[str] = None
-    phase = 'analyzing'  # 'analyzing' | 'dcv'
-    run_start: Optional[str] = None
-    run_end: Optional[str] = None
-
     try:
-        with open(json_path, 'r', encoding='utf-8', errors='replace') as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-
-                ts = rec.get('timestamp', '')
-                indent = rec.get('indent', 0)
-                contents = rec.get('contents', '')
-                rtype = rec.get('type', 'out')
-
-                if run_start is None:
-                    run_start = ts
-                run_end = ts
-
-                if indent == 0:
-                    # DCV phase: "Processing "USERNAME"'s local DCV results …"
-                    m = _RE_USER_DCV.search(contents)
-                    if m:
-                        current_user = m.group(1)
-                        phase = 'dcv'
-                        users.setdefault(current_user, {'domains': {}})
-                        current_domain = None
-
-                elif indent == 1:
-                    if phase == 'analyzing':
-                        m = _RE_USER_ANALYZING.search(contents)
-                        if m:
-                            current_user = m.group(1)
-                            users.setdefault(current_user, {'domains': {}})
-                            current_domain = None
-                        elif _RE_USER_COMPLETE.search(contents):
-                            # end of user's analyzing section
-                            current_domain = None
-
-                    elif phase == 'dcv' and current_user is not None:
-                        m = _RE_DOMAIN_DCV.search(contents)
-                        if m:
-                            current_domain = m.group(1)
-
-                elif indent == 2:
-                    if phase == 'analyzing' and current_user is not None:
-                        m = _RE_DOMAIN.search(contents)
-                        if m:
-                            current_domain = m.group(1)
-                            users[current_user]['domains'].setdefault(
-                                current_domain, _new_domain_entry(current_domain)
-                            )
-
-                    elif phase == 'dcv' and current_user is not None and current_domain is not None:
-                        if contents.startswith('Impediment:'):
-                            entry = users[current_user]['domains'].setdefault(
-                                current_domain, _new_domain_entry(current_domain)
-                            )
-                            m = _RE_IMPEDIMENT.match(contents)
-                            if m:
-                                entry['impediments'].append({
-                                    'code': m.group(1),
-                                    'detail': m.group(2).rstrip('.'),
-                                })
-
-                elif indent == 3:
-                    if phase == 'analyzing' and current_user is not None and current_domain is not None:
-                        entry = users[current_user]['domains'].get(current_domain)
-                        if entry is None:
-                            continue
-
-                        if 'TLS Status:' in contents:
-                            if rtype == 'success':
-                                entry['tls_status'] = 'ok'
-                            elif rtype == 'error':
-                                entry['tls_status'] = 'defective'
-                            else:
-                                entry['tls_status'] = 'incomplete'
-
-                        elif 'Certificate expiry:' in contents:
-                            entry['cert_expiry_raw'] = contents
-                            m2 = _RE_EXPIRY_DAYS.search(contents)
-                            if m2:
-                                days = float(m2.group(1))
-                                if m2.group(2) == 'ago':
-                                    days = -days
-                                entry['cert_expiry_days'] = days
-
-                        elif contents.startswith('Defect:'):
-                            m3 = _RE_DEFECT.match(contents)
-                            if m3:
-                                entry['defects'].append(m3.group(1))
-
-                        elif 'User-excluded' in contents:
-                            entry['user_excluded'] = True
-
-                        elif contents.startswith('Impediment:'):
-                            # Some impediments appear at indent=3 during analyzing phase
-                            m4 = _RE_IMPEDIMENT.match(contents)
-                            if m4:
-                                entry['impediments'].append({
-                                    'code': m4.group(1),
-                                    'detail': m4.group(2).rstrip('.'),
-                                })
-
+        users, run_start, run_end = _parse_log_lines(json_path)
     except OSError as exc:
         return {
             'contract_version': '1.0',
@@ -263,37 +298,7 @@ def parse_run(timestamp: str, log_dir: str = AUTOSSL_LOG_DIR) -> Dict[str, Any]:
             'log_dir': run_dir,
         }
 
-    # Build per-user sorted domain lists and overall summary
-    _STATUS_ORDER = {'defective': 0, 'incomplete': 1, 'ok': 2}
-    overall: Dict[str, int] = {}
-    user_list = []
-
-    for uname, udata in users.items():
-        domains_list = sorted(
-            udata['domains'].values(),
-            key=lambda d: (
-                _STATUS_ORDER.get(d.get('tls_status') or 'unknown', 3),
-                d['domain'],
-            ),
-        )
-        # Annotate with compact defect codes
-        for d in domains_list:
-            d['defect_codes'] = [_extract_defect_code(x) for x in d['defects']]
-
-        user_summary: Dict[str, int] = {}
-        for d in domains_list:
-            status = d.get('tls_status') or (
-                'dcv_failed' if d.get('impediments') else 'unknown'
-            )
-            user_summary[status] = user_summary.get(status, 0) + 1
-            overall[status] = overall.get(status, 0) + 1
-
-        user_list.append({
-            'username': uname,
-            'domain_count': len(domains_list),
-            'summary': user_summary,
-            'domains': domains_list,
-        })
+    user_list, overall = _build_user_list(users)
 
     return {
         'contract_version': '1.0',

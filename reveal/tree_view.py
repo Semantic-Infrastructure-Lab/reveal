@@ -9,6 +9,39 @@ from .display.filtering import PathFilter
 from .utils import format_size
 
 
+def _collect_matching_files(root_path: Path, show_hidden: bool, path_filter: Any, exts: Optional[set]) -> list:
+    """Walk root_path and return list of (fpath, stat) for files passing all filters."""
+    files = []
+    for root, dirs, filenames in os.walk(root_path):
+        if not show_hidden:
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+        dirs[:] = [d for d in dirs if not path_filter.should_filter(Path(root) / d)]
+        for fname in filenames:
+            fpath = Path(root) / fname
+            if not show_hidden and fname.startswith('.'):
+                continue
+            if path_filter.should_filter(fpath):
+                continue
+            if exts and fpath.suffix.lower().lstrip('.') not in exts:
+                continue
+            try:
+                files.append((fpath, fpath.stat()))
+            except OSError:
+                continue
+    return files
+
+
+def _sort_files(files: list, sort_by: Optional[str], sort_desc: bool) -> None:
+    """Sort (fpath, stat) list in-place by sort_by key."""
+    effective_sort = sort_by or 'mtime'
+    if effective_sort in ('mtime', 'modified'):
+        files.sort(key=lambda x: x[1].st_mtime, reverse=sort_desc)
+    elif effective_sort == 'size':
+        files.sort(key=lambda x: x[1].st_size, reverse=sort_desc)
+    elif effective_sort == 'name':
+        files.sort(key=lambda x: x[0].name.lower(), reverse=sort_desc)
+
+
 def show_file_list(path: str, show_hidden: bool = False,
                    respect_gitignore: bool = True,
                    exclude_patterns: Optional[List[str]] = None,
@@ -39,42 +72,14 @@ def show_file_list(path: str, show_hidden: bool = False,
         exclude_patterns=exclude_patterns,
         include_defaults=True
     )
-
     exts = {e.lower().lstrip('.') for e in include_extensions} if include_extensions else None
 
-    # Collect all matching files
-    files = []
-    for root, dirs, filenames in os.walk(root_path):
-        # Filter hidden dirs in-place to prevent descending into them
-        if not show_hidden:
-            dirs[:] = [d for d in dirs if not d.startswith('.')]
-        dirs[:] = [d for d in dirs if not path_filter.should_filter(Path(root) / d)]
-
-        for fname in filenames:
-            fpath = Path(root) / fname
-            if not show_hidden and fname.startswith('.'):
-                continue
-            if path_filter.should_filter(fpath):
-                continue
-            if exts and fpath.suffix.lower().lstrip('.') not in exts:
-                continue
-            try:
-                stat = fpath.stat()
-                files.append((fpath, stat))
-            except OSError:
-                continue
-
+    files = _collect_matching_files(root_path, show_hidden, path_filter, exts)
     if not files:
-        return f"No files found in {path}" + (f" (ext: {','.join(include_extensions)})" if include_extensions else "")
+        ext_suffix = f" (ext: {','.join(include_extensions)})" if include_extensions else ""
+        return f"No files found in {path}{ext_suffix}"
 
-    # Sort
-    effective_sort = sort_by or 'mtime'
-    if effective_sort in ('mtime', 'modified'):
-        files.sort(key=lambda x: x[1].st_mtime, reverse=sort_desc)
-    elif effective_sort == 'size':
-        files.sort(key=lambda x: x[1].st_size, reverse=sort_desc)
-    elif effective_sort == 'name':
-        files.sort(key=lambda x: x[0].name.lower(), reverse=sort_desc)
+    _sort_files(files, sort_by, sort_desc)
 
     lines = []
     for fpath, stat in files:
