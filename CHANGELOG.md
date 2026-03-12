@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - v0.60.x (sessions toxic-onslaught-0310, ethereal-leviathan-0310, psychic-frenzy-0310, mystical-sword-0311, kilonova-throne-0311, eternal-launch-0311)
+## [Unreleased] - v0.60.x (sessions toxic-onslaught-0310, ethereal-leviathan-0310, psychic-frenzy-0310, mystical-sword-0311, kilonova-throne-0311, eternal-launch-0311, turbo-ultimatum-0311)
 
 ### Added
 - **BACK-014: `nginx://` adapter `get_schema()` — completes 21/21 adapter schema coverage** — `reveal help://schemas/nginx` now works. Schema covers all 8 output types (`nginx_sites_overview`, `nginx_vhost_summary`, `nginx_vhost_not_found`, `nginx_vhost_ports`, `nginx_vhost_upstream`, `nginx_vhost_auth`, `nginx_vhost_locations`, `nginx_vhost_config`), 5 elements, 7 example queries. `AGENT_HELP.md` updated from "20 of 21" to "all 21 adapters"; nginx and cpanel added to schemas listing. (session kilonova-throne-0311)
@@ -64,6 +64,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`help://schemas/unknown_adapter` showed listing, not error** — renderer's `if available_adapters:` check didn't distinguish "bare listing" from "unknown name listing". Fixed: only show listing when `adapter == ''`; unknown names show error + exit(1). (session eternal-launch-0311)
 - **5 recipe output_type names didn't match schema definitions** — `ast_query_results` → `ast_query` (12 occurrences), `git_log` → `git_ref`, `stats_results` → `stats_summary`, `links` → `markdown_query`, `outline` → `markdown_query`. The contract test `test_recipe_output_types_resolve_to_schema_types` now enforces alignment. (session eternal-launch-0311)
 - **`_render_adapter_schema` crashed on markdown/cpanel query_params** — those adapters use flat string values in `query_params` (e.g. `'body-contains=term': 'description...'`). Renderer now handles both dict and string param values. (session eternal-launch-0311)
+
+### Fixed (session turbo-ultimatum-0311)
+- **`stats://src --only-failures` in quality recipe was silently a no-op** — `--only-failures` is not implemented in the stats adapter (check/batch mode only); it was listed as a CLI flag and cited in schema notes without effect. Quality recipe replaced with `stats://src?hotspots=true` which actually shows files with issues. stats schema `--only-failures` flag removed; replaced with `--hotspots` and `--format=json` which work. (session turbo-ultimatum-0311)
+- **ast schema claimed complexity "heuristic-based (line count proxy)"** — outdated since tree-sitter was added. Proper McCabe cyclomatic complexity is calculated for all 50+ tree-sitter languages; line-count heuristic is only the fallback for unsupported languages. Schema note updated to reflect reality. (session turbo-ultimatum-0311)
+- **ast text output groups by file, making `sort=` invisible** — text renderer always groups results by filename (alphabetical). Sort IS applied to the underlying data (verifiable via `--format=json` or `--format=grep`). Added schema note: "text output groups results by file; use --format=json or --format=grep for globally sorted output". (session turbo-ultimatum-0311)
+- **Cross-field OR syntax broken in RECIPES.md** — `reveal 'ast://./src?complexity>30|lines>150'` returns 0 results because `|` is for same-field OR only (e.g., `type=function|class`). "Find god functions" recipe fixed to use `&` (AND). (session turbo-ultimatum-0311)
+- **AGENT_HELP.md jq pipeline used wrong field names** — `file_path` → `file`, `line_number` → `line`, `select(.depth > 10)` → `select(.complexity > 10)` (depth is nesting depth, not cyclomatic complexity). (session turbo-ultimatum-0311)
+- **`imports://` schema missing false positive warning** — decorator-based registration imports (e.g., `from . import adapter` in `__init__.py`) are flagged as unused but are intentional side-effect imports. Added schema note. (session turbo-ultimatum-0311)
+- **`reveal://rules` listed utility modules as rules** — `get_rules()` discovered all `.py` files in rule category directories, including `validation/utils.py` and `validation/adapter_utils.py`. Fix: skip files not starting with uppercase (rule codes are always uppercase-first: V001, B001, etc.). Validation category: 23 → 21 actual rules. (session turbo-ultimatum-0311)
+
+### Tests (session turbo-ultimatum-0311)
+- **`test_rules_exclude_utility_modules`** — asserts `utils` and `adapter_utils` not present in rules list; also asserts all rule codes start with uppercase. Prevents recurrence of the utility-as-rule bug. Tests: 4,770 → 4,771. (session turbo-ultimatum-0311)
 
 ### Tests (session eternal-launch-0311)
 - **16 new `TestHelpAdapter` tests** — cover all new/fixed routes: `help://schemas` listing, `help://schemas/ast` data and rendering, `help://schemas/unknown_adapter` error + stderr, `help://examples` listing, `help://examples/quality` data and rendering, all 6 task categories validation. Tests: 4,768 → 4,770. (session eternal-launch-0311)
