@@ -4,6 +4,24 @@ from typing import Dict, List, Any, Optional
 from collections import defaultdict
 
 from ....utils.patterns import Patterns
+from typing import Generator, Tuple
+
+
+def _iter_assistant_content(messages: List[Dict]) -> Generator[Tuple[int, Dict, Dict], None, None]:
+    """Yield (msg_index, msg, content_block) for each content block in assistant messages."""
+    for i, msg in enumerate(messages):
+        if msg.get('type') == 'assistant':
+            for content in msg.get('message', {}).get('content', []):
+                yield i, msg, content
+
+
+def _iter_user_content(messages: List[Dict]) -> Generator[Tuple[int, Dict, Dict], None, None]:
+    """Yield (msg_index, msg, content_block) for each content block in user messages."""
+    for i, msg in enumerate(messages):
+        if msg.get('type') == 'user':
+            for content in msg.get('message', {}).get('content', []):
+                if isinstance(content, dict):
+                    yield i, msg, content
 
 
 def is_tool_error(content: Dict) -> bool:
@@ -41,14 +59,12 @@ def is_tool_error(content: Dict) -> bool:
 def _collect_tool_use_map(messages: List[Dict]) -> Dict[str, str]:
     """Build tool_use_id → tool_name mapping from assistant messages."""
     tool_use_map: Dict[str, str] = {}
-    for msg in messages:
-        if msg.get('type') == 'assistant':
-            for content in msg.get('message', {}).get('content', []):
-                if isinstance(content, dict) and content.get('type') == 'tool_use':
-                    tool_id = content.get('id')
-                    tool_name = content.get('name')
-                    if tool_id and tool_name:
-                        tool_use_map[tool_id] = tool_name
+    for _i, _msg, content in _iter_assistant_content(messages):
+        if isinstance(content, dict) and content.get('type') == 'tool_use':
+            tool_id = content.get('id')
+            tool_name = content.get('name')
+            if tool_id and tool_name:
+                tool_use_map[tool_id] = tool_name
     return tool_use_map
 
 
@@ -65,27 +81,18 @@ def extract_all_tool_results(messages: List[Dict]) -> List[Dict]:
     # First pass: collect tool_use_id -> tool_name mapping from assistant messages
     tool_use_map = _collect_tool_use_map(messages)
 
-    # Second pass: extract tool results from user messages
     results = []
-    for i, msg in enumerate(messages):
-        if msg.get('type') == 'user':
-            for content in msg.get('message', {}).get('content', []):
-                if not isinstance(content, dict):
-                    continue
-                if content.get('type') == 'tool_result':
-                    tool_id = str(content.get("tool_use_id", ""))
-                    tool_name = tool_use_map.get(tool_id, 'unknown')
-                    result_content = str(content.get('content', ''))
-
-                    results.append({
-                        'message_index': i,
-                        'tool_use_id': tool_id,
-                        'tool_name': tool_name,
-                        'content': result_content[:500],  # Truncate for display
-                        'is_error': is_tool_error(content),
-                        'timestamp': msg.get('timestamp')
-                    })
-
+    for i, msg, content in _iter_user_content(messages):
+        if content.get('type') == 'tool_result':
+            tool_id = str(content.get("tool_use_id", ""))
+            results.append({
+                'message_index': i,
+                'tool_use_id': tool_id,
+                'tool_name': tool_use_map.get(tool_id, 'unknown'),
+                'content': str(content.get('content', ''))[:500],
+                'is_error': is_tool_error(content),
+                'timestamp': msg.get('timestamp')
+            })
     return results
 
 
@@ -106,17 +113,14 @@ def get_tool_calls(messages: List[Dict], tool_name: str, session_name: str,
     base['type'] = 'claude_tool_calls'
 
     tool_calls = []
-
-    for i, msg in enumerate(messages):
-        if msg.get('type') == 'assistant':
-            for content in msg.get('message', {}).get('content', []):
-                if content.get('type') == 'tool_use' and content.get('name') == tool_name:
-                    tool_calls.append({
-                        'message_index': i,
-                        'tool_use_id': content.get('id'),
-                        'input': content.get('input'),
-                        'timestamp': msg.get('timestamp')
-                    })
+    for i, msg, content in _iter_assistant_content(messages):
+        if content.get('type') == 'tool_use' and content.get('name') == tool_name:
+            tool_calls.append({
+                'message_index': i,
+                'tool_use_id': content.get('id'),
+                'input': content.get('input'),
+                'timestamp': msg.get('timestamp')
+            })
 
     base.update({
         'session': session_name,
@@ -143,20 +147,16 @@ def get_all_tools(messages: List[Dict], session_name: str,
     base = contract_base.copy()
     base['type'] = 'claude_tool_summary'
 
-    # Collect tool call details
     tools = defaultdict(list)
-    for i, msg in enumerate(messages):
-        if msg.get('type') == 'assistant':
-            for content in msg.get('message', {}).get('content', []):
-                if content.get('type') == 'tool_use':
-                    tool_name = content.get('name')
-                    tool_input = content.get('input', {})
-                    tools[tool_name].append({
-                        'message_index': i,
-                        'tool_use_id': content.get('id'),
-                        'timestamp': msg.get('timestamp'),
-                        'detail': _extract_tool_detail(tool_name, tool_input)
-                    })
+    for i, msg, content in _iter_assistant_content(messages):
+        if content.get('type') == 'tool_use':
+            name = content.get('name')
+            tools[name].append({
+                'message_index': i,
+                'tool_use_id': content.get('id'),
+                'timestamp': msg.get('timestamp'),
+                'detail': _extract_tool_detail(name, content.get('input', {}))
+            })
 
     # Calculate success rates
     success_rates = calculate_tool_success_rate(messages)
@@ -182,23 +182,14 @@ def get_all_tools(messages: List[Dict], session_name: str,
 
 
 def _collect_tool_use_ids(messages: List[Dict]) -> Dict[str, str]:
-    """Extract mapping of tool_use_id to tool name from messages.
-
-    Args:
-        messages: List of message dictionaries
-
-    Returns:
-        Dictionary mapping tool_use_id to tool name
-    """
+    """Extract mapping of tool_use_id to tool name from messages."""
     tool_use_map = {}
-    for msg in messages:
-        if msg.get('type') == 'assistant':
-            for content in msg.get('message', {}).get('content', []):
-                if content.get('type') == 'tool_use':
-                    tool_id = content.get('id')
-                    tool_name = content.get('name')
-                    if tool_id and tool_name:
-                        tool_use_map[tool_id] = tool_name
+    for _i, _msg, content in _iter_assistant_content(messages):
+        if content.get('type') == 'tool_use':
+            tool_id = content.get('id')
+            tool_name = content.get('name')
+            if tool_id and tool_name:
+                tool_use_map[tool_id] = tool_name
     return tool_use_map
 
 
@@ -211,28 +202,18 @@ def _track_tool_results(messages: List[Dict], tool_use_map: Dict[str, str],
         tool_use_map: Mapping of tool_use_id to tool name
         tool_stats: Dictionary to update with success/failure counts
     """
-    for msg in messages:
-        # Tool results are in 'user' type messages (results returned to assistant)
-        if msg.get('type') != 'user':
+    for _i, _msg, content in _iter_user_content(messages):
+        if content.get('type') != 'tool_result':
             continue
-
-        for content in msg.get('message', {}).get('content', []):
-            if not isinstance(content, dict):
-                continue
-            if content.get('type') != 'tool_result':
-                continue
-
-            tool_id = str(content.get("tool_use_id", ""))
-            if tool_id not in tool_use_map:
-                continue
-
-            tool_name = tool_use_map[tool_id]
-            tool_stats[tool_name]['total'] += 1
-
-            if is_tool_error(content):
-                tool_stats[tool_name]['failure'] += 1
-            else:
-                tool_stats[tool_name]['success'] += 1
+        tool_id = str(content.get("tool_use_id", ""))
+        if tool_id not in tool_use_map:
+            continue
+        tool_name = tool_use_map[tool_id]
+        tool_stats[tool_name]['total'] += 1
+        if is_tool_error(content):
+            tool_stats[tool_name]['failure'] += 1
+        else:
+            tool_stats[tool_name]['success'] += 1
 
 
 def _build_success_rate_report(tool_stats: Dict[str, Dict[str, int]]) -> Dict[str, Dict[str, Any]]:
@@ -404,27 +385,17 @@ def get_workflow(messages: List[Dict], session_name: str,
     base['type'] = 'claude_workflow'
 
     workflow: List[Dict[str, Any]] = []
-
-    for i, msg in enumerate(messages):
-        # Skip non-assistant messages
-        if msg.get('type') != 'assistant':
+    for i, msg, content in _iter_assistant_content(messages):
+        if content.get('type') != 'tool_use':
             continue
-
-        # Process tool uses in assistant message
-        for content in msg.get('message', {}).get('content', []):
-            if content.get('type') != 'tool_use':
-                continue
-
-            tool_name = content.get('name')
-            detail = _extract_tool_detail(tool_name, content.get('input', {}))
-
-            workflow.append({
-                'step': len(workflow) + 1,
-                'message_index': i,
-                'tool': tool_name,
-                'detail': detail,
-                'timestamp': msg.get('timestamp')
-            })
+        tool_name = content.get('name')
+        workflow.append({
+            'step': len(workflow) + 1,
+            'message_index': i,
+            'tool': tool_name,
+            'detail': _extract_tool_detail(tool_name, content.get('input', {})),
+            'timestamp': msg.get('timestamp')
+        })
 
     base.update({
         'session': session_name,
