@@ -39,6 +39,8 @@ class AstAdapter(ResourceAdapter):
         ast://.?complexity>10&sort=-complexity&limit=10  # Top 10 most complex (NEW: sort, limit)
     """
 
+    BUDGET_LIST_FIELD = 'results'
+
     @staticmethod
     def get_help() -> Dict[str, Any]:
         """Get help documentation for ast:// adapter."""

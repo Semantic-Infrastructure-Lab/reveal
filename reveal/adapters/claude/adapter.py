@@ -29,6 +29,115 @@ from .analysis import (
 )
 
 
+_SCHEMA_QUERY_PARAMS = {
+    'summary': {'type': 'flag', 'description': 'Session summary (overview + key events)'},
+    'errors': {'type': 'flag', 'description': 'Filter for messages containing errors'},
+    'tools': {'type': 'string', 'description': 'Filter for specific tool usage', 'examples': ['?tools=Bash', '?tools=Edit']},
+    'contains': {'type': 'string', 'description': 'Filter messages containing text', 'examples': ['?contains=reveal', '?contains=error']},
+    'role': {'type': 'string', 'description': 'Filter by message role', 'values': ['user', 'assistant'], 'examples': ['?role=user']},
+    'search': {
+        'type': 'string',
+        'description': 'Search all message content (text, thinking, tool inputs) for a term (case-insensitive)',
+        'examples': ['?search=path traversal', '?search=FileNotFoundError']
+    }
+}
+
+_SCHEMA_ELEMENTS = {
+    'workflow': 'Chronological sequence of tool operations',
+    'files': 'All files read, written, or edited',
+    'tools': 'All tool usage with success rates',
+    'thinking': 'All thinking blocks with content previews and token estimates',
+    'errors': 'All errors and exceptions',
+    'timeline': 'Chronological message timeline',
+    'context': 'Context window changes over session',
+    'user': 'User messages: initial prompt full text + tool-result turn summaries',
+    'assistant': 'Assistant messages: text blocks only (skips thinking/tool_use)',
+    'message/<n>': 'Single message by zero-based index with full content'
+}
+
+def _make_output_type(type_name: str, description: str, extra_props: dict) -> dict:
+    """Build a standard claude output_type schema entry."""
+    props = {
+        'contract_version': {'type': 'string'},
+        'type': {'type': 'string', 'const': type_name},
+        'source': {'type': 'string'},
+        'source_type': {'type': 'string'},
+        'session_name': {'type': 'string'},
+    }
+    props.update(extra_props)
+    return {'type': type_name, 'description': description, 'schema': {'type': 'object', 'properties': props}}
+
+_SCHEMA_OUTPUT_TYPES = [
+    _make_output_type('claude_overview', 'Session overview with message counts and tool usage', {
+        'message_count': {'type': 'integer'}, 'tool_calls': {'type': 'integer'},
+        'duration': {'type': 'string'}, 'tool_summary': {'type': 'array'}
+    }),
+    _make_output_type('claude_workflow', 'Chronological tool operation sequence', {'operations': {'type': 'array'}}),
+    _make_output_type('claude_files', 'Files touched during session', {'files': {'type': 'array'}}),
+    _make_output_type('claude_tools', 'Tool usage statistics', {
+        'tools': {'type': 'array'}, 'success_rate': {'type': 'number'}
+    }),
+    _make_output_type('claude_errors', 'All errors and exceptions in session', {
+        'errors': {'type': 'array'}, 'count': {'type': 'integer'}
+    }),
+    _make_output_type('claude_user_messages', 'User messages: initial prompt + tool-result turn summaries', {'messages': {'type': 'array'}}),
+    _make_output_type('claude_assistant_messages', 'Assistant messages: text responses (thinking/tool blocks excluded)', {'messages': {'type': 'array'}}),
+    _make_output_type('claude_thinking', 'All thinking blocks with content previews and token estimates', {
+        'blocks': {'type': 'array'}, 'total_tokens': {'type': 'integer'}
+    }),
+    {
+        'type': 'claude_message',
+        'description': 'Single message by zero-based index with full content',
+        'schema': {'type': 'object', 'properties': {
+            'contract_version': {'type': 'string'},
+            'type': {'type': 'string', 'const': 'claude_message'},
+            'session_name': {'type': 'string'},
+            'index': {'type': 'integer'},
+            'role': {'type': 'string', 'enum': ['user', 'assistant']},
+            'content': {'type': 'array'}
+        }}
+    },
+    _make_output_type('claude_timeline', 'Chronological message timeline with timestamps and turn types', {'events': {'type': 'array'}}),
+    _make_output_type('claude_context', 'Context window usage and changes over the session', {
+        'snapshots': {'type': 'array'}, 'peak_tokens': {'type': 'integer'}
+    }),
+    _make_output_type('claude_search_results', 'Search results across all session content (text, thinking, tool inputs)', {
+        'query': {'type': 'string'}, 'matches': {'type': 'array'}, 'total': {'type': 'integer'}
+    }),
+]
+
+_SCHEMA_EXAMPLE_QUERIES = [
+    {'uri': 'claude://session/infernal-earth-0118', 'description': 'Session overview (messages, tools, duration)', 'output_type': 'claude_overview'},
+    {'uri': 'claude://session/infernal-earth-0118/workflow', 'description': 'Chronological sequence of tool operations', 'element': 'workflow', 'output_type': 'claude_workflow'},
+    {'uri': 'claude://session/infernal-earth-0118/files', 'description': 'All files read, written, or edited', 'element': 'files', 'output_type': 'claude_files'},
+    {'uri': 'claude://session/infernal-earth-0118/tools', 'description': 'All tool usage with success rates', 'element': 'tools', 'output_type': 'claude_tools'},
+    {'uri': 'claude://session/infernal-earth-0118/errors', 'description': 'All errors and exceptions', 'element': 'errors', 'output_type': 'claude_errors'},
+    {'uri': 'claude://session/infernal-earth-0118?tools=Bash', 'description': 'Filter for Bash tool usage', 'query_param': '?tools=Bash', 'output_type': 'claude_overview'},
+    {'uri': 'claude://session/infernal-earth-0118?errors', 'description': 'Filter for error messages', 'query_param': '?errors', 'output_type': 'claude_overview'},
+    {'uri': 'claude://session/infernal-earth-0118?summary', 'description': 'Session summary with key events', 'query_param': '?summary', 'output_type': 'claude_overview'},
+    {'uri': 'claude://session/infernal-earth-0118/user', 'description': 'User messages: initial prompt + tool-result turn summaries', 'element': 'user', 'output_type': 'claude_user_messages'},
+    {'uri': 'claude://session/infernal-earth-0118/assistant', 'description': 'Assistant messages: text responses (thinking/tools hidden)', 'element': 'assistant', 'output_type': 'claude_assistant_messages'},
+    {'uri': 'claude://session/infernal-earth-0118/thinking', 'description': 'All thinking blocks with content and token estimates', 'element': 'thinking', 'output_type': 'claude_thinking'},
+    {'uri': 'claude://session/infernal-earth-0118/message/5', 'description': 'Read a specific message by zero-based index', 'element': 'message/<n>', 'output_type': 'claude_message'},
+    {'uri': 'claude://session/infernal-earth-0118/timeline', 'description': 'Chronological message timeline with timestamps and turn types', 'element': 'timeline', 'output_type': 'claude_timeline'},
+    {'uri': 'claude://session/infernal-earth-0118/context', 'description': 'Context window usage and changes over the session', 'element': 'context', 'output_type': 'claude_context'},
+    {
+        'uri': 'claude://session/infernal-earth-0118?search=path traversal',
+        'description': 'Search all content (text, thinking, tool inputs) for a term',
+        'query_param': '?search=<term>',
+        'output_type': 'claude_search_results'
+    },
+]
+
+_SCHEMA_NOTES = [
+    'Reads Claude Code conversation JSONL files from ~/.claude/projects/',
+    'Supports composite queries (e.g., ?tools=Bash&errors)',
+    'Workflow tracking shows tool operation sequences',
+    'File tracking shows all Read/Write/Edit operations',
+    'Tool success rates calculated from result vs error status'
+]
+
+
 @register_adapter('claude')
 @register_renderer(ClaudeRenderer)
 class ClaudeAdapter(ResourceAdapter):
@@ -41,6 +150,8 @@ class ClaudeAdapter(ResourceAdapter):
     - Error detection
     - Token usage estimates
     """
+
+    BUDGET_LIST_FIELD = 'results'
 
     CONVERSATION_BASE = Path(os.environ.get('REVEAL_CLAUDE_DIR', str(Path.home() / '.claude' / 'projects')))
 
@@ -307,39 +418,78 @@ class ClaudeAdapter(ResourceAdapter):
         return base
 
     @staticmethod
+    def _extract_text_from_content(content: Any) -> str:
+        """Extract plain text from a message content (str or list of content blocks)."""
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict) and item.get('type') == 'text':
+                    return item.get('text', '').strip()
+        return ''
+
+    @staticmethod
+    def _parse_jsonl_line_for_title(line: str) -> Optional[str]:
+        """Parse one JSONL line and return user text as a title candidate, or None."""
+        import json as _json
+        try:
+            rec = _json.loads(line)
+        except Exception:
+            return None
+        if rec.get('type') != 'user':
+            return None
+        content = rec.get('message', {}).get('content', '')
+        text = ClaudeAdapter._extract_text_from_content(content)
+        return (text.split('\n')[0].strip()[:80] or None) if text else None
+
+    @staticmethod
+    def _scan_jsonl_for_title(jsonl_path: Path) -> Optional[str]:
+        """Scan first 30 lines of JSONL file for a user text title."""
+        with open(jsonl_path, 'r', errors='replace') as fh:
+            for i, line in enumerate(fh):
+                if i > 30:
+                    break
+                title = ClaudeAdapter._parse_jsonl_line_for_title(line)
+                if title is not None:
+                    return title
+        return None
+
+    @staticmethod
     def _read_session_title(jsonl_path: Path) -> Optional[str]:
         """Read first user text message from JSONL as a display title.
 
         Reads only the first 30 lines to avoid loading entire file.
         """
         try:
-            import json as _json
-            with open(jsonl_path, 'r', errors='replace') as fh:
-                for i, line in enumerate(fh):
-                    if i > 30:
-                        break
-                    try:
-                        rec = _json.loads(line)
-                    except Exception:
-                        continue
-                    if rec.get('type') != 'user':
-                        continue
-                    content = rec.get('message', {}).get('content', '')
-                    if isinstance(content, str):
-                        text = content.strip()
-                    elif isinstance(content, list):
-                        text = ''
-                        for item in content:
-                            if isinstance(item, dict) and item.get('type') == 'text':
-                                text = item.get('text', '').strip()
-                                break
-                    else:
-                        continue
-                    if text:
-                        return text.split('\n')[0].strip()[:80] or None
+            return ClaudeAdapter._scan_jsonl_for_title(jsonl_path)
         except Exception:
             pass
         return None
+
+    @staticmethod
+    def _collect_sessions_from_dir(project_dir: Path) -> List[Dict[str, Any]]:
+        """Collect session entry dicts from one project directory."""
+        sessions = []
+        for jsonl_file in project_dir.glob('*.jsonl'):
+            if jsonl_file.stem.startswith('agent-'):
+                continue
+            dir_name = project_dir.name
+            file_stem = jsonl_file.stem
+            if '-sessions-' in dir_name:
+                session_name = dir_name.split('-sessions-')[-1]
+            elif len(file_stem) == 36 and file_stem.count('-') == 4:
+                # UUID filename (Windows-style) — use the UUID as the session name
+                session_name = file_stem
+            else:
+                session_name = dir_name
+            stat = jsonl_file.stat()
+            sessions.append({
+                'session': session_name,
+                'path': str(jsonl_file),
+                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                'size_kb': stat.st_size // 1024
+            })
+        return sessions
 
     def _list_sessions(self) -> Dict[str, Any]:
         """List available Claude Code sessions.
@@ -374,35 +524,8 @@ class ClaudeAdapter(ResourceAdapter):
             for project_dir in self.CONVERSATION_BASE.iterdir():
                 if not project_dir.is_dir():
                     continue
-
-                # Find JSONL files in project dir (skip subagent agent-*.jsonl files)
-                for jsonl_file in project_dir.glob('*.jsonl'):
-                    if jsonl_file.stem.startswith('agent-'):
-                        continue
-                    # Derive session name:
-                    # 1. TIA Linux:  dir = -home-user-src-tia-sessions-SESSION_NAME (one jsonl)
-                    # 2. Windows:    dir = C--Users-markf-frono, file = UUID.jsonl (many per dir)
-                    dir_name = project_dir.name
-                    file_stem = jsonl_file.stem
-                    if '-sessions-' in dir_name:
-                        session_name = dir_name.split('-sessions-')[-1]
-                    elif len(file_stem) == 36 and file_stem.count('-') == 4:
-                        # UUID filename (Windows-style) — use the UUID as the session name
-                        session_name = file_stem
-                    else:
-                        session_name = dir_name
-
-                    stat = jsonl_file.stat()
-                    sessions.append({
-                        'session': session_name,
-                        'path': str(jsonl_file),
-                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                        'size_kb': stat.st_size // 1024
-                    })
-
-            # Sort by modified time, most recent first
+                sessions.extend(self._collect_sessions_from_dir(project_dir))
             sessions.sort(key=lambda x: x['modified'], reverse=True)  # type: ignore[arg-type, return-value]
-
         except Exception as e:
             base['error'] = str(e)
 
@@ -454,329 +577,14 @@ class ClaudeAdapter(ResourceAdapter):
             'adapter': 'claude',
             'description': 'Claude Code conversation analysis with tool usage, workflow tracking, and error detection',
             'uri_syntax': 'claude://session/{name}[/resource][?query]',
-            'query_params': {
-                'summary': {
-                    'type': 'flag',
-                    'description': 'Session summary (overview + key events)'
-                },
-                'errors': {
-                    'type': 'flag',
-                    'description': 'Filter for messages containing errors'
-                },
-                'tools': {
-                    'type': 'string',
-                    'description': 'Filter for specific tool usage',
-                    'examples': ['?tools=Bash', '?tools=Edit']
-                },
-                'contains': {
-                    'type': 'string',
-                    'description': 'Filter messages containing text',
-                    'examples': ['?contains=reveal', '?contains=error']
-                },
-                'role': {
-                    'type': 'string',
-                    'description': 'Filter by message role',
-                    'values': ['user', 'assistant'],
-                    'examples': ['?role=user']
-                },
-                'search': {
-                    'type': 'string',
-                    'description': 'Search all message content (text, thinking, tool inputs) for a term (case-insensitive)',
-                    'examples': ['?search=path traversal', '?search=FileNotFoundError']
-                }
-            },
-            'elements': {
-                'workflow': 'Chronological sequence of tool operations',
-                'files': 'All files read, written, or edited',
-                'tools': 'All tool usage with success rates',
-                'thinking': 'All thinking blocks with content previews and token estimates',
-                'errors': 'All errors and exceptions',
-                'timeline': 'Chronological message timeline',
-                'context': 'Context window changes over session',
-                'user': 'User messages: initial prompt full text + tool-result turn summaries',
-                'assistant': 'Assistant messages: text blocks only (skips thinking/tool_use)',
-                'message/<n>': 'Single message by zero-based index with full content'
-            },
+            'query_params': _SCHEMA_QUERY_PARAMS,
+            'elements': _SCHEMA_ELEMENTS,
             'cli_flags': [],
             'supports_batch': False,
             'supports_advanced': False,
-            'output_types': [
-                {
-                    'type': 'claude_overview',
-                    'description': 'Session overview with message counts and tool usage',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'claude_overview'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string', 'const': 'file'},
-                            'session_name': {'type': 'string'},
-                            'message_count': {'type': 'integer'},
-                            'tool_calls': {'type': 'integer'},
-                            'duration': {'type': 'string'},
-                            'tool_summary': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'claude_workflow',
-                    'description': 'Chronological tool operation sequence',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'claude_workflow'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'session_name': {'type': 'string'},
-                            'operations': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'claude_files',
-                    'description': 'Files touched during session',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'claude_files'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'session_name': {'type': 'string'},
-                            'files': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'claude_tools',
-                    'description': 'Tool usage statistics',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'claude_tools'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'session_name': {'type': 'string'},
-                            'tools': {'type': 'array'},
-                            'success_rate': {'type': 'number'}
-                        }
-                    }
-                },
-                {
-                    'type': 'claude_errors',
-                    'description': 'All errors and exceptions in session',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'claude_errors'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'session_name': {'type': 'string'},
-                            'errors': {'type': 'array'},
-                            'count': {'type': 'integer'}
-                        }
-                    }
-                },
-                {
-                    'type': 'claude_user_messages',
-                    'description': 'User messages: initial prompt + tool-result turn summaries',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'claude_user_messages'},
-                            'session_name': {'type': 'string'},
-                            'messages': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'claude_assistant_messages',
-                    'description': 'Assistant messages: text responses (thinking/tool blocks excluded)',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'claude_assistant_messages'},
-                            'session_name': {'type': 'string'},
-                            'messages': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'claude_thinking',
-                    'description': 'All thinking blocks with content previews and token estimates',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'claude_thinking'},
-                            'session_name': {'type': 'string'},
-                            'blocks': {'type': 'array'},
-                            'total_tokens': {'type': 'integer'}
-                        }
-                    }
-                },
-                {
-                    'type': 'claude_message',
-                    'description': 'Single message by zero-based index with full content',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'claude_message'},
-                            'session_name': {'type': 'string'},
-                            'index': {'type': 'integer'},
-                            'role': {'type': 'string', 'enum': ['user', 'assistant']},
-                            'content': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'claude_timeline',
-                    'description': 'Chronological message timeline with timestamps and turn types',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'claude_timeline'},
-                            'session_name': {'type': 'string'},
-                            'events': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'claude_context',
-                    'description': 'Context window usage and changes over the session',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'claude_context'},
-                            'session_name': {'type': 'string'},
-                            'snapshots': {'type': 'array'},
-                            'peak_tokens': {'type': 'integer'}
-                        }
-                    }
-                },
-                {
-                    'type': 'claude_search_results',
-                    'description': 'Search results across all session content (text, thinking, tool inputs)',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'claude_search_results'},
-                            'session_name': {'type': 'string'},
-                            'query': {'type': 'string'},
-                            'matches': {'type': 'array'},
-                            'total': {'type': 'integer'}
-                        }
-                    }
-                }
-            ],
-            'example_queries': [
-                {
-                    'uri': 'claude://session/infernal-earth-0118',
-                    'description': 'Session overview (messages, tools, duration)',
-                    'output_type': 'claude_overview'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/workflow',
-                    'description': 'Chronological sequence of tool operations',
-                    'element': 'workflow',
-                    'output_type': 'claude_workflow'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/files',
-                    'description': 'All files read, written, or edited',
-                    'element': 'files',
-                    'output_type': 'claude_files'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/tools',
-                    'description': 'All tool usage with success rates',
-                    'element': 'tools',
-                    'output_type': 'claude_tools'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/errors',
-                    'description': 'All errors and exceptions',
-                    'element': 'errors',
-                    'output_type': 'claude_errors'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118?tools=Bash',
-                    'description': 'Filter for Bash tool usage',
-                    'query_param': '?tools=Bash',
-                    'output_type': 'claude_overview'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118?errors',
-                    'description': 'Filter for error messages',
-                    'query_param': '?errors',
-                    'output_type': 'claude_overview'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118?summary',
-                    'description': 'Session summary with key events',
-                    'query_param': '?summary',
-                    'output_type': 'claude_overview'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/user',
-                    'description': 'User messages: initial prompt + tool-result turn summaries',
-                    'element': 'user',
-                    'output_type': 'claude_user_messages'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/assistant',
-                    'description': 'Assistant messages: text responses (thinking/tools hidden)',
-                    'element': 'assistant',
-                    'output_type': 'claude_assistant_messages'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/thinking',
-                    'description': 'All thinking blocks with content and token estimates',
-                    'element': 'thinking',
-                    'output_type': 'claude_thinking'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/message/5',
-                    'description': 'Read a specific message by zero-based index',
-                    'element': 'message/<n>',
-                    'output_type': 'claude_message'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/timeline',
-                    'description': 'Chronological message timeline with timestamps and turn types',
-                    'element': 'timeline',
-                    'output_type': 'claude_timeline'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118/context',
-                    'description': 'Context window usage and changes over the session',
-                    'element': 'context',
-                    'output_type': 'claude_context'
-                },
-                {
-                    'uri': 'claude://session/infernal-earth-0118?search=path traversal',
-                    'description': 'Search all content (text, thinking, tool inputs) for a term',
-                    'query_param': '?search=<term>',
-                    'output_type': 'claude_search_results'
-                }
-            ],
-            'notes': [
-                'Reads Claude Code conversation JSONL files from ~/.claude/projects/',
-                'Supports composite queries (e.g., ?tools=Bash&errors)',
-                'Workflow tracking shows tool operation sequences',
-                'File tracking shows all Read/Write/Edit operations',
-                'Tool success rates calculated from result vs error status'
-            ]
+            'output_types': _SCHEMA_OUTPUT_TYPES,
+            'example_queries': _SCHEMA_EXAMPLE_QUERIES,
+            'notes': _SCHEMA_NOTES,
         }
 
     @staticmethod
@@ -884,6 +692,115 @@ class ClaudeAdapter(ResourceAdapter):
                 ]
             }
         ]
+
+    def post_process(self, result: Dict[str, Any], args: Any) -> Dict[str, Any]:
+        """Apply display hints and claude-specific filtering after get_structure().
+
+        Called by the router after get_structure() returns. Keeps all knowledge
+        of claude result-type taxonomy inside the adapter layer.
+        """
+        if not isinstance(result, dict):
+            return result
+
+        result_type = result.get('type', '')
+        if not result_type.startswith('claude_'):
+            return result
+
+        result['_display'] = {
+            'max_snippet_chars': getattr(args, 'max_snippet_chars', None),
+            'verbose': getattr(args, 'verbose', False),
+            'head': getattr(args, 'head', None),
+            'tail': getattr(args, 'tail', None),
+            'range': getattr(args, 'range', None),
+        }
+
+        if result_type == 'claude_workflow':
+            self._post_process_workflow(result, args)
+        elif result_type == 'claude_session_list':
+            self._post_process_session_list(result, args)
+        elif result_type == 'claude_messages':
+            self._post_process_messages(result, args)
+
+        return result
+
+    @staticmethod
+    def _slice_list(items: list, args: Any) -> list:
+        """Slice a list by --head, --tail, or --range args."""
+        head = getattr(args, 'head', None)
+        tail = getattr(args, 'tail', None)
+        rng = getattr(args, 'range', None)
+        if head is not None:
+            return items[:head]
+        if tail is not None:
+            return items[-tail:]
+        if rng is not None:
+            start, end = rng
+            return items[start - 1:end]
+        return items
+
+    @staticmethod
+    def _post_process_workflow(result: Dict[str, Any], args: Any) -> None:
+        """Apply --type, --search, and --head/--tail/--range to claude_workflow results."""
+        workflow = result.get('workflow')
+        if workflow is None:
+            return
+        total_before = len(workflow)
+
+        type_filter = getattr(args, 'type', None)
+        if type_filter:
+            workflow = [s for s in workflow if (s.get('tool') or '').lower() == type_filter.lower()]
+
+        search_term = getattr(args, 'search', None)
+        if search_term:
+            lower = search_term.lower()
+            workflow = [
+                s for s in workflow
+                if lower in (s.get('detail') or '').lower()
+                or lower in (s.get('tool') or '').lower()
+            ]
+
+        workflow = ClaudeAdapter._slice_list(workflow, args)
+        result['workflow'] = workflow
+        result['displayed_steps'] = len(workflow)
+        if len(workflow) < total_before:
+            result['filtered_from'] = total_before
+
+    @staticmethod
+    def _post_process_session_list(result: Dict[str, Any], args: Any) -> None:
+        """Apply --search, --since, --head/--all filters to claude_session_list results."""
+        sessions = result.get('recent_sessions')
+        if sessions is None:
+            return
+
+        search_term = getattr(args, 'search', None)
+        if search_term:
+            lower = search_term.lower()
+            sessions = [s for s in sessions if lower in s.get('session', '').lower()]
+
+        since = getattr(args, 'since', None)
+        if since:
+            sessions = [s for s in sessions if s.get('modified', '') >= since]
+
+        if not getattr(args, 'all', False):
+            head = getattr(args, 'head', None)
+            sessions = sessions[:head if head else 20]
+
+        result['recent_sessions'] = sessions
+        result['displayed_count'] = len(sessions)
+
+        for s in sessions:
+            if 'title' not in s and s.get('path'):
+                s['title'] = ClaudeAdapter._read_session_title(Path(s['path']))
+
+    @staticmethod
+    def _post_process_messages(result: Dict[str, Any], args: Any) -> None:
+        """Apply --head/--tail/--range slicing to claude_messages results."""
+        msgs = result.get('messages')
+        if msgs is None:
+            return
+        msgs = ClaudeAdapter._slice_list(msgs, args)
+        result['messages'] = msgs
+        result['total_turns'] = len(msgs)
 
     @staticmethod
     def get_help() -> Dict[str, Any]:

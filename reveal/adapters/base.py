@@ -1,11 +1,161 @@
 """Base adapter interface for URI resources."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
+
+
+# ---------------------------------------------------------------------------
+# Adapter initialization helpers
+# These try-functions are ordered by convention type. Each returns (adapter, error).
+# A non-None adapter = success. A non-None error is kept as "last error" for
+# reporting if all attempts fail.
+# ---------------------------------------------------------------------------
+
+def _try_no_args_init(adapter_class: type) -> Tuple[Any, Optional[Exception]]:
+    """Try no-argument initialization (env, python adapters)."""
+    try:
+        return adapter_class(), None
+    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
+        return None, None
+    except ImportError as e:
+        return None, e
+
+
+def _try_query_parsing_init(adapter_class: type, resource: str) -> Tuple[Any, Optional[Exception]]:
+    """Try query-parsing initialization (ast, json with ?query)."""
+    if '?' not in resource:
+        return None, None
+    try:
+        path, query = resource.split('?', 1)
+        path = path or '.'
+        return adapter_class(path, query), None
+    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
+        return None, None
+    except ImportError as e:
+        return None, e
+
+
+def _try_keyword_args_init(adapter_class: type, resource: str) -> Tuple[Any, Optional[Exception]]:
+    """Try keyword arguments initialization (markdown with base_path/query)."""
+    try:
+        if '?' in resource:
+            path_part, query = resource.split('?', 1)
+            path = path_part.rstrip('/') if path_part else '.'
+        else:
+            path = resource.rstrip('/') if resource else '.'
+            query = None
+        return adapter_class(base_path=path, query=query), None
+    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
+        return None, None
+    except ImportError as e:
+        return None, e
+
+
+def _try_resource_arg_init(adapter_class: type, resource: str) -> Tuple[Any, Optional[Exception]]:
+    """Try resource argument initialization (help, git, etc)."""
+    if resource is None:
+        return None, None
+    try:
+        if '?' not in resource:
+            path = resource or '.'
+            try:
+                return adapter_class(path, None), None
+            except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
+                return adapter_class(resource), None
+            except ImportError as e:
+                return None, e
+        else:
+            return adapter_class(resource), None
+    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError) as e:
+        return None, e
+    except ImportError as e:
+        return None, e
+
+
+def _try_full_uri_init(adapter_class: type, scheme: str, resource: str,
+                       element: Optional[str]) -> Tuple[Any, Optional[Exception]]:
+    """Try full URI initialization (mysql, sqlite)."""
+    try:
+        full_uri = f"{scheme}://{resource}"
+        if element and '://' in full_uri:
+            full_uri = f"{full_uri}/{element}"
+        return adapter_class(full_uri), None
+    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError) as e:
+        return None, e
+    except ImportError as e:
+        return None, e
+
+
+def _default_from_uri(adapter_class: type, scheme: str, resource: str,
+                      element: Optional[str]) -> Any:
+    """Default try-chain initialization used by ResourceAdapter.from_uri.
+
+    Available as a standalone function so the router can apply it to any
+    adapter class (including test doubles that don't inherit ResourceAdapter).
+
+    Raises:
+        ImportError: If initialization failed due to a missing optional dependency.
+        RuntimeError: If all initialization attempts failed.
+    """
+    if resource:
+        init_attempts = [
+            lambda: _try_query_parsing_init(adapter_class, resource),
+            lambda: _try_resource_arg_init(adapter_class, resource),
+            lambda: _try_keyword_args_init(adapter_class, resource),
+            lambda: _try_no_args_init(adapter_class),
+            lambda: _try_full_uri_init(adapter_class, scheme, resource, element),
+        ]
+    else:
+        init_attempts = [
+            lambda: _try_no_args_init(adapter_class),
+            lambda: _try_query_parsing_init(adapter_class, resource),
+            lambda: _try_keyword_args_init(adapter_class, resource),
+            lambda: _try_resource_arg_init(adapter_class, resource),
+            lambda: _try_full_uri_init(adapter_class, scheme, resource, element),
+        ]
+
+    init_error: Optional[Exception] = None
+    for attempt in init_attempts:
+        adapter, error = attempt()
+        if adapter is not None:
+            return adapter
+        if error is not None:
+            init_error = error
+
+    if isinstance(init_error, ImportError):
+        raise init_error
+    raise RuntimeError(
+        f"Could not initialize {scheme}:// adapter: {init_error}"
+    )
 
 
 class ResourceAdapter(ABC):
     """Base class for all resource adapters."""
+
+    # Override in subclasses to name the top-level list field that budget
+    # constraints (--max-items, --max-bytes, etc.) should apply to.
+    # None = this adapter has no budget-limitable list field.
+    BUDGET_LIST_FIELD: Optional[str] = None
+
+    @classmethod
+    def from_uri(cls, scheme: str, resource: str,
+                 element: Optional[str]) -> 'ResourceAdapter':
+        """Initialize adapter from URI components.
+
+        Tries multiple constructor conventions in order. Override in subclasses
+        for deterministic, single-call initialization without a fallback chain.
+
+        Different adapters have different conventions:
+        - No-arg: env, python (take no resource in __init__)
+        - Resource-arg: help, reveal (take resource string as first arg)
+        - Query-parsing: ast, json (parse resource to extract path/query)
+        - URI: mysql (expect full URI like mysql://host:port)
+
+        Raises:
+            ImportError: If initialization failed due to a missing optional dependency.
+            RuntimeError: If all initialization attempts failed.
+        """
+        return _default_from_uri(cls, scheme, resource, element)
 
     @abstractmethod
     def get_structure(self, **kwargs) -> Dict[str, Any]:

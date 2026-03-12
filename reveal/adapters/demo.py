@@ -60,6 +60,8 @@ class DemoAdapter(ResourceAdapter):
         demo://item_name?param=value  # Item with query parameters
     """
 
+    BUDGET_LIST_FIELD = 'items'
+
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         """Get machine-readable schema for demo:// adapter.

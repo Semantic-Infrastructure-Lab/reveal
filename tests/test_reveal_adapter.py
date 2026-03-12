@@ -707,70 +707,42 @@ class TestRevealAdapterRoutingRegression:
     
     def test_adapter_initialized_with_component_parameter(self):
         """Test that RevealAdapter gets component from URI resource."""
-        from reveal.cli.routing import _try_initialize_adapter
-        from reveal.adapters.reveal import RevealAdapter, RevealRenderer
+        from reveal.adapters.reveal import RevealAdapter
 
         # Simulate: reveal reveal://config
-        adapter = _try_initialize_adapter(
-            adapter_class=RevealAdapter,
-            scheme='reveal',
-            resource='config',  # This should become component="config"
-            element=None,
-            renderer_class=RevealRenderer
-        )
+        adapter = RevealAdapter.from_uri(scheme='reveal', resource='config', element=None)
 
         assert adapter is not None
         assert adapter.component == 'config'
-    
+
     def test_adapter_initialization_with_empty_resource(self):
         """Test that empty resource still works (reveal://)."""
-        from reveal.cli.routing import _try_initialize_adapter
-        from reveal.adapters.reveal import RevealAdapter, RevealRenderer
+        from reveal.adapters.reveal import RevealAdapter
 
         # Simulate: reveal reveal://
-        adapter = _try_initialize_adapter(
-            adapter_class=RevealAdapter,
-            scheme='reveal',
-            resource='',  # Empty resource
-            element=None,
-            renderer_class=RevealRenderer
-        )
+        adapter = RevealAdapter.from_uri(scheme='reveal', resource='', element=None)
 
         assert adapter is not None
         assert adapter.component is None  # Should default to None
-    
+
     def test_initialization_order_with_resource(self):
         """Test that resource-arg init is tried before no-args when resource provided."""
-        from reveal.cli.routing import _try_initialize_adapter
-        
+        from reveal.adapters.base import ResourceAdapter
+
         # Mock adapter that tracks initialization attempts
         init_attempts = []
-        
-        class TrackedAdapter:
+
+        class TrackedAdapter(ResourceAdapter):
             def __init__(self, *args, **kwargs):
                 init_attempts.append(('init', args, kwargs))
-                if args:
-                    self.resource = args[0]
-                else:
-                    self.resource = None
-            
-            def get_structure(self):
+                self.resource = args[0] if args else None
+
+            def get_structure(self, **kwargs):
                 return {}
-        
-        class MockRenderer:
-            @staticmethod
-            def render_error(error):
-                pass
-        
+
         # With resource, should try passing it as argument
-        adapter = _try_initialize_adapter(
-            adapter_class=TrackedAdapter,
-            scheme='test',
-            resource='something',
-            element=None,
-            renderer_class=MockRenderer
-        )
-        
+        adapter = TrackedAdapter.from_uri(scheme='test', resource='something', element=None)
+
         assert adapter is not None
         # Should have received the resource as an argument
         # (may be in query parsing attempt or resource arg attempt)

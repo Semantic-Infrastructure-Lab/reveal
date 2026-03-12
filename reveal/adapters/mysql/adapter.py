@@ -24,6 +24,125 @@ class HealthCheckThresholds:
     operator: str = '<'
 
 
+_SCHEMA_OUTPUT_TYPES = [
+    {
+        'type': 'mysql_health',
+        'description': 'Database health overview with connection, InnoDB, and resource metrics',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'mysql_health'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string', 'const': 'database'},
+                'server': {'type': 'string'},
+                'version': {'type': 'string'},
+                'uptime': {'type': 'integer'},
+                'connections': {'type': 'object'},
+                'innodb': {'type': 'object'},
+                'resources': {'type': 'object'}
+            }
+        }
+    },
+    {
+        'type': 'mysql_replication',
+        'description': 'Replication status including lag and IO/SQL thread state',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'mysql_replication'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string', 'const': 'database'},
+                'io_running': {'type': 'boolean'},
+                'sql_running': {'type': 'boolean'},
+                'lag_seconds': {'type': ['integer', 'null']},
+                'master_log_file': {'type': 'string'},
+                'relay_log_file': {'type': 'string'}
+            }
+        }
+    },
+    {
+        'type': 'mysql_storage',
+        'description': 'Database and table size information',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'mysql_storage'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string', 'const': 'database'},
+                'databases': {'type': 'array'},
+                'total_size_mb': {'type': 'number'}
+            }
+        }
+    },
+    {
+        'type': 'mysql_performance',
+        'description': 'Query performance metrics (slow queries, throughput)',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'mysql_performance'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string', 'const': 'database'},
+                'slow_queries': {'type': 'integer'},
+                'queries_per_second': {'type': 'number'},
+                'top_tables': {'type': 'array'}
+            }
+        }
+    },
+    {
+        'type': 'mysql_variables',
+        'description': 'Server configuration variables',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'mysql_variables'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string', 'const': 'database'},
+                'variables': {'type': 'object'}
+            }
+        }
+    }
+]
+
+_SCHEMA_EXAMPLE_QUERIES = [
+    {'uri': 'mysql://localhost', 'description': 'Database health overview',
+     'output_type': 'mysql_health'},
+    {'uri': 'mysql://localhost --check',
+     'description': 'Run health checks (connection, InnoDB, resources)',
+     'cli_flag': '--check', 'output_type': 'mysql_health'},
+    {'uri': 'mysql://localhost/connections',
+     'description': 'Connection pool and thread details',
+     'element': 'connections', 'output_type': 'mysql_health'},
+    {'uri': 'mysql://localhost/replication',
+     'description': 'Replication status and lag',
+     'element': 'replication', 'output_type': 'mysql_replication'},
+    {'uri': 'mysql://localhost/storage',
+     'description': 'Database and table sizes',
+     'element': 'storage', 'output_type': 'mysql_storage'},
+    {'uri': 'mysql://user:pass@prod.db.host:3306/innodb',
+     'description': 'InnoDB buffer pool status',
+     'element': 'innodb', 'output_type': 'mysql_health'},
+    {'uri': 'mysql://localhost/performance',
+     'description': 'Query performance metrics (slow queries, throughput)',
+     'element': 'performance', 'output_type': 'mysql_performance'},
+    {'uri': 'mysql://localhost/variables',
+     'description': 'Server configuration variables',
+     'element': 'variables', 'output_type': 'mysql_variables'},
+]
+
+_SCHEMA_NOTES = [
+    'Requires pymysql package (pip install pymysql)',
+    'Credentials can be provided in URI or via environment variables',
+    'Read-only operations for safety',
+    'Health checks include connection utilization, InnoDB buffer pool, and resource limits'
+]
+
+
 @register_adapter('mysql')
 @register_renderer(MySQLRenderer)
 class MySQLAdapter(ResourceAdapter):
@@ -37,6 +156,8 @@ class MySQLAdapter(ResourceAdapter):
         reveal mysql://localhost/innodb           # InnoDB status
         reveal mysql://localhost --check          # Health checks
     """
+
+    BUDGET_LIST_FIELD = 'checks'
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -58,151 +179,15 @@ class MySQLAdapter(ResourceAdapter):
                 'variables': 'Server configuration variables'
             },
             'cli_flags': [
-                '--check',  # Run health checks
-                '--advanced',  # Include advanced metrics
+                '--check',      # Run health checks
+                '--advanced',   # Include advanced metrics
                 '--only-failures'  # Show only failed health checks
             ],
             'supports_batch': False,
             'supports_advanced': True,
-            'output_types': [
-                {
-                    'type': 'mysql_health',
-                    'description': 'Database health overview with connection, InnoDB, and resource metrics',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'mysql_health'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string', 'const': 'database'},
-                            'server': {'type': 'string'},
-                            'version': {'type': 'string'},
-                            'uptime': {'type': 'integer'},
-                            'connections': {'type': 'object'},
-                            'innodb': {'type': 'object'},
-                            'resources': {'type': 'object'}
-                        }
-                    }
-                },
-                {
-                    'type': 'mysql_replication',
-                    'description': 'Replication status including lag and IO/SQL thread state',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'mysql_replication'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string', 'const': 'database'},
-                            'io_running': {'type': 'boolean'},
-                            'sql_running': {'type': 'boolean'},
-                            'lag_seconds': {'type': ['integer', 'null']},
-                            'master_log_file': {'type': 'string'},
-                            'relay_log_file': {'type': 'string'}
-                        }
-                    }
-                },
-                {
-                    'type': 'mysql_storage',
-                    'description': 'Database and table size information',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'mysql_storage'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string', 'const': 'database'},
-                            'databases': {'type': 'array'},
-                            'total_size_mb': {'type': 'number'}
-                        }
-                    }
-                },
-                {
-                    'type': 'mysql_performance',
-                    'description': 'Query performance metrics (slow queries, throughput)',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'mysql_performance'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string', 'const': 'database'},
-                            'slow_queries': {'type': 'integer'},
-                            'queries_per_second': {'type': 'number'},
-                            'top_tables': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'mysql_variables',
-                    'description': 'Server configuration variables',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'mysql_variables'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string', 'const': 'database'},
-                            'variables': {'type': 'object'}
-                        }
-                    }
-                }
-            ],
-            'example_queries': [
-                {
-                    'uri': 'mysql://localhost',
-                    'description': 'Database health overview',
-                    'output_type': 'mysql_health'
-                },
-                {
-                    'uri': 'mysql://localhost --check',
-                    'description': 'Run health checks (connection, InnoDB, resources)',
-                    'cli_flag': '--check',
-                    'output_type': 'mysql_health'
-                },
-                {
-                    'uri': 'mysql://localhost/connections',
-                    'description': 'Connection pool and thread details',
-                    'element': 'connections',
-                    'output_type': 'mysql_health'
-                },
-                {
-                    'uri': 'mysql://localhost/replication',
-                    'description': 'Replication status and lag',
-                    'element': 'replication',
-                    'output_type': 'mysql_replication'
-                },
-                {
-                    'uri': 'mysql://localhost/storage',
-                    'description': 'Database and table sizes',
-                    'element': 'storage',
-                    'output_type': 'mysql_storage'
-                },
-                {
-                    'uri': 'mysql://user:pass@prod.db.host:3306/innodb',
-                    'description': 'InnoDB buffer pool status',
-                    'element': 'innodb',
-                    'output_type': 'mysql_health'
-                },
-                {
-                    'uri': 'mysql://localhost/performance',
-                    'description': 'Query performance metrics (slow queries, throughput)',
-                    'element': 'performance',
-                    'output_type': 'mysql_performance'
-                },
-                {
-                    'uri': 'mysql://localhost/variables',
-                    'description': 'Server configuration variables',
-                    'element': 'variables',
-                    'output_type': 'mysql_variables'
-                }
-            ],
-            'notes': [
-                'Requires pymysql package (pip install pymysql)',
-                'Credentials can be provided in URI or via environment variables',
-                'Read-only operations for safety',
-                'Health checks include connection utilization, InnoDB buffer pool, and resource limits'
-            ]
+            'output_types': _SCHEMA_OUTPUT_TYPES,
+            'example_queries': _SCHEMA_EXAMPLE_QUERIES,
+            'notes': _SCHEMA_NOTES,
         }
 
     @staticmethod
@@ -824,12 +809,64 @@ class MySQLAdapter(ResourceAdapter):
                 'message': 'Slow query log may not be enabled or accessible',
             }
 
+    @staticmethod
+    def _process_table_row(table: Dict) -> tuple:
+        """Process one table I/O row; return (entry_dict, alert_dict_or_None)."""
+        table_name = table['table_name']
+        reads = int(table['reads'])
+        writes = int(table['writes'])
+
+        if writes > 0:
+            read_write_ratio = reads / writes
+        else:
+            read_write_ratio = float('inf') if reads > 0 else 0
+
+        total_time_sec = int(table['total_time_ps']) / 1_000_000_000_000
+        read_time_sec = int(table['read_time_ps']) / 1_000_000_000_000
+        write_time_sec = int(table['write_time_ps']) / 1_000_000_000_000
+
+        # Alert detection (priority order: extreme_read_ratio > high_read_volume > long_running)
+        alert: Optional[Dict] = None
+        alert_type = None
+        recommendation = None
+        if read_write_ratio > 10_000:
+            alert_type = "extreme_read_ratio"
+            recommendation = "add_limit_clause"
+            alert = {'table': table_name, 'type': 'extreme_read_ratio',
+                     'ratio': read_write_ratio,
+                     'recommendation': 'Review queries for missing LIMIT clauses or excessive reads'}
+        elif reads > 1_000_000_000:
+            alert_type = "high_read_volume"
+            recommendation = "optimize_queries"
+            alert = {'table': table_name, 'type': 'high_read_volume',
+                     'reads': reads,
+                     'recommendation': 'Review query patterns and consider caching'}
+        elif total_time_sec > 3600:
+            alert_type = "long_running"
+            recommendation = "performance_review"
+            alert = {'table': table_name, 'type': 'long_running',
+                     'total_hours': round(total_time_sec / 3600, 1),
+                     'recommendation': 'Review table for performance bottlenecks'}
+
+        entry = {
+            'table_name': table_name,
+            'reads': reads,
+            'writes': writes,
+            'read_write_ratio': round(read_write_ratio, 1) if read_write_ratio != float('inf') else None,
+            'total_time_sec': round(total_time_sec, 2),
+            'total_time_hours': round(total_time_sec / 3600, 2),
+            'read_time_sec': round(read_time_sec, 2),
+            'write_time_sec': round(write_time_sec, 2),
+            'alert': alert_type,
+            'recommendation': recommendation,
+        }
+        return entry, alert
+
     def _get_tables(self) -> Dict[str, Any]:
         """Get table I/O statistics from performance_schema."""
         timing = self.conn.get_snapshot_context()
         ps_status = self.conn.get_performance_schema_status()
 
-        # Determine actual measurement basis
         if ps_status['counters_reset_detected']:
             measurement_basis = "since_reset"
             measurement_start_time = ps_status['likely_reset_time']
@@ -837,7 +874,6 @@ class MySQLAdapter(ResourceAdapter):
             measurement_basis = "since_server_start"
             measurement_start_time = timing['server_start_time']
 
-        # Get table I/O statistics
         tables = self._execute_query("""
             SELECT
                 OBJECT_NAME AS table_name,
@@ -853,71 +889,13 @@ class MySQLAdapter(ResourceAdapter):
             LIMIT 50
         """)
 
-        # Process tables and add calculated fields
         alerts = []
         processed_tables = []
-
         for table in tables:
-            table_name = table['table_name']
-            reads = int(table['reads'])
-            writes = int(table['writes'])
-
-            # Calculate read:write ratio
-            if writes > 0:
-                read_write_ratio = reads / writes
-            else:
-                read_write_ratio = float('inf') if reads > 0 else 0
-
-            # Convert picoseconds to seconds/hours
-            total_time_sec = int(table['total_time_ps']) / 1_000_000_000_000
-            read_time_sec = int(table['read_time_ps']) / 1_000_000_000_000
-            write_time_sec = int(table['write_time_ps']) / 1_000_000_000_000
-
-            # Check for alerts
-            alert_type = None
-            recommendation = None
-
-            # Check for alerts (priority order: extreme_read_ratio > high_read_volume > long_running)
-            if read_write_ratio > 10_000:
-                alert_type = "extreme_read_ratio"
-                recommendation = "add_limit_clause"
-                alerts.append({
-                    'table': table_name,
-                    'type': 'extreme_read_ratio',
-                    'ratio': read_write_ratio,
-                    'recommendation': 'Review queries for missing LIMIT clauses or excessive reads'
-                })
-            elif reads > 1_000_000_000:
-                alert_type = "high_read_volume"
-                recommendation = "optimize_queries"
-                alerts.append({
-                    'table': table_name,
-                    'type': 'high_read_volume',
-                    'reads': reads,
-                    'recommendation': 'Review query patterns and consider caching'
-                })
-            elif total_time_sec > 3600:  # > 1 hour
-                alert_type = "long_running"
-                recommendation = "performance_review"
-                alerts.append({
-                    'table': table_name,
-                    'type': 'long_running',
-                    'total_hours': round(total_time_sec / 3600, 1),
-                    'recommendation': 'Review table for performance bottlenecks'
-                })
-
-            processed_tables.append({
-                'table_name': table_name,
-                'reads': reads,
-                'writes': writes,
-                'read_write_ratio': round(read_write_ratio, 1) if read_write_ratio != float('inf') else None,
-                'total_time_sec': round(total_time_sec, 2),
-                'total_time_hours': round(total_time_sec / 3600, 2),
-                'read_time_sec': round(read_time_sec, 2),
-                'write_time_sec': round(write_time_sec, 2),
-                'alert': alert_type,
-                'recommendation': recommendation,
-            })
+            entry, alert = self._process_table_row(table)
+            processed_tables.append(entry)
+            if alert:
+                alerts.append(alert)
 
         return {
             'type': 'tables',

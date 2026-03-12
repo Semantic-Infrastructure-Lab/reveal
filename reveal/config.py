@@ -229,6 +229,21 @@ class Override:
         return glob_match(rel_path, self.files_pattern)
 
 
+def _check_rule_enabled(rules: Dict[str, Any], rule_code: str) -> bool:
+    """Return True if rule_code is enabled under the given rules config dict."""
+    if not rules.get('enabled', True):
+        return False
+    if rule_code in rules.get('disable', []):
+        return False
+    selected = rules.get('select', [])
+    if selected:
+        if rule_code not in selected:
+            prefix = rule_code[0] if rule_code else ""
+            if prefix not in selected:
+                return False
+    return True
+
+
 @dataclass
 class FileConfig:
     """Configuration effective for a specific file (after applying overrides)."""
@@ -245,28 +260,7 @@ class FileConfig:
         Returns:
             True if rule should run on this file
         """
-        rules = self._config.get('rules', {})
-
-        # Check global enabled flag
-        if not rules.get('enabled', True):
-            return False
-
-        # Check if in disable list
-        disabled = rules.get('disable', [])
-        if rule_code in disabled:
-            return False
-
-        # Check if in select list (if select is specified, only those run)
-        selected = rules.get('select', [])
-        if selected:
-            # Check if rule code or prefix matches
-            if rule_code not in selected:
-                # Check prefix (e.g., "B" matches "B001", "B002")
-                prefix = rule_code[0] if rule_code else ""
-                if prefix not in selected:
-                    return False
-
-        return True
+        return _check_rule_enabled(self._config.get('rules', {}), rule_code)
 
     def get_rule_config(self, rule_code: str, key: str, default: Optional[Any] = None) -> Any:
         """Get configuration value for a specific rule.
@@ -285,19 +279,18 @@ class FileConfig:
 class RevealConfig:
     """Unified configuration manager with multi-level precedence."""
 
-    # Class-level cache: project_root -> config instance
-    _cache: Dict[Any, 'RevealConfig'] = {}  # Cache key is tuple[Path, str]
+    # Config instance cache: (resolved_path, cli_overrides_repr) -> RevealConfig.
+    # Avoids re-parsing config files for the same project root within one process.
+    _cache: Dict[Any, 'RevealConfig'] = {}
 
-    # Path-level cache: start_path -> project_root.
-    # _find_project_root traverses the filesystem; this avoids repeating that
-    # traversal for files in the same directory (called once per file, O(n) total
-    # without caching; reduced to once per unique directory with caching).
+    # Project-root cache: resolved start_path -> project_root.
+    # _find_project_root walks the filesystem; this avoids repeating that
+    # traversal for files in the same directory (once per unique dir, O(n) total
+    # without caching; O(unique_dirs) with caching).
     _root_cache: Dict[Path, Path] = {}
 
-    # Resolve cache: unresolved Path -> resolved Path.
-    # Path.resolve() does a full lstat chain on every call even for absolute
-    # paths (to canonicalize symlinks). Caching avoids ~60 syscalls per file.
-    _resolve_cache: Dict[Path, Path] = {}
+    # Path resolution is handled by module-level _cached_resolve() (shared with
+    # FileConfig.matches) so there is no separate _resolve_cache here.
 
     def __init__(self, merged_config: Dict[str, Any], project_root: Optional[Path] = None):
         """Initialize with merged configuration.
@@ -346,10 +339,8 @@ class RevealConfig:
         if start_path is None:
             start_path = Path.cwd()
 
-        # Normalize to absolute path (cache resolve() to avoid repeated lstat chains)
-        if start_path not in cls._resolve_cache:
-            cls._resolve_cache[start_path] = start_path.resolve()
-        start_path = cls._resolve_cache[start_path]
+        # Normalize to absolute path (module-level _cached_resolve avoids repeated lstat chains)
+        start_path = _cached_resolve(start_path)
         if start_path.is_file():
             start_path = start_path.parent
 
@@ -455,10 +446,9 @@ class RevealConfig:
 
                 # 2. User config
                 user_config_path = cls._get_user_config_path()
-                if user_config_path.exists():
-                    user_config = cls._load_file(user_config_path)
-                    if user_config:
-                        configs.append(user_config)
+                user_config = cls._load_file(user_config_path) if user_config_path.exists() else None
+                if user_config:
+                    configs.append(user_config)
 
                 # 3. Project configs (walk up from start_path)
                 project_configs = cls._discover_project_configs(start_path)
@@ -510,15 +500,14 @@ class RevealConfig:
                 config = cls._load_file(config_file)
                 if config:
                     configs.append(config)
-                    # Stop if root:true
-                    if config.get('root'):
-                        break
+                if config and config.get('root'):
+                    break
 
             pyproject_config = cls._try_load_pyproject_reveal(current / 'pyproject.toml')
             if pyproject_config:
                 configs.append(pyproject_config)
-                if pyproject_config.get('root'):
-                    break
+            if pyproject_config and pyproject_config.get('root'):
+                break
 
             current = current.parent
 
@@ -645,25 +634,7 @@ class RevealConfig:
         """
         if file_path:
             return self.get_file_config(file_path).is_rule_enabled(rule_code)
-
-        # Global check
-        rules = self._config.get('rules', {})
-
-        if not rules.get('enabled', True):
-            return False
-
-        disabled = rules.get('disable', [])
-        if rule_code in disabled:
-            return False
-
-        selected = rules.get('select', [])
-        if selected:
-            if rule_code not in selected:
-                prefix = rule_code[0] if rule_code else ""
-                if prefix not in selected:
-                    return False
-
-        return True
+        return _check_rule_enabled(self._config.get('rules', {}), rule_code)
 
     def get_rule_config(self, rule_code: str, key: str, default: Optional[Any] = None) -> Any:
         """Get configuration for a specific rule.
@@ -870,6 +841,16 @@ def get_config(start_path: Optional[Path] = None, **kwargs) -> RevealConfig:
     return _config
 
 
+def _try_load_yaml_file(path: Path) -> Optional[Dict[str, Any]]:
+    """Try to load a YAML file; return parsed dict or None on failure."""
+    try:
+        with open(path, encoding='utf-8') as f:
+            loaded = yaml.safe_load(f)
+            return cast(Dict[str, Any], loaded) if loaded is not None else None
+    except Exception:
+        return None
+
+
 # Backwards compatibility functions (for existing code)
 def load_config(name: str, default: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """DEPRECATED: Load YAML config file with defaults.
@@ -886,7 +867,6 @@ def load_config(name: str, default: Optional[Dict[str, Any]] = None) -> Dict[str
     """
     logger.warning(f"load_config('{name}') is deprecated. Use RevealConfig.get() instead.")
 
-    # Try to load from old locations for backwards compatibility
     config_paths = [
         Path.cwd() / '.reveal' / name,
         Path.home() / '.config' / 'reveal' / name,
@@ -895,13 +875,9 @@ def load_config(name: str, default: Optional[Dict[str, Any]] = None) -> Dict[str
 
     for path in config_paths:
         if path.exists() and yaml:
-            try:
-                with open(path, encoding='utf-8') as f:
-                    loaded = yaml.safe_load(f)
-                    if loaded is not None:
-                        return cast(Dict[str, Any], loaded)
-            except Exception:
-                continue
+            result = _try_load_yaml_file(path)
+            if result is not None:
+                return result
 
     return default or {}
 

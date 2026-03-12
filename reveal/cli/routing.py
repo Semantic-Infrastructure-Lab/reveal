@@ -20,42 +20,6 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
 
-def _read_session_title_cheap(jsonl_path: str) -> Optional[str]:
-    """Read first meaningful user text from a JSONL session file (first 30 lines only).
-
-    Skips system-injected continuation context blocks so the title reflects
-    the actual user prompt, not the framework's session context.
-    """
-    import json as _json
-    _SKIP_PREFIXES = ('# Session Continuation Context', '# System', '<system')
-    try:
-        with open(jsonl_path, 'r', errors='replace') as fh:
-            for i, line in enumerate(fh):
-                if i > 30:
-                    break
-                try:
-                    rec = _json.loads(line)
-                except Exception:
-                    continue
-                if rec.get('type') != 'user':
-                    continue
-                content = rec.get('message', {}).get('content', '')
-                if isinstance(content, str):
-                    text = content.strip()
-                elif isinstance(content, list):
-                    text = ''
-                    for item in content:
-                        if isinstance(item, dict) and item.get('type') == 'text':
-                            text = item.get('text', '').strip()
-                            break
-                else:
-                    continue
-                if text and not any(text.startswith(p) for p in _SKIP_PREFIXES):
-                    return text.split('\n')[0].strip()[:80] or None
-    except Exception:
-        pass
-    return None
-
 
 # ============================================================================
 # Import file handling from shared module to avoid circular dependency
@@ -120,8 +84,20 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
         element: Optional element to extract
         args: CLI arguments
     """
-    # Initialize adapter using multiple fallback strategies
-    adapter = _try_initialize_adapter(adapter_class, scheme, resource, element, renderer_class)
+    # Initialize adapter via from_uri.  Use _default_from_uri when adapter_class is
+    # not a real type (e.g. a Mock callable in tests) or lacks from_uri.
+    from ..adapters.base import _default_from_uri
+    try:
+        if isinstance(adapter_class, type) and hasattr(adapter_class, 'from_uri'):
+            adapter = adapter_class.from_uri(scheme, resource, element)
+        else:
+            adapter = _default_from_uri(adapter_class, scheme, resource, element)
+    except ImportError as e:
+        renderer_class.render_error(e)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error initializing {scheme}:// adapter: {e}", file=sys.stderr)
+        sys.exit(1)
 
     # Apply --base-path override for adapters that use a base directory (e.g., claude://)
     path_override = getattr(args, 'base_path', None)
@@ -139,139 +115,6 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
 
     # Render element or structure based on adapter type
     _handle_rendering(adapter, renderer_class, scheme, resource, element, args)
-
-
-def _try_no_args_init(adapter_class: type) -> tuple[Any, Optional[Exception]]:
-    """Try no-argument initialization (env, python adapters)."""
-    try:
-        return adapter_class(), None
-    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
-        return None, None
-    except ImportError as e:
-        return None, e
-
-
-def _try_query_parsing_init(adapter_class: type, resource: str) -> tuple[Any, Optional[Exception]]:
-    """Try query-parsing initialization (ast, json with ?query)."""
-    if '?' not in resource:
-        return None, None
-
-    try:
-        path, query = resource.split('?', 1)
-        path = path or '.'  # Default empty path to current directory
-        return adapter_class(path, query), None
-    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
-        return None, None
-    except ImportError as e:
-        return None, e
-
-
-def _try_keyword_args_init(adapter_class: type, resource: str) -> tuple[Any, Optional[Exception]]:
-    """Try keyword arguments initialization (markdown with base_path/query)."""
-    try:
-        if '?' in resource:
-            path_part, query = resource.split('?', 1)
-            path = path_part.rstrip('/') if path_part else '.'
-        else:
-            path = resource.rstrip('/') if resource else '.'
-            query = None
-        return adapter_class(base_path=path, query=query), None
-    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
-        return None, None
-    except ImportError as e:
-        return None, e
-
-
-def _try_resource_arg_init(adapter_class: type, resource: str) -> tuple[Any, Optional[Exception]]:
-    """Try resource argument initialization (help, git, etc)."""
-    if resource is None:
-        return None, None
-
-    try:
-        if '?' not in resource:
-            path = resource or '.'
-            # Try with query=None for query-parsing adapters
-            try:
-                return adapter_class(path, None), None
-            except (TypeError, ValueError, FileNotFoundError, IsADirectoryError):
-                # Try simple resource argument
-                return adapter_class(resource), None
-            except ImportError as e:
-                return None, e
-        else:
-            return adapter_class(resource), None
-    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError) as e:
-        return None, e
-    except ImportError as e:
-        return None, e
-
-
-def _try_full_uri_init(adapter_class: type, scheme: str, resource: str,
-                       element: Optional[str]) -> tuple[Any, Optional[Exception]]:
-    """Try full URI initialization (mysql, sqlite)."""
-    try:
-        full_uri = f"{scheme}://{resource}"
-        if element and '://' in full_uri:
-            full_uri = f"{full_uri}/{element}"
-        return adapter_class(full_uri), None
-    except (TypeError, ValueError, FileNotFoundError, IsADirectoryError) as e:
-        return None, e
-    except ImportError as e:
-        return None, e
-
-
-def _try_initialize_adapter(adapter_class: type, scheme: str, resource: str,
-                            element: Optional[str], renderer_class: type[Any]):
-    """Try multiple initialization patterns to instantiate adapter.
-
-    Different adapters have different conventions:
-    - No-arg: env, python (take no resource in __init__)
-    - Resource-arg: help, reveal (take resource string as first arg)
-    - Query-parsing: ast, json (parse resource to extract path/query)
-    - URI: mysql (expect full URI like mysql://host:port)
-
-    Returns:
-        Initialized adapter instance
-
-    Raises:
-        SystemExit: If initialization fails
-    """
-    # Try initialization patterns in order
-    # If resource is provided, try using it before trying no-args
-    # This ensures reveal://config passes "config" to RevealAdapter(component="config")
-    if resource:
-        init_attempts = [
-            lambda: _try_query_parsing_init(adapter_class, resource),
-            lambda: _try_resource_arg_init(adapter_class, resource),
-            lambda: _try_keyword_args_init(adapter_class, resource),
-            lambda: _try_no_args_init(adapter_class),
-            lambda: _try_full_uri_init(adapter_class, scheme, resource, element)
-        ]
-    else:
-        init_attempts = [
-            lambda: _try_no_args_init(adapter_class),
-            lambda: _try_query_parsing_init(adapter_class, resource),
-            lambda: _try_keyword_args_init(adapter_class, resource),
-            lambda: _try_resource_arg_init(adapter_class, resource),
-            lambda: _try_full_uri_init(adapter_class, scheme, resource, element)
-        ]
-
-    adapter = None
-    init_error = None
-
-    for attempt in init_attempts:
-        adapter, error = attempt()
-        if adapter is not None:
-            return adapter
-        if error is not None:
-            init_error = error  # Keep last error
-
-    # All attempts failed
-    if isinstance(init_error, ImportError):
-        renderer_class.render_error(init_error)
-    else:
-        print(f"Error initializing {scheme}:// adapter: {init_error}", file=sys.stderr)
-    sys.exit(1)
 
 
 def _build_check_kwargs(adapter, args: 'Namespace') -> dict:
@@ -481,17 +324,22 @@ def _apply_field_selection(result: dict, args: 'Namespace') -> dict:
     return result
 
 
-def _apply_budget_constraints(result: dict, args: 'Namespace') -> dict:
+def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None) -> dict:
     """Apply budget constraints to result list fields."""
-    if not (hasattr(result, 'get') and isinstance(result, dict)):
+    if not isinstance(result, dict):
         return result
 
-    # Find list field to apply budget limits to
-    list_field = None
-    for field_name in ['items', 'results', 'checks', 'commits', 'files']:
-        if field_name in result and isinstance(result[field_name], list):
-            list_field = field_name
-            break
+    # Adapter declares which field is budget-limitable; fall back to probing for
+    # adapters that predate BUDGET_LIST_FIELD (transition period only).
+    declared = getattr(adapter, 'BUDGET_LIST_FIELD', None) if adapter is not None else None
+    if declared:
+        list_field = declared if (declared in result and isinstance(result[declared], list)) else None
+    else:
+        list_field = None
+        for field_name in ['items', 'results', 'checks', 'commits', 'files']:
+            if field_name in result and isinstance(result[field_name], list):
+                list_field = field_name
+                break
 
     if not list_field:
         return result
@@ -514,116 +362,6 @@ def _apply_budget_constraints(result: dict, args: 'Namespace') -> dict:
             result['meta']['budget'] = budget_result['meta']
         else:
             result['meta'] = budget_result['meta']
-
-    return result
-
-
-def _apply_slice(items: list, args: 'Namespace') -> list:
-    """Slice a list by --head, --tail, or --range args. Returns original list if none set."""
-    head = getattr(args, 'head', None)
-    tail = getattr(args, 'tail', None)
-    rng = getattr(args, 'range', None)
-    if head:
-        return items[:head]
-    if tail:
-        return items[-tail:]
-    if rng:
-        start, end = rng  # already parsed as (int, int) by parser
-        return items[start - 1:end]
-    return items
-
-
-def _apply_workflow_filters(result: dict, args: 'Namespace') -> None:
-    """Apply --type, --search, and --head/--tail/--range to claude_workflow results."""
-    workflow = result.get('workflow')
-    if workflow is None:
-        return
-    total_before = len(workflow)
-
-    type_filter = getattr(args, 'type', None)
-    if type_filter:
-        workflow = [s for s in workflow if (s.get('tool') or '').lower() == type_filter.lower()]
-
-    search_term = getattr(args, 'search', None)
-    if search_term:
-        lower = search_term.lower()
-        workflow = [
-            s for s in workflow
-            if lower in (s.get('detail') or '').lower()
-            or lower in (s.get('tool') or '').lower()
-        ]
-
-    workflow = _apply_slice(workflow, args)
-    result['workflow'] = workflow
-    result['displayed_steps'] = len(workflow)
-    if len(workflow) < total_before:
-        result['filtered_from'] = total_before
-
-
-def _apply_session_list_filters(result: dict, args: 'Namespace') -> None:
-    """Apply --search, --since, --head/--all filters to claude_session_list results."""
-    sessions = result.get('recent_sessions')
-    if sessions is None:
-        return
-
-    search_term = getattr(args, 'search', None)
-    if search_term:
-        lower = search_term.lower()
-        sessions = [s for s in sessions if lower in s.get('session', '').lower()]
-
-    since = getattr(args, 'since', None)
-    if since:
-        sessions = [s for s in sessions if s.get('modified', '') >= since]
-
-    if not getattr(args, 'all', False):
-        head = getattr(args, 'head', None)
-        sessions = sessions[:head if head else 20]
-
-    result['recent_sessions'] = sessions
-    result['displayed_count'] = len(sessions)
-
-    for s in sessions:
-        if 'title' not in s and s.get('path'):
-            s['title'] = _read_session_title_cheap(s['path'])
-
-
-def _apply_messages_slice(result: dict, args: 'Namespace') -> None:
-    """Apply --head/--tail/--range slicing to claude_messages results."""
-    msgs = result.get('messages')
-    if msgs is None:
-        return
-    msgs = _apply_slice(msgs, args)
-    result['messages'] = msgs
-    result['total_turns'] = len(msgs)
-
-
-def _apply_claude_display_hints(result: dict, args: 'Namespace') -> dict:
-    """Inject display hints and apply filtering for claude:// adapter results.
-
-    For claude_workflow: applies --type, --search filters and injects _display hints.
-    For all claude types: injects _display hints for renderer use.
-    """
-    if not isinstance(result, dict):
-        return result
-
-    result_type = result.get('type', '')
-    if not result_type.startswith('claude_'):
-        return result
-
-    result['_display'] = {
-        'max_snippet_chars': getattr(args, 'max_snippet_chars', None),
-        'verbose': getattr(args, 'verbose', False),
-        'head': getattr(args, 'head', None),
-        'tail': getattr(args, 'tail', None),
-        'range': getattr(args, 'range', None),
-    }
-
-    if result_type == 'claude_workflow':
-        _apply_workflow_filters(result, args)
-    elif result_type == 'claude_session_list':
-        _apply_session_list_filters(result, args)
-    elif result_type == 'claude_messages':
-        _apply_messages_slice(result, args)
 
     return result
 
@@ -656,8 +394,10 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
 
     # Apply post-processing
     result = _apply_field_selection(result, args)
-    result = _apply_budget_constraints(result, args)
-    result = _apply_claude_display_hints(result, args)
+    result = _apply_budget_constraints(result, args, adapter)
+    # Check class hierarchy (not instance attr) to avoid triggering Mock auto-attrs
+    if any('post_process' in cls.__dict__ for cls in type(adapter).__mro__[:-1]):
+        result = adapter.post_process(result, args)
 
     # Add available elements if adapter supports discovery
     if hasattr(adapter, 'get_available_elements'):
@@ -731,6 +471,16 @@ def _validate_path_exists(path: Path, path_str: str) -> None:
         sys.exit(1)
 
 
+def _stat_one_file(fpath: Path, ext_counts: dict) -> Optional[tuple]:
+    """Stat a single file and update ext_counts. Returns (size, mtime) or None."""
+    try:
+        stat = fpath.stat()
+    except OSError:
+        return None
+    ext_counts[fpath.suffix.lower().lstrip('.') or '(no ext)'] += 1
+    return stat.st_size, stat.st_mtime
+
+
 def _collect_dir_stats(path: Path) -> tuple:
     """Walk a directory and collect file count, size, mtime, extension counts.
 
@@ -746,18 +496,14 @@ def _collect_dir_stats(path: Path) -> tuple:
     oldest_mtime = float('inf')
     for root, _dirs, files in os.walk(path):
         for fname in files:
-            fpath = Path(root) / fname
-            try:
-                stat = fpath.stat()
-                total_files += 1
-                total_size += stat.st_size
-                if stat.st_mtime > newest_mtime:
-                    newest_mtime = stat.st_mtime
-                if stat.st_mtime < oldest_mtime:
-                    oldest_mtime = stat.st_mtime
-                ext_counts[fpath.suffix.lower().lstrip('.') or '(no ext)'] += 1
-            except OSError:
+            result = _stat_one_file(Path(root) / fname, ext_counts)
+            if result is None:
                 continue
+            size, mtime = result
+            total_files += 1
+            total_size += size
+            newest_mtime = max(newest_mtime, mtime)
+            oldest_mtime = min(oldest_mtime, mtime)
     return ext_counts, total_files, total_size, newest_mtime, oldest_mtime
 
 
@@ -846,25 +592,8 @@ _SSL_ADAPTER_FLAGS = {
     'summary': '--summary',
     'validate_nginx': '--validate-nginx',
 }
-_NON_NGINX_EXTENSIONS = {
-    '.py', '.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs',
-    '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.cc', '.h', '.hpp',
-    '.cs', '.php', '.swift', '.kt', '.scala', '.lua',
-    '.sh', '.bash', '.zsh', '.fish', '.ps1',
-    '.md', '.rst', '.txt',
-    '.json', '.yaml', '.yml', '.toml', '.xml',
-    '.html', '.htm', '.css', '.scss', '.sass',
-    '.sql', '.csv',
-}
-_NON_MARKDOWN_EXTENSIONS = {
-    '.py', '.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs',
-    '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.cc', '.h', '.hpp',
-    '.cs', '.php', '.swift', '.kt', '.scala', '.lua',
-    '.sh', '.bash', '.zsh', '.fish', '.ps1',
-    '.json', '.yaml', '.yml', '.toml', '.xml',
-    '.html', '.htm', '.css', '.scss', '.sass',
-    '.sql', '.csv', '.conf', '.ini',
-}
+_NGINX_EXTENSIONS = {'.conf', '.ini', ''}  # '' = files with no extension (e.g. nginx, site.conf)
+_MARKDOWN_EXTENSIONS = {'.md', '.markdown', '.rst', '.txt', ''}
 
 
 def _guard_hotspots_flag(args: 'Namespace', path_str: str) -> None:
@@ -883,7 +612,7 @@ def _guard_hotspots_flag(args: 'Namespace', path_str: str) -> None:
 def _guard_nginx_flags(args: 'Namespace', path_str: str) -> None:
     """Exit with error if nginx-specific flags are used on non-nginx file extensions."""
     path_ext = Path(path_str).suffix.lower() if '.' in Path(path_str).name else ''
-    if path_ext not in _NON_NGINX_EXTENSIONS:
+    if path_ext in _NGINX_EXTENSIONS:
         return
     for attr, flag in _NGINX_ADAPTER_FLAGS.items():
         if getattr(args, attr, False):
@@ -916,7 +645,7 @@ def _guard_related_flags(args: 'Namespace', path_str: str) -> None:
     if not (getattr(args, 'related', False) or getattr(args, 'related_all', False)):
         return
     md_ext = Path(path_str).suffix.lower() if '.' in Path(path_str).name else ''
-    if md_ext not in _NON_MARKDOWN_EXTENSIONS:
+    if md_ext in _MARKDOWN_EXTENSIONS:
         return
     flag = '--related-all' if getattr(args, 'related_all', False) else '--related'
     print(f"❌ Error: {flag} only works with markdown files", file=sys.stderr)
@@ -1002,7 +731,3 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
         print(f"Error: {path_str} is neither file nor directory", file=sys.stderr)
         sys.exit(1)
 
-
-# Backward compatibility aliases
-_handle_adapter = handle_adapter
-_handle_file_or_directory = handle_file_or_directory

@@ -13,6 +13,25 @@ from . import query as query_module
 from . import operations
 
 
+def _extract_body_contains(filter_query: str) -> tuple:
+    """Extract body-contains= params from filter query.
+
+    Returns:
+        (body_contains_terms, remaining_query_string)
+    """
+    body_contains = []
+    remaining_parts = []
+    for part in filter_query.split('&'):
+        stripped = part.strip()
+        if stripped.startswith('body-contains='):
+            term = stripped[len('body-contains='):]
+            if term:
+                body_contains.append(term)
+        else:
+            remaining_parts.append(part)
+    return body_contains, '&'.join(remaining_parts)
+
+
 @register_adapter('markdown')
 @register_renderer(MarkdownRenderer)
 class MarkdownQueryAdapter(ResourceAdapter):
@@ -21,6 +40,8 @@ class MarkdownQueryAdapter(ResourceAdapter):
     Enables finding markdown files based on frontmatter field values,
     missing fields, or wildcards. Works on local directory trees.
     """
+
+    BUDGET_LIST_FIELD = 'results'
 
     @staticmethod
     def get_schema() -> Dict[str, Any]:
@@ -65,16 +86,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
         # Extract body-contains= params before passing to filter parsers
         self.body_contains = []
         if filter_query:
-            remaining_parts = []
-            for part in filter_query.split('&'):
-                stripped = part.strip()
-                if stripped.startswith('body-contains='):
-                    term = stripped[len('body-contains='):]
-                    if term:
-                        self.body_contains.append(term)
-                else:
-                    remaining_parts.append(part)
-            filter_query = '&'.join(remaining_parts)
+            self.body_contains, filter_query = _extract_body_contains(filter_query)
 
         # Parse query filters conditionally (only if new operators present)
         # This prevents legacy parameters from being misinterpreted

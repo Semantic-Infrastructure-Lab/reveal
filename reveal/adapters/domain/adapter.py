@@ -128,9 +128,39 @@ class _NoRedirect(_urllib_request.HTTPRedirectHandler):
         return None
 
 
+def _make_absolute_url(location: str, base_url: str) -> str:
+    """Make a potentially relative redirect Location header absolute."""
+    if location.startswith('/'):
+        from urllib.parse import urlparse
+        parsed = urlparse(base_url)
+        return f"{parsed.scheme}://{parsed.netloc}{location}"
+    return location
+
+
+def _handle_redirect_step(
+    opener, req, current: str, chain: list
+) -> tuple:
+    """Try one HTTP step; return (final_result_or_None, next_url).
+
+    Appends to chain in place. Returns (dict, url) where dict is the
+    final result if the request terminated, or None to continue redirecting.
+    """
+    try:
+        resp = opener.open(req, timeout=8)
+        code = resp.getcode()
+        chain.append({'url': current, 'status': code})
+        return {'status': code, 'chain': chain, 'final_url': current}, current
+    except _urllib_error.HTTPError as e:
+        code = e.code
+        chain.append({'url': current, 'status': code})
+        if code in (301, 302, 303, 307, 308) and 'Location' in e.headers:
+            return None, _make_absolute_url(e.headers['Location'], current)
+        return {'status': code, 'chain': chain, 'final_url': current}, current
+
+
 def _follow_redirect_chain(url: str, max_redirects: int = 5) -> Dict[str, Any]:
     """Follow a URL's redirect chain, returning final status, chain, and any error."""
-    chain = []
+    chain: list = []
     current = url
     ctx = _ssl_module.create_default_context()
     ctx.check_hostname = False
@@ -139,24 +169,12 @@ def _follow_redirect_chain(url: str, max_redirects: int = 5) -> Dict[str, Any]:
     for _ in range(max_redirects + 1):
         try:
             req = _urllib_request.Request(current, headers={'User-Agent': 'reveal-cli/1.0'})
-            opener = _urllib_request.build_opener(_urllib_request.HTTPSHandler(context=ctx), _NoRedirect())
-            try:
-                resp = opener.open(req, timeout=8)
-                code = resp.getcode()
-                chain.append({'url': current, 'status': code})
-                return {'status': code, 'chain': chain, 'final_url': current}
-            except _urllib_error.HTTPError as e:
-                code = e.code
-                chain.append({'url': current, 'status': code})
-                if code in (301, 302, 303, 307, 308) and 'Location' in e.headers:
-                    location = e.headers['Location']
-                    if location.startswith('/'):
-                        from urllib.parse import urlparse
-                        parsed = urlparse(current)
-                        location = f"{parsed.scheme}://{parsed.netloc}{location}"
-                    current = location
-                else:
-                    return {'status': code, 'chain': chain, 'final_url': current}
+            opener = _urllib_request.build_opener(
+                _urllib_request.HTTPSHandler(context=ctx), _NoRedirect()
+            )
+            result, current = _handle_redirect_step(opener, req, current, chain)
+            if result is not None:
+                return result
         except _urllib_error.URLError as e:
             return {'status': None, 'chain': chain, 'error': str(e.reason), 'final_url': current}
         except Exception as e:
@@ -310,6 +328,99 @@ def _generate_domain_next_steps(checks: List[Dict[str, Any]], domain: str) -> Li
     return next_steps
 
 
+_SCHEMA_ELEMENTS = {
+    'dns': 'DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)',
+    'whois': 'WHOIS registration data (requires python-whois)',
+    'ssl': 'SSL certificate status (delegates to ssl:// adapter)',
+    'registrar': 'Registrar and nameserver information',
+}
+
+_SCHEMA_OUTPUT_TYPES = [
+    {
+        'type': 'domain_overview',
+        'description': 'Domain overview with DNS and SSL summary',
+        'schema': {'type': 'object', 'properties': {
+            'contract_version': {'type': 'string'},
+            'type': {'type': 'string', 'const': 'domain_overview'},
+            'source': {'type': 'string'}, 'source_type': {'type': 'string'},
+            'domain': {'type': 'string'},
+            'dns': {'type': 'object', 'properties': {
+                'nameservers': {'type': 'array'}, 'a_records': {'type': 'array'},
+                'has_mx': {'type': 'boolean'}, 'error': {'type': ['string', 'null']},
+            }},
+            'ssl': {'type': 'object'},
+            'next_steps': {'type': 'array'},
+        }},
+    },
+    {
+        'type': 'domain_dns',
+        'description': 'All DNS records for domain',
+        'schema': {'type': 'object', 'properties': {
+            'contract_version': {'type': 'string'},
+            'type': {'type': 'string', 'const': 'domain_dns'},
+            'source': {'type': 'string'}, 'source_type': {'type': 'string'},
+            'domain': {'type': 'string'},
+            'records': {'type': 'object', 'properties': {
+                'A': {'type': 'array'}, 'AAAA': {'type': 'array'}, 'MX': {'type': 'array'},
+                'TXT': {'type': 'array'}, 'NS': {'type': 'array'}, 'CNAME': {'type': 'array'},
+                'SOA': {'type': 'array'},
+            }},
+        }},
+    },
+    {
+        'type': 'domain_whois',
+        'description': 'WHOIS registration data — registrar, dates, nameservers',
+        'schema': {'type': 'object', 'properties': {
+            'contract_version': {'type': 'string'},
+            'type': {'type': 'string', 'const': 'domain_whois'},
+            'source': {'type': 'string'}, 'domain': {'type': 'string'},
+            'registrar': {'type': 'string'}, 'creation_date': {'type': 'string'},
+            'expiration_date': {'type': 'string'}, 'nameservers': {'type': 'array'},
+            'status': {'type': 'array'},
+        }},
+    },
+    {
+        'type': 'domain_registrar',
+        'description': 'Registrar name and key dates from WHOIS',
+        'schema': {'type': 'object', 'properties': {
+            'contract_version': {'type': 'string'},
+            'type': {'type': 'string', 'const': 'domain_registrar'},
+            'source': {'type': 'string'}, 'domain': {'type': 'string'},
+            'registrar': {'type': 'string'}, 'creation_date': {'type': 'string'},
+            'expiration_date': {'type': 'string'},
+        }},
+    },
+    {
+        'type': 'domain_health',
+        'description': 'Domain health check results (HTTP status, redirect chain)',
+        'schema': {'type': 'object', 'properties': {
+            'contract_version': {'type': 'string'},
+            'type': {'type': 'string', 'const': 'domain_health'},
+            'source': {'type': 'string'}, 'domain': {'type': 'string'},
+            'http_status': {'type': 'integer'}, 'https_status': {'type': 'integer'},
+            'redirect_chain': {'type': 'array'},
+            'checks_passed': {'type': 'integer'}, 'checks_failed': {'type': 'integer'},
+        }},
+    },
+]
+
+_SCHEMA_EXAMPLE_QUERIES = [
+    {'uri': 'domain://example.com', 'description': 'Domain overview — registrar, DNS summary, SSL status', 'output_type': 'domain_overview'},
+    {'uri': 'domain://example.com/dns', 'description': 'All DNS records (A, MX, NS, TXT, CNAME, etc.)', 'element': 'dns', 'output_type': 'domain_dns'},
+    {'uri': 'domain://example.com/ssl', 'description': 'SSL certificate details (delegates to ssl:// adapter)', 'element': 'ssl', 'output_type': 'ssl_certificate'},
+    {'uri': 'domain://example.com/whois', 'description': 'WHOIS registration data — registrar, dates, nameservers (requires python-whois)', 'element': 'whois', 'output_type': 'domain_whois'},
+    {'uri': 'domain://example.com/registrar', 'description': 'Registrar name, creation/expiry dates from WHOIS', 'element': 'registrar', 'output_type': 'domain_registrar'},
+    {'uri': 'domain://example.com --check', 'description': 'Full health check: DNS propagation + HTTP response + SSL expiry', 'cli_flag': '--check', 'output_type': 'domain_health'},
+]
+
+_SCHEMA_NOTES = [
+    'DNS resolution via dnspython library',
+    'SSL inspection delegates to ssl:// adapter',
+    'WHOIS requires python-whois package (optional)',
+    'Health checks include DNS propagation and SSL expiry',
+]
+
+
 @register_adapter('domain')
 @register_renderer(DomainRenderer)
 class DomainAdapter(ResourceAdapter):
@@ -331,178 +442,23 @@ class DomainAdapter(ResourceAdapter):
         registrar: Registrar and nameserver information
     """
 
+    BUDGET_LIST_FIELD = 'checks'
+
     @staticmethod
     def get_schema() -> Dict[str, Any]:
-        """Get machine-readable schema for domain:// adapter.
-
-        Returns JSON schema for AI agent integration.
-        """
+        """Get machine-readable schema for domain:// adapter."""
         return {
             'adapter': 'domain',
             'description': 'Domain registration, DNS, and SSL inspection with health checks',
             'uri_syntax': 'domain://<domain>[/element]',
-            'query_params': {},  # No query parameters
-            'elements': {
-                'dns': 'DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)',
-                'whois': 'WHOIS registration data (requires python-whois)',
-                'ssl': 'SSL certificate status (delegates to ssl:// adapter)',
-                'registrar': 'Registrar and nameserver information'
-            },
-            'cli_flags': [
-                '--check',  # DNS propagation, SSL, expiry checks
-                '--advanced',  # Advanced DNS diagnostics
-                '--only-failures'  # Show only failed checks
-            ],
+            'query_params': {},
+            'elements': _SCHEMA_ELEMENTS,
+            'cli_flags': ['--check', '--advanced', '--only-failures'],
             'supports_batch': False,
             'supports_advanced': True,
-            'output_types': [
-                {
-                    'type': 'domain_overview',
-                    'description': 'Domain overview with DNS and SSL summary',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'domain_overview'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'domain': {'type': 'string'},
-                            'dns': {
-                                'type': 'object',
-                                'properties': {
-                                    'nameservers': {'type': 'array'},
-                                    'a_records': {'type': 'array'},
-                                    'has_mx': {'type': 'boolean'},
-                                    'error': {'type': ['string', 'null']}
-                                }
-                            },
-                            'ssl': {'type': 'object'},
-                            'next_steps': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'domain_dns',
-                    'description': 'All DNS records for domain',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'domain_dns'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'domain': {'type': 'string'},
-                            'records': {
-                                'type': 'object',
-                                'properties': {
-                                    'A': {'type': 'array'},
-                                    'AAAA': {'type': 'array'},
-                                    'MX': {'type': 'array'},
-                                    'TXT': {'type': 'array'},
-                                    'NS': {'type': 'array'},
-                                    'CNAME': {'type': 'array'},
-                                    'SOA': {'type': 'array'}
-                                }
-                            }
-                        }
-                    }
-                },
-                {
-                    'type': 'domain_whois',
-                    'description': 'WHOIS registration data — registrar, dates, nameservers',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'domain_whois'},
-                            'source': {'type': 'string'},
-                            'domain': {'type': 'string'},
-                            'registrar': {'type': 'string'},
-                            'creation_date': {'type': 'string'},
-                            'expiration_date': {'type': 'string'},
-                            'nameservers': {'type': 'array'},
-                            'status': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'domain_registrar',
-                    'description': 'Registrar name and key dates from WHOIS',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'domain_registrar'},
-                            'source': {'type': 'string'},
-                            'domain': {'type': 'string'},
-                            'registrar': {'type': 'string'},
-                            'creation_date': {'type': 'string'},
-                            'expiration_date': {'type': 'string'}
-                        }
-                    }
-                },
-                {
-                    'type': 'domain_health',
-                    'description': 'Domain health check results (HTTP status, redirect chain)',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'domain_health'},
-                            'source': {'type': 'string'},
-                            'domain': {'type': 'string'},
-                            'http_status': {'type': 'integer'},
-                            'https_status': {'type': 'integer'},
-                            'redirect_chain': {'type': 'array'},
-                            'checks_passed': {'type': 'integer'},
-                            'checks_failed': {'type': 'integer'}
-                        }
-                    }
-                }
-            ],
-            'example_queries': [
-                {
-                    'uri': 'domain://example.com',
-                    'description': 'Domain overview — registrar, DNS summary, SSL status',
-                    'output_type': 'domain_overview'
-                },
-                {
-                    'uri': 'domain://example.com/dns',
-                    'description': 'All DNS records (A, MX, NS, TXT, CNAME, etc.)',
-                    'element': 'dns',
-                    'output_type': 'domain_dns'
-                },
-                {
-                    'uri': 'domain://example.com/ssl',
-                    'description': 'SSL certificate details (delegates to ssl:// adapter)',
-                    'element': 'ssl',
-                    'output_type': 'ssl_certificate'
-                },
-                {
-                    'uri': 'domain://example.com/whois',
-                    'description': 'WHOIS registration data — registrar, dates, nameservers (requires python-whois)',
-                    'element': 'whois',
-                    'output_type': 'domain_whois'
-                },
-                {
-                    'uri': 'domain://example.com/registrar',
-                    'description': 'Registrar name, creation/expiry dates from WHOIS',
-                    'element': 'registrar',
-                    'output_type': 'domain_registrar'
-                },
-                {
-                    'uri': 'domain://example.com --check',
-                    'description': 'Full health check: DNS propagation + HTTP response + SSL expiry',
-                    'cli_flag': '--check',
-                    'output_type': 'domain_health'
-                }
-            ],
-            'notes': [
-                'DNS resolution via dnspython library',
-                'SSL inspection delegates to ssl:// adapter',
-                'WHOIS requires python-whois package (optional)',
-                'Health checks include DNS propagation and SSL expiry'
-            ]
+            'output_types': _SCHEMA_OUTPUT_TYPES,
+            'example_queries': _SCHEMA_EXAMPLE_QUERIES,
+            'notes': _SCHEMA_NOTES,
         }
 
     @staticmethod

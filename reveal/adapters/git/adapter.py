@@ -16,6 +16,69 @@ from ...utils.query import (
 from .renderer import GitRenderer
 from . import refs, commits, files, queries
 
+_SCHEMA_QUERY_PARAMS = {
+    'type': {'type': 'string', 'description': 'Query type for file operations', 'values': ['history', 'blame'], 'examples': ['?type=history', '?type=blame']},
+    'detail': {'type': 'string', 'description': 'Detail level for blame', 'values': ['full', 'summary'], 'examples': ['?type=blame&detail=full']},
+    'element': {'type': 'string', 'description': 'Semantic element for blame (function/class name)', 'examples': ['?type=blame&element=load_config']},
+    'author': {'type': 'string', 'description': 'Filter commits by author name (case-insensitive)', 'examples': ['?author=John', '?author~=john']},
+    'email': {'type': 'string', 'description': 'Filter commits by author email (case-insensitive)', 'examples': ['?email=john@example.com', '?email~=@example.com']},
+    'message': {'type': 'string', 'description': 'Filter commits by message (supports regex with ~=)', 'examples': ['?message~=bug', '?message=Initial commit']},
+    'hash': {'type': 'string', 'description': 'Filter commits by hash prefix', 'examples': ['?hash=a1b2c3d']},
+}
+
+def _git_output_type(type_name: str, description: str, extra_props: dict) -> dict:
+    base = {
+        'contract_version': {'type': 'string'},
+        'type': {'type': 'string', 'const': type_name},
+        'source': {'type': 'string'},
+        'source_type': {'type': 'string'},
+    }
+    base.update(extra_props)
+    return {'type': type_name, 'description': description, 'schema': {'type': 'object', 'properties': base}}
+
+_SCHEMA_OUTPUT_TYPES = [
+    _git_output_type('git_repository', 'Repository overview with branches, tags, and recent commits', {
+        'source_type': {'type': 'string', 'const': 'repository'},
+        'path': {'type': 'string'}, 'head': {'type': 'object'},
+        'branches': {'type': 'object'}, 'tags': {'type': 'object'}, 'commits': {'type': 'object'}
+    }),
+    _git_output_type('git_ref', 'Branch/tag/commit history', {
+        'ref': {'type': 'string'}, 'commit': {'type': 'object'}, 'history': {'type': 'array'}
+    }),
+    _git_output_type('git_file', 'File contents at specific ref', {
+        'source_type': {'type': 'string', 'const': 'file'},
+        'path': {'type': 'string'}, 'ref': {'type': 'string'}, 'commit': {'type': 'string'},
+        'size': {'type': 'integer'}, 'lines': {'type': 'integer'}, 'content': {'type': 'string'}
+    }),
+    _git_output_type('git_file_history', 'File commit history', {
+        'path': {'type': 'string'}, 'ref': {'type': 'string'},
+        'count': {'type': 'integer'}, 'commits': {'type': 'array'}
+    }),
+    _git_output_type('git_file_blame', 'File blame with author attribution', {
+        'path': {'type': 'string'}, 'ref': {'type': 'string'},
+        'lines': {'type': 'integer'}, 'element': {'type': ['string', 'null']},
+        'contributors': {'type': 'array'}, 'hunks': {'type': 'array'}
+    }),
+]
+
+_SCHEMA_EXAMPLE_QUERIES = [
+    {'uri': 'git://.', 'description': 'Repository overview (branches, tags, commits)', 'output_type': 'git_repository'},
+    {'uri': 'git://.@main', 'description': 'Branch/commit history', 'ref': 'main', 'output_type': 'git_ref'},
+    {'uri': 'git://.@abc1234', 'description': 'Specific commit details', 'ref': 'abc1234', 'output_type': 'git_ref'},
+    {'uri': 'git://src/app.py@v1.0', 'description': 'File contents at tag', 'ref': 'v1.0', 'output_type': 'git_file'},
+    {'uri': 'git://src/app.py?type=history', 'description': 'File commit history (50 commits)', 'query_param': '?type=history', 'output_type': 'git_file_history'},
+    {'uri': 'git://src/app.py?type=blame', 'description': 'File blame summary (contributors + key hunks)', 'query_param': '?type=blame', 'output_type': 'git_file_blame'},
+    {'uri': 'git://src/app.py?type=blame&detail=full', 'description': 'File blame detailed (line-by-line)', 'query_param': '?type=blame&detail=full', 'output_type': 'git_file_blame'},
+    {'uri': 'git://src/app.py?type=blame&element=load_config', 'description': 'Semantic blame (who wrote this function)', 'query_param': '?type=blame&element=load_config', 'output_type': 'git_file_blame'},
+]
+
+_SCHEMA_NOTES = [
+    'Requires pygit2 library (pip install pygit2)',
+    'Supports @ syntax for refs (branches, tags, commits)',
+    'Query params for file-level operations (history, blame)',
+    'Semantic blame works with Python functions/classes'
+]
+
 
 # Check if pygit2 is available
 try:
@@ -44,6 +107,8 @@ class GitAdapter(ResourceAdapter):
 
     Requires: pip install reveal-cli[git]
     """
+
+    BUDGET_LIST_FIELD = 'commits'
 
     def _normalize_resource_parameter(self, resource: Optional[str],
                                        path: Optional[str]) -> str:
@@ -401,195 +466,14 @@ class GitAdapter(ResourceAdapter):
             'adapter': 'git',
             'description': 'Git repository inspection with history, blame, and file tracking',
             'uri_syntax': 'git://<path>[/<subpath>][@<ref>][?<query>]',
-            'query_params': {
-                'type': {
-                    'type': 'string',
-                    'description': 'Query type for file operations',
-                    'values': ['history', 'blame'],
-                    'examples': ['?type=history', '?type=blame']
-                },
-                'detail': {
-                    'type': 'string',
-                    'description': 'Detail level for blame',
-                    'values': ['full', 'summary'],
-                    'examples': ['?type=blame&detail=full']
-                },
-                'element': {
-                    'type': 'string',
-                    'description': 'Semantic element for blame (function/class name)',
-                    'examples': ['?type=blame&element=load_config']
-                },
-                'author': {
-                    'type': 'string',
-                    'description': 'Filter commits by author name (case-insensitive)',
-                    'examples': ['?author=John', '?author~=john']
-                },
-                'email': {
-                    'type': 'string',
-                    'description': 'Filter commits by author email (case-insensitive)',
-                    'examples': ['?email=john@example.com', '?email~=@example.com']
-                },
-                'message': {
-                    'type': 'string',
-                    'description': 'Filter commits by message (supports regex with ~=)',
-                    'examples': ['?message~=bug', '?message=Initial commit']
-                },
-                'hash': {
-                    'type': 'string',
-                    'description': 'Filter commits by hash prefix',
-                    'examples': ['?hash=a1b2c3d']
-                }
-            },
-            'elements': {},  # File paths and refs are dynamic
+            'query_params': _SCHEMA_QUERY_PARAMS,
+            'elements': {},
             'cli_flags': [],
             'supports_batch': False,
             'supports_advanced': False,
-            'output_types': [
-                {
-                    'type': 'git_repository',
-                    'description': 'Repository overview with branches, tags, and recent commits',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'git_repository'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string', 'const': 'repository'},
-                            'path': {'type': 'string'},
-                            'head': {'type': 'object'},
-                            'branches': {'type': 'object'},
-                            'tags': {'type': 'object'},
-                            'commits': {'type': 'object'}
-                        }
-                    }
-                },
-                {
-                    'type': 'git_ref',
-                    'description': 'Branch/tag/commit history',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'git_ref'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'ref': {'type': 'string'},
-                            'commit': {'type': 'object'},
-                            'history': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'git_file',
-                    'description': 'File contents at specific ref',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'git_file'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string', 'const': 'file'},
-                            'path': {'type': 'string'},
-                            'ref': {'type': 'string'},
-                            'commit': {'type': 'string'},
-                            'size': {'type': 'integer'},
-                            'lines': {'type': 'integer'},
-                            'content': {'type': 'string'}
-                        }
-                    }
-                },
-                {
-                    'type': 'git_file_history',
-                    'description': 'File commit history',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'git_file_history'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'path': {'type': 'string'},
-                            'ref': {'type': 'string'},
-                            'count': {'type': 'integer'},
-                            'commits': {'type': 'array'}
-                        }
-                    }
-                },
-                {
-                    'type': 'git_file_blame',
-                    'description': 'File blame with author attribution',
-                    'schema': {
-                        'type': 'object',
-                        'properties': {
-                            'contract_version': {'type': 'string'},
-                            'type': {'type': 'string', 'const': 'git_file_blame'},
-                            'source': {'type': 'string'},
-                            'source_type': {'type': 'string'},
-                            'path': {'type': 'string'},
-                            'ref': {'type': 'string'},
-                            'lines': {'type': 'integer'},
-                            'element': {'type': ['string', 'null']},
-                            'contributors': {'type': 'array'},
-                            'hunks': {'type': 'array'}
-                        }
-                    }
-                }
-            ],
-            'example_queries': [
-                {
-                    'uri': 'git://.',
-                    'description': 'Repository overview (branches, tags, commits)',
-                    'output_type': 'git_repository'
-                },
-                {
-                    'uri': 'git://.@main',
-                    'description': 'Branch/commit history',
-                    'ref': 'main',
-                    'output_type': 'git_ref'
-                },
-                {
-                    'uri': 'git://.@abc1234',
-                    'description': 'Specific commit details',
-                    'ref': 'abc1234',
-                    'output_type': 'git_ref'
-                },
-                {
-                    'uri': 'git://src/app.py@v1.0',
-                    'description': 'File contents at tag',
-                    'ref': 'v1.0',
-                    'output_type': 'git_file'
-                },
-                {
-                    'uri': 'git://src/app.py?type=history',
-                    'description': 'File commit history (50 commits)',
-                    'query_param': '?type=history',
-                    'output_type': 'git_file_history'
-                },
-                {
-                    'uri': 'git://src/app.py?type=blame',
-                    'description': 'File blame summary (contributors + key hunks)',
-                    'query_param': '?type=blame',
-                    'output_type': 'git_file_blame'
-                },
-                {
-                    'uri': 'git://src/app.py?type=blame&detail=full',
-                    'description': 'File blame detailed (line-by-line)',
-                    'query_param': '?type=blame&detail=full',
-                    'output_type': 'git_file_blame'
-                },
-                {
-                    'uri': 'git://src/app.py?type=blame&element=load_config',
-                    'description': 'Semantic blame (who wrote this function)',
-                    'query_param': '?type=blame&element=load_config',
-                    'output_type': 'git_file_blame'
-                }
-            ],
-            'notes': [
-                'Requires pygit2 library (pip install pygit2)',
-                'Supports @ syntax for refs (branches, tags, commits)',
-                'Query params for file-level operations (history, blame)',
-                'Semantic blame works with Python functions/classes'
-            ]
+            'output_types': _SCHEMA_OUTPUT_TYPES,
+            'example_queries': _SCHEMA_EXAMPLE_QUERIES,
+            'notes': _SCHEMA_NOTES,
         }
 
     @staticmethod
