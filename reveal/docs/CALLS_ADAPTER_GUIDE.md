@@ -77,6 +77,8 @@ calls://<path>?callees=<name>[&format=<fmt>]
 | `path` | Directory (or file) to index — typically `src/` or `.` |
 | `target` | Function name to find **callers of** (reverse lookup) |
 | `callees` | Function name to find **callees of** (forward lookup) |
+| `rank` | Set to `callers` to rank all functions by in-degree (coupling metrics) |
+| `top` | Max results for `?rank=callers` (default: 10, max: 100) |
 | `depth` | Transitive levels for `?target` (default: 1, max: 5) |
 | `format` | Output format: `text` (default), `json`, or `dot` (Graphviz) |
 
@@ -130,11 +132,13 @@ callee → [(file, caller_func, line), ...]
 |-----------|------|---------|-------------|
 | `target` | string | — | Function name to find **callers of** (reverse lookup) |
 | `callees` | string | — | Function name to find **callees of** (forward lookup) |
+| `rank` | string | — | Set to `callers` to rank all functions by in-degree |
+| `top` | integer | 10 | Max results for `?rank=callers` (capped at 100) |
 | `depth` | integer | 1 | Transitive levels for `?target` (1 = direct only, max 5) |
-| `builtins` | boolean | `false` | Include Python builtins in `?callees` output (`len`, `str`, `sorted`, exceptions, etc.) |
+| `builtins` | boolean | `false` | Include Python builtins in output (applies to `?callees` and `?rank=callers`) |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot` |
 
-> One of `target` or `callees` is required. If both are given, `callees` takes precedence.
+> One of `target`, `callees`, or `rank` is required. If `rank=callers` is given, it takes precedence.
 
 ### `target`
 
@@ -165,7 +169,39 @@ reveal 'calls://src/?callees=handle_request'
 
 Python builtins (`len`, `str`, `sorted`, `ValueError`, `open`, `print`, etc.) are hidden by default — they add noise without revealing project structure. Use `?builtins=true` when you specifically want to audit dangerous builtins like `eval`, `exec`, or `open`.
 
-> Only applies to `?callees` (forward lookup). The `?target` (reverse lookup) is unaffected — callers of builtins are always shown.
+> `?builtins` applies to both `?callees` (forward lookup) and `?rank=callers`. The `?target` (reverse lookup) is unaffected — callers of builtins are always shown.
+
+### `rank`
+
+Rank all callable symbols in the project by how many unique callers they have (in-degree coupling metric). Zero new infrastructure — uses the same cached index as `?target`.
+
+```bash
+# Top 10 most-called functions
+reveal 'calls://src/?rank=callers'
+
+# Top 20, include builtins
+reveal 'calls://src/?rank=callers&top=20&builtins=true'
+```
+
+Output:
+
+```
+Most-called functions: src/
+Ranking by:            caller count (in-degree)
+Showing:               top 10 of 87 unique callees
+
+  validate_item  (5 callers)
+    utils/auth.py:42  check_token
+    api/routes.py:18  post_handler
+    api/routes.py:31  put_handler
+    workers/batch.py:9  run_job
+    workers/batch.py:55  process_item
+
+  parse_config  (3 callers)
+    …
+```
+
+High in-degree = potential coupling hotspot. Functions at the top are load-bearing — changes ripple wide.
 
 ### `depth`
 

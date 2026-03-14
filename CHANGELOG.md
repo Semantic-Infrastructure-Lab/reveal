@@ -12,6 +12,17 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] (session casuyi-0314)
+
+### Added (session casuyi-0314)
+- **`calls://` `?rank=callers`** — coupling metrics via in-degree ranking. `calls://src/?rank=callers&top=10` ranks all callable symbols by how many unique callers reference them. Zero new infrastructure — uses the already-built callers index. `?top=N` controls result count (default 10, max 100). `?builtins=true` includes builtins in ranking. `rank_by_callers()` added to `calls/index.py`; `_render_ranking_text()` added to renderer; `### rank` section added to `CALLS_ADAPTER_GUIDE.md`. 13 new tests. (session casuyi-0314)
+- **`ast://` `?builtins=true/false`** — builtin filtering for call graph output. `ast://?show=calls` and element-level `calls:` field now filter Python builtins by default (consistent with `calls://?callees=X` introduced in chosen-flame-0314). Routes through same `PYTHON_BUILTINS` frozenset and `.split('.')[-1]` pattern from `calls/index.py`. `extract_builtins_param()` in `ast/queries.py` mirrors `extract_show_param()`. `?builtins=true` restores raw output. 12 new tests. (session casuyi-0314)
+
+### Refactored (session casuyi-0314)
+- **Query parser unification** (BACK-024) — replaced 4 hand-rolled `split('&') + split('=', 1)` loops with `parse_query_params()` from `utils/query.py`: `calls/adapter.py` (removed private `_parse_calls_query`), `git/adapter.py` (2 locations), `imports.py`, `cpanel/adapter.py`. `calls` adapter now uses `coerce=True` so `depth` and `builtins` arrive as native `int`/`bool`. Net -45 lines. (session casuyi-0314)
+
+---
+
 ## [0.62.0] - 2026-03-14 (sessions destined-altar-0313, risen-armor-0314, turbulent-frost-0314, chosen-flame-0314, nurosu-0314)
 
 ### Added (session chosen-flame-0314)
