@@ -1,11 +1,17 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-13 (majesuto-0313 — v0.61.0 release)
+> **Last updated**: 2026-03-14 (nurosu-0314 — v0.62.0 release)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.62.0
+- ✅ **`calls://` adapter** — new URI scheme for project-level cross-file call graph analysis. `?target=fn` (reverse: who calls fn?), `?callees=fn` (forward: what does fn call?), `?depth=N` (transitive BFS up to 5 levels), `?format=dot` (Graphviz output). Cross-file resolution: `resolved_calls` field links each outgoing call to its definition file. Builds inverted callers index cached by mtime fingerprint.
+- ✅ **`calls://` builtin filtering** — Python builtins (`len`, `str`, `sorted`, `ValueError`, etc.) hidden by default in `?callees` output; `?builtins=true` restores full list. Footer shows `(N builtin(s) hidden)`. `PYTHON_BUILTINS` frozenset derived from `dir(builtins)` — stays correct across Python versions.
+- ✅ **`calls://` bug fixes** — renderer crash fixed (static-method pattern); `?format=dot` in query string now works; `show=calls` no longer includes imports in output.
+- ✅ **38 new tests** — 4,924 → 4,962; covers callers index, callees, builtin filtering, renderer, schema contracts, dot format, relative paths.
 
 ### v0.61.0
 - ✅ **`cpanel://user/full-audit`** — composite ssl+acl-check+nginx ACME audit in one pass; exits 2 on any failure; `has_failures` flag in JSON output

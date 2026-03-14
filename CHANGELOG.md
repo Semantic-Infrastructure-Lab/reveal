@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (session destined-altar-0313)
+## [0.62.0] - 2026-03-14 (sessions destined-altar-0313, risen-armor-0314, turbulent-frost-0314, chosen-flame-0314, nurosu-0314)
 
 ### Added (session chosen-flame-0314)
 - **`calls://` `?callees=X` builtin filtering** — Python builtins (`len`, `str`, `sorted`, `ValueError`, etc.) are now hidden from callees output by default, leaving only project-defined and stdlib calls. Uses `PYTHON_BUILTINS` frozenset derived from `dir(builtins)` at import time (stays in sync across Python versions). `?builtins=true` restores the full raw list. Dotted stdlib calls like `os.path.join` are unaffected (bare name `join` is not a builtin). Footer in text output shows `(N builtin(s) hidden — use ?builtins=true to include)` when any are filtered. `_builtins_hidden` count added to result dict. (session chosen-flame-0314)
