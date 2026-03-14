@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (session destined-altar-0313)
 
+### Documentation (session risen-armor-0314)
+- **`CALLS_ADAPTER_GUIDE.md`** — new full guide for `calls://` adapter: URI syntax, all 3 output formats (text, JSON, dot), 5 workflows (impact analysis, dead code, execution path tracing, architecture docs, refactoring verification), limitations, caching/performance, FAQ. (session risen-armor-0314)
+- **`AST_ADAPTER_GUIDE.md`** — updated: fixed stale FAQ ("call graphs not supported" was wrong since Phase 1/2); added `calls`, `callee_of`, `show` to query params table; added full "Call Graph Analysis" section covering within-file queries, `show=calls` format, cross-file escalation, and JSON field docs; added Workflow 7 (Trace Function Call Graph). (session risen-armor-0314)
+- **`AGENT_HELP.md`** — added "Task: Trace function call graph" section with both adapters, scope comparison table, JSON fields reference. (session risen-armor-0314)
+- **`ast/help.py`** — added `calls`, `callee_of`, `show` to `_SCHEMA_QUERY_PARAMS`, filters, examples, workflows, notes, and see_also. `reveal help://ast` now surfaces all call graph capabilities. (session risen-armor-0314)
+
 ### Added (session destined-altar-0313)
 - **Call graph Phase 3: cross-file resolution** — `resolve_callees()` in new `adapters/ast/call_graph.py` joins a function's `calls` list against the file's import symbol map, adding `resolved_file` + `resolved_name` to each entry that can be traced to a file on disk. The existing `calls: List[str]` field is unchanged (backward-compatible); resolved data appears in a new `resolved_calls` field in JSON output. Text renderer shows `db.insert (→ database.py::insert)` inline. (session destined-altar-0313)
 - **`calls://` adapter** — new URI scheme for project-level cross-file callers queries. Builds a per-directory inverted callers index (callee → [(file, caller, line)]) cached by mtime fingerprint. Supports `?target=<name>` (direct callers), `?depth=N` (transitive BFS, capped at 5), `?format=dot` (Graphviz output). +25 tests. Tests: 4,899 → 4,924. (session destined-altar-0313)

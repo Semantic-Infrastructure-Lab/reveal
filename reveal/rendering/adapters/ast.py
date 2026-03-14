@@ -119,11 +119,20 @@ def _render_ast_element(elem: Dict[str, Any]) -> None:
 def _render_call_graph(data: Dict[str, Any]) -> None:
     """Render compact call graph view (show=calls)."""
     results = data.get('results', [])
-    path = data.get('path', '.')
+
+    # Only show functions and methods — imports, classes, etc. have no call data
+    callable_results = [
+        e for e in results
+        if e.get('category') in ('functions', 'methods')
+    ]
+
+    if not callable_results:
+        print("No functions or methods found.")
+        return
 
     # Group by file
     by_file: Dict[str, List[Dict[str, Any]]] = {}
-    for elem in results:
+    for elem in callable_results:
         fp = elem.get('file', '')
         by_file.setdefault(fp, []).append(elem)
 

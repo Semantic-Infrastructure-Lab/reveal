@@ -4,15 +4,18 @@ Tests that calls/called_by propagate through create_element_dict, that the
 calls= and callee_of= filters work, and that show=calls produces a graph result.
 """
 
+import io
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from typing import Dict, Any
 
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.ast.analysis import create_element_dict
 from reveal.adapters.ast.queries import extract_show_param
 from reveal.adapters.ast.filtering import _matches_call_list
+from reveal.rendering.adapters.ast import render_ast_structure
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +221,79 @@ class TestShowCallsMode(unittest.TestCase):
         names = [r['name'] for r in s.get('results', [])]
         self.assertEqual(names, ['parse'])
         self.assertEqual(s.get('show_mode'), 'calls')
+
+
+# ---------------------------------------------------------------------------
+# Renderer: show=calls — imports excluded, callable elements only
+# ---------------------------------------------------------------------------
+
+def _capture(func, *args, **kwargs) -> str:
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        func(*args, **kwargs)
+    return buf.getvalue()
+
+
+class TestShowCallsRenderer(unittest.TestCase):
+    """Renderer tests for show=calls mode."""
+
+    def _data_with(self, results, show_mode='calls'):
+        return {
+            'path': 'test.py',
+            'query': 'none',
+            'show_mode': show_mode,
+            'total_files': 1,
+            'total_results': len(results),
+            'displayed_results': len(results),
+            'results': results,
+        }
+
+    def test_imports_excluded_from_call_graph(self):
+        """show=calls should not render import elements."""
+        results = [
+            {'category': 'imports', 'name': 'os', 'file': 't.py', 'line': 1, 'calls': [], 'called_by': []},
+            {'category': 'functions', 'name': 'main', 'file': 't.py', 'line': 5, 'calls': ['helper'], 'called_by': []},
+        ]
+        out = _capture(render_ast_structure, self._data_with(results), 'text')
+        self.assertNotIn('import os', out)
+        self.assertIn('main', out)
+
+    def test_function_calls_rendered(self):
+        """Functions with calls should show the calls line."""
+        results = [
+            {'category': 'functions', 'name': 'process', 'file': 't.py', 'line': 3, 'calls': ['validate', 'save'], 'called_by': []},
+        ]
+        out = _capture(render_ast_structure, self._data_with(results), 'text')
+        self.assertIn('process', out)
+        self.assertIn('validate', out)
+        self.assertIn('save', out)
+
+    def test_called_by_rendered(self):
+        """Functions with called_by should show the called-by line."""
+        results = [
+            {'category': 'functions', 'name': 'validate', 'file': 't.py', 'line': 10, 'calls': [], 'called_by': ['process']},
+        ]
+        out = _capture(render_ast_structure, self._data_with(results), 'text')
+        self.assertIn('validate', out)
+        self.assertIn('process', out)
+
+    def test_no_callable_elements_shows_message(self):
+        """show=calls with only imports shows 'No functions or methods found'."""
+        results = [
+            {'category': 'imports', 'name': 'os', 'file': 't.py', 'line': 1, 'calls': [], 'called_by': []},
+        ]
+        out = _capture(render_ast_structure, self._data_with(results), 'text')
+        self.assertIn('No functions or methods found', out)
+
+    def test_class_elements_excluded(self):
+        """show=calls should not render class elements."""
+        results = [
+            {'category': 'classes', 'name': 'MyClass', 'file': 't.py', 'line': 1, 'calls': [], 'called_by': []},
+            {'category': 'methods', 'name': '__init__', 'file': 't.py', 'line': 3, 'calls': ['super'], 'called_by': []},
+        ]
+        out = _capture(render_ast_structure, self._data_with(results), 'text')
+        self.assertNotIn('MyClass', out)
+        self.assertIn('__init__', out)
 
 
 if __name__ == '__main__':
