@@ -640,6 +640,52 @@ find src/ -name "*.py" | reveal --stdin --format=json | \
 
 ---
 
+### Task: "Trace function call graph"
+
+**Pattern:**
+```bash
+# Cross-file: who calls a function across the entire project?
+reveal 'calls://src/?target=validate_item'
+
+# Transitive: callers-of-callers (2 levels)
+reveal 'calls://src/?target=validate_item&depth=2'
+
+# Within-file: find all functions that call validate_item
+reveal 'ast://src/auth.py?calls=validate_item'
+
+# Within-file: find everything called by process_batch
+reveal 'ast://src/?callee_of=process_batch'
+
+# Compact call graph view (arrow diagram)
+reveal 'ast://src/?show=calls'
+
+# Graphviz: pipe to dot for SVG
+reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
+```
+
+**Two adapters — different scopes:**
+
+| Adapter | Scope | Use For |
+|---------|-------|---------|
+| `calls://src/?target=fn` | Cross-file, whole project | "Who calls fn anywhere?" |
+| `ast://src/?calls=fn` | Within-file only | "Does this file call fn?" |
+| `ast://src/?show=calls` | Within-file only | "Show me the call graph for this file" |
+
+**JSON output — call fields per function:**
+```bash
+reveal 'ast://src/auth.py?type=function' --format=json | \
+  jq '.results[] | {name, calls, called_by, resolved_calls}'
+```
+
+Fields:
+- `calls` — outgoing calls from this function
+- `called_by` — within-file callers
+- `resolved_calls` — cross-file resolved entries (file + name, Python only)
+
+**See also:** `CALLS_ADAPTER_GUIDE.md` for full `calls://` documentation.
+
+---
+
 ### Task: "Find duplicate code"
 
 **Pattern:**

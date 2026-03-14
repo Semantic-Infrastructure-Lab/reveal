@@ -252,6 +252,9 @@ Complete reference of all supported query parameters:
 | `type` | string | Element type: `function`, `class`, `method`. Supports OR with `\|` or `,` | `type=function`, `type=class\|function` |
 | `name` | string | Element name with wildcards (`*` = any chars, `?` = one char) or regex | `name=test_*`, `name~=^test_` |
 | `decorator` | string | Decorator pattern with wildcards or regex | `decorator=property`, `decorator=*cache*` |
+| `calls` | string | Find functions that call a given name (wildcard supported) | `calls=validate_item`, `calls=*send*` |
+| `callee_of` | string | Find functions called by a given name (within-file reverse) | `callee_of=main`, `callee_of=process_*` |
+| `show` | string | Display mode — `show=calls` renders a compact call graph view | `show=calls` |
 
 **Parameter capabilities:**
 
@@ -397,6 +400,101 @@ src/api.py:78:process_request
 
 ---
 
+## Call Graph Analysis
+
+The AST adapter extracts call graph data from every function and method during analysis. This includes:
+
+- **`calls`** — list of function names called by this function (outgoing calls)
+- **`called_by`** — list of function names that call this function, within the same file
+- **`resolved_calls`** — like `calls`, but with `resolved_file` + `resolved_name` for calls that can be traced across import boundaries (Python only; requires tree-sitter)
+
+Call graph fields appear automatically in JSON output and in the default text renderer (as `calls:` and `called by:` lines below each function).
+
+### Within-file call queries
+
+**`calls=<name>`** — find functions that call a given name:
+
+```bash
+# Find all callers of validate_token in auth.py
+reveal 'ast://src/auth.py?calls=validate_token'
+
+# Wildcard: find functions calling any logging method
+reveal 'ast://src/?calls=log.*'
+reveal 'ast://src/?calls=*log*'
+```
+
+**`callee_of=<name>`** — find functions called by a specific function:
+
+```bash
+# What does process_batch call?
+reveal 'ast://src/?callee_of=process_batch'
+```
+
+**`show=calls`** — compact call graph view (arrow diagram):
+
+```bash
+# Show full call graph for a file or directory
+reveal 'ast://src/auth.py?show=calls'
+reveal 'ast://src/?show=calls'
+```
+
+Output:
+```
+Call Graph: src/auth.py
+
+authenticate
+  └─calls──▶ validate_token, hash_password, log_attempt
+  ◀─called─  login_handler
+
+validate_token
+  └─calls──▶ decode_jwt, check_expiry
+  ◀─called─  authenticate
+```
+
+### Cross-file call queries
+
+`calls=` and `callee_of=` only see within-file relationships. For project-wide callers use the `calls://` adapter:
+
+```bash
+# Who calls validate_token across the entire project?
+reveal 'calls://src/?target=validate_token'
+
+# Two levels deep (callers-of-callers)
+reveal 'calls://src/?target=validate_token&depth=2'
+
+# Graphviz dot output
+reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > call_graph.svg
+```
+
+See [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) for full `calls://` documentation.
+
+### JSON output — call fields
+
+```bash
+reveal 'ast://src/auth.py?type=function' --format=json | \
+  jq '.results[] | {name, calls, called_by, resolved_calls}'
+```
+
+Example result:
+```json
+{
+  "name": "authenticate",
+  "calls": ["validate_token", "hash_password"],
+  "called_by": ["login_handler"],
+  "resolved_calls": [
+    {
+      "name": "validate_token",
+      "resolved_file": "src/tokens.py",
+      "resolved_name": "validate_token"
+    }
+  ]
+}
+```
+
+> **Note:** `resolved_calls` is only present when at least one call can be resolved to a file via imports. It is absent (not an empty list) when nothing resolves.
+
+---
+
 ## Common Workflows
 
 ### Workflow 1: Find Refactoring Targets
@@ -539,6 +637,33 @@ reveal 'ast://./src?type=class|function' --format=json | \
 ```
 
 **Expected outcome**: Complete API surface documentation.
+
+### Workflow 7: Trace Function Call Graph
+
+**Scenario**: Understand execution paths and call chains through a codebase.
+
+```bash
+# Step 1: See who each function calls (compact view)
+reveal 'ast://src/auth.py?show=calls'
+
+# Step 2: Find callers of a specific function (within-file)
+reveal 'ast://src/auth.py?calls=validate_token'
+
+# Step 3: Find callers project-wide
+reveal 'calls://src/?target=validate_token'
+
+# Step 4: Explore callers-of-callers (who triggers the chain?)
+reveal 'calls://src/?target=validate_token&depth=2'
+
+# Step 5: Extract call data for a specific function (JSON)
+reveal 'ast://src/auth.py?name=authenticate' --format=json | \
+  jq '.results[0] | {calls, called_by, resolved_calls}'
+
+# Step 6: Generate a visual graph
+reveal 'calls://src/?target=authenticate&format=dot' | dot -Tsvg > auth_calls.svg
+```
+
+**Expected outcome**: Complete picture of call chains — who triggers what, and how deep it goes.
 
 ---
 
@@ -1172,7 +1297,19 @@ A: Currently heuristic-based. Tree-sitter-based McCabe calculation is planned fo
 
 **Q: Can I find all callers of a function?**
 
-A: No, AST adapter only analyzes code structure, not relationships. Use `imports://` for dependency analysis or IDE tools for call graphs.
+A: Yes. Two levels of support:
+
+- **Within-file** — use `calls=<name>` to find functions that call `<name>` in the same file:
+  ```bash
+  reveal 'ast://src/auth.py?calls=validate_token'
+  ```
+- **Cross-file (project-wide)** — use the `calls://` adapter:
+  ```bash
+  reveal 'calls://src/?target=validate_token'           # direct callers
+  reveal 'calls://src/?target=validate_token&depth=2'   # callers-of-callers
+  ```
+
+See [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) for full documentation.
 
 **Q: How do I exclude test files?**
 

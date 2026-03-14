@@ -79,7 +79,19 @@ _HELP_EXAMPLES = [
     {
         'uri': 'ast://.?complexity>5&sort=-lines&limit=20&offset=10',
         'description': 'Complex functions, paginated results (NEW: full result control)'
-    }
+    },
+    {
+        'uri': 'ast://src/?calls=validate_item --format=json',
+        'description': 'Find all functions that call validate_item (JSON includes calls + resolved_calls)'
+    },
+    {
+        'uri': 'ast://src/?callee_of=process_batch',
+        'description': 'Find functions called by process_batch (within-file)'
+    },
+    {
+        'uri': 'ast://src/?show=calls',
+        'description': 'Show call graph view for all functions in src/ (calls + called_by)'
+    },
 ]
 
 _HELP_WORKFLOWS = [
@@ -109,6 +121,17 @@ _HELP_WORKFLOWS = [
         'steps': [
             "git diff --name-only | grep '\\.py$' | xargs -I{} reveal 'ast://{}?complexity>8'",
             "git diff --name-only | reveal --stdin --check",
+        ]
+    },
+    {
+        'name': 'Trace Function Call Graph',
+        'scenario': 'Understand what calls what — trace execution paths and identify hotspots',
+        'steps': [
+            "reveal 'ast://src/?show=calls'                        # Compact call graph: all functions + their calls",
+            "reveal 'ast://src/?calls=validate_item'               # Which functions call validate_item? (within-file)",
+            "reveal 'calls://src/?target=validate_item'            # Cross-file: who calls validate_item project-wide?",
+            "reveal 'calls://src/?target=validate_item&depth=2'    # Callers-of-callers (transitive, 2 levels)",
+            "reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > call_graph.svg  # Graphviz SVG",
         ]
     },
     {
@@ -173,7 +196,19 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'Decorator pattern with wildcard support',
         'operators': ['==', '~='],
         'examples': ['decorator=property', 'decorator=*cache*', 'decorator=staticmethod']
-    }
+    },
+    'calls': {
+        'type': 'string',
+        'description': 'Find functions/methods that call a given name (wildcard supported). Matches against the calls list extracted from function bodies.',
+        'operators': ['==', '~='],
+        'examples': ['calls=validate_item', 'calls=*send*', 'calls=db.*']
+    },
+    'callee_of': {
+        'type': 'string',
+        'description': 'Find functions that are called by a given function name (within-file reverse direction). Matches against the called_by list.',
+        'operators': ['==', '~='],
+        'examples': ['callee_of=main', 'callee_of=process_batch', 'callee_of=*handler*']
+    },
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -267,7 +302,22 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'uri': 'ast://.?lines>30&complexity<5',
         'description': 'Long but simple functions',
         'output_type': 'ast_query'
-    }
+    },
+    {
+        'uri': 'ast://src/?calls=validate_item',
+        'description': 'Find functions that call validate_item (within-file)',
+        'output_type': 'ast_query'
+    },
+    {
+        'uri': 'ast://src/?callee_of=main',
+        'description': 'Find functions called by main (within-file)',
+        'output_type': 'ast_query'
+    },
+    {
+        'uri': 'ast://src/?show=calls',
+        'description': 'Compact call graph view for all functions in src/',
+        'output_type': 'ast_query'
+    },
 ]
 
 
@@ -292,7 +342,10 @@ def get_help() -> Dict[str, Any]:
             'complexity': 'McCabe cyclomatic complexity (industry threshold: >10 needs refactoring, >20 is high risk)',
             'type': 'Element type: function, class, method. Supports OR with | or , (e.g., type=function, type=class|function)',
             'name': 'Element name pattern with wildcards or regex (e.g., name=test_*, name~=^test_)',
-            'decorator': 'Decorator pattern - find decorated functions/classes (e.g., decorator=property, decorator!=property)'
+            'decorator': 'Decorator pattern - find decorated functions/classes (e.g., decorator=property, decorator!=property)',
+            'calls': 'Find functions that call a given name (e.g., calls=validate_item, calls=*send*)',
+            'callee_of': 'Find functions called by a given function (within-file reverse, e.g., callee_of=main)',
+            'show': 'Display mode: show=calls renders a compact call graph view instead of filtered results'
         },
         'result_control': {
             'sort': 'Sort results by field (e.g., sort=complexity, sort=-lines for descending)',
@@ -306,6 +359,7 @@ def get_help() -> Dict[str, Any]:
             "reveal 'ast://.?name=test_*'",
             "reveal 'ast://.?decorator=property'",
             "reveal 'ast://.?decorator=*cache*'",
+            "reveal 'ast://.?show=calls'",
         ],
         # Scenario-based workflow patterns
         'workflows': _HELP_WORKFLOWS,
@@ -316,16 +370,19 @@ def get_help() -> Dict[str, Any]:
             'NEW operators: != (not equals), ~= (regex), .. (range)',
             'NEW result control: sort=field (or sort=-field for descending), limit=N, offset=M',
             'Result control enables efficient pagination for AI agents and large codebases',
-            'Complexity is currently heuristic-based (line count). Tree-sitter-based calculation coming soon.',
+            'Complexity is proper McCabe cyclomatic complexity for tree-sitter languages; falls back to line-count heuristic',
             'Scans all code files in directory recursively',
             'Supports Python, JS, TS, Rust, Go, and 50+ languages via tree-sitter',
-            'Use --format=json for programmatic filtering with jq'
+            'Use --format=json for programmatic filtering with jq',
+            'Call graph: calls= and callee_of= filters work within a file; use calls:// for cross-file callers',
+            'JSON output includes calls[], called_by[], and resolved_calls[] fields on each function/method',
         ],
         'output_formats': ['text', 'json', 'grep'],
         'see_also': [
             'reveal help://python - Runtime environment inspection',
             'reveal help://tricks - Power user workflows',
-            'reveal file.py --check - Code quality checks'
+            'reveal file.py --check - Code quality checks',
+            'reveal help://calls - Cross-file call graph queries (calls:// adapter)',
         ]
     }
 
@@ -364,5 +421,8 @@ def get_schema() -> Dict[str, Any]:
             'Supports 50+ languages via tree-sitter (Python, JS, TS, Rust, Go, Java, C, C++, ...)',
             'Complexity is proper McCabe cyclomatic complexity for tree-sitter languages; falls back to line-count heuristic for unsupported languages',
             'type= shorthand: ?functions → ?type=function, ?classes → ?type=class, ?methods → ?type=method',
+            'Call graph fields on functions/methods in JSON: calls[] (outgoing), called_by[] (within-file incoming), resolved_calls[] (cross-file resolved entries)',
+            'calls= and callee_of= filters search within-file call lists; for project-wide callers use calls:// adapter',
+            'show=calls renders a compact call graph view (arrow diagram) instead of the standard element list',
         ]
     }

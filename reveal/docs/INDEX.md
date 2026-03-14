@@ -41,6 +41,7 @@ Complete guides for all URI protocol adapters (~24,500 lines):
 | File | Lines | Purpose |
 |------|-------|---------|
 | [AST_ADAPTER_GUIDE.md](AST_ADAPTER_GUIDE.md) | 1192 | AST-based code analysis with complexity/size filtering |
+| [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) | — | Cross-file call graph queries (calls://) |
 | [CLAUDE_ADAPTER_GUIDE.md](CLAUDE_ADAPTER_GUIDE.md) | 2316 | Claude CLI session analysis and tool usage tracking |
 | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md) | 328 | cPanel user environment: domains, SSL, ACL health |
 | [DIFF_ADAPTER_GUIDE.md](DIFF_ADAPTER_GUIDE.md) | 1932 | Git diff analysis and structure comparison |
