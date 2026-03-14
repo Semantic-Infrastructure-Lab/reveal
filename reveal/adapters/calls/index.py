@@ -9,6 +9,7 @@ invalidates only the entries affected.  In practice the whole index is rebuilt
 per directory when any file changes (simple and correct).
 """
 
+import builtins as _builtins_module
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -18,6 +19,13 @@ from ..ast.analysis import collect_structures, is_code_file
 # Module-level cache: directory → (cache_key, index)
 # cache_key is a frozenset of (abspath_str, mtime_ns) so it's hashable.
 _INDEX_CACHE: Dict[str, Tuple[Any, Dict[str, List[Dict[str, Any]]]]] = {}
+
+# All public names in the Python builtins module — used to filter noise from
+# callees results.  Built at import time so it stays in sync with the running
+# Python version automatically.
+PYTHON_BUILTINS: frozenset = frozenset(
+    name for name in dir(_builtins_module) if not name.startswith('_')
+)
 
 
 def _dir_cache_key(directory: Path) -> Any:
@@ -92,7 +100,11 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
     return index
 
 
-def find_callees(path: str, target: str) -> Dict[str, Any]:
+def find_callees(
+    path: str,
+    target: str,
+    include_builtins: bool = False,
+) -> Dict[str, Any]:
     """Find what function *target* calls, across all matching definitions.
 
     Scans the project for every function/method named *target* and returns
@@ -103,16 +115,20 @@ def find_callees(path: str, target: str) -> Dict[str, Any]:
     Args:
         path: Root directory (or file) to search.
         target: Function/method name to look up.
+        include_builtins: When False (default), Python builtins (``len``,
+            ``str``, ``sorted``, ``isinstance``, exception types, etc.) are
+            stripped from the call list.  Pass True to see the raw list.
 
     Returns:
         Dict with ``target``, ``matches`` (one entry per definition found),
-        and ``total_calls`` count.
+        ``total_calls`` count, and ``_builtins_hidden`` (count filtered out).
     """
     path_obj = Path(path)
     directory = path_obj if path_obj.is_dir() else path_obj.parent
     structures = collect_structures(str(directory))
 
     matches: List[Dict[str, Any]] = []
+    builtins_hidden = 0
     for file_struct in structures:
         file_path = file_struct.get('file', '')
         for elem in file_struct.get('elements', []):
@@ -120,11 +136,16 @@ def find_callees(path: str, target: str) -> Dict[str, Any]:
                 continue
             if elem.get('name', '') != target:
                 continue
+            calls = elem.get('calls', [])
+            if not include_builtins:
+                filtered = [c for c in calls if c.split('.')[-1] not in PYTHON_BUILTINS]
+                builtins_hidden += len(calls) - len(filtered)
+                calls = filtered
             matches.append({
                 'file': file_path,
                 'function': target,
                 'line': elem.get('line', 0),
-                'calls': elem.get('calls', []),
+                'calls': calls,
             })
 
     return {
@@ -132,6 +153,7 @@ def find_callees(path: str, target: str) -> Dict[str, Any]:
         'query': 'callees',
         'matches': matches,
         'total_calls': sum(len(m['calls']) for m in matches),
+        '_builtins_hidden': builtins_hidden,
     }
 
 

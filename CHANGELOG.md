@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (session destined-altar-0313)
 
+### Added (session chosen-flame-0314)
+- **`calls://` `?callees=X` builtin filtering** — Python builtins (`len`, `str`, `sorted`, `ValueError`, etc.) are now hidden from callees output by default, leaving only project-defined and stdlib calls. Uses `PYTHON_BUILTINS` frozenset derived from `dir(builtins)` at import time (stays in sync across Python versions). `?builtins=true` restores the full raw list. Dotted stdlib calls like `os.path.join` are unaffected (bare name `join` is not a builtin). Footer in text output shows `(N builtin(s) hidden — use ?builtins=true to include)` when any are filtered. `_builtins_hidden` count added to result dict. (session chosen-flame-0314)
+
 ### Added (session turbulent-frost-0314)
 - **`calls://` `?callees=X` forward lookup** — symmetric to the existing `?target=X` (reverse/callers). `calls://src/?callees=validate_item` scans all definitions of `validate_item` across the project and shows what it calls, with per-file breakdown for functions defined in multiple files. New `find_callees()` in `index.py`; new `_render_callees_text()` in renderer; `?callees=` also supports `?format=json`. If both `callees=` and `target=` are given, `callees=` takes precedence. (session turbulent-frost-0314)
 

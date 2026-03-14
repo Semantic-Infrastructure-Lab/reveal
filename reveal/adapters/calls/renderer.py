@@ -66,10 +66,13 @@ def _render_callees_text(data: Dict[str, Any]) -> None:
     total = data.get('total_calls', 0)
     matches = data.get('matches', [])
     path = data.get('path', '.')
+    builtins_hidden = data.get('_builtins_hidden', 0)
 
     print(f"Callees of: {target}")
     print(f"Project:    {path}")
     print(f"Total:      {total} call(s) across {len(matches)} definition(s)")
+    if builtins_hidden:
+        print(f"            ({builtins_hidden} builtin(s) hidden — use ?builtins=true to include)")
     print()
 
     if not matches:

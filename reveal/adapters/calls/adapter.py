@@ -21,7 +21,7 @@ import os
 from typing import Any, Dict, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from .index import find_callers, find_callees
+from .index import PYTHON_BUILTINS, find_callers, find_callees
 from .renderer import render_calls_structure
 from ...utils.results import ResultBuilder
 
@@ -31,10 +31,12 @@ _HELP: Dict[str, Any] = {
     'syntax': 'calls://<path>?target=<function>[&depth=N][&format=dot|json]\n'
               '         calls://<path>?callees=<function>',
     'parameters': {
-        'target':  'Function name to find callers of (reverse lookup)',
-        'callees': 'Function name to find callees of — what does it call? (forward lookup)',
-        'depth':   'Transitive caller depth (default 1, max 5) — applies to ?target only',
-        'format':  'Output format: text (default), dot (Graphviz), or json',
+        'target':   'Function name to find callers of (reverse lookup)',
+        'callees':  'Function name to find callees of — what does it call? (forward lookup)',
+        'depth':    'Transitive caller depth (default 1, max 5) — applies to ?target only',
+        'format':   'Output format: text (default), dot (Graphviz), or json',
+        'builtins': 'Include Python builtins in callees output (default: false). '
+                    'Use ?builtins=true to see len, str, sorted, ValueError, etc.',
     },
     'examples': [
         {'uri': 'calls://src/?target=validate_item',
@@ -42,7 +44,9 @@ _HELP: Dict[str, Any] = {
         {'uri': 'calls://src/?target=process_batch&depth=2',
          'description': 'Callers-of-callers too (transitive, 2 levels)'},
         {'uri': 'calls://src/?callees=validate_item',
-         'description': 'What does validate_item call? (forward lookup)'},
+         'description': 'What does validate_item call? (forward lookup, builtins hidden)'},
+        {'uri': 'calls://src/?callees=validate_item&builtins=true',
+         'description': 'Include builtins (len, str, sorted, exceptions, etc.)'},
         {'uri': 'calls://src/?target=main&format=dot',
          'description': 'Output callers graph as Graphviz dot (pipe to dot -Tsvg)'},
         {'uri': 'calls://src/?target=main&format=json',
@@ -62,10 +66,11 @@ _SCHEMA: Dict[str, Any] = {
     'description': 'Cross-file call graph — who calls X (?target) or what does X call (?callees)?',
     'uri_syntax': 'calls://<path>?target=<name>[&depth=N][&format=text|dot|json]',
     'query_params': {
-        'target':  {'type': 'string',  'description': 'Function name to find callers of (reverse lookup)'},
-        'callees': {'type': 'string',  'description': 'Function name to find callees of (forward lookup)'},
-        'depth':   {'type': 'integer', 'description': 'Transitive depth 1-5 (default 1), applies to ?target'},
-        'format':  {'type': 'string',  'description': 'Output format: text (default), dot (Graphviz), or json'},
+        'target':   {'type': 'string',  'description': 'Function name to find callers of (reverse lookup)'},
+        'callees':  {'type': 'string',  'description': 'Function name to find callees of (forward lookup)'},
+        'depth':    {'type': 'integer', 'description': 'Transitive depth 1-5 (default 1), applies to ?target'},
+        'format':   {'type': 'string',  'description': 'Output format: text (default), dot (Graphviz), or json'},
+        'builtins': {'type': 'boolean', 'description': 'Include Python builtins in callees output (default: false)'},
     },
     'elements': {},
     'supports_batch': False,
@@ -145,7 +150,12 @@ _SCHEMA: Dict[str, Any] = {
         },
         {
             'uri': 'calls://src/?callees=validate_item',
-            'description': 'What does validate_item call? (forward lookup)',
+            'description': 'What does validate_item call? (builtins hidden by default)',
+            'output_type': 'calls_callees',
+        },
+        {
+            'uri': 'calls://src/?callees=validate_item&builtins=true',
+            'description': 'Include Python builtins (len, str, sorted, ValueError, etc.)',
             'output_type': 'calls_callees',
         },
         {
@@ -165,6 +175,7 @@ _SCHEMA: Dict[str, Any] = {
         'Callee names are normalised: "self.foo" → "foo" for lookup; full dotted form also indexed.',
         '?target depth=N expands callers transitively up to N levels (capped at 5).',
         '?callees=X scans all definitions of X — useful when the name appears in multiple files.',
+        '?callees hides Python builtins by default (len, str, sorted, ValueError, etc.); use ?builtins=true to include them.',
     ],
 }
 
@@ -242,7 +253,8 @@ class CallsAdapter(ResourceAdapter):
         query_format = self.query_params.get('format', '')
 
         if callees_target:
-            result_data = find_callees(self.path, callees_target)
+            include_builtins = self.query_params.get('builtins', '').lower() == 'true'
+            result_data = find_callees(self.path, callees_target, include_builtins=include_builtins)
             result_data['path'] = self.path
             if query_format:
                 result_data['_query_format'] = query_format

@@ -593,5 +593,178 @@ class TestCallsRendererCallees(unittest.TestCase):
         self.assertNotIn('  helpers.py:', out)
 
 
+# ---------------------------------------------------------------------------
+# Builtin filtering: find_callees with include_builtins flag
+# ---------------------------------------------------------------------------
+
+class TestFindCalleesBuiltinFiltering(unittest.TestCase):
+    """Tests for ?builtins=false (default) — Python builtins hidden from callees."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        # process calls: helper (project fn), sorted (builtin), len (builtin)
+        _write(self.tmpdir, 'main.py', '''
+def process(items):
+    helper(items)
+    return sorted(items)
+
+def helper(x):
+    return len(x)
+''')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_builtins_hidden_by_default(self):
+        result = find_callees(self.tmpdir, 'process')
+        calls = result['matches'][0]['calls']
+        self.assertIn('helper', calls)
+        self.assertNotIn('sorted', calls)
+
+    def test_include_builtins_restores_full_list(self):
+        result = find_callees(self.tmpdir, 'process', include_builtins=True)
+        calls = result['matches'][0]['calls']
+        self.assertIn('helper', calls)
+        self.assertIn('sorted', calls)
+
+    def test_builtins_hidden_count_reported(self):
+        result = find_callees(self.tmpdir, 'process')
+        # 'sorted' is filtered; helper is not
+        self.assertGreater(result['_builtins_hidden'], 0)
+
+    def test_builtins_hidden_zero_when_include_true(self):
+        result = find_callees(self.tmpdir, 'process', include_builtins=True)
+        self.assertEqual(result['_builtins_hidden'], 0)
+
+    def test_total_calls_reflects_filtered_list(self):
+        result = find_callees(self.tmpdir, 'process')
+        total = result['total_calls']
+        actual = sum(len(m['calls']) for m in result['matches'])
+        self.assertEqual(total, actual)
+
+    def test_exception_types_hidden_by_default(self):
+        _write(self.tmpdir, 'validator.py', '''
+def validate(x):
+    if not x:
+        raise ValueError("bad")
+    return clean(x)
+
+def clean(x):
+    return x
+''')
+        result = find_callees(self.tmpdir, 'validate')
+        calls = result['matches'][0]['calls']
+        self.assertNotIn('ValueError', calls)
+        self.assertIn('clean', calls)
+
+    def test_stdlib_dotted_calls_not_filtered(self):
+        """os.path.join — bare name is 'join', not a builtin — must stay visible."""
+        _write(self.tmpdir, 'utils.py', '''
+import os
+
+def build_path(base, name):
+    return os.path.join(base, name)
+''')
+        result = find_callees(self.tmpdir, 'build_path', include_builtins=False)
+        calls = result['matches'][0]['calls']
+        # 'join' is not a Python builtin function — should be visible
+        self.assertTrue(any('join' in c for c in calls))
+
+
+# ---------------------------------------------------------------------------
+# Adapter: ?builtins=true query param
+# ---------------------------------------------------------------------------
+
+class TestCallsAdapterBuiltinsParam(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        _write(self.tmpdir, 'a.py', '''
+def worker(items):
+    helper(items)
+    return sorted(items)
+
+def helper(x):
+    pass
+''')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_default_hides_builtins(self):
+        adapter = CallsAdapter(self.tmpdir, 'callees=worker')
+        result = adapter.get_structure()
+        calls = result['matches'][0]['calls']
+        self.assertIn('helper', calls)
+        self.assertNotIn('sorted', calls)
+
+    def test_builtins_true_includes_builtins(self):
+        adapter = CallsAdapter(self.tmpdir, 'callees=worker&builtins=true')
+        result = adapter.get_structure()
+        calls = result['matches'][0]['calls']
+        self.assertIn('helper', calls)
+        self.assertIn('sorted', calls)
+
+    def test_builtins_false_explicit_hides_builtins(self):
+        adapter = CallsAdapter(self.tmpdir, 'callees=worker&builtins=false')
+        result = adapter.get_structure()
+        calls = result['matches'][0]['calls']
+        self.assertNotIn('sorted', calls)
+
+
+# ---------------------------------------------------------------------------
+# Renderer: builtins_hidden footer in text output
+# ---------------------------------------------------------------------------
+
+class TestCallsRendererBuiltinsFooter(unittest.TestCase):
+
+    def _capture(self, data, fmt='text'):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            render_calls_structure(data, fmt)
+        return buf.getvalue()
+
+    def test_footer_shown_when_builtins_hidden(self):
+        data = {
+            'query': 'callees',
+            'target': 'process',
+            'path': 'src/',
+            'total_calls': 1,
+            '_builtins_hidden': 3,
+            'matches': [{'file': 'src/main.py', 'function': 'process', 'line': 5,
+                         'calls': ['helper']}],
+        }
+        out = self._capture(data, 'text')
+        self.assertIn('3 builtin(s) hidden', out)
+        self.assertIn('?builtins=true', out)
+
+    def test_footer_absent_when_none_hidden(self):
+        data = {
+            'query': 'callees',
+            'target': 'process',
+            'path': 'src/',
+            'total_calls': 1,
+            '_builtins_hidden': 0,
+            'matches': [{'file': 'src/main.py', 'function': 'process', 'line': 5,
+                         'calls': ['helper']}],
+        }
+        out = self._capture(data, 'text')
+        self.assertNotIn('builtin', out)
+
+    def test_footer_absent_when_key_missing(self):
+        """Renderer is backwards-compatible — no _builtins_hidden key → no footer."""
+        data = {
+            'query': 'callees',
+            'target': 'fn',
+            'path': '.',
+            'total_calls': 1,
+            'matches': [{'file': 'a.py', 'function': 'fn', 'line': 2, 'calls': ['bar']}],
+        }
+        out = self._capture(data, 'text')
+        self.assertNotIn('builtin', out)
+
+
 if __name__ == '__main__':
     unittest.main()
