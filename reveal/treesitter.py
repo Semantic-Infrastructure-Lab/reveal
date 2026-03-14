@@ -75,6 +75,25 @@ ELEMENT_TYPE_MAP = {
     'struct': STRUCT_NODE_TYPES,
 }
 
+# Node types for call expression extraction (call graph)
+CALL_NODE_TYPES = {
+    'call',                  # Python
+    'call_expression',       # JS, TS, Go, Rust, C, C++, Kotlin
+    'method_call',           # Ruby, Rust (method syntax)
+    'method_call_expression', # Rust
+    'invocation',            # C#
+    'function_call',         # Lua, Bash
+    'method_invocation',     # Java
+}
+
+# Callee node types for attribute/member access (self.foo, obj.method, pkg.Func)
+CALLEE_ATTRIBUTE_TYPES = {
+    'attribute',             # Python: self.bar
+    'member_expression',     # JS/TS: obj.method
+    'field_expression',      # C/C++: obj.field
+    'selector_expression',   # Go: pkg.Func
+}
+
 # Parent node types for hierarchical extraction (Class.method)
 PARENT_NODE_TYPES = (
     'class_definition', 'class_declaration',
@@ -98,6 +117,31 @@ ALL_ELEMENT_NODE_TYPES = (
     'class_definition', 'class_declaration',
     'struct_item', 'struct_specifier', 'struct_declaration',
 )
+
+
+def build_callers_index(functions: List[Dict[str, Any]]) -> Dict[str, List[str]]:
+    """Invert the callees map to produce a within-file callers index.
+
+    Args:
+        functions: List of function dicts with 'name' and 'calls' fields.
+
+    Returns:
+        Dict mapping function name → sorted list of names that call it (within this file).
+
+    Example:
+        [{'name': 'main', 'calls': ['parse', 'run']},
+         {'name': 'run',  'calls': ['parse']}]
+        → {'parse': ['main', 'run'], 'run': ['main']}
+    """
+    callers: Dict[str, List[str]] = {}
+    for func in functions:
+        for callee in func.get('calls', []):
+            # Strip attribute prefix for local matching: "self.bar" → "bar"
+            local_name = callee.split('.')[-1]
+            callers.setdefault(local_name, [])
+            if func['name'] not in callers[local_name]:
+                callers[local_name].append(func['name'])
+    return callers
 
 
 class TreeSitterAnalyzer(FileAnalyzer):
@@ -191,7 +235,11 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         # Extract common elements
         structure['imports'] = self._extract_imports()
-        structure['functions'] = self._extract_functions()
+        functions = self._extract_functions()
+        callers_index = build_callers_index(functions)
+        for func in functions:
+            func['called_by'] = callers_index.get(func['name'], [])
+        structure['functions'] = functions
         structure['classes'] = self._extract_classes()
         structure['structs'] = self._extract_structs()
 
@@ -330,6 +378,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'depth': depth,
             'complexity': complexity,
             'decorators': decorators,
+            'calls': self._extract_calls_in_function(node),
         }
 
     def _extract_classes(self) -> List[Dict[str, Any]]:
@@ -734,3 +783,47 @@ class TreeSitterAnalyzer(FileAnalyzer):
                 stack.append((child, child_type, child_depth))
 
         return decision_count + 1, max_depth
+
+    def _get_callee_name(self, call_node) -> Optional[str]:
+        """Extract the callee name from a call expression node.
+
+        Handles three forms:
+          - Simple:    foo()       → "foo"
+          - Attribute: self.bar()  → "self.bar"
+          - Chained:   a.b.c()    → "a.b.c"
+        """
+        if not call_node.children:
+            return None
+        callee_node = call_node.children[0]
+        if callee_node.type == 'identifier':
+            return self._get_node_text(callee_node)
+        if callee_node.type in CALLEE_ATTRIBUTE_TYPES:
+            return self._get_node_text(callee_node)
+        # Fallback: try to get any text from the callee node
+        text = self._get_node_text(callee_node).strip()
+        return text if text else None
+
+    def _extract_calls_in_function(self, func_node) -> List[str]:
+        """Walk function body subtree and return unique callee name strings.
+
+        Returns best-effort callee names from call expression nodes within the
+        function body. Names are not resolved across files (that's Phase 3).
+
+        Examples:
+            foo()           → ["foo"]
+            self.bar()      → ["self.bar"]
+            foo(bar())      → ["foo", "bar"]  (nested calls both captured)
+        """
+        calls: List[str] = []
+        seen: set = set()
+        stack = list(func_node.children)
+        while stack:
+            node = stack.pop()
+            if node.type in CALL_NODE_TYPES:
+                name = self._get_callee_name(node)
+                if name and name not in seen:
+                    calls.append(name)
+                    seen.add(name)
+            stack.extend(reversed(node.children))
+        return calls
+
