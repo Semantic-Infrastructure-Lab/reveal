@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
 from ..analyzers.imports import ImportGraph, ImportStatement
+from ..utils.query import parse_query_params
 
 _SCHEMA_QUERY_PARAMS = {
     'unused': {
@@ -367,14 +368,7 @@ class ImportsAdapter(ResourceAdapter):
             path_str = '.'
 
         # Parse query params - support both flag-style (?circular) and key-value (?circular=true)
-        query_params: Dict[str, str | bool] = {}
-        if parsed.query:
-            for param in parsed.query.split('&'):
-                if '=' in param:
-                    key, value = param.split('=', 1)
-                    query_params[key] = value
-                else:
-                    query_params[param] = True
+        query_params = parse_query_params(parsed.query or '')
 
         # Resolve target path
         target_path = Path(path_str).resolve()

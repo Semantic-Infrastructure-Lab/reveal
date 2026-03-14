@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ...utils.query import (
     parse_query_filters,
+    parse_query_params,
     parse_result_control,
     ResultControl
 )
@@ -152,11 +153,7 @@ class GitAdapter(ResourceAdapter):
             # ref looks like a query string, move it to query
             query_string = ref
             ref = None
-            query = {}
-            for param in query_string.split('&'):
-                if '=' in param:
-                    key, value = param.split('=', 1)
-                    query[key] = value
+            query = parse_query_params(query_string)
 
         return ref, query
 
@@ -317,11 +314,7 @@ class GitAdapter(ResourceAdapter):
         # Extract query parameters first (?key=value)
         if '?' in resource:
             resource, query_string = resource.rsplit('?', 1)
-            # Simple query parsing (key=value&key2=value2)
-            for param in query_string.split('&'):
-                if '=' in param:
-                    key, value = param.split('=', 1)
-                    query[key] = value
+            query = parse_query_params(query_string)
 
         # Extract ref (@branch or @tag or @commit)
         if '@' in resource:

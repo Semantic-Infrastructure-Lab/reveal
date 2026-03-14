@@ -22,7 +22,7 @@ from typing import Any, Dict
 from reveal.adapters.ast.call_graph import build_symbol_map, resolve_callees
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.calls.index import build_callers_index, find_callers, find_callees
-from reveal.adapters.calls.adapter import CallsAdapter, CallsRenderer, _parse_calls_query
+from reveal.adapters.calls.adapter import CallsAdapter, CallsRenderer
 from reveal.adapters.calls.renderer import render_calls_structure
 
 
@@ -193,23 +193,6 @@ class TestResolvedCallsInAstAdapter(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Unit: _parse_calls_query
-# ---------------------------------------------------------------------------
-
-class TestParseCallsQuery(unittest.TestCase):
-
-    def test_empty(self):
-        self.assertEqual(_parse_calls_query(''), {})
-
-    def test_target(self):
-        self.assertEqual(_parse_calls_query('target=foo'), {'target': 'foo'})
-
-    def test_multiple(self):
-        p = _parse_calls_query('target=foo&depth=2')
-        self.assertEqual(p['target'], 'foo')
-        self.assertEqual(p['depth'], '2')
-
-
 # ---------------------------------------------------------------------------
 # Integration: build_callers_index + find_callers
 # ---------------------------------------------------------------------------

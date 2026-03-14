@@ -23,6 +23,7 @@ from typing import Any, Dict, Optional
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .index import PYTHON_BUILTINS, find_callers, find_callees
 from .renderer import render_calls_structure
+from ...utils.query import parse_query_params
 from ...utils.results import ResultBuilder
 
 _HELP: Dict[str, Any] = {
@@ -232,7 +233,7 @@ class CallsAdapter(ResourceAdapter):
 
     def __init__(self, path: str, query_string: Optional[str] = None):
         self.path = os.path.expanduser(path)
-        self.query_params = _parse_calls_query(query_string or '')
+        self.query_params = parse_query_params(query_string or '', coerce=True)
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         target = self.query_params.get('target', '')
@@ -253,7 +254,7 @@ class CallsAdapter(ResourceAdapter):
         query_format = self.query_params.get('format', '')
 
         if callees_target:
-            include_builtins = self.query_params.get('builtins', '').lower() == 'true'
+            include_builtins = bool(self.query_params.get('builtins', False))
             result_data = find_callees(self.path, callees_target, include_builtins=include_builtins)
             result_data['path'] = self.path
             if query_format:
@@ -281,16 +282,3 @@ class CallsAdapter(ResourceAdapter):
             contract_version='1.1',
             data=result_data,
         )
-
-
-def _parse_calls_query(query_string: str) -> Dict[str, str]:
-    """Parse simple key=value query params from a calls:// query string."""
-    params: Dict[str, str] = {}
-    if not query_string:
-        return params
-    for part in query_string.split('&'):
-        part = part.strip()
-        if '=' in part:
-            key, _, value = part.partition('=')
-            params[key.strip()] = value.strip()
-    return params

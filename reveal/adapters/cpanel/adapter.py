@@ -34,6 +34,7 @@ if sys.platform != 'win32':
     import struct
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
+from ...utils.query import parse_query_params
 from .renderer import CpanelRenderer
 
 
@@ -375,11 +376,7 @@ class CpanelAdapter(ResourceAdapter):
         if element_raw and '?' in element_raw:
             element_part, query_string = element_raw.split('?', 1)
             self.element = element_part or None
-            self.query_params = {}
-            for pair in query_string.split('&'):
-                if '=' in pair:
-                    k, v = pair.split('=', 1)
-                    self.query_params[k] = v
+            self.query_params = parse_query_params(query_string)
         else:
             self.element = element_raw
             self.query_params = {}
