@@ -88,6 +88,33 @@ def parse_query(query_string: str) -> Dict[str, Any]:
     return filters
 
 
+def extract_builtins_param(query_string: str):
+    """Extract and remove 'builtins=<value>' or bare 'builtins' from a query string.
+
+    Args:
+        query_string: URL query string (e.g., "show=calls&builtins=true")
+
+    Returns:
+        (cleaned_query_string, include_builtins: bool)
+        Default is False — builtins are filtered out unless explicitly requested.
+    """
+    if not query_string or 'builtins' not in query_string:
+        return query_string, False
+
+    parts = query_string.split('&')
+    include_builtins = False
+    remaining = []
+    for part in parts:
+        stripped = part.strip()
+        if stripped == 'builtins' or stripped == 'builtins=true':
+            include_builtins = True
+        elif stripped == 'builtins=false':
+            pass  # explicitly false — consume and drop
+        else:
+            remaining.append(part)
+    return '&'.join(remaining), include_builtins
+
+
 def extract_show_param(query_string: str):
     """Extract and remove 'show=<value>' from a query string.
 

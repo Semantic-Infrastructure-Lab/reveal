@@ -4,7 +4,11 @@ import os
 
 from typing import Dict, List, Any, Optional
 
-from .queries import parse_query, format_query, extract_show_param as _extract_show_param
+from .queries import (
+    parse_query, format_query,
+    extract_show_param as _extract_show_param,
+    extract_builtins_param as _extract_builtins_param,
+)
 from .analysis import collect_structures
 from .filtering import apply_filters, matches_decorator
 from .help import get_help as _get_help, get_schema as _get_schema
@@ -67,13 +71,15 @@ class AstAdapter(ResourceAdapter):
         # Extract result control parameters (sort, limit, offset)
         if query_string:
             cleaned_query, self.result_control = parse_result_control(query_string)
-            # Extract show= before parsing filters (it's a display mode, not a filter)
+            # Extract show= and builtins= before parsing filters (display modes, not filters)
             cleaned_query, self.show_mode = _extract_show_param(cleaned_query)
+            cleaned_query, self.include_builtins = _extract_builtins_param(cleaned_query)
             self.query = parse_query(cleaned_query)
         else:
             self.query = {}
             self.result_control = ResultControl()
             self.show_mode = None
+            self.include_builtins = False
 
         self.results: List[Any] = []
 
@@ -125,6 +131,13 @@ class AstAdapter(ResourceAdapter):
                     'type': 'truncated',
                     'message': f'Results truncated: showing {len(controlled)} of {len(filtered)} total matches'
                 })
+
+        # Filter builtins from calls lists unless ?builtins=true
+        if not self.include_builtins:
+            from ..calls.index import PYTHON_BUILTINS
+            for elem in controlled:
+                if elem.get('calls'):
+                    elem['calls'] = [c for c in elem['calls'] if c.split('.')[-1] not in PYTHON_BUILTINS]
 
         # Build result using ResultBuilder (automatically handles contract_version, source, source_type)
         result = ResultBuilder.create(

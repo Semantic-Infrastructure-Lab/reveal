@@ -7,13 +7,14 @@ calls= and callee_of= filters work, and that show=calls produces a graph result.
 import io
 import os
 import tempfile
+import textwrap
 import unittest
 from contextlib import redirect_stdout
 from typing import Dict, Any
 
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.ast.analysis import create_element_dict
-from reveal.adapters.ast.queries import extract_show_param
+from reveal.adapters.ast.queries import extract_show_param, extract_builtins_param
 from reveal.adapters.ast.filtering import _matches_call_list
 from reveal.rendering.adapters.ast import render_ast_structure
 
@@ -294,6 +295,111 @@ class TestShowCallsRenderer(unittest.TestCase):
         out = _capture(render_ast_structure, self._data_with(results), 'text')
         self.assertNotIn('MyClass', out)
         self.assertIn('__init__', out)
+
+
+# ---------------------------------------------------------------------------
+# Unit: extract_builtins_param
+# ---------------------------------------------------------------------------
+
+class TestExtractBuiltinsParam(unittest.TestCase):
+
+    def test_no_builtins_param(self):
+        q, include = extract_builtins_param('lines>50&type=function')
+        self.assertEqual(q, 'lines>50&type=function')
+        self.assertFalse(include)
+
+    def test_builtins_true(self):
+        q, include = extract_builtins_param('builtins=true')
+        self.assertEqual(q, '')
+        self.assertTrue(include)
+
+    def test_builtins_false(self):
+        q, include = extract_builtins_param('builtins=false')
+        self.assertEqual(q, '')
+        self.assertFalse(include)
+
+    def test_bare_builtins_flag(self):
+        q, include = extract_builtins_param('builtins')
+        self.assertEqual(q, '')
+        self.assertTrue(include)
+
+    def test_builtins_with_other_params(self):
+        q, include = extract_builtins_param('type=function&builtins=true&lines>10')
+        self.assertNotIn('builtins', q)
+        self.assertIn('type=function', q)
+        self.assertIn('lines>10', q)
+        self.assertTrue(include)
+
+    def test_empty_string(self):
+        q, include = extract_builtins_param('')
+        self.assertEqual(q, '')
+        self.assertFalse(include)
+
+    def test_none(self):
+        q, include = extract_builtins_param(None)
+        self.assertIsNone(q)
+        self.assertFalse(include)
+
+
+# ---------------------------------------------------------------------------
+# Integration: builtins filtering in ast:// adapter
+# ---------------------------------------------------------------------------
+
+class TestBuiltinsFiltering(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        # Write a Python file that calls both user-defined and builtin functions
+        code = textwrap.dedent("""\
+            def process(items):
+                result = []
+                for item in items:
+                    result.append(validate(item))
+                return result
+
+            def validate(item):
+                return len(item) > 0
+        """)
+        self.py_file = os.path.join(self.tmpdir, 'sample.py')
+        with open(self.py_file, 'w') as f:
+            f.write(code)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _get_calls_for(self, fn_name: str, query_string: str = '') -> list:
+        adapter = AstAdapter(self.py_file, query_string)
+        data = adapter.get_structure()
+        results = data.get('results', [])
+        for elem in results:
+            if elem.get('name') == fn_name:
+                return elem.get('calls', [])
+        return []
+
+    def test_builtins_filtered_by_default(self):
+        """len/append should not appear in calls by default."""
+        calls = self._get_calls_for('process')
+        self.assertNotIn('append', calls)  # list method — a builtin
+        self.assertNotIn('len', calls)
+
+    def test_user_calls_preserved(self):
+        """User-defined function calls should survive filtering."""
+        calls = self._get_calls_for('process')
+        self.assertIn('validate', calls)
+
+    def test_builtins_shown_with_param(self):
+        """?builtins=true should restore builtin calls in output."""
+        calls = self._get_calls_for('validate', 'builtins=true')
+        self.assertIn('len', calls)
+
+    def test_include_builtins_false_attribute(self):
+        adapter = AstAdapter(self.py_file, 'builtins=false')
+        self.assertFalse(adapter.include_builtins)
+
+    def test_include_builtins_true_attribute(self):
+        adapter = AstAdapter(self.py_file, 'builtins=true')
+        self.assertTrue(adapter.include_builtins)
 
 
 if __name__ == '__main__':
