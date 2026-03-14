@@ -109,13 +109,10 @@ class D002(BaseRule):
         # Generate detections for top candidates
         detections: List[Detection] = []
         for interestingness, similarity, combined_size, func1, func2 in candidates[:self.MAX_CANDIDATES]:
-            detections.append(Detection(
+            detections.append(self.create_detection(
                 file_path=file_path,
                 line=func2.get('line', 0),
-                rule_code=self.code,
                 message=f"{self.message}: '{func2['name']}' ~{similarity:.0%} similar to '{func1['name']}' (line {func1.get('line', 0)})",
-                severity=self.severity,
-                category=self.category,
                 suggestion=f"Combined {combined_size} lines. Worth investigating if logic can be shared.",
                 context=f"Interestingness: {interestingness:.1f} (similarity {similarity:.0%} × size {combined_size})"
             ))

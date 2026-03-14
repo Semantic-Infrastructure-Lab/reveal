@@ -84,16 +84,13 @@ class C901(BaseRule, ASTParsingMixin):
             if complexity > threshold:
                 line = func.get('line', 0)
 
-                detections.append(Detection(
+                detections.append(self.create_detection(
                     file_path=file_path,
                     line=line,
-                    rule_code=self.code,
                     message=f"{self.message}: {func_name} (complexity: {complexity}, max: {threshold})",
                     column=1,
                     suggestion="Break into smaller functions or reduce branching",
                     context=f"Function: {func_name}",
-                    severity=self.severity,
-                    category=self.category
                 ))
 
         return detections

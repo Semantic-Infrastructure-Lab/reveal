@@ -98,16 +98,14 @@ class M101(BaseRule):
             else:
                 return detections
 
-            detections.append(Detection(
+            detections.append(self.create_detection(
                 file_path=file_path,
                 line=1,
-                rule_code=self.code,
                 message=msg,
                 column=1,
                 suggestion=suggestion,
                 context=context,
                 severity=severity,
-                category=self.category
             ))
 
         except Exception as e:

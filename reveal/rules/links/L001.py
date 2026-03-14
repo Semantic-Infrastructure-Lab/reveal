@@ -83,16 +83,13 @@ class L001(BaseRule):
                 message = f"{self.message}: {url}"
                 suggestion = self._suggest_fix(base_path, url, reason)
 
-                detections.append(Detection(
+                detections.append(self.create_detection(
                     file_path=file_path,
                     line=line_num,
-                    rule_code=self.code,
                     message=message,
-                    column=1,  # Column not available from structure
+                    column=1,
                     suggestion=suggestion,
                     context=f"[{text}]({url})",
-                    severity=self.severity,
-                    category=self.category
                 ))
 
         return detections

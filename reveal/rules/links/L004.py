@@ -66,13 +66,9 @@ class L004(BaseRule):
             # Only report once per directory (use a marker file)
             # To avoid duplicate reports for every file in docs/
             if path.name == sorted(docs_dir.glob("*.md"))[0].name:
-                detections.append(Detection(
-                    rule_code=self.code,
-                    message=self.message,
-                    severity=self.severity,
+                detections.append(self.create_detection(
                     file_path=str(docs_dir),
                     line=1,
-                    column=1,
                     context=f"Documentation directory has no index: {docs_dir}",
                     suggestion=(
                         f"Create {docs_dir}/README.md with:\n"

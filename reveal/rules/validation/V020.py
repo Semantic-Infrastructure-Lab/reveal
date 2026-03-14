@@ -99,10 +99,9 @@ class V020(BaseRule):
 
         # Validation 1: If renderer has render_element, adapter must have get_element
         if supports_elements and not has_get_element:
-            detections.append(Detection(
+            detections.append(self.create_detection(
                 file_path=str(adapter_file),
                 line=class_line,
-                rule_code=self.code,
                 message=f"Adapter '{scheme}' missing get_element() but renderer has render_element()",
                 suggestion=(
                     "Add get_element() method to adapter:\n"
@@ -115,15 +114,13 @@ class V020(BaseRule):
                 ),
                 context="Renderer supports elements but adapter doesn't implement get_element",
                 severity=Severity.HIGH,
-                category=self.category
             ))
 
         # Validation 2: All adapters should have get_structure
         if not has_get_structure:
-            detections.append(Detection(
+            detections.append(self.create_detection(
                 file_path=str(adapter_file),
                 line=class_line,
-                rule_code=self.code,
                 message=f"Adapter '{scheme}' missing get_structure() method",
                 suggestion=(
                     "Add get_structure() method to adapter:\n"
@@ -135,7 +132,6 @@ class V020(BaseRule):
                 ),
                 context="Adapter missing required get_structure() method",
                 severity=Severity.HIGH,
-                category=self.category
             ))
 
         # Validation 3: Test get_element error handling (if it exists)
@@ -163,10 +159,9 @@ class V020(BaseRule):
             return None
         except Exception as e:
             exception_type = type(e).__name__
-            return Detection(
+            return self.create_detection(
                 file_path=str(adapter_file),
                 line=self._find_line_matching(adapter_file, 'def get_element'),
-                rule_code=self.code,
                 message=(
                     f"Adapter '{scheme}' get_element() crashes with "
                     f"{exception_type} for missing element"
@@ -184,8 +179,6 @@ class V020(BaseRule):
                     f"Error: {str(e)}"
                 ),
                 context=f"get_element crashes with {exception_type} instead of returning None",
-                severity=Severity.MEDIUM,
-                category=self.category
             )
 
     @staticmethod

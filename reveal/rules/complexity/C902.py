@@ -81,16 +81,14 @@ class C902(BaseRule):
             line = func.get('line', 0)
             func_name = func.get('name', '<unknown>')
 
-            detections.append(Detection(
+            detections.append(self.create_detection(
                 file_path=file_path,
                 line=line,
-                rule_code=self.code,
                 message=msg,
                 column=1,
                 suggestion=suggestion,
                 context=f"Function: {func_name} ({line_count} lines)",
                 severity=severity,
-                category=self.category
             ))
 
         return detections

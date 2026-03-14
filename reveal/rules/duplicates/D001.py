@@ -94,13 +94,10 @@ class D001(BaseRule):
                 instances.sort(key=lambda x: x[1])
                 original = instances[0]
                 for duplicate in instances[1:]:
-                    detections.append(Detection(
+                    detections.append(self.create_detection(
                         file_path=file_path,
                         line=duplicate[1],
-                        rule_code=self.code,
                         message=f"{self.message}: '{duplicate[0]}' identical to '{original[0]}' (line {original[1]})",
-                        severity=self.severity,
-                        category=self.category,
                         suggestion=f"Refactor to share implementation with {original[0]}",
                         context=f"{duplicate[2]} chars, hash {func_hash}"
                     ))

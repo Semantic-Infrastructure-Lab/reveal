@@ -87,13 +87,9 @@ class L005(BaseRule):
                 "  - Creates interconnected documentation web"
             )
 
-            detections.append(Detection(
-                rule_code=self.code,
-                message=self.message,
-                severity=self.severity,
+            detections.append(self.create_detection(
                 file_path=file_path,
                 line=1,
-                column=1,
                 context=f"Only {internal_md_links} cross-reference(s) found",
                 suggestion=suggestion_text
             ))

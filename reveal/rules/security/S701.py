@@ -68,16 +68,13 @@ class S701(BaseRule):
             match = re.match(r'^\s*FROM\s+(\S+):latest', line, re.IGNORECASE)
             if match:
                 image = match.group(1)
-                detections.append(Detection(
+                detections.append(self.create_detection(
                     file_path=file_path,
                     line=i,
-                    rule_code=self.code,
                     message=f"{self.message}: {image}:latest",
                     column=1,
                     suggestion=f"Pin to specific version: FROM {image}:1.0.0",
                     context=line.strip(),
-                    severity=self.severity,
-                    category=self.category
                 ))
 
             # Check for missing tag (defaults to :latest)
@@ -92,15 +89,12 @@ class S701(BaseRule):
         """Check Docker Hub page for :latest usage."""
         # For URIs, check if content mentions :latest
         if ':latest' in content or 'latest tag' in content.lower():
-            return [Detection(
+            return [self.create_detection(
                 file_path=uri,
                 line=0,
-                rule_code=self.code,
                 message="Docker Hub image uses :latest tag",
                 column=0,
                 suggestion="Use a specific version tag",
-                severity=self.severity,
-                category=self.category
             )]
         return []
 
@@ -112,14 +106,11 @@ class S701(BaseRule):
         image = parts[1]
         if 'AS' in line.upper():
             return None
-        return Detection(
+        return self.create_detection(
             file_path=file_path,
             line=line_num,
-            rule_code=self.code,
             message=f"Docker image missing tag (defaults to :latest): {image}",
             column=1,
             suggestion=f"Pin to specific version: FROM {image}:1.0.0",
             context=line.strip(),
-            severity=self.severity,
-            category=self.category,
         )

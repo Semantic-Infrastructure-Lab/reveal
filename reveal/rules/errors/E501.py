@@ -74,16 +74,13 @@ class E501(BaseRule):
             if line_length > max_length:
                 excess = line_length - max_length
 
-                detections.append(Detection(
+                detections.append(self.create_detection(
                     file_path=file_path,
                     line=i,
-                    rule_code=self.code,
                     message=f"{self.message} ({line_length} > {max_length} characters, {excess} over)",
                     column=max_length + 1,
                     suggestion="Break line into multiple lines or refactor",
                     context=line[:80] + '...' if len(line) > 80 else line,
-                    severity=self.severity,
-                    category=self.category
                 ))
 
         return detections

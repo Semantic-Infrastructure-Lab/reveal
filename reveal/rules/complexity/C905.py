@@ -61,10 +61,9 @@ class C905(BaseRule):
                 line = func.get('line', 0)
                 func_name = func.get('name', '<unknown>')
 
-                detections.append(Detection(
+                detections.append(self.create_detection(
                     file_path=file_path,
                     line=line,
-                    rule_code=self.code,
                     message=f"{self.message}: {func_name} (depth: {depth}, max: {self.MAX_DEPTH})",
                     column=1,
                     suggestion=(
@@ -75,8 +74,6 @@ class C905(BaseRule):
                         f"4) Consider polymorphism or strategy pattern"
                     ),
                     context=f"Function: {func_name} (nesting depth: {depth})",
-                    severity=Severity.MEDIUM,
-                    category=self.category
                 ))
 
         return detections

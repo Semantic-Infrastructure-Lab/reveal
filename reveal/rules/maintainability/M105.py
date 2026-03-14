@@ -86,26 +86,22 @@ class M105(BaseRule):
             # Check if imported
             if not self._is_imported(handler, main_content):
                 line = self._find_handler_line(handler, content)
-                detections.append(Detection(
-                    rule_code=self.code,
-                    message=f"Handler '{handler}' not imported in main.py",
+                detections.append(self.create_detection(
                     file_path=file_path,
                     line=line,
+                    message=f"Handler '{handler}' not imported in main.py",
                     column=1,
-                    severity=self.severity,
                     context=f"Fix: Add to main.py imports: from .cli import {handler}"
                 ))
 
             # Check if called (only if imported)
             elif not self._is_called(handler, main_content):
                 line = self._find_handler_line(handler, content)
-                detections.append(Detection(
-                    rule_code=self.code,
-                    message=f"Handler '{handler}' imported but never called in main.py",
+                detections.append(self.create_detection(
                     file_path=file_path,
                     line=line,
+                    message=f"Handler '{handler}' imported but never called in main.py",
                     column=1,
-                    severity=self.severity,
                     context="Fix: Call in main.py or remove import"
                 ))
 

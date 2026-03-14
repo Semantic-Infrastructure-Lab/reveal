@@ -70,16 +70,13 @@ class U501(BaseRule):
                 secure_url = insecure_url.replace('http://', 'https://')
                 column = match.start() + 1  # 1-indexed
 
-                detections.append(Detection(
+                detections.append(self.create_detection(
                     file_path=file_path,
                     line=i,
-                    rule_code=self.code,
                     message=f"{self.message}: {insecure_url}",
                     column=column,
                     suggestion=f"Use HTTPS: {secure_url}",
                     context=line.strip(),
-                    severity=self.severity,
-                    category=self.category
                 ))
 
         return detections
@@ -88,14 +85,11 @@ class U501(BaseRule):
         """Check if URI itself is insecure GitHub URL."""
         if uri.startswith('http://') and ('github.com' in uri or 'github.io' in uri):
             secure_url = uri.replace('http://', 'https://')
-            return [Detection(
+            return [self.create_detection(
                 file_path=uri,
                 line=0,
-                rule_code=self.code,
                 message=f"{self.message}: {uri}",
                 column=0,
                 suggestion=f"Use HTTPS: {secure_url}",
-                severity=self.severity,
-                category=self.category
             )]
         return []
