@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.office.openxml import XlsxAnalyzer
+from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
 
@@ -340,7 +341,7 @@ class XlsxAdapter(ResourceAdapter):
         # Split path and query string
         if '?' in uri:
             path_part, query_part = uri.split('?', 1)
-            self.query_params = self._parse_query_string(query_part)
+            self.query_params = parse_query_params(query_part)
         else:
             path_part = uri
             self.query_params = {}
@@ -363,24 +364,6 @@ class XlsxAdapter(ResourceAdapter):
                 f"Supported formats: .xlsx, .xlsm\n"
                 f"Example: reveal xlsx:///data/sales.xlsx"
             )
-
-    def _parse_query_string(self, query: str) -> Dict[str, str]:
-        """Parse query string into dict.
-
-        Args:
-            query: param1=value1&param2=value2
-
-        Returns:
-            Dict of query parameters
-        """
-        params = {}
-        for part in query.split('&'):
-            if '=' in part:
-                key, value = part.split('=', 1)
-                params[key] = value
-            else:
-                params[part] = 'true'
-        return params
 
     def _init_analyzer(self) -> None:
         """Initialize XlsxAnalyzer for the file."""
