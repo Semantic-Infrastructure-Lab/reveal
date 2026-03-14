@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - v0.60.x (sessions toxic-onslaught-0310, ethereal-leviathan-0310, psychic-frenzy-0310, mystical-sword-0311, kilonova-throne-0311, eternal-launch-0311, turbo-ultimatum-0311, pattering-wind-0311, fluorescent-dawn-0311, astral-observatory-0313, astral-comet-0313, platinum-gleam-0313, mountain-gale-0313, turbulent-hail-0313)
+## [0.61.0] - 2026-03-13 (sessions toxic-onslaught-0310, ethereal-leviathan-0310, psychic-frenzy-0310, mystical-sword-0311, kilonova-throne-0311, eternal-launch-0311, turbo-ultimatum-0311, pattering-wind-0311, fluorescent-dawn-0311, astral-observatory-0313, astral-comet-0313, platinum-gleam-0313, mountain-gale-0313, turbulent-hail-0313)
 
 ### Fixed (session turbulent-hail-0313)
 - **`imports://` false positive: `__init__.py` re-exports flagged as unused** — `_should_skip_import` in `analyzers/imports/types.py` now skips all imports in `__init__.py` files unconditionally. These are re-export patterns (public API surface), never unused code. Regression test added. (session turbulent-hail-0313)

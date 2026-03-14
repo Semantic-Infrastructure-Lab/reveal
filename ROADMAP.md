@@ -1,11 +1,26 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-10 (spinning-asteroid-0310 — v0.60.0 release)
+> **Last updated**: 2026-03-13 (majesuto-0313 — v0.61.0 release)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.61.0
+- ✅ **`cpanel://user/full-audit`** — composite ssl+acl-check+nginx ACME audit in one pass; exits 2 on any failure; `has_failures` flag in JSON output
+- ✅ **`cpanel://user/ssl?domain_type=`** — query filter by domain type (`main_domain|addon|subdomain|parked`); composable with `--only-failures` and `--dns-verified`
+- ✅ **`--only-failures` for `cpanel://user/ssl` and `cpanel://user/acl-check`** — was wired only for nginx; now complete across all three cpanel views
+- ✅ **`--dns-verified` IP-match verification** — extends DNS mode to detect "resolves but to different server"; `dns_points_here` field; `[→ elsewhere]` renderer tag; elsewhere domains excluded from summary counts
+- ✅ **`--validate-nginx-acme --format=json`** — machine-readable ACME audit; `{type, has_failures, only_failures, domains: [...]}` shape; exit 2 on failures preserved
+- ✅ **`cpanel://user/ssl` `domain_type` field** — each cert entry now carries its domain type; renderer shows subdomain/parked breakdown in expired count
+- ✅ **CLI no-path crash fix** — `--capabilities`, `--explain-file`, `--show-ast` no longer raise `TypeError` when called without a file path; clean `Usage:` message + exit 1
+- ✅ **Rule false positive fixes** — `imports://` `__init__.py` re-exports; M102 `importlib.import_module()` dispatch tables + rule plugin naming convention; B006 try-then-try fallback pattern
+- ✅ **B006 real violations fixed** — 11 `except Exception: pass` antipatterns corrected across 8 files; `return` moved into except body, specific exception types where appropriate
+- ✅ **`TreeViewOptions` dataclass** — `show_directory_tree` refactored from 11-param signature to options object; fully backwards-compatible
+- ✅ **9 unused imports removed** — autossl, markdown, jsonl, toml, review, routing, treesitter (discovered via `imports://` self-scan)
+- ✅ **49 new tests** — 4,816 → 4,865; cpanel full-audit/dns/query-params/only-failures; CLI no-path guards; rule false positive regression guards
+- ✅ **Quality: 99.8/100** — nesting depth hotspots eliminated across 40+ functions; all depth>4 reduced to ≤4
 
 ### v0.60.0
 - ✅ **`nginx://` URI adapter** — domain-centric nginx vhost inspection (21st adapter). `reveal nginx://domain` shows config file + symlink status, ports (80/443, SSL, redirect), upstream servers + TCP reachability, auth directives, location blocks. Sub-paths: `/ports`, `/upstream`, `/auth`, `/locations`, `/config`. `reveal nginx://` lists all enabled sites. Searched against `/etc/nginx/sites-enabled/` and `/etc/nginx/conf.d/` automatically. Zero extra dependencies. Validated against 44 real vhosts on tia-proxy — 0 errors.
