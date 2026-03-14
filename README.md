@@ -52,7 +52,7 @@ reveal dev new-adapter        # Scaffold new adapters/rules
 - 🔍 **Unified Query Syntax**: Filter and sort across all adapters
 - 🤖 **AI-Optimized**: Token-efficient output for LLM consumption
 - 📊 **Quality Metrics**: Complexity, maintainability, test coverage
-- 🔌 **Extensible**: 21 built-in adapters, 80+ languages, easy to add custom ones
+- 🔌 **Extensible**: 22 built-in adapters, 80+ languages, easy to add custom ones
 
 ## License
 

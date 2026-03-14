@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+from .call_graph import build_symbol_map, resolve_callees
+
 
 def try_add_file_structure(file_path: str, structures: List[Dict[str, Any]]) -> None:
     """Analyze file and add its structure to list if successful.
@@ -63,7 +65,8 @@ def create_element_dict(
     file_path: str,
     category: str,
     item: Dict[str, Any],
-    analyzer
+    analyzer,
+    symbol_map: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Create element dict from analyzer item.
 
@@ -72,6 +75,9 @@ def create_element_dict(
         category: Element category (functions, classes, etc.)
         item: Item dict from analyzer
         analyzer: Analyzer instance for complexity calculation
+        symbol_map: Optional import-symbol map from build_symbol_map() for
+            cross-file call resolution.  When provided, functions/methods gain
+            a ``resolved_calls`` field alongside the plain ``calls`` list.
 
     Returns:
         Element dict with standardized fields
@@ -104,8 +110,14 @@ def create_element_dict(
         # Otherwise calculate with heuristic
         element['complexity'] = item.get('complexity') or calculate_complexity(item, analyzer)
         # Propagate call graph fields (Phase 1 data from tree-sitter)
-        element['calls'] = item.get('calls', [])
+        calls = item.get('calls', [])
+        element['calls'] = calls
         element['called_by'] = item.get('called_by', [])
+        # Phase 3: resolve calls against import symbol map
+        if symbol_map is not None and calls:
+            resolved = resolve_callees(calls, symbol_map)
+            if any('resolved_file' in entry for entry in resolved):
+                element['resolved_calls'] = resolved
 
     return element
 
@@ -134,9 +146,16 @@ def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
         # Flatten all elements from structure
         result: Dict[str, Any] = {'file': file_path, 'elements': []}
 
+        # Build import symbol map for cross-file call resolution (Phase 3).
+        # build_symbol_map is cheap for already-parsed files (import extractor caches).
+        try:
+            symbol_map: Optional[Dict[str, Any]] = build_symbol_map(file_path)
+        except Exception:  # noqa: BLE001
+            symbol_map = None
+
         for category, items in structure.items():
             for item in items:
-                element = create_element_dict(file_path, category, item, analyzer)
+                element = create_element_dict(file_path, category, item, analyzer, symbol_map)
                 result['elements'].append(element)
 
         return result
