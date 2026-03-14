@@ -20,6 +20,10 @@ def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
         _render_callees_text(data)
         return
 
+    if data.get('query') == 'rank_callers':
+        _render_ranking_text(data)
+        return
+
     if output_format == 'dot':
         _render_dot(data)
         return
@@ -89,6 +93,38 @@ def _render_callees_text(data: Dict[str, Any]) -> None:
                 print(f"    → {callee}")
         else:
             print(f"    (no calls detected)")
+        print()
+
+
+def _render_ranking_text(data: Dict[str, Any]) -> None:
+    """Render rank=callers output — most-called functions sorted by in-degree."""
+    path = data.get('path', '.')
+    top = data.get('top', 10)
+    total = data.get('total_unique_callees', 0)
+    entries = data.get('entries', [])
+
+    print(f"Most-called functions: {path}")
+    print(f"Ranking by:            caller count (in-degree)")
+    print(f"Showing:               top {top} of {total} unique callees")
+    print()
+
+    if not entries:
+        print("  No call data found. Does the path contain Python files with function calls?")
+        return
+
+    for entry in entries:
+        name = entry['name']
+        count = entry['caller_count']
+        callers = entry.get('callers', [])
+        plural = 'caller' if count == 1 else 'callers'
+        print(f"  {name}  ({count} {plural})")
+        for rec in callers[:5]:  # show up to 5 callers per entry
+            file_path = rec['file']
+            caller = rec['caller']
+            line = rec['line']
+            print(f"    {file_path}:{line}  {caller}")
+        if len(callers) > 5:
+            print(f"    … and {len(callers) - 5} more")
         print()
 
 

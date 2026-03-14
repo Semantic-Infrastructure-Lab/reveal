@@ -14,6 +14,7 @@ Covers:
 import io
 import os
 import tempfile
+import textwrap
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -21,7 +22,7 @@ from typing import Any, Dict
 
 from reveal.adapters.ast.call_graph import build_symbol_map, resolve_callees
 from reveal.adapters.ast.adapter import AstAdapter
-from reveal.adapters.calls.index import build_callers_index, find_callers, find_callees
+from reveal.adapters.calls.index import build_callers_index, find_callers, find_callees, rank_by_callers
 from reveal.adapters.calls.adapter import CallsAdapter, CallsRenderer
 from reveal.adapters.calls.renderer import render_calls_structure
 
@@ -747,6 +748,156 @@ class TestCallsRendererBuiltinsFooter(unittest.TestCase):
         }
         out = self._capture(data, 'text')
         self.assertNotIn('builtin', out)
+
+
+# ---------------------------------------------------------------------------
+# Unit: rank_by_callers
+# ---------------------------------------------------------------------------
+
+class TestRankByCallers(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        # Three functions. helper is called by both process_a and process_b.
+        # process_a is called by main. standalone has no callers.
+        code = textwrap.dedent("""\
+            def helper():
+                pass
+
+            def process_a():
+                helper()
+
+            def process_b():
+                helper()
+
+            def main():
+                process_a()
+
+            def standalone():
+                pass
+        """)
+        self.py_file = os.path.join(self.tmpdir, 'sample.py')
+        with open(self.py_file, 'w') as f:
+            f.write(code)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_returns_ranking_structure(self):
+        result = rank_by_callers(self.tmpdir)
+        self.assertIn('query', result)
+        self.assertEqual(result['query'], 'rank_callers')
+        self.assertIn('entries', result)
+        self.assertIn('total_unique_callees', result)
+
+    def test_helper_ranks_first(self):
+        result = rank_by_callers(self.tmpdir)
+        entries = result['entries']
+        top_name = entries[0]['name'] if entries else ''
+        self.assertEqual(top_name, 'helper')
+
+    def test_helper_has_two_callers(self):
+        result = rank_by_callers(self.tmpdir)
+        entry = next(e for e in result['entries'] if e['name'] == 'helper')
+        self.assertEqual(entry['caller_count'], 2)
+
+    def test_top_param_limits_output(self):
+        result = rank_by_callers(self.tmpdir, top=1)
+        self.assertEqual(len(result['entries']), 1)
+        self.assertEqual(result['top'], 1)
+
+    def test_top_capped_at_100(self):
+        result = rank_by_callers(self.tmpdir, top=999)
+        self.assertEqual(result['top'], 100)
+
+    def test_sorted_descending(self):
+        result = rank_by_callers(self.tmpdir)
+        counts = [e['caller_count'] for e in result['entries']]
+        self.assertEqual(counts, sorted(counts, reverse=True))
+
+
+class TestRankRendering(unittest.TestCase):
+
+    def _capture(self, data: Dict[str, Any], fmt: str = 'text') -> str:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            render_calls_structure(data, fmt)
+        return buf.getvalue()
+
+    def _ranking_data(self, entries=None):
+        if entries is None:
+            entries = [
+                {'name': 'validate', 'caller_count': 3,
+                 'callers': [
+                     {'file': 'a.py', 'caller': 'run', 'line': 10},
+                     {'file': 'b.py', 'caller': 'process', 'line': 20},
+                     {'file': 'c.py', 'caller': 'main', 'line': 5},
+                 ]},
+                {'name': 'parse', 'caller_count': 1,
+                 'callers': [{'file': 'd.py', 'caller': 'load', 'line': 7}]},
+            ]
+        return {
+            'query': 'rank_callers',
+            'path': 'src/',
+            'top': 10,
+            'total_unique_callees': len(entries),
+            'entries': entries,
+        }
+
+    def test_header_present(self):
+        out = self._capture(self._ranking_data())
+        self.assertIn('Most-called functions', out)
+        self.assertIn('src/', out)
+
+    def test_entries_rendered(self):
+        out = self._capture(self._ranking_data())
+        self.assertIn('validate', out)
+        self.assertIn('3 callers', out)
+        self.assertIn('parse', out)
+        self.assertIn('1 caller', out)
+
+    def test_callers_listed(self):
+        out = self._capture(self._ranking_data())
+        self.assertIn('run', out)
+        self.assertIn('a.py', out)
+
+    def test_truncation_at_five(self):
+        callers = [{'file': f'f{i}.py', 'caller': f'fn{i}', 'line': i} for i in range(8)]
+        data = self._ranking_data([{'name': 'foo', 'caller_count': 8, 'callers': callers}])
+        out = self._capture(data)
+        self.assertIn('… and 3 more', out)
+
+    def test_empty_entries(self):
+        out = self._capture(self._ranking_data([]))
+        self.assertIn('No call data found', out)
+
+    def test_json_format(self):
+        out = self._capture(self._ranking_data(), 'json')
+        import json
+        parsed = json.loads(out)
+        self.assertEqual(parsed['query'], 'rank_callers')
+
+    def test_rank_param_routes_to_ranking(self):
+        """?rank=callers in CallsAdapter routes to rank_by_callers."""
+        import tempfile, textwrap
+        tmpdir = tempfile.mkdtemp()
+        try:
+            code = textwrap.dedent("""\
+                def a():
+                    b()
+                def b():
+                    pass
+            """)
+            with open(os.path.join(tmpdir, 'x.py'), 'w') as f:
+                f.write(code)
+            adapter = CallsAdapter(tmpdir, 'rank=callers&top=5')
+            result = adapter.get_structure()
+            self.assertEqual(result.get('query'), 'rank_callers')
+            self.assertIn('entries', result)
+        finally:
+            import shutil
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 if __name__ == '__main__':

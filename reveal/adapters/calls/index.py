@@ -207,3 +207,64 @@ def find_callers(
         'total_callers': sum(len(lvl['callers']) for lvl in levels),
         'levels': levels,
     }
+
+
+def rank_by_callers(
+    path: str,
+    top: int = 10,
+    include_builtins: bool = False,
+) -> Dict[str, Any]:
+    """Rank all callable symbols by how many unique callers they have.
+
+    Uses the already-built callers index (cached) — zero extra infrastructure.
+
+    Args:
+        path: Root directory (or file) to analyse.
+        top: Maximum number of entries to return (default 10, capped at 100).
+        include_builtins: If False (default), skip Python builtins from the ranking.
+
+    Returns:
+        Dict with ``path``, ``top``, ``total_unique_callees``, and ``entries``
+        sorted descending by ``caller_count``.
+
+    Example entry::
+
+        {
+            "name": "validate_item",
+            "caller_count": 5,
+            "callers": [
+                {"file": "app.py", "caller": "process_batch", "line": 42, "call_expr": "validate_item"},
+                ...
+            ]
+        }
+    """
+    index = build_callers_index(path)
+    top = max(1, min(top, 100))
+
+    entries = []
+    for callee_name, caller_records in index.items():
+        if not include_builtins and callee_name.split('.')[-1] in PYTHON_BUILTINS:
+            continue
+        # Deduplicate caller records by (file, caller) to count unique callers
+        seen: Set[Tuple[str, str]] = set()
+        unique_records = []
+        for rec in caller_records:
+            key = (rec['file'], rec['caller'])
+            if key not in seen:
+                seen.add(key)
+                unique_records.append(rec)
+        entries.append({
+            'name': callee_name,
+            'caller_count': len(unique_records),
+            'callers': unique_records,
+        })
+
+    entries.sort(key=lambda e: e['caller_count'], reverse=True)
+
+    return {
+        'query': 'rank_callers',
+        'path': path,
+        'top': top,
+        'total_unique_callees': len(entries),
+        'entries': entries[:top],
+    }

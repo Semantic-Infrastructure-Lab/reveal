@@ -21,7 +21,7 @@ import os
 from typing import Any, Dict, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from .index import PYTHON_BUILTINS, find_callers, find_callees
+from .index import PYTHON_BUILTINS, find_callers, find_callees, rank_by_callers
 from .renderer import render_calls_structure
 from ...utils.query import parse_query_params
 from ...utils.results import ResultBuilder
@@ -238,6 +238,19 @@ class CallsAdapter(ResourceAdapter):
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         target = self.query_params.get('target', '')
         callees_target = self.query_params.get('callees', '')
+        rank = self.query_params.get('rank', '')
+
+        if rank == 'callers':
+            top = int(self.query_params.get('top', 10))
+            include_builtins = bool(self.query_params.get('builtins', False))
+            result_data = rank_by_callers(self.path, top=top, include_builtins=include_builtins)
+            result_data['path'] = self.path
+            return ResultBuilder.create(
+                result_type='calls_ranking',
+                source=self.path,
+                contract_version='1.1',
+                data=result_data,
+            )
 
         if not target and not callees_target:
             return ResultBuilder.create(
@@ -246,7 +259,7 @@ class CallsAdapter(ResourceAdapter):
                 contract_version='1.1',
                 data={
                     'path': self.path,
-                    'error': "Missing required parameter: target=<name> or callees=<name>",
+                    'error': "Missing required parameter: target=<name>, callees=<name>, or rank=callers",
                     'example': f"calls://{self.path}?target=my_function",
                 }
             )
