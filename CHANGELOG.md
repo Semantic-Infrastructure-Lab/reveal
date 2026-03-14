@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (session destined-altar-0313)
 
+### Fixed (session risen-armor-0314)
+- **`calls://` renderer crash on every query** — `CallsRenderer` used instance-method signature (`self, data, **kwargs`) but the routing layer calls renderers as class-level functions. This made every `calls://` query crash with `AttributeError: 'str' object has no attribute 'get'`. Converted to static-method pattern (no `self`), matching `ImportsRenderer` and all other adapters. 5 regression tests added. (session risen-armor-0314)
+- **`calls://` `format=dot` in query string now works** — previously `?target=fn&format=dot` silently produced text output instead of Graphviz dot. `get_structure()` now stores `_query_format` in the result dict; the renderer applies it with precedence over the CLI `--format` flag. (session risen-armor-0314)
+- **`show=calls` included imports in call graph output** — `_render_call_graph` now filters results to only `functions` and `methods` before rendering. Previously, import elements appeared with `(no calls or callers within this file)` which was noise. 5 renderer tests added. (session risen-armor-0314)
+
 ### Documentation (session risen-armor-0314)
 - **`CALLS_ADAPTER_GUIDE.md`** — new full guide for `calls://` adapter: URI syntax, all 3 output formats (text, JSON, dot), 5 workflows (impact analysis, dead code, execution path tracing, architecture docs, refactoring verification), limitations, caching/performance, FAQ. (session risen-armor-0314)
 - **`AST_ADAPTER_GUIDE.md`** — updated: fixed stale FAQ ("call graphs not supported" was wrong since Phase 1/2); added `calls`, `callee_of`, `show` to query params table; added full "Call Graph Analysis" section covering within-file queries, `show=calls` format, cross-file escalation, and JSON field docs; added Workflow 7 (Trace Function Call Graph). (session risen-armor-0314)
