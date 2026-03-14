@@ -8,18 +8,21 @@ Covers:
 - calls:// adapter: ?depth=2 finds transitive callers
 - calls:// adapter: missing target returns error message
 - Callers index cache invalidation (mtime change)
+- CallsRenderer: static method pattern, format=dot via query string
 """
 
+import io
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, Dict
 
 from reveal.adapters.ast.call_graph import build_symbol_map, resolve_callees
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.calls.index import build_callers_index, find_callers
-from reveal.adapters.calls.adapter import CallsAdapter, _parse_calls_query
+from reveal.adapters.calls.adapter import CallsAdapter, CallsRenderer, _parse_calls_query
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +320,73 @@ def caller_b(x):
         adapter = CallsAdapter(self.tmpdir, 'target=helper')
         result = adapter.get_structure()
         self.assertIn('path', result)
+
+
+# ---------------------------------------------------------------------------
+# CallsRenderer: static method pattern + format=dot via query string
+# ---------------------------------------------------------------------------
+
+def _capture_renderer(func, *args, **kwargs) -> str:
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        func(*args, **kwargs)
+    return buf.getvalue()
+
+
+class TestCallsRenderer(unittest.TestCase):
+    """Regression tests for CallsRenderer static-method calling convention."""
+
+    def _base_result(self, **extra):
+        return {
+            'target': 'helper',
+            'depth': 1,
+            'total_callers': 1,
+            'path': '/tmp/src',
+            'levels': [{'level': 1, 'callers': [
+                {'file': 'app.py', 'caller': 'main', 'line': 5, 'call_expr': 'helper', 'callee': 'helper'}
+            ]}],
+            **extra,
+        }
+
+    def test_render_structure_text(self):
+        """render_structure(result, 'text') should output caller lines."""
+        result = self._base_result()
+        out = _capture_renderer(CallsRenderer.render_structure, result, 'text')
+        self.assertIn('helper', out)
+        self.assertIn('main', out)
+
+    def test_render_structure_dot_via_cli_format(self):
+        """render_structure(result, 'dot') should output digraph."""
+        result = self._base_result()
+        out = _capture_renderer(CallsRenderer.render_structure, result, 'dot')
+        self.assertIn('digraph calls', out)
+        self.assertIn('"main"', out)
+
+    def test_render_structure_format_dot_in_query_string(self):
+        """_query_format=dot stored in result should override CLI format arg."""
+        result = self._base_result(_query_format='dot')
+        # Even if CLI says 'text', query-string format=dot wins
+        out = _capture_renderer(CallsRenderer.render_structure, result, 'text')
+        self.assertIn('digraph calls', out)
+
+    def test_render_structure_no_crash_without_self(self):
+        """Calling CallsRenderer.render_structure without an instance must not crash."""
+        result = self._base_result()
+        # This is how the routing layer calls it — as a class-level function
+        try:
+            _capture_renderer(CallsRenderer.render_structure, result, 'text')
+        except TypeError as e:
+            self.fail(f"render_structure raised TypeError (likely self-bug): {e}")
+
+    def test_format_dot_stored_in_result(self):
+        """Adapter should store _query_format=dot when format=dot in query string."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fpath = os.path.join(tmpdir, 'a.py')
+            with open(fpath, 'w') as f:
+                f.write('def helper(): pass\ndef main(): helper()\n')
+            adapter = CallsAdapter(tmpdir, 'target=helper&format=dot')
+            result = adapter.get_structure()
+            self.assertEqual(result.get('_query_format'), 'dot')
 
 
 if __name__ == '__main__':

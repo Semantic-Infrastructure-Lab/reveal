@@ -66,16 +66,29 @@ _SCHEMA: Dict[str, Any] = {
 
 
 class CallsRenderer:
-    """Renderer shim so the adapter works with the standard render pipeline."""
+    """Renderer shim so the adapter works with the standard render pipeline.
 
-    def render_structure(self, data: Dict[str, Any], **kwargs) -> None:
-        output_format = kwargs.get('format', 'text')
-        render_calls_structure(data, output_format)
+    Note: render_structure / render_element are called as *class methods* by
+    the routing layer (``renderer_class.render_structure(result, args.format)``),
+    so the first positional parameter is the result dict, NOT ``self``.  This
+    mirrors the pattern used by ImportsRenderer and other adapters.
 
-    def render_element(self, data: Dict[str, Any], **kwargs) -> None:
-        render_calls_structure(data, kwargs.get('format', 'text'))
+    The ``format=dot`` query-string parameter takes precedence over the CLI
+    ``--format`` flag for calls:// because ``dot`` is a calls://-specific
+    format that has no CLI-flag equivalent.  The adapter stores the chosen
+    format in result[``_query_format``] so the renderer can pick it up.
+    """
 
-    def render_error(self, error: Exception) -> None:
+    def render_structure(result: Dict[str, Any], format: str = 'text') -> None:  # noqa: N805
+        # Query-string format= (e.g. format=dot) takes precedence over CLI --format
+        effective_format = result.get('_query_format') or format
+        render_calls_structure(result, effective_format)
+
+    def render_element(result: Dict[str, Any], format: str = 'text') -> None:  # noqa: N805
+        effective_format = result.get('_query_format') or format
+        render_calls_structure(result, effective_format)
+
+    def render_error(error: Exception) -> None:  # noqa: N805
         print(f"Error: {error}")
 
 
@@ -125,6 +138,12 @@ class CallsAdapter(ResourceAdapter):
 
         result_data = find_callers(self.path, target, depth=depth)
         result_data['path'] = self.path
+
+        # Store query-string format so renderer can apply dot/json regardless
+        # of what the CLI --format flag is set to.
+        query_format = self.query_params.get('format', '')
+        if query_format:
+            result_data['_query_format'] = query_format
 
         return ResultBuilder.create(
             result_type='calls_query',
