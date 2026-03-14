@@ -6,12 +6,15 @@
 # Example: ./scripts/release.sh 0.10.0
 #
 # This script handles the complete release process:
-# 1. Pre-flight checks (clean repo, tests pass, etc.)
-# 2. Version bump in pyproject.toml
-# 3. CHANGELOG reminder/validation
-# 4. Git commit and tag
-# 5. Push to GitHub
-# 6. Create GitHub release (triggers auto-publish to PyPI)
+# 1. Pre-flight checks (clean repo, on master, etc.)
+# 2. CHANGELOG validation
+# 3. Version bump in pyproject.toml (before tests, so version-match tests pass)
+# 4. Reveal self-check (V007/V011/V012/V013)
+# 5. Test suite
+# 6. Build package
+# 7. Git commit and tag
+# 8. Push to GitHub
+# 9. Create GitHub release (triggers auto-publish to PyPI)
 #
 
 set -euo pipefail
@@ -154,6 +157,31 @@ success "CHANGELOG.md contains entry for v$NEW_VERSION"
 echo
 
 # ============================================================================
+# VERSION BUMP (before self-check and tests so version-match assertions pass)
+# ============================================================================
+
+CURRENT_VERSION_IN_FILE=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+if [ "$CURRENT_VERSION_IN_FILE" = "$NEW_VERSION" ]; then
+    info "Version already at $NEW_VERSION in pyproject.toml (pre-bumped)"
+else
+    info "Bumping pyproject.toml: $CURRENT_VERSION_IN_FILE → $NEW_VERSION..."
+    sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" pyproject.toml
+
+    # Verify the change
+    NEW_VERSION_CHECK=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+    if [ "$NEW_VERSION_CHECK" != "$NEW_VERSION" ]; then
+        error "Failed to update version in pyproject.toml"
+    fi
+
+    # If tests fail or the script exits early, roll back pyproject.toml so the
+    # repo stays clean. The trap is cleared after tests pass (see below).
+    trap 'warn "Rolling back pyproject.toml to $CURRENT_VERSION"; sed -i "s/^version = \".*\"/version = \"$CURRENT_VERSION\"/" pyproject.toml' EXIT
+
+    success "Version bumped to $NEW_VERSION"
+fi
+echo
+
+# ============================================================================
 # REVEAL SELF-CHECK
 # ============================================================================
 
@@ -176,28 +204,13 @@ info "Running test suite..."
 python3 -m pytest tests/ -q --tb=short || error "Tests failed — fix failures before releasing"
 
 success "All tests passed"
+
+# Tests passed — version bump is permanent; disable the rollback trap
+trap - EXIT
 echo
 
 # ============================================================================
-# VERSION BUMP
-# ============================================================================
-
-info "Updating version in pyproject.toml..."
-
-# Update version in pyproject.toml
-sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" pyproject.toml
-
-# Verify the change
-NEW_VERSION_CHECK=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
-if [ "$NEW_VERSION_CHECK" != "$NEW_VERSION" ]; then
-    error "Failed to update version in pyproject.toml"
-fi
-
-success "Version updated to $NEW_VERSION in pyproject.toml"
-echo
-
-# ============================================================================
-# BUILD AND TEST
+# BUILD
 # ============================================================================
 
 info "Building package to verify it works..."

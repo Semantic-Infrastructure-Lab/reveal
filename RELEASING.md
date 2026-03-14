@@ -80,14 +80,20 @@ Before running the release script, **4 files must be updated** — CI checks val
 
 | File | What to update |
 |------|---------------|
-| `CHANGELOG.md` | Add new version section |
-| `reveal/docs/AGENT_HELP.md` | Version line near the top |
+| `CHANGELOG.md` | Move `[Unreleased]` → `[X.Y.Z] - YYYY-MM-DD` with session list |
+| `reveal/docs/AGENT_HELP.md` | Version line near the top → new version |
 | `ROADMAP.md` | Add entry to "What We've Shipped" |
-| `pyproject.toml` | Handled by release script — but verify manually if doing a manual release |
+| `pyproject.toml` | **Pre-bump to new version** (same as AGENT_HELP) |
 
-> **Why all 4?** Learned from v0.51.1: `test_agent_help_is_current_version` checks
-> `AGENT_HELP.md`; V011 (release readiness) checks `ROADMAP.md`'s shipped section.
-> Missing either causes CI failures that block PyPI publish.
+> **Why pre-bump `pyproject.toml`?** The release script runs `test_agent_help_is_current_version`
+> which checks that `AGENT_HELP.md` matches `pyproject.toml`. The script bumps `pyproject.toml`
+> *before* tests now (so both files agree), but pre-bumping is still the cleanest approach for
+> a single prep commit. Commit all 4 files together:
+> ```bash
+> git add CHANGELOG.md reveal/docs/AGENT_HELP.md ROADMAP.md pyproject.toml
+> git commit -m "chore: prep vX.Y.Z — CHANGELOG, version strings, ROADMAP shipped"
+> ```
+> Then run `./scripts/release.sh X.Y.Z` — it detects the pre-bump and skips the version commit.
 
 #### Update CHANGELOG.md
 
@@ -264,11 +270,11 @@ Follow [Semantic Versioning](https://semver.org/):
 
 ## Release Checklist
 
-**Before release — 4-file update check:**
-- [ ] `CHANGELOG.md` — new version section added
-- [ ] `reveal/docs/AGENT_HELP.md` — version line updated to match new version
+**Before release — 4-file prep commit:**
+- [ ] `CHANGELOG.md` — `[Unreleased]` → `[X.Y.Z] - YYYY-MM-DD` with session list
+- [ ] `reveal/docs/AGENT_HELP.md` — version line bumped to new version
 - [ ] `ROADMAP.md` — new version added to "What We've Shipped" section
-- [ ] `pyproject.toml` — version bumped (or let release script handle it)
+- [ ] `pyproject.toml` — **pre-bumped to new version** (all 4 committed together)
 
 **Pre-flight:**
 - [ ] **Self-check passes**: `reveal reveal:// --check` (no errors, especially V007/V011)

@@ -16,6 +16,7 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
 - [Onboarding & Exploration](#onboarding-exploration)
 - [Debugging & Troubleshooting](#debugging-troubleshooting)
 - [Refactoring & Quality](#refactoring-quality)
+  - [Trace call relationships](#trace-call-relationships)
 - [Documentation Maintenance](#documentation-maintenance)
 - [JSON Navigation](#json-navigation)
 - [Database Operations](#database-operations)
@@ -322,6 +323,36 @@ reveal src/ --check --select D
 
 # Specific duplication check
 reveal src/module.py --check --select D001,D002
+```
+
+### Trace call relationships
+
+```bash
+# Who calls this function across the whole project? (reverse/impact)
+reveal 'calls://src/?target=validate_item'
+
+# What does this function call? (forward/dependency, builtins hidden)
+reveal 'calls://src/?callees=process_request'
+
+# Include Python builtins — useful to audit for eval/open/exec
+reveal 'calls://src/?callees=process_request&builtins=true'
+
+# Transitive: callers-of-callers (2 levels deep)
+reveal 'calls://src/?target=validate_item&depth=2'
+
+# Generate Graphviz call graph (pipe to dot)
+reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
+```
+
+**Before refactoring a function:** run `?target=fn` to see impact radius — everything that calls it.
+**Before splitting a function:** run `?callees=fn` to see its full dependency surface.
+**Dead code hunt:** if `?target=fn` returns 0 callers, it's a candidate for removal.
+
+```bash
+# Within a single file (cheaper — no cross-file index)
+reveal 'ast://src/auth.py?calls=validate_item'    # who calls it in this file?
+reveal 'ast://src/auth.py?callee_of=process'      # what does process call?
+reveal 'ast://src/auth.py?show=calls'             # full call graph diagram
 ```
 
 ---
@@ -918,6 +949,8 @@ reveal 'ast://./src?name=*pattern*'      # Find by name
 reveal 'ast://./src?complexity>10'       # Find by complexity
 reveal 'imports://src?circular'          # Find circular imports
 reveal stats://./src --hotspots          # Find technical debt
+reveal 'calls://src/?target=fn'          # Who calls fn? (cross-file reverse)
+reveal 'calls://src/?callees=fn'         # What does fn call? (cross-file forward)
 ```
 
 ### Inspection commands
