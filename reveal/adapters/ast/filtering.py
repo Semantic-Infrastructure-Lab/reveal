@@ -66,6 +66,17 @@ def matches_filters(element: Dict[str, Any], query: Dict[str, Any]) -> bool:
             if not matches_decorator(decorators, condition):
                 return False
             continue  # Already handled, skip normal comparison
+        elif key == 'calls':
+            # calls=<name>: find functions whose calls list contains <name>
+            # Supports bare name match or attribute suffix: "validate_item" matches "self.validate_item"
+            if not _matches_call_list(element.get('calls', []), condition):
+                return False
+            continue
+        elif key == 'callee_of':
+            # callee_of=<name>: find functions whose called_by list contains <name>
+            if not _matches_call_list(element.get('called_by', []), condition):
+                return False
+            continue
         else:
             value = element.get(key)
 
@@ -190,3 +201,37 @@ def compare_value(value: Any, condition: Dict[str, Any]) -> bool:
             'none_matches_not_equal': False
         }
     )
+
+
+def _matches_call_list(call_list: List[str], condition: Dict[str, Any]) -> bool:
+    """Check if any entry in a calls/called_by list satisfies the condition.
+
+    Supports bare name match with attribute suffix stripping:
+    - "validate_item" matches "validate_item" and "self.validate_item"
+    - Glob patterns supported: "self.*" matches "self.bar"
+
+    Args:
+        call_list: List of callee/caller name strings
+        condition: Condition dict with 'op' and 'value'
+
+    Returns:
+        True if any entry in call_list matches the condition
+    """
+    target = str(condition['value'])
+    op = condition['op']
+
+    for entry in call_list:
+        # Also check the bare suffix (strips "self.", "obj.", etc.)
+        local_name = entry.split('.')[-1]
+        for candidate in {entry, local_name}:
+            if op in ('==', '='):
+                if candidate == target:
+                    return True
+            elif op == 'glob':
+                if fnmatch(candidate, target):
+                    return True
+            elif op == '~=':
+                import re
+                if re.search(target, candidate):
+                    return True
+    return False

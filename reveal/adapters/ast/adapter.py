@@ -4,7 +4,7 @@ import os
 
 from typing import Dict, List, Any, Optional
 
-from .queries import parse_query, format_query
+from .queries import parse_query, format_query, extract_show_param as _extract_show_param
 from .analysis import collect_structures
 from .filtering import apply_filters, matches_decorator
 from .help import get_help as _get_help, get_schema as _get_schema
@@ -67,10 +67,13 @@ class AstAdapter(ResourceAdapter):
         # Extract result control parameters (sort, limit, offset)
         if query_string:
             cleaned_query, self.result_control = parse_result_control(query_string)
+            # Extract show= before parsing filters (it's a display mode, not a filter)
+            cleaned_query, self.show_mode = _extract_show_param(cleaned_query)
             self.query = parse_query(cleaned_query)
         else:
             self.query = {}
             self.result_control = ResultControl()
+            self.show_mode = None
 
         self.results: List[Any] = []
 
@@ -131,6 +134,7 @@ class AstAdapter(ResourceAdapter):
             data={
                 'path': self.path,
                 'query': format_query(self.query),
+                'show_mode': self.show_mode,
                 'total_files': len(structures),
                 'total_results': len(filtered),
                 'displayed_results': len(controlled),

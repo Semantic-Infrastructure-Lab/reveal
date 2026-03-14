@@ -17,7 +17,7 @@ _FILTER_SHORTHANDS = {
 }
 
 # All keys that ast:// actually understands
-_KNOWN_FILTER_KEYS = {'type', 'name', 'complexity', 'size', 'lines', 'decorator'}
+_KNOWN_FILTER_KEYS = {'type', 'name', 'complexity', 'size', 'lines', 'decorator', 'calls', 'callee_of'}
 
 
 def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -60,6 +60,12 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
         _suggest_filter_correction(query)
         return
 
+    # show=calls → call graph view
+    show_mode = data.get('show_mode')
+    if show_mode == 'calls':
+        _render_call_graph(data)
+        return
+
     # Group by file
     by_file: Dict[str, List[Dict[str, Any]]] = {}
     for result in results:
@@ -86,6 +92,42 @@ def _render_ast_element(elem: Dict[str, Any]) -> None:
         print(f"  :{line:>4}  {name} [{line_count} lines, complexity: {complexity}]")
     else:
         print(f"  :{line:>4}  {name} [{line_count} lines]")
+
+    calls = elem.get('calls', [])
+    called_by = elem.get('called_by', [])
+    if calls:
+        print(f"           calls:     {', '.join(calls)}")
+    if called_by:
+        print(f"           called by: {', '.join(called_by)}")
+
+
+def _render_call_graph(data: Dict[str, Any]) -> None:
+    """Render compact call graph view (show=calls)."""
+    results = data.get('results', [])
+    path = data.get('path', '.')
+
+    # Group by file
+    by_file: Dict[str, List[Dict[str, Any]]] = {}
+    for elem in results:
+        fp = elem.get('file', '')
+        by_file.setdefault(fp, []).append(elem)
+
+    for file_path, elements in sorted(by_file.items()):
+        print(f"Call Graph: {file_path}")
+        print()
+        for elem in elements:
+            name = elem.get('name', '')
+            calls = elem.get('calls', [])
+            called_by = elem.get('called_by', [])
+            print(f"{name}")
+            if calls:
+                print(f"  └─calls──▶ {', '.join(calls)}")
+            if called_by:
+                print(f"  ◀─called─  {', '.join(called_by)}")
+            if not calls and not called_by:
+                print(f"  (no calls or callers within this file)")
+            print()
+        print()
 
 
 def _suggest_filter_correction(query: str) -> None:

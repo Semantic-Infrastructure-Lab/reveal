@@ -88,6 +88,29 @@ def parse_query(query_string: str) -> Dict[str, Any]:
     return filters
 
 
+def extract_show_param(query_string: str):
+    """Extract and remove 'show=<value>' from a query string.
+
+    Args:
+        query_string: URL query string (e.g., "show=calls&lines>50")
+
+    Returns:
+        (cleaned_query_string, show_value_or_None)
+    """
+    if not query_string or 'show=' not in query_string:
+        return query_string, None
+
+    parts = query_string.split('&')
+    show_value = None
+    remaining = []
+    for part in parts:
+        if part.startswith('show='):
+            show_value = part[5:]
+        else:
+            remaining.append(part)
+    return '&'.join(remaining), show_value
+
+
 def format_query(query: Dict[str, Any]) -> str:
     """Format query dict back to readable string.
 
