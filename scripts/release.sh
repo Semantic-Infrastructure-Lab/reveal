@@ -118,10 +118,10 @@ import sys
 from packaging.version import Version
 cur = Version("$CURRENT_VERSION")
 new = Version("$NEW_VERSION")
-sys.exit(0 if new > cur else 1)
+sys.exit(0 if new >= cur else 1)
 EOF
 then
-    error "New version ($NEW_VERSION) must be greater than current version ($CURRENT_VERSION)"
+    error "New version ($NEW_VERSION) must be >= current version ($CURRENT_VERSION) — cannot release a lower version"
 fi
 
 info "Proceeding with release v$NEW_VERSION"
