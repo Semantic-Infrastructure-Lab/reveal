@@ -19,13 +19,19 @@ Examples:
     reveal cpanel://USERNAME/acl-check        # nobody ACL on all docroots
 """
 
-import array
-import fcntl
 import os
 import re
 import socket
-import struct
+import sys
 from typing import Dict, Any, Optional, List
+
+# fcntl/struct/array are Unix-only; used only in _get_local_ips() for IP
+# enumeration via SIOCGIFCONF ioctl. Guarded here so the module imports
+# cleanly on Windows (where cPanel does not exist).
+if sys.platform != 'win32':
+    import array
+    import fcntl
+    import struct
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import CpanelRenderer
@@ -170,6 +176,8 @@ def _dns_resolve_ips(domain: str) -> List[str]:
 
 def _get_local_ips() -> set:
     """Return set of non-loopback IPv4 addresses bound to this host (stdlib only, Linux)."""
+    if sys.platform == 'win32':
+        return set()  # SIOCGIFCONF is Linux-only; caller falls back to hostname
     ips: set = set()
     try:
         max_bytes = 4096
