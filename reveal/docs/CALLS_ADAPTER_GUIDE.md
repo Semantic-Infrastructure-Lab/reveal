@@ -131,6 +131,7 @@ callee → [(file, caller_func, line), ...]
 | `target` | string | — | Function name to find **callers of** (reverse lookup) |
 | `callees` | string | — | Function name to find **callees of** (forward lookup) |
 | `depth` | integer | 1 | Transitive levels for `?target` (1 = direct only, max 5) |
+| `builtins` | boolean | `false` | Include Python builtins in `?callees` output (`len`, `str`, `sorted`, exceptions, etc.) |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot` |
 
 > One of `target` or `callees` is required. If both are given, `callees` takes precedence.
@@ -152,12 +153,19 @@ reveal 'calls://src/?target=process'
 Forward lookup — what does this function call? Scans all definitions of the function name across the project:
 
 ```bash
-# What does validate_item call?
+# What does validate_item call? (builtins hidden by default)
 reveal 'calls://src/?callees=validate_item'
+
+# Include Python builtins (len, str, sorted, ValueError, open, eval, etc.)
+reveal 'calls://src/?callees=validate_item&builtins=true'
 
 # Useful when a function is defined in multiple files
 reveal 'calls://src/?callees=handle_request'
 ```
+
+Python builtins (`len`, `str`, `sorted`, `ValueError`, `open`, `print`, etc.) are hidden by default — they add noise without revealing project structure. Use `?builtins=true` when you specifically want to audit dangerous builtins like `eval`, `exec`, or `open`.
+
+> Only applies to `?callees` (forward lookup). The `?target` (reverse lookup) is unaffected — callers of builtins are always shown.
 
 ### `depth`
 
@@ -228,7 +236,11 @@ Total:      4 call(s) across 1 definition(s)
     → normalize_value
     → log_validation
     → raise_error
+
+            (6 builtin(s) hidden — use ?builtins=true to include)
 ```
+
+With `?builtins=true` the footer disappears and the full raw list (including `len`, `str`, `isinstance`, etc.) is shown. The footer only appears when at least one builtin was filtered.
 
 When the function is not found:
 
@@ -515,6 +527,20 @@ A: A few possibilities:
 **Q: How do I find all functions that are never called (dead code)?**
 
 A: There's no built-in filter yet. Use the shell loop pattern from Workflow 2 above, or check `called_by` from `ast://` as a quick heuristic for within-file isolation.
+
+**Q: How do I audit code for dangerous builtins like `eval` or `open`?**
+
+A: Use `?builtins=true` on a `?callees=` query to include builtins in the output, then grep:
+
+```bash
+# Find every function that calls eval
+reveal 'calls://src/?callees=process_input&builtins=true' | grep 'eval'
+
+# Or scan callers of eval directly (reverse lookup — always includes builtins)
+reveal 'calls://src/?target=eval'
+```
+
+The `?target=` direction (reverse lookup) always returns results regardless of `?builtins` — builtins filtering only applies to the forward `?callees=` direction.
 
 **Q: Is `calls://` the same as a full call graph tool like pycallgraph or pyCallGraph?**
 

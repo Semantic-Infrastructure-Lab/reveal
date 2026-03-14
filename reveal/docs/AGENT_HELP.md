@@ -647,8 +647,11 @@ find src/ -name "*.py" | reveal --stdin --format=json | \
 # Cross-file: who calls a function across the entire project? (reverse)
 reveal 'calls://src/?target=validate_item'
 
-# Cross-file: what does a function call? (forward)
+# Cross-file: what does a function call? (forward, builtins hidden by default)
 reveal 'calls://src/?callees=validate_item'
+
+# Include Python builtins — useful to audit for eval/open/exec
+reveal 'calls://src/?callees=validate_item&builtins=true'
 
 # Transitive: callers-of-callers (2 levels)
 reveal 'calls://src/?target=validate_item&depth=2'
@@ -671,7 +674,7 @@ reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
 | Adapter | Scope | Use For |
 |---------|-------|---------|
 | `calls://src/?target=fn` | Cross-file, whole project | "Who calls fn anywhere?" (reverse) |
-| `calls://src/?callees=fn` | Cross-file, whole project | "What does fn call?" (forward) |
+| `calls://src/?callees=fn` | Cross-file, whole project | "What does fn call?" (forward, builtins hidden; add `&builtins=true` to include) |
 | `ast://src/?calls=fn` | Within-file only | "Does this file call fn?" |
 | `ast://src/?show=calls` | Within-file only | "Show me the call graph for this file" |
 
