@@ -1,6 +1,5 @@
 """Renderer for calls:// adapter output."""
 
-from pathlib import Path
 from typing import Any, Dict
 
 from reveal.utils import safe_json_dumps
@@ -15,6 +14,10 @@ def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
     """
     if output_format == 'json':
         print(safe_json_dumps(data))
+        return
+
+    if data.get('query') == 'callees':
+        _render_callees_text(data)
         return
 
     if output_format == 'dot':
@@ -49,13 +52,41 @@ def _render_text(data: Dict[str, Any]) -> None:
             label = "Direct callers" if level_num == 1 else f"Level {level_num} callers"
             print(f"{label}:")
         for rec in callers:
-            file_short = Path(rec['file']).name
+            file_path = rec['file']  # relative path from project root
             caller = rec['caller']
             line = rec['line']
             call_expr = rec.get('call_expr', rec.get('callee', target))
-            print(f"  {file_short}:{line}  {caller}  (calls {call_expr})")
+            print(f"  {file_path}:{line}  {caller}  (calls {call_expr})")
         if depth > 1:
             print()
+
+
+def _render_callees_text(data: Dict[str, Any]) -> None:
+    target = data.get('target', '?')
+    total = data.get('total_calls', 0)
+    matches = data.get('matches', [])
+    path = data.get('path', '.')
+
+    print(f"Callees of: {target}")
+    print(f"Project:    {path}")
+    print(f"Total:      {total} call(s) across {len(matches)} definition(s)")
+    print()
+
+    if not matches:
+        print(f"  No definition of '{target}' found.")
+        return
+
+    for match in matches:
+        file_path = match['file']
+        line = match['line']
+        calls = match.get('calls', [])
+        print(f"  {file_path}:{line}  {target}")
+        if calls:
+            for callee in calls:
+                print(f"    → {callee}")
+        else:
+            print(f"    (no calls detected)")
+        print()
 
 
 def _render_dot(data: Dict[str, Any]) -> None:

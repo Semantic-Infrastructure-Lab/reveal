@@ -19,6 +19,7 @@ from reveal.adapters import (
     imports, diff, reveal, stats, markdown, claude
 )
 from reveal.adapters.autossl.adapter import AutosslAdapter  # noqa: F401
+from reveal.adapters.calls.adapter import CallsAdapter  # noqa: F401
 from reveal.adapters.cpanel.adapter import CpanelAdapter  # noqa: F401
 from reveal.adapters.domain.adapter import DomainAdapter  # noqa: F401
 from reveal.adapters.nginx.adapter import NginxUriAdapter  # noqa: F401
@@ -37,7 +38,7 @@ class TestAdapterContracts(unittest.TestCase):
         self.expected_schemes = {
             'env', 'ast', 'help', 'python', 'json', 'git', 'mysql', 'sqlite',
             'imports', 'diff', 'reveal', 'stats', 'markdown', 'claude',
-            'autossl', 'cpanel', 'domain', 'nginx', 'ssl', 'xlsx',
+            'autossl', 'cpanel', 'domain', 'nginx', 'ssl', 'xlsx', 'calls',
         }
 
     def test_all_adapters_are_registered(self):

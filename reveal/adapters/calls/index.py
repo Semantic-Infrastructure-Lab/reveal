@@ -92,6 +92,49 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
     return index
 
 
+def find_callees(path: str, target: str) -> Dict[str, Any]:
+    """Find what function *target* calls, across all matching definitions.
+
+    Scans the project for every function/method named *target* and returns
+    the calls it makes, with per-file breakdown.  Useful when you know a
+    function name but not which file it lives in, or when the name appears
+    in multiple files.
+
+    Args:
+        path: Root directory (or file) to search.
+        target: Function/method name to look up.
+
+    Returns:
+        Dict with ``target``, ``matches`` (one entry per definition found),
+        and ``total_calls`` count.
+    """
+    path_obj = Path(path)
+    directory = path_obj if path_obj.is_dir() else path_obj.parent
+    structures = collect_structures(str(directory))
+
+    matches: List[Dict[str, Any]] = []
+    for file_struct in structures:
+        file_path = file_struct.get('file', '')
+        for elem in file_struct.get('elements', []):
+            if elem.get('category') not in ('functions', 'methods'):
+                continue
+            if elem.get('name', '') != target:
+                continue
+            matches.append({
+                'file': file_path,
+                'function': target,
+                'line': elem.get('line', 0),
+                'calls': elem.get('calls', []),
+            })
+
+    return {
+        'target': target,
+        'query': 'callees',
+        'matches': matches,
+        'total_calls': sum(len(m['calls']) for m in matches),
+    }
+
+
 def find_callers(
     path: str,
     target: str,

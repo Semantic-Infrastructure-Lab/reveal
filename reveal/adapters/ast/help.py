@@ -130,6 +130,7 @@ _HELP_WORKFLOWS = [
             "reveal 'ast://src/?show=calls'                        # Compact call graph: all functions + their calls",
             "reveal 'ast://src/?calls=validate_item'               # Which functions call validate_item? (within-file)",
             "reveal 'calls://src/?target=validate_item'            # Cross-file: who calls validate_item project-wide?",
+            "reveal 'calls://src/?callees=validate_item'           # Cross-file: what does validate_item call?",
             "reveal 'calls://src/?target=validate_item&depth=2'    # Callers-of-callers (transitive, 2 levels)",
             "reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > call_graph.svg  # Graphviz SVG",
         ]
@@ -374,7 +375,7 @@ def get_help() -> Dict[str, Any]:
             'Scans all code files in directory recursively',
             'Supports Python, JS, TS, Rust, Go, and 50+ languages via tree-sitter',
             'Use --format=json for programmatic filtering with jq',
-            'Call graph: calls= and callee_of= filters work within a file; use calls:// for cross-file callers',
+            'Call graph: calls= and callee_of= filters work within a file; use calls:// for cross-file callers (?target=X) and callees (?callees=X)',
             'JSON output includes calls[], called_by[], and resolved_calls[] fields on each function/method',
         ],
         'output_formats': ['text', 'json', 'grep'],

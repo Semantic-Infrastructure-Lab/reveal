@@ -21,8 +21,9 @@ from typing import Any, Dict
 
 from reveal.adapters.ast.call_graph import build_symbol_map, resolve_callees
 from reveal.adapters.ast.adapter import AstAdapter
-from reveal.adapters.calls.index import build_callers_index, find_callers
+from reveal.adapters.calls.index import build_callers_index, find_callers, find_callees
 from reveal.adapters.calls.adapter import CallsAdapter, CallsRenderer, _parse_calls_query
+from reveal.adapters.calls.renderer import render_calls_structure
 
 
 # ---------------------------------------------------------------------------
@@ -387,6 +388,209 @@ class TestCallsRenderer(unittest.TestCase):
             adapter = CallsAdapter(tmpdir, 'target=helper&format=dot')
             result = adapter.get_structure()
             self.assertEqual(result.get('_query_format'), 'dot')
+
+
+# ---------------------------------------------------------------------------
+# find_callees: forward direction — what does function X call?
+# ---------------------------------------------------------------------------
+
+class TestFindCallees(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        _write(self.tmpdir, 'utils.py', '''
+def helper(x):
+    return str(x)
+
+def another():
+    return len([])
+''')
+        _write(self.tmpdir, 'main.py', '''
+def process(item):
+    helper(item)
+    another()
+    return sorted([item])
+''')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_callees_found_for_known_function(self):
+        result = find_callees(self.tmpdir, 'process')
+        self.assertEqual(result['target'], 'process')
+        self.assertEqual(result['query'], 'callees')
+        self.assertEqual(len(result['matches']), 1)
+        calls = result['matches'][0]['calls']
+        self.assertIn('helper', calls)
+        self.assertIn('another', calls)
+
+    def test_total_calls_count(self):
+        result = find_callees(self.tmpdir, 'process')
+        self.assertEqual(result['total_calls'], len(result['matches'][0]['calls']))
+
+    def test_no_match_returns_empty(self):
+        result = find_callees(self.tmpdir, 'nonexistent_func')
+        self.assertEqual(result['matches'], [])
+        self.assertEqual(result['total_calls'], 0)
+
+    def test_multiple_files_same_name(self):
+        """If two files define a function with the same name, both are returned."""
+        _write(self.tmpdir, 'extra.py', '''
+def process(x):
+    len(x)
+''')
+        result = find_callees(self.tmpdir, 'process')
+        self.assertEqual(len(result['matches']), 2)
+
+    def test_match_includes_file_and_line(self):
+        result = find_callees(self.tmpdir, 'helper')
+        self.assertEqual(len(result['matches']), 1)
+        match = result['matches'][0]
+        self.assertIn('file', match)
+        self.assertIn('line', match)
+        self.assertGreater(match['line'], 0)
+
+
+# ---------------------------------------------------------------------------
+# CallsAdapter: ?callees= query param (forward lookup)
+# ---------------------------------------------------------------------------
+
+class TestCallsAdapterCallees(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        _write(self.tmpdir, 'a.py', '''
+def worker():
+    helper()
+    validate()
+''')
+        _write(self.tmpdir, 'b.py', '''
+def helper():
+    pass
+
+def validate():
+    pass
+''')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_callees_param_returns_callees_result(self):
+        adapter = CallsAdapter(self.tmpdir, 'callees=worker')
+        result = adapter.get_structure()
+        self.assertEqual(result.get('type'), 'calls_callees')
+        self.assertEqual(result.get('target'), 'worker')
+        self.assertEqual(result.get('query'), 'callees')
+
+    def test_callees_result_has_matches(self):
+        adapter = CallsAdapter(self.tmpdir, 'callees=worker')
+        result = adapter.get_structure()
+        matches = result.get('matches', [])
+        self.assertEqual(len(matches), 1)
+        calls = matches[0]['calls']
+        self.assertIn('helper', calls)
+        self.assertIn('validate', calls)
+
+    def test_callees_param_takes_precedence_over_target(self):
+        """?callees=X&target=Y: callees param wins (callees mode)."""
+        adapter = CallsAdapter(self.tmpdir, 'callees=worker&target=helper')
+        result = adapter.get_structure()
+        self.assertEqual(result.get('type'), 'calls_callees')
+        self.assertEqual(result.get('target'), 'worker')
+
+    def test_missing_both_params_returns_error(self):
+        adapter = CallsAdapter(self.tmpdir, '')
+        result = adapter.get_structure()
+        self.assertIn('error', result)
+        self.assertIn('target', result['error'])
+        self.assertIn('callees', result['error'])
+
+    def test_callees_format_json_stored_in_result(self):
+        adapter = CallsAdapter(self.tmpdir, 'callees=worker&format=json')
+        result = adapter.get_structure()
+        self.assertEqual(result.get('_query_format'), 'json')
+
+
+# ---------------------------------------------------------------------------
+# Renderer: callees text output + relative paths
+# ---------------------------------------------------------------------------
+
+class TestCallsRendererCallees(unittest.TestCase):
+
+    def _capture(self, data, fmt='text'):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            render_calls_structure(data, fmt)
+        return buf.getvalue()
+
+    def test_callees_text_shows_target(self):
+        data = {
+            'query': 'callees',
+            'target': 'process',
+            'path': 'src/',
+            'total_calls': 2,
+            'matches': [{'file': 'src/worker.py', 'function': 'process', 'line': 10,
+                          'calls': ['helper', 'validate']}],
+        }
+        out = self._capture(data, 'text')
+        self.assertIn('Callees of: process', out)
+        self.assertIn('src/worker.py', out)
+        self.assertIn('→ helper', out)
+        self.assertIn('→ validate', out)
+
+    def test_callees_no_match_shows_message(self):
+        data = {
+            'query': 'callees',
+            'target': 'unknown',
+            'path': 'src/',
+            'total_calls': 0,
+            'matches': [],
+        }
+        out = self._capture(data, 'text')
+        self.assertIn("No definition of 'unknown' found", out)
+
+    def test_callees_empty_calls_list(self):
+        data = {
+            'query': 'callees',
+            'target': 'leaf_fn',
+            'path': '.',
+            'total_calls': 0,
+            'matches': [{'file': 'app.py', 'function': 'leaf_fn', 'line': 5, 'calls': []}],
+        }
+        out = self._capture(data, 'text')
+        self.assertIn('no calls detected', out)
+
+    def test_callees_json_format(self):
+        data = {
+            'query': 'callees',
+            'target': 'fn',
+            'path': '.',
+            'total_calls': 1,
+            'matches': [{'file': 'a.py', 'function': 'fn', 'line': 3, 'calls': ['bar']}],
+        }
+        out = self._capture(data, 'json')
+        import json
+        parsed = json.loads(out)
+        self.assertEqual(parsed['target'], 'fn')
+
+    def test_text_renderer_shows_relative_path(self):
+        """_render_text must show the full relative path, not just basename."""
+        data = {
+            'target': 'helper',
+            'depth': 1,
+            'total_callers': 1,
+            'path': 'src/',
+            'levels': [{'level': 1, 'callers': [
+                {'file': 'src/utils/helpers.py', 'caller': 'main',
+                 'line': 7, 'call_expr': 'helper', 'callee': 'helper'},
+            ]}],
+        }
+        out = self._capture(data, 'text')
+        self.assertIn('src/utils/helpers.py', out)
+        # Must NOT reduce to just basename
+        self.assertNotIn('  helpers.py:', out)
 
 
 if __name__ == '__main__':

@@ -34,8 +34,11 @@ beth_topics:
 ## Quick Start
 
 ```bash
-# Who calls validate_item anywhere in the project?
+# Who calls validate_item anywhere in the project? (reverse lookup)
 reveal 'calls://src/?target=validate_item'
+
+# What does validate_item call? (forward lookup)
+reveal 'calls://src/?callees=validate_item'
 
 # Include callers-of-callers (2 levels deep)
 reveal 'calls://src/?target=validate_item&depth=2'
@@ -52,6 +55,7 @@ reveal 'ast://src/auth.py?calls=validate_token'
 
 **Why use calls://?**
 - **Impact analysis**: Before changing a function, find all callers across the codebase
+- **Understand behaviour**: Find what a function calls to trace its dependencies
 - **Trace execution paths**: Follow call chains to understand how a feature triggers
 - **Dead code detection**: A function with no callers may be unused
 - **Visualize architecture**: Export call graphs to Graphviz for documentation
@@ -61,21 +65,29 @@ reveal 'ast://src/auth.py?calls=validate_token'
 ## URI Syntax
 
 ```
+# Reverse lookup: who calls function X?
 calls://<path>?target=<name>[&depth=N][&format=<fmt>]
+
+# Forward lookup: what does function X call?
+calls://<path>?callees=<name>[&format=<fmt>]
 ```
 
 | Component | Description |
 |-----------|-------------|
 | `path` | Directory (or file) to index — typically `src/` or `.` |
-| `target` | Function name to look up (required) |
-| `depth` | How many levels of transitive callers to expand (default: 1, max: 5) |
+| `target` | Function name to find **callers of** (reverse lookup) |
+| `callees` | Function name to find **callees of** (forward lookup) |
+| `depth` | Transitive levels for `?target` (default: 1, max: 5) |
 | `format` | Output format: `text` (default), `json`, or `dot` (Graphviz) |
 
 ### Examples
 
 ```bash
-# Direct callers of process_batch
+# Direct callers of process_batch (reverse lookup)
 reveal 'calls://src/?target=process_batch'
+
+# What does process_batch call? (forward lookup)
+reveal 'calls://src/?callees=process_batch'
 
 # Callers-of-callers (2 levels)
 reveal 'calls://src/?target=process_batch&depth=2'
@@ -116,13 +128,16 @@ callee → [(file, caller_func, line), ...]
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `target` | string | (required) | Function name to find callers of |
-| `depth` | integer | 1 | Transitive levels (1 = direct only, max 5) |
+| `target` | string | — | Function name to find **callers of** (reverse lookup) |
+| `callees` | string | — | Function name to find **callees of** (forward lookup) |
+| `depth` | integer | 1 | Transitive levels for `?target` (1 = direct only, max 5) |
 | `format` | string | `text` | Output format: `text`, `json`, or `dot` |
+
+> One of `target` or `callees` is required. If both are given, `callees` takes precedence.
 
 ### `target`
 
-The bare function name — no file qualifier needed. The adapter searches across all files:
+Reverse lookup — who calls this function? The bare function name, no file qualifier needed:
 
 ```bash
 # Bare name (most common)
@@ -130,6 +145,18 @@ reveal 'calls://src/?target=validate_item'
 
 # Method names work the same way
 reveal 'calls://src/?target=process'
+```
+
+### `callees`
+
+Forward lookup — what does this function call? Scans all definitions of the function name across the project:
+
+```bash
+# What does validate_item call?
+reveal 'calls://src/?callees=validate_item'
+
+# Useful when a function is defined in multiple files
+reveal 'calls://src/?callees=handle_request'
 ```
 
 ### `depth`
@@ -148,17 +175,19 @@ reveal 'calls://src/?target=validate_item&depth=5'   # up to 5 levels deep (capp
 
 ### Text (default)
 
-Human-readable summary with file, line, and caller context:
+Human-readable summary with relative file path, line, and caller context:
 
 ```
 Callers of: validate_item
 Project:    src/
 Total:      3
 
-  auth.py:42  authenticate  (calls validate_item)
-  api.py:78   process_request  (calls validate_item)
-  worker.py:17  run_job  (calls self.validate_item)
+  src/auth/handlers.py:42  authenticate  (calls validate_item)
+  src/api/routes.py:78     process_request  (calls validate_item)
+  src/worker/jobs.py:17    run_job  (calls self.validate_item)
 ```
+
+> File paths are relative to the project root — not just the basename — so `auth/handlers.py` and `utils/handlers.py` are never confused.
 
 With `depth=2`:
 
@@ -169,12 +198,12 @@ Depth:      2
 Total:      5
 
 Direct callers:
-  auth.py:42  authenticate  (calls validate_item)
-  worker.py:17  run_job  (calls self.validate_item)
+  src/auth/handlers.py:42  authenticate  (calls validate_item)
+  src/worker/jobs.py:17    run_job  (calls self.validate_item)
 
 Level 2 callers:
-  api.py:78   process_request  (calls authenticate)
-  main.py:12  main  (calls run_job)
+  src/api/routes.py:78  process_request  (calls authenticate)
+  src/main.py:12        main  (calls run_job)
 ```
 
 When no callers are found:
@@ -185,6 +214,30 @@ Project:    src/
 Total:      0
 
   No callers found for 'orphan_fn'.
+```
+
+**Callees text output** (`?callees=`):
+
+```
+Callees of: validate_item
+Project:    src/
+Total:      4 call(s) across 1 definition(s)
+
+  src/auth/validators.py:55  validate_item
+    → check_required
+    → normalize_value
+    → log_validation
+    → raise_error
+```
+
+When the function is not found:
+
+```
+Callees of: unknown_fn
+Project:    src/
+Total:      0 call(s) across 0 definition(s)
+
+  No definition of 'unknown_fn' found.
 ```
 
 ### JSON
@@ -328,6 +381,20 @@ reveal 'calls://src/?target=old_parse_config'
 reveal 'calls://src/?target=parse_config'
 ```
 
+### Workflow 6: Understand What a Function Does (Forward Lookup)
+
+Before reviewing or debugging a function, see what it delegates to:
+
+```bash
+# What does process_request call?
+reveal 'calls://src/?callees=process_request'
+
+# Useful for understanding a function you've never seen before
+reveal 'calls://src/?callees=initialize_app'
+```
+
+This is faster than reading the full implementation when you just want to know the collaboration pattern — what it orchestrates, not how.
+
 ---
 
 ## Call Graph in ast://
@@ -337,9 +404,9 @@ For within-file analysis, `ast://` provides lighter-weight call graph features w
 | Feature | `ast://` | `calls://` |
 |---------|---------|-----------|
 | Scope | Within a single file | Across the whole project |
-| `calls` outgoing | ✅ (via JSON or text renderer) | ✅ (as callee lookup) |
-| `called_by` incoming | ✅ within-file reverse | ✅ full project |
-| Filters | `calls=<name>`, `callee_of=<name>` | `target=<name>` |
+| `calls` outgoing | ✅ (via JSON or text renderer) | ✅ `?callees=<name>` (forward lookup) |
+| `called_by` incoming | ✅ within-file reverse | ✅ `?target=<name>` (full project) |
+| Filters | `calls=<name>`, `callee_of=<name>` | `target=<name>`, `callees=<name>` |
 | Display mode | `show=calls` (arrow diagram) | text / json / dot |
 | Cross-file resolution | `resolved_calls[]` in JSON | full index |
 | Cache | No (per-request) | Yes (mtime-based) |
