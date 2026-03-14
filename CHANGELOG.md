@@ -12,6 +12,14 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - (session destined-altar-0313)
+
+### Added (session destined-altar-0313)
+- **Call graph Phase 3: cross-file resolution** — `resolve_callees()` in new `adapters/ast/call_graph.py` joins a function's `calls` list against the file's import symbol map, adding `resolved_file` + `resolved_name` to each entry that can be traced to a file on disk. The existing `calls: List[str]` field is unchanged (backward-compatible); resolved data appears in a new `resolved_calls` field in JSON output. Text renderer shows `db.insert (→ database.py::insert)` inline. (session destined-altar-0313)
+- **`calls://` adapter** — new URI scheme for project-level cross-file callers queries. Builds a per-directory inverted callers index (callee → [(file, caller, line)]) cached by mtime fingerprint. Supports `?target=<name>` (direct callers), `?depth=N` (transitive BFS, capped at 5), `?format=dot` (Graphviz output). +25 tests. Tests: 4,899 → 4,924. (session destined-altar-0313)
+
+---
+
 ## [0.61.0] - 2026-03-13 (sessions toxic-onslaught-0310, ethereal-leviathan-0310, psychic-frenzy-0310, mystical-sword-0311, kilonova-throne-0311, eternal-launch-0311, turbo-ultimatum-0311, pattering-wind-0311, fluorescent-dawn-0311, astral-observatory-0313, astral-comet-0313, platinum-gleam-0313, mountain-gale-0313, turbulent-hail-0313)
 
 ### Fixed (session turbulent-hail-0313)
