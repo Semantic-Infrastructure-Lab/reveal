@@ -475,7 +475,7 @@ class TestXlsxAdapterCrossSheetSearch:
     @pytest.fixture
     def multi_sheet_xlsx(self, tmp_path):
         """Create a multi-sheet xlsx file for testing."""
-        import openpyxl
+        openpyxl = pytest.importorskip("openpyxl", reason="openpyxl not installed (pip install reveal-cli[xlsx])")
         wb = openpyxl.Workbook()
 
         # Sheet 1: Customers
