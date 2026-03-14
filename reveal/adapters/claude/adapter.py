@@ -463,8 +463,7 @@ class ClaudeAdapter(ResourceAdapter):
         try:
             return ClaudeAdapter._scan_jsonl_for_title(jsonl_path)
         except Exception:
-            pass
-        return None
+            return None
 
     @staticmethod
     def _collect_sessions_from_dir(project_dir: Path) -> List[Dict[str, Any]]:

@@ -92,7 +92,7 @@ def list_branches(repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, 
             info = _get_branch_info(repo, branch_name)
             if info:
                 branches.append(info)
-    except Exception:
+    except Exception:  # pygit2 errors vary — return partial results collected so far
         pass
     return sorted(branches, key=lambda b: cast(int, b.get('timestamp', 0)), reverse=True)[:limit]
 
@@ -132,6 +132,6 @@ def list_tags(repo: 'pygit2.Repository', limit: int = 20) -> List[Dict[str, Any]
             info = _get_tag_info(repo, ref_name)
             if info:
                 tags.append(info)
-    except Exception:
+    except Exception:  # pygit2 errors vary — return partial results collected so far
         pass
     return sorted(tags, key=lambda t: cast(int, t.get('timestamp', 0)), reverse=True)[:limit]

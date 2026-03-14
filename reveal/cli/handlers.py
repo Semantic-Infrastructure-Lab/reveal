@@ -109,6 +109,9 @@ def handle_explain_file(path: str, verbose: bool = False):
     Shows how reveal will analyze a file, including analyzer type,
     fallback status, and capabilities.
     """
+    if path is None:
+        print("Usage: reveal <file> --explain-file", file=sys.stderr)
+        sys.exit(1)
     from .introspection import explain_file
     print(explain_file(path, verbose=verbose))
     sys.exit(0)
@@ -122,6 +125,9 @@ def handle_capabilities(path: str):
     """
     import json
     from .introspection import get_capabilities
+    if path is None:
+        print("Usage: reveal <file> --capabilities", file=sys.stderr)
+        sys.exit(1)
     result = get_capabilities(path)
     print(json.dumps(result, indent=2))
     sys.exit(0)
@@ -132,6 +138,9 @@ def handle_show_ast(path: str, max_depth: int = 10):
 
     Displays the tree-sitter AST for a file.
     """
+    if path is None:
+        print("Usage: reveal <file> --show-ast", file=sys.stderr)
+        sys.exit(1)
     from .introspection import show_ast
     print(show_ast(path, max_depth=max_depth))
     sys.exit(0)

@@ -31,20 +31,24 @@ class CpanelRenderer:
     def render_structure(result: Dict[str, Any], format: str = 'text') -> None:
         if format == 'json':
             print(json.dumps(result, indent=2, default=str))
-            return
-
-        result_type = result.get('type', '')
-        if result_type == 'cpanel_user':
-            CpanelRenderer._render_overview(result)
-        elif result_type == 'cpanel_domains':
-            CpanelRenderer._render_domains(result)
-        elif result_type == 'cpanel_ssl':
-            CpanelRenderer._render_ssl(result)
-        elif result_type == 'cpanel_acl':
-            CpanelRenderer._render_acl(result)
         else:
-            # Fallback: dump as JSON
-            print(json.dumps(result, indent=2, default=str))
+            result_type = result.get('type', '')
+            if result_type == 'cpanel_user':
+                CpanelRenderer._render_overview(result)
+            elif result_type == 'cpanel_domains':
+                CpanelRenderer._render_domains(result)
+            elif result_type == 'cpanel_ssl':
+                CpanelRenderer._render_ssl(result)
+            elif result_type == 'cpanel_acl':
+                CpanelRenderer._render_acl(result)
+            elif result_type == 'cpanel_full_audit':
+                CpanelRenderer._render_full_audit(result)
+            else:
+                # Fallback: dump as JSON
+                print(json.dumps(result, indent=2, default=str))
+
+        if result.get('type') == 'cpanel_full_audit' and result.get('has_failures'):
+            sys.exit(2)
 
     @staticmethod
     def render_element(result: Dict[str, Any], format: str = 'text') -> None:
@@ -96,7 +100,7 @@ class CpanelRenderer:
             print(f"  {d['domain']:<{col_domain}}  {d.get('type', ''):<{col_type}}  {d.get('docroot', '')}")
 
     @staticmethod
-    def _format_cert_detail(cert: dict, nxdomain: bool) -> str:
+    def _format_cert_detail(cert: dict, nxdomain: bool, elsewhere: bool = False) -> str:
         """Format the status detail string for one cert row."""
         s = cert['status']
         if s == 'ok':
@@ -112,6 +116,8 @@ class CpanelRenderer:
             detail = f"❌ {cert.get('error', s)}"
         if nxdomain:
             detail += "  [nxdomain]"
+        elif elsewhere:
+            detail += "  [→ elsewhere]"
         return detail
 
     @staticmethod
@@ -121,29 +127,53 @@ class CpanelRenderer:
         summary = r.get('summary', {})
         dns_verified = r.get('dns_verified', False)
         dns_excluded = r.get('dns_excluded', {})
+        dns_elsewhere = r.get('dns_elsewhere', {})
         print(f"SSL disk certs for cPanel user: {username}")
         print(f"  source: {r.get('cpanel_ssl_dir', '')}/DOMAIN/combined")
-        if summary:
-            parts = [f"{v} {k}" for k, v in summary.items() if v]
-            summary_line = f"  summary: {', '.join(parts)}"
+        if summary or dns_excluded or dns_elsewhere:
+            expired_sub = sum(
+                1 for c in certs
+                if c.get('status') == 'expired'
+                and c.get('domain_type', '') in ('subdomain', 'parked')
+            )
+            parts = []
+            for k, v in summary.items():
+                if not v:
+                    continue
+                if k == 'expired' and expired_sub > 0:
+                    parts.append(f"{v} expired ({expired_sub} subdomain/parked)")
+                else:
+                    parts.append(f"{v} {k}")
+            summary_line = f"  summary: {', '.join(parts) or 'none'}"
             if dns_excluded:
                 excluded_total = sum(dns_excluded.values())
                 excluded_parts = [f"{v} {k}" for k, v in dns_excluded.items() if v]
                 summary_line += f"  ({excluded_total} nxdomain-excluded: {', '.join(excluded_parts)})"
+            if dns_elsewhere:
+                elsewhere_total = sum(dns_elsewhere.values())
+                elsewhere_parts = [f"{v} {k}" for k, v in dns_elsewhere.items() if v]
+                summary_line += f"  ({elsewhere_total} elsewhere-excluded: {', '.join(elsewhere_parts)})"
             print(summary_line)
         if dns_verified:
-            print(f"  dns-verified: NXDOMAIN domains shown but excluded from summary counts")
+            print("  dns-verified: NXDOMAIN and elsewhere-resolving domains excluded from summary counts")
         if not certs:
             print("  (no domains found)")
             return
 
-        col_domain = max(len(c['domain']) for c in certs)
+        only_failures = r.get('only_failures', False)
+        visible_certs = [c for c in certs if not only_failures or c.get('status') != 'ok']
+        if only_failures and not visible_certs:
+            print("✅ No failures found.")
+            return
+
+        col_domain = max(len(c['domain']) for c in visible_certs)
         print()
         print(f"  {'domain':<{col_domain}}  status")
         print("  " + "─" * (col_domain + 40))
-        for c in certs:
+        for c in visible_certs:
             nxdomain = dns_verified and not c.get('dns_resolves', True)
-            detail = CpanelRenderer._format_cert_detail(c, nxdomain)
+            elsewhere = dns_verified and c.get('dns_points_here') is False
+            detail = CpanelRenderer._format_cert_detail(c, nxdomain, elsewhere)
             print(f"  {c['domain']:<{col_domain}}  {detail}")
 
         steps = r.get('next_steps', [])
@@ -157,6 +187,7 @@ class CpanelRenderer:
         username = r.get('username', '?')
         domains = r.get('domains', [])
         summary = r.get('summary', {})
+        only_failures = r.get('only_failures', False)
         print(f"Docroot ACL check for cPanel user: {username}")
         if summary:
             parts = [f"{v} {k}" for k, v in summary.items() if v]
@@ -165,12 +196,17 @@ class CpanelRenderer:
             print("  (no domains found)")
             return
 
-        col_domain = max(len(d['domain']) for d in domains)
-        col_docroot = max(len(d.get('docroot', '')) for d in domains)
+        visible = [d for d in domains if not only_failures or d['acl_status'] == 'denied']
+        if only_failures and not visible:
+            print("✅ No ACL failures found.")
+            return
+
+        col_domain = max(len(d['domain']) for d in visible)
+        col_docroot = max(len(d.get('docroot', '')) for d in visible)
         print()
         print(f"  {'domain':<{col_domain}}  {'status':<14}  docroot")
         print("  " + "─" * (col_domain + col_docroot + 20))
-        for d in domains:
+        for d in visible:
             icon = _icon_for_acl_status(d['acl_status'])
             status_col = f"{icon} {d['acl_status']}"
             print(f"  {d['domain']:<{col_domain}}  {status_col:<14}  {d.get('docroot', '')}")
@@ -185,3 +221,68 @@ class CpanelRenderer:
             print()
             for s in steps:
                 print(f"  → {s}")
+
+    @staticmethod
+    def _render_full_audit(r: Dict[str, Any]) -> None:
+        username = r.get('username', '?')
+        print(f"Full audit: {username}")
+        print("=" * (len(username) + 13))
+
+        # SSL section
+        ssl = r.get('ssl', {})
+        ssl_summary = ssl.get('summary', {})
+        ssl_total = ssl.get('cert_count', 0)
+        ssl_parts = [f"{v} {k}" for k, v in ssl_summary.items() if v]
+        ssl_issues = sum(v for k, v in ssl_summary.items() if k != 'ok' and v)
+        ssl_icon = '❌' if ssl_issues else '✅'
+        print()
+        print(f"{ssl_icon} SSL ({ssl_total} domains): {', '.join(ssl_parts) or 'none'}")
+        if ssl_issues:
+            for c in ssl.get('certs', []):
+                if c.get('status') != 'ok':
+                    detail = CpanelRenderer._format_cert_detail(c, False)
+                    print(f"     {c['domain']}: {detail}")
+
+        # ACL section
+        acl = r.get('acl', {})
+        acl_summary = acl.get('summary', {})
+        acl_total = acl.get('domain_count', 0)
+        acl_parts = [f"{v} {k}" for k, v in acl_summary.items() if v]
+        acl_has_failures = acl.get('has_failures', False)
+        acl_icon = '❌' if acl_has_failures else '✅'
+        print(f"{acl_icon} ACL ({acl_total} domains): {', '.join(acl_parts) or 'none'}")
+        if acl_has_failures:
+            for d in acl.get('domains', []):
+                if d['acl_status'] == 'denied':
+                    print(f"     {d['domain']}: ❌ denied  ({d.get('docroot', '')})")
+
+        # nginx ACME section
+        nginx = r.get('nginx')
+        if nginx is None:
+            print("⚫ nginx: no config found")
+        elif 'error' in nginx:
+            print(f"⚠️  nginx: audit error — {nginx['error']}")
+        else:
+            nginx_total = nginx.get('domain_count', 0)
+            nginx_has_failures = nginx.get('has_failures', False)
+            nginx_icon = '❌' if nginx_has_failures else '✅'
+            if nginx_total == 0:
+                print("⚫ nginx: no ACME challenge roots found")
+            else:
+                nginx_fails = [d for d in nginx.get('domains', []) if d.get('has_failure')]
+                nginx_ok = nginx_total - len(nginx_fails)
+                nginx_parts = []
+                if nginx_ok:
+                    nginx_parts.append(f"{nginx_ok} ok")
+                if nginx_fails:
+                    nginx_parts.append(f"{len(nginx_fails)} issues")
+                print(f"{nginx_icon} nginx ACME ({nginx_total} domains): {', '.join(nginx_parts)}")
+                for d in nginx_fails:
+                    print(f"     {d['domain']}: acl={d['acl_status']} ssl={d['ssl_status']}")
+
+        # Overall verdict
+        print()
+        if r.get('has_failures'):
+            print("❌ Audit complete — failures detected (exit 2)")
+        else:
+            print("✅ Audit complete — all checks passed")

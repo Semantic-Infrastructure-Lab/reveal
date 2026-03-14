@@ -2,11 +2,27 @@
 
 import datetime
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Optional
 from .registry import get_analyzer
 from .display.filtering import PathFilter
 from .utils import format_size
+
+
+@dataclass
+class TreeViewOptions:
+    """Options controlling directory tree rendering."""
+    depth: int = 3
+    show_hidden: bool = False
+    max_entries: int = 200
+    fast: bool = False
+    respect_gitignore: bool = True
+    exclude_patterns: Optional[List[str]] = None
+    dir_limit: int = 50
+    sort_by: Optional[str] = None
+    sort_desc: bool = False
+    include_extensions: Optional[List[str]] = None
 
 
 def _collect_matching_files(root_path: Path, show_hidden: bool, path_filter: Any, exts: Optional[set]) -> list:
@@ -93,33 +109,34 @@ def show_file_list(path: str, show_hidden: bool = False,
     return '\n'.join(lines)
 
 
-def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
-                        max_entries: int = 200, fast: bool = False,
-                        respect_gitignore: bool = True,
-                        exclude_patterns: Optional[List[str]] = None,
-                        dir_limit: int = 50,
-                        sort_by: Optional[str] = None,
-                        sort_desc: bool = False,
-                        include_extensions: Optional[List[str]] = None) -> str:
+def show_directory_tree(path: str, options: Optional[TreeViewOptions] = None, **kwargs) -> str:
     """Show directory tree with file info.
 
     Args:
         path: Directory path
-        depth: Maximum depth to traverse
-        show_hidden: Whether to show hidden files/dirs
-        max_entries: Maximum entries to display (0=unlimited)
-        fast: Skip expensive line counting for performance
-        respect_gitignore: Whether to respect .gitignore rules (default: True)
-        exclude_patterns: Additional patterns to exclude (e.g., ['*.log', 'tmp/'])
-        dir_limit: Maximum entries per directory before snipping (default: 50, 0=unlimited).
-                   When exceeded, shows "[snipped N more]" and continues with siblings.
-        sort_by: Sort entries by field: 'name', 'size', 'mtime'/'modified' (default: dirs first, then name)
-        sort_desc: If True, reverse sort order
-        include_extensions: If set, only show files with these extensions (e.g., ['md', 'py'])
+        options: TreeViewOptions instance. If not provided, built from kwargs for
+                 backwards compatibility.
+        **kwargs: Backwards-compatible keyword arguments corresponding to TreeViewOptions
+                  fields (depth, show_hidden, max_entries, fast, respect_gitignore,
+                  exclude_patterns, dir_limit, sort_by, sort_desc, include_extensions).
 
     Returns:
         Formatted tree string
     """
+    if options is None:
+        options = TreeViewOptions(
+            depth=kwargs.get('depth', 3),
+            show_hidden=kwargs.get('show_hidden', False),
+            max_entries=kwargs.get('max_entries', 200),
+            fast=kwargs.get('fast', False),
+            respect_gitignore=kwargs.get('respect_gitignore', True),
+            exclude_patterns=kwargs.get('exclude_patterns', None),
+            dir_limit=kwargs.get('dir_limit', 50),
+            sort_by=kwargs.get('sort_by', None),
+            sort_desc=kwargs.get('sort_desc', False),
+            include_extensions=kwargs.get('include_extensions', None),
+        )
+
     root_path = Path(path)
 
     if not root_path.is_dir():
@@ -128,30 +145,31 @@ def show_directory_tree(path: str, depth: int = 3, show_hidden: bool = False,
     # Create path filter
     path_filter = PathFilter(
         root_path=root_path,
-        respect_gitignore=respect_gitignore,
-        exclude_patterns=exclude_patterns,
+        respect_gitignore=options.respect_gitignore,
+        exclude_patterns=options.exclude_patterns,
         include_defaults=True
     )
 
     # Count total entries first for warnings
-    total_entries = _count_entries(root_path, depth, show_hidden, path_filter)
+    total_entries = _count_entries(root_path, options.depth, options.show_hidden, path_filter)
 
     lines = [f"{root_path.name or root_path}/\n"]
 
     # Warn if directory is large and user hasn't disabled limits
-    if total_entries > 500 and max_entries > 0:
+    if total_entries > 500 and options.max_entries > 0:
         lines.append(f"⚠️  Large directory detected ({total_entries} entries)")
-        lines.append(f"   Showing first {max_entries} entries (use --max-entries 0 for unlimited)")
-        if not fast:
+        lines.append(f"   Showing first {options.max_entries} entries (use --max-entries 0 for unlimited)")
+        if not options.fast:
             lines.append("   Consider using --fast to skip line counting for better performance\n")
 
     # Track how many entries we've shown
     context: dict[str, Any] = {
-        'count': 0, 'max_entries': max_entries, 'truncated': 0, 'dir_limit': dir_limit,
-        'sort_by': sort_by, 'sort_desc': sort_desc, 'include_extensions': include_extensions,
+        'count': 0, 'max_entries': options.max_entries, 'truncated': 0,
+        'dir_limit': options.dir_limit, 'sort_by': options.sort_by,
+        'sort_desc': options.sort_desc, 'include_extensions': options.include_extensions,
     }
-    _walk_directory(root_path, lines, depth=depth, show_hidden=show_hidden,
-                   fast=fast, context=context, path_filter=path_filter)
+    _walk_directory(root_path, lines, depth=options.depth, show_hidden=options.show_hidden,
+                   fast=options.fast, context=context, path_filter=path_filter)
 
     # Show truncation message if we hit the limit
     if context['truncated'] > 0:

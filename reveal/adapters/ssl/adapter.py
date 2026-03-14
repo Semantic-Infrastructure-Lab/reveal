@@ -596,7 +596,7 @@ class SSLAdapter(ResourceAdapter):
             try:
                 analyzer = NginxAnalyzer(path)
                 entries.extend(analyzer.extract_ssl_cert_paths())
-            except Exception:
+            except Exception:  # skip unparseable or unreadable config files
                 pass
         return entries
 

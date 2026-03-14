@@ -25,6 +25,10 @@ _RE_IMPORT = re.compile(r'^\s*import\s+([\w.]+(?:\s*,\s*[\w.]+)*)', re.MULTILINE
 _RE_FROM = re.compile(r'^\s*from\s+([\w.]+)\s+import\s+([^\n(#]+)', re.MULTILINE)
 # Multi-line: `from X import (\n    Y, Z\n)` — captures everything inside the parens
 _RE_FROM_PAREN = re.compile(r'^\s*from\s+([\w.]+)\s+import\s*\(([^)]+)\)', re.MULTILINE | re.DOTALL)
+# String literals that look like dotted module paths — catches dynamic imports:
+# importlib.import_module('pkg.sub.mod'), dispatch tables ('pkg.sub': ...), etc.
+# Requires at least two dots (three parts) to avoid false positives on short strings.
+_RE_MODULE_STRING = re.compile(r'''['"]([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*){2,})['"]''')
 
 
 def _resolve_relative_import(
@@ -129,6 +133,11 @@ def _extract_imports_regex(
         # Record 'X.Y' for each name so `from pkg import mod` is not a false orphan
         _add_named_imports(imports, module, m.group(2).strip())
 
+    # String literals with dotted module paths — catches dynamic dispatch patterns:
+    # importlib.import_module('pkg.sub.mod'), tuple tables ('pkg.sub.cmd', ...), etc.
+    for m in _RE_MODULE_STRING.finditer(content):
+        _add_module_and_parents(imports, m.group(1))
+
 
 class M102(BaseRule):
     """Detect Python files not imported anywhere in the package."""
@@ -148,6 +157,11 @@ class M102(BaseRule):
 
     # Directory patterns that contain entry points
     ENTRY_POINT_DIRS = {'bin', 'scripts', 'tools', 'migrations'}
+
+    # Rule plugin naming convention: one uppercase letter + digits (e.g. B001, M102, E501).
+    # These files are always dynamically discovered and loaded at runtime — never statically
+    # imported — so static import analysis cannot detect their usage.
+    _RULE_CODE_RE = re.compile(r'^[A-Z][0-9]+$')
 
     # Test file patterns
     TEST_PATTERNS = {'test_', '_test', 'tests'}
@@ -215,6 +229,10 @@ class M102(BaseRule):
 
         # Check filename patterns
         if stem in self.ENTRY_POINT_PATTERNS:
+            return True
+
+        # Rule plugin files (e.g. B001.py, M102.py, E501.py) are always dynamically loaded
+        if self._RULE_CODE_RE.match(path.stem):
             return True
 
         # Check if in entry point directory

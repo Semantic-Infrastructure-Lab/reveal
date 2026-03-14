@@ -33,7 +33,7 @@ Log structure — two phases:
 import json
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 AUTOSSL_LOG_DIR = "/var/cpanel/logs/autossl"
 

@@ -767,6 +767,15 @@ reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
 # On large configs (500+ domains), filter to problems only:
 reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme --only-failures
 
+# Machine-readable JSON output (for agents / scripting)
+reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme --format=json
+# Shape: {type: "nginx_acme_audit", has_failures: bool, only_failures: bool, domains: [...]}
+# Each domain: {domain, acme_path, acl_status, ssl_status, ssl_days, has_failure}
+# Exit 2 still fires on failures even in JSON mode
+# Combine with --only-failures: only domains with has_failure=true in output
+reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme --format=json --only-failures
+reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme --format=json | jq '.domains[] | select(.has_failure)'
+
 # Check nginx error log for ACME/SSL failures (retroactive diagnosis)
 reveal /etc/nginx/conf.d/users/USERNAME.conf --diagnose
 # Scans last 5,000 lines of nginx error log for:
@@ -971,80 +980,162 @@ reveal ssl://example.com --check     # verify cert health
 
 ---
 
+### Task: "Inspect domain health — DNS, registration, HTTP"
+
+The `domain://` adapter provides structured domain health checks: DNS records, HTTP response chain, SSL expiry, and WHOIS registration. Combines multiple checks into a single pass.
+
+**Pattern:**
+```bash
+# Overview: DNS summary, SSL status, nameservers
+reveal domain://example.com
+
+# Deep health check: DNS resolution, propagation, SSL expiry, HTTP status
+reveal domain://example.com --check
+
+# Show only problems
+reveal domain://example.com --check --only-failures
+
+# Specific sub-views
+reveal domain://example.com/dns          # All DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)
+reveal domain://example.com/ssl          # SSL certificate status (delegates to ssl://)
+reveal domain://example.com/registrar    # Registrar name and key dates from WHOIS
+reveal domain://example.com/whois        # WHOIS data (requires: pip install reveal[whois])
+
+# JSON for scripting
+reveal domain://example.com --check --format=json
+```
+
+**When to use which view:**
+
+| Scenario | Command |
+|----------|---------|
+| "Is this domain healthy?" | `reveal domain://example.com --check` |
+| "What are the DNS records?" | `.../dns` |
+| "When does this domain expire?" | `.../registrar` |
+| "Is SSL valid?" | `.../ssl` or `reveal ssl://example.com --check` |
+| "Is DNS propagated?" | `reveal domain://example.com --check` (includes propagation check) |
+
+**Batch domain checks:**
+```bash
+# Check multiple domains, show only failures
+echo -e "domain://example.com\ndomain://api.example.com" | reveal --stdin --batch --check --only-failures
+```
+
+**domain:// vs ssl://:**
+- `domain://` — overview + DNS + HTTP + registrar; use for broad health checks
+- `ssl://` — deep SSL inspection (cert chain, SANs, cipher suites); use when SSL is the specific concern
+
+---
+
 ### Task: "Audit a cPanel user environment"
 
 The `cpanel://` adapter provides a first-class view of a cPanel user's web environment.
 All operations are filesystem-based — no WHM API or credentials required.
 
-**Pattern:**
+**Fastest path for agents — one command does everything:**
+```bash
+# ssl + acl-check + nginx ACME in one pass; exits 2 if any component has failures
+reveal cpanel://USERNAME/full-audit
+
+# Machine-readable composite audit
+reveal cpanel://USERNAME/full-audit --format=json
+# Output shape: {type, username, has_failures, ssl: {...}, acl: {...}, nginx: {...}|null}
+
+# Filter to failures only across all three components
+reveal cpanel://USERNAME/full-audit --only-failures
+```
+
+**Individual components (when you need targeted output):**
 ```bash
 # Overview: domain count + SSL summary + nginx config path
 reveal cpanel://USERNAME
 
-# List all domains with docroots and type (addon/subdomain/main)
+# List all domains with docroots and type (addon/subdomain/main_domain/parked)
 reveal cpanel://USERNAME/domains
 
-# Disk cert health for every domain (S2)
+# Disk cert health for every domain — sorted failures first
 reveal cpanel://USERNAME/ssl
 
-# DNS-verified: exclude NXDOMAIN domains from critical/expiring counts
-# Use when large accounts have inactive/former-customer domains with expiring certs
+# Show only failing certs
+reveal cpanel://USERNAME/ssl --only-failures
+
+# Filter to main domain only (URI query param)
+reveal cpanel://USERNAME/ssl?domain_type=main_domain
+# domain_type values: main_domain, addon, subdomain, parked
+
+# DNS-verified: exclude NXDOMAIN and elsewhere-pointing domains from counts
+# Use when large accounts have inactive/migrated domains with expiring certs
 reveal cpanel://USERNAME/ssl --dns-verified
-# Output: summary shows "1 critical  (2 nxdomain-excluded: 2 critical)"
-# NXDOMAIN domains still shown in table with [nxdomain] tag
+# Summary: "1 critical  (2 nxdomain-excluded: 2 critical)  (1 elsewhere-excluded: 1 critical)"
+# Table annotations: [nxdomain] = NXDOMAIN; [→ elsewhere] = resolves but to a different server
+# Combine: --dns-verified --only-failures shows only failures on domains served by THIS server
 
-# Nobody ACL check on every domain docroot (N1)
-reveal cpanel://USERNAME/acl-check
-
-# JSON output for scripting
-reveal cpanel://USERNAME --format=json
+# JSON output for jq pipelines
 reveal cpanel://USERNAME/ssl --format=json
+reveal cpanel://USERNAME/ssl --dns-verified --format=json | jq '.certs[] | select(.dns_points_here == false)'
+reveal cpanel://USERNAME/ssl --format=json | jq '.certs[] | select(.status != "ok")'
+
+# Nobody ACL check on every domain docroot — required for ACME renewal
+reveal cpanel://USERNAME/acl-check
+reveal cpanel://USERNAME/acl-check --only-failures  # show only denied docroots
 ```
 
-**Full per-user audit workflow:**
+**Full per-user audit workflow (when NOT using full-audit):**
 ```bash
 # 1. Overview
 reveal cpanel://USERNAME
 
 # 2. Check nobody ACL on all docroots (required for nginx ACME renewal)
-reveal cpanel://USERNAME/acl-check
+reveal cpanel://USERNAME/acl-check --only-failures
 
 # 3. Check on-disk cert health for every SSL domain
-reveal cpanel://USERNAME/ssl
+reveal cpanel://USERNAME/ssl --only-failures
 
-# 4. Composed audit: ACME paths + ACL + live SSL in one table
-reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
-# On 500+ domain configs, filter to failures only:
+# 4. Composed audit: ACME paths + ACL + live SSL in one nginx table
 reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme --only-failures
 
 # 5. Disk cert vs live cert comparison (detect AutoSSL renewed but nginx not reloaded)
 reveal /etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs
 
-# 6. Retroactive error log diagnosis (what has already failed)
+# 6. nginx ACME audit as JSON (for agents that want structured output)
+reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme --format=json
+# Shape: {type: "nginx_acme_audit", has_failures, only_failures, domains: [...]}
+
+# 7. Retroactive error log diagnosis (what has already failed)
 reveal /etc/nginx/conf.d/users/USERNAME.conf --diagnose
 ```
 
 **cpanel:// views:**
+- `cpanel://USERNAME/full-audit` — **recommended start**: ssl + acl-check + nginx ACME; exits 2 on failure
 - `cpanel://USERNAME` — overview: domain count, SSL summary, nginx config path
-- `cpanel://USERNAME/domains` — all addon/subdomain domains with docroots and type
-- `cpanel://USERNAME/ssl` — disk cert health per domain from `/var/cpanel/ssl/apache_tls/`
-- `cpanel://USERNAME/acl-check` — nobody ACL status on every domain docroot
+- `cpanel://USERNAME/domains` — all domains with docroots and type (main_domain/addon/subdomain/parked)
+- `cpanel://USERNAME/ssl` — disk cert health per domain; supports `--only-failures`, `--dns-verified`, `?domain_type=`
+- `cpanel://USERNAME/acl-check` — nobody ACL status on every domain docroot; supports `--only-failures`
 
 **When to use which command:**
 | Scenario | Command |
 |----------|---------|
-| Quick user overview | `reveal cpanel://USERNAME` |
+| Full health check (preferred) | `reveal cpanel://USERNAME/full-audit` |
+| Full health check, machine-readable | `reveal cpanel://USERNAME/full-audit --format=json` |
 | "Why is ACME renewal failing?" | `reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme` then `--diagnose` |
 | "Did AutoSSL run but nginx not reload?" | `reveal /etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs` |
-| "Which docroots block nobody?" | `reveal cpanel://USERNAME/acl-check` |
+| "Which docroots block nobody?" | `reveal cpanel://USERNAME/acl-check --only-failures` |
 | "What domains does this user have?" | `reveal cpanel://USERNAME/domains` |
-| 500+ domain config, show only problems | add `--only-failures` to `--validate-nginx-acme` |
+| Show only cert problems | `reveal cpanel://USERNAME/ssl --only-failures` |
 | "Former-customer domains inflating critical count" | `reveal cpanel://USERNAME/ssl --dns-verified` |
+| "Which domains point to a different server?" | `reveal cpanel://USERNAME/ssl --dns-verified --format=json \| jq '.certs[] \| select(.dns_points_here == false)'` |
+| Scope to main domain only | `reveal cpanel://USERNAME/ssl?domain_type=main_domain` |
+
+**DNS verification details (--dns-verified):**
+- `dns_resolves: false` → domain is NXDOMAIN (DNS gone); shown with `[nxdomain]` tag, excluded from summary
+- `dns_points_here: false` → domain resolves but IPs don't match any local interface; shown with `[→ elsewhere]` tag, excluded from summary
+- `dns_points_here: null` → domain resolves but local IPs couldn't be determined
+- Both NXDOMAIN and elsewhere-pointing domains are excluded from counts — summary reflects only domains this server actually serves
 
 **ACL check methods:**
 - `reveal cpanel://USERNAME/acl-check` — filesystem walk (authoritative); finds denied docroots directly
 - `reveal /etc/nginx/.../USERNAME.conf --validate-nginx-acme` — parses nginx config + checks ACME paths + live SSL; also verifies routing
-- Use both: cpanel ACL check for fast docroot scan; nginx audit to verify ACME config path resolution
+- `reveal cpanel://USERNAME/full-audit` — runs both plus ssl in one pass
 
 ---
 
@@ -1903,6 +1994,42 @@ reveal deep_dir/
    # Skip node_modules, .git, etc.
    reveal project/ --exclude node_modules,venv,.git
    ```
+
+---
+
+### Issue: "Exit code 2 is breaking my pipeline / parallel tool calls"
+
+**Exit code contract:**
+- `0` — pass (no findings, or informational output only)
+- `1` — warnings (expiring certs, non-critical issues)
+- `2` — failures found (expired certs, rule violations, ACL failures)
+
+Exit code 2 means **reveal found something** — it is not a tool crash. The output is still valid and useful; the exit code is the machine-readable summary.
+
+**The right fix is `|| true` at the call site:**
+```bash
+# In a shell pipeline — don't stop on findings
+reveal ssl://example.com --check || true
+
+# In a script that should continue regardless
+reveal /etc/nginx/conf.d/users/myuser.conf --validate-nginx-acme --only-failures || true
+
+# In a Makefile
+check-ssl:
+    reveal ssl://example.com --check || true
+```
+
+**Why there is no `--no-fail` / `--exit-zero` flag:**
+`|| true` is the idiomatic Unix pattern for "run this but don't stop on non-zero exit." Adding `--no-fail` would push caller concerns into the tool, conflate "checking" with "what to do about findings," and need to be added to every checking command. Most Unix tools (`grep`, `diff`, `test`) follow the same convention.
+
+**For AI agents running parallel tool calls:**
+If your agent framework treats any non-zero exit as a tool failure, use `|| true`. The output (text or JSON) is produced regardless of exit code — the exit code is purely a machine-readable summary of the result.
+
+```bash
+# These both produce output — exit code just summarizes the result
+reveal ssl://example.com --check           # exits 2 if expired
+reveal ssl://example.com --check || true   # always exits 0; output identical
+```
 
 ---
 

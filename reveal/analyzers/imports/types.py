@@ -128,6 +128,7 @@ class ImportGraph:
             or '# type: ignore' in stmt.source_line
             or stmt.is_type_checking
             or stmt.import_type == 'star_import'  # can't reliably detect
+            or stmt.file_path.name == '__init__.py'  # re-export pattern: imports are public API
         )
 
     @staticmethod

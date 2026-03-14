@@ -267,6 +267,37 @@ class TestM102OrphanFile(unittest.TestCase):
             self.teardown_directory(temp_dir)
 
 
+    def test_dynamic_dispatch_string_not_flagged(self):
+        """Modules referenced as string literals in dispatch tables should not be flagged."""
+        import reveal.rules.maintainability.M102 as m
+        m._import_cache.clear()
+
+        files = {
+            "pyproject.toml": "[project]\nname = 'testpkg'\n",
+            "testpkg/__init__.py": "",
+            "testpkg/dispatcher.py": (
+                "import importlib\n"
+                "_COMMANDS = {\n"
+                "    'run': ('testpkg.commands.run', 'create_parser', 'run_cmd'),\n"
+                "}\n"
+                "def dispatch(name):\n"
+                "    mod_path, _, _ = _COMMANDS[name]\n"
+                "    mod = importlib.import_module(mod_path)\n"
+            ),
+            "testpkg/commands/__init__.py": "",
+            "testpkg/commands/run.py": "def create_parser(): pass\ndef run_cmd(args): pass\n",
+        }
+        temp_dir = self.create_temp_directory_structure(files)
+        try:
+            rule = M102()
+            run_path = str(temp_dir / "testpkg" / "commands" / "run.py")
+            detections = rule.check(run_path, None, files["testpkg/commands/run.py"])
+            # run.py is referenced as 'testpkg.commands.run' string literal — should not be flagged
+            self.assertEqual(len(detections), 0, "dynamic dispatch via string literal should suppress M102")
+        finally:
+            self.teardown_directory(temp_dir)
+
+
 class TestM103VersionConsistency(unittest.TestCase):
     """Test M103: Version consistency detector."""
 

@@ -146,6 +146,41 @@ class TestImportGraph:
         assert unused[0].module_name == 'sys'
 
 
+    def test_init_py_imports_not_flagged_as_unused(self):
+        """Imports in __init__.py should never be flagged — they are re-exports."""
+        imports = [
+            ImportStatement(
+                file_path=Path('mypackage/__init__.py'),
+                line_number=1,
+                module_name='mypackage.adapter',
+                imported_names=['MyAdapter'],
+                is_relative=False,
+                import_type='from_import',
+                source_line='from mypackage.adapter import MyAdapter',
+            ),
+            ImportStatement(
+                file_path=Path('mypackage/__init__.py'),
+                line_number=2,
+                module_name='mypackage.renderer',
+                imported_names=['MyRenderer'],
+                is_relative=False,
+                import_type='from_import',
+                source_line='from mypackage.renderer import MyRenderer',
+            ),
+        ]
+
+        graph = ImportGraph.from_imports(imports)
+        # Neither name appears in symbols_by_file (simulates "not used internally")
+        symbols_by_file: dict = {Path('mypackage/__init__.py'): set()}
+
+        unused = graph.find_unused_imports(symbols_by_file)
+
+        # Both imports are in __init__.py — they are re-exports, should not be flagged
+        assert len(unused) == 0, (
+            "__init__.py imports are re-exports and must never be flagged as unused"
+        )
+
+
 class TestPythonImportExtraction:
     """Test Python import extraction."""
 

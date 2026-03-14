@@ -6,7 +6,7 @@ import subprocess
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, cast
+from typing import Dict, Any, List, cast
 
 
 def create_review_parser() -> argparse.ArgumentParser:
@@ -125,9 +125,9 @@ def _run_check(path: Path, select: str) -> List[Dict[str, Any]]:
         if result.stdout.strip():
             data = json.loads(result.stdout)
             return cast(List[Dict[str, Any]], data.get('violations', []))
+        return []
     except Exception:
-        pass
-    return []
+        return []
 
 
 def _run_hotspots(path: Path) -> List[Dict[str, Any]]:
@@ -141,9 +141,9 @@ def _run_hotspots(path: Path) -> List[Dict[str, Any]]:
             data = json.loads(result.stdout)
             hotspots = data.get('hotspots', data.get('files', []))
             return cast(List[Dict[str, Any]], hotspots[:10])  # Top 10
+        return []
     except Exception:
-        pass
-    return []
+        return []
 
 
 def _run_complexity(path: Path) -> List[Dict[str, Any]]:
@@ -157,9 +157,9 @@ def _run_complexity(path: Path) -> List[Dict[str, Any]]:
         if result.stdout.strip():
             data = json.loads(result.stdout)
             return cast(List[Dict[str, Any]], data.get('elements', data.get('results', []))[:10])
+        return []
     except Exception:
-        pass
-    return []
+        return []
 
 
 def _detect_source_root() -> Path:
@@ -171,9 +171,9 @@ def _detect_source_root() -> Path:
             root = Path(result.stdout.strip())
             subdir = next((root / c for c in ['src', 'lib', 'app'] if (root / c).is_dir()), None)
             return subdir if subdir else root
+        return Path('.')
     except Exception:
-        pass
-    return Path('.')
+        return Path('.')
 
 
 def _render_diff_section(diff: Dict[str, Any]) -> None:

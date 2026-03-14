@@ -232,7 +232,7 @@ This document outlines reveal's development priorities and future direction. For
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: 4,816 passing (unreleased; v0.60.0 shipped 4,632)
+- Test count: 4,861 passing (unreleased; v0.60.0 shipped 4,632)
 - UX Phases 3/4/5: ✅ **ALL COMPLETE** (query operators, field selection, element discovery)
 - Target: 80%+ coverage for core adapters
 
@@ -242,8 +242,8 @@ This document outlines reveal's development priorities and future direction. For
 - `autossl://` adapter — ✅ shipped in v0.58.0
 - `nginx://` adapter — ✅ shipped in v0.60.0 (21st adapter; validated on 44 real vhosts)
 - `domain://` HTTP response check — ✅ shipped in v0.60.0
-- `--full-audit` — `reveal cpanel://USERNAME --full-audit` composing ssl+acl+nginx in one pass
-- U6 follow-on — IP-match verification (resolves but to different server)
+- `cpanel://USERNAME/full-audit` — ✅ shipped (platinum-gleam-0313): ssl + acl-check + nginx ACME in one pass; exits 2 on any failure
+- U6 follow-on — ✅ shipped (platinum-gleam-0313): `dns_points_here` annotation on `--dns-verified`; elsewhere domains excluded from summary counts; `[→ elsewhere]` renderer tag; `dns_elsewhere` result dict key for jq consumers
 
 ---
 
@@ -302,6 +302,7 @@ These violate reveal's mission ("reveal reveals, doesn't modify") or have unclea
 | Feature | Why Not |
 |---------|---------|
 | `--fix` auto-fix | Mission violation. Use Ruff/Black for formatting/fixes. |
+| `--no-fail` / `--exit-zero` | `\|\| true` is the Unix idiom. The flag conflates "checking" with "what to do about findings" — callers decide that, not the tool. Documented in AGENT_HELP under "Exit code 2 is breaking my pipeline." |
 | `semantic://` embedding search | Requires ML infrastructure; over-engineered |
 | `trace://` execution traces | Wrong domain (debugging tools) |
 | `live://` real-time monitoring | Wrong domain (observability tools) |

@@ -5,8 +5,9 @@ URI scheme: cpanel://USERNAME[/element]
 Elements:
     (none)          Overview: domains, SSL status summary, nginx config presence
     domains         List addon domains with docroots and home directory
-    ssl             S2 disk-cert health per domain from /var/cpanel/ssl/apache_tls/
-    acl-check       N1 nobody ACL health per domain docroot
+    ssl             Disk cert health per domain from /var/cpanel/ssl/apache_tls/
+    acl-check       nobody ACL health per domain docroot
+    full-audit      Composite: ssl + acl-check + nginx ACME in one pass; exits 2 on failure
 
 All operations are filesystem-based; no WHM API or authentication required.
 Must be run as root (or with read access to /var/cpanel/userdata/).
@@ -18,9 +19,12 @@ Examples:
     reveal cpanel://USERNAME/acl-check        # nobody ACL on all docroots
 """
 
+import array
+import fcntl
 import os
 import re
 import socket
+import struct
 from typing import Dict, Any, Optional, List
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -156,11 +160,52 @@ def _dns_resolves(domain: str) -> bool:
         return False
 
 
+def _dns_resolve_ips(domain: str) -> List[str]:
+    """Return list of IPv4 addresses domain resolves to (empty list on failure)."""
+    try:
+        return list({info[4][0] for info in socket.getaddrinfo(domain, None, socket.AF_INET)})
+    except socket.gaierror:
+        return []
+
+
+def _get_local_ips() -> set:
+    """Return set of non-loopback IPv4 addresses bound to this host (stdlib only, Linux)."""
+    ips: set = set()
+    try:
+        max_bytes = 4096
+        names = array.array('B', b'\0' * max_bytes)
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            outbytes = struct.unpack('iL', fcntl.ioctl(
+                s.fileno(), 0x8912,  # SIOCGIFCONF
+                struct.pack('iL', max_bytes, names.buffer_info()[0])
+            ))[0]
+            for i in range(0, outbytes, 40):
+                ip = socket.inet_ntoa(bytes(names[i + 20:i + 24]))
+                if not ip.startswith('127.'):
+                    ips.add(ip)
+        finally:
+            s.close()
+    except OSError:  # ioctl unsupported or permission denied — fall back to hostname
+        pass
+    if not ips:
+        # Fallback: resolve hostname
+        try:
+            for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+                ip = info[4][0]
+                if not ip.startswith('127.'):
+                    ips.add(ip)
+        except OSError:  # hostname resolution failed — return empty set
+            pass
+    return ips
+
+
 _SCHEMA_ELEMENTS = {
     '(none)': 'Overview: domain count, SSL summary, nginx config path',
     'domains': 'All addon/subdomain domains with docroots and type',
-    'ssl': 'Disk cert health per domain from /var/cpanel/ssl/apache_tls/',
-    'acl-check': 'nobody ACL status on every domain docroot',
+    'ssl': 'Disk cert health per domain from /var/cpanel/ssl/apache_tls/ (supports ?domain_type= query param)',
+    'acl-check': 'nobody ACL status on every domain docroot (supports --only-failures)',
+    'full-audit': 'Composite: ssl + acl-check + nginx ACME in one pass; exits 2 on any failure',
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -198,19 +243,26 @@ _SCHEMA_OUTPUT_TYPES = [
         'type': 'cpanel_ssl',
         'description': 'Disk cert health per domain — sorted by severity (failures first)',
         'triggered_by': 'cpanel://USERNAME/ssl',
+        'flags': ['--dns-verified', '--only-failures', '--format=json'],
+        'query_params': {'domain_type': 'Filter to: main_domain, addon, subdomain, parked'},
         'schema': {'type': 'object', 'properties': {
             'type': {'type': 'string', 'const': 'cpanel_ssl'},
             'username': {'type': 'string'},
             'cpanel_ssl_dir': {'type': 'string'},
             'cert_count': {'type': 'integer'},
             'dns_verified': {'type': 'boolean'},
-            'summary': {'type': 'object', 'description': 'Counts keyed by status: ok/expiring/critical/expired/missing/error'},
-            'dns_excluded': {'type': 'object', 'description': 'Counts of NXDOMAIN-excluded domains by status (only when dns_verified=true)'},
+            'only_failures': {'type': 'boolean'},
+            'domain_type_filter': {'type': ['string', 'null'], 'description': 'Active ?domain_type= filter, or null'},
+            'summary': {'type': 'object', 'description': 'Counts by status: ok/expiring/critical/expired/missing/error (excludes nxdomain and elsewhere when dns_verified)'},
+            'dns_excluded': {'type': 'object', 'description': 'NXDOMAIN-excluded domain counts by status (only when dns_verified=true)'},
+            'dns_elsewhere': {'type': 'object', 'description': 'Resolves-but-not-here domain counts by status (only when dns_verified=true)'},
             'certs': {'type': 'array', 'items': {'type': 'object', 'properties': {
                 'domain': {'type': 'string'},
+                'domain_type': {'type': 'string', 'enum': ['main_domain', 'addon', 'subdomain', 'parked', 'unknown']},
                 'status': {'type': 'string', 'enum': ['ok', 'expiring', 'critical', 'expired', 'missing', 'error']},
-                'expiry_days': {'type': ['number', 'null']},
-                'dns_resolves': {'type': 'boolean', 'description': 'Only present when dns_verified=true'},
+                'days_until_expiry': {'type': ['number', 'null']},
+                'dns_resolves': {'type': 'boolean', 'description': 'Only present when dns_verified=true; false = NXDOMAIN'},
+                'dns_points_here': {'type': ['boolean', 'null'], 'description': 'Only present when dns_verified=true and domain resolves; false = points to different server'},
             }}},
             'next_steps': {'type': 'array', 'items': {'type': 'string'}},
         }},
@@ -219,10 +271,12 @@ _SCHEMA_OUTPUT_TYPES = [
         'type': 'cpanel_acl',
         'description': 'nobody ACL status on every domain docroot — required for ACME renewal',
         'triggered_by': 'cpanel://USERNAME/acl-check',
+        'flags': ['--only-failures', '--format=json'],
         'schema': {'type': 'object', 'properties': {
             'type': {'type': 'string', 'const': 'cpanel_acl'},
             'username': {'type': 'string'},
             'domain_count': {'type': 'integer'},
+            'only_failures': {'type': 'boolean'},
             'has_failures': {'type': 'boolean'},
             'summary': {'type': 'object', 'description': 'Counts keyed by acl_status: ok/denied/no_docroot/unknown'},
             'domains': {'type': 'array', 'items': {'type': 'object', 'properties': {
@@ -234,22 +288,46 @@ _SCHEMA_OUTPUT_TYPES = [
             'next_steps': {'type': 'array', 'items': {'type': 'string'}},
         }},
     },
+    {
+        'type': 'cpanel_full_audit',
+        'description': 'Composite: ssl + acl-check + nginx ACME in one pass. Exits 2 if any component has failures.',
+        'triggered_by': 'cpanel://USERNAME/full-audit',
+        'flags': ['--only-failures', '--dns-verified', '--format=json'],
+        'schema': {'type': 'object', 'properties': {
+            'type': {'type': 'string', 'const': 'cpanel_full_audit'},
+            'username': {'type': 'string'},
+            'has_failures': {'type': 'boolean', 'description': 'True if any of ssl/acl/nginx components has failures'},
+            'ssl': {'type': 'object', 'description': 'cpanel_ssl result (see cpanel_ssl schema)'},
+            'acl': {'type': 'object', 'description': 'cpanel_acl result (see cpanel_acl schema)'},
+            'nginx': {'type': ['object', 'null'], 'description': 'null if no nginx conf; otherwise {domain_count, has_failures, domains}'},
+        }},
+    },
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
+    {'uri': 'reveal cpanel://johndoe/full-audit', 'description': 'One-shot composite: ssl + ACL + nginx ACME; exits 2 on any failure', 'output_type': 'cpanel_full_audit'},
+    {'uri': 'reveal cpanel://johndoe/full-audit --format=json', 'description': 'Machine-readable composite audit for scripting', 'output_type': 'cpanel_full_audit'},
     {'uri': 'reveal cpanel://johndoe', 'description': 'Overview: domain count, SSL summary, nginx config path', 'output_type': 'cpanel_user'},
     {'uri': 'reveal cpanel://johndoe/domains', 'description': 'List all domains with docroots and type (main/addon/subdomain)', 'output_type': 'cpanel_domains'},
     {'uri': 'reveal cpanel://johndoe/ssl', 'description': 'Disk cert health per domain — sorted by severity', 'output_type': 'cpanel_ssl'},
-    {'uri': 'reveal cpanel://johndoe/ssl --dns-verified', 'description': 'SSL cert health excluding NXDOMAIN (dead) domains', 'output_type': 'cpanel_ssl'},
+    {'uri': 'reveal cpanel://johndoe/ssl --dns-verified', 'description': 'SSL cert health: excludes NXDOMAIN and elsewhere-pointing domains from counts', 'output_type': 'cpanel_ssl'},
+    {'uri': 'reveal cpanel://johndoe/ssl --only-failures', 'description': 'Show only cert failures (non-ok domains)', 'output_type': 'cpanel_ssl'},
+    {'uri': 'reveal cpanel://johndoe/ssl?domain_type=main_domain', 'description': 'Disk cert health for main domain only', 'output_type': 'cpanel_ssl'},
+    {'uri': 'reveal cpanel://johndoe/ssl?domain_type=subdomain --only-failures', 'description': 'Failed subdomain certs only', 'output_type': 'cpanel_ssl'},
     {'uri': 'reveal cpanel://johndoe/acl-check', 'description': 'nobody ACL status on every docroot — needed for ACME cert renewal', 'output_type': 'cpanel_acl'},
-    {'uri': "reveal cpanel://johndoe --format=json | jq '.ssl_summary'", 'description': 'Machine-readable SSL summary counts', 'output_type': 'cpanel_user'},
+    {'uri': 'reveal cpanel://johndoe/acl-check --only-failures', 'description': 'Show only denied docroots', 'output_type': 'cpanel_acl'},
+    {'uri': "reveal cpanel://johndoe/ssl --format=json | jq '.certs[] | select(.status != \"ok\")'", 'description': 'jq: all failing certs', 'output_type': 'cpanel_ssl'},
+    {'uri': "reveal cpanel://johndoe/ssl --dns-verified --format=json | jq '.certs[] | select(.dns_points_here == false)'", 'description': 'jq: domains pointing to a different server', 'output_type': 'cpanel_ssl'},
 ]
 
 _SCHEMA_NOTES = [
     'Reads /var/cpanel/userdata/<username>/ directly — no WHM API or credentials required',
     'SSL cert data comes from /var/cpanel/ssl/apache_tls/ (disk-based, not live connection)',
     "acl-check validates nobody can read each docroot — required for Let's Encrypt / AutoSSL",
-    '--dns-verified excludes NXDOMAIN domains to avoid false positives on deleted subdomains',
+    '--dns-verified excludes NXDOMAIN domains AND domains resolving to a different server (dns_elsewhere)',
+    'dns_points_here=false means domain resolves in DNS but IPs do not match any local interface — migrated away',
+    '?domain_type= query param filters ssl certs by type: main_domain, addon, subdomain, parked',
+    'full-audit is the preferred single-command for agents: ssl+acl+nginx, exits 2 on any failure',
 ]
 
 
@@ -272,18 +350,31 @@ class CpanelAdapter(ResourceAdapter):
         self.connection_string = connection_string
         self.username: str = ''
         self.element: Optional[str] = None
+        self.query_params: Dict[str, str] = {}
 
         self._parse_connection_string(connection_string)
 
     def _parse_connection_string(self, uri: str) -> None:
-        """Parse cpanel://USERNAME[/element] URI."""
+        """Parse cpanel://USERNAME[/element[?key=val&...]] URI."""
         if not uri.startswith('cpanel://'):
             raise ValueError(f"Invalid cpanel:// URI: {uri}")
 
         rest = uri[len('cpanel://'):]
         parts = rest.split('/', 1)
         self.username = parts[0]
-        self.element = parts[1].rstrip('/') if len(parts) > 1 else None
+        element_raw = parts[1].rstrip('/') if len(parts) > 1 else None
+
+        if element_raw and '?' in element_raw:
+            element_part, query_string = element_raw.split('?', 1)
+            self.element = element_part or None
+            self.query_params = {}
+            for pair in query_string.split('&'):
+                if '=' in pair:
+                    k, v = pair.split('=', 1)
+                    self.query_params[k] = v
+        else:
+            self.element = element_raw
+            self.query_params = {}
 
         if not self.username:
             raise ValueError("cpanel:// URI requires a username: cpanel://USERNAME")
@@ -291,19 +382,26 @@ class CpanelAdapter(ResourceAdapter):
     def _get_domains(self) -> List[Dict[str, str]]:
         return _list_user_domains(self.username)
 
-    def get_structure(self, dns_verified: bool = False, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, dns_verified: bool = False, only_failures: bool = False,
+                      **kwargs) -> Dict[str, Any]:
         """Get cPanel user overview or element data."""
         if self.element:
             if self.element == 'domains':
                 return self._get_domains_structure()
             elif self.element == 'ssl':
-                return self._get_ssl_structure(dns_verified=dns_verified)
+                domain_type_filter = self.query_params.get('domain_type')
+                return self._get_ssl_structure(dns_verified=dns_verified,
+                                                only_failures=only_failures,
+                                                domain_type_filter=domain_type_filter)
             elif self.element == 'acl-check':
-                return self._get_acl_structure()
+                return self._get_acl_structure(only_failures=only_failures)
+            elif self.element == 'full-audit':
+                return self._get_full_audit_structure(dns_verified=dns_verified,
+                                                       only_failures=only_failures)
             else:
                 raise ValueError(
                     f"Unknown cpanel:// element '{self.element}'. "
-                    f"Valid: domains, ssl, acl-check"
+                    f"Valid: domains, ssl, acl-check, full-audit"
                 )
         return self._get_overview_structure()
 
@@ -327,14 +425,15 @@ class CpanelAdapter(ResourceAdapter):
         userdata_ok = os.path.isdir(userdata_dir)
 
         next_steps = [
-            f"reveal cpanel://{self.username}/domains    # All domains + docroots",
-            f"reveal cpanel://{self.username}/ssl        # Cert health per domain",
-            f"reveal cpanel://{self.username}/acl-check  # nobody ACL on docroots",
+            f"reveal cpanel://{self.username}/full-audit  # SSL + ACL + nginx in one pass",
+            f"reveal cpanel://{self.username}/domains     # All domains + docroots",
+            f"reveal cpanel://{self.username}/ssl         # Cert health per domain",
+            f"reveal cpanel://{self.username}/acl-check   # nobody ACL on docroots",
         ]
         if nginx_present:
             next_steps.append(
                 f"reveal {nginx_conf} --validate-nginx-acme"
-                f"  # Full ACME audit"
+                f"  # nginx ACME audit only"
             )
 
         return {
@@ -360,32 +459,48 @@ class CpanelAdapter(ResourceAdapter):
             'domains': domains,
         }
 
-    def _get_ssl_structure(self, dns_verified: bool = False) -> Dict[str, Any]:
+    def _get_ssl_structure(self, dns_verified: bool = False,
+                           only_failures: bool = False,
+                           domain_type_filter: Optional[str] = None) -> Dict[str, Any]:
         """Disk cert health per domain."""
         domains = self._get_domains()
+        local_ips = _get_local_ips() if dns_verified else set()
         certs = []
         for d in domains:
             status = _get_disk_cert_status(d['domain'])
             entry: Dict[str, Any] = {
                 'domain': d['domain'],
+                'domain_type': d.get('type', 'unknown'),
                 **status,
             }
             if dns_verified:
-                entry['dns_resolves'] = _dns_resolves(d['domain'])
+                resolved_ips = _dns_resolve_ips(d['domain'])
+                entry['dns_resolves'] = bool(resolved_ips)
+                if resolved_ips and local_ips:
+                    entry['dns_points_here'] = bool(set(resolved_ips) & local_ips)
+                elif resolved_ips:
+                    entry['dns_points_here'] = None  # resolved but couldn't determine local IPs
             certs.append(entry)
+
+        # Apply domain_type filter (from URI query param ?domain_type=...)
+        if domain_type_filter:
+            certs = [c for c in certs if c.get('domain_type') == domain_type_filter]
 
         # Sort: failures first, then expiring, then ok
         _ORDER = {'expired': 0, 'critical': 1, 'error': 2, 'expiring': 3,
                   'missing': 4, 'ok': 5}
         certs.sort(key=lambda r: (_ORDER.get(r['status'], 9), r['domain']))
 
-        # Build summary: with --dns-verified, exclude NXDOMAIN domains from counts
+        # Build summary: with --dns-verified, exclude NXDOMAIN and "elsewhere" domains from counts
         summary: Dict[str, int] = {}
         dns_excluded: Dict[str, int] = {}
+        dns_elsewhere: Dict[str, int] = {}
         for c in certs:
             s = c['status']
             if dns_verified and not c.get('dns_resolves', True):
                 dns_excluded[s] = dns_excluded.get(s, 0) + 1
+            elif dns_verified and c.get('dns_points_here') is False:
+                dns_elsewhere[s] = dns_elsewhere.get(s, 0) + 1
             else:
                 summary[s] = summary.get(s, 0) + 1
 
@@ -396,8 +511,11 @@ class CpanelAdapter(ResourceAdapter):
             'cpanel_ssl_dir': CPANEL_SSL_DIR,
             'cert_count': len(certs),
             'dns_verified': dns_verified,
+            'only_failures': only_failures,
+            'domain_type_filter': domain_type_filter,
             'summary': summary,
             'dns_excluded': dns_excluded,
+            'dns_elsewhere': dns_elsewhere,
             'certs': certs,
             'next_steps': [
                 f"reveal cpanel://{self.username}/acl-check  # Check docroot ACL",
@@ -406,7 +524,7 @@ class CpanelAdapter(ResourceAdapter):
             ],
         }
 
-    def _get_acl_structure(self) -> Dict[str, Any]:
+    def _get_acl_structure(self, only_failures: bool = False) -> Dict[str, Any]:
         """nobody ACL health per domain docroot."""
         domains = self._get_domains()
         acl_results = []
@@ -440,6 +558,7 @@ class CpanelAdapter(ResourceAdapter):
             'type': 'cpanel_acl',
             'username': self.username,
             'domain_count': len(acl_results),
+            'only_failures': only_failures,
             'summary': summary,
             'has_failures': has_failures,
             'domains': acl_results,
@@ -448,6 +567,66 @@ class CpanelAdapter(ResourceAdapter):
                 f"reveal {os.path.join(NGINX_USER_CONF_DIR, self.username + '.conf')}"
                 f" --check-acl  # Full nginx ACL check",
             ],
+        }
+
+    def _get_full_audit_structure(self, dns_verified: bool = False,
+                                  only_failures: bool = False) -> Dict[str, Any]:
+        """Composite audit: ssl + acl-check + nginx ACME in one pass."""
+        ssl_data = self._get_ssl_structure(dns_verified=dns_verified,
+                                            only_failures=only_failures)
+        acl_data = self._get_acl_structure(only_failures=only_failures)
+
+        # nginx ACME audit — optional (only if conf file exists)
+        nginx_conf = os.path.join(NGINX_USER_CONF_DIR, f'{self.username}.conf')
+        nginx_audit: Optional[Dict[str, Any]] = None
+        if os.path.exists(nginx_conf):
+            try:
+                from ...analyzers.nginx import NginxAnalyzer
+                from ...adapters.ssl.certificate import check_ssl_health
+                analyzer = NginxAnalyzer(nginx_conf)
+                rows = analyzer.extract_acme_roots()
+                if rows:
+                    results = []
+                    for row in rows:
+                        try:
+                            ssl_result = check_ssl_health(row['domain'], warn_days=30,
+                                                          critical_days=7)
+                            leaf = ssl_result.get('leaf', {})
+                            enriched = {**row,
+                                        'ssl_status': ssl_result.get('status', 'unknown'),
+                                        'ssl_days': leaf.get('days_until_expiry'),
+                                        'ssl_not_after': leaf.get('not_after', '')}
+                        except Exception as exc:
+                            enriched = {**row, 'ssl_status': 'error', 'ssl_days': None,
+                                        'ssl_not_after': str(exc)[:60]}
+                        acl_fail = enriched['acl_status'] == 'denied'
+                        ssl_fail = enriched['ssl_status'] in ('expired', 'error')
+                        enriched['has_failure'] = acl_fail or ssl_fail
+                        results.append(enriched)
+                    nginx_audit = {
+                        'domain_count': len(results),
+                        'has_failures': any(r['has_failure'] for r in results),
+                        'domains': results,
+                    }
+                else:
+                    nginx_audit = {'domain_count': 0, 'has_failures': False, 'domains': []}
+            except Exception as exc:
+                nginx_audit = {'error': str(exc), 'has_failures': False, 'domains': []}
+
+        # Use summary (not raw certs) so --dns-verified exclusions are respected
+        ssl_has_failures = any(k != 'ok' and v > 0 for k, v in ssl_data.get('summary', {}).items())
+        acl_has_failures = acl_data.get('has_failures', False)
+        nginx_has_failures = nginx_audit.get('has_failures', False) if nginx_audit else False
+        has_failures = ssl_has_failures or acl_has_failures or nginx_has_failures
+
+        return {
+            'contract_version': '1.0',
+            'type': 'cpanel_full_audit',
+            'username': self.username,
+            'has_failures': has_failures,
+            'ssl': ssl_data,
+            'acl': acl_data,
+            'nginx': nginx_audit,
         }
 
     def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
@@ -459,11 +638,11 @@ class CpanelAdapter(ResourceAdapter):
         """Machine-readable schema for AI agent integration."""
         return {
             'adapter': 'cpanel',
-            'description': 'Inspect cPanel user environments — domains, SSL certs, ACL health',
-            'uri_syntax': 'cpanel://USERNAME[/element]',
-            'query_params': {'--dns-verified': 'Exclude NXDOMAIN domains from SSL summary counts'},
+            'description': 'Inspect cPanel user environments — domains, SSL certs, ACL health, composite audit',
+            'uri_syntax': 'cpanel://USERNAME[/element[?domain_type=<type>]]',
+            'uri_query_params': {'domain_type': 'Filter ssl certs by type: main_domain, addon, subdomain, parked'},
             'elements': _SCHEMA_ELEMENTS,
-            'cli_flags': ['--format=json', '--dns-verified'],
+            'cli_flags': ['--format=json', '--dns-verified', '--only-failures'],
             'supports_batch': False,
             'output_types': _SCHEMA_OUTPUT_TYPES,
             'example_queries': _SCHEMA_EXAMPLE_QUERIES,

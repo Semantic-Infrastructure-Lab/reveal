@@ -175,7 +175,7 @@ class L001(BaseRule):
                 if actual_file.name != target.name:
                     return (True, "case_mismatch")
                 break
-        except Exception:
+        except OSError:  # filesystem errors — assume no case mismatch
             pass
         return (False, "")
 

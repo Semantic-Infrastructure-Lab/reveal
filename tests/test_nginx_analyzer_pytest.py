@@ -2379,3 +2379,99 @@ server {
         _handle_validate_nginx_acme(a, self._make_args(only_failures=True))
         out = capsys.readouterr().out
         assert 'No failures' in out or '✅' in out
+
+
+class TestValidateNginxAcmeJsonOutput:
+    """U4 — --validate-nginx-acme --format=json produces structured output."""
+
+    CONFIG = """
+server {
+    server_name ok.com;
+    location /.well-known/acme-challenge/ {
+        root /home/ok/public_html;
+    }
+}
+server {
+    server_name fail.com;
+    location /.well-known/acme-challenge/ {
+        root /home/fail/public_html;
+    }
+}
+"""
+
+    _ACL_OK = {'status': 'ok', 'message': 'ok', 'failing_path': None}
+    _ACL_DENIED = {'status': 'denied', 'message': 'denied', 'failing_path': '/some/path'}
+
+    def _make_analyzer(self, config_text, tmp_path):
+        path = tmp_path / 'nginx.conf'
+        path.write_text(config_text)
+        return NginxAnalyzer(str(path))
+
+    def _make_args(self, only_failures=False, fmt='json'):
+        import argparse
+        args = argparse.Namespace()
+        args.only_failures = only_failures
+        args.format = fmt
+        return args
+
+    def test_json_output_is_valid_json(self, tmp_path, monkeypatch, capsys):
+        import json
+        def fake_ssl(domain, **_):
+            return {'status': 'healthy', 'leaf': {'days_until_expiry': 90, 'not_after': ''}}
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
+                            lambda p: self._ACL_OK)
+        monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
+        from reveal.file_handler import _handle_validate_nginx_acme
+        a = self._make_analyzer(self.CONFIG, tmp_path)
+        _handle_validate_nginx_acme(a, self._make_args())
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert data['type'] == 'nginx_acme_audit'
+        assert 'domains' in data
+        assert 'has_failures' in data
+
+    def test_json_output_contains_domain_rows(self, tmp_path, monkeypatch, capsys):
+        import json
+        def fake_ssl(domain, **_):
+            return {'status': 'healthy', 'leaf': {'days_until_expiry': 90, 'not_after': ''}}
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
+                            lambda p: self._ACL_OK)
+        monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
+        from reveal.file_handler import _handle_validate_nginx_acme
+        a = self._make_analyzer(self.CONFIG, tmp_path)
+        _handle_validate_nginx_acme(a, self._make_args())
+        data = json.loads(capsys.readouterr().out)
+        domains = [r['domain'] for r in data['domains']]
+        assert 'ok.com' in domains
+        assert 'fail.com' in domains
+
+    def test_json_only_failures_filters_rows(self, tmp_path, monkeypatch, capsys):
+        import json
+        def fake_ssl(domain, **_):
+            return {'status': 'healthy', 'leaf': {'days_until_expiry': 90, 'not_after': ''}}
+        def fake_acl(path):
+            return self._ACL_OK if 'ok' in path else self._ACL_DENIED
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access', fake_acl)
+        monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
+        from reveal.file_handler import _handle_validate_nginx_acme
+        a = self._make_analyzer(self.CONFIG, tmp_path)
+        with pytest.raises(SystemExit):
+            _handle_validate_nginx_acme(a, self._make_args(only_failures=True))
+        data = json.loads(capsys.readouterr().out)
+        domains = [r['domain'] for r in data['domains']]
+        assert 'ok.com' not in domains
+        assert 'fail.com' in domains
+        assert data['has_failures'] is True
+
+    def test_json_has_failures_false_when_all_pass(self, tmp_path, monkeypatch, capsys):
+        import json
+        def fake_ssl(domain, **_):
+            return {'status': 'healthy', 'leaf': {'days_until_expiry': 90, 'not_after': ''}}
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
+                            lambda p: self._ACL_OK)
+        monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
+        from reveal.file_handler import _handle_validate_nginx_acme
+        a = self._make_analyzer(self.CONFIG, tmp_path)
+        _handle_validate_nginx_acme(a, self._make_args())
+        data = json.loads(capsys.readouterr().out)
+        assert data['has_failures'] is False

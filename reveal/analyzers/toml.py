@@ -9,7 +9,7 @@ Benefits:
 - Cleaner core logic (AST-based instead of regex matching)
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 from ..registry import register
 from ..treesitter import TreeSitterAnalyzer
 

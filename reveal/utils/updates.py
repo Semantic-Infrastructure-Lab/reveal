@@ -65,5 +65,5 @@ def check_for_updates():
         cache_file.write_text(datetime.now().isoformat())
         _print_update_notice(latest_version, __version__)
 
-    except Exception:
+    except Exception:  # best effort — network or parse error; never block the user
         pass

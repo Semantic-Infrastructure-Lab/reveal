@@ -353,5 +353,45 @@ def cleanup():
         self.assertEqual(len(detections), 0)
 
 
+    def test_try_then_try_fallback_not_flagged(self):
+        """try → except pass → try (multi-attempt pattern) should not be flagged."""
+        content = """
+def fetch_data(url):
+    try:
+        result = subprocess.run(['curl', url], capture_output=True, timeout=10)
+        if result.returncode == 0:
+            return result.stdout
+    except Exception:
+        pass
+    # Fallback: try wget
+    try:
+        result = subprocess.run(['wget', '-qO-', url], capture_output=True, timeout=10)
+        return result.stdout
+    except Exception:
+        return b''
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        # First except pass is multi-attempt fallback — should not be flagged
+        # Second except returns b'' — not a silent pass, should not be flagged either
+        self.assertEqual(len(detections), 0)
+
+    def test_try_then_return_still_flagged(self):
+        """try → except pass → return default should still be flagged (not a multi-attempt pattern)."""
+        content = """
+def read_config(path):
+    try:
+        with open(path) as f:
+            return f.read()
+    except Exception:
+        pass
+    return None
+"""
+        path = self.create_temp_file(content)
+        detections = self.rule.check(path, None, content)
+        # Single try block with silent pass + return default — still a B006 finding
+        self.assertEqual(len(detections), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

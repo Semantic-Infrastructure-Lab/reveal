@@ -151,11 +151,13 @@ class B006(BaseRule, ASTParsingMixin):
     def _is_intentional_fallback(
         self, node: ast.ExceptHandler, parent_map: Dict[ast.AST, ast.AST]
     ) -> bool:
-        """Return True when the enclosing function's docstring explicitly documents
-        that exceptions are tolerated (e.g. "Returns False if unavailable or raises").
+        """Return True when the handler is clearly intentional.
 
-        This is narrower than checking for a fallback return, which would also suppress
-        legitimate findings like `except Exception: pass; return None`.
+        Two patterns are recognized:
+        1. Docstring explicitly documents error tolerance (e.g. "returns None if unavailable").
+        2. Try-then-continue: the try block is NOT the last statement in the enclosing
+           function/scope, meaning the except pass is used to fall through to alternative
+           logic (e.g. subprocess call → fallback strategy).
         """
         # Walk up: ExceptHandler → Try → enclosing function
         try_node = parent_map.get(node)
@@ -169,10 +171,20 @@ class B006(BaseRule, ASTParsingMixin):
                 return False
             func_node = outer
 
-        # Get docstring: first statement must be a string literal
         body = func_node.body
         if not body:
             return False
+
+        # Pattern 1: try-then-try — another try block follows, indicating a multi-attempt
+        # fallback strategy (e.g. try approach A, if it fails try approach B).
+        # This is intentional: the first except pass means "continue to next attempt".
+        if try_node in body:
+            idx = body.index(try_node)
+            remaining = body[idx + 1:]
+            if any(isinstance(s, ast.Try) for s in remaining):
+                return True
+
+        # Pattern 2: docstring explicitly documents error tolerance
         first = body[0]
         if not (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
                 and isinstance(first.value.value, str)):

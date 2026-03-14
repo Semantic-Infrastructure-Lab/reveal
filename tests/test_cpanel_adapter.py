@@ -293,6 +293,22 @@ class TestCpanelAdapterGetStructure:
         # expired should sort first
         assert r['certs'][0]['domain'] == 'expired.com'
 
+    def test_ssl_cert_entries_include_domain_type(self):
+        adapter = CpanelAdapter('cpanel://testuser/ssl')
+        domains = [
+            {'domain': 'main.com', 'docroot': '/h/m', 'serveralias': '', 'type': 'main_domain'},
+            {'domain': 'sub.main.com', 'docroot': '/h/s', 'serveralias': '', 'type': 'subdomain'},
+        ]
+        disk_status = {'status': 'ok', 'days_until_expiry': 60, 'not_after': '2026-04-30',
+                       'serial_number': 'S1', 'common_name': 'main.com'}
+        with patch.object(adapter, '_get_domains', return_value=domains), \
+             patch('reveal.adapters.cpanel.adapter._get_disk_cert_status',
+                   return_value=disk_status):
+            r = adapter.get_structure()
+        domain_types = {c['domain']: c['domain_type'] for c in r['certs']}
+        assert domain_types['main.com'] == 'main_domain'
+        assert domain_types['sub.main.com'] == 'subdomain'
+
 
 # ---------------------------------------------------------------------------
 # CpanelRenderer
@@ -330,6 +346,28 @@ class TestCpanelRenderer:
         out = capsys.readouterr().out
         assert 'alpha.com' in out
         assert '60' in out
+
+    def test_render_ssl_expired_subdomain_breakdown(self, capsys):
+        result = {
+            'type': 'cpanel_ssl', 'username': 'myuser',
+            'cpanel_ssl_dir': CPANEL_SSL_DIR,
+            'cert_count': 3,
+            'summary': {'expired': 3},
+            'dns_verified': False,
+            'dns_excluded': {},
+            'certs': [
+                {'domain': 'old.com', 'status': 'expired', 'domain_type': 'main_domain',
+                 'days_until_expiry': -10, 'not_after': '2026-01-01'},
+                {'domain': 'sub1.old.com', 'status': 'expired', 'domain_type': 'subdomain',
+                 'days_until_expiry': -5, 'not_after': '2026-01-01'},
+                {'domain': 'sub2.old.com', 'status': 'expired', 'domain_type': 'parked',
+                 'days_until_expiry': -3, 'not_after': '2026-01-01'},
+            ],
+            'next_steps': [],
+        }
+        CpanelRenderer.render_structure(result, format='text')
+        out = capsys.readouterr().out
+        assert '3 expired (2 subdomain/parked)' in out
 
     def test_render_acl_shows_denied(self, capsys):
         result = {
@@ -394,17 +432,19 @@ class TestCpanelSslDnsVerified:
         assert 'dns_resolves' not in result['certs'][0]
 
     def test_dns_verified_resolving_domain_in_summary(self):
-        """Domains that resolve are counted normally in summary."""
+        """Domains that resolve to local IPs are counted normally in summary."""
         adapter = self._make_adapter()
         domains = [{'domain': 'live.example.com', 'docroot': '/home/u/public_html'}]
         with patch('reveal.adapters.cpanel.adapter._list_user_domains', return_value=domains), \
              patch('reveal.adapters.cpanel.adapter._get_disk_cert_status',
                    side_effect=self._disk_status_critical), \
-             patch('reveal.adapters.cpanel.adapter._dns_resolves', return_value=True):
+             patch('reveal.adapters.cpanel.adapter._dns_resolve_ips', return_value=['1.2.3.4']), \
+             patch('reveal.adapters.cpanel.adapter._get_local_ips', return_value={'1.2.3.4'}):
             result = adapter.get_structure(dns_verified=True)
         assert result['summary'].get('critical', 0) == 1
         assert sum(result['dns_excluded'].values()) == 0
         assert result['certs'][0]['dns_resolves'] is True
+        assert result['certs'][0]['dns_points_here'] is True
 
     def test_dns_verified_nxdomain_excluded_from_summary(self):
         """NXDOMAIN domains are excluded from critical/expiring summary counts."""
@@ -417,16 +457,17 @@ class TestCpanelSslDnsVerified:
         def disk_status(domain):
             return self._disk_status_critical(domain)
 
-        def dns(domain):
-            return domain == 'live.example.com'
+        def resolve_ips(domain):
+            return ['1.2.3.4'] if domain == 'live.example.com' else []
 
         with patch('reveal.adapters.cpanel.adapter._list_user_domains', return_value=domains), \
              patch('reveal.adapters.cpanel.adapter._get_disk_cert_status',
                    side_effect=disk_status), \
-             patch('reveal.adapters.cpanel.adapter._dns_resolves', side_effect=dns):
+             patch('reveal.adapters.cpanel.adapter._dns_resolve_ips', side_effect=resolve_ips), \
+             patch('reveal.adapters.cpanel.adapter._get_local_ips', return_value={'1.2.3.4'}):
             result = adapter.get_structure(dns_verified=True)
 
-        # live domain is critical and resolves → in summary
+        # live domain is critical and resolves to this server → in summary
         assert result['summary'].get('critical', 0) == 1
         # dead domain is critical but NXDOMAIN → in dns_excluded, not summary
         assert result['dns_excluded'].get('critical', 0) == 1
@@ -445,8 +486,11 @@ class TestCpanelSslDnsVerified:
             'cpanel_ssl_dir': CPANEL_SSL_DIR,
             'cert_count': 2,
             'dns_verified': True,
+            'only_failures': False,
+            'domain_type_filter': None,
             'summary': {'critical': 1},
             'dns_excluded': {'critical': 2},
+            'dns_elsewhere': {},
             'certs': [
                 {
                     'domain': 'live.example.com',
@@ -454,6 +498,7 @@ class TestCpanelSslDnsVerified:
                     'days_until_expiry': 5,
                     'not_after': '2026-03-04',
                     'dns_resolves': True,
+                    'dns_points_here': True,
                 },
                 {
                     'domain': 'dead1.example.com',
@@ -472,6 +517,612 @@ class TestCpanelSslDnsVerified:
         assert '[nxdomain]' in out
         assert 'dead1.example.com' in out
         assert 'live.example.com' in out
+
+
+class TestCpanelSslOnlyFailures:
+    """--only-failures for cpanel://user/ssl hides ok certs."""
+
+    def _make_adapter(self):
+        return CpanelAdapter('cpanel://testuser/ssl')
+
+    def _domains(self):
+        return [
+            {'domain': 'ok.com', 'docroot': '/h/ok', 'serveralias': '', 'type': 'addon'},
+            {'domain': 'expired.com', 'docroot': '/h/ex', 'serveralias': '', 'type': 'main_domain'},
+        ]
+
+    def _disk_status(self, domain):
+        if domain == 'expired.com':
+            return {'status': 'expired', 'days_until_expiry': -5, 'not_after': '2026-01-01',
+                    'serial_number': 'OLD', 'common_name': 'expired.com'}
+        return {'status': 'ok', 'days_until_expiry': 80, 'not_after': '2026-06-01',
+                'serial_number': 'NEW', 'common_name': 'ok.com'}
+
+    def test_only_failures_true_sets_flag_in_result(self):
+        adapter = self._make_adapter()
+        with patch.object(adapter, '_get_domains', return_value=self._domains()), \
+             patch('reveal.adapters.cpanel.adapter._get_disk_cert_status',
+                   side_effect=self._disk_status):
+            r = adapter.get_structure(only_failures=True)
+        assert r['only_failures'] is True
+
+    def test_only_failures_false_sets_flag_in_result(self):
+        adapter = self._make_adapter()
+        with patch.object(adapter, '_get_domains', return_value=self._domains()), \
+             patch('reveal.adapters.cpanel.adapter._get_disk_cert_status',
+                   side_effect=self._disk_status):
+            r = adapter.get_structure(only_failures=False)
+        assert r['only_failures'] is False
+
+    def test_renderer_hides_ok_certs_when_only_failures(self, capsys):
+        result = {
+            'type': 'cpanel_ssl', 'username': 'testuser',
+            'cpanel_ssl_dir': CPANEL_SSL_DIR,
+            'cert_count': 2,
+            'only_failures': True,
+            'dns_verified': False,
+            'dns_excluded': {},
+            'summary': {'ok': 1, 'expired': 1},
+            'certs': [
+                {'domain': 'expired.com', 'status': 'expired', 'domain_type': 'main_domain',
+                 'days_until_expiry': -5, 'not_after': '2026-01-01'},
+                {'domain': 'ok.com', 'status': 'ok', 'domain_type': 'addon',
+                 'days_until_expiry': 80, 'not_after': '2026-06-01'},
+            ],
+            'next_steps': [],
+        }
+        CpanelRenderer.render_structure(result, format='text')
+        out = capsys.readouterr().out
+        assert 'expired.com' in out
+        assert 'ok.com' not in out
+
+    def test_renderer_shows_all_certs_without_only_failures(self, capsys):
+        result = {
+            'type': 'cpanel_ssl', 'username': 'testuser',
+            'cpanel_ssl_dir': CPANEL_SSL_DIR,
+            'cert_count': 2,
+            'only_failures': False,
+            'dns_verified': False,
+            'dns_excluded': {},
+            'summary': {'ok': 1, 'expired': 1},
+            'certs': [
+                {'domain': 'expired.com', 'status': 'expired', 'domain_type': 'main_domain',
+                 'days_until_expiry': -5, 'not_after': '2026-01-01'},
+                {'domain': 'ok.com', 'status': 'ok', 'domain_type': 'addon',
+                 'days_until_expiry': 80, 'not_after': '2026-06-01'},
+            ],
+            'next_steps': [],
+        }
+        CpanelRenderer.render_structure(result, format='text')
+        out = capsys.readouterr().out
+        assert 'expired.com' in out
+        assert 'ok.com' in out
+
+    def test_renderer_prints_clean_message_when_all_pass(self, capsys):
+        result = {
+            'type': 'cpanel_ssl', 'username': 'testuser',
+            'cpanel_ssl_dir': CPANEL_SSL_DIR,
+            'cert_count': 1,
+            'only_failures': True,
+            'dns_verified': False,
+            'dns_excluded': {},
+            'summary': {'ok': 1},
+            'certs': [
+                {'domain': 'ok.com', 'status': 'ok', 'domain_type': 'addon',
+                 'days_until_expiry': 80, 'not_after': '2026-06-01'},
+            ],
+            'next_steps': [],
+        }
+        CpanelRenderer.render_structure(result, format='text')
+        out = capsys.readouterr().out
+        assert '✅' in out or 'No failures' in out
+        assert 'ok.com' not in out
+
+
+# ---------------------------------------------------------------------------
+# acl-check --only-failures
+# ---------------------------------------------------------------------------
+
+class TestCpanelAclOnlyFailures:
+    """--only-failures for cpanel://user/acl-check hides ok domains."""
+
+    def _make_domains(self):
+        return [
+            {'domain': 'ok.com', 'docroot': '/home/u/ok', 'serveralias': '', 'type': 'main_domain'},
+            {'domain': 'bad.com', 'docroot': '/home/u/bad', 'serveralias': '', 'type': 'addon'},
+        ]
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._check_docroot_acl')
+    def test_only_failures_flag_stored_in_result(self, mock_acl, mock_domains):
+        mock_domains.return_value = self._make_domains()
+        mock_acl.return_value = {'status': 'ok'}
+        a = CpanelAdapter('cpanel://u/acl-check')
+        result = a.get_structure(only_failures=True)
+        assert result['only_failures'] is True
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._check_docroot_acl')
+    def test_only_failures_false_stored_in_result(self, mock_acl, mock_domains):
+        mock_domains.return_value = self._make_domains()
+        mock_acl.return_value = {'status': 'ok'}
+        a = CpanelAdapter('cpanel://u/acl-check')
+        result = a.get_structure(only_failures=False)
+        assert result['only_failures'] is False
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._check_docroot_acl')
+    def test_renderer_hides_ok_domains_when_only_failures(self, mock_acl, mock_domains, capsys):
+        mock_domains.return_value = self._make_domains()
+        def acl(path):
+            return {'status': 'denied' if 'bad' in path else 'ok'}
+        mock_acl.side_effect = acl
+        a = CpanelAdapter('cpanel://u/acl-check')
+        result = a.get_structure(only_failures=True)
+        CpanelRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'bad.com' in out
+        assert 'ok.com' not in out
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._check_docroot_acl')
+    def test_renderer_shows_clean_message_when_no_failures(self, mock_acl, mock_domains, capsys):
+        mock_domains.return_value = self._make_domains()
+        mock_acl.return_value = {'status': 'ok'}
+        a = CpanelAdapter('cpanel://u/acl-check')
+        result = a.get_structure(only_failures=True)
+        CpanelRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'No ACL failures' in out
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._check_docroot_acl')
+    def test_renderer_shows_all_domains_without_only_failures(self, mock_acl, mock_domains, capsys):
+        mock_domains.return_value = self._make_domains()
+        mock_acl.return_value = {'status': 'ok'}
+        a = CpanelAdapter('cpanel://u/acl-check')
+        result = a.get_structure(only_failures=False)
+        CpanelRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'ok.com' in out
+        assert 'bad.com' in out
+
+
+# ---------------------------------------------------------------------------
+# U6 follow-on: IP-match verification (dns_points_here)
+# ---------------------------------------------------------------------------
+
+class TestCpanelDnsIpMatch:
+    """--dns-verified annotates dns_points_here and excludes elsewhere domains."""
+
+    def _make_adapter(self):
+        return CpanelAdapter('cpanel://testuser/ssl')
+
+    def _disk_status_critical(self, domain):
+        return {'status': 'critical', 'days_until_expiry': 5, 'not_after': '2026-03-18',
+                'cert_path': f'/var/cpanel/ssl/apache_tls/{domain}/combined'}
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    @patch('reveal.adapters.cpanel.adapter._dns_resolve_ips')
+    @patch('reveal.adapters.cpanel.adapter._get_local_ips')
+    def test_dns_points_here_true_when_ip_matches(self, mock_local, mock_ips,
+                                                    mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'here.com', 'docroot': '/home/u', 'serveralias': '', 'type': 'main_domain'},
+        ]
+        mock_status.side_effect = self._disk_status_critical
+        mock_ips.return_value = ['1.2.3.4']
+        mock_local.return_value = {'1.2.3.4', '5.6.7.8'}
+        result = self._make_adapter().get_structure(dns_verified=True)
+        assert result['certs'][0]['dns_points_here'] is True
+        assert result['certs'][0]['dns_resolves'] is True
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    @patch('reveal.adapters.cpanel.adapter._dns_resolve_ips')
+    @patch('reveal.adapters.cpanel.adapter._get_local_ips')
+    def test_dns_points_here_false_when_ip_differs(self, mock_local, mock_ips,
+                                                     mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'elsewhere.com', 'docroot': '/home/u', 'serveralias': '', 'type': 'main_domain'},
+        ]
+        mock_status.side_effect = self._disk_status_critical
+        mock_ips.return_value = ['9.9.9.9']
+        mock_local.return_value = {'1.2.3.4'}
+        result = self._make_adapter().get_structure(dns_verified=True)
+        assert result['certs'][0]['dns_points_here'] is False
+        assert result['certs'][0]['dns_resolves'] is True
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    @patch('reveal.adapters.cpanel.adapter._dns_resolve_ips')
+    @patch('reveal.adapters.cpanel.adapter._get_local_ips')
+    def test_elsewhere_domain_excluded_from_summary(self, mock_local, mock_ips,
+                                                      mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'here.com', 'docroot': '/home/u/here', 'serveralias': '', 'type': 'main_domain'},
+            {'domain': 'there.com', 'docroot': '/home/u/there', 'serveralias': '', 'type': 'addon'},
+        ]
+        mock_status.side_effect = self._disk_status_critical
+        def resolve(domain):
+            return ['1.2.3.4'] if domain == 'here.com' else ['9.9.9.9']
+        mock_ips.side_effect = resolve
+        mock_local.return_value = {'1.2.3.4'}
+        result = self._make_adapter().get_structure(dns_verified=True)
+        # here.com points here → in summary
+        assert result['summary'].get('critical', 0) == 1
+        # there.com points elsewhere → in dns_elsewhere, not summary
+        assert result['dns_elsewhere'].get('critical', 0) == 1
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    @patch('reveal.adapters.cpanel.adapter._dns_resolve_ips')
+    @patch('reveal.adapters.cpanel.adapter._get_local_ips')
+    def test_nxdomain_and_elsewhere_both_excluded(self, mock_local, mock_ips,
+                                                    mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'here.com', 'docroot': '/home', 'serveralias': '', 'type': 'main_domain'},
+            {'domain': 'dead.com', 'docroot': '/home', 'serveralias': '', 'type': 'addon'},
+            {'domain': 'there.com', 'docroot': '/home', 'serveralias': '', 'type': 'subdomain'},
+        ]
+        mock_status.side_effect = self._disk_status_critical
+        def resolve(domain):
+            if domain == 'dead.com':
+                return []
+            if domain == 'there.com':
+                return ['9.9.9.9']
+            return ['1.2.3.4']
+        mock_ips.side_effect = resolve
+        mock_local.return_value = {'1.2.3.4'}
+        result = self._make_adapter().get_structure(dns_verified=True)
+        assert result['summary'].get('critical', 0) == 1      # only here.com
+        assert result['dns_excluded'].get('critical', 0) == 1  # dead.com
+        assert result['dns_elsewhere'].get('critical', 0) == 1  # there.com
+
+    def test_renderer_shows_elsewhere_tag(self, capsys):
+        result = {
+            'type': 'cpanel_ssl', 'username': 'u', 'cpanel_ssl_dir': CPANEL_SSL_DIR,
+            'cert_count': 1, 'dns_verified': True, 'only_failures': False,
+            'domain_type_filter': None,
+            'summary': {}, 'dns_excluded': {}, 'dns_elsewhere': {'critical': 1},
+            'certs': [{'domain': 'there.com', 'domain_type': 'main_domain',
+                        'status': 'critical', 'days_until_expiry': 5,
+                        'not_after': '2026-03-18', 'dns_resolves': True,
+                        'dns_points_here': False}],
+            'next_steps': [],
+        }
+        CpanelRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert '[→ elsewhere]' in out
+        assert 'elsewhere-excluded' in out
+
+    def test_renderer_no_elsewhere_tag_when_points_here(self, capsys):
+        result = {
+            'type': 'cpanel_ssl', 'username': 'u', 'cpanel_ssl_dir': CPANEL_SSL_DIR,
+            'cert_count': 1, 'dns_verified': True, 'only_failures': False,
+            'domain_type_filter': None,
+            'summary': {'critical': 1}, 'dns_excluded': {}, 'dns_elsewhere': {},
+            'certs': [{'domain': 'here.com', 'domain_type': 'main_domain',
+                        'status': 'critical', 'days_until_expiry': 5,
+                        'not_after': '2026-03-18', 'dns_resolves': True,
+                        'dns_points_here': True}],
+            'next_steps': [],
+        }
+        CpanelRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert '[→ elsewhere]' not in out
+        assert '[nxdomain]' not in out
+
+
+# ---------------------------------------------------------------------------
+# URI query param filtering (?domain_type=...)
+# ---------------------------------------------------------------------------
+
+class TestCpanelUriQueryParams:
+    """_parse_connection_string handles ?key=value query params."""
+
+    def test_parses_query_param_domain_type(self):
+        a = CpanelAdapter('cpanel://myuser/ssl?domain_type=main_domain')
+        assert a.element == 'ssl'
+        assert a.query_params == {'domain_type': 'main_domain'}
+
+    def test_no_query_params_empty_dict(self):
+        a = CpanelAdapter('cpanel://myuser/ssl')
+        assert a.query_params == {}
+
+    def test_query_params_multiple_keys(self):
+        a = CpanelAdapter('cpanel://myuser/ssl?domain_type=addon&foo=bar')
+        assert a.query_params['domain_type'] == 'addon'
+        assert a.query_params['foo'] == 'bar'
+
+    def test_element_without_query_still_parses(self):
+        a = CpanelAdapter('cpanel://myuser/acl-check')
+        assert a.element == 'acl-check'
+        assert a.query_params == {}
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    def test_domain_type_filter_applied_in_ssl_structure(self, mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'main.com', 'docroot': '/home/u/main', 'serveralias': '', 'type': 'main_domain'},
+            {'domain': 'sub.main.com', 'docroot': '/home/u/sub', 'serveralias': '', 'type': 'subdomain'},
+            {'domain': 'addon.com', 'docroot': '/home/u/addon', 'serveralias': '', 'type': 'addon'},
+        ]
+        mock_status.return_value = {'status': 'ok', 'days_until_expiry': 60, 'not_after': '2026-06-01',
+                                    'cert_path': '/etc/cpanel/ssl/installed/main.com/combined'}
+        a = CpanelAdapter('cpanel://myuser/ssl?domain_type=main_domain')
+        result = a.get_structure()
+        domains_in_result = [c['domain'] for c in result['certs']]
+        assert domains_in_result == ['main.com']
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    def test_domain_type_filter_subdomain(self, mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'main.com', 'docroot': '/home/u', 'serveralias': '', 'type': 'main_domain'},
+            {'domain': 'sub.main.com', 'docroot': '/home/u/sub', 'serveralias': '', 'type': 'subdomain'},
+        ]
+        mock_status.return_value = {'status': 'expired', 'days_until_expiry': -5, 'not_after': '2026-01-01',
+                                    'cert_path': '/etc/cpanel/ssl/installed/sub.main.com/combined'}
+        a = CpanelAdapter('cpanel://myuser/ssl?domain_type=subdomain')
+        result = a.get_structure()
+        assert all(c['domain_type'] == 'subdomain' for c in result['certs'])
+        assert result['domain_type_filter'] == 'subdomain'
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    def test_no_filter_returns_all_domains(self, mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'main.com', 'docroot': '/home/u', 'serveralias': '', 'type': 'main_domain'},
+            {'domain': 'sub.main.com', 'docroot': '/home/u/sub', 'serveralias': '', 'type': 'subdomain'},
+        ]
+        mock_status.return_value = {'status': 'ok', 'days_until_expiry': 60, 'not_after': '2026-06-01',
+                                    'cert_path': '/etc/cpanel/ssl/installed/main.com/combined'}
+        a = CpanelAdapter('cpanel://myuser/ssl')
+        result = a.get_structure()
+        assert len(result['certs']) == 2
+        assert result['domain_type_filter'] is None
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    def test_domain_type_filter_unknown_type_returns_empty(self, mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'main.com', 'docroot': '/home/u', 'serveralias': '', 'type': 'main_domain'},
+        ]
+        mock_status.return_value = {'status': 'ok', 'days_until_expiry': 60, 'not_after': '2026-06-01',
+                                    'cert_path': '/etc/cpanel/ssl/installed/main.com/combined'}
+        a = CpanelAdapter('cpanel://myuser/ssl?domain_type=parked')
+        result = a.get_structure()
+        assert result['certs'] == []
+
+
+# ---------------------------------------------------------------------------
+# full-audit element
+# ---------------------------------------------------------------------------
+
+def _make_ssl_result(username='myuser', certs=None):
+    certs = certs or [{'domain': 'ok.com', 'domain_type': 'main_domain',
+                        'status': 'ok', 'days_until_expiry': 60, 'not_after': '2026-06-01',
+                        'cert_path': '/etc/cpanel/ssl/installed/ok.com/combined'}]
+    return {
+        'contract_version': '1.0', 'type': 'cpanel_ssl', 'username': username,
+        'cpanel_ssl_dir': CPANEL_SSL_DIR, 'cert_count': len(certs),
+        'dns_verified': False, 'only_failures': False, 'domain_type_filter': None,
+        'summary': {'ok': len(certs)}, 'dns_excluded': {}, 'dns_elsewhere': {}, 'certs': certs,
+        'next_steps': [],
+    }
+
+
+def _make_acl_result(username='myuser', has_failures=False):
+    domains = [{'domain': 'ok.com', 'docroot': '/home/u/public_html',
+                'acl_status': 'ok' if not has_failures else 'denied', 'acl_detail': {}}]
+    return {
+        'contract_version': '1.0', 'type': 'cpanel_acl', 'username': username,
+        'domain_count': 1, 'summary': {'ok': 1}, 'has_failures': has_failures,
+        'domains': domains, 'next_steps': [],
+    }
+
+
+class TestCpanelFullAudit:
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    @patch('reveal.adapters.cpanel.adapter._check_docroot_acl')
+    @patch('os.path.exists', return_value=False)
+    def test_full_audit_returns_correct_type(self, mock_exists, mock_acl,
+                                              mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'ok.com', 'docroot': '/home/u/public_html', 'serveralias': '', 'type': 'main_domain'},
+        ]
+        mock_status.return_value = {'status': 'ok', 'days_until_expiry': 60, 'not_after': '2026-06-01',
+                                    'cert_path': '/etc/cpanel/ssl/installed/ok.com/combined'}
+        mock_acl.return_value = {'status': 'ok'}
+        a = CpanelAdapter('cpanel://myuser/full-audit')
+        result = a.get_structure()
+        assert result['type'] == 'cpanel_full_audit'
+        assert result['username'] == 'myuser'
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    @patch('reveal.adapters.cpanel.adapter._check_docroot_acl')
+    @patch('os.path.exists', return_value=False)
+    def test_full_audit_all_ok_has_failures_false(self, mock_exists, mock_acl,
+                                                   mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'ok.com', 'docroot': '/home/u/public_html', 'serveralias': '', 'type': 'main_domain'},
+        ]
+        mock_status.return_value = {'status': 'ok', 'days_until_expiry': 60, 'not_after': '2026-06-01',
+                                    'cert_path': '/etc/cpanel/ssl/installed/ok.com/combined'}
+        mock_acl.return_value = {'status': 'ok'}
+        a = CpanelAdapter('cpanel://myuser/full-audit')
+        result = a.get_structure()
+        assert result['has_failures'] is False
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    @patch('reveal.adapters.cpanel.adapter._check_docroot_acl')
+    @patch('os.path.exists', return_value=False)
+    def test_full_audit_ssl_failure_sets_has_failures(self, mock_exists, mock_acl,
+                                                       mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'bad.com', 'docroot': '/home/u/public_html', 'serveralias': '', 'type': 'main_domain'},
+        ]
+        mock_status.return_value = {'status': 'expired', 'days_until_expiry': -10,
+                                    'not_after': '2026-01-01',
+                                    'cert_path': '/etc/cpanel/ssl/installed/bad.com/combined'}
+        mock_acl.return_value = {'status': 'ok'}
+        a = CpanelAdapter('cpanel://myuser/full-audit')
+        result = a.get_structure()
+        assert result['has_failures'] is True
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    @patch('reveal.adapters.cpanel.adapter._check_docroot_acl')
+    @patch('os.path.exists', return_value=False)
+    def test_full_audit_acl_failure_sets_has_failures(self, mock_exists, mock_acl,
+                                                       mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'ok.com', 'docroot': '/home/u/restricted', 'serveralias': '', 'type': 'main_domain'},
+        ]
+        mock_status.return_value = {'status': 'ok', 'days_until_expiry': 60, 'not_after': '2026-06-01',
+                                    'cert_path': '/etc/cpanel/ssl/installed/ok.com/combined'}
+        mock_acl.return_value = {'status': 'denied'}
+        a = CpanelAdapter('cpanel://myuser/full-audit')
+        result = a.get_structure()
+        assert result['has_failures'] is True
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    @patch('reveal.adapters.cpanel.adapter._check_docroot_acl')
+    @patch('os.path.exists', return_value=False)
+    def test_full_audit_nginx_none_when_no_conf(self, mock_exists, mock_acl,
+                                                mock_status, mock_domains):
+        mock_domains.return_value = [
+            {'domain': 'ok.com', 'docroot': '/home/u/public_html', 'serveralias': '', 'type': 'main_domain'},
+        ]
+        mock_status.return_value = {'status': 'ok', 'days_until_expiry': 60, 'not_after': '2026-06-01',
+                                    'cert_path': '/etc/cpanel/ssl/installed/ok.com/combined'}
+        mock_acl.return_value = {'status': 'ok'}
+        a = CpanelAdapter('cpanel://myuser/full-audit')
+        result = a.get_structure()
+        assert result['nginx'] is None
+
+    def test_full_audit_renderer_all_ok(self, capsys):
+        result = {
+            'type': 'cpanel_full_audit', 'username': 'myuser', 'has_failures': False,
+            'ssl': _make_ssl_result(),
+            'acl': _make_acl_result(),
+            'nginx': None,
+        }
+        CpanelRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'Full audit: myuser' in out
+        assert '✅' in out
+        assert 'Audit complete' in out
+
+    def test_full_audit_renderer_exits_2_on_failures(self, capsys):
+        result = {
+            'type': 'cpanel_full_audit', 'username': 'myuser', 'has_failures': True,
+            'ssl': _make_ssl_result(certs=[{
+                'domain': 'bad.com', 'domain_type': 'main_domain',
+                'status': 'expired', 'days_until_expiry': -10, 'not_after': '2026-01-01',
+                'cert_path': '/etc/cpanel/ssl/installed/bad.com/combined',
+            }]),
+            'acl': _make_acl_result(),
+            'nginx': None,
+        }
+        with pytest.raises(SystemExit) as exc_info:
+            CpanelRenderer.render_structure(result, 'text')
+        assert exc_info.value.code == 2
+
+    def test_full_audit_renderer_json_exits_2_on_failures(self, capsys):
+        result = {
+            'type': 'cpanel_full_audit', 'username': 'myuser', 'has_failures': True,
+            'ssl': _make_ssl_result(), 'acl': _make_acl_result(), 'nginx': None,
+        }
+        with pytest.raises(SystemExit) as exc_info:
+            CpanelRenderer.render_structure(result, 'json')
+        assert exc_info.value.code == 2
+
+    def test_full_audit_renderer_json_no_exit_when_all_ok(self, capsys):
+        result = {
+            'type': 'cpanel_full_audit', 'username': 'myuser', 'has_failures': False,
+            'ssl': _make_ssl_result(), 'acl': _make_acl_result(), 'nginx': None,
+        }
+        CpanelRenderer.render_structure(result, 'json')  # should not raise
+        out = capsys.readouterr().out
+        import json
+        parsed = json.loads(out)
+        assert parsed['type'] == 'cpanel_full_audit'
+
+    def test_full_audit_renderer_shows_nginx_none(self, capsys):
+        result = {
+            'type': 'cpanel_full_audit', 'username': 'myuser', 'has_failures': False,
+            'ssl': _make_ssl_result(), 'acl': _make_acl_result(), 'nginx': None,
+        }
+        CpanelRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'nginx' in out
+        assert 'no config' in out
+
+    @patch('reveal.adapters.cpanel.adapter._get_local_ips')
+    @patch('reveal.adapters.cpanel.adapter._dns_resolve_ips')
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    @patch('reveal.adapters.cpanel.adapter._check_docroot_acl')
+    @patch('os.path.exists', return_value=False)
+    def test_full_audit_dns_verified_excluded_failures_do_not_set_has_failures(
+            self, mock_exists, mock_acl, mock_status, mock_domains,
+            mock_resolve_ips, mock_local_ips):
+        """Regression: full-audit with --dns-verified should not set has_failures=True
+        for NXDOMAIN or elsewhere-pointing domains, since they're excluded from summary."""
+        mock_local_ips.return_value = {'10.0.0.1'}
+        # domain1: ok cert, resolves to this server
+        # domain2: expired cert, NXDOMAIN (dns_resolve_ips returns [])
+        mock_domains.return_value = [
+            {'domain': 'ok.com', 'docroot': '/home/u/public_html', 'serveralias': '',
+             'type': 'main_domain'},
+            {'domain': 'gone.com', 'docroot': '/home/u/gone', 'serveralias': '',
+             'type': 'addon'},
+        ]
+
+        def fake_status(domain):
+            if domain == 'ok.com':
+                return {'status': 'ok', 'days_until_expiry': 60, 'not_after': '2026-06-01',
+                        'cert_path': '/cpanel/ssl/ok.com/combined'}
+            return {'status': 'expired', 'days_until_expiry': -5, 'not_after': '2026-01-01',
+                    'cert_path': '/cpanel/ssl/gone.com/combined'}
+
+        mock_status.side_effect = fake_status
+        mock_resolve_ips.side_effect = lambda d: ['10.0.0.1'] if d == 'ok.com' else []
+        mock_acl.return_value = {'status': 'ok'}
+
+        a = CpanelAdapter('cpanel://myuser/full-audit')
+        result = a.get_structure(dns_verified=True)
+        # gone.com is NXDOMAIN → in dns_excluded, not summary
+        # summary only has ok.com → no failures
+        assert result['has_failures'] is False
+        assert result['ssl']['dns_excluded'].get('expired', 0) == 1
+        assert 'expired' not in result['ssl']['summary']
+
+    def test_full_audit_renderer_shows_nginx_domains(self, capsys):
+        result = {
+            'type': 'cpanel_full_audit', 'username': 'myuser', 'has_failures': False,
+            'ssl': _make_ssl_result(), 'acl': _make_acl_result(),
+            'nginx': {
+                'domain_count': 3, 'has_failures': False,
+                'domains': [
+                    {'domain': 'a.com', 'acme_path': '/var/www/html/.well-known/acme-challenge',
+                     'acl_status': 'ok', 'ssl_status': 'healthy', 'ssl_days': 45,
+                     'ssl_not_after': '2026-06-01', 'has_failure': False},
+                ] * 3,
+            },
+        }
+        CpanelRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'nginx ACME' in out
+        assert '3 ok' in out
 
 
 if __name__ == '__main__':

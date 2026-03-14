@@ -215,14 +215,42 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
         sys.exit(1)
 
     only_failures = getattr(args, 'only_failures', False)
+    output_format = getattr(args, 'format', 'text')
     from .adapters.ssl.certificate import check_ssl_health
 
     rows = analyzer.extract_acme_roots()
     if not rows:
-        print("No ACME challenge location blocks found.")
+        if output_format == 'json':
+            import json
+            print(json.dumps({'type': 'nginx_acme_audit', 'domains': [],
+                              'has_failures': False, 'message': 'No ACME challenge location blocks found.'}))
+        else:
+            print("No ACME challenge location blocks found.")
         return
 
     results = _fetch_acme_ssl_data(rows, check_ssl_health)
+
+    # Annotate each row with failure flag for both output paths
+    for r in results:
+        _, acl_fail = _format_acl_col(r['acl_status'])
+        _, ssl_fail = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'])
+        r['has_failure'] = acl_fail or ssl_fail
+
+    has_failures = any(r['has_failure'] for r in results)
+
+    if output_format == 'json':
+        import json
+        output_rows = [r for r in results if not only_failures or r['has_failure']]
+        print(json.dumps({
+            'type': 'nginx_acme_audit',
+            'has_failures': has_failures,
+            'only_failures': only_failures,
+            'domains': output_rows,
+        }, default=str))
+        if has_failures:
+            sys.exit(2)
+        return
+
     col_domain = max(len(r['domain']) for r in results)
     col_path = max(len(r['acme_path']) for r in results)
 
@@ -231,14 +259,12 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
     print(header)
     print("  " + "─" * (len(header) - 2))
 
-    has_failures = False
     printed = 0
     for r in results:
-        acl_col, acl_fail = _format_acl_col(r['acl_status'])
-        ssl_col, ssl_fail = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'])
-        has_failures = has_failures or acl_fail or ssl_fail
+        acl_col, _ = _format_acl_col(r['acl_status'])
+        ssl_col, _ = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'])
 
-        if only_failures and not (acl_fail or ssl_fail):
+        if only_failures and not r['has_failure']:
             continue
         print(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}"
               f"  {acl_col:<14}  {ssl_col}")

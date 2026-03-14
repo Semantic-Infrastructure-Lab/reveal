@@ -18,7 +18,7 @@ Examples:
 from typing import Any, Dict, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from .parser import AUTOSSL_LOG_DIR, get_run_metadata, list_runs, parse_run
+from .parser import AUTOSSL_LOG_DIR, list_runs, parse_run
 from .renderer import AutosslRenderer
 
 

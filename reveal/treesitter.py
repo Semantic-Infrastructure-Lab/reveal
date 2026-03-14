@@ -1,7 +1,7 @@
 """Tree-sitter based analyzer for multi-language support."""
 
 import os
-from typing import Dict, List, Any, Optional, Tuple, cast
+from typing import Dict, List, Any, Optional, Tuple
 from .base import FileAnalyzer
 from .core import suppress_treesitter_warnings
 

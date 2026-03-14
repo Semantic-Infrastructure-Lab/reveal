@@ -12,7 +12,7 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
@@ -304,6 +304,7 @@ def _build_adapter_kwargs(adapter, args: 'Namespace', scheme: Optional[str] = No
         'max_complexity': 'max_complexity',
         'min_functions': 'min_functions',
         'dns_verified': 'dns_verified',
+        'only_failures': 'only_failures',
     }
 
     for arg_name, param_name in param_mapping.items():

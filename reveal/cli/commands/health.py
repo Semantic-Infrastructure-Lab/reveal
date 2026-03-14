@@ -66,7 +66,7 @@ def _detect_targets() -> List[str]:
         health_targets = raw.get('health', {}).get('targets', [])
         if health_targets:
             return [str(t) for t in health_targets]
-    except Exception:
+    except Exception:  # config unavailable or malformed — fall through to defaults
         pass
 
     # 2. Look for common source directories

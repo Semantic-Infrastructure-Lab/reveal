@@ -309,6 +309,15 @@ class TestHandleExplainFile(unittest.TestCase):
         self.assertIn('Detailed explanation', output)
         mock_exit.assert_called_once_with(0)
 
+    @patch('sys.exit', side_effect=SystemExit(1))
+    @patch('sys.stderr', new_callable=StringIO)
+    def test_handle_explain_file_no_path(self, mock_stderr, mock_exit):
+        """Test --explain-file with no path crashes gracefully, not with TypeError."""
+        with self.assertRaises(SystemExit) as cm:
+            handle_explain_file(None)
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn('Usage:', mock_stderr.getvalue())
+
 
 class TestHandleCapabilities(unittest.TestCase):
     """Tests for handle_capabilities function."""
@@ -329,6 +338,15 @@ class TestHandleCapabilities(unittest.TestCase):
         self.assertEqual(data['analyzer'], 'python')
         self.assertIn('capabilities', data)
         mock_exit.assert_called_once_with(0)
+
+    @patch('sys.exit', side_effect=SystemExit(1))
+    @patch('sys.stderr', new_callable=StringIO)
+    def test_handle_capabilities_no_path(self, mock_stderr, mock_exit):
+        """Test --capabilities with no path crashes gracefully, not with TypeError."""
+        with self.assertRaises(SystemExit) as cm:
+            handle_capabilities(None)
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn('Usage:', mock_stderr.getvalue())
 
 
 class TestHandleShowAst(unittest.TestCase):
@@ -359,6 +377,15 @@ class TestHandleShowAst(unittest.TestCase):
         output = mock_stdout.getvalue()
         self.assertIn('AST tree', output)
         mock_exit.assert_called_once_with(0)
+
+    @patch('sys.exit', side_effect=SystemExit(1))
+    @patch('sys.stderr', new_callable=StringIO)
+    def test_handle_show_ast_no_path(self, mock_stderr, mock_exit):
+        """Test --show-ast with no path crashes gracefully, not with TypeError."""
+        with self.assertRaises(SystemExit) as cm:
+            handle_show_ast(None)
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn('Usage:', mock_stderr.getvalue())
 
 
 class TestHandleLanguageInfo(unittest.TestCase):

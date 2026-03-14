@@ -144,7 +144,7 @@ class L003(BaseRule):
             try:
                 if 'django' in candidate.read_text(encoding='utf-8').lower():
                     return True
-            except Exception:
+            except OSError:  # unreadable file — assume not Django
                 pass
 
         return False

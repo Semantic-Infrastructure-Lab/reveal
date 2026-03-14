@@ -1,7 +1,7 @@
 """High-level operations for markdown adapter."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 
 from . import files, filtering, results
 

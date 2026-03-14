@@ -111,7 +111,7 @@ class V003(BaseRule):
             if is_structured and not self._check_hierarchy_support(content):
                 line_num = self._find_class_line(content)
                 results.append(self._create_missing_outline_detection(ctx, line_num))
-        except Exception:
+        except Exception:  # skip unanalyzable files (import errors, syntax errors, etc.)
             pass
         return results
 
