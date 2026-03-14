@@ -14,6 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - (session destined-altar-0313)
 
+### Added (session turbulent-frost-0314)
+- **`calls://` `?callees=X` forward lookup** — symmetric to the existing `?target=X` (reverse/callers). `calls://src/?callees=validate_item` scans all definitions of `validate_item` across the project and shows what it calls, with per-file breakdown for functions defined in multiple files. New `find_callees()` in `index.py`; new `_render_callees_text()` in renderer; `?callees=` also supports `?format=json`. If both `callees=` and `target=` are given, `callees=` takes precedence. (session turbulent-frost-0314)
+
+### Fixed (session turbulent-frost-0314)
+- **`calls://` text renderer showed basename only** — `_render_text` was using `Path(rec['file']).name` (basename), which is ambiguous when files with the same name exist in different directories. Now uses `rec['file']` directly, which is already project-relative. Regression test added. (session turbulent-frost-0314)
+- **`calls` adapter missing from schema contract tests** — `calls` was never added to `expected_schemes` in `test_adapter_contracts.py` after Phase 3 shipped, so the schema contract was never enforced. Fixed: added `calls` to `expected_schemes` and imported `CallsAdapter` for registration. (session turbulent-frost-0314)
+- **`calls` schema missing `output_types`, `example_queries`, `notes`** — the adapter contract requires all three. Added `calls_query` and `calls_callees` output types with full JSON schema + example, 5 `example_queries` with `output_type` references, and 5 notes. (session turbulent-frost-0314)
+
+### Documentation (session turbulent-frost-0314)
+- **`CALLS_ADAPTER_GUIDE.md`** — added `?callees=X` throughout: Quick Start, URI Syntax table, Query Parameters table + new `### callees` section, callees text output format example, Workflow 6 (forward lookup). Updated `ast://` vs `calls://` comparison table. Updated text output examples to show full relative paths (not basename). (session turbulent-frost-0314)
+- **`AGENT_HELP.md`** — updated "Trace function call graph" task: added `?callees=` command + row in the scope comparison table. (session turbulent-frost-0314)
+- **`ast/help.py`** — updated Trace Call Graph workflow to include `?callees=` step; updated notes to mention forward lookup. (session turbulent-frost-0314)
+
+### Tests (session turbulent-frost-0314)
+- **15 new tests** — `TestFindCallees` (5): callees found, total count, no match, multiple files same name, file+line in match. `TestCallsAdapterCallees` (5): type=calls_callees, matches content, callees takes precedence, missing-both-params error, json format stored. `TestCallsRendererCallees` (5): text shows target, no-match message, empty-calls message, json format, relative path in _render_text. Tests: 4,934 → 4,949. (session turbulent-frost-0314)
+
 ### Fixed (session risen-armor-0314)
 - **`calls://` renderer crash on every query** — `CallsRenderer` used instance-method signature (`self, data, **kwargs`) but the routing layer calls renderers as class-level functions. This made every `calls://` query crash with `AttributeError: 'str' object has no attribute 'get'`. Converted to static-method pattern (no `self`), matching `ImportsRenderer` and all other adapters. 5 regression tests added. (session risen-armor-0314)
 - **`calls://` `format=dot` in query string now works** — previously `?target=fn&format=dot` silently produced text output instead of Graphviz dot. `get_structure()` now stores `_query_format` in the result dict; the renderer applies it with precedence over the CLI `--format` flag. (session risen-armor-0314)
