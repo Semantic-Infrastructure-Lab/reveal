@@ -98,7 +98,7 @@ fi
 
 # Pull latest changes
 info "Pulling latest changes from origin..."
-git pull origin master || error "Failed to pull from origin"
+git pull --ff-only origin master || error "Failed to pull from origin (hint: repo may have diverged — rebase manually)"
 
 success "Pre-flight checks passed"
 echo
@@ -111,6 +111,18 @@ CURRENT_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/
 info "Current version: $CURRENT_VERSION"
 info "New version: $NEW_VERSION"
 echo
+
+# Verify new version is greater than current version
+if ! python3 - <<EOF
+import sys
+from packaging.version import Version
+cur = Version("$CURRENT_VERSION")
+new = Version("$NEW_VERSION")
+sys.exit(0 if new > cur else 1)
+EOF
+then
+    error "New version ($NEW_VERSION) must be greater than current version ($CURRENT_VERSION)"
+fi
 
 info "Proceeding with release v$NEW_VERSION"
 echo
@@ -139,6 +151,31 @@ if ! grep -q "## \[$NEW_VERSION\]" CHANGELOG.md && ! grep -q "## $NEW_VERSION" C
 fi
 
 success "CHANGELOG.md contains entry for v$NEW_VERSION"
+echo
+
+# ============================================================================
+# REVEAL SELF-CHECK
+# ============================================================================
+
+info "Running reveal self-check (V007/V011/V012/V013)..."
+
+if ! command -v reveal &> /dev/null; then
+    warn "reveal not found in PATH — skipping self-check (install with: pip install -e .)"
+else
+    reveal reveal:// --check || error "reveal self-check failed — fix documentation issues before releasing"
+    success "Reveal self-check passed"
+fi
+echo
+
+# ============================================================================
+# TESTS
+# ============================================================================
+
+info "Running test suite..."
+
+python3 -m pytest tests/ -q --tb=short || error "Tests failed — fix failures before releasing"
+
+success "All tests passed"
 echo
 
 # ============================================================================
