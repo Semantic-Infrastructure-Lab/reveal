@@ -470,8 +470,10 @@ def _validate_path_exists(path: Path, path_str: str) -> None:
             print(f"Error: {path_str} not found", file=sys.stderr)
             print(f"Hint: If extracting lines, use: reveal {base_path} :{path_str.rsplit(':', 1)[1]}", file=sys.stderr)
         else:
+            abs_suggestion = os.path.join(cwd, path_str)
             print(f"Error: {path_str} not found", file=sys.stderr)
-            print(f"Hint: Running from {cwd} — try an absolute path or cd to your project root.", file=sys.stderr)
+            print(f"Hint: Running from {cwd}", file=sys.stderr)
+            print(f"      Try: reveal {abs_suggestion}", file=sys.stderr)
         sys.exit(1)
 
 

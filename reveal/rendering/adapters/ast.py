@@ -48,11 +48,20 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
         return
 
     # Text format
+    displayed_results = data.get('displayed_results', len(results))
+    meta_warnings = data.get('meta', {}).get('warnings', [])
+    auto_cap_warning = next((w for w in meta_warnings if w.get('type') == 'auto_capped'), None)
+
     print(f"AST Query: {data.get('path', '.')}")
     if query != 'none':
         print(f"Filter: {query}")
     print(f"Files scanned: {total_files}")
-    print(f"Results: {total_results}")
+    if auto_cap_warning:
+        print(f"Results: {displayed_results} of {total_results} — add filters or use ?limit=N to see more")
+    elif displayed_results < total_results:
+        print(f"Results: {displayed_results} of {total_results}")
+    else:
+        print(f"Results: {total_results}")
     print()
 
     if not results:

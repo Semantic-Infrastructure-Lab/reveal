@@ -171,7 +171,13 @@ def _render_query_results(data: Dict[str, Any], output_format: str) -> None:
 
     if not results:
         print("No matching files found.")
-        return
 
     for result in results:
         _render_result_row(result)
+
+    # Show hints (e.g. low match rate front matter warning)
+    hints = data.get('hints', [])
+    if hints:
+        print()
+        for hint in hints:
+            print(f"ℹ️  {hint['message']}")

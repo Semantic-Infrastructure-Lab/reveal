@@ -70,17 +70,20 @@ class AstAdapter(ResourceAdapter):
 
         # Detect multi-file colon syntax (e.g. file1.py:file2.py) which is unsupported.
         # Colons in valid paths: Windows drive letters (C:\), or schemes (://). On Linux/Mac
-        # a colon in a plain path means the user likely copied diff:// syntax by mistake.
+        # a colon in a plain path almost always means the user copied diff:// syntax by mistake.
         if ':' in self.path and '://' not in self.path and not os.path.exists(self.path):
-            # Could be "file1.py:file2.py" — check if splitting on colon yields existing files
             parts = self.path.split(':', 1)
-            if os.path.exists(parts[0]):
+            left, right = parts[0], parts[1]
+            # Raise helpful error if either side looks like a code file path
+            if left.endswith(('.py', '.js', '.ts', '.go', '.rs', '.rb', '.java', '.cpp', '.c')) \
+                    or right.endswith(('.py', '.js', '.ts', '.go', '.rs', '.rb', '.java', '.cpp', '.c')) \
+                    or os.path.exists(left) or os.path.exists(right):
                 raise ValueError(
                     f"ast:// does not support multi-file colon syntax: {path!r}\n"
                     "  Each ast:// query targets one file or directory.\n"
                     "  Run separate queries:\n"
-                    f"    reveal 'ast://{parts[0]}?<filter>'\n"
-                    f"    reveal 'ast://{parts[1]}?<filter>'"
+                    f"    reveal 'ast://{left}?<filter>'\n"
+                    f"    reveal 'ast://{right}?<filter>'"
                 )
 
         # Extract result control parameters (sort, limit, offset)
