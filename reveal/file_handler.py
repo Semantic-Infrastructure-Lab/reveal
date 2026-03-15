@@ -3,7 +3,10 @@
 This module is separate from cli.routing to avoid circular dependencies with adapters.
 """
 
+import json
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
@@ -24,8 +27,8 @@ def _get_analyzer_or_exit(path: str, allow_fallback: bool):
     Exits:
         With error code 1 if no analyzer found
     """
-    from .registry import get_analyzer, get_all_analyzers
-    from .errors import AnalyzerNotFoundError
+    from .registry import get_analyzer, get_all_analyzers  # noqa: I006 — circular avoidance
+    from .errors import AnalyzerNotFoundError  # noqa: I006 — circular avoidance
 
     analyzer_class = get_analyzer(path, allow_fallback=allow_fallback)
     if not analyzer_class:
@@ -175,7 +178,6 @@ def _format_acme_ssl_col(ssl_status: str, ssl_days, ssl_not_after: str) -> tuple
         col = f"✅ {ssl_days}d"
         if ssl_not_after:
             try:
-                from datetime import datetime
                 dt = datetime.fromisoformat(ssl_not_after.replace('Z', '+00:00'))
                 col += f"  ({dt.strftime('%b %d, %Y')})"
             except (ValueError, TypeError):
@@ -216,12 +218,11 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
 
     only_failures = getattr(args, 'only_failures', False)
     output_format = getattr(args, 'format', 'text')
-    from .adapters.ssl.certificate import check_ssl_health
+    from .adapters.ssl.certificate import check_ssl_health  # noqa: I006 — optional heavy dep
 
     rows = analyzer.extract_acme_roots()
     if not rows:
         if output_format == 'json':
-            import json
             print(json.dumps({'type': 'nginx_acme_audit', 'domains': [],
                               'has_failures': False, 'message': 'No ACME challenge location blocks found.'}))
         else:
@@ -239,7 +240,6 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
     has_failures = any(r['has_failure'] for r in results)
 
     if output_format == 'json':
-        import json
         output_rows = [r for r in results if not only_failures or r['has_failure']]
         print(json.dumps({
             'type': 'nginx_acme_audit',
@@ -316,7 +316,6 @@ def _handle_check_conflicts(analyzer) -> None:
 
 def _resolve_log_path(analyzer, explicit_path: Optional[str]) -> Optional[str]:
     """Resolve nginx error log path: explicit > config directive > default locations."""
-    import os
     if explicit_path:
         return explicit_path
     resolved = analyzer.get_error_log_path()
@@ -371,8 +370,6 @@ def _handle_diagnose(analyzer, log_path: Optional[str] = None) -> None:
         print("This option is available for nginx config files.", file=sys.stderr)
         sys.exit(1)
 
-    import os
-
     resolved_path = _resolve_log_path(analyzer, log_path)
     if not resolved_path or not os.path.exists(resolved_path):
         print(f"⚠️  No nginx error log found.", file=sys.stderr)
@@ -393,7 +390,6 @@ def _handle_diagnose(analyzer, log_path: Optional[str] = None) -> None:
 
 def _load_disk_cert(cert_path: str, load_certificate_from_file) -> dict:
     """Load on-disk cert. Returns dict with status/expiry/serial/not_after keys."""
-    import os
     if not os.path.exists(cert_path):
         return {'status': 'missing', 'expiry': None, 'serial': None, 'not_after': None}
     try:
@@ -417,7 +413,6 @@ def _load_live_cert(domain: str, check_ssl_health) -> dict:
         not_after_str = leaf_data.get('not_after', '')
         if not_after_str:
             try:
-                from datetime import datetime
                 not_after = datetime.fromisoformat(not_after_str.replace('Z', '+00:00'))
             except (ValueError, TypeError):
                 pass
@@ -497,7 +492,7 @@ def _handle_cpanel_certs(analyzer) -> None:
         print("This option is available for nginx config files.", file=sys.stderr)
         sys.exit(1)
 
-    from .adapters.ssl.certificate import load_certificate_from_file, check_ssl_health
+    from .adapters.ssl.certificate import load_certificate_from_file, check_ssl_health  # noqa: I006 — optional heavy dep
 
     domains = analyzer.extract_ssl_domains()
     if not domains:
@@ -568,8 +563,8 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         output_format: Output format ('text', 'json', 'grep')
         args: Full argument namespace (for filter options)
     """
-    from .display import show_structure, show_metadata, extract_element
-    from .config import RevealConfig
+    from .display import show_structure, show_metadata, extract_element  # noqa: I006 — circular avoidance
+    from .config import RevealConfig  # noqa: I006 — circular avoidance
 
     # Get analyzer
     allow_fallback = not getattr(args, 'no_fallback', False) if args else True
@@ -612,12 +607,12 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         return
 
     if args and getattr(args, 'validate_schema', None):
-        from .checks import run_schema_validation
+        from .checks import run_schema_validation  # noqa: I006 — circular avoidance
         run_schema_validation(analyzer, path, args.validate_schema, output_format, args)
         return
 
     if args and getattr(args, 'check', False):
-        from .checks import run_pattern_detection
+        from .checks import run_pattern_detection  # noqa: I006 — circular avoidance
         run_pattern_detection(analyzer, path, output_format, args, config=config)
         return
 

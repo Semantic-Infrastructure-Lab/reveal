@@ -94,12 +94,12 @@ class TestGetGuideDescription(unittest.TestCase):
     def test_agent_description(self):
         """Should return correct description for agent guide."""
         desc = _get_guide_description('agent')
-        self.assertEqual(desc, 'Quick reference (task-based patterns)')
+        self.assertEqual(desc, 'Complete agent guide (task-based patterns, all adapters, troubleshooting)')
 
     def test_agent_full_description(self):
         """Should return correct description for agent-full guide."""
         desc = _get_guide_description('agent-full')
-        self.assertEqual(desc, 'Comprehensive guide')
+        self.assertEqual(desc, 'Complete agent guide (alias for agent)')
 
     def test_python_guide_description(self):
         """Should return correct description for python-guide."""
@@ -180,7 +180,7 @@ class TestRenderHelpListMode(unittest.TestCase):
         self.assertIn('STATIC GUIDES', output)
         self.assertIn('For AI Agents', output)
         self.assertIn('agent', output)
-        self.assertIn('~2,200', output)  # Token estimate
+        self.assertIn('~12,000', output)  # Token estimate
         self.assertIn('--agent-help flag', output)  # Alias
         self.assertIn('Feature Guides', output)
         self.assertIn('python-guide', output)

@@ -2535,3 +2535,20 @@ This release completes the link validation feature with anchor support, fixes do
 - **GitHub**: https://github.com/Semantic-Infrastructure-Lab/reveal
 - **PyPI**: https://pypi.org/project/reveal-cli/
 - **Issues**: https://github.com/Semantic-Infrastructure-Lab/reveal/issues
+
+## [Unreleased] — v0.64.0
+
+### Added
+- `reveal hotspots <path>` subcommand — file-level quality hotspots + high-complexity functions. `--top N`, `--min-complexity N`, `--functions-only`, `--files-only`, `--format json`. Exit 1 on critical findings (quality < 70 or complexity > 20).
+- **I006 rule** — detects imports inside function/method bodies (Python-only). Uses function `line`/`line_end` ranges to classify. Exceptions: `__future__`, `TYPE_CHECKING`, `# noqa`, functions named with `lazy`/`import`.
+
+### Fixed
+- **I005 silent bug** — `_normalize_import()` checked `statement`/`source` keys but Python structure dicts use `content`; rule returned zero detections for all Python files. Fixed.
+- `ssl/adapter.py` — hoisted 5 scattered lazy imports to module top: `NginxAnalyzer` (was 3×), `glob` (was 2× with different aliases), `load_certificate_from_file` (was 2×), `pathlib.Path` inline alias.
+- `calls/index.py` — removed unused `Optional` import (I001 catch).
+- `markdown/operations.py` — hoisted inline `Counter` import out of function body.
+- Test patch target updated after `load_certificate_from_file` moved to module top in ssl adapter.
+
+### Stats
+- 5,903 tests passing (up from 5,728 two sessions ago)
+- Session: viral-warmonger-0315

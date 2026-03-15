@@ -83,7 +83,7 @@ class I005(BaseRule):
                 continue
 
             line = imp.get('line') or imp.get('line_start', 0)
-            display = imp.get('statement') or imp.get('content', statement)
+            display = imp.get('content', '') or imp.get('statement', '') or statement
             import_occurrences[statement].append((line, display))
 
         # Find duplicates (imports that appear more than once)
@@ -125,8 +125,9 @@ class I005(BaseRule):
         Returns:
             Normalized import statement or None
         """
-        # Get the import statement
-        statement = imp.get('statement') or imp.get('source', '') or imp.get('content', '')
+        # Get the import statement.
+        # Priority: content (Python analyzer) > statement (JS/Go) > source (Rust)
+        statement = imp.get('content', '') or imp.get('statement', '') or imp.get('source', '')
         if not statement:
             # Try to reconstruct from module/symbol
             module = imp.get('module', '')

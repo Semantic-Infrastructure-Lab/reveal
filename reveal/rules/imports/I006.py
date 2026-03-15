@@ -154,7 +154,7 @@ class I006(BaseRule):
             structure: Parsed file structure from the analyzer. Expected keys:
                        'imports' — list of dicts with 'line' and 'content'.
                        'functions' — list of dicts with 'line', 'line_end', 'name'.
-            content: Raw file content (unused; structure carries what we need).
+            content: Raw file content — used to read source lines for noqa detection.
 
         Returns:
             List of Detection objects, one per flagged inline import.
@@ -176,12 +176,18 @@ class I006(BaseRule):
         if not ranges:
             return detections
 
+        # Index raw source lines for noqa detection (analyzers strip comments from 'content')
+        source_lines = content.splitlines() if content else []
+
         for imp in imports:
             import_line: int = imp.get('line', 0)
             if not import_line:
                 continue
 
             import_content: str = imp.get('content', '') or ''
+
+            # Use the raw source line so that trailing `# noqa` comments are visible
+            raw_source_line = source_lines[import_line - 1] if 0 < import_line <= len(source_lines) else import_content
 
             # Check if this import falls inside any function body
             enclosing = self._find_enclosing_function(import_line, ranges)
@@ -191,7 +197,7 @@ class I006(BaseRule):
             _start, _end, func_name = enclosing
 
             # Apply exception rules before flagging
-            if self._is_exception(import_content, func_name):
+            if self._is_exception(raw_source_line, func_name):
                 continue
 
             detections.append(Detection(

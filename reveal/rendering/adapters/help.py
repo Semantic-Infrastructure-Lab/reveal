@@ -21,7 +21,7 @@ GUIDE_CATEGORIES = {
 
 TOKEN_ESTIMATES = {
     'quick-start': '~2,000',
-    'agent': '~2,200',
+    'agent': '~12,000',
     'agent-full': '~12,000',
     'python-guide': '~2,500',
     'markdown': '~4,000',
@@ -202,7 +202,7 @@ def _render_navigation_section() -> None:
     print("  reveal help://quick-start   # 5-minute introduction")
     print()
     print("**Bootstrap (AI agents):**")
-    print("  reveal --agent-help         # Task-based patterns (~2,200 tokens)")
+    print("  reveal --agent-help         # Complete agent guide (~12,000 tokens)")
     print()
     print("**Discover adapters:**")
     print("  reveal help://adapters      # Summary of all URI adapters")
@@ -290,8 +290,8 @@ def _get_guide_description(topic: str) -> str:
     """Get human-friendly description for a guide topic."""
     descriptions = {
         'quick-start': '5-minute introduction to reveal',
-        'agent': 'Quick reference (task-based patterns)',
-        'agent-full': 'Comprehensive guide',
+        'agent': 'Complete agent guide (task-based patterns, all adapters, troubleshooting)',
+        'agent-full': 'Complete agent guide (alias for agent)',
         'python': 'Python adapter with examples (duplicate of python-guide)',
         'python-guide': 'Python adapter deep dive',
         'reveal-guide': 'reveal:// adapter reference',
