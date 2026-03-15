@@ -43,7 +43,7 @@ reveal check src/             # Quality check (complexity, maintainability, link
 reveal review main..feature   # PR review: diff + check + hotspots in one pass
 reveal health ssl://site.com  # Health check with exit codes 0/1/2
 reveal pack src/ --budget 8000  # Token-budgeted snapshot for LLM context
-reveal dev new-adapter        # Scaffold new adapters/rules
+reveal dev new-adapter <name> # Scaffold new adapters/rules
 ```
 
 ## Features

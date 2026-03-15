@@ -6,7 +6,7 @@ category: reference
 
 **Complete catalog of all user-facing documentation**
 
-**Last Updated**: 2026-03-03
+**Last Updated**: 2026-03-14
 **Total**: 44 markdown files, ~38,600 lines
 
 ---
@@ -14,7 +14,7 @@ category: reference
 ## Quick Navigation
 
 - **New users** → [QUICK_START.md](QUICK_START.md) → [RECIPES.md](RECIPES.md)
-- **Adapters** → See [Adapter Guides](#adapter-guides-16-files) below
+- **Adapters** → See [Adapter Guides](#adapter-guides-17-files) below
 - **nginx / cPanel operator** → [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md)
 - **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2391 lines)
 - **Developers** → [Development Guides](#development-guides-3-files)
@@ -34,14 +34,14 @@ category: reference
 
 ---
 
-## Adapter Guides (16 files)
+## Adapter Guides (17 files)
 
 Complete guides for all URI protocol adapters (~24,500 lines):
 
 | File | Lines | Purpose |
 |------|-------|---------|
 | [AST_ADAPTER_GUIDE.md](AST_ADAPTER_GUIDE.md) | 1192 | AST-based code analysis with complexity/size filtering |
-| [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) | — | Cross-file call graph queries (calls://) |
+| [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) | 592 | Cross-file call graph queries (calls://) |
 | [CLAUDE_ADAPTER_GUIDE.md](CLAUDE_ADAPTER_GUIDE.md) | 2316 | Claude CLI session analysis and tool usage tracking |
 | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md) | 328 | cPanel user environment: domains, SSL, ACL health |
 | [DIFF_ADAPTER_GUIDE.md](DIFF_ADAPTER_GUIDE.md) | 1932 | Git diff analysis and structure comparison |
@@ -59,6 +59,13 @@ Complete guides for all URI protocol adapters (~24,500 lines):
 | [XLSX_ADAPTER_GUIDE.md](XLSX_ADAPTER_GUIDE.md) | 568 | Excel/XLSX file analysis and data extraction |
 
 **Total**: ~24,500 lines
+
+**Adapters without dedicated guides** (covered elsewhere or minimal):
+- `autossl://` — see [NGINX_ADAPTER_GUIDE.md](NGINX_ADAPTER_GUIDE.md) (cPanel AutoSSL logs)
+- `markdown://` — see [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) under Analyzer Guides
+- `nginx://` — see [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) under Analyzer Guides
+- `demo://` — example/testing adapter, no guide needed
+- `help://` — meta-adapter for in-tool help; use `reveal help://` to explore
 
 ---
 
@@ -144,7 +151,7 @@ Complete reference for AI agent integration:
 ## Documentation Statistics
 
 **By Category**:
-- Adapter Guides: 16 files, ~24,500 lines (63%)
+- Adapter Guides: 17 files, ~24,500 lines (63%)
 - Reference: 11 files, ~6,300 lines (16%)
 - Analyzer Guides: 5 files, ~2,555 lines (7%)
 - User Guides: 4 files, ~3,140 lines (8%)
@@ -154,7 +161,7 @@ Complete reference for AI agent integration:
 
 **Total**: 44 files, ~40,355 lines
 
-**Last Updated**: 2026-03-03 (Session: gapozi-0303)
+**Last Updated**: 2026-03-14 (Session: lunar-pulsar-0314)
 
 ---
 
@@ -163,13 +170,13 @@ Complete reference for AI agent integration:
 **By Task**:
 - "How do I start?" → [QUICK_START.md](QUICK_START.md)
 - "What can Reveal do?" → [RECIPES.md](RECIPES.md)
-- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-16-files)
+- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-17-files)
 - "How do queries work?" → [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md)
 - "For AI agents?" → [AGENT_HELP.md](AGENT_HELP.md)
 - "Create custom adapter?" → [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md)
 
 **By Adapter**:
-Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-16-files) above.
+Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-17-files) above.
 
 ---
 
@@ -180,5 +187,5 @@ Internal maintainer documentation (planning, research, architecture) is maintain
 
 ---
 
-**Last Updated**: 2026-03-03 (Session: gapozi-0303)
+**Last Updated**: 2026-03-14 (Session: lunar-pulsar-0314)
 **Navigation**: [README](README.md) | [Project Root](../../README.md)
