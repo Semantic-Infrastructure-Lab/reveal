@@ -39,7 +39,17 @@ _SCHEMA_QUERY_PARAMS = {
         'type': 'string',
         'description': 'Search all message content (text, thinking, tool inputs) for a term (case-insensitive)',
         'examples': ['?search=path traversal', '?search=FileNotFoundError']
-    }
+    },
+    'tail': {
+        'type': 'integer',
+        'description': 'Show last N assistant turns — fast session recovery ("where did it stop?")',
+        'examples': ['?tail=3', '?tail=1']
+    },
+    'last': {
+        'type': 'flag',
+        'description': 'Show last assistant turn (shorthand for ?tail=1)',
+        'examples': ['?last']
+    },
 }
 
 _SCHEMA_ELEMENTS = {
@@ -52,7 +62,7 @@ _SCHEMA_ELEMENTS = {
     'context': 'Context window changes over session',
     'user': 'User messages: initial prompt full text + tool-result turn summaries',
     'assistant': 'Assistant messages: text blocks only (skips thinking/tool_use)',
-    'message/<n>': 'Single message by zero-based index with full content'
+    'message/<n>': 'Single message by zero-based index (or negative: message/-1 = last message)'
 }
 
 def _make_output_type(type_name: str, description: str, extra_props: dict) -> dict:
@@ -97,6 +107,7 @@ _SCHEMA_OUTPUT_TYPES = [
             'content': {'type': 'array'}
         }}
     },
+    _make_output_type('claude_messages', 'Assistant narrative turns (text only, no tool calls) — used by /messages, ?tail=N, ?last', {'messages': {'type': 'array'}, 'total_turns': {'type': 'integer'}}),
     _make_output_type('claude_timeline', 'Chronological message timeline with timestamps and turn types', {'events': {'type': 'array'}}),
     _make_output_type('claude_context', 'Context window usage and changes over the session', {
         'snapshots': {'type': 'array'}, 'peak_tokens': {'type': 'integer'}
@@ -127,6 +138,9 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'query_param': '?search=<term>',
         'output_type': 'claude_search_results'
     },
+    {'uri': 'claude://session/infernal-earth-0118?last', 'description': 'Last assistant turn — fast recovery ("where did it stop?")', 'query_param': '?last', 'output_type': 'claude_messages'},
+    {'uri': 'claude://session/infernal-earth-0118?tail=3', 'description': 'Last 3 assistant turns', 'query_param': '?tail=N', 'output_type': 'claude_messages'},
+    {'uri': 'claude://session/infernal-earth-0118/message/-1', 'description': 'Last message (negative index)', 'element': 'message/<n>', 'output_type': 'claude_message'},
 ]
 
 _SCHEMA_NOTES = [
@@ -279,6 +293,18 @@ class ClaudeAdapter(ResourceAdapter):
             return get_tool_calls(messages, self.query.split('=')[1], self.session_name, contract_base)
         if self.query and self.query.startswith('search='):
             return search_messages(messages, self.query.split('=', 1)[1], self.session_name, contract_base)
+        # ?tail=N — last N assistant turns; ?last — shorthand for ?tail=1
+        tail_str = self.query_params.get('tail')
+        if tail_str is not None or 'last' in self.query_params:
+            tail = 1 if 'last' in self.query_params else int(tail_str)
+            result = get_messages(messages, self.session_name, contract_base)
+            turns = result.get('messages', [])
+            total = len(turns)
+            result['messages'] = turns[-tail:] if 0 < tail < total else ([] if tail == 0 else turns)
+            result['total_turns'] = total
+            if tail < total:
+                result['tail_of'] = total
+            return result
         return None
 
     def _route_by_resource(self, messages: List[Dict], conversation_path_str: str,
@@ -300,6 +326,8 @@ class ClaudeAdapter(ResourceAdapter):
             return filter_by_role(messages, 'assistant', self.session_name, contract_base)
         if '/message/' in self.resource:
             msg_id = int(self.resource.split('/message/')[1])
+            if msg_id < 0:
+                msg_id = len(messages) + msg_id
             return get_message(messages, msg_id, self.session_name, contract_base)
         if '/messages' in self.resource:
             search = self.query_params.get('search') or self.query_params.get('contains')
@@ -652,6 +680,18 @@ class ClaudeAdapter(ResourceAdapter):
             {
                 'uri': 'claude://session/infernal-earth-0118/message/5',
                 'description': 'Read a specific message by index'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118/message/-1',
+                'description': 'Read the last message (negative index supported)'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118?last',
+                'description': 'Show last assistant turn — fast session recovery'
+            },
+            {
+                'uri': 'claude://session/infernal-earth-0118?tail=3',
+                'description': 'Show last 3 assistant turns'
             },
             {
                 'uri': 'claude://session/infernal-earth-0118?search=verify',
