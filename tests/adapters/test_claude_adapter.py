@@ -502,26 +502,24 @@ class TestSessionListing:
 
 
 class TestSearchSubcommand:
-    """Tests for claude://search routing."""
+    """Tests for claude://search routing — now a real content search."""
 
-    def test_search_subcommand_returns_helpful_error(self, tmp_path):
-        """Test that claude://search returns a not-implemented error, not session-not-found."""
-        adapter = ClaudeAdapter('search', query='query=reveal')
+    def test_search_subcommand_routes_to_content_search(self, tmp_path):
+        """claude://search (no term) routes to cross-session search with empty term."""
+        adapter = ClaudeAdapter('search', query=None)
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
             result = adapter.get_structure()
 
-        assert result['type'] == 'claude_error'
-        assert 'not implemented' in result['error']
-        assert 'tia search sessions' in result['hint']
+        assert result['type'] == 'claude_cross_session_search'
 
-    def test_search_subpath_also_caught(self, tmp_path):
-        """Test that claude://search/anything also returns the not-implemented error."""
-        adapter = ClaudeAdapter('search/whatever', query='query=foo')
+    def test_search_subpath_uses_path_term(self, tmp_path):
+        """claude://search/<term> extracts the term from the path."""
+        adapter = ClaudeAdapter('search/topstep', query=None)
         with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
             result = adapter.get_structure()
 
-        assert result['type'] == 'claude_error'
-        assert 'not implemented' in result['error']
+        assert result['type'] == 'claude_cross_session_search'
+        assert result['term'] == 'topstep'
 
 
 class TestFindConversationAgentFilter:

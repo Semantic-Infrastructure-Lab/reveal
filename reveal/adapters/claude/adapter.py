@@ -26,6 +26,7 @@ from .analysis import (
     get_files_touched,
     get_workflow,
     get_context_changes,
+    search_sessions_for_term,
 )
 
 
@@ -359,24 +360,27 @@ class ClaudeAdapter(ResourceAdapter):
                 'source': conversation file path
                 'source_type': 'file'
         """
-        # Handle bare claude:// - list available sessions
-        if not self.resource or self.resource in ('.', ''):
+        # Handle bare claude:// and sessions/ aliases.
+        # ?search=term at this level means cross-session content search.
+        # ?filter=term (or no ?search=) keeps the original session-name listing.
+        is_session_list_resource = (
+            not self.resource
+            or self.resource in ('.', '', 'sessions', 'sessions/')
+            or self.resource.startswith('sessions/')
+        )
+        if is_session_list_resource:
+            if self.query_params.get('search'):
+                return self._search_sessions()
             return self._list_sessions()
 
-        # Handle 'sessions' as alias for listing (plural form of bare claude://)
-        if self.resource in ('sessions', 'sessions/') or self.resource.startswith('sessions/'):
-            return self._list_sessions()
-
-        # Handle top-level search subcommand (not yet implemented)
+        # claude://search/<term> — path-based alias for cross-session content search.
+        # Also handles bare claude://search (prompts for a term).
         if self.resource == 'search' or self.resource.startswith('search/'):
-            return {
-                'contract_version': '1.0',
-                'type': 'claude_error',
-                'source': str(self.CONVERSATION_BASE),
-                'source_type': 'directory',
-                'error': 'cross-session search not implemented',
-                'hint': 'Use: tia search sessions "<term>" — scans all session transcripts',
-            }
+            parts = self.resource.split('/', 1)
+            path_term = parts[1].strip() if len(parts) > 1 else ''
+            if path_term and not self.query_params.get('search'):
+                self.query_params['search'] = path_term
+            return self._search_sessions()
 
         messages = self._load_messages()
         contract_base = self._get_contract_base()
@@ -513,9 +517,23 @@ class ClaudeAdapter(ResourceAdapter):
             return None
 
     @staticmethod
+    def _extract_project_from_dir(dir_name: str) -> str:
+        """Derive a short project label from an encoded Claude project directory name.
+
+        E.g. '-home-scottsen-src-tia-sessions-hosefobe-0314' → 'tia'
+             '-home-scottsen-src-projects-reveal-external-git' → 'reveal'
+        """
+        _SKIP = {'home', 'scottsen', 'src', 'projects', 'external', 'internal', 'git'}
+        prefix = dir_name.split('-sessions-')[0] if '-sessions-' in dir_name else dir_name
+        parts = [p for p in prefix.lstrip('-').split('-') if p and p not in _SKIP]
+        return parts[-1] if parts else ''
+
+    @staticmethod
     def _collect_sessions_from_dir(project_dir: Path) -> List[Dict[str, Any]]:
         """Collect session entry dicts from one project directory."""
         sessions = []
+        readme_present = bool(list(project_dir.glob('README*.md'))[:1])
+        project = ClaudeAdapter._extract_project_from_dir(project_dir.name)
         for jsonl_file in project_dir.glob('*.jsonl'):
             if jsonl_file.stem.startswith('agent-'):
                 continue
@@ -533,7 +551,9 @@ class ClaudeAdapter(ResourceAdapter):
                 'session': session_name,
                 'path': str(jsonl_file),
                 'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                'size_kb': stat.st_size // 1024
+                'size_kb': stat.st_size // 1024,
+                'readme_present': readme_present,
+                'project': project,
             })
         return sessions
 
@@ -597,6 +617,63 @@ class ClaudeAdapter(ResourceAdapter):
         })
 
         return base
+
+    def _search_sessions(self) -> Dict[str, Any]:
+        """Cross-session content search using ``?search=term``.
+
+        Scans all session JSONL files for the search term using parallel
+        byte-level pre-filtering, then extracts one representative snippet per
+        matching session.
+
+        Supports ``?since=DATE`` (e.g. ``2026-03-01`` or ``today``) to scope
+        the corpus before scanning — highly recommended for large session stores.
+
+        Returns:
+            Dict of type ``claude_cross_session_search`` with ``matches`` list.
+        """
+        term = self.query_params.get('search', '')
+        since = self.query_params.get('since', '')
+
+        if since == 'today':
+            from datetime import date as _date
+            since = _date.today().isoformat()
+
+        # Collect all sessions across all project directories.
+        all_sessions: List[Dict[str, Any]] = []
+        try:
+            for project_dir in self.CONVERSATION_BASE.iterdir():
+                if project_dir.is_dir():
+                    all_sessions.extend(self._collect_sessions_from_dir(project_dir))
+        except Exception as e:
+            return {
+                'contract_version': '1.0',
+                'type': 'claude_cross_session_search',
+                'source': str(self.CONVERSATION_BASE),
+                'source_type': 'directory',
+                'term': term,
+                'error': str(e),
+                'sessions_scanned': 0,
+                'match_count': 0,
+                'matches': [],
+            }
+
+        # Apply --since before grep to shrink the corpus.
+        if since:
+            all_sessions = [s for s in all_sessions if s.get('modified', '') >= since]
+
+        matches = search_sessions_for_term(all_sessions, term)
+
+        return {
+            'contract_version': '1.0',
+            'type': 'claude_cross_session_search',
+            'source': str(self.CONVERSATION_BASE),
+            'source_type': 'directory',
+            'term': term,
+            'since': since or None,
+            'sessions_scanned': len(all_sessions),
+            'match_count': len(matches),
+            'matches': matches,
+        }
 
     # Wrapper methods for backward compatibility with tests
     def _get_overview(self, messages: List[Dict]) -> Dict[str, Any]:
@@ -837,6 +914,9 @@ class ClaudeAdapter(ResourceAdapter):
 
         since = getattr(args, 'since', None)
         if since:
+            if since == 'today':
+                from datetime import date
+                since = date.today().isoformat()
             sessions = [s for s in sessions if s.get('modified', '') >= since]
 
         if not getattr(args, 'all', False):

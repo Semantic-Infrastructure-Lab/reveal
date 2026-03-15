@@ -20,21 +20,23 @@ class ClaudeRenderer(TypeDispatchRenderer):
         count_line = f"Claude Sessions: {total} total"
         if displayed < total:
             count_line += f" | showing {displayed}"
-        count_line += " | --all to show all | --head N for more | --since YYYY-MM-DD to filter"
+        count_line += " | --all to show all | --head N for more | --since YYYY-MM-DD (or today)"
         print(count_line)
         print()
-        print(f"  {'SESSION':<38} {'MODIFIED':<17} {'SIZE':>6}  TITLE")
-        print(f"  {'-'*38} {'-'*17} {'-'*6}  {'-'*30}")
+        print(f"  {'SESSION':<34} {'MODIFIED':<17} {'SIZE':>6}  {'R':<1}  {'PROJECT':<12}  TITLE")
+        print(f"  {'-'*34} {'-'*17} {'-'*6}  {'-':<1}  {'-'*12}  {'-'*25}")
         for s in recent:
             name = s.get('session', '?')
-            if len(name) > 38:
-                name = name[-38:]
+            if len(name) > 34:
+                name = name[-34:]
             mod = s.get('modified', '')[:16].replace('T', ' ')
             kb = s.get('size_kb', 0)
+            readme = '✓' if s.get('readme_present') else '✗'
+            project = (s.get('project', '') or '')[:12]
             title = s.get('title', '') or ''
-            if len(title) > 40:
-                title = title[:37] + '...'
-            print(f"  {name:<38} {mod:<17} {kb:>4}kb  {title}")
+            if len(title) > 25:
+                title = title[:22] + '...'
+            print(f"  {name:<34} {mod:<17} {kb:>4}kb  {readme:<1}  {project:<12}  {title}")
         print()
         usage = result.get('usage', {})
         if usage:
@@ -554,6 +556,43 @@ class ClaudeRenderer(TypeDispatchRenderer):
 
         if 'hint' in result:
             print(f"\nNote: {result['hint']}")
+
+    @staticmethod
+    def _render_claude_cross_session_search(result: dict) -> None:
+        """Render cross-session search results."""
+        term = result.get('term', '')
+        scanned = result.get('sessions_scanned', 0)
+        count = result.get('match_count', 0)
+        since = result.get('since')
+        error = result.get('error')
+
+        since_str = f'  since {since}' if since else ''
+        print(f'Cross-session search: "{term}"{since_str}')
+        print(f'Scanned {scanned} sessions  |  Found {count} matches')
+
+        if error:
+            print(f'Error: {error}')
+            return
+        if count == 0:
+            return
+
+        print()
+        matches = result.get('matches', [])
+        for match in matches:
+            session = match.get('session', '?')
+            modified = (match.get('modified') or '')[:16].replace('T', ' ')
+            project = match.get('project', '')
+            role = match.get('role', '')
+            excerpt = (match.get('excerpt') or '').replace('\n', ' ').strip()
+
+            project_tag = f'  [{project}]' if project else ''
+            role_tag = f'  {role}' if role else ''
+            print(f'{session}{project_tag}  {modified}{role_tag}')
+            if excerpt:
+                if len(excerpt) > 200:
+                    excerpt = excerpt[:200] + '...'
+                print(f'  {excerpt}')
+            print()
 
     @staticmethod
     def _render_claude_search_results(result: dict) -> None:

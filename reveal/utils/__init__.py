@@ -23,6 +23,7 @@ from .safe_operations import (
     SafeContext,
 )
 from .updates import check_for_updates
+from .parallel import grep_files
 from .query import (
     coerce_value,
     parse_query_params,
@@ -52,6 +53,7 @@ __all__ = [
     'safe_yaml_loads',
     'SafeContext',
     'check_for_updates',
+    'grep_files',
     'coerce_value',
     'parse_query_params',
     'parse_query_filters',

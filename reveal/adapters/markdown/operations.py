@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from . import files, filtering, results
+from ...utils.parallel import grep_files
 
 
 def get_structure(
@@ -28,10 +29,17 @@ def get_structure(
         Dict containing matched files with frontmatter summary
     """
     all_files = files.find_markdown_files(base_path)
+
+    # Fast parallel pre-filter: eliminate files that can't possibly match
+    # before the expensive frontmatter parse + body-only verification.
+    # grep_files scans whole-file bytes; matches_body_contains re-checks
+    # body-only content to drop any frontmatter false-positives.
+    candidates = grep_files(all_files, body_contains) if body_contains else all_files
+
     matched_results = []
 
     # Build results for matching files
-    for path in all_files:
+    for path in candidates:
         frontmatter = files.extract_frontmatter(path)
         if not filtering.matches_all_filters(frontmatter, filters, query_filters):
             continue
@@ -95,11 +103,12 @@ def aggregate_field_values(
     from collections import Counter
 
     all_files = files.find_markdown_files(base_path)
+    candidates = grep_files(all_files, body_contains) if body_contains else all_files
     counts: Counter = Counter()
     matched = 0
     missing = 0
 
-    for path in all_files:
+    for path in candidates:
         frontmatter = files.extract_frontmatter(path)
         if not filtering.matches_all_filters(frontmatter, filters, query_filters):
             continue
