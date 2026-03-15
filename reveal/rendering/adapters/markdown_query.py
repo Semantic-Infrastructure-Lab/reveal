@@ -18,10 +18,47 @@ def render_markdown_query(data: Dict[str, Any], output_format: str,
         print(safe_json_dumps(data))
         return
 
-    if single_file:
+    if data.get('type') == 'markdown_aggregate':
+        _render_aggregate(data, output_format)
+    elif single_file:
         _render_single_file(data, output_format)
     else:
         _render_query_results(data, output_format)
+
+
+def _render_aggregate(data: Dict[str, Any], output_format: str) -> None:
+    """Render frontmatter field frequency table."""
+    if output_format == 'grep':
+        for entry in data.get('aggregate', []):
+            print(f"{entry['value']}\t{entry['count']}")
+        return
+
+    field = data.get('field', '?')
+    source = data.get('source', '.')
+    matched = data.get('matched_files', 0)
+    total = data.get('total_files', 0)
+    missing = data.get('files_missing_field', 0)
+
+    print(f"Aggregate: {field}")
+    print(f"Source: {source}/")
+    print(f"Files: {matched} of {total} matched")
+    if missing:
+        print(f"Missing field: {missing} files")
+    print()
+
+    aggregate = data.get('aggregate', [])
+    if not aggregate:
+        print(f"No values found for field '{field}'.")
+        return
+
+    max_count = aggregate[0]['count'] if aggregate else 1
+    bar_width = 30
+    for entry in aggregate:
+        val = str(entry['value'])
+        cnt = entry['count']
+        filled = int(bar_width * cnt / max_count) if max_count else 0
+        bar = '█' * filled
+        print(f"  {val:<24} {cnt:>5}  {bar}")
 
 
 def _print_frontmatter_item(key: str, value: Any) -> None:

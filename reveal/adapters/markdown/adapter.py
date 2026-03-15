@@ -13,6 +13,25 @@ from . import query as query_module
 from . import operations
 
 
+def _extract_aggregate(filter_query: str) -> tuple:
+    """Extract aggregate=<field> param from filter query.
+
+    Returns:
+        (aggregate_field_or_None, remaining_query_string)
+    """
+    aggregate_field = None
+    remaining_parts = []
+    for part in filter_query.split('&'):
+        stripped = part.strip()
+        if stripped.startswith('aggregate='):
+            field = stripped[len('aggregate='):]
+            if field:
+                aggregate_field = field
+        else:
+            remaining_parts.append(part)
+    return aggregate_field, '&'.join(remaining_parts)
+
+
 def _extract_body_contains(filter_query: str) -> tuple:
     """Extract body-contains= params from filter query.
 
@@ -83,6 +102,11 @@ class MarkdownQueryAdapter(ResourceAdapter):
             filter_query = ''
             self.result_control = ResultControl()
 
+        # Extract aggregate= param before passing to filter parsers
+        self.aggregate_field = None
+        if filter_query:
+            self.aggregate_field, filter_query = _extract_aggregate(filter_query)
+
         # Extract body-contains= params before passing to filter parsers
         self.body_contains = []
         if filter_query:
@@ -110,8 +134,24 @@ class MarkdownQueryAdapter(ResourceAdapter):
         """Query markdown files and return matching results.
 
         Returns:
-            Dict containing matched files with frontmatter summary
+            Dict containing matched files with frontmatter summary, or
+            a frequency table when ?aggregate=<field> is specified.
         """
+        if self.aggregate_field:
+            result = operations.aggregate_field_values(
+                self.base_path,
+                self.aggregate_field,
+                self.filters,
+                self.query_filters,
+                self.body_contains or None,
+            )
+            return {
+                'contract_version': '1.0',
+                'type': 'markdown_aggregate',
+                'source': str(self.base_path),
+                **result,
+            }
+
         result = operations.get_structure(
             self.base_path,
             self.query or '',

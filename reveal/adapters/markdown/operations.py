@@ -70,6 +70,66 @@ def get_structure(
     return response
 
 
+def aggregate_field_values(
+    base_path: Path,
+    field: str,
+    filters: list,
+    query_filters: list,
+    body_contains: Optional[list] = None,
+) -> Dict[str, Any]:
+    """Count occurrences of each value for a frontmatter field across matched files.
+
+    List-valued fields (e.g. beth_topics: [reveal, deployment]) are expanded
+    so each list item is counted individually.
+
+    Args:
+        base_path: Directory to search
+        field: Frontmatter field name to aggregate (e.g. 'type', 'beth_topics')
+        filters: Legacy query filters
+        query_filters: New query filters
+        body_contains: Optional list of terms that must appear in body text
+
+    Returns:
+        Dict with aggregate frequency table sorted by count descending
+    """
+    from collections import Counter
+
+    all_files = files.find_markdown_files(base_path)
+    counts: Counter = Counter()
+    matched = 0
+    missing = 0
+
+    for path in all_files:
+        frontmatter = files.extract_frontmatter(path)
+        if not filtering.matches_all_filters(frontmatter, filters, query_filters):
+            continue
+        if body_contains and not filtering.matches_body_contains(path, body_contains):
+            continue
+        matched += 1
+        value = (frontmatter or {}).get(field)
+        if value is None:
+            missing += 1
+        elif isinstance(value, list):
+            for item in value:
+                if item is not None:
+                    counts[str(item)] += 1
+        else:
+            counts[str(value)] += 1
+
+    aggregate = [
+        {'value': val, 'count': cnt}
+        for val, cnt in counts.most_common()
+    ]
+
+    return {
+        'field': field,
+        'total_files': len(all_files),
+        'matched_files': matched,
+        'files_missing_field': missing,
+        'aggregate': aggregate,
+    }
+
+
 def get_element(base_path: Path, element_name: str) -> Optional[Dict[str, Any]]:
     """Get frontmatter from a specific file.
 

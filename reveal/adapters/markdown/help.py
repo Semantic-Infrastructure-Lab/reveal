@@ -4,6 +4,7 @@ from typing import Dict, Any
 
 
 _SCHEMA_QUERY_PARAMS = {
+    'aggregate=field': 'Frequency table of values for a frontmatter field. List fields (e.g. beth_topics) are expanded per item.',
     'body-contains=term': 'Case-insensitive substring search in body text (after frontmatter). Multiple body-contains= params are AND\'d.',
     'field=value': 'Exact match (or substring for list fields)',
     'field=*pattern*': 'Glob-style wildcard matching',
@@ -22,6 +23,31 @@ _SCHEMA_QUERY_PARAMS = {
 }
 
 _SCHEMA_OUTPUT_TYPES = [
+    {
+        'type': 'markdown_aggregate',
+        'description': 'Frequency table of frontmatter field values across matched files',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'type': {'type': 'string', 'const': 'markdown_aggregate'},
+                'field': {'type': 'string'},
+                'source': {'type': 'string'},
+                'total_files': {'type': 'integer'},
+                'matched_files': {'type': 'integer'},
+                'files_missing_field': {'type': 'integer'},
+                'aggregate': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'value': {'type': 'string'},
+                            'count': {'type': 'integer'},
+                        }
+                    }
+                }
+            }
+        }
+    },
     {
         'type': 'markdown_query',
         'description': 'List of markdown files matching query filters',
@@ -105,6 +131,18 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'description': 'Body text search — AND logic, both terms must appear',
         'cli_flag': '?body-contains=nginx&body-contains=ssl',
         'output_type': 'markdown_query'
+    },
+    {
+        'uri': 'markdown://docs/?aggregate=type',
+        'description': 'Frequency table of "type" field values across all docs',
+        'cli_flag': '?aggregate=type',
+        'output_type': 'markdown_aggregate'
+    },
+    {
+        'uri': 'markdown://sessions/?aggregate=beth_topics',
+        'description': 'Topic distribution — list fields expanded per item',
+        'cli_flag': '?aggregate=beth_topics',
+        'output_type': 'markdown_aggregate'
     }
 ]
 
