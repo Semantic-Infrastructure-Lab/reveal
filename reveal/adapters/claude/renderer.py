@@ -138,6 +138,43 @@ class ClaudeRenderer(TypeDispatchRenderer):
                 print()
 
     @staticmethod
+    def _render_claude_analytics(result: dict) -> None:
+        """Render detailed analytics summary (?summary view)."""
+        print(f"Analytics: {result.get('session', 'unknown')}")
+        title = result.get('title')
+        if title:
+            print(f"Title: {title}")
+        duration = result.get('duration')
+        if duration:
+            print(f"Duration: {duration}")
+        print(f"Messages: {result.get('message_count', 0)} "
+              f"(user: {result.get('user_messages', 0)}, "
+              f"assistant: {result.get('assistant_messages', 0)})")
+        print()
+
+        tool_success_rate = result.get('tool_success_rate', {})
+        if tool_success_rate:
+            print("Tool Success Rates:")
+            for tool, stats in sorted(tool_success_rate.items(),
+                                      key=lambda x: -x[1].get('total', 0)):
+                total = stats.get('total', 0)
+                rate = stats.get('success_rate', 0)
+                success = stats.get('success', 0)
+                failure = stats.get('failure', 0)
+                fail_str = f", {failure} failed" if failure else ""
+                print(f"  {tool}: {rate}% ({success}/{total}{fail_str})")
+            print()
+
+        avg = result.get('avg_message_size', 0)
+        max_size = result.get('max_message_size', 0)
+        thinking_blocks = result.get('thinking_blocks', 0)
+        if avg or max_size:
+            print(f"Message Sizes: avg {avg:,} chars, max {max_size:,} chars")
+        if thinking_blocks:
+            thinking_tokens = result.get('thinking_tokens_approx', 0)
+            print(f"Thinking: {thinking_blocks} blocks (~{thinking_tokens:,} tokens)")
+
+    @staticmethod
     def _render_claude_errors(result: dict) -> None:
         """Render error summary with context."""
         session = result.get('session', 'unknown')

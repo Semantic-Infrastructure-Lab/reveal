@@ -1,10 +1,14 @@
 """Overview and summary generation for Claude sessions."""
 
+import re
 from typing import Dict, List, Any, Optional
 from collections import defaultdict
 from datetime import datetime
 
 from .tools import calculate_tool_success_rate
+
+
+_BOILERPLATE_PREFIXES = ('# Session Continuation Context', '# TIA System Instructions')
 
 
 def _extract_text_from_content(content: Any) -> str:
@@ -18,18 +22,53 @@ def _extract_text_from_content(content: Any) -> str:
     return ''
 
 
-def _extract_session_title(messages: List[Dict]) -> Optional[str]:
-    """Extract a display title from the first user message with text content.
+def _extract_badge_from_messages(messages: List[Dict]) -> Optional[str]:
+    """Extract tia session badge text from Bash tool calls."""
+    for msg in messages:
+        if msg.get('type') != 'assistant':
+            continue
+        for block in msg.get('message', {}).get('content', []):
+            if block.get('type') == 'tool_use' and block.get('name') == 'Bash':
+                cmd = block.get('input', {}).get('command', '')
+                m = re.search(r'tia session badge\s+"([^"]+)"', cmd)
+                if m:
+                    return m.group(1)
+    return None
 
-    Content can be a string (inline text) or a list of content items.
-    Returns the first non-empty line, truncated to 100 chars, or None.
+
+def _extract_session_title(messages: List[Dict]) -> Optional[str]:
+    """Extract a display title from session messages.
+
+    Priority:
+      1. ``tia session badge "text"`` Bash call (most authoritative)
+      2. First non-boilerplate user message first line
+      3. None
     """
+    # 1. Badge is the authoritative title when present
+    badge = _extract_badge_from_messages(messages)
+    if badge:
+        return badge
+
+    # 2. First real user message
     for msg in messages:
         if msg.get('type') != 'user':
             continue
         text = _extract_text_from_content(msg.get('message', {}).get('content', ''))
-        if text:
-            return text.split('\n')[0].strip()[:100] or None
+        if not text:
+            continue
+        candidate = text.split('\n')[0].strip()
+        # Skip auto-injected boilerplate preambles
+        if any(candidate.startswith(p) for p in _BOILERPLATE_PREFIXES):
+            sep_idx = text.rfind('\n---\n')
+            if sep_idx >= 0:
+                candidate = text[sep_idx + 5:].strip().split('\n')[0].strip()
+            else:
+                continue
+        # Skip bare boot commands
+        if candidate.lower() in ('boot.', 'boot'):
+            continue
+        if candidate:
+            return candidate[:100]
     return None
 
 
@@ -79,7 +118,13 @@ def _calculate_session_duration(messages: List[Dict]) -> Any:
         try:
             start = datetime.fromisoformat(timestamps[0].replace('Z', '+00:00'))
             end = datetime.fromisoformat(timestamps[-1].replace('Z', '+00:00'))
-            return str(end - start)
+            total_seconds = int((end - start).total_seconds())
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            seconds = total_seconds % 60
+            if hours > 0:
+                return f"{hours}h {minutes}m {seconds}s"
+            return f"{minutes}m {seconds}s"
         except (ValueError, AttributeError):
             pass
     return None

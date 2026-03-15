@@ -428,9 +428,15 @@ class ClaudeAdapter(ResourceAdapter):
                     return item.get('text', '').strip()
         return ''
 
+    _BOILERPLATE_PREFIXES = ('# Session Continuation Context', '# TIA System Instructions')
+
     @staticmethod
     def _parse_jsonl_line_for_title(line: str) -> Optional[str]:
-        """Parse one JSONL line and return user text as a title candidate, or None."""
+        """Parse one JSONL line and return user text as a title candidate, or None.
+
+        Returns None to signal "skip this line, keep scanning" for boilerplate messages.
+        Returns False to signal "stop scanning" (not currently used, but reserved).
+        """
         import json as _json
         try:
             rec = _json.loads(line)
@@ -440,14 +446,27 @@ class ClaudeAdapter(ResourceAdapter):
             return None
         content = rec.get('message', {}).get('content', '')
         text = ClaudeAdapter._extract_text_from_content(content)
-        return (text.split('\n')[0].strip()[:80] or None) if text else None
+        if not text:
+            return None
+        candidate = text.split('\n')[0].strip()
+        # Skip auto-injected boilerplate preambles; try to extract real user text after ---
+        if any(candidate.startswith(p) for p in ClaudeAdapter._BOILERPLATE_PREFIXES):
+            sep_idx = text.rfind('\n---\n')
+            if sep_idx >= 0:
+                candidate = text[sep_idx + 5:].strip().split('\n')[0].strip()
+            else:
+                return None
+        # Skip bare boot commands — the real task will be in a later message
+        if candidate.lower() in ('boot.', 'boot'):
+            return None
+        return candidate[:80] or None
 
     @staticmethod
     def _scan_jsonl_for_title(jsonl_path: Path) -> Optional[str]:
-        """Scan first 30 lines of JSONL file for a user text title."""
+        """Scan first 50 lines of JSONL file for a user text title."""
         with open(jsonl_path, 'r', errors='replace') as fh:
             for i, line in enumerate(fh):
-                if i > 30:
+                if i > 50:
                     break
                 title = ClaudeAdapter._parse_jsonl_line_for_title(line)
                 if title is not None:
