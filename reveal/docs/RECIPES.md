@@ -18,6 +18,14 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
 - [Refactoring & Quality](#refactoring-quality)
   - [Trace call relationships](#trace-call-relationships)
 - [Documentation Maintenance](#documentation-maintenance)
+  - [Search doc body text](#search-doc-body-text)
+  - [Count values across a field](#count-values-across-a-field)
+  - [Build a link graph](#build-a-link-graph)
+- [Session Analysis](#session-analysis)
+  - [Browse sessions](#browse-sessions)
+  - [Search across sessions](#search-across-sessions)
+  - [Track file history across sessions](#track-file-history-across-sessions)
+  - [Inspect a session](#inspect-a-session)
 - [JSON Navigation](#json-navigation)
 - [Database Operations](#database-operations)
   - [SSL certificate inspection](#ssl-certificate-inspection)
@@ -391,6 +399,49 @@ reveal 'markdown://?tags=python'
 reveal 'markdown://?!topics'
 ```
 
+### Search doc body text
+
+```bash
+# Find docs containing a keyword in the body (not just frontmatter)
+reveal 'markdown://docs/?body-contains=deployment'
+
+# AND logic: both terms must appear
+reveal 'markdown://docs/?body-contains=authentication&body-contains=oauth'
+
+# Combine with frontmatter filter: docs about auth that mention oauth
+reveal 'markdown://docs/?topics=authentication&body-contains=oauth'
+```
+
+### Count values across a field
+
+```bash
+# See frequency of each value for a frontmatter field
+reveal 'markdown://docs/?aggregate=type'
+
+# Count by topic tag (list fields are expanded per item)
+reveal 'markdown://docs/?aggregate=beth_topics'
+
+# Count by status
+reveal 'markdown://docs/?aggregate=status'
+```
+
+**Output:** Sorted frequency table. Great for understanding your doc taxonomy.
+
+### Build a link graph
+
+```bash
+# Which docs link to which? (forward edges + backlinks)
+reveal 'markdown://docs/?link-graph'
+
+# Grep-friendly tab-separated edges for scripting
+reveal 'markdown://docs/?link-graph' --format=grep
+
+# Pipe to see which docs have the most backlinks
+reveal 'markdown://docs/?link-graph' --format=grep | cut -f2 | sort | uniq -c | sort -rn
+```
+
+**Output:** Per-file: links-to list, linked-by count. Plus isolated files (no links in or out — orphaned docs).
+
 ### Validate links
 
 ```bash
@@ -703,6 +754,85 @@ reveal @domains.txt --check --expiring-within=14
 
 ---
 
+## Session Analysis
+
+The `claude://` adapter reads Claude Code session files (`.jsonl` in `~/.claude/projects/`).
+
+### Browse sessions
+
+```bash
+# List all sessions (newest first)
+reveal claude://
+
+# Filter by project
+reveal 'claude://?filter=reveal'
+
+# Sessions from today only
+reveal 'claude://?since=today'
+```
+
+### Search across sessions
+
+```bash
+# Find all sessions that mention a keyword
+reveal 'claude://?search=topstep'
+
+# Scope to recent sessions (recommended for large histories)
+reveal 'claude://?search=authentication&since=today'
+reveal 'claude://?search=deployment&since=2026-03-01'
+
+# Path-style alias (same result)
+reveal 'claude://search/topstep'
+```
+
+**Why:** With 2,000+ sessions, scanning manually doesn't scale. `?search=` pre-filters with parallel byte-scan (~0.7s for 2,700 files).
+
+### Track file history across sessions
+
+```bash
+# Which sessions touched this file?
+reveal 'claude://files/src/auth.py'
+
+# Partial paths work (matches absolute paths)
+reveal 'claude://files/auth.py'
+
+# Scope to recent sessions
+reveal 'claude://files/operations.py?since=today'
+```
+
+**What you get:** Session name, project, date, and Read/Edit/Write counts per session. Answers "what sessions changed this?" at the AI-interaction level — `git log` doesn't capture this.
+
+### Inspect a session
+
+```bash
+# Overview (badge, files touched, tools used)
+reveal claude://my-session-name
+
+# Timeline (message sequence)
+reveal 'claude://my-session-name?timeline'
+
+# Files touched (Read/Write/Edit breakdown)
+reveal 'claude://my-session-name?files'
+
+# Errors encountered
+reveal 'claude://my-session-name?errors'
+
+# Workflow (tool call sequence, collapsed duplicates)
+reveal 'claude://my-session-name?workflow'
+```
+
+### Session tail / recovery
+
+```bash
+# Last assistant message (fast session recovery)
+reveal 'claude://my-session-name?last'
+
+# Last 5 turns
+reveal 'claude://my-session-name?tail=5'
+```
+
+---
+
 ## Pipeline Integration
 
 ### Unix pipelines
@@ -951,6 +1081,10 @@ reveal 'imports://src?circular'          # Find circular imports
 reveal stats://./src --hotspots          # Find technical debt
 reveal 'calls://src/?target=fn'          # Who calls fn? (cross-file reverse)
 reveal 'calls://src/?callees=fn'         # What does fn call? (cross-file forward)
+reveal 'claude://?search=term'           # Search session history for keyword
+reveal 'claude://files/path/to/file.py'  # Sessions that touched this file
+reveal 'markdown://docs/?link-graph'     # Cross-file doc link graph
+reveal 'markdown://docs/?aggregate=type' # Frontmatter field frequency table
 ```
 
 ### Inspection commands
