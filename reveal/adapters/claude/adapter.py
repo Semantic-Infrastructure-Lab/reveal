@@ -382,6 +382,10 @@ class ClaudeAdapter(ResourceAdapter):
                 self.query_params['search'] = path_term
             return self._search_sessions()
 
+        # claude://files/<path> — cross-session file tracking.
+        if self.resource == 'files' or self.resource.startswith('files/'):
+            return self._track_file_sessions()
+
         messages = self._load_messages()
         contract_base = self._get_contract_base()
         conversation_path_str = str(self.conversation_path) if self.conversation_path else ''
@@ -673,6 +677,108 @@ class ClaudeAdapter(ResourceAdapter):
             'sessions_scanned': len(all_sessions),
             'match_count': len(matches),
             'matches': matches,
+        }
+
+    def _track_file_sessions(self) -> Dict[str, Any]:
+        """Cross-session file tracking using ``claude://files/<path>``.
+
+        Finds all sessions that touched a given file path using parallel
+        byte-level pre-filtering, then extracts per-session operations
+        (Read/Write/Edit counts).  Partial path matching is used so both
+        absolute and relative path fragments work.
+
+        Supports ``?since=DATE`` to scope the corpus before scanning.
+
+        Returns:
+            Dict of type ``claude_file_sessions`` with ``sessions`` list.
+        """
+        from ...utils.parallel import grep_files as _grep_files
+
+        file_path = self.resource[len('files/'):].strip('/')
+        since = self.query_params.get('since', '')
+
+        if since == 'today':
+            from datetime import date as _date
+            since = _date.today().isoformat()
+
+        _error_base: Dict[str, Any] = {
+            'contract_version': '1.0',
+            'type': 'claude_file_sessions',
+            'source': str(self.CONVERSATION_BASE),
+            'source_type': 'directory',
+            'file_path': file_path,
+            'since': since or None,
+            'sessions_scanned': 0,
+            'match_count': 0,
+            'sessions': [],
+        }
+
+        if not file_path:
+            return {**_error_base, 'error': 'No file path provided. Usage: claude://files/path/to/file.py'}
+
+        all_sessions: List[Dict[str, Any]] = []
+        try:
+            for project_dir in self.CONVERSATION_BASE.iterdir():
+                if project_dir.is_dir():
+                    all_sessions.extend(self._collect_sessions_from_dir(project_dir))
+        except Exception as e:
+            return {**_error_base, 'error': str(e)}
+
+        if since:
+            all_sessions = [s for s in all_sessions if s.get('modified', '') >= since]
+
+        # Parallel byte-scan pre-filter.
+        matched_paths = _grep_files([Path(s['path']) for s in all_sessions], [file_path])
+        matched_path_strs = {str(p) for p in matched_paths}
+        candidates = [s for s in all_sessions if s['path'] in matched_path_strs]
+
+        results = []
+        for session in candidates:
+            try:
+                messages: List[Dict] = []
+                with open(session['path'], 'r', encoding='utf-8') as fh:
+                    for line in fh:
+                        try:
+                            messages.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+                contract_base = {
+                    'contract_version': '1.0',
+                    'source': session['path'],
+                    'source_type': 'file',
+                }
+                files_result = get_files_touched(messages, session['session'], contract_base)
+
+                # Partial path match across all ops.
+                ops_for_file: Dict[str, int] = {}
+                for op, files_dict in files_result.get('by_operation', {}).items():
+                    count = sum(v for k, v in files_dict.items() if file_path in k)
+                    if count:
+                        ops_for_file[op] = count
+
+                if ops_for_file:
+                    results.append({
+                        'session': session['session'],
+                        'project': session.get('project', ''),
+                        'modified': session['modified'],
+                        'ops': ops_for_file,
+                        'total_ops': sum(ops_for_file.values()),
+                    })
+            except Exception:
+                continue
+
+        results.sort(key=lambda x: x['modified'], reverse=True)
+
+        return {
+            'contract_version': '1.0',
+            'type': 'claude_file_sessions',
+            'source': str(self.CONVERSATION_BASE),
+            'source_type': 'directory',
+            'file_path': file_path,
+            'since': since or None,
+            'sessions_scanned': len(all_sessions),
+            'match_count': len(results),
+            'sessions': results,
         }
 
     # Wrapper methods for backward compatibility with tests

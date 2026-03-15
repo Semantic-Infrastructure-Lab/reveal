@@ -595,6 +595,41 @@ class ClaudeRenderer(TypeDispatchRenderer):
             print()
 
     @staticmethod
+    def _render_claude_file_sessions(result: dict) -> None:
+        """Render cross-session file tracking results."""
+        file_path = result.get('file_path', '')
+        scanned = result.get('sessions_scanned', 0)
+        count = result.get('match_count', 0)
+        since = result.get('since')
+        error = result.get('error')
+
+        since_str = f'  since {since}' if since else ''
+        print(f'File history: {file_path}{since_str}')
+        print(f'Scanned {scanned} sessions  |  Found {count} sessions touching this file')
+
+        if error:
+            print(f'Error: {error}')
+            return
+        if count == 0:
+            return
+
+        print()
+        for entry in result.get('sessions', []):
+            session = entry.get('session', '?')
+            modified = (entry.get('modified') or '')[:16].replace('T', ' ')
+            project = entry.get('project', '')
+            ops = entry.get('ops', {})
+
+            project_tag = f'  [{project}]' if project else ''
+            op_parts = []
+            for op in ('Read', 'Edit', 'Write'):
+                n = ops.get(op, 0)
+                if n:
+                    op_parts.append(f'{op} ×{n}')
+            ops_str = '  ' + '  '.join(op_parts) if op_parts else ''
+            print(f'{session}{project_tag}  {modified}{ops_str}')
+
+    @staticmethod
     def _render_claude_search_results(result: dict) -> None:
         """Render search results with excerpts."""
         session = result.get('session', 'unknown')
