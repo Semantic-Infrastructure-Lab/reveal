@@ -12,6 +12,23 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - (session awakened-pegasus-0315)
+
+### Fixed
+- **BUG: `git://` `?type=blame&element=` crash** — lambda in `get_structure` passed 1 arg but `_apply_element_blame_filter` called it with 3. Fixed lambda arity; semantic blame now works correctly.
+- **BUG: `ast://` multi-file colon syntax silently returns 0 results** — `ast://file1.py:file2.py` now raises a clear `ValueError` with the two separate commands to run. Detection by extension pattern, not just path existence.
+- **`imports://` `?violations` misleading "0 violations"** — when `.reveal.yaml` config is missing, output now shows `Layer Violations: NOT CONFIGURED` with explanation instead of `Layer Violations: 0`.
+- **`diff://` absolute path `::` separator** — `::` now accepted as explicit separator for absolute paths. Malformed right side emits actionable error with suggested fix.
+- **`ast://` auto-cap rendered wrong counts** — renderer printed `total_results` (pre-cap) while iterating `results` (post-cap). Now shows `N of M — add filters or use ?limit=N` when auto-capped; cap warning wired into text renderer (was JSON-only).
+- **`markdown://` type filter hint was invisible** — `hints[]` added to response but renderer never read it. Now printed after result list.
+- **`markdown://` low match rate hint** — when match rate < 5%, prints front matter explanation.
+- **File not found error missing cwd** — `_validate_path_exists` now prints `Running from <cwd>` and the resolved absolute path to try.
+
+### Changed
+- **`git://` help docs** — `~=` documented as substring regex with word-boundary tip. `?type=history` syntax noted as correct approach for file-scoped history.
+
+---
+
 ## [0.63.0] - 2026-03-15 (sessions casuyi-0314, mint-stone-0315, viral-warmonger-0315, wonipuhi-0315, awakened-anvil-0315, kumewu-0315)
 
 ### Added
