@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-15 (viral-warmonger-0315 — v0.64.0)
+> **Last updated**: 2026-03-15 (kumewu-0315 — v0.63.0)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -7,12 +7,18 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
-### v0.64.0
+### v0.63.0
+- ✅ **`calls://` `?rank=callers`** — coupling metrics via in-degree ranking; ranks functions by unique caller count. `?top=N`, `?builtins=true`.
+- ✅ **`ast://` builtin filtering** — `show=calls` + element-level `calls:` field now filter Python builtins by default (consistent with `calls://?callees=`). `?builtins=true` restores raw output.
 - ✅ **`reveal hotspots <path>`** — new subcommand: file-level hotspots (quality score, issues) + high-complexity functions in one view. `--top N`, `--min-complexity N`, `--functions-only`, `--files-only`, `--format json`. Exit 1 on critical findings for CI use.
 - ✅ **I006 rule** — detects imports inside function/method bodies that should be at module top. Python-only. Skips `__future__`, `TYPE_CHECKING` blocks, `# noqa`, and functions with `lazy`/`import` in their name (intentional lazy-load pattern).
 - ✅ **I005 bug fix** — `_normalize_import()` was checking `statement`/`source` keys but Python structure dicts use `content`; rule silently returned zero detections for all Python files. Fixed.
-- ✅ **`ssl/adapter.py` import hygiene** — hoisted 5 scattered lazy imports to module top: `NginxAnalyzer` (was 3×), `glob` (was 2× with different aliases), `load_certificate_from_file` (was 2×), `pathlib.Path` alias.
-- ✅ **5,904 tests** — up from 5,728 two sessions ago; scaffold 100%, analysis/tools 100%, adapter 94%
+- ✅ **`claude://` session recovery + search** (BACK-028/029/040) — `?tail=N`/`?last`/`message/-1` for fast re-entry; cross-session file tracking; cross-session content search.
+- ✅ **`claude://` overview improvements** (BACK-031/032) — richer session index, collapsed workflow run output.
+- ✅ **`markdown://` cross-file link graph** (BACK-039) — outbound link tracking across a doc collection.
+- ✅ **`markdown://` `?aggregate=<field>`** (BACK-033) — frontmatter frequency table for any field.
+- ✅ **Query parser unification** (BACK-024) — replaced 4 hand-rolled parse loops with `parse_query_params()`; net -45 lines.
+- ✅ **6,009 tests** — up from 4,949; new test_I005.py, test_I006.py, test_cli_hotspots.py; scaffold 100%, analysis/tools 100%, adapter 94%
 
 ### v0.62.0
 - ✅ **`calls://` adapter** — new URI scheme for project-level cross-file call graph analysis. `?target=fn` (reverse: who calls fn?), `?callees=fn` (forward: what does fn call?), `?depth=N` (transitive BFS up to 5 levels), `?format=dot` (Graphviz output). Cross-file resolution: `resolved_calls` field links each outgoing call to its definition file. Builds inverted callers index cached by mtime fingerprint.

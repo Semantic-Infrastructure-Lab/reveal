@@ -12,14 +12,39 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] (session casuyi-0314)
+## [0.63.0] - 2026-03-15 (sessions casuyi-0314, mint-stone-0315, viral-warmonger-0315, wonipuhi-0315, awakened-anvil-0315, kumewu-0315)
 
-### Added (session casuyi-0314)
+### Added
 - **`calls://` `?rank=callers`** — coupling metrics via in-degree ranking. `calls://src/?rank=callers&top=10` ranks all callable symbols by how many unique callers reference them. Zero new infrastructure — uses the already-built callers index. `?top=N` controls result count (default 10, max 100). `?builtins=true` includes builtins in ranking. `rank_by_callers()` added to `calls/index.py`; `_render_ranking_text()` added to renderer; `### rank` section added to `CALLS_ADAPTER_GUIDE.md`. 13 new tests. (session casuyi-0314)
 - **`ast://` `?builtins=true/false`** — builtin filtering for call graph output. `ast://?show=calls` and element-level `calls:` field now filter Python builtins by default (consistent with `calls://?callees=X` introduced in chosen-flame-0314). Routes through same `PYTHON_BUILTINS` frozenset and `.split('.')[-1]` pattern from `calls/index.py`. `extract_builtins_param()` in `ast/queries.py` mirrors `extract_show_param()`. `?builtins=true` restores raw output. 12 new tests. (session casuyi-0314)
+- **`reveal hotspots <path>`** — new subcommand for file-level quality hotspots + high-complexity functions. `--top N`, `--min-complexity N`, `--functions-only`, `--files-only`, `--format json`. Exit 1 on critical findings (quality < 70 or complexity > 20) for CI use. (session viral-warmonger-0315)
+- **I006 rule** — detects imports inside function/method bodies (Python-only). Uses function `line`/`line_end` ranges to classify inline imports. Exceptions: `__future__`, `TYPE_CHECKING` blocks, `# noqa: I006`, and functions with `lazy`/`import` in their name (intentional lazy-load pattern). (session viral-warmonger-0315)
+- **`claude://` cross-session file tracking** (BACK-040) — track which files appeared in prior sessions; `?files` view. (session mint-stone-0315)
+- **`claude://` cross-session content search** (BACK-029) — `grep_files` utility; search across session transcripts. (session mint-stone-0315)
+- **`claude://` session recovery** (BACK-028) — `?tail=N`, `?last`, `message/-1` for fast session re-entry. (session mint-stone-0315)
+- **`claude://` richer session overview + workflow run collapse** (BACK-031/032) — grouped session index, collapsed tool output in list view. (session mint-stone-0315)
+- **`markdown://` cross-file link graph** (BACK-039) — tracks outbound links across a doc collection; `?links` view. (session mint-stone-0315)
+- **`markdown://` `?aggregate=<field>`** (BACK-033) — frontmatter frequency table for any field (e.g. `?aggregate=type`). (session mint-stone-0315)
 
-### Refactored (session casuyi-0314)
-- **Query parser unification** (BACK-024) — replaced 4 hand-rolled `split('&') + split('=', 1)` loops with `parse_query_params()` from `utils/query.py`: `calls/adapter.py` (removed private `_parse_calls_query`), `git/adapter.py` (2 locations), `imports.py`, `cpanel/adapter.py`. `calls` adapter now uses `coerce=True` so `depth` and `builtins` arrive as native `int`/`bool`. Net -45 lines. (session casuyi-0314)
+### Fixed
+- **I005 silent bug** — `_normalize_import()` checked `statement`/`source` keys but Python structure dicts use `content`; rule returned zero detections for all Python files. Fixed priority to `content` → `statement` → `source`. (session viral-warmonger-0315)
+- **I006 `# noqa` detection** — now reads raw source lines (analyzers strip trailing comments from their parsed `content` field), so `# noqa: I006` suppressions are correctly honoured. (session kumewu-0315)
+- **`json://` `?flatten` type mismatch** (BACK-038) — fixed coercion error; added `?flatten&data-only` flag. (session mint-stone-0315)
+- **`claude://` title extraction, analytics renderer, duration format** (BACK-027/030/034). (session mint-stone-0315)
+- **`ast://` builtin filtering consistent with `calls://`** — `show=calls` and element-level `calls:` field now filter builtins by default, matching the `calls://?callees=X` behaviour introduced in v0.62.0. (session casuyi-0314)
+
+### Refactored
+- **Query parser unification** (BACK-024) — replaced 4 hand-rolled `split('&') + split('=', 1)` loops with `parse_query_params()` from `utils/query.py`: `calls/adapter.py`, `git/adapter.py` (2 locations), `imports.py`, `cpanel/adapter.py`. `calls` adapter now uses `coerce=True` so `depth` and `builtins` arrive as native `int`/`bool`. Net -45 lines. (session casuyi-0314)
+- **`file_handler.py` import hygiene** — hoisted 5 inline imports to module top; circular-avoidance imports annotated with `# noqa: I006`. (session kumewu-0315)
+
+### Documentation
+- **Nginx guides merged** — `NGINX_ADAPTER_GUIDE.md` + `NGINX_ANALYZER_GUIDE.md` → `NGINX_GUIDE.md`. (session awakened-anvil-0315)
+- **Subcommand stubs merged** — `DEV_GUIDE.md`, `REVIEW_GUIDE.md`, `PACK_GUIDE.md`, `HEALTH_GUIDE.md` → `SUBCOMMANDS_GUIDE.md`. `help://dev`, `//review`, `//health`, `//pack` all route to new file. (session awakened-anvil-0315)
+- **`UNIFIED_OPERATOR_REFERENCE.md` retired** — 670-line dev log with broken `See Also` links; content fully covered by `QUERY_SYNTAX_GUIDE.md`. (session awakened-anvil-0315)
+- **Hotspot command references updated** — 10× `reveal stats://./src --hotspots` → `reveal hotspots ./src` across `CODEBASE_REVIEW.md`, `STATS_ADAPTER_GUIDE.md`, `RECIPES.md`. (session awakened-anvil-0315)
+
+### Stats
+- 4,949 → 6,009 tests (+1,060); includes new `test_I005.py`, `test_I006.py`, `test_cli_hotspots.py`
 
 ---
 
@@ -2536,19 +2561,3 @@ This release completes the link validation feature with anchor support, fixes do
 - **PyPI**: https://pypi.org/project/reveal-cli/
 - **Issues**: https://github.com/Semantic-Infrastructure-Lab/reveal/issues
 
-## [Unreleased] — v0.64.0
-
-### Added
-- `reveal hotspots <path>` subcommand — file-level quality hotspots + high-complexity functions. `--top N`, `--min-complexity N`, `--functions-only`, `--files-only`, `--format json`. Exit 1 on critical findings (quality < 70 or complexity > 20).
-- **I006 rule** — detects imports inside function/method bodies (Python-only). Uses function `line`/`line_end` ranges to classify. Exceptions: `__future__`, `TYPE_CHECKING`, `# noqa`, functions named with `lazy`/`import`.
-
-### Fixed
-- **I005 silent bug** — `_normalize_import()` checked `statement`/`source` keys but Python structure dicts use `content`; rule returned zero detections for all Python files. Fixed.
-- `ssl/adapter.py` — hoisted 5 scattered lazy imports to module top: `NginxAnalyzer` (was 3×), `glob` (was 2× with different aliases), `load_certificate_from_file` (was 2×), `pathlib.Path` inline alias.
-- `calls/index.py` — removed unused `Optional` import (I001 catch).
-- `markdown/operations.py` — hoisted inline `Counter` import out of function body.
-- Test patch target updated after `load_certificate_from_file` moved to module top in ssl adapter.
-
-### Stats
-- 5,903 tests passing (up from 5,728 two sessions ago)
-- Session: viral-warmonger-0315
