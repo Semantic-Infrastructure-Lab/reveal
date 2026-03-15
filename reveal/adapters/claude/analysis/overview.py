@@ -130,6 +130,47 @@ def _calculate_session_duration(messages: List[Dict]) -> Any:
     return None
 
 
+def _collect_files_touched(messages: List[Dict]) -> List[str]:
+    """Collect distinct file paths from Edit/Write/Read tool calls, in order of first appearance."""
+    seen: Dict[str, int] = {}
+    file_tools = {'Edit', 'Write', 'Read'}
+    for msg in messages:
+        if msg.get('type') != 'assistant':
+            continue
+        for block in msg.get('message', {}).get('content', []):
+            if block.get('type') == 'tool_use' and block.get('name') in file_tools:
+                path = block.get('input', {}).get('file_path', '')
+                if path and path not in seen:
+                    seen[path] = len(seen)
+    return sorted(seen.keys(), key=lambda p: seen[p])
+
+
+def _get_last_assistant_snippet(messages: List[Dict]) -> Optional[str]:
+    """Return the last 100 chars of the last assistant text block."""
+    for msg in reversed(messages):
+        if msg.get('type') != 'assistant':
+            continue
+        for block in reversed(msg.get('message', {}).get('content', [])):
+            if block.get('type') == 'text':
+                text = block.get('text', '').strip()
+                if text:
+                    snippet = text[:100]
+                    if len(text) > 100:
+                        snippet += '…'
+                    return snippet
+    return None
+
+
+def _check_readme_present(conversation_path: str) -> bool:
+    """Check if README*.md exists in the session directory (parent of conversation file)."""
+    try:
+        from pathlib import Path as _Path
+        session_dir = _Path(conversation_path).parent
+        return any(session_dir.glob('README*.md'))
+    except Exception:
+        return False
+
+
 def _process_content_list(
     content_list: List[Dict], tools_used: Dict, file_operations: Dict
 ) -> int:
@@ -200,6 +241,10 @@ def get_overview(messages: List[Dict], session_name: str, conversation_path: str
     duration = _calculate_session_duration(messages)
     title = _extract_session_title(messages)
 
+    files_touched = _collect_files_touched(messages)
+    last_snippet = _get_last_assistant_snippet(messages)
+    readme_present = _check_readme_present(conversation_path)
+
     base.update({
         'session': session_name,
         'title': title,
@@ -211,6 +256,10 @@ def get_overview(messages: List[Dict], session_name: str, conversation_path: str
         'thinking_chars_approx': stats['thinking_chars'],
         'thinking_tokens_approx': stats['thinking_chars'] // 4,  # Rough estimate
         'duration': duration,
+        'files_touched': files_touched,
+        'files_touched_count': len(files_touched),
+        'readme_present': readme_present,
+        'last_assistant_snippet': last_snippet,
         'conversation_file': conversation_path
     })
 

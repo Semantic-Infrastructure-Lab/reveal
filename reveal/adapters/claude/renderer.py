@@ -54,13 +54,38 @@ class ClaudeRenderer(TypeDispatchRenderer):
         print(f"User: {result.get('user_messages', 0)} | Assistant: {result.get('assistant_messages', 0)}")
         if 'duration' in result:
             print(f"Duration: {result['duration']}")
+
+        # README presence indicator
+        readme_present = result.get('readme_present')
+        if readme_present is not None:
+            marker = '✓' if readme_present else '✗'
+            label = 'present' if readme_present else 'absent'
+            print(f"README: {marker} {label}")
+
         print()
+
+        # Files touched
+        files_touched = result.get('files_touched', [])
+        file_count = result.get('files_touched_count', len(files_touched))
+        if file_count > 0:
+            top3 = files_touched[:3]
+            top3_str = ', '.join(top3)
+            if file_count > 3:
+                top3_str += f', +{file_count - 3} more'
+            print(f"Files: {file_count} ({top3_str})")
+            print()
 
         tools = result.get('tools_used', {})
         if tools:
             print("Tools Used:")
             for tool, count in sorted(tools.items(), key=lambda x: -x[1]):
                 print(f"  {tool}: {count}")
+            print()
+
+        # Last assistant snippet
+        snippet = result.get('last_assistant_snippet')
+        if snippet:
+            print(f"Last: {snippet}")
             print()
 
         print(f"Conversation: {result.get('conversation_file', 'unknown')}")
@@ -255,12 +280,16 @@ class ClaudeRenderer(TypeDispatchRenderer):
         else:
             truncate_at = 80
 
+        collapsed_steps = result.get('collapsed_steps')
+
         print(f"Workflow: {session}")
         total_line = f"Total Steps: {total}"
         if filtered_from is not None:
             total_line += f" (filtered from {filtered_from})"
         elif displayed is not None and displayed < total:
             total_line += f" (showing {displayed})"
+        if collapsed_steps is not None and collapsed_steps < total:
+            total_line += f" → {collapsed_steps} after collapsing runs"
         print(total_line)
         print()
 
@@ -269,11 +298,18 @@ class ClaudeRenderer(TypeDispatchRenderer):
             step_num = step.get('step', 0)
             tool = step.get('tool', 'unknown')
             detail = step.get('detail', '') or ''
+            run_count = step.get('run_count', 1)
+            thinking_hint = step.get('thinking_hint')
 
             if truncate_at is not None and len(detail) > truncate_at:
                 detail = detail[:truncate_at - 3] + '...'
 
+            if run_count > 1:
+                detail = f"{detail} (×{run_count})"
+
             print(f"[{step_num:3}] {tool:12} {detail}")
+            if thinking_hint:
+                print(f"           → {thinking_hint}")
 
     @staticmethod
     def _render_claude_context(result: dict) -> None:

@@ -370,6 +370,57 @@ def _extract_tool_detail(tool_name: str, tool_input: Dict[str, Any]) -> Optional
     return None
 
 
+def _collapse_workflow_runs(
+    workflow: List[Dict[str, Any]], messages: List[Dict]
+) -> List[Dict[str, Any]]:
+    """Collapse consecutive identical tool+detail steps into single entries with run_count.
+
+    When N consecutive steps share the same tool and detail, they are merged
+    into one entry with ``run_count=N``.  A ``thinking_hint`` is added when
+    a thinking block precedes the run in the same assistant message.
+    """
+    if not workflow:
+        return workflow
+
+    collapsed: List[Dict[str, Any]] = []
+    i = 0
+    while i < len(workflow):
+        step = workflow[i]
+        tool = step.get('tool')
+        detail = step.get('detail')
+
+        j = i + 1
+        while (j < len(workflow)
+               and workflow[j].get('tool') == tool
+               and workflow[j].get('detail') == detail):
+            j += 1
+        run_count = j - i
+
+        entry = dict(step)
+        if run_count > 1:
+            entry['run_count'] = run_count
+            # Look for a thinking block in the same assistant message as the run start
+            msg_idx = step.get('message_index')
+            if msg_idx is not None and msg_idx < len(messages):
+                for block in messages[msg_idx].get('message', {}).get('content', []):
+                    if block.get('type') == 'thinking':
+                        raw = block.get('thinking', '').strip()
+                        if raw:
+                            first_line = raw.split('\n')[0].strip()
+                            if first_line:
+                                entry['thinking_hint'] = first_line[:60]
+                        break
+
+        collapsed.append(entry)
+        i = j
+
+    # Renumber steps
+    for idx, s in enumerate(collapsed, 1):
+        s['step'] = idx
+
+    return collapsed
+
+
 def get_workflow(messages: List[Dict], session_name: str,
                  contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Get chronological sequence of tool operations.
@@ -398,9 +449,13 @@ def get_workflow(messages: List[Dict], session_name: str,
             'timestamp': msg.get('timestamp')
         })
 
+    total_steps = len(workflow)
+    workflow = _collapse_workflow_runs(workflow, messages)
+
     base.update({
         'session': session_name,
-        'total_steps': len(workflow),
+        'total_steps': total_steps,
+        'collapsed_steps': len(workflow),
         'workflow': workflow
     })
 
