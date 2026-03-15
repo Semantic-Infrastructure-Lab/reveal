@@ -55,6 +55,10 @@ def parse_diff_uris(resource: str) -> Tuple[str, str]:
 
     if scheme_count == 0:
         # Simple case: "file1:file2" or Windows paths "C:\file1:D:\file2"
+        # Support '::' as explicit separator for absolute paths (e.g. /abs/file1::/abs/file2)
+        if '::' in resource:
+            left, right = resource.split('::', 1)
+            return left, right
         sep_idx = _find_separator_colon(resource)
         if sep_idx == -1:
             raise ValueError(
@@ -64,6 +68,18 @@ def parse_diff_uris(resource: str) -> Tuple[str, str]:
             )
         left = resource[:sep_idx]
         right = resource[sep_idx+1:]
+        # Detect absolute path on right side with no leading slash — user likely needs ::
+        # or the left is absolute. Emit a helpful hint.
+        if left.startswith('/') or right.startswith('/'):
+            # Absolute paths — verify the split looks correct (right should start with /)
+            if not right.startswith('/'):
+                raise ValueError(
+                    f"diff:// path parsing error with absolute paths.\n"
+                    f"  Got left={left!r}, right={right!r}\n"
+                    f"  For absolute paths, use '::' as separator:\n"
+                    f"    reveal 'diff://{left}::{right}'\n"
+                    f"  Or use relative paths from your project root."
+                )
         return left, right
 
     elif scheme_count == 1:

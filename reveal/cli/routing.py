@@ -9,6 +9,7 @@ All URI adapters now use the renderer-based system (Phase 4 complete).
 """
 
 import logging
+import os
 import re
 import sys
 from pathlib import Path
@@ -463,12 +464,14 @@ def _parse_file_line_syntax(path_str: str) -> tuple[Path, Optional[str]]:
 def _validate_path_exists(path: Path, path_str: str) -> None:
     """Validate that path exists, providing helpful error messages."""
     if not path.exists():
+        cwd = os.getcwd()
         if ':' in path_str and re.search(r':\d+', path_str):
             base_path = path_str.rsplit(':', 1)[0]
             print(f"Error: {path_str} not found", file=sys.stderr)
             print(f"Hint: If extracting lines, use: reveal {base_path} :{path_str.rsplit(':', 1)[1]}", file=sys.stderr)
         else:
             print(f"Error: {path_str} not found", file=sys.stderr)
+            print(f"Hint: Running from {cwd} — try an absolute path or cd to your project root.", file=sys.stderr)
         sys.exit(1)
 
 

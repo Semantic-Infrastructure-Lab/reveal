@@ -76,6 +76,9 @@ def get_structure(
     displayed = len(controlled_results)
     results.add_truncation_warning(response, displayed, total_matches)
 
+    # Add hint when filter matches very few files (likely front matter mismatch)
+    results.add_low_match_rate_hint(response, len(all_files), total_matches, filters)
+
     return response
 
 

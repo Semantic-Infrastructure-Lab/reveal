@@ -163,3 +163,43 @@ def add_truncation_warning(
         }]
         response['displayed_results'] = displayed
         response['total_matches'] = total_matches
+
+
+def add_low_match_rate_hint(
+    response: Dict[str, Any],
+    total_files: int,
+    total_matches: int,
+    filters: List[tuple]
+) -> None:
+    """Add a hint when the match rate is very low, suggesting the filter requires front matter.
+
+    Args:
+        response: Response dict to modify
+        total_files: Total number of files scanned
+        total_matches: Number of files that matched
+        filters: List of (field, operator, value) filter tuples
+
+    Modifies response in place.
+    """
+    if total_files < 5 or total_matches == 0 or not filters:
+        return
+    match_rate = total_matches / total_files
+    if match_rate < 0.05:
+        # Find type= filter if present
+        type_filters = [v for f, o, v in filters if f == 'type']
+        if type_filters:
+            hint = (
+                f"Only {total_matches} of {total_files} files matched. "
+                f"The 'type' filter matches only files with 'type: {type_filters[0]}' in YAML front matter. "
+                f"Files without front matter are excluded. "
+                f"See: reveal help://markdown"
+            )
+        else:
+            hint = (
+                f"Only {total_matches} of {total_files} files matched. "
+                f"Filters apply to YAML front matter fields — files without front matter are excluded. "
+                f"See: reveal help://markdown"
+            )
+        if 'hints' not in response:
+            response['hints'] = []
+        response['hints'].append({'type': 'low_match_rate', 'message': hint})

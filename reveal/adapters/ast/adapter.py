@@ -68,6 +68,21 @@ class AstAdapter(ResourceAdapter):
         # Expand ~ to home directory
         self.path = os.path.expanduser(path)
 
+        # Detect multi-file colon syntax (e.g. file1.py:file2.py) which is unsupported.
+        # Colons in valid paths: Windows drive letters (C:\), or schemes (://). On Linux/Mac
+        # a colon in a plain path means the user likely copied diff:// syntax by mistake.
+        if ':' in self.path and '://' not in self.path and not os.path.exists(self.path):
+            # Could be "file1.py:file2.py" — check if splitting on colon yields existing files
+            parts = self.path.split(':', 1)
+            if os.path.exists(parts[0]):
+                raise ValueError(
+                    f"ast:// does not support multi-file colon syntax: {path!r}\n"
+                    "  Each ast:// query targets one file or directory.\n"
+                    "  Run separate queries:\n"
+                    f"    reveal 'ast://{parts[0]}?<filter>'\n"
+                    f"    reveal 'ast://{parts[1]}?<filter>'"
+                )
+
         # Extract result control parameters (sort, limit, offset)
         if query_string:
             cleaned_query, self.result_control = parse_result_control(query_string)
@@ -113,6 +128,15 @@ class AstAdapter(ResourceAdapter):
         # Apply result control (sort, limit, offset)
         controlled = apply_result_control(filtered, self.result_control)
 
+        # Auto-cap large unfiltered result sets to prevent accidental token floods.
+        # Applies only when no explicit limit was set by the user.
+        DEFAULT_RESULT_CAP = 200
+        auto_capped = False
+        if not self.result_control.limit and len(controlled) > DEFAULT_RESULT_CAP:
+            auto_capped = True
+            auto_capped_total = len(controlled)
+            controlled = controlled[:DEFAULT_RESULT_CAP]
+
         # Create trust metadata (v1.1)
         # AST adapter uses tree-sitter for parsing
         meta = self.create_meta(
@@ -122,15 +146,26 @@ class AstAdapter(ResourceAdapter):
             errors=[]
         )
 
+        if not meta.get('warnings'):
+            meta['warnings'] = []
+
         # Add truncation metadata if results were limited
         if self.result_control.limit or self.result_control.offset:
-            if not meta.get('warnings'):
-                meta['warnings'] = []
             if len(filtered) > len(controlled):
                 meta['warnings'].append({
                     'type': 'truncated',
                     'message': f'Results truncated: showing {len(controlled)} of {len(filtered)} total matches'
                 })
+
+        # Warn when auto-cap kicked in
+        if auto_capped:
+            meta['warnings'].append({
+                'type': 'auto_capped',
+                'message': (
+                    f'Large result set capped at {DEFAULT_RESULT_CAP} of {auto_capped_total} matches. '
+                    f'Add filters to narrow results, or use ?limit=N to set an explicit cap.'
+                )
+            })
 
         # Filter builtins from calls lists unless ?builtins=true
         if not self.include_builtins:

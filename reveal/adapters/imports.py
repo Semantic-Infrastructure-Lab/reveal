@@ -224,12 +224,21 @@ class ImportsRenderer:
     def _render_layer_violations(result: dict, verbose: bool) -> None:
         """Render layer violation results."""
         count = result['count']
+        note = result.get('note', '')
+        not_configured = count == 0 and note and 'requires' in note.lower()
+
         print(f"\n{'='*60}")
-        print(f"Layer Violations: {count}")
+        if not_configured:
+            print(f"Layer Violations: NOT CONFIGURED")
+        else:
+            print(f"Layer Violations: {count}")
         print(f"{'='*60}\n")
 
-        if count == 0:
-            print(f"  ✅ {result.get('note', 'No violations found')}\n")
+        if not_configured:
+            print(f"  ℹ️  {note}\n")
+            print(f"  Add layer rules to .reveal.yaml to enable this check.\n")
+        elif count == 0:
+            print(f"  ✅ {note or 'No violations found'}\n")
         else:
             violations = result.get('violations', [])
             if verbose:

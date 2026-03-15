@@ -385,7 +385,7 @@ class GitAdapter(ResourceAdapter):
             elif query_type == 'blame':
                 return files.get_file_blame(
                     repo, self.ref, self.subpath, self.query, self.path,
-                    lambda en: files.get_element_line_range(en, self.path, self.subpath)
+                    lambda en, _path, _sub: files.get_element_line_range(en, self.path, self.subpath)
                 )
             else:
                 return files.get_file_at_ref(repo, self.ref, self.subpath)
@@ -509,6 +509,8 @@ class GitAdapter(ResourceAdapter):
                 'Use ?limit=N on history/element queries for more results',
                 'Commit filtering: Use =, ~=, >, <, >=, <=, != operators',
                 'Multiple filters use AND logic: ?author=John&message~=bug',
+                '~= uses substring regex match (e.g. ?message~=fix matches "fixes", "prefix-fix"). Use ?message~=\\bfix\\b for word-boundary match.',
+                'For file-scoped history, use: reveal \'git://path/to/file.py?type=history\' (not --log flag)',
             ],
             'see_also': [
                 'reveal help://diff - Compare two files or directories',
