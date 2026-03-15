@@ -1258,7 +1258,7 @@ class TestSSLFileMode(unittest.TestCase):
         adapter._cert_file_path = '/fake/cert.pem'
         adapter._fetcher = MagicMock()
 
-        with patch('reveal.adapters.ssl.certificate.load_certificate_from_file',
+        with patch('reveal.adapters.ssl.adapter.load_certificate_from_file',
                    return_value=(cert, [])) as mock_load:
             adapter._fetch_certificate()
             mock_load.assert_called_once_with('/fake/cert.pem')
