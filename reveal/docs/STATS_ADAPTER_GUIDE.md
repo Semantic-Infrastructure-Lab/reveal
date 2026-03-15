@@ -94,7 +94,13 @@ Statistics Summary: ./src
 
 ### Example 2: Identify Hotspots
 
-Find top 10 files needing attention:
+Find top 10 files needing attention. The recommended high-level command is the `hotspots` subcommand:
+
+```bash
+reveal hotspots ./src
+```
+
+Or via the stats adapter directly (equivalent, lower-level):
 
 ```bash
 reveal stats://./src?hotspots=true
@@ -617,7 +623,7 @@ Quality Hotspots (Top 10 worst files):
 ### Using Hotspots
 
 **Workflow**:
-1. **Identify** hotspots: `reveal stats://./src?hotspots=true`
+1. **Identify** hotspots: `reveal hotspots ./src`
 2. **Inspect** top file: `reveal stats://./src/core.py` (detailed stats)
 3. **Analyze** structure: `reveal ast://./src/core.py?functions` (see functions)
 4. **Review** code: `reveal ./src/core.py` (read implementation)

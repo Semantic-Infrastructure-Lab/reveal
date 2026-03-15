@@ -340,7 +340,7 @@ reveal check Dockerfile                # Docker best practices (S701)
 - **D** (duplicates) - Duplicate code detection (D001; D002 exists but is disabled by default — enable with `--select D002`)
 - **E** (errors) - Line length and formatting (E501)
 - **F** (frontmatter) - Markdown front matter validation (F001-F005)
-- **I** (imports) - Import analysis and dependencies (I001-I005)
+- **I** (imports) - Import analysis and dependencies (I001-I006)
 - **L** (links) - Link validation and documentation (L001-L005)
 - **M** (maintainability) - Code maintainability checks (M101-M105)
 - **N** (nginx) - Nginx configuration validation (N001-N007)
@@ -667,6 +667,11 @@ reveal 'ast://src/?show=calls'
 
 # Graphviz: pipe to dot for SVG
 reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
+
+# Coupling metrics: rank all functions by how many unique callers they have
+reveal 'calls://src/?rank=callers'             # Top 10 most-called functions
+reveal 'calls://src/?rank=callers&top=20'      # Top 20
+reveal 'calls://src/?rank=callers&builtins=true'  # Include Python builtins
 ```
 
 **Two adapters — different scopes:**
@@ -675,6 +680,7 @@ reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
 |---------|-------|---------|
 | `calls://src/?target=fn` | Cross-file, whole project | "Who calls fn anywhere?" (reverse) |
 | `calls://src/?callees=fn` | Cross-file, whole project | "What does fn call?" (forward, builtins hidden; add `&builtins=true` to include) |
+| `calls://src/?rank=callers` | Cross-file, whole project | "Which functions are called most?" (coupling metrics) |
 | `ast://src/?calls=fn` | Within-file only | "Does this file call fn?" |
 | `ast://src/?show=calls` | Within-file only | "Show me the call graph for this file" |
 
@@ -690,6 +696,28 @@ Fields:
 - `resolved_calls` — cross-file resolved entries (file + name, Python only)
 
 **See also:** `CALLS_ADAPTER_GUIDE.md` for full `calls://` documentation.
+
+---
+
+### Task: "Find complexity hotspots"
+
+**Pattern:**
+```bash
+# Subcommand form (preferred)
+reveal hotspots .                  # Worst 10 files + complex functions
+reveal hotspots ./src --top 20     # Top 20 files
+reveal hotspots . --functions-only # Only complex functions
+reveal hotspots . --files-only     # Only file-level hotspots
+reveal hotspots . --min-complexity 15  # Raise complexity threshold
+reveal hotspots . --format json    # JSON for CI/scripting
+
+# Legacy stats:// form (still works)
+reveal stats://. --hotspots
+```
+
+**Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores.
+
+**Use case:** Identify the 10 worst files in a codebase — start technical debt work here. Output is the same data `reveal review` uses to surface hotspots in PR reviews.
 
 ---
 
@@ -1839,24 +1867,24 @@ reveal docs/setup.md --links --link-type internal
 
 ### Issue: "Nothing happens when I use --hotspots"
 
-**Problem:** `--hotspots` flag only works with the `stats://` adapter.
+**Problem:** You're using the old `--hotspots` flag form instead of the `reveal hotspots` subcommand.
 
-**Wrong:**
+**Old (still works, but deprecated):**
 ```bash
-reveal . --hotspots              # Error: --hotspots only works with stats://
-reveal file.py --hotspots        # Error: --hotspots only works with stats://
-```
-
-**Correct:**
-```bash
-# URI parameter (preferred):
-reveal stats://.?hotspots=true
-
-# Flag (legacy - shows migration hint):
 reveal stats://. --hotspots
+reveal stats://.?hotspots=true
 ```
 
-**Why:** Adapter-specific features should use URI parameters, not global flags. This keeps the CLI consistent and prevents confusion about which flags work where.
+**Correct — use the subcommand:**
+```bash
+reveal hotspots .                  # Hotspots in current directory
+reveal hotspots ./src              # Hotspots in src/
+reveal hotspots . --top 20         # Show top 20 instead of default 10
+reveal hotspots . --functions-only # Only complex functions, skip file-level
+reveal hotspots . --format json    # JSON output for CI/scripting
+```
+
+**`reveal hotspots --help`** — full options including `--min-complexity`, `--files-only`.
 
 ---
 
@@ -2090,12 +2118,12 @@ reveal ssl://example.com --check || true   # always exits 0; output identical
 
 ### Bug Detection (B)
 
-**B001: Except block catches all exceptions**
+**B001: Bare except clause catches all exceptions**
 ```python
 # ❌ Bad
 try:
     risky_operation()
-except:  # Catches everything, even KeyboardInterrupt
+except:  # Catches everything, even KeyboardInterrupt and SystemExit
     pass
 
 # ✅ Good
@@ -2105,9 +2133,20 @@ except ValueError:
     pass
 ```
 
-**B002: __init__.py missing in package**
-- Detects directories with .py files but no __init__.py
-- Important for proper Python package structure
+**B002: @staticmethod should not have 'self' parameter**
+```python
+# ❌ Bad - 'self' is meaningless on a staticmethod
+class MyClass:
+    @staticmethod
+    def helper(self, value):
+        return value * 2
+
+# ✅ Good
+class MyClass:
+    @staticmethod
+    def helper(value):
+        return value * 2
+```
 
 **B003: @property with complex body**
 Properties should be simple getters. Threshold: 15 lines (configurable via `.reveal.yaml`).
@@ -2135,29 +2174,44 @@ def get_headers(self) -> dict:
     ...
 ```
 
-**B004: @property decorator on class method**
+**B004: @property has no return statement**
 ```python
-# ❌ Bad
+# ❌ Bad - property that never returns a value
 class MyClass:
-    @classmethod
-    @property  # Properties can't be class methods
-    def value(cls):
-        return cls._value
+    @property
+    def value(self):
+        self._compute()  # forgot to return!
 
 # ✅ Good
 class MyClass:
-    @classmethod
-    def get_value(cls):
-        return cls._value
+    @property
+    def value(self):
+        return self._value
 ```
 
-**B005: @staticmethod on __init__ or __new__**
+**B005: Import references non-existent or unresolvable module**
 ```python
-# ❌ Bad - Makes no sense
-class MyClass:
-    @staticmethod
-    def __init__(self):
-        pass
+# ❌ Bad
+from nonexistent_module import SomeClass  # B005 - module not found
+import typo_in_name                       # B005 - module not found
+
+# ✅ Good
+from actual_module import SomeClass
+```
+
+**B006: Broad exception handler with silent pass**
+```python
+# ❌ Bad - swallows all errors silently
+try:
+    process_data()
+except Exception:
+    pass  # B006 - bugs hide here
+
+# ✅ Good - at minimum, log it
+try:
+    process_data()
+except Exception as e:
+    logger.warning("process_data failed: %s", e)
 ```
 
 ---
@@ -2218,9 +2272,10 @@ def process():
 
 ### Error Handling (E)
 
-**E001: Syntax errors**
-- Python syntax errors detected by parser
-- File won't execute until fixed
+**E501: Line too long**
+- Line exceeds maximum length (default: 88 characters, configurable via `.reveal.yaml`)
+- Applies to all file types (`*`)
+- Use `reveal --explain E501` for the threshold and configuration options
 
 ---
 
@@ -2234,6 +2289,53 @@ def process():
 - Similar but not identical code
 - **Disabled by default** (high false positive rate) — enable explicitly with `--select D002`
 - Use D001 for reliable duplicate detection
+
+---
+
+### Imports (I)
+
+**I001: Unused import**
+- Import is never referenced in the file
+- Applies to Python, JS/TS, Rust, Go (multi-language)
+
+**I002: Circular dependency**
+- Module A imports B which imports A (directly or transitively)
+- Can cause `ImportError` or subtle initialization bugs
+
+**I003: Architectural layer violation**
+- Import crosses a forbidden layer boundary (e.g., data layer importing presentation)
+- Requires layer configuration in `.reveal.yaml`
+
+**I004: Local file shadows standard library module**
+```python
+# ❌ Bad - local json.py shadows stdlib json
+import json  # Which one? stdlib or local json.py?
+```
+
+**I005: Duplicate import statement**
+```python
+# ❌ Bad
+from module import Class  # first import
+from other import Thing
+from module import Class  # I005 - duplicate
+```
+- Detects duplicate top-level imports across languages
+
+**I006: Import inside function body** *(Python only)*
+```python
+# ❌ Bad - import belongs at module top
+def process():
+    import json  # I006
+    return json.dumps({})
+
+# OK - intentional lazy load (name contains 'lazy' or 'import')
+def _lazy_import_heavy():
+    from .heavy_module import Widget  # skipped
+    return Widget()
+```
+- Suppressed by `# noqa: I006` or `# noqa` on the import line
+- Suppressed when function name contains `lazy` or `import`
+- Suppressed for `TYPE_CHECKING` guards
 
 ---
 
@@ -2502,6 +2604,7 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Extract 2nd function | `reveal file.py function:2` |
 | Quality check | `reveal file.py --check` |
 | Security check only | `reveal file.py --check --select S` |
+| Find hotspots | `reveal hotspots .` |
 | Find by name | `reveal 'ast://./src?name=*pattern*'` |
 | Find complex code | `reveal 'ast://./src?complexity>10'` |
 | Find long functions | `reveal 'ast://./src?lines>50'` |
@@ -2558,7 +2661,7 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 
 ---
 
-**Last updated:** 2026-02-27
+**Last updated:** 2026-03-15
 **Source:** https://github.com/Semantic-Infrastructure-Lab/reveal
 **PyPI:** https://pypi.org/project/reveal-cli/
 
@@ -2638,6 +2741,8 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
+- **v0.62.0** - `calls://` complete: `?callees=`, `?rank=callers`, `?builtins=` filtering; I005 + I006 import rules; `reveal hotspots` subcommand; B006 false-positive fixes; cpanel `full-audit`, `?domain_type=`
+- **v0.61.0** - markdown cross-file link graph; claude:// cross-session file tracking + content search; json:// `?flatten` fix; domain:// task section; cpanel `--only-failures` for acl-check; I001 `__init__.py` re-export fix; B006 multi-attempt fallback fix; M102 dynamic dispatch fix
 - **v0.60.0** - `nginx://` URI adapter (21st adapter); nginx vhost inspection by domain name; nginx bug fixes (glob + nesting); N007 rule
 - **v0.59.0** - `--help` argument groups (12 named sections, no more flag wall); 20 adapters support `help://schemas/`; CLI flag taxonomy documented
 - **v0.58.0** - `autossl://` adapter (20th URI adapter); cPanel AutoSSL run log inspection

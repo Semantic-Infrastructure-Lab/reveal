@@ -77,7 +77,7 @@ Aggregate metrics: lines of code, function/class counts, average complexity, qua
 reveal stats://./src
 
 # Find top 10 problem files
-reveal stats://./src --hotspots
+reveal hotspots ./src
 
 # Track complexity over time (baseline)
 reveal stats://./src --format=json > baseline.json
@@ -402,7 +402,7 @@ reveal src/
 reveal stats://./src
 
 # Step 3: Find problem files (hotspots) (~2 min)
-reveal stats://./src --hotspots
+reveal hotspots ./src
 
 # Step 4: Find complex functions (~2 min)
 reveal 'ast://./src?complexity>10'
@@ -640,7 +640,7 @@ reveal mysql://localhost/connections  # Check for root logins
 
 ```bash
 # Step 1: Identify hotspots (top 10% worst files)
-reveal stats://./src --hotspots --format=json > hotspots.json
+reveal hotspots ./src --format json > hotspots.json
 
 # Step 2: Find all high-complexity functions
 reveal 'ast://./src?complexity>15' --format=json > complex_functions.json
@@ -740,7 +740,7 @@ reveal .
 
 # Level 2: What's the codebase like? (~5 min)
 reveal stats://./src
-reveal stats://./src --hotspots
+reveal hotspots ./src
 
 # Level 3: Where's the entry point? (~5 min)
 reveal 'ast://.?name=main*'
@@ -800,7 +800,7 @@ reveal 'ast://./src?type=class' --format=json | \
 
 ```bash
 # 2.1 Hotspots (top 10 problem files)
-reveal stats://./src --hotspots
+reveal hotspots ./src
 
 # 2.2 Complexity analysis
 reveal 'ast://./src?complexity>10'
@@ -837,7 +837,7 @@ reveal git://src/hotspot_file.py?type=history
 
 ```bash
 # 4.1 Export findings
-reveal stats://./src --hotspots --format=json > review_findings.json
+reveal hotspots ./src --format json > review_findings.json
 reveal 'ast://./src?complexity>10' --format=json >> review_findings.json
 
 # 4.2 Generate tasks (manual or scripted)
@@ -862,7 +862,7 @@ reveal stats://./src --format=json > progress_week_2.json
 
 ```bash
 # 1. Find hotspots
-reveal stats://./src --hotspots
+reveal hotspots ./src
 
 # 2. Identify complex functions in hotspot
 reveal 'ast://src/hotspot.py?complexity>10'
@@ -1025,7 +1025,7 @@ reveal src/
 reveal stats://./src
 
 # Layer 3: Hotspots (~500 tokens)
-reveal stats://./src --hotspots
+reveal hotspots ./src
 
 # Layer 4: Specific file outline (~150 tokens)
 reveal src/hotspot.py --outline
@@ -1124,7 +1124,7 @@ reveal 'ast://src?type=function' --format=json | \
 ```bash
 # Day 1: Initial assessment
 reveal stats://./src > due_diligence/stats.txt
-reveal stats://./src --hotspots > due_diligence/hotspots.txt
+reveal hotspots ./src > due_diligence/hotspots.txt
 reveal 'ast://./src?complexity>20' > due_diligence/complex_functions.txt
 
 # Day 2: Dependency analysis
@@ -1172,7 +1172,7 @@ reveal python://doctor  # Check for Python 2.7 patterns
 # (manual: search for print statements, xrange, unicode, etc.)
 
 # Step 3: Identify migration hotspots
-reveal stats://./src --hotspots
+reveal hotspots ./src
 
 # Step 4: Create baseline
 reveal stats://./src --format=json > migration_baseline.json
@@ -1292,7 +1292,7 @@ reveal stats://./src --format=json > perf_after.json
 | Task | Command |
 |------|---------|
 | **Codebase health** | `reveal stats://./src` |
-| **Top 10 problem files** | `reveal stats://./src --hotspots` |
+| **Top 10 problem files** | `reveal hotspots ./src` |
 | **Complex functions** | `reveal 'ast://./src?complexity>10'` |
 | **Quality check** | `find src/ -name "*.py" \| reveal --stdin --check` |
 | **Circular dependencies** | `reveal 'imports://src?circular'` |
@@ -1330,7 +1330,7 @@ reveal stats://./src --format=json > perf_after.json
 | Adapter | Purpose | Example |
 |---------|---------|---------|
 | `ast://` | Query code structure | `ast://src?complexity>10` |
-| `stats://` | Codebase metrics | `stats://src --hotspots` |
+| `stats://` | Codebase metrics | `reveal hotspots src` |
 | `imports://` | Dependency analysis | `imports://src?circular` |
 | `diff://` | Semantic comparison | `diff://old.py:new.py` |
 | `git://` | Version control | `git://src/app.py?type=blame` |

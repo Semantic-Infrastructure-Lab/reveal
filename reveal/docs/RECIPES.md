@@ -250,7 +250,7 @@ reveal reveal://adapters/reveal.py get_element
 
 ```bash
 # Quality hotspots (worst files first)
-reveal stats://./src --hotspots
+reveal hotspots ./src
 
 # Complex functions across codebase
 reveal 'ast://./src?complexity>10'
@@ -1078,7 +1078,7 @@ reveal src/                              # Explore subdirectory
 reveal 'ast://./src?name=*pattern*'      # Find by name
 reveal 'ast://./src?complexity>10'       # Find by complexity
 reveal 'imports://src?circular'          # Find circular imports
-reveal stats://./src --hotspots          # Find technical debt
+reveal hotspots ./src                    # Find technical debt
 reveal 'calls://src/?target=fn'          # Who calls fn? (cross-file reverse)
 reveal 'calls://src/?callees=fn'         # What does fn call? (cross-file forward)
 reveal 'claude://?search=term'           # Search session history for keyword

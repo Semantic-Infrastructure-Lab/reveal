@@ -47,8 +47,8 @@ reveal --help
 
 **Usage:**
 ```bash
-reveal --agent-help           # Quick reference (~2,200 tokens)
-reveal --agent-help-full      # Complete guide (~12,000 tokens)
+reveal --agent-help           # Complete guide (~12,000 tokens)
+reveal --agent-help-full      # Same as --agent-help (alias)
 ```
 
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -127,7 +127,7 @@ reveal help://anti-patterns      # Common mistakes
 ### For AI Agents:
 ```bash
 # Bootstrap understanding
-reveal --agent-help              # Get task-based patterns (~2,200 tokens)
+reveal --agent-help              # Get complete agent guide (~12,000 tokens)
 
 # Discover adapter capabilities programmatically
 reveal help://schemas            # List all adapters with schemas

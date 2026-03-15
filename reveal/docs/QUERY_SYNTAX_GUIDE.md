@@ -1,15 +1,11 @@
 ---
 title: Query Syntax Guide
 description: Complete reference for unified query operators and result control
-date: 2026-02-08
-phase: Phase 3 Complete
 ---
 
 # Query Syntax Guide
 
-**Status**: Phase 3 Complete (2026-02-08) - Universal query operators standardized across all 5 query-capable adapters.
-
-This guide documents the **unified query syntax** that works consistently across Reveal's query-capable adapters. All operators described here use the same underlying comparison logic (`compare_values()` in `reveal/utils/query.py`), ensuring consistent behavior.
+Complete reference for the unified query syntax that works consistently across all of Reveal's query-capable adapters. All operators use the same underlying comparison logic (`compare_values()` in `reveal/utils/query.py`), ensuring consistent behavior across adapters.
 
 ---
 

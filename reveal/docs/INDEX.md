@@ -15,8 +15,8 @@ category: reference
 
 - **New users** → [QUICK_START.md](QUICK_START.md) → [RECIPES.md](RECIPES.md)
 - **Adapters** → See [Adapter Guides](#adapter-guides-17-files) below
-- **nginx / cPanel operator** → [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md)
-- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2391 lines)
+- **nginx / cPanel operator** → [NGINX_GUIDE.md](NGINX_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md)
+- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2766 lines)
 - **Developers** → [Development Guides](#development-guides-3-files)
 
 ---
@@ -61,9 +61,9 @@ Complete guides for all URI protocol adapters (~24,500 lines):
 **Total**: ~24,500 lines
 
 **Adapters without dedicated guides** (covered elsewhere or minimal):
-- `autossl://` — see [NGINX_ADAPTER_GUIDE.md](NGINX_ADAPTER_GUIDE.md) (cPanel AutoSSL logs)
+- `autossl://` — see [NGINX_GUIDE.md](NGINX_GUIDE.md) (cPanel AutoSSL logs)
 - `markdown://` — see [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) under Analyzer Guides
-- `nginx://` — see [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) under Analyzer Guides
+- `nginx://` — see [NGINX_GUIDE.md](NGINX_GUIDE.md)
 - `demo://` — example/testing adapter, no guide needed
 - `help://` — meta-adapter for in-tool help; use `reveal help://` to explore
 
@@ -79,7 +79,7 @@ Language and infrastructure analyzer guides:
 | [ELIXIR_ANALYZER_GUIDE.md](ELIXIR_ANALYZER_GUIDE.md) | 76 | Elixir language analyzer guide |
 | [HTML_GUIDE.md](HTML_GUIDE.md) | 401 | HTML analysis and template extraction |
 | [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) | 852 | Markdown analysis, headings, and frontmatter |
-| [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) | 405 | nginx config analysis: rules, operator commands, cPanel workflows |
+| [NGINX_GUIDE.md](NGINX_GUIDE.md) | — | nginx:// adapter + config file analyzer (N001–N007 rules, ACME/SSL audits) |
 
 **Total**: ~2,555 lines
 
@@ -93,7 +93,6 @@ Core reference and technical specifications:
 |------|-------|-------------|
 | [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md) | 762 | Universal query operators and result control |
 | [QUERY_PARAMETER_REFERENCE.md](QUERY_PARAMETER_REFERENCE.md) | 363 | Query parameters for all adapters |
-| [UNIFIED_OPERATOR_REFERENCE.md](UNIFIED_OPERATOR_REFERENCE.md) | 670 | Operator support matrix across all 5 core adapters |
 | [FIELD_SELECTION_GUIDE.md](FIELD_SELECTION_GUIDE.md) | 658 | Token reduction with --fields and budgets |
 | [ELEMENT_DISCOVERY_GUIDE.md](ELEMENT_DISCOVERY_GUIDE.md) | 701 | Progressive disclosure with available_elements |
 | [OUTPUT_CONTRACT.md](OUTPUT_CONTRACT.md) | 678 | JSON output specification |
@@ -107,18 +106,13 @@ Core reference and technical specifications:
 
 ---
 
-## Subcommand Guides (4 files)
+## Subcommand Guides (1 file)
 
-Reference guides for `reveal check`, `review`, `health`, `pack`, and `dev` subcommands:
+Reference guides for `reveal dev`, `review`, `health`, and `pack` subcommands:
 
 | File | Lines | Description |
 |------|-------|-------------|
-| [DEV_GUIDE.md](DEV_GUIDE.md) | 46 | `reveal dev` — scaffold adapters, rules, inspect config |
-| [HEALTH_GUIDE.md](HEALTH_GUIDE.md) | 66 | `reveal health` — unified health check with exit codes |
-| [PACK_GUIDE.md](PACK_GUIDE.md) | 61 | `reveal pack` — token-budgeted context snapshot |
-| [REVIEW_GUIDE.md](REVIEW_GUIDE.md) | 66 | `reveal review` — PR review workflow |
-
-**Total**: ~239 lines
+| [SUBCOMMANDS_GUIDE.md](SUBCOMMANDS_GUIDE.md) | — | `reveal dev`, `review`, `health`, `pack` — all subcommand reference |
 
 ---
 

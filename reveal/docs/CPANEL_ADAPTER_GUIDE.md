@@ -296,7 +296,7 @@ reveal /etc/nginx/conf.d/users/myuser.conf --validate-nginx-acme
 
 **Why they differ**: `cpanel://acl-check` checks the `nobody` user's filesystem permissions on docroots as cPanel defines them. `--validate-nginx-acme` reads the *nginx config* to find the actual path nginx will serve ACME challenges from, then checks ACL on that path — which may differ from cPanel's `documentroot` if the nginx config has a custom `root` directive in the ACME location block.
 
-See [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) for all nginx operator commands.
+See [NGINX_GUIDE.md](NGINX_GUIDE.md) for all nginx operator commands.
 
 ---
 
@@ -322,7 +322,7 @@ See [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) for all nginx operator co
 ## See Also
 
 - `reveal help://cpanel` — inline help with live examples
-- [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) — all nginx operator flags
+- [NGINX_GUIDE.md](NGINX_GUIDE.md) — all nginx operator flags
 - [SSL_ADAPTER_GUIDE.md](SSL_ADAPTER_GUIDE.md) — live SSL certificate inspection
 - `reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme` — full audit
 - `reveal /etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs` — disk vs live comparison

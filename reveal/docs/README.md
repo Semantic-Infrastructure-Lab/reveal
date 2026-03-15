@@ -74,7 +74,7 @@ Complete guides for all URI adapters:
 | [ELIXIR_ANALYZER_GUIDE.md](ELIXIR_ANALYZER_GUIDE.md) | Elixir language analyzer |
 | [HTML_GUIDE.md](HTML_GUIDE.md) | HTML analysis and templates |
 | [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) | Markdown analysis and extraction |
-| [NGINX_ANALYZER_GUIDE.md](NGINX_ANALYZER_GUIDE.md) | nginx config analysis: N001–N006 rules, cPanel workflows |
+| [NGINX_GUIDE.md](NGINX_GUIDE.md) | nginx:// adapter + config file analysis (N001–N007 rules, ACME/SSL audits) |
 
 ### Format & Validation
 
