@@ -51,12 +51,12 @@ class LayerRule:
         if project_root:
             try:
                 file_relative = file_path.relative_to(project_root)
-                file_str = str(file_relative)
+                file_str = str(file_relative).replace("\\", "/")
             except ValueError:
                 # file_path is not under project_root
                 return False
         else:
-            file_str = str(file_path)
+            file_str = str(file_path).replace("\\", "/")
 
         for pattern in self.paths:
             # Handle glob patterns with **
@@ -107,10 +107,10 @@ class LayerRule:
         """Return *to_file* as a slash-terminated module path, or None if outside project root."""
         if project_root:
             try:
-                return str(to_file.relative_to(project_root)) + "/"
+                return str(to_file.relative_to(project_root)).replace("\\", "/") + "/"
             except ValueError:
                 return None
-        return str(to_file) + "/"
+        return str(to_file).replace("\\", "/") + "/"
 
     def _is_target_allowed(self, to_module: str) -> bool:
         """Return True if *to_module* matches at least one pattern in allow_imports."""
