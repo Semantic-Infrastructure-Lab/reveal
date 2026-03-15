@@ -1,11 +1,18 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-14 (nurosu-0314 — v0.62.0 release)
+> **Last updated**: 2026-03-15 (viral-warmonger-0315 — v0.64.0)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.64.0
+- ✅ **`reveal hotspots <path>`** — new subcommand: file-level hotspots (quality score, issues) + high-complexity functions in one view. `--top N`, `--min-complexity N`, `--functions-only`, `--files-only`, `--format json`. Exit 1 on critical findings for CI use.
+- ✅ **I006 rule** — detects imports inside function/method bodies that should be at module top. Python-only. Skips `__future__`, `TYPE_CHECKING` blocks, `# noqa`, and functions with `lazy`/`import` in their name (intentional lazy-load pattern).
+- ✅ **I005 bug fix** — `_normalize_import()` was checking `statement`/`source` keys but Python structure dicts use `content`; rule silently returned zero detections for all Python files. Fixed.
+- ✅ **`ssl/adapter.py` import hygiene** — hoisted 5 scattered lazy imports to module top: `NginxAnalyzer` (was 3×), `glob` (was 2× with different aliases), `load_certificate_from_file` (was 2×), `pathlib.Path` alias.
+- ✅ **5,904 tests** — up from 5,728 two sessions ago; scaffold 100%, analysis/tools 100%, adapter 94%
 
 ### v0.62.0
 - ✅ **`calls://` adapter** — new URI scheme for project-level cross-file call graph analysis. `?target=fn` (reverse: who calls fn?), `?callees=fn` (forward: what does fn call?), `?depth=N` (transitive BFS up to 5 levels), `?format=dot` (Graphviz output). Cross-file resolution: `resolved_calls` field links each outgoing call to its definition file. Builds inverted callers index cached by mtime fingerprint.
@@ -253,9 +260,9 @@ This document outlines reveal's development priorities and future direction. For
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: 4,861 passing (unreleased; v0.60.0 shipped 4,632)
+- Test count: **5,904 passing** (v0.64.0)
 - UX Phases 3/4/5: ✅ **ALL COMPLETE** (query operators, field selection, element discovery)
-- Target: 80%+ coverage for core adapters
+- Target: 80%+ coverage for core adapters — scaffold 100%, tools 100%, adapter 94%
 
 ### Stability & Polish
 - Output contract v1.1 enforcement
@@ -274,11 +281,10 @@ This document outlines reveal's development priorities and future direction. For
 
 ### Additional Subcommands
 
-Five subcommands (`check`, `review`, `pack`, `health`, `dev`) shipped in v0.57.0. Remaining subcommand ideas:
+Six subcommands (`check`, `review`, `pack`, `health`, `dev`, `hotspots`) shipped. Remaining subcommand ideas:
 
 ```bash
 reveal overview              # Auto-generated repo summary
-reveal hotspots              # Complexity/quality issues (top N files/functions)
 reveal onboarding            # First-day guide for unfamiliar codebases
 reveal audit                 # Security/compliance focus (S, B, N rules)
 reveal deps                  # Full dependency analysis (wraps imports://)
