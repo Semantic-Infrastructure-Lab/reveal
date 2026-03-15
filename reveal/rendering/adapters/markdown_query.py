@@ -18,12 +18,46 @@ def render_markdown_query(data: Dict[str, Any], output_format: str,
         print(safe_json_dumps(data))
         return
 
-    if data.get('type') == 'markdown_aggregate':
+    if data.get('type') == 'markdown_link_graph':
+        _render_link_graph(data, output_format)
+    elif data.get('type') == 'markdown_aggregate':
         _render_aggregate(data, output_format)
     elif single_file:
         _render_single_file(data, output_format)
     else:
         _render_query_results(data, output_format)
+
+
+def _render_link_graph(data: Dict[str, Any], output_format: str) -> None:
+    """Render markdown cross-file link graph."""
+    if output_format == 'grep':
+        for node in data.get('nodes', []):
+            for target in node['links_to']:
+                print(f"{node['file']}\t{target}")
+        return
+
+    total = data.get('total_files', 0)
+    edges = data.get('total_edges', 0)
+    isolated = data.get('isolated', [])
+    source = data.get('source', '')
+    print(f'Link graph: {source}')
+    print(f'{total} files  |  {edges} edges  |  {len(isolated)} isolated')
+
+    nodes = [n for n in data.get('nodes', []) if n['links_to'] or n['linked_by']]
+    if nodes:
+        print()
+        for node in nodes:
+            linked_by_count = len(node['linked_by'])
+            linked_by_str = f'  (linked by {linked_by_count})' if linked_by_count else ''
+            print(f'{node["file"]}{linked_by_str}')
+            for target in node['links_to']:
+                print(f'  → {target}')
+
+    if isolated:
+        print()
+        print(f'Isolated ({len(isolated)} files with no links):')
+        for f in isolated:
+            print(f'  {f}')
 
 
 def _render_aggregate(data: Dict[str, Any], output_format: str) -> None:

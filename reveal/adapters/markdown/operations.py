@@ -139,6 +139,69 @@ def aggregate_field_values(
     }
 
 
+def build_link_graph(base_path: Path) -> Dict[str, Any]:
+    """Build a cross-file link graph for all markdown files under base_path.
+
+    For each file, discovers which other files it links to (forward edges) and
+    which files link back to it (back-edges / backlinks).  Files with neither
+    forward nor backward links are reported as ``isolated``.
+
+    Args:
+        base_path: Root directory to index.
+
+    Returns:
+        Dict with keys:
+            total_files   — number of markdown files found
+            total_edges   — total number of directed link edges
+            nodes         — list of node dicts, each with:
+                            file, links_to, linked_by
+            isolated      — list of filenames with zero edges (in or out)
+    """
+    all_files = files.find_markdown_files(base_path)
+    base_resolved = base_path.resolve()
+
+    # Map relative-path-string → list of relative-path-string targets
+    forward: Dict[str, List[str]] = {}
+    for md_path in all_files:
+        try:
+            rel = str(md_path.resolve().relative_to(base_resolved)).replace('\\', '/')
+        except ValueError:
+            continue
+        forward[rel] = files.extract_internal_links(md_path, base_path)
+
+    # Build reverse index
+    reverse: Dict[str, List[str]] = {k: [] for k in forward}
+    for src, targets in forward.items():
+        for tgt in targets:
+            if tgt in reverse:
+                if src not in reverse[tgt]:
+                    reverse[tgt].append(src)
+            # tgt may be outside the set if file was deleted; skip silently
+
+    total_edges = sum(len(v) for v in forward.values())
+
+    nodes = [
+        {
+            'file': rel,
+            'links_to': sorted(forward.get(rel, [])),
+            'linked_by': sorted(reverse.get(rel, [])),
+        }
+        for rel in sorted(forward)
+    ]
+
+    isolated = [
+        n['file'] for n in nodes
+        if not n['links_to'] and not n['linked_by']
+    ]
+
+    return {
+        'total_files': len(all_files),
+        'total_edges': total_edges,
+        'nodes': nodes,
+        'isolated': isolated,
+    }
+
+
 def get_element(base_path: Path, element_name: str) -> Optional[Dict[str, Any]]:
     """Get frontmatter from a specific file.
 

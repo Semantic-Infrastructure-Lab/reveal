@@ -58,6 +58,69 @@ def read_body_text(path: Path) -> str:
     return content[body_start:]
 
 
+def extract_internal_links(path: Path, base_path: Path) -> List[str]:
+    """Extract internal markdown links from a file, returning relative paths.
+
+    Scans for ``[text](url)`` patterns.  Skips external links (http/https/mailto)
+    and anchor-only links (#section).  Resolves each URL relative to the source
+    file's directory, then expresses the target as a path relative to base_path.
+    Only returns targets that actually exist on disk within base_path.
+
+    Args:
+        path: Source markdown file.
+        base_path: The directory being indexed (links outside it are ignored).
+
+    Returns:
+        Sorted list of relative path strings (using forward slashes).
+    """
+    try:
+        content = path.read_text(encoding='utf-8')
+    except Exception:
+        return []
+
+    # [text](url) — grab the URL portion
+    pattern = re.compile(r'\[([^\]]*)\]\(([^)\s]+)[^)]*\)')
+    base_resolved = base_path.resolve()
+    seen: set = set()
+    results: List[str] = []
+
+    for m in pattern.finditer(content):
+        url = m.group(2)
+        # Skip external, anchor-only, and non-markdown links
+        if url.startswith(('http://', 'https://', 'mailto:', '//')):
+            continue
+        if url.startswith('#'):
+            continue
+        # Strip inline anchor from the filename
+        url_file = url.split('#')[0]
+        if not url_file:
+            continue
+        if not url_file.lower().endswith(('.md', '.markdown')):
+            continue
+
+        # Resolve relative to the source file's directory
+        try:
+            resolved = (path.parent / url_file).resolve()
+        except Exception:
+            continue
+
+        # Must exist and live under base_path
+        try:
+            rel = resolved.relative_to(base_resolved)
+        except ValueError:
+            continue
+
+        if not resolved.exists():
+            continue
+
+        rel_str = str(rel).replace('\\', '/')
+        if rel_str not in seen:
+            seen.add(rel_str)
+            results.append(rel_str)
+
+    return sorted(results)
+
+
 def extract_frontmatter(path: Path) -> Optional[Dict[str, Any]]:
     """Extract YAML frontmatter from a markdown file.
 

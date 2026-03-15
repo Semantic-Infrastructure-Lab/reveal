@@ -32,6 +32,23 @@ def _extract_aggregate(filter_query: str) -> tuple:
     return aggregate_field, '&'.join(remaining_parts)
 
 
+def _extract_link_graph(filter_query: str) -> tuple:
+    """Extract bare ``link-graph`` flag from filter query.
+
+    Returns:
+        (link_graph_requested: bool, remaining_query_string)
+    """
+    link_graph = False
+    remaining_parts = []
+    for part in filter_query.split('&'):
+        stripped = part.strip()
+        if stripped in ('link-graph', 'link_graph'):
+            link_graph = True
+        else:
+            remaining_parts.append(part)
+    return link_graph, '&'.join(remaining_parts)
+
+
 def _extract_body_contains(filter_query: str) -> tuple:
     """Extract body-contains= params from filter query.
 
@@ -102,6 +119,11 @@ class MarkdownQueryAdapter(ResourceAdapter):
             filter_query = ''
             self.result_control = ResultControl()
 
+        # Extract link-graph flag before passing to filter parsers
+        self.link_graph = False
+        if filter_query:
+            self.link_graph, filter_query = _extract_link_graph(filter_query)
+
         # Extract aggregate= param before passing to filter parsers
         self.aggregate_field = None
         if filter_query:
@@ -135,8 +157,19 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
         Returns:
             Dict containing matched files with frontmatter summary, or
-            a frequency table when ?aggregate=<field> is specified.
+            a frequency table when ?aggregate=<field> is specified, or
+            a link graph when ?link-graph is specified.
         """
+        if self.link_graph:
+            result = operations.build_link_graph(self.base_path)
+            return {
+                'contract_version': '1.0',
+                'type': 'markdown_link_graph',
+                'source': str(self.base_path),
+                'source_type': 'directory',
+                **result,
+            }
+
         if self.aggregate_field:
             result = operations.aggregate_field_values(
                 self.base_path,
