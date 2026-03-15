@@ -12,7 +12,7 @@ per directory when any file changes (simple and correct).
 import builtins as _builtins_module
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 from ..ast.analysis import collect_structures, is_code_file
 

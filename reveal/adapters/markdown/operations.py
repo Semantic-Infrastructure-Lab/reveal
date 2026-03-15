@@ -1,5 +1,6 @@
 """High-level operations for markdown adapter."""
 
+from collections import Counter
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -100,8 +101,6 @@ def aggregate_field_values(
     Returns:
         Dict with aggregate frequency table sorted by count descending
     """
-    from collections import Counter
-
     all_files = files.find_markdown_files(base_path)
     candidates = grep_files(all_files, body_contains) if body_contains else all_files
     counts: Counter = Counter()

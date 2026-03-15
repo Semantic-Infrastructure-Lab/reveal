@@ -1,10 +1,13 @@
 """SSL certificate adapter (ssl://)."""
 
+import glob
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
-from .certificate import SSLFetcher, CertificateInfo, check_ssl_health
+from .certificate import SSLFetcher, CertificateInfo, check_ssl_health, load_certificate_from_file
 from .renderer import SSLRenderer
+from reveal.analyzers.nginx import NginxAnalyzer
 
 _SCHEMA_ELEMENTS = {
     'san': 'Subject Alternative Names (all domain names)',
@@ -225,7 +228,6 @@ class SSLAdapter(ResourceAdapter):
         if self._certificate is not None:
             return
         if self._cert_file_path:
-            from .certificate import load_certificate_from_file
             self._certificate, self._chain = load_certificate_from_file(self._cert_file_path)
             self._verification = None  # no network verification for file certs
         elif self.host:
@@ -241,9 +243,6 @@ class SSLAdapter(ResourceAdapter):
         Returns:
             Dict with domain list and metadata
         """
-        import glob
-        from reveal.analyzers.nginx import NginxAnalyzer
-
         all_domains: set[str] = set()
         files_processed: List[str] = []
 
@@ -588,10 +587,8 @@ class SSLAdapter(ResourceAdapter):
 
     def _collect_cert_entries(self) -> List[Dict[str, Any]]:
         """Glob nginx path and collect ssl_certificate entries across all matching files."""
-        import glob as glob_module
-        from reveal.analyzers.nginx import NginxAnalyzer
         entries: List[Dict[str, Any]] = []
-        paths = glob_module.glob(self._nginx_path) if '*' in self._nginx_path else [self._nginx_path]
+        paths = glob.glob(self._nginx_path) if '*' in self._nginx_path else [self._nginx_path]
         for path in paths:
             try:
                 analyzer = NginxAnalyzer(path)
@@ -665,9 +662,7 @@ class SSLAdapter(ResourceAdapter):
         Returns:
             Validation result dict with status, cert metadata, and optional issue/error
         """
-        from pathlib import Path as _Path
-
-        if not _Path(cert_path).exists():
+        if not Path(cert_path).exists():
             return {
                 'cert_path': cert_path,
                 'domains': domains,
@@ -676,8 +671,7 @@ class SSLAdapter(ResourceAdapter):
             }
 
         try:
-            from .certificate import load_certificate_from_file as _load_cert_file
-            cert, _chain = _load_cert_file(cert_path)
+            cert, _chain = load_certificate_from_file(cert_path)
             days = cert.days_until_expiry
             if days < 0:
                 status = 'failure'
@@ -1032,8 +1026,6 @@ def batch_check_from_nginx(
     Returns:
         Batch check results
     """
-    from reveal.analyzers.nginx import NginxAnalyzer
-
     # Parse nginx config
     analyzer = NginxAnalyzer(nginx_path)
     structure = analyzer.get_structure()
