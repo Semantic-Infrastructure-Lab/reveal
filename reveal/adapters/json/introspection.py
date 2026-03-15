@@ -145,19 +145,23 @@ def get_schema_result(value: Any, file_path: Path, json_path: List[str | int], m
     }
 
 
-def get_flatten_result(value: Any, file_path: Path, json_path: List[str | int]) -> Dict[str, Any]:
+def get_flatten_result(
+    value: Any, file_path: Path, json_path: List[str | int],
+    data_only: bool = False
+) -> Dict[str, Any]:
     """Generate flattened (gron-style) output result.
 
     Args:
         value: JSON value to flatten
         file_path: Source file path
         json_path: JSON navigation path
+        data_only: When True, renderer omits header and JSON output is lines array only
 
     Returns:
         Flatten result dict
     """
     lines = flatten_value(value, 'json')
-    return {
+    result = {
         'contract_version': '1.0',
         'type': 'json_flatten',
         'source': str(file_path),
@@ -167,6 +171,9 @@ def get_flatten_result(value: Any, file_path: Path, json_path: List[str | int]) 
         'lines': lines,
         'line_count': len(lines)
     }
+    if data_only:
+        result['data_only'] = True
+    return result
 
 
 def get_type_info_result(value: Any, file_path: Path, json_path: List[str | int]) -> Dict[str, Any]:

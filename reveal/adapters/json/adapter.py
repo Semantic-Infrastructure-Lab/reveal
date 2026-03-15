@@ -74,9 +74,10 @@ class JsonAdapter(ResourceAdapter):
 
         # Parse query filters and result control
         if query_string:
-            # Detect if this is a legacy query mode (single word flag)
+            # Detect if this is a legacy query mode (single word flag or flatten&data-only)
             legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
-            is_legacy_mode = query_string.lower() in legacy_modes
+            primary_part = query_string.lower().split('&')[0]
+            is_legacy_mode = primary_part in legacy_modes
 
             if not is_legacy_mode:
                 # Parse result control first (removes sort/limit/offset from query)
@@ -198,7 +199,11 @@ class JsonAdapter(ResourceAdapter):
             True if legacy query mode
         """
         legacy_modes = {'schema', 'flatten', 'gron', 'type', 'keys', 'length'}
-        return bool(self.query_string and self.query_string.lower() in legacy_modes)
+        if not self.query_string:
+            return False
+        # Support ?flatten&data-only, ?gron&data-only variants
+        primary = self.query_string.lower().split('&')[0]
+        return primary in legacy_modes
 
     def _validate_query_syntax(self) -> Optional[Dict[str, Any]]:
         """Validate query syntax, return error dict if invalid.
@@ -243,12 +248,14 @@ class JsonAdapter(ResourceAdapter):
             Query result dict
         """
         assert self.query_string is not None
-        query = self.query_string.lower()
+        parts = [p.strip() for p in self.query_string.lower().split('&')]
+        query = parts[0]
+        data_only = 'data-only' in parts
 
         if query == 'schema':
             return get_schema_result(value, self.file_path, self.json_path)
         elif query in ('flatten', 'gron'):  # gron is alias for flatten
-            return get_flatten_result(value, self.file_path, self.json_path)
+            return get_flatten_result(value, self.file_path, self.json_path, data_only=data_only)
         elif query == 'type':
             return get_type_info_result(value, self.file_path, self.json_path)
         elif query == 'keys':

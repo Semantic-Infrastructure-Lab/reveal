@@ -36,9 +36,10 @@ def _render_json_schema(data: Dict[str, Any], file_path: str, json_path: str) ->
 
 
 def _render_json_flatten(data: Dict[str, Any], file_path: str, json_path: str) -> None:
-    print(f"# File: {file_path}")
-    print(f"# Path: {json_path}")
-    print()
+    if not data.get('data_only'):
+        print(f"# File: {file_path}")
+        print(f"# Path: {json_path}")
+        print()
     for line in data.get('lines', []):
         print(line)
 
@@ -86,6 +87,15 @@ def render_json_result(data: Dict[str, Any], output_format: str) -> None:
     """
     result_type = data.get('type', 'unknown')
 
+    # data-only flatten: output lines only (skips header in text; gives bare array in json)
+    if result_type in ('json_flatten', 'json-flatten') and data.get('data_only'):
+        if output_format == 'json':
+            print(json.dumps(data.get('lines', []), indent=2))
+        else:
+            for line in data.get('lines', []):
+                print(line)
+        return
+
     if output_format == 'json':
         print(json.dumps(data, indent=2))
         return
@@ -95,7 +105,8 @@ def render_json_result(data: Dict[str, Any], output_format: str) -> None:
 
     file_path = data.get('file', '')
     json_path = data.get('path', '(root)')
-    renderer = _TYPE_RENDERERS.get(result_type)
+    # Normalize underscore→hyphen so both adapter output and test fixtures work
+    renderer = _TYPE_RENDERERS.get(result_type) or _TYPE_RENDERERS.get(result_type.replace('_', '-'))
     if renderer:
         renderer(data, file_path, json_path)
     else:
