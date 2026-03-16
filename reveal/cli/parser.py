@@ -281,6 +281,8 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
                         help='Show Output Contract v1.0 specification for stable JSON output')
     parser.add_argument('--explain', type=str, metavar='CODE',
                         help='Explain a specific rule (e.g., "B001")')
+    parser.add_argument('--severity', type=str, metavar='LEVEL',
+                        help='Minimum severity level to report: low, medium, high, critical. Default: show all')
 
 
 def _add_navigation_options(parser: argparse.ArgumentParser) -> None:

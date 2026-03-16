@@ -120,6 +120,7 @@ def run_pattern_detection(
     select = args.select.split(',') if args.select else None
     ignore = args.ignore.split(',') if args.ignore else None
     no_group = getattr(args, 'no_group', False)
+    severity_arg = getattr(args, 'severity', None)
 
     # Get structure and content
     structure = analyzer.get_structure()
@@ -134,6 +135,18 @@ def run_pattern_detection(
     detections = RuleRegistry.check_file(
         path, structure, content, select=select, ignore=ignore
     )
+
+    # Apply severity filter if requested
+    if severity_arg:
+        _SEVERITY_ORDER = ['low', 'medium', 'high', 'critical']
+        level = severity_arg.lower()
+        if level not in _SEVERITY_ORDER:
+            print(f"Warning: unknown --severity '{severity_arg}'. Valid levels: {', '.join(_SEVERITY_ORDER)}",
+                  file=sys.stderr)
+        else:
+            min_idx = _SEVERITY_ORDER.index(level)
+            detections = [d for d in detections
+                          if _SEVERITY_ORDER.index(d.severity.value) >= min_idx]
 
     # Format and output results
     formatters = {
