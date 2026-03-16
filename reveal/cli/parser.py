@@ -435,6 +435,8 @@ def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
                         help='Path to nginx error log for --diagnose (overrides auto-detection from config and default paths)')
     parser.add_argument('--dns-verified', action='store_true', dest='dns_verified',
                         help='cpanel://USERNAME/ssl: resolve each domain in DNS before reporting; NXDOMAIN domains are shown but excluded from critical/expiring summary counts (eliminates false alarms from domains that have moved away)')
+    parser.add_argument('--check-live', action='store_true', dest='check_live',
+                        help='cpanel://USERNAME/ssl: for each non-ok disk cert, also fetch the live cert via ssl:// and show disk-vs-live comparison; surfaces CDN/edge renewals where disk cert is stale')
     parser.add_argument('--user', type=str, metavar='USERNAME',
                         help='autossl://: filter output to a single named user')
 

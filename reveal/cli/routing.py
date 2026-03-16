@@ -309,6 +309,7 @@ def _build_adapter_kwargs(adapter, args: 'Namespace', scheme: Optional[str] = No
         'only_failures': 'only_failures',
         'summary': 'summary',
         'user': 'user',
+        'check_live': 'check_live',
     }
 
     for arg_name, param_name in param_mapping.items():

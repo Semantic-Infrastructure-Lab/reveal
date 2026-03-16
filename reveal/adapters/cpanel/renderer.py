@@ -100,6 +100,27 @@ class CpanelRenderer:
             print(f"  {d['domain']:<{col_domain}}  {d.get('type', ''):<{col_type}}  {d.get('docroot', '')}")
 
     @staticmethod
+    def _format_live_detail(cert: dict) -> str:
+        """Format the live cert status line for --check-live mode."""
+        live_s = cert.get('live_status')
+        if not live_s:
+            return ''
+        if cert.get('live_error'):
+            return f"     ↳ ⚠️  live: check failed — {cert['live_error'][:50]}"
+        live_days = cert.get('live_days_until_expiry')
+        live_exp = cert.get('live_not_after', '')
+        live_icon = _icon_for_ssl_status(live_s)
+        if live_s == 'ok':
+            return f"     ↳ {live_icon} live: {live_days}d  ({live_exp})"
+        elif live_s in ('expiring', 'critical'):
+            return f"     ↳ {live_icon} live: {live_days}d  ({live_exp})"
+        elif live_s == 'expired':
+            days_ago = abs(live_days or 0)
+            return f"     ↳ {live_icon} live: EXPIRED {days_ago}d ago  ({live_exp})"
+        else:
+            return f"     ↳ {live_icon} live: {live_s}"
+
+    @staticmethod
     def _format_cert_detail(cert: dict, nxdomain: bool, elsewhere: bool = False) -> str:
         """Format the status detail string for one cert row."""
         s = cert['status']
@@ -118,6 +139,10 @@ class CpanelRenderer:
             detail += "  [nxdomain]"
         elif elsewhere:
             detail += "  [→ elsewhere]"
+        # Append live cert line if present (from --check-live)
+        live_line = CpanelRenderer._format_live_detail(cert)
+        if live_line:
+            detail += f"\n{live_line}"
         return detail
 
     @staticmethod
@@ -180,8 +205,12 @@ class CpanelRenderer:
         dns_verified = r.get('dns_verified', False)
         dns_excluded = r.get('dns_excluded', {})
         dns_elsewhere = r.get('dns_elsewhere', {})
+        check_live = r.get('check_live', False)
         print(f"SSL disk certs for cPanel user: {username}")
         print(f"  source: {r.get('cpanel_ssl_dir', '')}/DOMAIN/combined")
+        if check_live:
+            non_ok = sum(1 for c in certs if c.get('status') != 'ok')
+            print(f"  live-check: enabled — fetched live cert for {non_ok} non-ok domain(s)")
         if summary or dns_excluded or dns_elsewhere:
             CpanelRenderer._render_ssl_summary_line(certs, summary, dns_excluded, dns_elsewhere)
         if dns_verified:

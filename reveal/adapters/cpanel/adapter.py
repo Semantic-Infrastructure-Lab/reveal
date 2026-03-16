@@ -155,6 +155,42 @@ def _get_disk_cert_status(domain: str) -> Dict[str, Any]:
         return {'status': 'error', 'cert_path': cert_path, 'error': str(exc)[:80]}
 
 
+def _get_live_cert_status(domain: str) -> Dict[str, Any]:
+    """Fetch live SSL cert for a domain and return status dict.
+
+    Used by --check-live to cross-reference disk cert against what the server
+    is actually serving (surfaces CDN/edge renewals where disk cert is stale).
+
+    Returns dict with: live_status ('ok'|'expiring'|'critical'|'expired'|'error'),
+    live_days_until_expiry, live_not_after, live_serial.
+    """
+    try:
+        from ..ssl.certificate import check_ssl_health
+        result = check_ssl_health(domain, 443)
+        cert = result.get('certificate', {})
+        if not cert:
+            return {'live_status': 'error', 'live_error': result.get('error', 'no cert data')[:80]}
+        days = cert.get('days_until_expiry')
+        if days is None:
+            return {'live_status': 'error', 'live_error': 'no days_until_expiry in live cert'}
+        if days < 0:
+            live_status = 'expired'
+        elif days < 7:
+            live_status = 'critical'
+        elif days < 30:
+            live_status = 'expiring'
+        else:
+            live_status = 'ok'
+        return {
+            'live_status': live_status,
+            'live_days_until_expiry': days,
+            'live_not_after': cert.get('not_after', '')[:10] if cert.get('not_after') else None,
+            'live_serial': cert.get('serial_number'),
+        }
+    except Exception as exc:
+        return {'live_status': 'error', 'live_error': str(exc)[:80]}
+
+
 def _check_docroot_acl(docroot: str) -> Dict[str, Any]:
     """Check that nobody user has read+execute access to docroot path components.
 
@@ -394,7 +430,7 @@ class CpanelAdapter(ResourceAdapter):
         return _list_user_domains(self.username)
 
     def get_structure(self, dns_verified: bool = False, only_failures: bool = False,
-                      **kwargs) -> Dict[str, Any]:
+                      check_live: bool = False, **kwargs) -> Dict[str, Any]:
         """Get cPanel user overview or element data."""
         if self.element:
             if self.element == 'domains':
@@ -403,7 +439,8 @@ class CpanelAdapter(ResourceAdapter):
                 domain_type_filter = self.query_params.get('domain_type')
                 return self._get_ssl_structure(dns_verified=dns_verified,
                                                 only_failures=only_failures,
-                                                domain_type_filter=domain_type_filter)
+                                                domain_type_filter=domain_type_filter,
+                                                check_live=check_live)
             elif self.element == 'acl-check':
                 return self._get_acl_structure(only_failures=only_failures)
             elif self.element == 'full-audit':
@@ -472,7 +509,8 @@ class CpanelAdapter(ResourceAdapter):
 
     def _get_ssl_structure(self, dns_verified: bool = False,
                            only_failures: bool = False,
-                           domain_type_filter: Optional[str] = None) -> Dict[str, Any]:
+                           domain_type_filter: Optional[str] = None,
+                           check_live: bool = False) -> Dict[str, Any]:
         """Disk cert health per domain."""
         domains = self._get_domains()
         local_ips = _get_local_ips() if dns_verified else set()
@@ -491,6 +529,9 @@ class CpanelAdapter(ResourceAdapter):
                     entry['dns_points_here'] = bool(set(resolved_ips) & local_ips)
                 elif resolved_ips:
                     entry['dns_points_here'] = None  # resolved but couldn't determine local IPs
+            if check_live and entry['status'] != 'ok':
+                live = _get_live_cert_status(d['domain'])
+                entry.update(live)
             certs.append(entry)
 
         # Apply domain_type filter (from URI query param ?domain_type=...)
@@ -515,6 +556,19 @@ class CpanelAdapter(ResourceAdapter):
             else:
                 summary[s] = summary.get(s, 0) + 1
 
+        next_steps = [
+            f"reveal cpanel://{self.username}/acl-check  # Check docroot ACL",
+        ]
+        if not check_live:
+            next_steps.append(
+                f"reveal cpanel://{self.username}/ssl --check-live  # Cross-reference disk vs live cert"
+            )
+        else:
+            next_steps.append(
+                f"reveal {os.path.join(NGINX_USER_CONF_DIR, self.username + '.conf')}"
+                f" --cpanel-certs  # Compare disk vs live via nginx config"
+            )
+
         return {
             'contract_version': '1.0',
             'type': 'cpanel_ssl',
@@ -523,16 +577,13 @@ class CpanelAdapter(ResourceAdapter):
             'cert_count': len(certs),
             'dns_verified': dns_verified,
             'only_failures': only_failures,
+            'check_live': check_live,
             'domain_type_filter': domain_type_filter,
             'summary': summary,
             'dns_excluded': dns_excluded,
             'dns_elsewhere': dns_elsewhere,
             'certs': certs,
-            'next_steps': [
-                f"reveal cpanel://{self.username}/acl-check  # Check docroot ACL",
-                f"reveal {os.path.join(NGINX_USER_CONF_DIR, self.username + '.conf')}"
-                f" --cpanel-certs  # Compare disk vs live",
-            ],
+            'next_steps': next_steps,
         }
 
     def _get_acl_structure(self, only_failures: bool = False) -> Dict[str, Any]:

@@ -1156,5 +1156,155 @@ class TestCpanelFullAudit:
         assert '3 ok' in out
 
 
+class TestGetLiveCertStatus:
+    """Tests for _get_live_cert_status (BACK-056)."""
+
+    def test_live_ok(self):
+        """Returns live_status=ok when live cert is healthy."""
+        from reveal.adapters.cpanel.adapter import _get_live_cert_status
+        mock_result = {
+            'status': 'pass',
+            'certificate': {'days_until_expiry': 87, 'not_after': '2026-06-15T00:00:00', 'serial_number': 'AABB'},
+        }
+        with patch('reveal.adapters.ssl.certificate.check_ssl_health', return_value=mock_result):
+            result = _get_live_cert_status('example.com')
+            assert result['live_status'] == 'ok'
+            assert result['live_days_until_expiry'] == 87
+            assert result['live_not_after'] == '2026-06-15'
+
+    def test_live_expired(self):
+        """Returns live_status=expired when live cert has expired."""
+        from reveal.adapters.cpanel.adapter import _get_live_cert_status
+        mock_result = {
+            'status': 'failure',
+            'certificate': {'days_until_expiry': -5, 'not_after': '2026-03-10T00:00:00', 'serial_number': 'CC'},
+        }
+        with patch('reveal.adapters.ssl.certificate.check_ssl_health', return_value=mock_result):
+            result = _get_live_cert_status('example.com')
+            assert result['live_status'] == 'expired'
+
+    def test_live_check_failure(self):
+        """Returns live_status=error on network exception."""
+        from reveal.adapters.cpanel.adapter import _get_live_cert_status
+        with patch('reveal.adapters.ssl.certificate.check_ssl_health', side_effect=Exception('Connection refused')):
+            result = _get_live_cert_status('example.com')
+            assert result['live_status'] == 'error'
+            assert 'Connection refused' in result['live_error']
+
+    def test_live_no_cert_data(self):
+        """Returns live_status=error when check_ssl_health returns no cert."""
+        from reveal.adapters.cpanel.adapter import _get_live_cert_status
+        mock_result = {'status': 'failure', 'certificate': {}, 'error': 'TLS handshake failed'}
+        with patch('reveal.adapters.ssl.certificate.check_ssl_health', return_value=mock_result):
+            result = _get_live_cert_status('example.com')
+            assert result['live_status'] == 'error'
+
+
+class TestCheckLiveIntegration:
+    """Tests for cpanel://USER/ssl --check-live (BACK-056)."""
+
+    def test_check_live_adds_live_fields_to_non_ok_certs(self):
+        """--check-live fetches live status for expired/missing disk certs."""
+        with patch('reveal.adapters.cpanel.adapter._list_user_domains', return_value=[
+            {'domain': 'bad.com', 'type': 'main_domain', 'docroot': '/home/user/public_html'},
+            {'domain': 'good.com', 'type': 'subdomain', 'docroot': '/home/user/sub'},
+        ]):
+            with patch('reveal.adapters.cpanel.adapter._get_disk_cert_status', side_effect=[
+                {'status': 'expired', 'days_until_expiry': -3, 'not_after': '2026-03-12'},
+                {'status': 'ok', 'days_until_expiry': 87, 'not_after': '2026-06-15'},
+            ]):
+                with patch('reveal.adapters.cpanel.adapter._get_live_cert_status',
+                           return_value={'live_status': 'ok', 'live_days_until_expiry': 87,
+                                         'live_not_after': '2026-06-15', 'live_serial': 'NEW'}):
+                    with patch('reveal.adapters.cpanel.adapter._get_local_ips', return_value=set()):
+                        adapter = CpanelAdapter('cpanel://testuser/ssl')
+                        result = adapter._get_ssl_structure(check_live=True)
+                        bad_cert = next(c for c in result['certs'] if c['domain'] == 'bad.com')
+                        good_cert = next(c for c in result['certs'] if c['domain'] == 'good.com')
+                        # Expired cert should have live data
+                        assert 'live_status' in bad_cert
+                        assert bad_cert['live_status'] == 'ok'
+                        # OK cert should NOT have live data (no network call)
+                        assert 'live_status' not in good_cert
+
+    def test_check_live_false_no_live_fields(self):
+        """Without --check-live, no live fields added."""
+        with patch('reveal.adapters.cpanel.adapter._list_user_domains', return_value=[
+            {'domain': 'bad.com', 'type': 'main_domain', 'docroot': '/home/user/public_html'},
+        ]):
+            with patch('reveal.adapters.cpanel.adapter._get_disk_cert_status',
+                       return_value={'status': 'expired', 'days_until_expiry': -5}):
+                with patch('reveal.adapters.cpanel.adapter._get_local_ips', return_value=set()):
+                    adapter = CpanelAdapter('cpanel://testuser/ssl')
+                    result = adapter._get_ssl_structure(check_live=False)
+                    cert = result['certs'][0]
+                    assert 'live_status' not in cert
+
+    def test_check_live_in_result_dict(self):
+        """check_live flag is stored in result dict."""
+        with patch('reveal.adapters.cpanel.adapter._list_user_domains', return_value=[]):
+            adapter = CpanelAdapter('cpanel://testuser/ssl')
+            result = adapter._get_ssl_structure(check_live=True)
+            assert result['check_live'] is True
+
+    def test_parser_accepts_check_live_flag(self):
+        """--check-live is registered in the argument parser."""
+        from reveal.cli.parser import create_argument_parser
+        parser = create_argument_parser('test')
+        args = parser.parse_args(['cpanel://user/ssl', '--check-live'])
+        assert args.check_live is True
+
+    def test_parser_check_live_default_false(self):
+        """--check-live defaults to False."""
+        from reveal.cli.parser import create_argument_parser
+        parser = create_argument_parser('test')
+        args = parser.parse_args(['cpanel://user/ssl'])
+        assert args.check_live is False
+
+    def test_renderer_shows_live_check_header(self, capsys):
+        """Renderer announces live-check mode and counts non-ok domains."""
+        result = {
+            'type': 'cpanel_ssl', 'username': 'myuser',
+            'cpanel_ssl_dir': '/var/cpanel/ssl/apache_tls',
+            'cert_count': 2, 'dns_verified': False, 'only_failures': False,
+            'check_live': True, 'domain_type_filter': None,
+            'summary': {'expired': 1, 'ok': 1},
+            'dns_excluded': {}, 'dns_elsewhere': {},
+            'certs': [
+                {'domain': 'bad.com', 'domain_type': 'main_domain',
+                 'status': 'expired', 'days_until_expiry': -5, 'not_after': '2026-03-10',
+                 'live_status': 'ok', 'live_days_until_expiry': 87, 'live_not_after': '2026-06-15'},
+                {'domain': 'good.com', 'domain_type': 'subdomain',
+                 'status': 'ok', 'days_until_expiry': 87, 'not_after': '2026-06-15'},
+            ],
+            'next_steps': [],
+        }
+        CpanelRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'live-check: enabled' in out
+        assert '1 non-ok' in out
+
+    def test_renderer_shows_live_line_in_cert_row(self, capsys):
+        """Renderer shows ↳ live: ... line below each non-ok cert with live data."""
+        result = {
+            'type': 'cpanel_ssl', 'username': 'myuser',
+            'cpanel_ssl_dir': '/var/cpanel/ssl/apache_tls',
+            'cert_count': 1, 'dns_verified': False, 'only_failures': False,
+            'check_live': True, 'domain_type_filter': None,
+            'summary': {'expired': 1},
+            'dns_excluded': {}, 'dns_elsewhere': {},
+            'certs': [
+                {'domain': 'bad.com', 'domain_type': 'main_domain',
+                 'status': 'expired', 'days_until_expiry': -5, 'not_after': '2026-03-10',
+                 'live_status': 'ok', 'live_days_until_expiry': 87, 'live_not_after': '2026-06-15'},
+            ],
+            'next_steps': [],
+        }
+        CpanelRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert '↳' in out
+        assert 'live:' in out
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
