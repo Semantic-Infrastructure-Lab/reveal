@@ -21,6 +21,61 @@ from ..base import ResourceAdapter, register_adapter, register_renderer
 from .parser import AUTOSSL_LOG_DIR, list_runs, parse_run
 from .renderer import AutosslRenderer
 
+_FAILURE_STATUSES = {'incomplete', 'defective', 'dcv_failed', 'unknown'}
+
+
+def _apply_autossl_filters(result: Dict[str, Any], only_failures: bool = False,
+                            summary: bool = False,
+                            user: Optional[str] = None) -> Dict[str, Any]:
+    """Apply --only-failures, --summary, and --user filters to a parsed autossl run.
+
+    Args:
+        result: Parsed autossl_run dict from parse_run()
+        only_failures: Drop ok domains; drop users with no remaining failures.
+        summary: Return only run-level header + summary counts, no per-user detail.
+        user: Filter to a single named user (case-sensitive).
+
+    Returns:
+        Filtered copy of result.
+    """
+    users = list(result.get('users', []))
+
+    # Filter to single user
+    if user is not None:
+        users = [u for u in users if u.get('username') == user]
+        if not users:
+            available = [u.get('username', '?') for u in result.get('users', [])]
+            raise ValueError(
+                f"User '{user}' not found in this AutoSSL run. "
+                f"Available users: {', '.join(available) if available else '(none)'}"
+            )
+
+    # Filter to failures only
+    if only_failures:
+        filtered_users = []
+        for u in users:
+            failing_domains = [
+                d for d in u.get('domains', [])
+                if d.get('tls_status') not in (None, 'ok')
+            ]
+            if failing_domains:
+                filtered_users.append({**u, 'domains': failing_domains,
+                                        'domain_count': len(failing_domains)})
+        users = filtered_users
+
+    result = dict(result)
+    result['users'] = users
+    result['user_count'] = len(users)
+    result['domain_count'] = sum(u['domain_count'] for u in users)
+
+    # Summary mode: strip per-user detail
+    if summary:
+        result = {k: v for k, v in result.items() if k != 'users'}
+        result['user_count'] = len(users)
+        result['domain_count'] = sum(u.get('domain_count', 0) for u in users)
+
+    return result
+
 
 @register_adapter('autossl')
 @register_renderer(AutosslRenderer)
@@ -52,11 +107,24 @@ class AutosslAdapter(ResourceAdapter):
         else:
             self.timestamp = rest
 
-    def get_structure(self, **kwargs: Any) -> Dict[str, Any]:
-        """Return run list or parsed run data."""
+    def get_structure(self, only_failures: bool = False, summary: bool = False,
+                      user: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
+        """Return run list or parsed run data.
+
+        Args:
+            only_failures: When True, omit domains with tls_status='ok'; drop
+                users with no remaining failures.
+            summary: When True, strip per-user/domain detail — return only the
+                top-level run header and summary counts.
+            user: When set, filter to only the named user (case-sensitive).
+        """
         if self.timestamp is None:
             return self._list_runs_structure()
-        return self._parse_run_structure(self.timestamp)
+        result = self._parse_run_structure(self.timestamp)
+        if result.get('error'):
+            return result
+        return _apply_autossl_filters(result, only_failures=only_failures,
+                                      summary=summary, user=user)
 
     def _list_runs_structure(self) -> Dict[str, Any]:
         runs = list_runs()

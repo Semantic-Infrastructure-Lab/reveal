@@ -541,3 +541,102 @@ class TestAutosslRenderer:
         AutosslRenderer.render_structure(result)
         out = capsys.readouterr().out
         assert 'no runs found' in out.lower()
+
+# ---------------------------------------------------------------------------
+# BACK-048: autossl filters (--only-failures, --summary, --user)
+# ---------------------------------------------------------------------------
+
+class TestApplyAutosslFilters:
+    """BACK-048: _apply_autossl_filters reduces 78KB autossl output."""
+
+    from reveal.adapters.autossl.adapter import _apply_autossl_filters  # noqa: E402
+
+    def _make_run(self, users=None):
+        """Build a minimal autossl_run dict for filter testing."""
+        if users is None:
+            users = [
+                {
+                    'username': 'alice',
+                    'domain_count': 3,
+                    'summary': {'ok': 2, 'incomplete': 1},
+                    'domains': [
+                        {'domain': 'a.com', 'tls_status': 'ok'},
+                        {'domain': 'b.com', 'tls_status': 'ok'},
+                        {'domain': 'c.com', 'tls_status': 'incomplete'},
+                    ],
+                },
+                {
+                    'username': 'bob',
+                    'domain_count': 2,
+                    'summary': {'ok': 2},
+                    'domains': [
+                        {'domain': 'd.com', 'tls_status': 'ok'},
+                        {'domain': 'e.com', 'tls_status': 'ok'},
+                    ],
+                },
+            ]
+        return {
+            'type': 'autossl_run',
+            'run_timestamp': '2026-01-01T00:00:00Z',
+            'provider': 'LetsEncrypt',
+            'run_start': '',
+            'run_end': '',
+            'user_count': len(users),
+            'domain_count': sum(u['domain_count'] for u in users),
+            'summary': {'ok': 4, 'incomplete': 1},
+            'users': users,
+        }
+
+    def test_only_failures_removes_ok_domains(self):
+        from reveal.adapters.autossl.adapter import _apply_autossl_filters
+        result = _apply_autossl_filters(self._make_run(), only_failures=True)
+        # alice has 1 failure, bob has 0 → bob dropped
+        assert result['user_count'] == 1
+        assert result['users'][0]['username'] == 'alice'
+        assert len(result['users'][0]['domains']) == 1
+        assert result['users'][0]['domains'][0]['domain'] == 'c.com'
+
+    def test_only_failures_drops_users_with_no_failures(self):
+        from reveal.adapters.autossl.adapter import _apply_autossl_filters
+        result = _apply_autossl_filters(self._make_run(), only_failures=True)
+        usernames = [u['username'] for u in result['users']]
+        assert 'bob' not in usernames
+
+    def test_summary_strips_users_key(self):
+        from reveal.adapters.autossl.adapter import _apply_autossl_filters
+        result = _apply_autossl_filters(self._make_run(), summary=True)
+        assert 'users' not in result
+        assert result['type'] == 'autossl_run'
+        assert 'summary' in result
+
+    def test_summary_preserves_counts(self):
+        from reveal.adapters.autossl.adapter import _apply_autossl_filters
+        result = _apply_autossl_filters(self._make_run(), summary=True)
+        assert result['user_count'] == 2
+        assert result['domain_count'] == 5
+
+    def test_user_filter_returns_matching_user(self):
+        from reveal.adapters.autossl.adapter import _apply_autossl_filters
+        result = _apply_autossl_filters(self._make_run(), user='alice')
+        assert result['user_count'] == 1
+        assert result['users'][0]['username'] == 'alice'
+
+    def test_user_filter_raises_on_unknown_user(self):
+        from reveal.adapters.autossl.adapter import _apply_autossl_filters
+        with pytest.raises(ValueError, match="User 'nobody' not found"):
+            _apply_autossl_filters(self._make_run(), user='nobody')
+
+    def test_combined_user_and_only_failures(self):
+        from reveal.adapters.autossl.adapter import _apply_autossl_filters
+        result = _apply_autossl_filters(self._make_run(), user='alice', only_failures=True)
+        assert result['user_count'] == 1
+        assert len(result['users'][0]['domains']) == 1
+        assert result['users'][0]['domains'][0]['tls_status'] == 'incomplete'
+
+    def test_no_filters_returns_all_data(self):
+        from reveal.adapters.autossl.adapter import _apply_autossl_filters
+        run = self._make_run()
+        result = _apply_autossl_filters(run)
+        assert result['user_count'] == 2
+        assert 'users' in result
+        assert len(result['users'][0]['domains']) == 3
