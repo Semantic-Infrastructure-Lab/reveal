@@ -2478,6 +2478,83 @@ server {
 
 
 # ---------------------------------------------------------------------------
+# BACK-055: --validate-nginx-acme --verbose shows validated config lines
+# ---------------------------------------------------------------------------
+
+class TestValidateNginxAcmeVerbose:
+    """BACK-055: --validate-nginx-acme --verbose prints the matched location block lines."""
+
+    CONFIG = """\
+server {
+    server_name verbose.example.com;
+    location /.well-known/acme-challenge/ {
+        root /home/verbose/public_html;
+    }
+}
+"""
+    _ACL_OK = {'status': 'ok', 'message': 'ok', 'failing_path': None}
+
+    def _make_analyzer(self, config_text, tmp_path):
+        from reveal.analyzers.nginx import NginxAnalyzer
+        path = tmp_path / 'nginx.conf'
+        path.write_text(config_text)
+        return NginxAnalyzer(str(path))
+
+    def _make_args(self, verbose=False, only_failures=False):
+        import argparse
+        args = argparse.Namespace()
+        args.verbose = verbose
+        args.only_failures = only_failures
+        args.format = 'text'
+        return args
+
+    def test_verbose_shows_config_lines(self, tmp_path, monkeypatch, capsys):
+        """--verbose should print the matched location block after each row."""
+        def fake_ssl(domain, **_):
+            return {'status': 'healthy', 'leaf': {'days_until_expiry': 90, 'not_after': ''}}
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
+                            lambda p: self._ACL_OK)
+        monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
+        from reveal.file_handler import _handle_validate_nginx_acme
+        a = self._make_analyzer(self.CONFIG, tmp_path)
+        _handle_validate_nginx_acme(a, self._make_args(verbose=True))
+        out = capsys.readouterr().out
+        # Should show the location line from the config
+        assert 'well-known' in out or 'acme-challenge' in out
+
+    def test_non_verbose_does_not_show_config_lines(self, tmp_path, monkeypatch, capsys):
+        """Without --verbose, config lines should not appear in output."""
+        def fake_ssl(domain, **_):
+            return {'status': 'healthy', 'leaf': {'days_until_expiry': 90, 'not_after': ''}}
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
+                            lambda p: self._ACL_OK)
+        monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
+        from reveal.file_handler import _handle_validate_nginx_acme
+        a = self._make_analyzer(self.CONFIG, tmp_path)
+        _handle_validate_nginx_acme(a, self._make_args(verbose=False))
+        out = capsys.readouterr().out
+        # domain should appear, but not the config snippet line numbers
+        assert 'verbose.example.com' in out
+        # Config lines with line number prefix (e.g. "   3: location...") should not appear
+        assert ': location' not in out
+
+    def test_verbose_shows_line_number(self, tmp_path, monkeypatch, capsys):
+        """--verbose snippet should include line numbers."""
+        def fake_ssl(domain, **_):
+            return {'status': 'healthy', 'leaf': {'days_until_expiry': 90, 'not_after': ''}}
+        monkeypatch.setattr('reveal.analyzers.nginx._check_nobody_access',
+                            lambda p: self._ACL_OK)
+        monkeypatch.setattr('reveal.adapters.ssl.certificate.check_ssl_health', fake_ssl)
+        from reveal.file_handler import _handle_validate_nginx_acme
+        a = self._make_analyzer(self.CONFIG, tmp_path)
+        _handle_validate_nginx_acme(a, self._make_args(verbose=True))
+        out = capsys.readouterr().out
+        # The snippet format is "   N: <line content>"
+        import re
+        assert re.search(r'\d+: ', out), "Expected 'N: <content>' snippet format in verbose output"
+
+
+# ---------------------------------------------------------------------------
 # BACK-059: extract_ssl_domains canonical_only (one URI per vhost)
 # ---------------------------------------------------------------------------
 

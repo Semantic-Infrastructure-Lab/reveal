@@ -252,6 +252,7 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
             sys.exit(2)
         return
 
+    verbose = getattr(args, 'verbose', False)
     col_domain = max(len(r['domain']) for r in results)
     col_path = max(len(r['acme_path']) for r in results)
 
@@ -261,6 +262,7 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
     print("  " + "─" * (len(header) - 2))
 
     printed = 0
+    analyzer_lines = getattr(analyzer, 'lines', [])
     for r in results:
         acl_col, _ = _format_acl_col(r['acl_status'])
         ssl_col, _ = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'])
@@ -269,6 +271,15 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
             continue
         print(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}"
               f"  {acl_col:<14}  {ssl_col}")
+        if verbose and analyzer_lines:
+            line_no = r.get('line', 0)
+            if line_no and 0 < line_no <= len(analyzer_lines):
+                # Show the location block: the matched line + up to 3 lines ahead (closing brace)
+                snippet_lines = analyzer_lines[line_no - 1:line_no + 3]
+                snippet = ''.join(snippet_lines).rstrip()
+                for sl in snippet.splitlines():
+                    print(f"       {line_no}: {sl.rstrip()}")
+                    line_no += 1
         printed += 1
 
     if only_failures and printed == 0:
