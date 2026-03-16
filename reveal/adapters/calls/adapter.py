@@ -232,8 +232,20 @@ class CallsAdapter(ResourceAdapter):
         return _SCHEMA
 
     def __init__(self, path: str, query_string: Optional[str] = None):
-        self.path = os.path.expanduser(path)
-        self.query_params = parse_query_params(query_string or '', coerce=True)
+        expanded = os.path.expanduser(path)  # raises TypeError for non-str path (contract)
+        qs = query_string if isinstance(query_string, str) else ''
+        self.query_params = parse_query_params(qs, coerce=True)
+        # Support 'path:target' colon shorthand (e.g. calls://src/file.py:my_fn).
+        # Only apply when the portion before ':' is an existing path and the portion
+        # after ':' looks like a bare name (no slashes → not a file path).
+        if ':' in expanded and '?' not in expanded:
+            before, _, after = expanded.rpartition(':')
+            if after and '/' not in after and os.path.exists(before):
+                if not self.query_params.get('target') and not self.query_params.get('callees'):
+                    self.query_params['target'] = after
+                self.path = before
+                return
+        self.path = expanded
 
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         target = self.query_params.get('target', '')

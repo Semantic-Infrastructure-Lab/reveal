@@ -900,5 +900,96 @@ class TestRankRendering(unittest.TestCase):
             shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+class TestCallsAdapterColonSyntax(unittest.TestCase):
+    """BACK-070: calls://path:target colon shorthand routes element to target= param."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        _write(self.tmpdir, 'lib.py', textwrap.dedent('''\
+            def helper(x):
+                return x * 2
+        '''))
+        _write(self.tmpdir, 'main.py', textwrap.dedent('''\
+            def caller_a(x):
+                return helper(x)
+        '''))
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_colon_syntax_extracts_target(self):
+        """'path:target' sets target= in query_params and strips element from path."""
+        adapter = CallsAdapter(f"{self.tmpdir}:helper")
+        self.assertEqual(adapter.query_params.get('target'), 'helper')
+        self.assertEqual(adapter.path, self.tmpdir)
+
+    def test_colon_syntax_finds_callers(self):
+        """calls via 'path:target' actually resolves callers correctly."""
+        adapter = CallsAdapter(f"{self.tmpdir}:helper")
+        result = adapter.get_structure()
+        self.assertEqual(result.get('target'), 'helper')
+        self.assertGreater(result.get('total_callers', 0), 0)
+
+    def test_colon_syntax_does_not_apply_when_path_missing(self):
+        """If path before ':' doesn't exist, fall through to normal path handling."""
+        adapter = CallsAdapter('/nonexistent/path:helper')
+        # Path should not be modified — the colon shorthand should not apply
+        self.assertIn(':helper', adapter.path)
+
+    def test_colon_syntax_does_not_override_explicit_target(self):
+        """Explicit ?target= in query string takes priority over colon element."""
+        adapter = CallsAdapter(f"{self.tmpdir}:helper", 'target=caller_a')
+        # Explicit query_string target should win — colon shorthand is skipped
+        self.assertEqual(adapter.query_params.get('target'), 'caller_a')
+
+    def test_no_colon_path_unaffected(self):
+        """Paths without ':' are not modified."""
+        adapter = CallsAdapter(self.tmpdir, 'target=helper')
+        self.assertEqual(adapter.path, self.tmpdir)
+        self.assertEqual(adapter.query_params.get('target'), 'helper')
+
+
+class TestCallsRendererMissingTarget(unittest.TestCase):
+    """BACK-070: missing target should emit a clear error, not 'Callers of: ?'."""
+
+    def _capture_stderr(self, func, *args, **kwargs) -> str:
+        import sys
+        buf = io.StringIO()
+        old_stderr = sys.stderr
+        sys.stderr = buf
+        try:
+            func(*args, **kwargs)
+        finally:
+            sys.stderr = old_stderr
+        return buf.getvalue()
+
+    def test_missing_target_shows_error_not_question_mark(self):
+        """When data has 'error' key and no 'target', renderer shows error to stderr."""
+        from reveal.adapters.calls.renderer import render_calls_structure
+        data = {
+            'path': '/some/path',
+            'error': 'Missing required parameter: target=<name>',
+            'example': 'calls:///some/path?target=my_function',
+        }
+        err = self._capture_stderr(render_calls_structure, data, 'text')
+        self.assertIn('Missing required parameter', err)
+        self.assertIn('calls://', err)
+
+    def test_error_case_does_not_print_callers_of_question_mark(self):
+        """The 'Callers of: ?' text should NOT appear when target is missing."""
+        from reveal.adapters.calls.renderer import render_calls_structure
+        import sys
+        buf = io.StringIO()
+        data = {
+            'path': '/some/path',
+            'error': 'Missing required parameter: target=<name>',
+        }
+        with redirect_stdout(buf):
+            render_calls_structure(data, 'text')
+        stdout = buf.getvalue()
+        self.assertNotIn('Callers of: ?', stdout)
+
+
 if __name__ == '__main__':
     unittest.main()

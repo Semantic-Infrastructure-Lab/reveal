@@ -32,6 +32,11 @@ def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
 
 
 def _render_text(data: Dict[str, Any]) -> None:
+    if 'error' in data and 'target' not in data:
+        print(f"Error: {data['error']}", file=__import__('sys').stderr)
+        if 'example' in data:
+            print(f"Example: {data['example']}", file=__import__('sys').stderr)
+        return
     target = data.get('target', '?')
     depth = data.get('depth', 1)
     total = data.get('total_callers', 0)
