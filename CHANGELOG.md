@@ -12,9 +12,14 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (session awakened-pegasus-0315)
+## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315)
 
 ### Fixed
+- **BACK-047: `domain://` false NS failures on subdomains** — `check_nameserver_response` and `check_dns_propagation` now return pass/skipped for domains with 3+ labels (e.g. `stg.rfr.bz`). Subdomains have no NS records of their own; querying NS for them produces spurious CRITICAL failures. `_is_subdomain()` helper added to `dns.py`. 10 new tests. (session slate-spectrum-0315)
+- **BACK-061: `--expiring-within N` had no effect on exit code** — Flag was render-only; now routed to `warn_days` in `SSLAdapter.check()` via `_build_check_kwargs`. `--expiring-within=60` on a cert with 47d to expiry now correctly exits 1 (WARNING). Accepts `30` or `30d` formats. 4 new tests. (session slate-spectrum-0315)
+- **BACK-062: `@file` not batch-equivalent to `--stdin --batch`** — `_handle_at_file` now routes through `handle_stdin_mode` (via `io.StringIO`) when `--batch` or `--check` is active, giving identical aggregation behavior. `@file --batch` now shows `BATCH CHECK RESULTS` header with Total URIs count. 3 new tests. (session slate-spectrum-0315)
+
+
 - **BUG: `git://` `?type=blame&element=` crash** — lambda in `get_structure` passed 1 arg but `_apply_element_blame_filter` called it with 3. Fixed lambda arity; semantic blame now works correctly.
 - **BUG: `ast://` multi-file colon syntax silently returns 0 results** — `ast://file1.py:file2.py` now raises a clear `ValueError` with the two separate commands to run. Detection by extension pattern, not just path existence.
 - **`imports://` `?violations` misleading "0 violations"** — when `.reveal.yaml` config is missing, output now shows `Layer Violations: NOT CONFIGURED` with explanation instead of `Layer Violations: 0`.
