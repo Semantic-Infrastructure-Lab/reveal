@@ -605,6 +605,65 @@ class TestCommitFiltering:
         assert 'Update' in commits[0]['message']
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_ref_query_param_overrides_starting_ref(self, git_repo):
+        """?ref= query param should set the starting ref (alias for @ref in URI)."""
+        # Get the second commit (one step before HEAD)
+        repo = pygit2.Repository(str(git_repo))
+        all_commits = list(repo.walk(repo.head.target, pygit2.GIT_SORT_TIME))
+        second_commit_hash = str(all_commits[1].id)  # one step before HEAD
+
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'type': 'history', 'ref': second_commit_hash}
+        )
+        structure = adapter.get_structure()
+
+        # Should start from the second commit, not HEAD
+        assert structure['type'] == 'git_ref'
+        assert structure['commit']['full_hash'] == second_commit_hash
+        # History from second commit should be shorter than from HEAD
+        full_adapter = GitAdapter(path=str(git_repo), query={'type': 'history'})
+        full_structure = full_adapter.get_structure()
+        assert len(structure['history']) < len(full_structure['history'])
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_ref_query_param_tag(self, git_repo):
+        """?ref= query param should accept tag names."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'type': 'history', 'ref': 'v1.0.0'}
+        )
+        structure = adapter.get_structure()
+
+        assert structure['type'] == 'git_ref'
+        assert structure['ref'] == 'v1.0.0'
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_filter_applied_flag_set_when_filters_present(self, git_repo):
+        """filter_applied should be True when query filters are used."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'type': 'history', 'author': 'Nonexistent'}
+        )
+        structure = adapter.get_structure()
+
+        assert structure['type'] == 'git_ref'
+        assert structure['filter_applied'] is True
+        assert structure['history'] == []
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_filter_applied_flag_not_set_without_filters(self, git_repo):
+        """filter_applied should be False when no query filters are used."""
+        adapter = GitAdapter(
+            path=str(git_repo),
+            query={'type': 'history'}
+        )
+        structure = adapter.get_structure()
+
+        assert structure['type'] == 'git_ref'
+        assert structure['filter_applied'] is False
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_filter_preserves_default_limit(self, git_repo):
         """Test that filtering works with default limit."""
         # Create more commits (more than the default limit of 10)
@@ -808,4 +867,59 @@ class TestGitRenderer(unittest.TestCase):
         # Should contain file history info
         self.assertIn('File History:', output)
         self.assertIn('test.txt', output)
-        self.assertIn('Commits:', output)
+
+    def test_renderer_empty_history_with_filter_shows_hint(self):
+        """When history is empty and a filter was applied, renderer shows a helpful hint."""
+        from reveal.adapters.git.renderer import GitRenderer
+        from io import StringIO
+
+        result = {
+            'type': 'git_ref',
+            'ref': 'HEAD',
+            'commit': {
+                'full_hash': 'abc1234',
+                'author': 'Test User',
+                'email': 'test@example.com',
+                'date': '2026-01-01 00:00:00',
+                'full_message': 'test commit\n',
+            },
+            'history': [],
+            'filter_applied': True,
+        }
+
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+        GitRenderer.render_structure(result, format='text')
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        self.assertIn('no commits matched filter', output)
+        self.assertIn('~=', output)
+
+    def test_renderer_empty_history_without_filter_shows_no_hint(self):
+        """When history is empty and no filter was applied, renderer shows (no commits)."""
+        from reveal.adapters.git.renderer import GitRenderer
+        from io import StringIO
+
+        result = {
+            'type': 'git_ref',
+            'ref': 'HEAD',
+            'commit': {
+                'full_hash': 'abc1234',
+                'author': 'Test User',
+                'email': 'test@example.com',
+                'date': '2026-01-01 00:00:00',
+                'full_message': 'test commit\n',
+            },
+            'history': [],
+            'filter_applied': False,
+        }
+
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = StringIO()
+        GitRenderer.render_structure(result, format='text')
+        sys.stdout = old_stdout
+        output = captured_output.getvalue()
+
+        self.assertIn('(no commits)', output)
+        self.assertNotIn('~=', output)

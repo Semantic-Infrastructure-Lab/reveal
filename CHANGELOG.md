@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316)
+## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316, heating-blizzard-0316)
 
 ### Fixed
 - **BACK-051: `domain://` missing email DNS layer** — `check_mx_records()`, `check_spf_record()`, `check_dmarc_record()`, and `check_email_dns()` aggregator added to `dns.py`. New `/mail` element (`reveal domain://DOMAIN/mail`) shows MX/SPF/DMARC status with record details. `check()` now includes all three email checks. Renderer added. 17 new tests. (session emerald-shade-0315)
@@ -42,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BACK-062: `@file` not batch-equivalent to `--stdin --batch`** — `_handle_at_file` now routes through `handle_stdin_mode` (via `io.StringIO`) when `--batch` or `--check` is active, giving identical aggregation behavior. `@file --batch` now shows `BATCH CHECK RESULTS` header with Total URIs count. 3 new tests. (session slate-spectrum-0315)
 
 
+- **BACK-066: `git://` empty history with no hint** — `_render_ref_structure` now shows `(no commits matched filter — use '~=' for substring match)` when history is empty and a filter was applied, or `(no commits)` when no filter was active. `filter_applied: bool(query_filters)` added to `get_ref_structure()` result dict. 4 new tests. (session heating-blizzard-0316)
+- **BACK-067: `git://` `?ref=` query param treated as filter** — `?type=history&ref=v0.63.0` previously treated `ref` as a commit-dict filter field (which doesn't exist), producing empty history. `_separate_query_parameters()` now recognizes `ref` as an operational param and sets `self.ref` from it, identical to the `@ref` URI syntax. 2 new tests. (session heating-blizzard-0316)
 - **BUG: `git://` `?type=blame&element=` crash** — lambda in `get_structure` passed 1 arg but `_apply_element_blame_filter` called it with 3. Fixed lambda arity; semantic blame now works correctly.
 - **BUG: `ast://` multi-file colon syntax silently returns 0 results** — `ast://file1.py:file2.py` now raises a clear `ValueError` with the two separate commands to run. Detection by extension pattern, not just path existence.
 - **`imports://` `?violations` misleading "0 violations"** — when `.reveal.yaml` config is missing, output now shows `Layer Violations: NOT CONFIGURED` with explanation instead of `Layer Violations: 0`.

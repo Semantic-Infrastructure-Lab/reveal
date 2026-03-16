@@ -78,6 +78,11 @@ class GitRenderer:
         print()
 
         print("History:")
+        if not result['history']:
+            if result.get('filter_applied'):
+                print("  (no commits matched filter — use '~=' for substring match, e.g., author~=name)")
+            else:
+                print("  (no commits)")
         for c in result['history']:
             print(f"  {c['hash']} {c['date']} {c['author']}")
             print(f"    {c['message']}")

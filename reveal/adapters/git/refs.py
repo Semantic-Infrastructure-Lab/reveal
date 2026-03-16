@@ -41,6 +41,7 @@ def get_ref_structure(
                 'ref': ref,
                 'commit': format_commit_func(commit_obj, detailed=True),
                 'history': commits,
+                'filter_applied': bool(query_filters),
             }
         else:
             raise ValueError(f"Cannot resolve ref to commit: {ref}")

@@ -209,6 +209,9 @@ class GitAdapter(ResourceAdapter):
             # Operational parameters (exclude from both)
             elif k in ['type', 'detail', 'element']:
                 continue
+            # ?ref= overrides the starting ref (alias for @ref in the URI)
+            elif k == 'ref':
+                self.ref = v
             # Filter parameters
             else:
                 # Check if key already ends with an operator character (~, !, >, <, .)
