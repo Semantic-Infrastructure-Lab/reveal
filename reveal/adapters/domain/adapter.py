@@ -6,7 +6,7 @@ from ..help_data import load_help_data
 from .dns import (
     get_dns_records, get_dns_summary,
     check_dns_resolution, check_nameserver_response, check_dns_propagation,
-    check_email_dns,
+    check_email_dns, check_ns_authority,
 )
 from .renderer import DomainRenderer
 
@@ -643,6 +643,7 @@ class DomainAdapter(ResourceAdapter):
             'registrar': self._get_registrar_info,
             'mail': self._get_email_dns,
             'http': self._get_http_chain,
+            'ns-audit': self._get_ns_audit,
         }
 
         handler = element_handlers.get(element_name)
@@ -687,6 +688,11 @@ class DomainAdapter(ResourceAdapter):
                 'name': 'http',
                 'description': 'HTTP redirect chain inspection (port 80 → HTTPS)',
                 'example': f'reveal domain://{self.domain}/http'
+            },
+            {
+                'name': 'ns-audit',
+                'description': 'NS authority cross-check — detects orphaned/stale nameserver entries',
+                'example': f'reveal domain://{self.domain}/ns-audit'
             },
         ]
 
@@ -883,6 +889,16 @@ class DomainAdapter(ResourceAdapter):
                 f"SSL details: reveal ssl://{self.domain}",
             ],
         }
+
+    def _get_ns_audit(self) -> Dict[str, Any]:
+        """Cross-query each NS server to detect orphaned or stale entries."""
+        assert self.domain is not None
+        result = check_ns_authority(self.domain)
+        result['next_steps'] = [
+            f"Full DNS records: reveal domain://{self.domain}/dns",
+            f"Propagation check: reveal domain://{self.domain} --check",
+        ]
+        return result
 
     def _get_whois_summary(self) -> Dict[str, Any]:
         """Get abbreviated WHOIS data for domain overview (registrar + expiry only)."""

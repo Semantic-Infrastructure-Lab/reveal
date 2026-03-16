@@ -424,6 +424,61 @@ class DomainRenderer(TypeDispatchRenderer):
                 print(f"  \u2022 {step}")
 
     @staticmethod
+    def _render_domain_ns_audit(result: dict) -> None:
+        """Render NS authority cross-check results."""
+        domain = result.get('domain', '')
+        status = result.get('status', 'unknown')
+        summary = result.get('summary', '')
+        registered = result.get('registered_nameservers', [])
+        servers = result.get('servers', [])
+        orphaned = result.get('orphaned', [])
+        consensus = result.get('consensus_ns_records', [])
+
+        STATUS_ICONS = {'ok': '✅', 'warning': '⚠️', 'critical': '❌', 'error': '❌', 'skipped': '⏭️'}
+        icon = STATUS_ICONS.get(status, '❓')
+
+        print(f"\nNS Authority Audit: {domain}")
+        print(f"{'─' * (22 + len(domain))}")
+        print(f"\n{icon} {summary}\n")
+
+        if servers:
+            print(f"Registered NS ({len(registered)}):")
+            for server in servers:
+                ns = server.get('nameserver', '?')
+                ip = server.get('ip') or 'unresolved'
+                s = server.get('status', '?')
+                agrees = server.get('agrees_with_consensus', False)
+                ns_returned = server.get('ns_records', [])
+                error = server.get('error')
+
+                server_icon = '✅' if s == 'ok' and agrees else ('⚠️' if s in ('query_failed',) else '❌')
+                print(f"  {server_icon} {ns}  [{ip}]")
+                if error:
+                    print(f"       Error: {error}")
+                elif ns_returned:
+                    if not agrees:
+                        print(f"       NS returned: {', '.join(ns_returned)}")
+                print()
+
+        if consensus:
+            print(f"Consensus NS set ({len(consensus)}):")
+            for ns in consensus:
+                print(f"  • {ns}")
+            print()
+
+        if orphaned:
+            print(f"⚠️  Orphaned entries ({len(orphaned)}) — listed but not in consensus:")
+            for ns in orphaned:
+                print(f"  ✗ {ns}")
+            print()
+
+        if result.get('next_steps'):
+            print(f"{'─' * 60}")
+            print("Next Steps:")
+            for step in result['next_steps']:
+                print(f"  • {step}")
+
+    @staticmethod
     def render_error(error: Exception) -> None:
         """Render user-friendly error messages.
 

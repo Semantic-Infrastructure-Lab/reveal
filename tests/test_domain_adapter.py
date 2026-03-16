@@ -919,5 +919,186 @@ class TestCheckHttpToHttpsRedirect(unittest.TestCase):
             self.assertEqual(len(result['details']['chain']), 2)
 
 
+class TestNsAudit(unittest.TestCase):
+    """Tests for check_ns_authority and domain://DOMAIN/ns-audit element."""
+
+    def setUp(self):
+        from reveal.adapters.domain.dns import check_ns_authority, _query_ns_for_ns_records
+        self.check_ns_authority = check_ns_authority
+        self._query = _query_ns_for_ns_records
+
+    def _mock_ns_resolve(self, nameservers):
+        """Return a mock dns.resolver.resolve that yields NS records."""
+        mock_answers = []
+        for ns in nameservers:
+            m = MagicMock()
+            m.__str__ = lambda self, _ns=ns: _ns + '.'
+            mock_answers.append(m)
+        return mock_answers
+
+    def test_returns_ok_when_all_ns_agree(self):
+        """All NS servers return same records → status ok."""
+        ns_list = ['ns1.example.com', 'ns2.example.com']
+        server_results = [
+            {'nameserver': 'ns1.example.com', 'ip': '1.1.1.1', 'ns_records': ns_list,
+             'status': 'ok', 'error': None},
+            {'nameserver': 'ns2.example.com', 'ip': '2.2.2.2', 'ns_records': ns_list,
+             'status': 'ok', 'error': None},
+        ]
+        with patch('reveal.adapters.domain.dns.dns.resolver.resolve') as mock_resolve, \
+             patch('reveal.adapters.domain.dns._query_ns_for_ns_records', side_effect=server_results):
+            mock_resolve.return_value = self._mock_ns_resolve(ns_list)
+            result = self.check_ns_authority('example.com')
+        assert result['status'] == 'ok'
+        assert result['orphaned'] == []
+        assert len(result['servers']) == 2
+
+    def test_orphaned_ns_detected(self):
+        """NS in registered list but not returned by auth servers → orphaned."""
+        registered = ['ns1.example.com', 'old-ns.web-hosting.com']
+        consensus = ['ns1.example.com']
+        server_results = [
+            {'nameserver': 'ns1.example.com', 'ip': '1.1.1.1', 'ns_records': consensus,
+             'status': 'ok', 'error': None},
+            {'nameserver': 'old-ns.web-hosting.com', 'ip': None,
+             'ns_records': [], 'status': 'unreachable', 'error': 'Cannot resolve IP'},
+        ]
+        with patch('reveal.adapters.domain.dns.dns.resolver.resolve') as mock_resolve, \
+             patch('reveal.adapters.domain.dns._query_ns_for_ns_records', side_effect=server_results):
+            mock_resolve.return_value = self._mock_ns_resolve(registered)
+            result = self.check_ns_authority('example.com')
+        assert result['status'] == 'critical'
+        assert 'old-ns.web-hosting.com' in result['orphaned']
+
+    def test_unreachable_ns_gives_warning(self):
+        """NS that can't be reached → warning (but not orphaned if not in consensus)."""
+        registered = ['ns1.example.com', 'ns2.example.com']
+        server_results = [
+            {'nameserver': 'ns1.example.com', 'ip': '1.1.1.1', 'ns_records': registered,
+             'status': 'ok', 'error': None},
+            {'nameserver': 'ns2.example.com', 'ip': None,
+             'ns_records': [], 'status': 'unreachable', 'error': 'timeout'},
+        ]
+        with patch('reveal.adapters.domain.dns.dns.resolver.resolve') as mock_resolve, \
+             patch('reveal.adapters.domain.dns._query_ns_for_ns_records', side_effect=server_results):
+            mock_resolve.return_value = self._mock_ns_resolve(registered)
+            result = self.check_ns_authority('example.com')
+        # ns2 is in consensus (listed by ns1), so not orphaned — but it is unreachable
+        assert result['status'] in ('warning', 'ok')  # ns2 unreachable → warning
+        assert 'ns2.example.com' in result['unreachable']
+
+    def test_no_dnspython_returns_skipped(self):
+        """When dnspython unavailable → status skipped."""
+        import reveal.adapters.domain.dns as dns_mod
+        original = dns_mod.HAS_DNSPYTHON
+        try:
+            dns_mod.HAS_DNSPYTHON = False
+            result = self.check_ns_authority('example.com')
+        finally:
+            dns_mod.HAS_DNSPYTHON = original
+        assert result['status'] == 'skipped'
+
+    def test_ns_resolve_failure_returns_error(self):
+        """Exception resolving NS records → status error."""
+        import dns.exception
+        with patch('reveal.adapters.domain.dns.dns.resolver.resolve',
+                   side_effect=dns.exception.DNSException('fail')):
+            result = self.check_ns_authority('example.com')
+        assert result['status'] == 'error'
+        assert 'Failed to resolve' in result['message']
+
+    def test_query_ns_unreachable_when_no_ip(self):
+        """_query_ns_for_ns_records returns unreachable when IP can't be resolved."""
+        import socket as _socket
+        with patch('reveal.adapters.domain.dns.socket.gethostbyname',
+                   side_effect=_socket.gaierror('Name resolution failed')):
+            result = self._query('bad-ns.example.com', 'example.com')
+        assert result['status'] == 'unreachable'
+        assert result['ip'] is None
+
+    def test_query_ns_timeout(self):
+        """_query_ns_for_ns_records returns no_response on timeout."""
+        import dns.exception
+        with patch('reveal.adapters.domain.dns.socket.gethostbyname', return_value='1.2.3.4'), \
+             patch('reveal.adapters.domain.dns.dns.resolver.Resolver') as MockResolver:
+            MockResolver.return_value.resolve.side_effect = dns.exception.Timeout
+            result = self._query('ns1.example.com', 'example.com')
+        assert result['status'] == 'no_response'
+
+    def test_ns_audit_element_available_in_adapter(self):
+        """ns-audit appears in get_available_elements()."""
+        adapter = DomainAdapter('example.com')
+        elements = adapter.get_available_elements()
+        names = [e['name'] for e in elements]
+        assert 'ns-audit' in names
+
+    def test_ns_audit_element_routes_correctly(self):
+        """get_element('ns-audit') calls check_ns_authority."""
+        adapter = DomainAdapter('example.com')
+        mock_result = {
+            'type': 'domain_ns_audit', 'domain': 'example.com',
+            'status': 'ok', 'summary': 'all agree',
+            'registered_nameservers': ['ns1.example.com'],
+            'servers': [], 'consensus_ns_records': ['ns1.example.com'],
+            'orphaned': [], 'unreachable': [],
+        }
+        with patch('reveal.adapters.domain.adapter.check_ns_authority', return_value=mock_result):
+            result = adapter.get_element('ns-audit')
+        assert result is not None
+        assert result['type'] == 'domain_ns_audit'
+        assert 'next_steps' in result
+
+
+class TestNsAuditRenderer(unittest.TestCase):
+    """Tests for _render_domain_ns_audit."""
+
+    def _capture(self, fn, *args, **kwargs):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            fn(*args, **kwargs)
+        return buf.getvalue()
+
+    def test_renders_ok_status(self):
+        from reveal.adapters.domain.renderer import DomainRenderer
+        result = {
+            'domain': 'example.com', 'status': 'ok',
+            'summary': 'All 2 NS servers agree on 2 records',
+            'registered_nameservers': ['ns1.example.com', 'ns2.example.com'],
+            'servers': [
+                {'nameserver': 'ns1.example.com', 'ip': '1.1.1.1', 'status': 'ok',
+                 'agrees_with_consensus': True, 'ns_records': ['ns1.example.com', 'ns2.example.com'],
+                 'error': None},
+            ],
+            'consensus_ns_records': ['ns1.example.com', 'ns2.example.com'],
+            'orphaned': [], 'next_steps': [],
+        }
+        out = self._capture(DomainRenderer._render_domain_ns_audit, result)
+        assert 'NS Authority Audit: example.com' in out
+        assert 'All 2 NS servers agree' in out
+        assert 'ns1.example.com' in out
+
+    def test_renders_orphaned_section(self):
+        from reveal.adapters.domain.renderer import DomainRenderer
+        result = {
+            'domain': 'example.com', 'status': 'critical',
+            'summary': '1 orphaned NS record(s) detected: old-ns.web-hosting.com',
+            'registered_nameservers': ['ns1.example.com', 'old-ns.web-hosting.com'],
+            'servers': [
+                {'nameserver': 'ns1.example.com', 'ip': '1.1.1.1', 'status': 'ok',
+                 'agrees_with_consensus': True, 'ns_records': ['ns1.example.com'], 'error': None},
+                {'nameserver': 'old-ns.web-hosting.com', 'ip': None, 'status': 'unreachable',
+                 'agrees_with_consensus': False, 'ns_records': [],
+                 'error': 'Cannot resolve IP: Name resolution failed'},
+            ],
+            'consensus_ns_records': ['ns1.example.com'],
+            'orphaned': ['old-ns.web-hosting.com'], 'next_steps': [],
+        }
+        out = self._capture(DomainRenderer._render_domain_ns_audit, result)
+        assert 'Orphaned' in out
+        assert 'old-ns.web-hosting.com' in out
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -505,3 +505,156 @@ def check_dns_propagation(domain: str) -> Dict[str, Any]:
             'message': f'Propagation check failed: {e}',
             'severity': 'medium',
         }
+
+
+def _query_ns_for_ns_records(ns_hostname: str, domain: str) -> Dict[str, Any]:
+    """Query a specific nameserver directly for the domain's NS records.
+
+    Args:
+        ns_hostname: Nameserver to query (e.g., 'ns1.example.com')
+        domain: Domain to query for (e.g., 'example.com')
+
+    Returns:
+        Dict with keys: ip (str|None), ns_records (list[str]), status (str), error (str|None)
+    """
+    result: Dict[str, Any] = {
+        'nameserver': ns_hostname,
+        'ip': None,
+        'ns_records': [],
+        'status': 'ok',
+        'error': None,
+    }
+    try:
+        ip = socket.gethostbyname(ns_hostname.rstrip('.'))
+        result['ip'] = ip
+    except socket.gaierror as e:
+        result['status'] = 'unreachable'
+        result['error'] = f'Cannot resolve IP: {e}'
+        return result
+
+    try:
+        resolver = dns.resolver.Resolver()
+        resolver.nameservers = [result['ip']]
+        resolver.lifetime = 5.0
+        answers = resolver.resolve(domain, 'NS')
+        result['ns_records'] = sorted(str(rdata).rstrip('.').lower() for rdata in answers)
+    except dns.exception.Timeout:
+        result['status'] = 'no_response'
+        result['error'] = 'Query timed out'
+    except Exception as e:
+        result['status'] = 'query_failed'
+        result['error'] = str(e)
+
+    return result
+
+
+def check_ns_authority(domain: str) -> Dict[str, Any]:
+    """Cross-query each authoritative NS to detect stale or orphaned entries.
+
+    Queries each registered NS server directly for the domain's NS records
+    and compares results. An orphaned NS is one that cannot be reached or
+    returns NS records inconsistent with the consensus.
+
+    Real-world use case: sociamonials.com had dns1.web-hosting.com listed as
+    an NS record that was no longer authoritative — required 4 raw dig calls
+    to find. This check surfaces that class of problem automatically.
+
+    Args:
+        domain: Domain name to audit
+
+    Returns:
+        Dict with type 'domain_ns_audit', full per-server results, orphaned list,
+        consensus NS set, and overall status
+    """
+    if not HAS_DNSPYTHON:
+        return {
+            'type': 'domain_ns_audit',
+            'domain': domain,
+            'status': 'skipped',
+            'message': 'dnspython not installed',
+            'registered_nameservers': [],
+            'servers': [],
+            'consensus_ns_records': [],
+            'orphaned': [],
+        }
+
+    try:
+        ns_answers = dns.resolver.resolve(domain, 'NS')
+        registered_nameservers = sorted(str(rr).rstrip('.').lower() for rr in ns_answers)
+    except Exception as e:
+        return {
+            'type': 'domain_ns_audit',
+            'domain': domain,
+            'status': 'error',
+            'message': f'Failed to resolve NS records: {e}',
+            'registered_nameservers': [],
+            'servers': [],
+            'consensus_ns_records': [],
+            'orphaned': [],
+        }
+
+    if not registered_nameservers:
+        return {
+            'type': 'domain_ns_audit',
+            'domain': domain,
+            'status': 'error',
+            'message': 'No NS records found for domain',
+            'registered_nameservers': [],
+            'servers': [],
+            'consensus_ns_records': [],
+            'orphaned': [],
+        }
+
+    # Query each NS server directly
+    servers = [_query_ns_for_ns_records(ns, domain) for ns in registered_nameservers]
+
+    # Build consensus: the NS set returned by the most servers that responded
+    from collections import Counter
+    responding = [tuple(s['ns_records']) for s in servers if s['ns_records']]
+    consensus_ns_records: List[str] = []
+    if responding:
+        most_common = Counter(responding).most_common(1)[0][0]
+        consensus_ns_records = list(most_common)
+
+    # Determine per-server agreement with consensus
+    for server in servers:
+        if server['ns_records']:
+            server['agrees_with_consensus'] = (
+                sorted(server['ns_records']) == sorted(consensus_ns_records)
+            )
+        else:
+            server['agrees_with_consensus'] = False
+
+    # Find orphaned: registered NS servers not in the consensus NS set
+    orphaned = [ns for ns in registered_nameservers if ns not in consensus_ns_records]
+
+    # Determine unreachable servers
+    unreachable = [s['nameserver'] for s in servers if s['status'] in ('unreachable', 'no_response')]
+
+    # Overall status
+    if orphaned:
+        overall_status = 'critical'
+        summary = (f'{len(orphaned)} orphaned NS record(s) detected: '
+                   f'{", ".join(orphaned)}')
+    elif unreachable:
+        overall_status = 'warning'
+        summary = (f'{len(unreachable)} NS server(s) unreachable: '
+                   f'{", ".join(unreachable)}')
+    elif any(not s['agrees_with_consensus'] for s in servers):
+        overall_status = 'warning'
+        summary = 'NS servers return inconsistent records'
+    else:
+        overall_status = 'ok'
+        summary = f'All {len(servers)} NS servers agree on {len(consensus_ns_records)} records'
+
+    return {
+        'type': 'domain_ns_audit',
+        'domain': domain,
+        'status': overall_status,
+        'summary': summary,
+        'registered_nameservers': registered_nameservers,
+        'servers': servers,
+        'consensus_ns_records': consensus_ns_records,
+        'orphaned': orphaned,
+        'unreachable': unreachable,
+    }
