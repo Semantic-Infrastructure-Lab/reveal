@@ -230,10 +230,12 @@ reveal pack . --format json               # For agent consumption
 ### JSON Output for Agents
 
 ```bash
-reveal pack . --budget 8000 --format json | jq '.selected[].relative'
+reveal pack . --budget 8000 --format json | jq '.files[].relative'
 ```
 
 Returns the relative paths of selected files, ready for agent `Read` calls.
+
+Top-level JSON keys: `path`, `budget`, `meta`, `files`. Each `files[]` entry has: `path`, `relative`, `priority`, `tokens_approx`, `lines`, `mtime`, `size`.
 
 ### See Also
 

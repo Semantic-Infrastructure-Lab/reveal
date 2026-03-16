@@ -387,16 +387,19 @@ reveal ssl://example.com --check --advanced
 
 ### Custom Expiry Thresholds
 
-**Adjust warning/critical thresholds**:
+**Filter output to certs expiring within N days** (uses `--expiring-within`):
 
 ```bash
-# Warn at 60 days, critical at 14 days
-reveal ssl://example.com --check --warn-days=60 --critical-days=14
+# Only show certs expiring within 60 days
+reveal ssl://example.com --expiring-within 60
+
+# Combine with --check for health assessment
+reveal ssl://example.com --check --expiring-within 30
 ```
 
-**Default thresholds**:
-- Warning: 30 days
-- Critical: 7 days
+**Default thresholds** (used by `--check`):
+- Warning: 30 days (`--expiring-within 30` sets this as the filter)
+- Critical: 7 days (hardcoded, not overridable via CLI flag)
 
 ---
 
