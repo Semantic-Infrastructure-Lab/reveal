@@ -122,6 +122,7 @@ class HelpAdapter(ResourceAdapter):
         help://markdown            # Markdown features guide
         help://tricks              # Cool tricks and hidden features
         help://adapters            # List all adapters with help
+        help://quick               # Quick-reference cheat sheet (top 10 commands)
         help://agent               # Agent usage guide (AGENT_HELP.md)
         help://agent-full          # Full agent guide (AGENT_HELP_FULL.md)
 
@@ -334,6 +335,10 @@ class HelpAdapter(ResourceAdapter):
         if '/' in topic:
             adapter_name, section = topic.split('/', 1)
             return self._get_adapter_section(adapter_name, section)
+
+        # Quick-start orientation cheat sheet
+        if topic == 'quick':
+            return self._get_quick_help()
 
         # Check if it's a static guide (includes auto-discovered + manual)
         if topic in self.help_topics:
@@ -590,6 +595,62 @@ class HelpAdapter(ResourceAdapter):
                 'error': 'Help generation failed',
                 'message': str(e)
             }
+
+    def _get_quick_help(self) -> Dict[str, Any]:
+        """Return a concise orientation cheat-sheet (help://quick)."""
+        return {
+            'type': 'help_quick',
+            'title': 'Reveal — Quick Reference',
+            'commands': [
+                {
+                    'cmd': 'reveal <file.py>',
+                    'description': 'Outline a Python/JS/Go/etc. file — functions, classes, imports',
+                },
+                {
+                    'cmd': 'reveal <dir/>',
+                    'description': 'Directory tree with file sizes and types',
+                },
+                {
+                    'cmd': 'reveal ssl://DOMAIN --check',
+                    'description': 'TLS cert health check — expiry, chain, algo (exit 1/2 on issues)',
+                },
+                {
+                    'cmd': 'reveal domain://DOMAIN',
+                    'description': 'DNS + WHOIS + HTTP redirect + email DNS in one pass',
+                },
+                {
+                    'cmd': 'reveal nginx://DOMAIN',
+                    'description': 'nginx vhost summary — SSL, ports, upstreams, ACL',
+                },
+                {
+                    'cmd': 'reveal cpanel://USER/ssl --only-failures',
+                    'description': 'Disk cert status for all domains on a cPanel user (failures only)',
+                },
+                {
+                    'cmd': 'reveal <file.py> --check',
+                    'description': 'Static quality rules — complexity, unused imports, long functions',
+                },
+                {
+                    'cmd': 'reveal <file.py> --pattern',
+                    'description': 'Pattern detection rules — security, anti-patterns, code smells',
+                },
+                {
+                    'cmd': 'find src/ -name "*.py" | reveal --stdin --check',
+                    'description': 'Batch check all Python files via stdin pipeline',
+                },
+                {
+                    'cmd': 'reveal help://adapters',
+                    'description': 'List all 20+ adapters with syntax and examples',
+                },
+            ],
+            'next_steps': [
+                'reveal help://adapters          # full adapter list',
+                'reveal help://ast               # Python/JS/Go AST queries',
+                'reveal help://ssl               # TLS cert adapter guide',
+                'reveal help://examples/security # security query recipes',
+                'reveal help://agent             # AI agent usage guide',
+            ],
+        }
 
     def _get_all_adapter_help(self) -> Dict[str, Any]:
         """Get help for all adapters."""

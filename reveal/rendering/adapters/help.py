@@ -806,6 +806,23 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
     _render_help_breadcrumbs(scheme, data)
 
 
+def _render_help_quick(data: Dict[str, Any]) -> None:
+    """Render help://quick — concise orientation cheat-sheet."""
+    print(f"\n{data.get('title', 'Reveal — Quick Reference')}\n")
+    commands = data.get('commands', [])
+    if commands:
+        col_cmd = max(len(c['cmd']) for c in commands)
+        for c in commands:
+            print(f"  {c['cmd']:<{col_cmd}}  — {c['description']}")
+    next_steps = data.get('next_steps', [])
+    if next_steps:
+        print()
+        print("More help:")
+        for s in next_steps:
+            print(f"  reveal {s}" if not s.startswith('reveal') else f"  {s}")
+    print()
+
+
 def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = False) -> None:
     """Render help content.
 
@@ -831,6 +848,7 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
         'help_section': _render_help_section,
         'query_recipes': _render_query_recipes,
         'adapter_schema': _render_adapter_schema,
+        'help_quick': _render_help_quick,
     }
 
     renderer = renderers.get(help_type)

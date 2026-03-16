@@ -650,5 +650,50 @@ class TestRenderHelp(unittest.TestCase):
         self.assertIn('# test:// - Test adapter', output)
 
 
+class TestHelpQuick(unittest.TestCase):
+    """BACK-043: help://quick returns orientation cheat-sheet."""
+
+    def _get_quick(self):
+        from reveal.adapters.help import HelpAdapter
+        a = HelpAdapter('help://quick')
+        return a.get_element('quick')
+
+    def test_type_is_help_quick(self):
+        result = self._get_quick()
+        self.assertEqual(result.get('type'), 'help_quick')
+
+    def test_has_commands_list(self):
+        result = self._get_quick()
+        self.assertIn('commands', result)
+        self.assertGreaterEqual(len(result['commands']), 5)
+
+    def test_each_command_has_cmd_and_description(self):
+        result = self._get_quick()
+        for item in result['commands']:
+            self.assertIn('cmd', item)
+            self.assertIn('description', item)
+            self.assertTrue(item['cmd'])
+            self.assertTrue(item['description'])
+
+    def test_has_next_steps(self):
+        result = self._get_quick()
+        self.assertIn('next_steps', result)
+        self.assertTrue(result['next_steps'])
+
+    def test_renderer_produces_output(self):
+        result = self._get_quick()
+        output = capture_stdout(render_help, result, 'text', False)
+        self.assertIn('reveal', output.lower())
+        # Should include at least one command
+        self.assertTrue(any(c['cmd'] in output for c in result['commands']))
+
+    def test_json_format_returns_raw(self):
+        result = self._get_quick()
+        output = capture_stdout(render_help, result, 'json', False)
+        import json
+        data = json.loads(output)
+        self.assertEqual(data['type'], 'help_quick')
+
+
 if __name__ == '__main__':
     unittest.main()
