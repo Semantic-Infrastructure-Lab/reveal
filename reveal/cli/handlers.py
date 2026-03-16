@@ -741,7 +741,8 @@ def _get_status_indicator(status: str) -> str:
 
 
 def _render_batch_text_output(stats: dict, overall_status: str,
-                               by_scheme: dict, display_results: list) -> None:
+                               by_scheme: dict, display_results: list,
+                               summary_only: bool = False) -> None:
     """Render batch results in text format.
 
     Args:
@@ -749,6 +750,7 @@ def _render_batch_text_output(stats: dict, overall_status: str,
         overall_status: Overall status string
         by_scheme: Results grouped by scheme
         display_results: Filtered results to display
+        summary_only: When True, skip per-URI lines (show header only)
     """
     print(f"\n{'='*60}")
     print("BATCH CHECK RESULTS")
@@ -766,7 +768,10 @@ def _render_batch_text_output(stats: dict, overall_status: str,
 
     print(f"{'='*60}\n")
 
-    # Show individual results if not summary-only
+    # Skip per-URI lines when --summary is requested
+    if summary_only:
+        return
+
     if display_results:
         for result in display_results:
             uri = result['uri']
@@ -834,11 +839,17 @@ def _render_batch_results(results: list, args: 'Namespace') -> None:
         'results': display_results,
     }
 
+    summary_only = getattr(args, 'summary', False)
+
     # Render based on format
     if args.format == 'json':
+        if summary_only:
+            # Drop per-URI results from JSON when --summary is requested
+            batch_result = {k: v for k, v in batch_result.items() if k != 'results'}
         print(json.dumps(batch_result, indent=2))
     else:
-        _render_batch_text_output(stats, overall_status, by_scheme, display_results)
+        _render_batch_text_output(stats, overall_status, by_scheme, display_results,
+                                   summary_only=summary_only)
 
     # Exit with appropriate code
     exit_code = _calculate_batch_exit_code(stats['failures'], stats['warnings'])

@@ -266,6 +266,85 @@ class TestAtFileBatchEquivalence(unittest.TestCase):
         finally:
             os.unlink(list_file)
 
+    def test_at_file_batch_summary_suppresses_per_uri_lines(self):
+        """BACK-060: --batch --summary must NOT emit one line per URI (header only)."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write('env://PATH\nenv://HOME\nenv://USER\nenv://SHELL\nenv://TERM\n')
+            list_file = f.name
+
+        try:
+            result = self.run_reveal(f'@{list_file}', '--batch', '--summary')
+            self.assertIn('BATCH CHECK RESULTS', result.stdout)
+            self.assertIn('Total URIs: 5', result.stdout)
+            # Per-URI lines look like "✓ env://PATH: SUCCESS" — should be absent
+            self.assertNotIn('env://PATH: ', result.stdout)
+            self.assertNotIn('env://HOME: ', result.stdout)
+        finally:
+            os.unlink(list_file)
+
+    def test_at_file_batch_without_summary_shows_per_uri_lines(self):
+        """Without --summary, each URI gets its own output line."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write('env://PATH\nenv://HOME\n')
+            list_file = f.name
+
+        try:
+            result = self.run_reveal(f'@{list_file}', '--batch')
+            self.assertIn('BATCH CHECK RESULTS', result.stdout)
+            # Per-URI lines must appear when --summary is NOT used
+            self.assertIn('env://', result.stdout)
+        finally:
+            os.unlink(list_file)
+
+
+class TestRenderBatchTextOutput:
+    """BACK-060: _render_batch_text_output summary_only parameter unit tests."""
+
+    def _make_results(self, n: int) -> list:
+        return [
+            {'uri': f'env://VAR{i}', 'scheme': 'env', 'status': 'success'}
+            for i in range(n)
+        ]
+
+    def test_summary_only_suppresses_uri_lines(self, capsys):
+        from reveal.cli.handlers import _render_batch_text_output
+        results = self._make_results(5)
+        by_scheme = {'env': results}
+        stats = {'total': 5, 'successful': 5, 'warnings': 0, 'failures': 0}
+        _render_batch_text_output(stats, 'pass', by_scheme, results, summary_only=True)
+        out = capsys.readouterr().out
+        assert 'BATCH CHECK RESULTS' in out
+        assert 'Total URIs: 5' in out
+        assert 'env://VAR0' not in out
+
+    def test_summary_only_false_shows_uri_lines(self, capsys):
+        from reveal.cli.handlers import _render_batch_text_output
+        results = self._make_results(3)
+        by_scheme = {'env': results}
+        stats = {'total': 3, 'successful': 3, 'warnings': 0, 'failures': 0}
+        _render_batch_text_output(stats, 'pass', by_scheme, results, summary_only=False)
+        out = capsys.readouterr().out
+        assert 'BATCH CHECK RESULTS' in out
+        assert 'env://VAR0' in out
+
+    def test_summary_only_json_drops_results_key(self, capsys):
+        import json
+        import sys
+        from argparse import Namespace
+        from unittest.mock import patch
+        from reveal.cli.handlers import _render_batch_results
+        results = [
+            {'uri': f'env://VAR{i}', 'scheme': 'env', 'status': 'success', 'data': {}}
+            for i in range(10)
+        ]
+        args = Namespace(format='json', summary=True, only_failures=False)
+        with patch('sys.exit'):
+            _render_batch_results(results, args)
+        out = capsys.readouterr().out
+        data = json.loads(out)
+        assert 'results' not in data
+        assert data['total'] == 10
+
 
 if __name__ == '__main__':
     unittest.main()
