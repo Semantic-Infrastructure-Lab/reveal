@@ -13,11 +13,12 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | Adapter | Query Params | Example |
 |---------|--------------|---------|
 | **imports://** | `unused`, `circular`, `violations` | `imports://.?unused` |
-| **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash` | `git://file.py?type=history` |
+| **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash`, `ref` | `git://file.py?type=history` |
 | **json://** | `schema`, field filters | `json://data.json?type=object` |
 | **markdown://** | field filters (frontmatter) | `markdown://docs/?status=draft` |
 | **stats://** | `hotspots`, `code_only` | `stats://.?hotspots` |
-| **ast://** | `lines` | `ast://file.py?lines=50..200` |
+| **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `calls`, `callee_of`, `show`, `rank` | `ast://src?complexity>10` |
+| **calls://** | `target`, `callees`, `rank`, `top`, `depth`, `format`, `builtins` | `calls://src?target=fn` |
 | **claude://** | `summary`, `tools`, `errors` | `claude://conv.json?summary` |
 | **diff://** | none | N/A |
 | **env://** | none | N/A |
@@ -117,6 +118,13 @@ reveal 'imports://src?unused&circular'
     reveal 'git://app.py?type=history&hash=a1b2c3d'
     ```
 
+- **`ref`** - Override the starting ref (alias for `@ref` in the URI)
+  - **Example**:
+    ```bash
+    reveal 'git://src/app.py?type=history&ref=v0.63.0'
+    reveal 'git://.?ref=main'          # same as git://.@main
+    ```
+
 **Combining Parameters**:
 ```bash
 reveal 'git://.?type=history&author~=john&message~=fix'
@@ -213,17 +221,110 @@ reveal 'stats://.?hotspots&code_only'
 
 ### ast:// - Abstract Syntax Tree Inspection
 
-**Purpose**: Explore Python AST nodes
+**Purpose**: Query code structure — find functions by complexity, size, name, type, and call relationships.
 
 **Query Parameters**:
 
-- **`lines`** - Filter AST nodes by line range
-  - **Syntax**: `lines=START..END`
-  - **Example**:
-    ```bash
-    reveal 'ast://file.py?lines=50..200'
-    ```
-  - Shows only AST nodes within the specified line range.
+- **`type`** - Filter by element type (`function`, `class`, `method`)
+  ```bash
+  reveal 'ast://src?type=function'
+  reveal 'ast://src?type=class'
+  ```
+
+- **`name`** / **`name~=`** - Filter by element name (exact or substring)
+  ```bash
+  reveal 'ast://src?name=validate_item'
+  reveal 'ast://src?name~=auth'          # name contains "auth"
+  reveal 'ast://src?name=*handler*'      # wildcard match
+  ```
+
+- **`complexity>`** - Filter by cyclomatic complexity
+  ```bash
+  reveal 'ast://src?complexity>10'       # complexity over 10
+  reveal 'ast://src?complexity>5&type=function'
+  ```
+
+- **`lines`** / **`lines>`** - Filter by line count or line range
+  ```bash
+  reveal 'ast://src?lines>50'            # functions over 50 lines
+  reveal 'ast://file.py?lines=50..200'   # elements in line range 50–200
+  ```
+
+- **`depth>`** - Filter by nesting depth
+  ```bash
+  reveal 'ast://src?depth>3'             # deeply nested code
+  ```
+
+- **`decorator`** - Filter by decorator name
+  ```bash
+  reveal 'ast://src?decorator=property'
+  reveal 'ast://src?decorator=staticmethod'
+  ```
+
+- **`calls`** - Find functions that call a given function (within-file)
+  ```bash
+  reveal 'ast://src?calls=validate_item'
+  reveal 'ast://src?calls=*send*'        # wildcard: calls anything with "send"
+  ```
+
+- **`callee_of`** - Find functions called by a given function (within-file)
+  ```bash
+  reveal 'ast://src?callee_of=main'
+  ```
+
+- **`show=calls`** - Show call graph for all functions in the file
+  ```bash
+  reveal 'ast://src/file.py?show=calls'
+  ```
+
+- **`rank`** - Sort by a field descending (e.g., `rank=-complexity`)
+  ```bash
+  reveal 'ast://src?rank=-complexity'    # most complex first
+  reveal 'ast://src?rank=-lines'         # longest first
+  ```
+
+> For cross-file call graph queries, use `calls://` (see below). `ast://` call filters (`calls=`, `callee_of=`) are within-file only.
+
+---
+
+### calls:// - Cross-File Call Graph
+
+**Purpose**: Find who calls a function, what a function calls, or rank functions by coupling — across the entire project.
+
+**Query Parameters**:
+
+- **`target`** - Find all callers of a function (reverse lookup)
+  ```bash
+  reveal 'calls://src?target=validate_item'
+  # Shorthand: calls://src/file.py:validate_item
+  ```
+
+- **`callees`** - Find everything a function calls (forward lookup)
+  ```bash
+  reveal 'calls://src?callees=validate_item'
+  reveal 'calls://src?callees=validate_item&builtins=true'  # include len, str, etc.
+  ```
+
+- **`rank=callers`** - Rank all functions by number of unique callers (coupling metrics)
+  ```bash
+  reveal 'calls://src?rank=callers'          # top 10 most-called
+  reveal 'calls://src?rank=callers&top=20'   # top 20
+  ```
+
+- **`depth`** - Transitive caller levels for `?target` (default 1, max 5)
+  ```bash
+  reveal 'calls://src?target=validate_item&depth=2'  # callers-of-callers
+  ```
+
+- **`format`** - Output format: `text` (default), `json`, `dot` (Graphviz)
+  ```bash
+  reveal 'calls://src?target=main&format=dot' | dot -Tsvg > graph.svg
+  ```
+
+- **`builtins`** - Include Python builtins in `?callees` and `?rank` output (default: false)
+  ```bash
+  reveal 'calls://src?callees=fn&builtins=true'
+  ```
 
 ---
 
