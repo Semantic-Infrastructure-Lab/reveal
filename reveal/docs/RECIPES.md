@@ -721,8 +721,18 @@ reveal cpanel://USERNAME/ssl
 # Useful when large accounts have inactive domains with expiring certs
 reveal cpanel://USERNAME/ssl --dns-verified
 
+# Live cert check: for each non-ok disk cert, also probe the live TLS handshake
+# Shows ↳ live: Nd (date) lines — confirms whether cert on disk is actually in use
+reveal cpanel://USERNAME/ssl --check-live
+
+# Only failures, with live probe (fast triage for large accounts)
+reveal cpanel://USERNAME/ssl --only-failures --check-live
+
 # Nobody ACL check on every domain docroot
 reveal cpanel://USERNAME/acl-check
+
+# Full audit: SSL + ACL + nginx ACME in one pass (exit 2 on any failure)
+reveal cpanel://USERNAME --audit
 
 # JSON output for scripting
 reveal cpanel://USERNAME/ssl --format=json
@@ -890,6 +900,36 @@ grep -h "server_name" /etc/nginx/sites-enabled/* | awk '{print $2}' | \
 # Batch SSL health checks with JSON output
 cat domains.txt | sed 's/^/ssl:\/\//' | reveal --stdin --format=json | \
   jq 'select(.status.health != "healthy")'
+```
+
+### Extract-then-batch pipeline
+
+Combine `--extract` with `--stdin --batch` to build composable check pipelines.
+
+```bash
+# Extract domains from nginx config, then batch-check their SSL certs
+reveal /etc/nginx/conf.d/app.conf --extract domains | \
+  sed 's/^/ssl:\/\//' | reveal --stdin --check
+
+# Show only SSL failures from all configs in a directory
+reveal /etc/nginx/sites-enabled/ --extract domains | \
+  sed 's/^/ssl:\/\//' | reveal --stdin --check --only-failures
+
+# Extract from cPanel domain list, batch-check SSL
+reveal cpanel://USERNAME/domains --format=json | \
+  jq -r '.domains[].domain' | sed 's/^/ssl:\/\//' | reveal --stdin --check
+
+# Use cpanel://USER/ssl --extract for already-structured data
+reveal cpanel://USERNAME/ssl --format=json | \
+  jq -r '.certs[] | select(.status != "ok") | .domain' | \
+  sed 's/^/ssl:\/\//' | reveal --stdin --check-live
+
+# Pattern detection with severity filter (only high+)
+reveal src/ --pattern --severity high
+
+# Full pipeline: extract domains → batch SSL → JSON → filter failures
+reveal nginx.conf --extract domains | sed 's/^/ssl:\/\//' | \
+  reveal --stdin --format=json | jq 'select(.status.health != "healthy")'
 ```
 
 ### Clipboard integration

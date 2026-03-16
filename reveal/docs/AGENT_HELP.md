@@ -1536,6 +1536,26 @@ find . -name "*.py" | reveal --stdin --format=json | \
 git diff HEAD~5 --name-only | reveal --stdin --check
 ```
 
+### Pattern 0: Extract-then-Batch Pipeline
+
+**Goal:** Use structured extraction to feed a batch check — no grep/awk needed
+
+```bash
+# Extract domains from nginx config, then SSL-check all of them
+reveal /etc/nginx/conf.d/app.conf --extract domains | \
+  sed 's/^/ssl:\/\//' | reveal --stdin --check
+
+# Show only failures (fast triage for large configs)
+reveal /etc/nginx/sites-enabled/ --extract domains | \
+  sed 's/^/ssl:\/\//' | reveal --stdin --check --only-failures
+
+# cPanel: check disk SSL for one user, live-probe each non-ok cert
+reveal cpanel://USERNAME/ssl --only-failures --check-live
+
+# Pattern detection with minimum severity filter
+reveal src/ --pattern --severity high
+```
+
 ### Pattern 1: Finding All High-Complexity Functions
 
 **Goal:** Identify refactoring targets across entire codebase
