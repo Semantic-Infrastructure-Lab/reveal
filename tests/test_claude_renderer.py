@@ -1233,5 +1233,112 @@ class TestClaudeSearchResultsRenderer:
         assert len(lines) == 1
 
 
+class TestClaudeChainRenderer:
+    """Tests for _render_claude_chain."""
+
+    def test_renders_header_with_session_name(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        result = {'type': 'claude_chain', 'session': 'my-session', 'chain': [], 'sessions_dir': None}
+        ClaudeRenderer._render_claude_chain(result)
+        out = capsys.readouterr().out
+        assert 'Session Chain: my-session' in out
+
+    def test_empty_chain_shows_no_data_message(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        result = {'type': 'claude_chain', 'session': 'my-session', 'chain': [], 'sessions_dir': None}
+        ClaudeRenderer._render_claude_chain(result)
+        out = capsys.readouterr().out
+        assert 'No chain data found.' in out
+
+    def test_head_entry_labeled_head(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        result = {
+            'type': 'claude_chain',
+            'session': 'session-c',
+            'chain': [
+                {'session': 'session-c', 'readme': '/path/r.md', 'date': '2026-03-16',
+                 'badge': 'fix stuff', 'continuing_from': 'session-b',
+                 'tests_start': 100, 'tests_end': 110, 'commits': 3},
+            ],
+            'sessions_dir': '/some/dir',
+        }
+        ClaudeRenderer._render_claude_chain(result)
+        out = capsys.readouterr().out
+        assert '[HEAD]' in out
+        assert 'session-c' in out
+        assert 'fix stuff' in out
+        assert '100 → 110 (+10)' in out
+        assert 'Commits: 3' in out
+
+    def test_continuation_entries_numbered(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        result = {
+            'type': 'claude_chain',
+            'session': 'session-c',
+            'chain': [
+                {'session': 'session-c', 'readme': '/r.md', 'date': None,
+                 'badge': None, 'continuing_from': 'session-b',
+                 'tests_start': None, 'tests_end': None, 'commits': None},
+                {'session': 'session-b', 'readme': '/r2.md', 'date': '2026-03-15',
+                 'badge': 'prev badge', 'continuing_from': None,
+                 'tests_start': None, 'tests_end': None, 'commits': None},
+            ],
+            'sessions_dir': '/some/dir',
+        }
+        ClaudeRenderer._render_claude_chain(result)
+        out = capsys.readouterr().out
+        assert '[2]' in out
+        assert 'session-b' in out
+        assert 'prev badge' in out
+
+    def test_missing_readme_shown(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        result = {
+            'type': 'claude_chain',
+            'session': 'my-session',
+            'chain': [
+                {'session': 'my-session', 'readme': None, 'date': None,
+                 'badge': None, 'continuing_from': None,
+                 'tests_start': None, 'tests_end': None, 'commits': None},
+            ],
+            'sessions_dir': '/some/dir',
+        }
+        ClaudeRenderer._render_claude_chain(result)
+        out = capsys.readouterr().out
+        assert 'README:  not found' in out
+
+    def test_hint_shown_when_no_sessions_dir(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        result = {
+            'type': 'claude_chain',
+            'session': 'my-session',
+            'chain': [
+                {'session': 'my-session', 'readme': None, 'date': None,
+                 'badge': None, 'continuing_from': None,
+                 'tests_start': None, 'tests_end': None, 'commits': None},
+            ],
+            'sessions_dir': None,
+        }
+        ClaudeRenderer._render_claude_chain(result)
+        out = capsys.readouterr().out
+        assert 'REVEAL_SESSIONS_DIR' in out
+
+    def test_no_hint_when_sessions_dir_set(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        result = {
+            'type': 'claude_chain',
+            'session': 'my-session',
+            'chain': [
+                {'session': 'my-session', 'readme': '/r.md', 'date': '2026-03-16',
+                 'badge': None, 'continuing_from': None,
+                 'tests_start': None, 'tests_end': None, 'commits': None},
+            ],
+            'sessions_dir': '/some/dir',
+        }
+        ClaudeRenderer._render_claude_chain(result)
+        out = capsys.readouterr().out
+        assert 'REVEAL_SESSIONS_DIR' not in out
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

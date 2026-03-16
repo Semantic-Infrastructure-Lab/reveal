@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315)
+## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316)
 
 ### Fixed
 - **BACK-051: `domain://` missing email DNS layer** — `check_mx_records()`, `check_spf_record()`, `check_dmarc_record()`, and `check_email_dns()` aggregator added to `dns.py`. New `/mail` element (`reveal domain://DOMAIN/mail`) shows MX/SPF/DMARC status with record details. `check()` now includes all three email checks. Renderer added. 17 new tests. (session emerald-shade-0315)
@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BACK-054: `nginx://` overview doesn't flag `.bak`/`.tmp` files** — `_find_artifact_files()` scans config dirs (top-level + one subdir level) for files matching backup/temp suffixes that nginx silently ignores. `_get_overview()` includes them as `artifact_files[]`; renderer prints a ⚠️  section; `next_steps` gains a housekeeping hint. 6 new tests. (session emerald-shade-0315)
 - **BACK-049: `ssl://` `--advanced` shows "Signature algorithm: Unknown"** — `ssl.getpeercert()` dict never includes `signatureAlgorithm`. `_get_peer_cert()` now also fetches the binary form and extracts the hash algorithm via the `cryptography` library, merging it into the returned dict. `_parse_binary_cert()` also includes `signatureAlgorithm`. 3 new tests. (session emerald-shade-0315)
 - **BACK-050: `--check` deprecation hint stdout pollution** — Already fixed pre-session. `routing.py:723` confirmed to write deprecation hint to `sys.stderr`. No code change required; confirmed resolved. (session emerald-shade-0315)
+
+### Added
+- **BACK-041: `claude://session/<id>/chain` — session continuation chain traversal** — Traverses the continuation chain by reading `continuing_from:` YAML frontmatter from session README files. Configure with `REVEAL_SESSIONS_DIR` env var pointing to the directory containing per-session subdirs (each with `README*.md`). Returns `chain[]` with session name, date, badge, tests start/end, and commits per step. Renderer displays aligned chain with `[HEAD]`/`[N]` labels, `↓ continues from` arrows, and a hint if `REVEAL_SESSIONS_DIR` is not set. Cycle-safe (50-session limit). 22 new tests. (session wise-temple-0316)
 
 ### Documentation
 - **BACK-058: `--extract domains | --stdin --batch` pipeline undocumented** — Added "Extract-then-batch pipeline" recipe section to `RECIPES.md`. Added "Pattern 0: Extract-then-Batch Pipeline" to `AGENT_HELP.md`. Documents `--check-live`, `--only-failures`, `--canonical-only` flags with cPanel + nginx + batch-SSL workflow examples. (session emerald-shade-0315)

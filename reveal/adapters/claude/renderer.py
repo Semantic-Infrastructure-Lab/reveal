@@ -630,6 +630,50 @@ class ClaudeRenderer(TypeDispatchRenderer):
             print(f'{session}{project_tag}  {modified}{ops_str}')
 
     @staticmethod
+    def _render_claude_chain(result: dict) -> None:
+        """Render session continuation chain."""
+        session = result.get('session', 'unknown')
+        chain = result.get('chain', [])
+        sessions_dir = result.get('sessions_dir')
+
+        print(f'Session Chain: {session}')
+        print('═' * (15 + len(session)))
+
+        if not chain:
+            print('No chain data found.')
+            return
+
+        for i, entry in enumerate(chain):
+            name = entry.get('session', 'unknown')
+            date = entry.get('date', '')
+            badge = entry.get('badge', '')
+            readme = entry.get('readme')
+            tests_start = entry.get('tests_start')
+            tests_end = entry.get('tests_end')
+            commits = entry.get('commits')
+            continuing_from = entry.get('continuing_from')
+
+            prefix = '[HEAD]' if i == 0 else f'[{i + 1}]  '
+            print(f'\n{prefix} {name}')
+            if date:
+                print(f'  Date:    {date}')
+            if badge:
+                print(f'  Badge:   {badge}')
+            if tests_start is not None and tests_end is not None:
+                delta = tests_end - tests_start
+                sign = '+' if delta >= 0 else ''
+                print(f'  Tests:   {tests_start} → {tests_end} ({sign}{delta})')
+            if commits is not None:
+                print(f'  Commits: {commits}')
+            if not readme:
+                print(f'  README:  not found')
+            if continuing_from:
+                print(f'  ↓ continues from')
+
+        if not sessions_dir:
+            print('\n[hint] Set REVEAL_SESSIONS_DIR to enable README metadata in chain')
+
+    @staticmethod
     def _render_claude_search_results(result: dict) -> None:
         """Render search results with excerpts."""
         session = result.get('session', 'unknown')

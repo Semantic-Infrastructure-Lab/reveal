@@ -169,6 +169,7 @@ class ClaudeAdapter(ResourceAdapter):
     BUDGET_LIST_FIELD = 'results'
 
     CONVERSATION_BASE = Path(os.environ.get('REVEAL_CLAUDE_DIR', str(Path.home() / '.claude' / 'projects')))
+    SESSIONS_DIR = Path(os.environ.get('REVEAL_SESSIONS_DIR', '')) if os.environ.get('REVEAL_SESSIONS_DIR') else None
 
     def __init__(self, resource: str, query: Optional[str] = None):
         """Initialize Claude adapter.
@@ -252,6 +253,91 @@ class ClaudeAdapter(ResourceAdapter):
                 return jsonl_file
 
         return None
+
+    @staticmethod
+    def _find_session_readme(session_name: str, sessions_dir: Optional[Path]) -> Optional[Path]:
+        """Find the most recent README for a session in the sessions directory.
+
+        Args:
+            session_name: Session identifier (e.g., 'emerald-shade-0315')
+            sessions_dir: Root directory containing per-session subdirs
+
+        Returns:
+            Path to the most recent README*.md file, or None if not found
+        """
+        if not sessions_dir or not sessions_dir.exists():
+            return None
+        session_dir = sessions_dir / session_name
+        if not session_dir.exists():
+            return None
+        readmes = sorted(session_dir.glob('README*.md'), reverse=True)
+        return readmes[0] if readmes else None
+
+    @staticmethod
+    def _parse_readme_frontmatter(readme_path: Path) -> Dict[str, Any]:
+        """Parse YAML frontmatter from a README file.
+
+        Args:
+            readme_path: Path to the README file
+
+        Returns:
+            Dict of frontmatter fields, empty dict if no frontmatter or parse error
+        """
+        import yaml
+        try:
+            text = readme_path.read_text(encoding='utf-8')
+            if text.startswith('---'):
+                end = text.find('\n---', 3)
+                if end != -1:
+                    frontmatter_text = text[3:end].strip()
+                    return yaml.safe_load(frontmatter_text) or {}
+        except Exception:
+            pass
+        return {}
+
+    def _get_chain(self) -> Dict[str, Any]:
+        """Traverse session continuation chain via README continuing_from: links.
+
+        Reads REVEAL_SESSIONS_DIR/<session>/README*.md for each session,
+        extracts YAML frontmatter, and follows continuing_from: until the
+        chain ends or a cycle is detected (limit: 50 sessions).
+
+        Returns:
+            Output Contract v1.0 dict with type 'claude_chain' and chain list
+        """
+        contract_base = self._get_contract_base()
+        sessions_dir = self.SESSIONS_DIR
+
+        chain: List[Dict[str, Any]] = []
+        seen: set = set()
+        current_name: Optional[str] = self.session_name
+
+        while current_name and current_name not in seen and len(chain) < 50:
+            seen.add(current_name)
+            readme_path = self._find_session_readme(current_name, sessions_dir)
+            frontmatter = self._parse_readme_frontmatter(readme_path) if readme_path else {}
+
+            entry: Dict[str, Any] = {
+                'session': current_name,
+                'readme': str(readme_path) if readme_path else None,
+                'date': frontmatter.get('date') or frontmatter.get('session_date'),
+                'badge': frontmatter.get('badge'),
+                'continuing_from': frontmatter.get('continuing_from'),
+                'tests_start': frontmatter.get('tests_start'),
+                'tests_end': frontmatter.get('tests_end'),
+                'commits': frontmatter.get('commits'),
+            }
+            chain.append(entry)
+            current_name = frontmatter.get('continuing_from')
+
+        return {
+            **contract_base,
+            'type': 'claude_chain',
+            'session': self.session_name,
+            'chain': chain,
+            'chain_length': len(chain),
+            'sessions_dir': str(sessions_dir) if sessions_dir else None,
+        }
 
     def _load_messages(self) -> List[Dict]:
         """Load and parse conversation JSONL.
@@ -385,6 +471,10 @@ class ClaudeAdapter(ResourceAdapter):
         # claude://files/<path> — cross-session file tracking.
         if self.resource == 'files' or self.resource.startswith('files/'):
             return self._track_file_sessions()
+
+        # claude://session/<id>/chain — session continuation chain traversal.
+        if '/chain' in self.resource:
+            return self._get_chain()
 
         messages = self._load_messages()
         contract_base = self._get_contract_base()

@@ -749,3 +749,155 @@ class TestPostProcessMessages:
         result = {'type': 'claude_messages', 'messages': None}
         ClaudeAdapter._post_process_messages(result, self._args())
         assert result['messages'] is None
+
+
+# ─── chain traversal ──────────────────────────────────────────────────────────
+
+def _write_readme(sessions_dir: Path, session_name: str, frontmatter: dict) -> Path:
+    """Write a README*.md with YAML frontmatter to sessions_dir/<session_name>/."""
+    import yaml
+    session_dir = sessions_dir / session_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    readme = session_dir / f'README_2026-01-01_00-00.md'
+    fm_text = yaml.dump(frontmatter, default_flow_style=False)
+    readme.write_text(f'---\n{fm_text}---\n\n# {session_name}\n')
+    return readme
+
+
+class TestFindSessionReadme:
+
+    def test_returns_none_when_sessions_dir_is_none(self):
+        result = ClaudeAdapter._find_session_readme('any-session', None)
+        assert result is None
+
+    def test_returns_none_when_sessions_dir_missing(self, tmp_path):
+        missing = tmp_path / 'no-such-dir'
+        result = ClaudeAdapter._find_session_readme('any-session', missing)
+        assert result is None
+
+    def test_returns_none_when_session_subdir_missing(self, tmp_path):
+        (tmp_path / 'other-session').mkdir()
+        result = ClaudeAdapter._find_session_readme('my-session', tmp_path)
+        assert result is None
+
+    def test_finds_readme_in_session_dir(self, tmp_path):
+        readme = _write_readme(tmp_path, 'my-session', {'badge': 'test'})
+        result = ClaudeAdapter._find_session_readme('my-session', tmp_path)
+        assert result == readme
+
+    def test_returns_most_recent_readme(self, tmp_path):
+        session_dir = tmp_path / 'my-session'
+        session_dir.mkdir()
+        (session_dir / 'README_2026-01-01_00-00.md').write_text('---\nbadge: old\n---\n')
+        newest = session_dir / 'README_2026-03-15_22-00.md'
+        newest.write_text('---\nbadge: new\n---\n')
+        result = ClaudeAdapter._find_session_readme('my-session', tmp_path)
+        assert result == newest
+
+
+class TestParseReadmeFrontmatter:
+
+    def test_parses_yaml_frontmatter(self, tmp_path):
+        readme = tmp_path / 'README.md'
+        readme.write_text('---\nbadge: test badge\ncontinuing_from: prev-session\n---\n# body\n')
+        result = ClaudeAdapter._parse_readme_frontmatter(readme)
+        assert result['badge'] == 'test badge'
+        assert result['continuing_from'] == 'prev-session'
+
+    def test_returns_empty_for_no_frontmatter(self, tmp_path):
+        readme = tmp_path / 'README.md'
+        readme.write_text('# Just a heading\nNo frontmatter here.\n')
+        result = ClaudeAdapter._parse_readme_frontmatter(readme)
+        assert result == {}
+
+    def test_returns_empty_for_unclosed_frontmatter(self, tmp_path):
+        readme = tmp_path / 'README.md'
+        readme.write_text('---\nbadge: test\n# no closing ---\n')
+        result = ClaudeAdapter._parse_readme_frontmatter(readme)
+        assert result == {}
+
+    def test_returns_empty_on_invalid_yaml(self, tmp_path):
+        readme = tmp_path / 'README.md'
+        readme.write_text('---\n: bad: yaml: [\n---\n')
+        result = ClaudeAdapter._parse_readme_frontmatter(readme)
+        assert result == {}
+
+
+class TestGetChain:
+
+    def _make_adapter(self, session_name: str, tmp_path: Path,
+                      sessions_dir: Path = None) -> ClaudeAdapter:
+        """Build adapter with CONVERSATION_BASE and optionally SESSIONS_DIR mocked."""
+        _write_session(tmp_path, session_name, [_user_msg('boot')])
+        adapter = _adapter(f'session/{session_name}/chain', base=tmp_path)
+        if sessions_dir is not None:
+            adapter.__class__.SESSIONS_DIR = sessions_dir
+        return adapter
+
+    def test_chain_type_and_session(self, tmp_path):
+        adapter = self._make_adapter('head-session', tmp_path)
+        result = adapter._get_chain()
+        assert result['type'] == 'claude_chain'
+        assert result['session'] == 'head-session'
+
+    def test_chain_length_one_with_no_readme(self, tmp_path):
+        adapter = self._make_adapter('head-session', tmp_path)
+        result = adapter._get_chain()
+        assert result['chain_length'] == 1
+        assert result['chain'][0]['session'] == 'head-session'
+        assert result['chain'][0]['readme'] is None
+
+    def test_chain_traverses_continuing_from(self, tmp_path):
+        sessions_dir = tmp_path / 'sessions'
+        _write_readme(sessions_dir, 'session-c', {'badge': 'C', 'continuing_from': 'session-b'})
+        _write_readme(sessions_dir, 'session-b', {'badge': 'B', 'continuing_from': 'session-a'})
+        _write_readme(sessions_dir, 'session-a', {'badge': 'A'})
+
+        _write_session(tmp_path, 'session-c', [_user_msg('boot')])
+        adapter = _adapter('session/session-c/chain', base=tmp_path)
+        adapter.__class__.SESSIONS_DIR = sessions_dir
+        result = adapter._get_chain()
+
+        assert result['chain_length'] == 3
+        assert [e['session'] for e in result['chain']] == ['session-c', 'session-b', 'session-a']
+        assert result['chain'][0]['badge'] == 'C'
+        assert result['chain'][2]['badge'] == 'A'
+        assert result['chain'][2]['continuing_from'] is None
+
+    def test_chain_stops_on_cycle(self, tmp_path):
+        sessions_dir = tmp_path / 'sessions'
+        _write_readme(sessions_dir, 'session-a', {'continuing_from': 'session-b'})
+        _write_readme(sessions_dir, 'session-b', {'continuing_from': 'session-a'})
+
+        _write_session(tmp_path, 'session-a', [_user_msg('boot')])
+        adapter = _adapter('session/session-a/chain', base=tmp_path)
+        adapter.__class__.SESSIONS_DIR = sessions_dir
+        result = adapter._get_chain()
+
+        assert result['chain_length'] == 2
+        assert [e['session'] for e in result['chain']] == ['session-a', 'session-b']
+
+    def test_chain_includes_test_counts_and_commits(self, tmp_path):
+        sessions_dir = tmp_path / 'sessions'
+        _write_readme(sessions_dir, 'head-session', {
+            'badge': 'test',
+            'tests_start': 6000,
+            'tests_end': 6125,
+            'commits': 14,
+        })
+        _write_session(tmp_path, 'head-session', [_user_msg('boot')])
+        adapter = _adapter('session/head-session/chain', base=tmp_path)
+        adapter.__class__.SESSIONS_DIR = sessions_dir
+        result = adapter._get_chain()
+
+        entry = result['chain'][0]
+        assert entry['tests_start'] == 6000
+        assert entry['tests_end'] == 6125
+        assert entry['commits'] == 14
+
+    def test_chain_sessions_dir_none_shown_in_result(self, tmp_path):
+        _write_session(tmp_path, 'my-session', [_user_msg('boot')])
+        adapter = _adapter('session/my-session/chain', base=tmp_path)
+        adapter.__class__.SESSIONS_DIR = None
+        result = adapter._get_chain()
+        assert result['sessions_dir'] is None
