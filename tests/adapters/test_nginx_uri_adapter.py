@@ -22,6 +22,7 @@ from unittest.mock import patch
 from reveal.adapters.nginx.adapter import (
     NginxUriAdapter,
     _iter_nginx_configs,
+    _find_artifact_files,
     _parse_server_block_for_domain,
     _NGINX_SEARCH_DIRS,
     _extract_ports,
@@ -271,6 +272,71 @@ class TestNginxUriOverview:
         assert 'alpha.example.com' in all_domains, "Extension-less vhost must appear in overview"
         assert 'beta.example.com' in all_domains, ".conf vhost must appear in overview"
         assert len(sites_found) == 2, "Backup .bak file must not appear in overview"
+
+
+class TestFindArtifactFiles:
+    """_find_artifact_files() should flag backup/temp files in nginx config dirs."""
+
+    def test_finds_bak_files(self, tmp_path):
+        confd = tmp_path / "conf.d"
+        confd.mkdir()
+        (confd / "site.conf").write_text("# normal config")
+        (confd / "site.conf.bak").write_text("# backup")
+        result = _find_artifact_files(str(confd))
+        assert str(confd / "site.conf.bak") in result
+        assert str(confd / "site.conf") not in result
+
+    def test_finds_tmp_files(self, tmp_path):
+        confd = tmp_path / "conf.d"
+        confd.mkdir()
+        (confd / "new.conf.tmp").write_text("# temp")
+        result = _find_artifact_files(str(confd))
+        assert str(confd / "new.conf.tmp") in result
+
+    def test_finds_artifacts_in_subdir(self, tmp_path):
+        confd = tmp_path / "conf.d"
+        users = confd / "users"
+        users.mkdir(parents=True)
+        (users / "user1.conf").write_text("# active")
+        (users / "user1.conf.bak").write_text("# backup")
+        (users / "old.conf.old").write_text("# old")
+        result = _find_artifact_files(str(confd))
+        assert str(users / "user1.conf.bak") in result
+        assert str(users / "old.conf.old") in result
+        assert str(users / "user1.conf") not in result
+
+    def test_empty_dir_returns_empty(self, tmp_path):
+        confd = tmp_path / "conf.d"
+        confd.mkdir()
+        assert _find_artifact_files(str(confd)) == []
+
+    def test_overview_includes_artifact_files_field(self, tmp_path):
+        confd = tmp_path / "conf.d"
+        confd.mkdir()
+        (confd / "real.conf").write_text("server { server_name real.example.com; }")
+        (confd / "real.conf.bak").write_text("# stale backup")
+        with patch.object(
+            __import__('reveal.adapters.nginx.adapter', fromlist=['_NGINX_SEARCH_DIRS']),
+            '_NGINX_SEARCH_DIRS',
+            [str(confd)],
+        ):
+            adapter = NginxUriAdapter('nginx://')
+            result = adapter.get_structure()
+        assert 'artifact_files' in result
+        assert any('real.conf.bak' in f for f in result['artifact_files'])
+
+    def test_overview_next_steps_warns_on_artifacts(self, tmp_path):
+        confd = tmp_path / "conf.d"
+        confd.mkdir()
+        (confd / "site.conf.bak").write_text("# backup")
+        with patch.object(
+            __import__('reveal.adapters.nginx.adapter', fromlist=['_NGINX_SEARCH_DIRS']),
+            '_NGINX_SEARCH_DIRS',
+            [str(confd)],
+        ):
+            adapter = NginxUriAdapter('nginx://')
+            result = adapter.get_structure()
+        assert any('Housekeeping' in s or 'backup' in s.lower() for s in result.get('next_steps', []))
 
 
 # ---------------------------------------------------------------------------

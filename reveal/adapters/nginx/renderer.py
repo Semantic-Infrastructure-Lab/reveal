@@ -22,6 +22,14 @@ class NginxUriRenderer(TypeDispatchRenderer):
             print(f"  {enabled} {site['file']}{symlink}")
             if domains:
                 print(f"       {domains}{extra}")
+        artifact_files = result.get('artifact_files', [])
+        if artifact_files:
+            print()
+            print(f"  ⚠️  {len(artifact_files)} backup/temp file(s) found (not loaded by nginx):")
+            for f in artifact_files[:10]:
+                print(f"     {f}")
+            if len(artifact_files) > 10:
+                print(f"     ... and {len(artifact_files) - 10} more")
         print()
         if result.get('next_steps'):
             print("Next Steps:")

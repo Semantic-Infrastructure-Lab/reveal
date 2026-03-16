@@ -41,6 +41,7 @@ _NGINX_MAIN_CONFIGS = [
 # Nginx includes all files in sites-enabled/, but only *.conf in conf.d/.
 # Skip backup/temp files regardless.
 _BACKUP_SUFFIXES = ('.bak', '.backup', '.old', '.disabled', '.orig', '~')
+_ARTIFACT_SUFFIXES = _BACKUP_SUFFIXES + ('.tmp',)
 
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -250,6 +251,29 @@ def _iter_nginx_configs(search_dir: str):
         if not is_sites_enabled and not name.endswith('.conf'):
             continue
         yield path
+
+
+def _find_artifact_files(search_dir: str) -> List[str]:
+    """Return paths of backup/temp files in a nginx config directory.
+
+    Scans top-level and one level of subdirectories (e.g. conf.d/users/).
+    These files are silently skipped by nginx but indicate housekeeping debt.
+    """
+    found = []
+    pattern = os.path.join(search_dir, '*')
+    for path in sorted(glob.glob(pattern)):
+        if os.path.isdir(path):
+            for subpath in sorted(glob.glob(os.path.join(path, '*'))):
+                if not os.path.isfile(subpath):
+                    continue
+                name = os.path.basename(subpath)
+                if any(name.endswith(s) for s in _ARTIFACT_SUFFIXES) or '.backup' in name:
+                    found.append(subpath)
+        elif os.path.isfile(path):
+            name = os.path.basename(path)
+            if any(name.endswith(s) for s in _ARTIFACT_SUFFIXES) or '.backup' in name:
+                found.append(path)
+    return found
 
 
 def _config_file_has_domain(conf_file: str, domain: str) -> bool:
@@ -613,6 +637,7 @@ class NginxUriAdapter(ResourceAdapter):
     def _get_overview(self) -> Dict[str, Any]:
         """List all enabled nginx sites."""
         sites = []
+        artifact_files: List[str] = []
         for search_dir in _NGINX_SEARCH_DIRS:
             if not os.path.isdir(search_dir):
                 continue
@@ -630,14 +655,22 @@ class NginxUriAdapter(ResourceAdapter):
                     'is_symlink': symlink_info['is_symlink'],
                     'enabled': symlink_info['exists'],
                 })
+            artifact_files.extend(_find_artifact_files(search_dir))
+
+        next_steps = [
+            "Inspect a specific domain: reveal nginx://<domain>",
+            "Check SSL certs across all nginx: reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check",
+        ]
+        if artifact_files:
+            next_steps.append(
+                f"Housekeeping: {len(artifact_files)} backup/temp file(s) found — review and remove"
+            )
 
         return {
             'type': 'nginx_sites_overview',
             'sites': sites,
-            'next_steps': [
-                "Inspect a specific domain: reveal nginx://<domain>",
-                "Check SSL certs across all nginx: reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check",
-            ],
+            'artifact_files': artifact_files,
+            'next_steps': next_steps,
         }
 
     def _get_vhost_summary(self) -> Dict[str, Any]:
