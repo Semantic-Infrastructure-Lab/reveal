@@ -81,9 +81,19 @@ class SSLFetcher:
     def _get_peer_cert(self, ssock) -> dict:
         """Get peer cert dict from an open SSL socket, with binary fallback."""
         cert = ssock.getpeercert(binary_form=False)
-        if cert:
-            return cert
         binary_cert = ssock.getpeercert(binary_form=True)
+        if cert:
+            # ssl.getpeercert() doesn't include signatureAlgorithm; extract from binary
+            if binary_cert:
+                try:
+                    x509_cert = x509.load_der_x509_certificate(binary_cert, default_backend())
+                    sig_hash = x509_cert.signature_hash_algorithm
+                    if sig_hash:
+                        cert = dict(cert)
+                        cert['signatureAlgorithm'] = sig_hash.name.upper()
+                except Exception:
+                    pass
+            return cert
         if binary_cert:
             return self._parse_binary_cert(binary_cert)
         raise ssl.SSLError("No certificate received from server")
@@ -248,7 +258,15 @@ class SSLFetcher:
             not_before = cert.not_valid_before_utc.strftime('%b %d %H:%M:%S %Y GMT')
             not_after = cert.not_valid_after_utc.strftime('%b %d %H:%M:%S %Y GMT')
 
-            return {
+            sig_algo = None
+            try:
+                sig_hash = cert.signature_hash_algorithm
+                if sig_hash:
+                    sig_algo = sig_hash.name.upper()
+            except Exception:
+                pass
+
+            result = {
                 'subject': tuple(subject),
                 'issuer': tuple(issuer),
                 'notBefore': not_before,
@@ -257,6 +275,9 @@ class SSLFetcher:
                 'version': cert.version.value + 1,  # x509 version is 0-indexed
                 'subjectAltName': tuple(san),
             }
+            if sig_algo:
+                result['signatureAlgorithm'] = sig_algo
+            return result
         except Exception:
             # If parsing fails, return empty dict (will use fallback dates)
             return {

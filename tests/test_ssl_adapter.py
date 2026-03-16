@@ -252,6 +252,84 @@ class TestSSLFetcher(unittest.TestCase):
         self.assertFalse(cert_info.is_expired)
 
 
+    def _make_test_cert_der(self, hash_algo=None):
+        """Return DER bytes for a self-signed cert using the given hash algorithm."""
+        from cryptography import x509 as cx
+        from cryptography.x509.oid import NameOID
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives.serialization import Encoding
+        from cryptography.hazmat.backends import default_backend
+        from datetime import timedelta
+
+        key = rsa.generate_private_key(65537, 2048, default_backend())
+        name = cx.Name([cx.NameAttribute(NameOID.COMMON_NAME, "test.example.com")])
+        now = datetime.now(timezone.utc)
+        h = hash_algo or hashes.SHA256()
+        cert = (
+            cx.CertificateBuilder()
+            .subject_name(name)
+            .issuer_name(name)
+            .public_key(key.public_key())
+            .serial_number(cx.random_serial_number())
+            .not_valid_before(now - timedelta(days=1))
+            .not_valid_after(now + timedelta(days=364))
+            .sign(key, h, default_backend())
+        )
+        return cert.public_bytes(encoding=Encoding.DER)
+
+    def test_parse_binary_cert_includes_signature_algorithm(self):
+        """_parse_binary_cert should include signatureAlgorithm key (BACK-049 fix)."""
+        der = self._make_test_cert_der()
+        fetcher = SSLFetcher()
+        parsed = fetcher._parse_binary_cert(der)
+        self.assertIn('signatureAlgorithm', parsed)
+        self.assertEqual(parsed['signatureAlgorithm'], 'SHA256')
+
+    def test_parse_binary_cert_sig_algo_propagates_to_cert_info(self):
+        """signature_algorithm on CertificateInfo should be SHA256 not None (BACK-049)."""
+        der = self._make_test_cert_der()
+        fetcher = SSLFetcher()
+        parsed = fetcher._parse_binary_cert(der)
+        cert_info = fetcher._parse_certificate(parsed)
+        self.assertEqual(cert_info.signature_algorithm, 'SHA256')
+
+    def test_get_peer_cert_enriches_dict_cert_with_sig_algo(self):
+        """_get_peer_cert should add signatureAlgorithm when binary cert is available."""
+        from cryptography.hazmat.primitives.serialization import Encoding
+        der = self._make_test_cert_der()
+
+        mock_ssock = MagicMock()
+        # binary_form=False returns a dict without signatureAlgorithm
+        mock_ssock.getpeercert.side_effect = lambda binary_form=False: (
+            {} if binary_form else {
+                'subject': (((  'commonName', 'test.example.com'),),),
+                'issuer': ((('commonName', 'test.example.com'),),),
+                'notBefore': 'Jan  1 00:00:00 2025 GMT',
+                'notAfter': 'Jan  1 00:00:00 2026 GMT',
+                'serialNumber': 'AABBCC',
+                'version': 3,
+                'subjectAltName': (),
+            }
+        )
+        # binary_form=True returns DER bytes
+        mock_ssock.getpeercert.side_effect = lambda binary_form=False: (
+            der if binary_form else {
+                'subject': ((('commonName', 'test.example.com'),),),
+                'issuer': ((('commonName', 'test.example.com'),),),
+                'notBefore': 'Jan  1 00:00:00 2025 GMT',
+                'notAfter': 'Jan  1 00:00:00 2026 GMT',
+                'serialNumber': 'AABBCC',
+                'version': 3,
+                'subjectAltName': (),
+            }
+        )
+        fetcher = SSLFetcher()
+        result = fetcher._get_peer_cert(mock_ssock)
+        self.assertIn('signatureAlgorithm', result)
+        self.assertEqual(result['signatureAlgorithm'], 'SHA256')
+
+
 class TestSSLAdapterStructure(unittest.TestCase):
     """Test SSLAdapter.get_structure()."""
 
