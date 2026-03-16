@@ -566,3 +566,29 @@ class TestN006Rule:
         content = "http {\n    send_timeout 30s;\n    client_max_body_size 200m;\n}"
         findings = self._run(content)
         assert findings[0].severity == Severity.HIGH
+
+
+class TestCheckSubcommandParser:
+    """Test that the reveal check subcommand parser accepts all expected flags."""
+
+    def test_severity_flag_accepted_by_check_parser(self):
+        """reveal check --severity LEVEL should be accepted (not 'unrecognized argument')."""
+        from reveal.cli.commands.check import create_check_parser
+        parser = create_check_parser()
+        args = parser.parse_args(['somefile.py', '--severity', 'high'])
+        assert args.severity == 'high'
+
+    def test_severity_flag_accepts_all_levels(self):
+        """All four severity levels should parse without error."""
+        from reveal.cli.commands.check import create_check_parser
+        parser = create_check_parser()
+        for level in ('low', 'medium', 'high', 'critical'):
+            args = parser.parse_args(['f.py', '--severity', level])
+            assert args.severity == level
+
+    def test_severity_defaults_to_none(self):
+        """Without --severity, the attribute should be None (show all)."""
+        from reveal.cli.commands.check import create_check_parser
+        parser = create_check_parser()
+        args = parser.parse_args(['f.py'])
+        assert args.severity is None

@@ -86,6 +86,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help='Show every check result individually (disables collapsing repeated rules)',
     )
     parser.add_argument(
+        '--severity', type=str, metavar='LEVEL',
+        help='Minimum severity level to report: low, medium, high, critical. Default: show all',
+    )
+    parser.add_argument(
         '--rules', action='store_true',
         help='List all available quality rules',
     )
