@@ -3,7 +3,10 @@
 
 name: ssl
 description: 'SSL certificate inspection - progressive disclosure of cert health, chain, and domains'
-syntax: 'ssl://host[:port][/element]'
+syntax: |
+  ssl://host[:port][/element]                    # Live cert from remote host
+  ssl://file:///path/to/cert.pem[/element]       # On-disk PEM/DER cert (no network)
+  ssl://nginx:///path/to/nginx.conf[/element]    # Certs from nginx config
 
 examples:
   # Single domain inspection
@@ -29,6 +32,12 @@ examples:
     description: 'Legacy batch check (still supported)'
   - uri: 'echo -e "ssl://ex1.com\nssl://ex2.com" | reveal --stdin --batch --check --only-failures'
     description: 'Show only failing/warning certs in batch mode'
+
+  # On-disk cert inspection (no network required)
+  - uri: 'ssl://file:///etc/letsencrypt/live/example.com/fullchain.pem'
+    description: 'Inspect on-disk PEM cert (issuer, expiry, SANs)'
+  - uri: 'ssl://file:///var/cpanel/ssl/apache_tls/example.com/combined'
+    description: 'Inspect cPanel on-disk cert'
 
   # Nginx SSL audit - two approaches (both fully supported)
   # Approach 1: Direct nginx syntax (best for simple audits)
@@ -126,7 +135,7 @@ workflows:
   - name: 'Monitor Certificate Expiry'
     scenario: 'Find certificates expiring soon across infrastructure'
     steps:
-      - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --warn-days 60  # Check all"
+      - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --expiring-within 60  # Certs expiring in 60 days"
       - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures # Show problems"
       - "reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --summary       # Quick counts"
   - name: 'Nginx SSL Audit (Simple)'
