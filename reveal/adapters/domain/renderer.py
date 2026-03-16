@@ -356,6 +356,38 @@ class DomainRenderer(TypeDispatchRenderer):
         print(f"Exit code: {result['exit_code']}")
 
     @staticmethod
+    def _render_domain_email_dns(result: dict) -> None:
+        """Render email DNS deliverability check results."""
+        domain = result['domain']
+        status = result.get('status', 'unknown')
+        status_icon = DomainRenderer._STATUS_ICONS.get(status, '\u2753')
+
+        print(f"\nEmail DNS for {domain}:\n")
+        print(f"Status: {status_icon} {status.upper()}\n")
+
+        checks = result.get('checks', [])
+        for check in checks:
+            icon = DomainRenderer._STATUS_ICONS.get(check['status'], '\u2753')
+            print(f"  {icon} {check['name']}: {check['message']}")
+            details = check.get('details', {})
+            if details:
+                if check['name'] == 'mx_records':
+                    for mx in details.get('mx_records', [])[:3]:
+                        print(f"      {mx}")
+                elif check['name'] == 'spf_record':
+                    spf = details.get('spf_record', '')
+                    print(f"      {spf[:70]}{'...' if len(spf) > 70 else ''}")
+                elif check['name'] == 'dmarc_record':
+                    dmarc = details.get('dmarc_record', '')
+                    print(f"      {dmarc[:70]}{'...' if len(dmarc) > 70 else ''}")
+
+        if result.get('next_steps'):
+            print(f"\n{'-'*60}")
+            print("Next Steps:")
+            for step in result['next_steps']:
+                print(f"  \u2022 {step}")
+
+    @staticmethod
     def render_error(error: Exception) -> None:
         """Render user-friendly error messages.
 

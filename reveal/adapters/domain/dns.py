@@ -187,6 +187,229 @@ def check_nameserver_response(domain: str) -> Dict[str, Any]:
         }
 
 
+def check_mx_records(domain: str) -> Dict[str, Any]:
+    """Check that domain has MX records configured.
+
+    Args:
+        domain: Domain name to check
+
+    Returns:
+        Check result dict
+    """
+    if not HAS_DNSPYTHON:
+        return {
+            'name': 'mx_records',
+            'status': 'warning',
+            'value': 'Skipped',
+            'threshold': 'MX configured',
+            'message': 'dnspython not installed',
+            'severity': 'medium',
+        }
+    try:
+        answers = dns.resolver.resolve(domain, 'MX')
+        mx_records = [f"{r.preference} {r.exchange}" for r in answers]
+        return {
+            'name': 'mx_records',
+            'status': 'pass',
+            'value': f'{len(mx_records)} records',
+            'threshold': 'MX configured',
+            'message': f'MX configured ({len(mx_records)} record{"s" if len(mx_records) != 1 else ""})',
+            'severity': 'medium',
+            'details': {'mx_records': mx_records},
+        }
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.exception.DNSException):
+        return {
+            'name': 'mx_records',
+            'status': 'failure',
+            'value': 'None',
+            'threshold': 'MX configured',
+            'message': 'No MX records — domain cannot receive email',
+            'severity': 'high',
+        }
+    except Exception as e:
+        return {
+            'name': 'mx_records',
+            'status': 'warning',
+            'value': 'Check failed',
+            'threshold': 'MX configured',
+            'message': f'MX check failed: {e}',
+            'severity': 'medium',
+        }
+
+
+def check_spf_record(domain: str) -> Dict[str, Any]:
+    """Check that domain has a valid SPF TXT record.
+
+    Args:
+        domain: Domain name to check
+
+    Returns:
+        Check result dict
+    """
+    if not HAS_DNSPYTHON:
+        return {
+            'name': 'spf_record',
+            'status': 'warning',
+            'value': 'Skipped',
+            'threshold': 'SPF present',
+            'message': 'dnspython not installed',
+            'severity': 'medium',
+        }
+    try:
+        answers = dns.resolver.resolve(domain, 'TXT')
+        spf_records = [
+            str(r).strip('"') for r in answers
+            if str(r).strip('"').startswith('v=spf1')
+        ]
+
+        if len(spf_records) == 0:
+            return {
+                'name': 'spf_record',
+                'status': 'failure',
+                'value': 'Missing',
+                'threshold': 'SPF present',
+                'message': 'No SPF record — domain is open to email spoofing',
+                'severity': 'high',
+            }
+        if len(spf_records) > 1:
+            return {
+                'name': 'spf_record',
+                'status': 'warning',
+                'value': 'Multiple',
+                'threshold': '1 SPF record',
+                'message': f'Multiple SPF records ({len(spf_records)}) — RFC 7208 requires exactly one',
+                'severity': 'medium',
+                'details': {'spf_records': spf_records},
+            }
+        record = spf_records[0]
+        return {
+            'name': 'spf_record',
+            'status': 'pass',
+            'value': record[:50] + ('...' if len(record) > 50 else ''),
+            'threshold': 'SPF present',
+            'message': 'SPF record found',
+            'severity': 'medium',
+            'details': {'spf_record': record},
+        }
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.exception.DNSException):
+        return {
+            'name': 'spf_record',
+            'status': 'failure',
+            'value': 'Missing',
+            'threshold': 'SPF present',
+            'message': 'No SPF record — domain is open to email spoofing',
+            'severity': 'high',
+        }
+    except Exception as e:
+        return {
+            'name': 'spf_record',
+            'status': 'warning',
+            'value': 'Check failed',
+            'threshold': 'SPF present',
+            'message': f'SPF check failed: {e}',
+            'severity': 'medium',
+        }
+
+
+def check_dmarc_record(domain: str) -> Dict[str, Any]:
+    """Check that domain has a DMARC TXT record at _dmarc.DOMAIN.
+
+    Args:
+        domain: Domain name to check
+
+    Returns:
+        Check result dict
+    """
+    if not HAS_DNSPYTHON:
+        return {
+            'name': 'dmarc_record',
+            'status': 'warning',
+            'value': 'Skipped',
+            'threshold': 'DMARC present',
+            'message': 'dnspython not installed',
+            'severity': 'medium',
+        }
+    dmarc_domain = f'_dmarc.{domain}'
+    try:
+        answers = dns.resolver.resolve(dmarc_domain, 'TXT')
+        dmarc_records = [
+            str(r).strip('"') for r in answers
+            if 'v=DMARC1' in str(r)
+        ]
+
+        if not dmarc_records:
+            return {
+                'name': 'dmarc_record',
+                'status': 'failure',
+                'value': 'Missing',
+                'threshold': 'DMARC present',
+                'message': 'No DMARC record — spoofed emails reach inboxes undetected',
+                'severity': 'medium',
+            }
+
+        record = dmarc_records[0]
+        policy = 'none'
+        for part in record.split(';'):
+            part = part.strip()
+            if part.startswith('p='):
+                policy = part[2:].strip()
+                break
+
+        if policy == 'none':
+            return {
+                'name': 'dmarc_record',
+                'status': 'warning',
+                'value': 'p=none',
+                'threshold': 'p=quarantine or p=reject',
+                'message': 'DMARC present but p=none (monitoring only — no enforcement)',
+                'severity': 'medium',
+                'details': {'dmarc_record': record, 'policy': policy},
+            }
+        return {
+            'name': 'dmarc_record',
+            'status': 'pass',
+            'value': f'p={policy}',
+            'threshold': 'p=quarantine or p=reject',
+            'message': f'DMARC enforced (p={policy})',
+            'severity': 'medium',
+            'details': {'dmarc_record': record, 'policy': policy},
+        }
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.exception.DNSException):
+        return {
+            'name': 'dmarc_record',
+            'status': 'failure',
+            'value': 'Missing',
+            'threshold': 'DMARC present',
+            'message': 'No DMARC record — spoofed emails reach inboxes undetected',
+            'severity': 'medium',
+        }
+    except Exception as e:
+        return {
+            'name': 'dmarc_record',
+            'status': 'warning',
+            'value': 'Check failed',
+            'threshold': 'DMARC present',
+            'message': f'DMARC check failed: {e}',
+            'severity': 'medium',
+        }
+
+
+def check_email_dns(domain: str) -> List[Dict[str, Any]]:
+    """Run all email DNS health checks (MX, SPF, DMARC).
+
+    Args:
+        domain: Domain name to check
+
+    Returns:
+        List of check result dicts
+    """
+    return [
+        check_mx_records(domain),
+        check_spf_record(domain),
+        check_dmarc_record(domain),
+    ]
+
+
 def check_dns_propagation(domain: str) -> Dict[str, Any]:
     """Check if all authoritative nameservers return same records.
 

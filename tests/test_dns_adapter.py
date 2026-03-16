@@ -517,5 +517,239 @@ class TestNameserverSubdomainSkip:
             assert 'Subdomain' not in result.get('value', '')
 
 
+class TestCheckMxRecords:
+    """Tests for check_mx_records (BACK-051)."""
+
+    def test_no_dnspython(self):
+        """Returns warning when dnspython not installed."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', False):
+            from reveal.adapters.domain.dns import check_mx_records
+            result = check_mx_records('example.com')
+            assert result['name'] == 'mx_records'
+            assert result['status'] == 'warning'
+            assert result['value'] == 'Skipped'
+
+    def test_mx_present(self):
+        """Returns pass when MX records exist."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', True):
+            import reveal.adapters.domain.dns
+            mock_mx = Mock()
+            mock_mx.preference = 10
+            mock_mx.exchange = 'mail.example.com'
+            with patch.object(reveal.adapters.domain.dns.dns.resolver, 'resolve', return_value=[mock_mx]):
+                from reveal.adapters.domain.dns import check_mx_records
+                result = check_mx_records('example.com')
+                assert result['name'] == 'mx_records'
+                assert result['status'] == 'pass'
+                assert '1 record' in result['value']
+                assert result['details']['mx_records'] == ['10 mail.example.com']
+
+    def test_mx_missing(self):
+        """Returns failure when no MX records."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', True):
+            import reveal.adapters.domain.dns
+            import dns.resolver
+            with patch.object(reveal.adapters.domain.dns.dns.resolver, 'resolve',
+                               side_effect=dns.resolver.NoAnswer()):
+                from reveal.adapters.domain.dns import check_mx_records
+                result = check_mx_records('example.com')
+                assert result['name'] == 'mx_records'
+                assert result['status'] == 'failure'
+                assert result['value'] == 'None'
+                assert 'cannot receive email' in result['message']
+
+
+class TestCheckSpfRecord:
+    """Tests for check_spf_record (BACK-051)."""
+
+    def test_no_dnspython(self):
+        """Returns warning when dnspython not installed."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', False):
+            from reveal.adapters.domain.dns import check_spf_record
+            result = check_spf_record('example.com')
+            assert result['name'] == 'spf_record'
+            assert result['status'] == 'warning'
+
+    def test_spf_present(self):
+        """Returns pass when exactly one SPF record exists."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', True):
+            import reveal.adapters.domain.dns
+            spf = 'v=spf1 include:_spf.google.com ~all'
+            with patch.object(reveal.adapters.domain.dns.dns.resolver, 'resolve',
+                               return_value=[Mock(__str__=lambda _: spf)]):
+                from reveal.adapters.domain.dns import check_spf_record
+                result = check_spf_record('example.com')
+                assert result['name'] == 'spf_record'
+                assert result['status'] == 'pass'
+                assert result['details']['spf_record'] == spf
+
+    def test_spf_missing(self):
+        """Returns failure when no SPF record found."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', True):
+            import reveal.adapters.domain.dns
+            with patch.object(reveal.adapters.domain.dns.dns.resolver, 'resolve',
+                               return_value=[Mock(__str__=lambda _: '"v=something-else"')]):
+                from reveal.adapters.domain.dns import check_spf_record
+                result = check_spf_record('example.com')
+                assert result['name'] == 'spf_record'
+                assert result['status'] == 'failure'
+                assert result['value'] == 'Missing'
+                assert 'spoofing' in result['message']
+
+    def test_multiple_spf_records(self):
+        """Returns warning when multiple SPF records present."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', True):
+            import reveal.adapters.domain.dns
+            r1 = Mock(__str__=lambda _: 'v=spf1 include:spf1.example.com ~all')
+            r2 = Mock(__str__=lambda _: 'v=spf1 include:spf2.example.com ~all')
+            with patch.object(reveal.adapters.domain.dns.dns.resolver, 'resolve',
+                               return_value=[r1, r2]):
+                from reveal.adapters.domain.dns import check_spf_record
+                result = check_spf_record('example.com')
+                assert result['name'] == 'spf_record'
+                assert result['status'] == 'warning'
+                assert result['value'] == 'Multiple'
+                assert 'RFC 7208' in result['message']
+
+
+class TestCheckDmarcRecord:
+    """Tests for check_dmarc_record (BACK-051)."""
+
+    def test_no_dnspython(self):
+        """Returns warning when dnspython not installed."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', False):
+            from reveal.adapters.domain.dns import check_dmarc_record
+            result = check_dmarc_record('example.com')
+            assert result['name'] == 'dmarc_record'
+            assert result['status'] == 'warning'
+
+    def test_dmarc_reject(self):
+        """Returns pass when DMARC p=reject."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', True):
+            import reveal.adapters.domain.dns
+            record = 'v=DMARC1; p=reject; rua=mailto:dmarc@example.com'
+            with patch.object(reveal.adapters.domain.dns.dns.resolver, 'resolve',
+                               return_value=[Mock(__str__=lambda _: record)]):
+                from reveal.adapters.domain.dns import check_dmarc_record
+                result = check_dmarc_record('example.com')
+                assert result['name'] == 'dmarc_record'
+                assert result['status'] == 'pass'
+                assert result['value'] == 'p=reject'
+                assert result['details']['policy'] == 'reject'
+
+    def test_dmarc_none_policy(self):
+        """Returns warning when DMARC p=none (monitoring only)."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', True):
+            import reveal.adapters.domain.dns
+            record = 'v=DMARC1; p=none; rua=mailto:dmarc@example.com'
+            with patch.object(reveal.adapters.domain.dns.dns.resolver, 'resolve',
+                               return_value=[Mock(__str__=lambda _: record)]):
+                from reveal.adapters.domain.dns import check_dmarc_record
+                result = check_dmarc_record('example.com')
+                assert result['name'] == 'dmarc_record'
+                assert result['status'] == 'warning'
+                assert result['value'] == 'p=none'
+                assert 'monitoring only' in result['message']
+
+    def test_dmarc_missing(self):
+        """Returns failure when no DMARC record at _dmarc.domain."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', True):
+            import reveal.adapters.domain.dns
+            import dns.resolver
+            with patch.object(reveal.adapters.domain.dns.dns.resolver, 'resolve',
+                               side_effect=dns.resolver.NXDOMAIN()):
+                from reveal.adapters.domain.dns import check_dmarc_record
+                result = check_dmarc_record('example.com')
+                assert result['name'] == 'dmarc_record'
+                assert result['status'] == 'failure'
+                assert result['value'] == 'Missing'
+                assert 'spoofed emails' in result['message']
+
+    def test_dmarc_quarantine(self):
+        """Returns pass when DMARC p=quarantine."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', True):
+            import reveal.adapters.domain.dns
+            record = 'v=DMARC1; p=quarantine'
+            with patch.object(reveal.adapters.domain.dns.dns.resolver, 'resolve',
+                               return_value=[Mock(__str__=lambda _: record)]):
+                from reveal.adapters.domain.dns import check_dmarc_record
+                result = check_dmarc_record('example.com')
+                assert result['status'] == 'pass'
+                assert result['value'] == 'p=quarantine'
+
+
+class TestCheckEmailDns:
+    """Tests for check_email_dns aggregator (BACK-051)."""
+
+    def test_returns_three_checks(self):
+        """check_email_dns returns exactly 3 checks (MX, SPF, DMARC)."""
+        with patch('reveal.adapters.domain.dns.check_mx_records', return_value={'name': 'mx_records', 'status': 'pass'}):
+            with patch('reveal.adapters.domain.dns.check_spf_record', return_value={'name': 'spf_record', 'status': 'pass'}):
+                with patch('reveal.adapters.domain.dns.check_dmarc_record', return_value={'name': 'dmarc_record', 'status': 'pass'}):
+                    from reveal.adapters.domain.dns import check_email_dns
+                    checks = check_email_dns('example.com')
+                    assert len(checks) == 3
+                    assert checks[0]['name'] == 'mx_records'
+                    assert checks[1]['name'] == 'spf_record'
+                    assert checks[2]['name'] == 'dmarc_record'
+
+
+class TestDomainAdapterMailElement:
+    """Tests for domain://DOMAIN/mail element (BACK-051)."""
+
+    def test_mail_element_in_available_elements(self):
+        """mail element appears in get_available_elements()."""
+        from reveal.adapters.domain.adapter import DomainAdapter
+        adapter = DomainAdapter('example.com')
+        elements = adapter.get_available_elements()
+        names = [e['name'] for e in elements]
+        assert 'mail' in names
+
+    def test_mail_element_description(self):
+        """mail element has MX/SPF/DMARC in description."""
+        from reveal.adapters.domain.adapter import DomainAdapter
+        adapter = DomainAdapter('example.com')
+        elements = adapter.get_available_elements()
+        mail_elem = next(e for e in elements if e['name'] == 'mail')
+        assert 'MX' in mail_elem['description'] or 'SPF' in mail_elem['description']
+
+    def test_get_element_mail_returns_email_dns_type(self):
+        """get_element('mail') returns domain_email_dns type."""
+        from reveal.adapters.domain.adapter import DomainAdapter
+        adapter = DomainAdapter('example.com')
+        mock_checks = [
+            {'name': 'mx_records', 'status': 'pass', 'details': {'mx_records': ['10 mail.example.com']}},
+            {'name': 'spf_record', 'status': 'pass', 'details': {'spf_record': 'v=spf1 ~all'}},
+            {'name': 'dmarc_record', 'status': 'pass', 'details': {'dmarc_record': 'v=DMARC1; p=reject', 'policy': 'reject'}},
+        ]
+        with patch('reveal.adapters.domain.adapter.check_email_dns', return_value=mock_checks):
+            result = adapter.get_element('mail')
+            assert result is not None
+            assert result['type'] == 'domain_email_dns'
+            assert result['domain'] == 'example.com'
+            assert result['status'] == 'pass'
+
+    def test_check_includes_email_dns(self):
+        """check() output includes mx_records, spf_record, dmarc_record checks."""
+        from reveal.adapters.domain.adapter import DomainAdapter
+        adapter = DomainAdapter('example.com')
+        mock_email_checks = [
+            {'name': 'mx_records', 'status': 'pass', 'message': 'ok', 'severity': 'medium'},
+            {'name': 'spf_record', 'status': 'failure', 'message': 'missing', 'severity': 'high'},
+            {'name': 'dmarc_record', 'status': 'failure', 'message': 'missing', 'severity': 'medium'},
+        ]
+        with patch('reveal.adapters.domain.adapter._run_dns_checks', return_value=[]):
+            with patch('reveal.adapters.domain.adapter._check_ssl_certificate',
+                       return_value={'name': 'ssl_certificate', 'status': 'pass', 'message': 'ok', 'severity': 'high'}):
+                with patch('reveal.adapters.domain.adapter._check_http_response',
+                           return_value={'name': 'http_response', 'status': 'pass', 'message': 'ok', 'severity': 'medium'}):
+                    with patch('reveal.adapters.domain.adapter.check_email_dns', return_value=mock_email_checks):
+                        result = adapter.check()
+                        check_names = [c['name'] for c in result['checks']]
+                        assert 'mx_records' in check_names
+                        assert 'spf_record' in check_names
+                        assert 'dmarc_record' in check_names
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

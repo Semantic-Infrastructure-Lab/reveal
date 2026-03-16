@@ -5,7 +5,8 @@ from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from .dns import (
     get_dns_records, get_dns_summary,
-    check_dns_resolution, check_nameserver_response, check_dns_propagation
+    check_dns_resolution, check_nameserver_response, check_dns_propagation,
+    check_email_dns,
 )
 from .renderer import DomainRenderer
 
@@ -540,6 +541,7 @@ class DomainAdapter(ResourceAdapter):
             f"DNS details: reveal domain://{self.domain}/dns",
             f"WHOIS details: reveal domain://{self.domain}/whois",
             f"SSL details: reveal ssl://{self.domain}",
+            f"Email DNS: reveal domain://{self.domain}/mail",
             f"Health check: reveal domain://{self.domain} --check",
         ]
 
@@ -574,6 +576,7 @@ class DomainAdapter(ResourceAdapter):
             'whois': self._get_whois_info,
             'ssl': self._get_ssl_status,
             'registrar': self._get_registrar_info,
+            'mail': self._get_email_dns,
         }
 
         handler = element_handlers.get(element_name)
@@ -608,6 +611,11 @@ class DomainAdapter(ResourceAdapter):
                 'name': 'registrar',
                 'description': 'Registrar and nameserver information',
                 'example': f'reveal domain://{self.domain}/registrar'
+            },
+            {
+                'name': 'mail',
+                'description': 'Email DNS deliverability (MX, SPF, DMARC)',
+                'example': f'reveal domain://{self.domain}/mail'
             },
         ]
 
@@ -744,6 +752,39 @@ class DomainAdapter(ResourceAdapter):
 
         return result
 
+    def _get_email_dns(self) -> Dict[str, Any]:
+        """Get email DNS deliverability checks (MX, SPF, DMARC)."""
+        assert self.domain is not None
+        checks = check_email_dns(self.domain)
+
+        overall = 'pass'
+        if any(c.get('status') == 'failure' for c in checks):
+            overall = 'failure'
+        elif any(c.get('status') == 'warning' for c in checks):
+            overall = 'warning'
+
+        mx_check = next((c for c in checks if c['name'] == 'mx_records'), {})
+        spf_check = next((c for c in checks if c['name'] == 'spf_record'), {})
+        dmarc_check = next((c for c in checks if c['name'] == 'dmarc_record'), {})
+
+        return {
+            'type': 'domain_email_dns',
+            'domain': self.domain,
+            'status': overall,
+            'mx_records': mx_check.get('details', {}).get('mx_records', []),
+            'spf_record': (
+                spf_check.get('details', {}).get('spf_record')
+                or spf_check.get('details', {}).get('spf_records')
+            ),
+            'dmarc_record': dmarc_check.get('details', {}).get('dmarc_record'),
+            'dmarc_policy': dmarc_check.get('details', {}).get('policy'),
+            'checks': checks,
+            'next_steps': [
+                f"Full domain check: reveal domain://{self.domain} --check",
+                f"DNS records: reveal domain://{self.domain}/dns",
+            ],
+        }
+
     def _get_whois_summary(self) -> Dict[str, Any]:
         """Get abbreviated WHOIS data for domain overview (registrar + expiry only)."""
         info = self._get_whois_info()
@@ -796,6 +837,7 @@ class DomainAdapter(ResourceAdapter):
         checks = _run_dns_checks(self.domain)
         checks.append(_check_ssl_certificate(self.domain, advanced))
         checks.append(_check_http_response(self.domain))
+        checks.extend(check_email_dns(self.domain))
 
         # Calculate metrics
         overall_status = _calculate_overall_status(checks)
