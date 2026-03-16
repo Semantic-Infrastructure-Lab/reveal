@@ -244,10 +244,10 @@ reveal 'stats://.?hotspots&code_only'
   reveal 'ast://src?complexity>5&type=function'
   ```
 
-- **`lines`** / **`lines>`** - Filter by line count or line range
+- **`lines`** / **`lines>`** - Filter by element length in lines
   ```bash
-  reveal 'ast://src?lines>50'            # functions over 50 lines
-  reveal 'ast://file.py?lines=50..200'   # elements in line range 50–200
+  reveal 'ast://src?lines>50'            # functions longer than 50 lines
+  reveal 'ast://src?lines=20..50'        # functions that are 20–50 lines long
   ```
 
 - **`depth>`** - Filter by nesting depth
