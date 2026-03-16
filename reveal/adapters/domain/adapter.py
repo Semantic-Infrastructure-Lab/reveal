@@ -252,6 +252,70 @@ def _check_http_response(domain: str) -> Dict[str, Any]:
     return _aggregate_http_checks(checks)
 
 
+def _check_http_to_https_redirect(domain: str) -> Dict[str, Any]:
+    """Check that HTTP (port 80) properly redirects to HTTPS (port 443).
+
+    Follows the redirect chain from http://domain/ and validates that it
+    ends on an https:// URL. Surfaces as a named pass/fail check in --check
+    output, distinct from the general http_response reachability check.
+    """
+    result = _follow_redirect_chain(f"http://{domain}/")
+    chain = result.get('chain', [])
+    final_url = result.get('final_url', '')
+    error = result.get('error')
+
+    if error:
+        return {
+            'name': 'http_redirect',
+            'status': 'warning',
+            'value': 'Unreachable',
+            'threshold': 'HTTP → HTTPS redirect',
+            'message': f'HTTP port 80 unreachable: {error}',
+            'severity': 'low',
+        }
+
+    first_status = chain[0]['status'] if chain else None
+    is_redirect = first_status in (301, 302, 303, 307, 308)
+    redirects_to_https = final_url.startswith('https://')
+
+    if is_redirect and redirects_to_https:
+        hop_statuses = ' → '.join(str(h['status']) for h in chain)
+        return {
+            'name': 'http_redirect',
+            'status': 'pass',
+            'value': f'{first_status} → HTTPS',
+            'threshold': 'HTTP → HTTPS redirect',
+            'message': f'HTTP redirects to HTTPS ({hop_statuses})',
+            'severity': 'medium',
+            'details': {
+                'chain': [f"{h['url']} ({h['status']})" for h in chain],
+                'final_url': final_url,
+            },
+        }
+
+    if not is_redirect:
+        return {
+            'name': 'http_redirect',
+            'status': 'warning',
+            'value': f'{first_status} (no redirect)',
+            'threshold': 'HTTP → HTTPS redirect',
+            'message': f'HTTP responds {first_status} without redirecting to HTTPS — consider adding redirect',
+            'severity': 'medium',
+            'details': {'final_url': final_url},
+        }
+
+    # is_redirect but stays on HTTP
+    return {
+        'name': 'http_redirect',
+        'status': 'warning',
+        'value': f'{first_status} → HTTP',
+        'threshold': 'HTTP → HTTPS redirect',
+        'message': f'HTTP redirects but stays on HTTP ({first_status} → {final_url[:60]}) — not upgrading to HTTPS',
+        'severity': 'medium',
+        'details': {'final_url': final_url},
+    }
+
+
 def _calculate_overall_status(checks: List[Dict[str, Any]]) -> str:
     """Calculate overall status from check results.
 
@@ -542,6 +606,7 @@ class DomainAdapter(ResourceAdapter):
             f"WHOIS details: reveal domain://{self.domain}/whois",
             f"SSL details: reveal ssl://{self.domain}",
             f"Email DNS: reveal domain://{self.domain}/mail",
+            f"HTTP redirect chain: reveal domain://{self.domain}/http",
             f"Health check: reveal domain://{self.domain} --check",
         ]
 
@@ -577,6 +642,7 @@ class DomainAdapter(ResourceAdapter):
             'ssl': self._get_ssl_status,
             'registrar': self._get_registrar_info,
             'mail': self._get_email_dns,
+            'http': self._get_http_chain,
         }
 
         handler = element_handlers.get(element_name)
@@ -616,6 +682,11 @@ class DomainAdapter(ResourceAdapter):
                 'name': 'mail',
                 'description': 'Email DNS deliverability (MX, SPF, DMARC)',
                 'example': f'reveal domain://{self.domain}/mail'
+            },
+            {
+                'name': 'http',
+                'description': 'HTTP redirect chain inspection (port 80 → HTTPS)',
+                'example': f'reveal domain://{self.domain}/http'
             },
         ]
 
@@ -785,6 +856,34 @@ class DomainAdapter(ResourceAdapter):
             ],
         }
 
+    def _get_http_chain(self) -> Dict[str, Any]:
+        """Get HTTP redirect chain for both HTTP and HTTPS."""
+        assert self.domain is not None
+        http_result = _follow_redirect_chain(f"http://{self.domain}/")
+        https_result = _follow_redirect_chain(f"https://{self.domain}/")
+        redirect_check = _check_http_to_https_redirect(self.domain)
+
+        def _format_chain(result: Dict[str, Any]) -> List[str]:
+            chain = result.get('chain', [])
+            if not chain:
+                return [f"Error: {result.get('error', 'no response')}"]
+            return [f"{h['url']} ({h['status']})" for h in chain]
+
+        return {
+            'type': 'domain_http_chain',
+            'domain': self.domain,
+            'http_chain': _format_chain(http_result),
+            'https_chain': _format_chain(https_result),
+            'http_final_url': http_result.get('final_url', ''),
+            'https_final_url': https_result.get('final_url', ''),
+            'redirects_to_https': redirect_check['status'] == 'pass',
+            'redirect_check': redirect_check,
+            'next_steps': [
+                f"Full health check: reveal domain://{self.domain} --check",
+                f"SSL details: reveal ssl://{self.domain}",
+            ],
+        }
+
     def _get_whois_summary(self) -> Dict[str, Any]:
         """Get abbreviated WHOIS data for domain overview (registrar + expiry only)."""
         info = self._get_whois_info()
@@ -837,6 +936,7 @@ class DomainAdapter(ResourceAdapter):
         checks = _run_dns_checks(self.domain)
         checks.append(_check_ssl_certificate(self.domain, advanced))
         checks.append(_check_http_response(self.domain))
+        checks.append(_check_http_to_https_redirect(self.domain))
         checks.extend(check_email_dns(self.domain))
 
         # Calculate metrics

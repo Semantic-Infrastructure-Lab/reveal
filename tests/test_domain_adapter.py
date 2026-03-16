@@ -802,5 +802,122 @@ class TestDomainWhoisRenderer(unittest.TestCase):
         self.assertNotIn('Registration:', output)
 
 
+class TestCheckHttpToHttpsRedirect(unittest.TestCase):
+    """Tests for _check_http_to_https_redirect (BACK-053)."""
+
+    def test_http_redirects_to_https(self):
+        """Pass when HTTP properly redirects to HTTPS."""
+        from reveal.adapters.domain.adapter import _check_http_to_https_redirect
+        mock_chain = {
+            'chain': [{'url': 'http://example.com/', 'status': 301}],
+            'final_url': 'https://example.com/', 'error': None,
+        }
+        with patch('reveal.adapters.domain.adapter._follow_redirect_chain', return_value=mock_chain):
+            result = _check_http_to_https_redirect('example.com')
+            self.assertEqual(result['name'], 'http_redirect')
+            self.assertEqual(result['status'], 'pass')
+            self.assertIn('HTTPS', result['value'])
+            self.assertEqual(result['details']['final_url'], 'https://example.com/')
+
+    def test_http_responds_without_redirect(self):
+        """Warning when HTTP serves content directly (no redirect to HTTPS)."""
+        from reveal.adapters.domain.adapter import _check_http_to_https_redirect
+        mock_chain = {
+            'chain': [{'url': 'http://example.com/', 'status': 200}],
+            'final_url': 'http://example.com/', 'error': None,
+        }
+        with patch('reveal.adapters.domain.adapter._follow_redirect_chain', return_value=mock_chain):
+            result = _check_http_to_https_redirect('example.com')
+            self.assertEqual(result['name'], 'http_redirect')
+            self.assertEqual(result['status'], 'warning')
+            self.assertIn('no redirect', result['value'])
+
+    def test_http_redirects_but_stays_http(self):
+        """Warning when HTTP redirects but destination stays on HTTP."""
+        from reveal.adapters.domain.adapter import _check_http_to_https_redirect
+        mock_chain = {
+            'chain': [{'url': 'http://example.com/', 'status': 301}],
+            'final_url': 'http://www.example.com/', 'error': None,
+        }
+        with patch('reveal.adapters.domain.adapter._follow_redirect_chain', return_value=mock_chain):
+            result = _check_http_to_https_redirect('example.com')
+            self.assertEqual(result['name'], 'http_redirect')
+            self.assertEqual(result['status'], 'warning')
+            self.assertIn('HTTP', result['value'])
+
+    def test_http_port_unreachable(self):
+        """Warning when HTTP port 80 connection fails."""
+        from reveal.adapters.domain.adapter import _check_http_to_https_redirect
+        mock_chain = {
+            'chain': [], 'final_url': 'http://example.com/', 'error': 'Connection refused',
+        }
+        with patch('reveal.adapters.domain.adapter._follow_redirect_chain', return_value=mock_chain):
+            result = _check_http_to_https_redirect('example.com')
+            self.assertEqual(result['name'], 'http_redirect')
+            self.assertEqual(result['status'], 'warning')
+            self.assertIn('Unreachable', result['value'])
+
+    def test_check_includes_http_redirect(self):
+        """domain.check() output includes http_redirect check."""
+        adapter = DomainAdapter('example.com')
+        redirect_check = {
+            'name': 'http_redirect', 'status': 'pass', 'message': 'OK',
+            'value': '301 → HTTPS', 'threshold': '', 'severity': 'medium',
+        }
+        with patch('reveal.adapters.domain.adapter._run_dns_checks', return_value=[]):
+            with patch('reveal.adapters.domain.adapter._check_ssl_certificate',
+                       return_value={'name': 'ssl_certificate', 'status': 'pass', 'message': 'ok', 'severity': 'high'}):
+                with patch('reveal.adapters.domain.adapter._check_http_response',
+                           return_value={'name': 'http_response', 'status': 'pass', 'message': 'ok', 'severity': 'medium'}):
+                    with patch('reveal.adapters.domain.adapter._check_http_to_https_redirect',
+                               return_value=redirect_check):
+                        with patch('reveal.adapters.domain.adapter.check_email_dns', return_value=[]):
+                            result = adapter.check()
+                            check_names = [c['name'] for c in result['checks']]
+                            self.assertIn('http_redirect', check_names)
+
+    def test_http_element_in_available_elements(self):
+        """/http element appears in get_available_elements()."""
+        adapter = DomainAdapter('example.com')
+        names = [e['name'] for e in adapter.get_available_elements()]
+        self.assertIn('http', names)
+
+    def test_get_element_http_returns_http_chain_type(self):
+        """get_element('http') returns domain_http_chain type."""
+        adapter = DomainAdapter('example.com')
+        http_chain = {'chain': [{'url': 'http://example.com/', 'status': 301}],
+                      'final_url': 'https://example.com/', 'error': None}
+        https_chain = {'chain': [{'url': 'https://example.com/', 'status': 200}],
+                       'final_url': 'https://example.com/', 'error': None}
+        redirect_check = {'name': 'http_redirect', 'status': 'pass', 'message': 'OK',
+                          'value': '301 → HTTPS', 'threshold': '', 'severity': 'medium',
+                          'details': {'chain': [], 'final_url': 'https://example.com/'}}
+        with patch('reveal.adapters.domain.adapter._follow_redirect_chain',
+                   side_effect=[http_chain, https_chain]):
+            with patch('reveal.adapters.domain.adapter._check_http_to_https_redirect',
+                       return_value=redirect_check):
+                result = adapter.get_element('http')
+                self.assertIsNotNone(result)
+                self.assertEqual(result['type'], 'domain_http_chain')
+                self.assertTrue(result['redirects_to_https'])
+
+    def test_redirect_chain_shows_hops(self):
+        """HTTP chain with multiple hops is captured correctly."""
+        from reveal.adapters.domain.adapter import _check_http_to_https_redirect
+        mock_chain = {
+            'chain': [
+                {'url': 'http://rfr.bz/', 'status': 301},
+                {'url': 'https://rfr.bz/', 'status': 302},
+            ],
+            'final_url': 'https://sociamonials.com/',
+            'error': None,
+        }
+        with patch('reveal.adapters.domain.adapter._follow_redirect_chain', return_value=mock_chain):
+            result = _check_http_to_https_redirect('rfr.bz')
+            self.assertEqual(result['status'], 'pass')
+            self.assertIn('301 → 302', result['message'])
+            self.assertEqual(len(result['details']['chain']), 2)
+
+
 if __name__ == '__main__':
     unittest.main()

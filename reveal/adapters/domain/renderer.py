@@ -388,6 +388,42 @@ class DomainRenderer(TypeDispatchRenderer):
                 print(f"  \u2022 {step}")
 
     @staticmethod
+    def _render_domain_http_chain(result: dict) -> None:
+        """Render HTTP redirect chain inspection."""
+        domain = result['domain']
+        redirects = result.get('redirects_to_https', False)
+        redirect_icon = '\u2705' if redirects else '\u26a0\ufe0f'
+
+        print(f"\nHTTP Redirect Chain for {domain}:\n")
+        print(f"HTTP → HTTPS redirect: {redirect_icon} {'Yes' if redirects else 'No'}\n")
+
+        http_chain = result.get('http_chain', [])
+        if http_chain:
+            print("HTTP (port 80):")
+            for hop in http_chain:
+                print(f"  \u2192 {hop}")
+            print()
+
+        https_chain = result.get('https_chain', [])
+        if https_chain:
+            print("HTTPS (port 443):")
+            for hop in https_chain:
+                print(f"  \u2192 {hop}")
+            print()
+
+        redirect_check = result.get('redirect_check', {})
+        if redirect_check and redirect_check.get('status') != 'pass':
+            icon = DomainRenderer._STATUS_ICONS.get(redirect_check['status'], '\u2753')
+            print(f"{icon} {redirect_check['message']}")
+            print()
+
+        if result.get('next_steps'):
+            print(f"{'-'*60}")
+            print("Next Steps:")
+            for step in result['next_steps']:
+                print(f"  \u2022 {step}")
+
+    @staticmethod
     def render_error(error: Exception) -> None:
         """Render user-friendly error messages.
 
