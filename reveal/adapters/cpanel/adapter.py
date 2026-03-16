@@ -43,6 +43,9 @@ CPANEL_USERDATA_DIR = "/var/cpanel/userdata"
 CPANEL_SSL_DIR = "/var/cpanel/ssl/apache_tls"
 NGINX_USER_CONF_DIR = "/etc/nginx/conf.d/users"
 
+# Non-domain files that may appear in the userdata directory (cache, metadata, etc.)
+_USERDATA_ARTIFACT_EXTENSIONS = ('.cache', '.yaml', '.json', '.lock', '.tmp', '.db', '.bak', '.log')
+
 
 def _parse_cpanel_userdata(path: str) -> Dict[str, str]:
     """Parse a cPanel userdata file (YAML-ish key: value format).
@@ -87,6 +90,9 @@ def _list_user_domains(username: str) -> List[Dict[str, str]]:
     for fname in sorted(os.listdir(userdata_dir)):
         # Skip non-domain files
         if fname in ('main', 'nobody') or fname.endswith('_SSL'):
+            continue
+        # Skip filesystem artifacts (.cache, .yaml, .json, etc.) — not domain entries
+        if any(fname.endswith(ext) for ext in _USERDATA_ARTIFACT_EXTENSIONS):
             continue
         fpath = os.path.join(userdata_dir, fname)
         if not os.path.isfile(fpath):

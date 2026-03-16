@@ -2475,3 +2475,101 @@ server {
         _handle_validate_nginx_acme(a, self._make_args())
         data = json.loads(capsys.readouterr().out)
         assert data['has_failures'] is False
+
+
+# ---------------------------------------------------------------------------
+# BACK-059: extract_ssl_domains canonical_only (one URI per vhost)
+# ---------------------------------------------------------------------------
+
+class TestExtractSslDomainsCanonicalOnly:
+    """BACK-059: --canonical-only returns one domain per vhost, not all aliases."""
+
+    def _write_config(self, content: str, tmp_path):
+        p = tmp_path / "site.conf"
+        p.write_text(content)
+        return NginxAnalyzer(str(p))
+
+    def test_canonical_only_returns_first_domain_per_vhost(self, tmp_path):
+        """With canonical_only=True, only the first server_name per block is returned."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name example.com www.example.com mail.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        a = self._write_config(config, tmp_path)
+        domains = a.extract_ssl_domains(canonical_only=True)
+        assert len(domains) == 1
+        assert 'example.com' in domains
+
+    def test_canonical_only_one_per_vhost_multiple_blocks(self, tmp_path):
+        """Multiple vhosts each contribute exactly one domain with canonical_only=True."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name alpha.io www.alpha.io;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+server {
+    listen 443 ssl;
+    server_name beta.io www.beta.io;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        a = self._write_config(config, tmp_path)
+        domains = a.extract_ssl_domains(canonical_only=True)
+        assert len(domains) == 2
+        assert 'alpha.io' in domains
+        assert 'beta.io' in domains
+        assert 'www.alpha.io' not in domains
+        assert 'www.beta.io' not in domains
+
+    def test_canonical_only_false_returns_all_aliases(self, tmp_path):
+        """Default (canonical_only=False) still returns all domains."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name example.com www.example.com mail.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        a = self._write_config(config, tmp_path)
+        domains = a.extract_ssl_domains(canonical_only=False)
+        assert len(domains) == 3
+        assert 'example.com' in domains
+        assert 'www.example.com' in domains
+        assert 'mail.example.com' in domains
+
+    def test_canonical_only_skips_wildcard_first_picks_next(self, tmp_path):
+        """canonical_only skips wildcard as first domain and picks the first valid one."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name *.example.com example.com www.example.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        a = self._write_config(config, tmp_path)
+        domains = a.extract_ssl_domains(canonical_only=True)
+        assert len(domains) == 1
+        assert 'example.com' in domains
+        assert 'www.example.com' not in domains
+
+    def test_canonical_only_deduplicates_across_blocks(self, tmp_path):
+        """canonical_only deduplicates if the same primary domain appears in two blocks."""
+        config = """
+server {
+    listen 443 ssl;
+    server_name shared.com www.shared.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+server {
+    listen 443 ssl;
+    server_name shared.com api.shared.com;
+    ssl_certificate /etc/ssl/certs/cert.pem;
+}
+"""
+        a = self._write_config(config, tmp_path)
+        domains = a.extract_ssl_domains(canonical_only=True)
+        assert domains.count('shared.com') == 1

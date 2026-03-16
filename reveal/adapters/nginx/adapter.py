@@ -222,13 +222,24 @@ def _iter_nginx_configs(search_dir: str):
 
     Mirrors nginx's own include logic:
     - sites-enabled: all files (no extension filter)
-    - conf.d and others: *.conf only
+    - conf.d and others: *.conf only (including one level of subdirectories,
+      e.g. conf.d/users/ on cPanel/WHM servers)
 
     Skips backup/temp files in both cases.
     """
     is_sites_enabled = 'sites-enabled' in search_dir
     pattern = os.path.join(search_dir, '*')
     for path in sorted(glob.glob(pattern)):
+        if os.path.isdir(path):
+            # Recurse one level into subdirectories (e.g. conf.d/users/)
+            for subpath in sorted(glob.glob(os.path.join(path, '*.conf'))):
+                if not os.path.isfile(subpath):
+                    continue
+                name = os.path.basename(subpath)
+                if any(name.endswith(s) or ('.backup' in name) for s in _BACKUP_SUFFIXES):
+                    continue
+                yield subpath
+            continue
         if not os.path.isfile(path):
             continue
         name = os.path.basename(path)

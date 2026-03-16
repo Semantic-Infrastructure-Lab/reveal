@@ -534,8 +534,13 @@ class NginxAnalyzer(FileAnalyzer):
         filtered['_domain_filter'] = domain
         return filtered
 
-    def extract_ssl_domains(self) -> List[str]:
+    def extract_ssl_domains(self, canonical_only: bool = False) -> List[str]:
         """Extract all SSL-enabled domains from nginx config.
+
+        Args:
+            canonical_only: When True, return only the first valid domain per
+                server block (the primary server_name) instead of all aliases.
+                Eliminates the 5× URI expansion from www/mail/alias variants.
 
         Returns:
             List of unique domain names from SSL server blocks.
@@ -543,27 +548,46 @@ class NginxAnalyzer(FileAnalyzer):
             IP addresses, and non-FQDN values.
         """
         structure = self.get_structure()
-        domains = set()
+        domains: List[str] = [] if canonical_only else []
+        seen: set = set()
 
         for server in structure.get('servers', []):
             # Only process SSL-enabled server blocks
             if not server.get('is_ssl'):
                 continue
 
-            for domain in server.get('domains', []):
-                # Skip non-domain values
-                if not domain or domain == '_' or domain == 'localhost':
-                    continue
-                # Skip wildcards (can't SSL check *.example.com)
-                if domain.startswith('*.'):
-                    continue
-                # Skip IP addresses
-                if re.match(r'^\d+\.\d+\.\d+\.\d+$', domain):
-                    continue
-                # Skip non-FQDN (no dot)
-                if '.' not in domain:
-                    continue
-                domains.add(domain)
+            if canonical_only:
+                # Take only the first valid domain per server block
+                for domain in server.get('domains', []):
+                    if not domain or domain == '_' or domain == 'localhost':
+                        continue
+                    if domain.startswith('*.'):
+                        continue
+                    if re.match(r'^\d+\.\d+\.\d+\.\d+$', domain):
+                        continue
+                    if '.' not in domain:
+                        continue
+                    if domain not in seen:
+                        seen.add(domain)
+                        domains.append(domain)
+                    break  # first valid domain only
+            else:
+                for domain in server.get('domains', []):
+                    # Skip non-domain values
+                    if not domain or domain == '_' or domain == 'localhost':
+                        continue
+                    # Skip wildcards (can't SSL check *.example.com)
+                    if domain.startswith('*.'):
+                        continue
+                    # Skip IP addresses
+                    if re.match(r'^\d+\.\d+\.\d+\.\d+$', domain):
+                        continue
+                    # Skip non-FQDN (no dot)
+                    if '.' not in domain:
+                        continue
+                    if domain not in seen:
+                        seen.add(domain)
+                        domains.append(domain)
 
         return sorted(domains)
 

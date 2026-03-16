@@ -148,6 +148,53 @@ class TestIterNginxConfigs:
         assert result['config_file'].endswith('example.com'), \
             f"Expected config_file to end with 'example.com', got: {result['config_file']}"
 
+    def test_conf_d_recurses_into_subdirectory(self, tmp_path):
+        """BACK-046: conf.d/users/*.conf files must be found (cPanel/WHM pattern)."""
+        confd = tmp_path / "conf.d"
+        confd.mkdir()
+        users = confd / "users"
+        users.mkdir()
+        (users / "example.com.conf").write_text(SIMPLE_SSL_VHOST)
+        (users / "other.com.conf").write_text(SIMPLE_SSL_VHOST.replace("example.com", "other.com"))
+
+        found = list(_iter_nginx_configs(str(confd)))
+        names = [os.path.basename(f) for f in found]
+        assert "example.com.conf" in names, "conf.d/users/ .conf files must be found"
+        assert "other.com.conf" in names
+
+    def test_conf_d_subdirectory_skips_backup_files(self, tmp_path):
+        """BACK-046: backup files in conf.d/users/ must be excluded."""
+        confd = tmp_path / "conf.d"
+        confd.mkdir()
+        users = confd / "users"
+        users.mkdir()
+        (users / "example.com.conf").write_text(SIMPLE_SSL_VHOST)
+        (users / "example.com.conf.bak").write_text(SIMPLE_SSL_VHOST)
+
+        found = list(_iter_nginx_configs(str(confd)))
+        names = [os.path.basename(f) for f in found]
+        assert "example.com.conf" in names
+        assert "example.com.conf.bak" not in names
+
+    def test_uri_adapter_finds_domain_in_conf_d_users(self, tmp_path):
+        """BACK-046: NginxUriAdapter resolves a domain stored in conf.d/users/."""
+        confd = tmp_path / "conf.d"
+        confd.mkdir()
+        users = confd / "users"
+        users.mkdir()
+        (users / "cpanel-site.conf").write_text(SIMPLE_SSL_VHOST)
+
+        with patch.object(
+            __import__('reveal.adapters.nginx.adapter', fromlist=['_NGINX_SEARCH_DIRS']),
+            '_NGINX_SEARCH_DIRS',
+            [str(confd)],
+        ):
+            adapter = NginxUriAdapter('nginx://example.com')
+            result = adapter.get_structure()
+
+        assert result.get('type') == 'nginx_vhost_summary'
+        assert result['domain'] == 'example.com'
+
 
 # ---------------------------------------------------------------------------
 # Bug 2: nested location blocks — SSL block must be found

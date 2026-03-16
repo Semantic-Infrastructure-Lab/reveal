@@ -115,6 +115,37 @@ class TestListUserDomains:
         assert result[0]['domain'] == 'sub.example.com'
         assert result[0]['type'] == 'subdomain'
 
+    def test_skips_artifact_extensions(self, tmp_path):
+        """BACK-045: .cache/.yaml/.json files in userdata dir must not be treated as domains."""
+        userdata = tmp_path / "myuser"
+        userdata.mkdir()
+        (userdata / "example.com").write_text("domain: example.com\ndocumentroot: /home/myuser/public_html\n")
+        (userdata / "example.com.cache").write_text("some cache data\n")
+        (userdata / "vhosts.yaml").write_text("some: yaml\n")
+        (userdata / "config.json").write_text('{"key":"value"}\n')
+        (userdata / "session.lock").write_text("")
+        (userdata / "debug.log").write_text("log data\n")
+
+        with patch('reveal.adapters.cpanel.adapter.CPANEL_USERDATA_DIR', str(tmp_path)):
+            result = _list_user_domains('myuser')
+
+        domains = [r['domain'] for r in result]
+        assert len(result) == 1, f"Expected 1 domain, got {len(result)}: {domains}"
+        assert 'example.com' in domains
+
+    def test_skips_bak_extension(self, tmp_path):
+        """BACK-045: .bak files in userdata dir must not be treated as domains."""
+        userdata = tmp_path / "myuser"
+        userdata.mkdir()
+        (userdata / "example.com").write_text("domain: example.com\ndocumentroot: /home/myuser/public_html\n")
+        (userdata / "example.com.bak").write_text("domain: old.example.com\n")
+
+        with patch('reveal.adapters.cpanel.adapter.CPANEL_USERDATA_DIR', str(tmp_path)):
+            result = _list_user_domains('myuser')
+
+        assert len(result) == 1
+        assert result[0]['domain'] == 'example.com'
+
 
 # ---------------------------------------------------------------------------
 # _get_disk_cert_status

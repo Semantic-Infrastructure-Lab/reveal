@@ -68,17 +68,18 @@ def _build_file_cli_overrides(args: Optional['Namespace']) -> dict:
     return cli_overrides
 
 
-def _handle_domain_extraction(analyzer) -> None:
+def _handle_domain_extraction(analyzer, canonical_only: bool = False) -> None:
     """Handle domain extraction from analyzer.
 
     Args:
         analyzer: Analyzer instance
+        canonical_only: When True, emit one URI per vhost (primary server_name only)
 
     Exits:
         With error code 1 if domain extraction not supported
     """
     if hasattr(analyzer, 'extract_ssl_domains'):
-        domains = analyzer.extract_ssl_domains()
+        domains = analyzer.extract_ssl_domains(canonical_only=canonical_only)
         for domain in domains:
             print(f"ssl://{domain}")
     else:
@@ -532,18 +533,20 @@ def _handle_cpanel_certs(analyzer) -> None:
         sys.exit(2)
 
 
-def _handle_extract_option(analyzer, extract_type: str) -> None:
+def _handle_extract_option(analyzer, extract_type: str, args=None) -> None:
     """Handle --extract option with validation.
 
     Args:
         analyzer: Analyzer instance
         extract_type: Type to extract (e.g., 'domains', 'acme-roots')
+        args: Full argument namespace (for --canonical-only and other flags)
 
     Exits:
         With error code 1 if extract type unknown
     """
     if extract_type == 'domains':
-        _handle_domain_extraction(analyzer)
+        canonical_only = getattr(args, 'canonical_only', False) if args else False
+        _handle_domain_extraction(analyzer, canonical_only=canonical_only)
     elif extract_type == 'acme-roots':
         _handle_acme_roots_extraction(analyzer)
     else:
@@ -583,7 +586,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         return
 
     if args and getattr(args, 'extract', None):
-        _handle_extract_option(analyzer, args.extract.lower())
+        _handle_extract_option(analyzer, args.extract.lower(), args=args)
         return
 
     if args and getattr(args, 'check_acl', False):
