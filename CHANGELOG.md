@@ -12,9 +12,12 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315)
+## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315)
 
 ### Fixed
+- **BACK-045: `cpanel://` domain count inflated by filesystem artifacts** — `.cache`/`.yaml`/`.json`/`.lock`/`.tmp`/`.db`/`.bak`/`.log` files in `/var/cpanel/userdata/USER/` were counted as domains, inflating SSL "missing" counts 300–400×. `_list_user_domains()` now filters these extensions. 2 new tests. (session lightning-shield-0315)
+- **BACK-046: `nginx://` missed `conf.d/users/` on cPanel/WHM servers** — `_iter_nginx_configs()` now recurses one level into subdirectories, finding `conf.d/users/*.conf` configs that cPanel writes there. Backup files in subdirs are also excluded. 3 new tests. (session lightning-shield-0315)
+- **BACK-059: `--extract domains` 5× URI expansion** — `extract_ssl_domains()` returned all `server_name` aliases (www/mail/rfr.bz variants), producing ~807 URIs for ~163 real vhosts. New `--canonical-only` flag returns one URI per vhost (the first valid `server_name`). `extract_ssl_domains(canonical_only=True)` added to the analyzer; flag wired through CLI parser and `file_handler`. 5 new tests. (session lightning-shield-0315)
 - **BACK-047: `domain://` false NS failures on subdomains** — `check_nameserver_response` and `check_dns_propagation` now return pass/skipped for domains with 3+ labels (e.g. `stg.rfr.bz`). Subdomains have no NS records of their own; querying NS for them produces spurious CRITICAL failures. `_is_subdomain()` helper added to `dns.py`. 10 new tests. (session slate-spectrum-0315)
 - **BACK-061: `--expiring-within N` had no effect on exit code** — Flag was render-only; now routed to `warn_days` in `SSLAdapter.check()` via `_build_check_kwargs`. `--expiring-within=60` on a cert with 47d to expiry now correctly exits 1 (WARNING). Accepts `30` or `30d` formats. 4 new tests. (session slate-spectrum-0315)
 - **BACK-062: `@file` not batch-equivalent to `--stdin --batch`** — `_handle_at_file` now routes through `handle_stdin_mode` (via `io.StringIO`) when `--batch` or `--check` is active, giving identical aggregation behavior. `@file --batch` now shows `BATCH CHECK RESULTS` header with Total URIs count. 3 new tests. (session slate-spectrum-0315)
