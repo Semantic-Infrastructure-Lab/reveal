@@ -12,6 +12,8 @@ beth_topics:
 
 Discovered via dogfooding on real codebases (morphogen, tiacad) — session shining-wormhole-0315, 2026-03-15.
 
+> **Status**: All 9 issues resolved in awakened-pegasus-0315 (v0.63.x). This doc is kept for historical reference.
+
 ---
 
 ## Bugs (Crashes / Wrong Output)
@@ -165,17 +167,17 @@ Error: path/to/file.py not found
 
 ## Summary Table
 
-| ID | Severity | Adapter | Issue |
-|----|----------|---------|-------|
-| BUG-01 | **High** | `git://` | `blame&element=` crashes with lambda arity error |
-| BUG-02 | **Medium** | `ast://` | Multi-file colon path silently scans 0 files |
-| UX-01 | **Medium** | `diff://` | Absolute paths fail cryptically due to `:` separator conflict |
-| UX-02 | **Medium** | `imports://` | Missing config shows "0 violations" instead of "not configured" |
-| UX-03 | **Medium** | `ast://` | No result cap or count warning on large unfiltered queries |
-| UX-04 | Low | `markdown://` | Silent exclusion when files lack front matter |
-| UX-05 | Low | file extraction | "Not found" error doesn't mention cwd context |
-| UX-06 | Low | `git://` | `~=` regex substring behavior undocumented |
-| UX-07 | Low | `git://` | `--log` flag silently ignored; correct syntax not suggested |
+| ID | Severity | Adapter | Issue | Status |
+|----|----------|---------|-------|--------|
+| BUG-01 | **High** | `git://` | `blame&element=` crashes with lambda arity error | ✅ Fixed awakened-pegasus-0315 |
+| BUG-02 | **Medium** | `ast://` | Multi-file colon path silently scans 0 files | ✅ Fixed awakened-pegasus-0315 |
+| UX-01 | **Medium** | `diff://` | Absolute paths fail cryptically due to `:` separator conflict | ✅ Fixed awakened-pegasus-0315 |
+| UX-02 | **Medium** | `imports://` | Missing config shows "0 violations" instead of "not configured" | ✅ Fixed awakened-pegasus-0315 |
+| UX-03 | **Medium** | `ast://` | No result cap or count warning on large unfiltered queries | ✅ Fixed awakened-pegasus-0315 |
+| UX-04 | Low | `markdown://` | Silent exclusion when files lack front matter | ✅ Fixed awakened-pegasus-0315 |
+| UX-05 | Low | file extraction | "Not found" error doesn't mention cwd context | ✅ Fixed awakened-pegasus-0315 |
+| UX-06 | Low | `git://` | `~=` regex substring behavior undocumented | ✅ Fixed awakened-pegasus-0315 |
+| UX-07 | Low | `git://` | `--log` flag silently ignored; correct syntax not suggested | ✅ Fixed awakened-pegasus-0315 |
 
 ---
 

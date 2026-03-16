@@ -572,3 +572,202 @@ class TestHandleFileOrDirectory:
                         handle_file_or_directory('/some/socket', args)
         captured = capsys.readouterr()
         assert 'neither' in captured.err
+
+
+# ─── generic_adapter_handler — real class with from_uri (line 93) ────────────
+
+class TestGenericAdapterHandlerFromUri:
+    def test_real_class_with_from_uri_is_called(self):
+        """Cover line 93: isinstance(adapter_class, type) + from_uri branch."""
+        from reveal.cli.routing import generic_adapter_handler
+
+        sentinel = object()
+
+        class FakeAdapter:
+            @classmethod
+            def from_uri(cls, scheme, resource, element):
+                return sentinel
+
+            def get_structure(self):
+                return {'items': []}
+
+        class FakeRenderer:
+            @staticmethod
+            def render(result, fmt, **kw):
+                pass
+
+        args = _args(check=False, element=None, base_path=None, sort=None,
+                     fields=None, max_items=None, max_bytes=None,
+                     max_depth=None, max_snippet_chars=None)
+
+        with patch('reveal.cli.routing._build_adapter_kwargs', return_value={}):
+            with patch('reveal.cli.routing._handle_rendering'):
+                generic_adapter_handler(FakeAdapter, FakeRenderer, 'fake', 'res', None, args)
+
+
+# ─── _render_element — successful get_element path (line 271) ────────────────
+
+class TestRenderElement:
+    def test_render_element_success(self):
+        """Cover line 271: render_element called when get_element returns a value."""
+        from reveal.cli.routing import _render_element
+
+        mock_adapter = MagicMock()
+        mock_adapter.get_element.return_value = {'name': 'foo', 'body': 'x = 1'}
+        mock_renderer = MagicMock()
+        args = _args()
+
+        _render_element(mock_adapter, mock_renderer, 'foo', None, args)
+        mock_renderer.render_element.assert_called_once_with({'name': 'foo', 'body': 'x = 1'}, 'text')
+
+
+# ─── _build_adapter_kwargs — uri param in signature (line 296) ───────────────
+
+class TestBuildAdapterKwargsUri:
+    def test_uri_param_in_signature_sets_uri_kwarg(self):
+        """Cover line 296: kwargs['uri'] built when adapter.get_structure takes 'uri'."""
+        from reveal.cli.routing import _build_adapter_kwargs
+        import inspect
+
+        class FakeAdapter:
+            def get_structure(self, uri=None):
+                pass
+
+        adapter = FakeAdapter()
+        args = _args()
+        result = _build_adapter_kwargs(adapter, args, scheme='env', resource='.env')
+        assert result.get('uri') == 'env://.env'
+
+
+# ─── _apply_budget_constraints — non-dict result (line 332) ──────────────────
+
+class TestApplyBudgetConstraintsNonDict:
+    def test_non_dict_passes_through(self):
+        """Cover line 332: non-dict result returned immediately."""
+        from reveal.cli.routing import _apply_budget_constraints
+
+        args = _args()
+        result = _apply_budget_constraints("just a string", args)
+        assert result == "just a string"
+
+        result = _apply_budget_constraints(42, args)
+        assert result == 42
+
+
+# ─── handle_adapter — generic_adapter_handler call (line 437) ────────────────
+
+class TestHandleAdapter:
+    def test_handle_adapter_calls_generic_handler(self):
+        """Cover line 437: handle_adapter routes to generic_adapter_handler."""
+        from reveal.cli.routing import handle_adapter
+
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+        args = _args()
+
+        with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+            with patch('reveal.cli.routing.generic_adapter_handler') as mock_generic:
+                handle_adapter(mock_adapter_cls, 'env', '.env', None, args)
+                mock_generic.assert_called_once_with(
+                    mock_adapter_cls, mock_renderer_cls, 'env', '.env', None, args
+                )
+
+
+# ─── _collect_dir_stats — stat failure returns None (line 507) ───────────────
+
+class TestCollectDirStatsStatFailure:
+    def test_unreadable_file_is_skipped(self, tmp_path):
+        """Cover line 507: _stat_one_file returns None → continue in _collect_dir_stats."""
+        from reveal.cli.routing import _collect_dir_stats
+
+        (tmp_path / 'good.py').write_text('x = 1\n')
+        (tmp_path / 'bad.py').write_text('y = 2\n')
+
+        original_stat_one_file = None
+
+        def fake_stat_one_file(fpath, ext_counts):
+            if fpath.name == 'bad.py':
+                return None
+            from collections import defaultdict
+            ext_counts[fpath.suffix.lower().lstrip('.') or '(no ext)'] += 1
+            import os
+            s = os.stat(fpath)
+            return s.st_size, s.st_mtime
+
+        with patch('reveal.cli.routing._stat_one_file', side_effect=fake_stat_one_file):
+            ext_counts, total_files, total_size, newest, oldest = _collect_dir_stats(tmp_path)
+
+        assert total_files == 1  # bad.py skipped
+
+
+# ─── _handle_directory_path — meta and files branches (lines 671-672, 677-678)
+
+class TestHandleDirectoryPath:
+    def test_meta_flag_calls_show_directory_meta(self, tmp_path):
+        """Cover lines 671-672: args.meta=True → _show_directory_meta."""
+        from reveal.cli.routing import _handle_directory_path
+
+        args = _args(meta=True, files=False, sort=None, asc=False, desc=False,
+                     ext=None, depth=3, max_entries=100, fast=False,
+                     respect_gitignore=True, exclude=[], dir_limit=0)
+
+        with patch('reveal.cli.routing._show_directory_meta') as mock_meta:
+            _handle_directory_path(tmp_path, args)
+            mock_meta.assert_called_once_with(tmp_path, args)
+
+    def test_files_flag_calls_show_file_list(self, tmp_path, capsys):
+        """Cover lines 677-678: args.files=True → show_file_list."""
+        from reveal.cli.routing import _handle_directory_path
+
+        args = _args(meta=False, files=True, sort=None, asc=False, desc=False,
+                     ext=None, depth=3, max_entries=100, fast=False,
+                     respect_gitignore=True, exclude=[], dir_limit=0)
+
+        with patch('reveal.tree_view.show_file_list', return_value='file list output') as mock_fl:
+            _handle_directory_path(tmp_path, args)
+            mock_fl.assert_called_once()
+        captured = capsys.readouterr()
+        assert 'file list output' in captured.out
+
+
+# ─── _handle_file_path — search/sort/type flag → handle_uri (lines 697-698) ──
+
+class TestHandleFilePathSearchFlag:
+    def test_search_flag_routes_to_handle_uri(self, tmp_path):
+        """Cover lines 697-698: args.search set → _build_ast_query_from_flags + handle_uri."""
+        from reveal.cli.routing import _handle_file_path
+
+        f = tmp_path / 'app.py'
+        f.write_text('def foo(): pass\n')
+        args = _args(search='foo', sort=None, type=None, element=None,
+                     section=None, meta=False, format='text',
+                     respect_gitignore=True, exclude=[], depth=3,
+                     max_entries=100, fast=False, asc=False, desc=False,
+                     ext=None, dir_limit=0)
+
+        with patch('reveal.cli.routing.handle_uri') as mock_handle_uri:
+            with patch('reveal.cli.routing._build_ast_query_from_flags', return_value='ast://app.py?search=foo'):
+                _handle_file_path(f, None, args)
+                mock_handle_uri.assert_called_once()
+
+
+# ─── _handle_file_path — section on markdown file (line 703) ─────────────────
+
+class TestHandleFilePathSectionOnMarkdown:
+    def test_section_on_md_file_passes_as_element(self, tmp_path):
+        """Cover line 703: args.section on .md file → element = args.section."""
+        from reveal.cli.routing import _handle_file_path
+
+        f = tmp_path / 'README.md'
+        f.write_text('# Intro\nHello\n')
+        args = _args(search=None, sort=None, type=None, element=None,
+                     section='Intro', meta=False, format='text',
+                     respect_gitignore=True, exclude=[], depth=3,
+                     max_entries=100, fast=False, asc=False, desc=False,
+                     ext=None, dir_limit=0)
+
+        with patch('reveal.cli.routing.handle_file') as mock_handle_file:
+            _handle_file_path(f, None, args)
+            mock_handle_file.assert_called_once()
+            call_args = mock_handle_file.call_args[0]
+            assert call_args[1] == 'Intro'  # element passed from args.section
