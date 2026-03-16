@@ -12,6 +12,7 @@ from reveal.cli.file_checker import (
     check_and_report_file,
     _i002_preload,
     _i002_init_worker,
+    _apply_severity_filter,
 )
 
 
@@ -592,3 +593,132 @@ class TestCheckSubcommandParser:
         parser = create_check_parser()
         args = parser.parse_args(['f.py'])
         assert args.severity is None
+
+
+def _make_mock_detection(severity_value: str) -> Mock:
+    """Helper: create a mock detection with a given severity string (e.g. 'HIGH')."""
+    d = Mock()
+    d.severity = Mock()
+    d.severity.value = severity_value
+    return d
+
+
+class TestApplySeverityFilter:
+    """Tests for _apply_severity_filter — the severity gate in recursive check."""
+
+    def test_none_severity_returns_all(self):
+        """severity=None should return all detections unchanged."""
+        detections = [_make_mock_detection('LOW'), _make_mock_detection('HIGH')]
+        assert _apply_severity_filter(detections, None) == detections
+
+    def test_low_returns_all_levels(self):
+        """--severity low should pass low, medium, high, critical."""
+        detections = [
+            _make_mock_detection('low'),
+            _make_mock_detection('medium'),
+            _make_mock_detection('high'),
+            _make_mock_detection('critical'),
+        ]
+        result = _apply_severity_filter(detections, 'low')
+        assert len(result) == 4
+
+    def test_medium_excludes_low(self):
+        """--severity medium should exclude low, keep medium/high/critical."""
+        detections = [
+            _make_mock_detection('low'),
+            _make_mock_detection('medium'),
+            _make_mock_detection('high'),
+        ]
+        result = _apply_severity_filter(detections, 'medium')
+        assert len(result) == 2
+        severities = {d.severity.value for d in result}
+        assert 'low' not in severities
+
+    def test_high_keeps_only_high_and_critical(self):
+        """--severity high should exclude low and medium."""
+        detections = [
+            _make_mock_detection('low'),
+            _make_mock_detection('medium'),
+            _make_mock_detection('high'),
+            _make_mock_detection('critical'),
+        ]
+        result = _apply_severity_filter(detections, 'high')
+        assert len(result) == 2
+        for d in result:
+            assert d.severity.value in ('high', 'critical')
+
+    def test_critical_keeps_only_critical(self):
+        """--severity critical should exclude everything below critical."""
+        detections = [
+            _make_mock_detection('low'),
+            _make_mock_detection('medium'),
+            _make_mock_detection('high'),
+            _make_mock_detection('critical'),
+        ]
+        result = _apply_severity_filter(detections, 'critical')
+        assert len(result) == 1
+        assert result[0].severity.value == 'critical'
+
+    def test_severity_comparison_is_case_insensitive(self):
+        """Severity values from detections are normalised to lowercase for comparison."""
+        detections = [
+            _make_mock_detection('LOW'),
+            _make_mock_detection('HIGH'),
+        ]
+        result = _apply_severity_filter(detections, 'high')
+        assert len(result) == 1
+        assert result[0].severity.value == 'HIGH'
+
+    def test_unknown_severity_arg_returns_all(self):
+        """An unrecognised --severity value should not crash and should return all."""
+        detections = [_make_mock_detection('low'), _make_mock_detection('high')]
+        result = _apply_severity_filter(detections, 'bogus')
+        assert result == detections
+
+    def test_empty_detections_returns_empty(self):
+        """Filtering an empty list should return an empty list."""
+        assert _apply_severity_filter([], 'high') == []
+
+
+class TestCheckFilesTextSeverity:
+    """Tests that _check_files_text and _check_files_json honour the severity= parameter."""
+
+    def _make_detection(self, sev: str) -> Mock:
+        d = Mock()
+        d.line = 1
+        d.column = 0
+        d.rule_code = 'F001'
+        d.message = 'test'
+        d.severity = Mock()
+        d.severity.value = sev
+        d.suggestion = ''
+        d.context = ''
+        return d
+
+    def test_check_files_text_filters_by_severity(self, tmp_path, capsys):
+        """_check_files_text with severity='high' should report only high/critical issues."""
+        from reveal.cli.file_checker import _check_files_text
+        dummy = tmp_path / 'a.py'
+        dummy.write_text('x = 1')
+        low = self._make_detection('low')
+        high = self._make_detection('high')
+
+        with patch('reveal.cli.file_checker.check_and_collect_file', return_value=(2, [low, high])):
+            total, files_with = _check_files_text([dummy], tmp_path, None, None, severity='high')
+
+        assert total == 1
+        assert files_with == 1
+
+    def test_check_files_json_filters_by_severity(self, tmp_path):
+        """_check_files_json with severity='high' should count only high/critical issues."""
+        from reveal.cli.file_checker import _check_files_json
+        dummy = tmp_path / 'a.py'
+        dummy.write_text('x = 1')
+        low = self._make_detection('low')
+        high = self._make_detection('high')
+
+        with patch('reveal.cli.file_checker.check_and_collect_file', return_value=(2, [low, high])):
+            total, files_with, _ = _check_files_json([dummy], tmp_path, None, None, severity='high')
+
+        assert total == 1
+        assert files_with == 1

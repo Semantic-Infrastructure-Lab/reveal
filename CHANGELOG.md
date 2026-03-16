@@ -12,9 +12,10 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316, heating-blizzard-0316)
+## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316, heating-blizzard-0316, ascending-journey-0316)
 
 ### Fixed
+- **BACK-069: `reveal check dir/ --severity` ignored filter in recursive mode** — `handle_recursive_check` extracted `select`/`ignore` from `args` but not `severity`. `_apply_severity_filter()` helper added (with `_SEVERITY_ORDER` constant); `_check_files_text` and `_check_files_json` each gain a `severity=None` parameter that gates detections post-collection. `handle_recursive_check` now reads `getattr(args, 'severity', None)` and passes it through. Case-insensitive comparison; unknown level passes all. 10 new tests. (session ascending-journey-0316)
 - **BACK-051: `domain://` missing email DNS layer** — `check_mx_records()`, `check_spf_record()`, `check_dmarc_record()`, and `check_email_dns()` aggregator added to `dns.py`. New `/mail` element (`reveal domain://DOMAIN/mail`) shows MX/SPF/DMARC status with record details. `check()` now includes all three email checks. Renderer added. 17 new tests. (session emerald-shade-0315)
 - **BACK-053: `domain://` no HTTP redirect chain inspection** — `_check_http_to_https_redirect()` added as a named `http_redirect` check in `check()` output. New `/http` element (`reveal domain://DOMAIN/http`) shows full redirect chains for HTTP and HTTPS with `redirects_to_https` flag. Renderer added. 8 new tests. (session emerald-shade-0315)
 - **BACK-042: `reveal check` severity filtering** — `--severity LEVEL` flag added (low, medium, high, critical). Filters detections post-check to only show issues at or above the specified level. Case-insensitive; invalid value emits stderr warning and shows all. 9 new tests. (session emerald-shade-0315)

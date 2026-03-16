@@ -383,8 +383,23 @@ def _handle_no_files_found(directory: Path, output_format: str) -> None:
         print(f"No supported files found in {directory}")
 
 
+_SEVERITY_ORDER = ['low', 'medium', 'high', 'critical']
+
+
+def _apply_severity_filter(detections: list, severity: Optional[str]) -> list:
+    """Filter detections to only those at or above the given severity level."""
+    if not severity:
+        return detections
+    level = severity.lower()
+    if level not in _SEVERITY_ORDER:
+        return detections
+    min_idx = _SEVERITY_ORDER.index(level)
+    return [d for d in detections if _SEVERITY_ORDER.index(d.severity.value.lower()) >= min_idx]
+
+
 def _check_files_json(
-    files: List[Path], directory: Path, select: Optional[List[str]], ignore: Optional[List[str]]
+    files: List[Path], directory: Path, select: Optional[List[str]], ignore: Optional[List[str]],
+    severity: Optional[str] = None,
 ) -> tuple:
     """Check files and collect JSON results.
 
@@ -393,6 +408,7 @@ def _check_files_json(
         directory: Base directory
         select: Rule codes to select
         ignore: Rule codes to ignore
+        severity: Minimum severity level to report (low/medium/high/critical)
 
     Returns:
         Tuple of (total_issues, files_with_issues, file_results)
@@ -412,6 +428,8 @@ def _check_files_json(
 
     cwd = Path.cwd()
     for file_path, issue_count, detections in results:
+        detections = _apply_severity_filter(detections, severity)
+        issue_count = len(detections)
         if issue_count > 0:
             total_issues += issue_count
             files_with_issues += 1
@@ -445,6 +463,7 @@ def _check_files_text(
     select: Optional[List[str]],
     ignore: Optional[List[str]],
     no_group: bool = False,
+    severity: Optional[str] = None,
 ) -> tuple:
     """Check files with text output.
 
@@ -454,6 +473,7 @@ def _check_files_text(
         select: Rule codes to select
         ignore: Rule codes to ignore
         no_group: Disable collapsing of repeated rule detections
+        severity: Minimum severity level to report (low/medium/high/critical)
 
     Returns:
         Tuple of (total_issues, files_with_issues)
@@ -472,6 +492,8 @@ def _check_files_text(
 
     cwd = Path.cwd()
     for file_path, issue_count, detections in results:
+        detections = _apply_severity_filter(detections, severity)
+        issue_count = len(detections)
         if issue_count > 0:
             total_issues += issue_count
             files_with_issues += 1
@@ -571,16 +593,17 @@ def handle_recursive_check(directory: Path, args: 'Namespace') -> None:
     select = args.select.split(',') if args.select else None
     ignore = args.ignore.split(',') if args.ignore else None
     no_group = getattr(args, 'no_group', False)
+    severity = getattr(args, 'severity', None)
 
     # Check files based on output format
     if output_format == 'json':
         total_issues, files_with_issues, file_results = _check_files_json(
-            files_to_check, directory, select, ignore
+            files_to_check, directory, select, ignore, severity=severity
         )
         _print_json_output(file_results, len(files_to_check), files_with_issues, total_issues)
     else:
         total_issues, files_with_issues = _check_files_text(
-            files_to_check, directory, select, ignore, no_group=no_group
+            files_to_check, directory, select, ignore, no_group=no_group, severity=severity
         )
         _print_text_summary(len(files_to_check), files_with_issues, total_issues, directory, config)
 
