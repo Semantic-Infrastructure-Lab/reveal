@@ -24,6 +24,90 @@ from .renderer import AutosslRenderer
 _FAILURE_STATUSES = {'incomplete', 'defective', 'dcv_failed', 'unknown'}
 
 
+def _get_error_code_taxonomy() -> dict:
+    """Return the AutoSSL error code reference (autossl://error-codes)."""
+    return {
+        'type': 'autossl_error_codes',
+        'title': 'cPanel AutoSSL Error Code Reference',
+        'openssl_defect_codes': [
+            {
+                'code': 'DEPTH_ZERO_SELF_SIGNED_CERT',
+                'meaning': 'Leaf certificate is self-signed (not issued by a CA)',
+                'cause': 'Server is using a cPanel self-signed fallback cert',
+                'fix': 'AutoSSL should replace it automatically; if stuck, check DCV impediments',
+            },
+            {
+                'code': 'SELF_SIGNED_CERT_IN_CHAIN',
+                'meaning': 'A certificate in the chain is self-signed',
+                'cause': 'Intermediate cert is missing or the chain includes a root in the wrong position',
+                'fix': 'Re-run AutoSSL; if persistent, check the domain\'s cert chain with: reveal ssl://DOMAIN --advanced',
+            },
+            {
+                'code': 'CERT_HAS_EXPIRED',
+                'meaning': 'Certificate has passed its notAfter date',
+                'cause': 'AutoSSL failed to renew before expiry',
+                'fix': 'Check DCV impediments for the domain; fix DNS/HTTP challenge accessibility',
+            },
+            {
+                'code': 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+                'meaning': 'Issuer cert not found in local trust store',
+                'cause': 'Incomplete chain or missing intermediate cert',
+                'fix': 'Usually resolves on next AutoSSL cycle; check with reveal ssl://DOMAIN --advanced',
+            },
+            {
+                'code': 'CERTIFICATE_VERIFY_FAILED',
+                'meaning': 'Certificate failed trust chain verification',
+                'cause': 'General chain validation error — often an intermediate missing',
+                'fix': 'Check live cert with: reveal ssl://DOMAIN --advanced',
+            },
+        ],
+        'dcv_impediment_codes': [
+            {
+                'code': 'TOTAL_DCV_FAILURE',
+                'meaning': 'Every domain in the certificate failed DCV — no renewal possible',
+                'cause': 'DNS not pointing to this server, or HTTP challenge path blocked',
+                'fix': (
+                    'Verify DNS A record points to this server. '
+                    'Check ACME challenge path: reveal nginx://DOMAIN --validate-nginx-acme'
+                ),
+            },
+            {
+                'code': 'NO_UNSECURED_DOMAIN_PASSED_DCV',
+                'meaning': 'No unsecured domain passed DCV — partial failure',
+                'cause': 'All domains in the cert failed DCV; at least one must pass for renewal',
+                'fix': 'Fix the primary domain DCV first; subdomains inherit the cert',
+            },
+            {
+                'code': 'DNS_RESOLVES_TO_ANOTHER_SERVER',
+                'meaning': 'Domain\'s DNS A/AAAA record points to a different server',
+                'cause': 'Domain migrated away or DNS not updated; AutoSSL skips externally-hosted domains',
+                'fix': (
+                    'Update DNS to point to this server, or remove the domain from cPanel. '
+                    'Check with: reveal domain://DOMAIN'
+                ),
+            },
+            {
+                'code': 'DOMAIN_NOT_IN_CPANEL',
+                'meaning': 'Domain not found in cPanel user account',
+                'cause': 'Domain was removed from the account but cert still references it',
+                'fix': 'Re-add the domain to cPanel or remove it from the SSL cert',
+            },
+        ],
+        'tls_status_values': {
+            'ok': 'Certificate valid; AutoSSL satisfied (no renewal needed)',
+            'incomplete': 'No renewal triggered — existing cert is still valid and not near expiry',
+            'defective': 'Certificate has a problem (expired, self-signed, chain error)',
+        },
+        'next_steps': [
+            'reveal autossl://latest --only-failures     # Show only domains with errors',
+            'reveal autossl://latest --format=json | jq \'.users[].domains[] | select(.tls_status=="defective")\'',
+            'reveal domain://DOMAIN                      # Check DNS for a failing domain',
+            'reveal nginx://DOMAIN --validate-nginx-acme # Verify ACME challenge path',
+            'reveal ssl://DOMAIN --advanced              # Inspect live cert chain',
+        ],
+    }
+
+
 def _apply_autossl_filters(result: Dict[str, Any], only_failures: bool = False,
                             summary: bool = False,
                             user: Optional[str] = None) -> Dict[str, Any]:
@@ -120,6 +204,8 @@ class AutosslAdapter(ResourceAdapter):
         """
         if self.timestamp is None:
             return self._list_runs_structure()
+        if self.timestamp == 'error-codes':
+            return _get_error_code_taxonomy()
         result = self._parse_run_structure(self.timestamp)
         if result.get('error'):
             return result

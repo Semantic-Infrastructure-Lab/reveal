@@ -640,3 +640,57 @@ class TestApplyAutosslFilters:
         assert result['user_count'] == 2
         assert 'users' in result
         assert len(result['users'][0]['domains']) == 3
+
+
+class TestAutosslErrorCodes:
+    """BACK-057: autossl://error-codes returns taxonomy of known error codes."""
+
+    def test_error_codes_uri_returns_taxonomy(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://error-codes')
+        result = a.get_structure()
+        assert result['type'] == 'autossl_error_codes'
+
+    def test_taxonomy_has_openssl_defect_codes(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://error-codes')
+        result = a.get_structure()
+        codes = result.get('openssl_defect_codes', [])
+        assert len(codes) >= 3
+        assert any(e['code'] == 'DEPTH_ZERO_SELF_SIGNED_CERT' for e in codes)
+        assert any(e['code'] == 'CERT_HAS_EXPIRED' for e in codes)
+
+    def test_taxonomy_has_dcv_impediment_codes(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://error-codes')
+        result = a.get_structure()
+        codes = result.get('dcv_impediment_codes', [])
+        assert len(codes) >= 2
+        assert any(e['code'] == 'TOTAL_DCV_FAILURE' for e in codes)
+
+    def test_each_openssl_entry_has_required_fields(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://error-codes')
+        result = a.get_structure()
+        for entry in result['openssl_defect_codes']:
+            assert 'code' in entry
+            assert 'meaning' in entry
+            assert 'fix' in entry
+
+    def test_taxonomy_has_tls_status_values(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://error-codes')
+        result = a.get_structure()
+        tls = result.get('tls_status_values', {})
+        assert 'ok' in tls
+        assert 'defective' in tls
+
+    def test_renderer_produces_output(self, capsys):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        from reveal.adapters.autossl.renderer import AutosslRenderer
+        a = AutosslAdapter('autossl://error-codes')
+        result = a.get_structure()
+        AutosslRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'DEPTH_ZERO_SELF_SIGNED_CERT' in out
+        assert 'TOTAL_DCV_FAILURE' in out

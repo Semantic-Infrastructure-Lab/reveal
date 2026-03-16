@@ -64,6 +64,8 @@ class AutosslRenderer:
                 AutosslRenderer._render_error(result)
             else:
                 AutosslRenderer._render_run(result)
+        elif result_type == 'autossl_error_codes':
+            AutosslRenderer._render_error_codes(result)
         else:
             print(json.dumps(result, indent=2, default=str))
 
@@ -186,3 +188,43 @@ class AutosslRenderer:
             detail_col = ', '.join(details)[:40] if details else ''
 
             print(f"  {domain:<{max_domain}}  {status_col}  {expiry_col}  {detail_col}")
+
+    @staticmethod
+    def _render_error_codes(r: Dict[str, Any]) -> None:
+        """Print the autossl://error-codes reference."""
+        print(f"\n{r.get('title', 'AutoSSL Error Code Reference')}\n")
+
+        openssl_codes = r.get('openssl_defect_codes', [])
+        if openssl_codes:
+            print("OpenSSL Defect Codes (appear in autossl://latest output under defect_codes):")
+            print()
+            for entry in openssl_codes:
+                print(f"  {entry['code']}")
+                print(f"    Meaning: {entry['meaning']}")
+                print(f"    Cause:   {entry['cause']}")
+                print(f"    Fix:     {entry['fix']}")
+                print()
+
+        dcv_codes = r.get('dcv_impediment_codes', [])
+        if dcv_codes:
+            print("DCV Impediment Codes (appear under impediments[].code):")
+            print()
+            for entry in dcv_codes:
+                print(f"  {entry['code']}")
+                print(f"    Meaning: {entry['meaning']}")
+                print(f"    Cause:   {entry['cause']}")
+                print(f"    Fix:     {entry['fix']}")
+                print()
+
+        tls = r.get('tls_status_values', {})
+        if tls:
+            print("TLS Status Values (tls_status field in autossl://latest):")
+            for k, v in tls.items():
+                print(f"  {k:<12} — {v}")
+            print()
+
+        steps = r.get('next_steps', [])
+        if steps:
+            print("Next Steps:")
+            for s in steps:
+                print(f"  {s}")
