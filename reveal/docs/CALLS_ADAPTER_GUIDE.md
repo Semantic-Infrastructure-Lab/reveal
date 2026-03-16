@@ -68,8 +68,14 @@ reveal 'ast://src/auth.py?calls=validate_token'
 # Reverse lookup: who calls function X?
 calls://<path>?target=<name>[&depth=N][&format=<fmt>]
 
+# Shorthand (colon syntax): same as ?target=
+calls://<path>:<name>
+
 # Forward lookup: what does function X call?
 calls://<path>?callees=<name>[&format=<fmt>]
+
+# Ranking: most-called functions in the project
+calls://<path>?rank=callers[&top=N]
 ```
 
 | Component | Description |
@@ -81,6 +87,20 @@ calls://<path>?callees=<name>[&format=<fmt>]
 | `top` | Max results for `?rank=callers` (default: 10, max: 100) |
 | `depth` | Transitive levels for `?target` (default: 1, max: 5) |
 | `format` | Output format: `text` (default), `json`, or `dot` (Graphviz) |
+
+### Colon Shorthand
+
+The colon syntax `calls://path:name` is equivalent to `calls://path?target=name`. Reveal detects that the portion before the colon is an existing filesystem path and the portion after is a bare name (no slashes), and automatically routes it as `?target=`:
+
+```bash
+# These are equivalent:
+reveal 'calls://src/auth.py:validate_token'
+reveal 'calls://src/?target=validate_token'
+
+# Works with directories too:
+reveal 'calls://src:validate_token'
+reveal 'calls://src/?target=validate_token'
+```
 
 ### Examples
 

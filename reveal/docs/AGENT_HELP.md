@@ -20,7 +20,7 @@ This is the complete offline reference for reveal (~12,000 tokens). Both `--agen
 
 ---
 
-## Agent Introspection (v0.51.0 - Complete Coverage)
+## Agent Introspection (v0.56.0+ - Complete Coverage)
 
 **NEW: Auto-discover capabilities programmatically**
 
@@ -33,13 +33,14 @@ reveal help://schemas                               # listing: ast, ssl, git, ..
 # List all available task recipe categories
 reveal help://examples                             # listing: quality, security, ...
 
-# Discover adapter schemas (all 21 adapters support this)
+# Discover adapter schemas (all 22 adapters support this)
 reveal help://schemas/<adapter> --format=json
 
 # File & Analysis Adapters
 reveal help://schemas/ast --format=json        # Code structure analysis
 reveal help://schemas/stats --format=json      # Code statistics
 reveal help://schemas/imports --format=json    # Import graph analysis
+reveal help://schemas/calls --format=json      # Cross-file call graph
 reveal help://schemas/diff --format=json       # Resource comparison
 
 # Environment & Data Adapters
@@ -49,6 +50,7 @@ reveal help://schemas/markdown --format=json   # Markdown queries
 reveal help://schemas/python --format=json     # Python runtime
 reveal help://schemas/mysql --format=json      # MySQL databases
 reveal help://schemas/sqlite --format=json     # SQLite databases
+reveal help://schemas/xlsx --format=json       # Excel/spreadsheet files
 
 # Infrastructure Adapters
 reveal help://schemas/ssl --format=json        # SSL certificates

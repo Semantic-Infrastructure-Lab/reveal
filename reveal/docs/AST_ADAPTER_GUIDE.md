@@ -4,7 +4,7 @@ category: guide
 ---
 # AST Adapter Guide
 
-**Version**: 1.0 (reveal 0.49.2+)
+**Version**: 1.0 (reveal 0.49.2+, current: 0.63.0)
 **Status**: 🟢 Stable - Production Ready
 **Adapter**: `ast://`
 

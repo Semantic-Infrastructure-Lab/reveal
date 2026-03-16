@@ -30,10 +30,13 @@ _HELP: Dict[str, Any] = {
     'name': 'calls',
     'description': 'Cross-file call graph queries — find callers or callees of any function.',
     'syntax': 'calls://<path>?target=<function>[&depth=N][&format=dot|json]\n'
-              '         calls://<path>?callees=<function>',
+              '         calls://<path>?callees=<function>\n'
+              '         calls://<path>:<function>           # shorthand — infers ?target=<function>',
     'parameters': {
         'target':   'Function name to find callers of (reverse lookup)',
         'callees':  'Function name to find callees of — what does it call? (forward lookup)',
+        'rank':     'Set to "callers" to rank all functions by in-degree (most-called first)',
+        'top':      'Max results for ?rank=callers (default: 10, max: 100)',
         'depth':    'Transitive caller depth (default 1, max 5) — applies to ?target only',
         'format':   'Output format: text (default), dot (Graphviz), or json',
         'builtins': 'Include Python builtins in callees output (default: false). '
@@ -42,12 +45,18 @@ _HELP: Dict[str, Any] = {
     'examples': [
         {'uri': 'calls://src/?target=validate_item',
          'description': 'Who calls validate_item? (reverse lookup)'},
+        {'uri': 'calls://src/main.py:main',
+         'description': 'Shorthand — who calls main? (colon infers ?target=main)'},
         {'uri': 'calls://src/?target=process_batch&depth=2',
          'description': 'Callers-of-callers too (transitive, 2 levels)'},
         {'uri': 'calls://src/?callees=validate_item',
          'description': 'What does validate_item call? (forward lookup, builtins hidden)'},
         {'uri': 'calls://src/?callees=validate_item&builtins=true',
          'description': 'Include builtins (len, str, sorted, exceptions, etc.)'},
+        {'uri': 'calls://src/?rank=callers',
+         'description': 'Top 10 most-called functions (coupling hotspot ranking)'},
+        {'uri': 'calls://src/?rank=callers&top=20',
+         'description': 'Top 20 most-called functions'},
         {'uri': 'calls://src/?target=main&format=dot',
          'description': 'Output callers graph as Graphviz dot (pipe to dot -Tsvg)'},
         {'uri': 'calls://src/?target=main&format=json',
@@ -65,10 +74,13 @@ _HELP: Dict[str, Any] = {
 _SCHEMA: Dict[str, Any] = {
     'adapter': 'calls',
     'description': 'Cross-file call graph — who calls X (?target) or what does X call (?callees)?',
-    'uri_syntax': 'calls://<path>?target=<name>[&depth=N][&format=text|dot|json]',
+    'uri_syntax': 'calls://<path>?target=<name>[&depth=N][&format=text|dot|json]\n'
+                  '             calls://<path>:<name>  # shorthand — infers ?target=<name>',
     'query_params': {
         'target':   {'type': 'string',  'description': 'Function name to find callers of (reverse lookup)'},
         'callees':  {'type': 'string',  'description': 'Function name to find callees of (forward lookup)'},
+        'rank':     {'type': 'string',  'description': 'Set to "callers" to rank all functions by in-degree'},
+        'top':      {'type': 'integer', 'description': 'Max results for ?rank=callers (default 10, max 100)'},
         'depth':    {'type': 'integer', 'description': 'Transitive depth 1-5 (default 1), applies to ?target'},
         'format':   {'type': 'string',  'description': 'Output format: text (default), dot (Graphviz), or json'},
         'builtins': {'type': 'boolean', 'description': 'Include Python builtins in callees output (default: false)'},

@@ -648,6 +648,7 @@ Next Steps:
 | `type` | string | `history`, `blame` | Operation type for files |
 | `detail` | string | `full`, `summary` | Blame detail level (default: summary) |
 | `element` | string | function/class name | Semantic blame target |
+| `ref` | string | branch/tag/commit | Override the starting ref — alias for `@ref` in the URI (e.g., `?ref=v0.63.0`) |
 
 ### Filter Parameters
 
