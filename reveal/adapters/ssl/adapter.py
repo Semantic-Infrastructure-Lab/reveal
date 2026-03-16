@@ -531,6 +531,14 @@ class SSLAdapter(ResourceAdapter):
         validate_nginx = kwargs.get('validate_nginx', False)
         local_certs = kwargs.get('local_certs', False)
 
+        # --expiring-within=N overrides warn_days: treat "expiring within N days" as warning threshold
+        expiring_within = kwargs.get('expiring_within')
+        if expiring_within:
+            try:
+                warn_days = int(str(expiring_within).rstrip('d'))
+            except (ValueError, TypeError):
+                pass
+
         # Handle local cert file validation from nginx config (no network)
         if local_certs:
             if not self._nginx_path:

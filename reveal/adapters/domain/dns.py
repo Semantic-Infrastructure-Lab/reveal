@@ -110,6 +110,15 @@ def check_dns_resolution(domain: str) -> Dict[str, Any]:
         }
 
 
+def _is_subdomain(domain: str) -> bool:
+    """Return True if domain is a subdomain (3+ labels).
+
+    Subdomains have no NS records of their own — NS checks should be skipped.
+    Examples: stg.rfr.bz (True), rfr.bz (False), www.example.com (True).
+    """
+    return domain.rstrip('.').count('.') >= 2
+
+
 def check_nameserver_response(domain: str) -> Dict[str, Any]:
     """Check if authoritative nameservers respond.
 
@@ -119,6 +128,16 @@ def check_nameserver_response(domain: str) -> Dict[str, Any]:
     Returns:
         Check result dict
     """
+    if _is_subdomain(domain):
+        return {
+            'name': 'nameserver_response',
+            'status': 'pass',
+            'value': 'Skipped (subdomain)',
+            'threshold': 'Responsive',
+            'message': 'Subdomain — NS records belong to apex; check skipped',
+            'severity': 'low',
+        }
+
     if not HAS_DNSPYTHON:
         return {
             'name': 'nameserver_response',
@@ -177,6 +196,16 @@ def check_dns_propagation(domain: str) -> Dict[str, Any]:
     Returns:
         Check result dict with propagation status
     """
+    if _is_subdomain(domain):
+        return {
+            'name': 'dns_propagation',
+            'status': 'pass',
+            'value': 'Skipped (subdomain)',
+            'threshold': 'Consistent',
+            'message': 'Subdomain — NS propagation check applies to apex only; check skipped',
+            'severity': 'low',
+        }
+
     if not HAS_DNSPYTHON:
         return {
             'name': 'dns_propagation',

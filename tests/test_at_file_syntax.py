@@ -217,5 +217,55 @@ class TestAtFileWithFlags(unittest.TestCase):
             os.unlink(list_file)
 
 
+class TestAtFileBatchEquivalence(unittest.TestCase):
+    """Tests for BACK-062: @file --batch produces same aggregated output as --stdin --batch."""
+
+    def run_reveal(self, *args):
+        """Run reveal command and return result."""
+        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+        return result
+
+    def test_at_file_batch_shows_batch_results_header(self):
+        """@file --batch should produce BATCH CHECK RESULTS header."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write('env://PATH\nenv://HOME\n')
+            list_file = f.name
+
+        try:
+            result = self.run_reveal(f'@{list_file}', '--batch')
+            # Batch header must appear regardless of individual URI exit code
+            self.assertIn('BATCH CHECK RESULTS', result.stdout)
+        finally:
+            os.unlink(list_file)
+
+    def test_at_file_batch_aggregates_counts(self):
+        """@file --batch should show Total URIs count across all items in file."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write('env://PATH\nenv://HOME\nenv://USER\n')
+            list_file = f.name
+
+        try:
+            result = self.run_reveal(f'@{list_file}', '--batch')
+            # Batch header must appear regardless of individual URI success/failure
+            self.assertIn('BATCH CHECK RESULTS', result.stdout)
+            self.assertIn('Total URIs: 3', result.stdout)
+        finally:
+            os.unlink(list_file)
+
+    def test_at_file_batch_summary_flag_works(self):
+        """@file --batch --summary should show aggregated summary."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write('env://PATH\nenv://HOME\n')
+            list_file = f.name
+
+        try:
+            result = self.run_reveal(f'@{list_file}', '--batch', '--summary')
+            # Summary flag must produce BATCH CHECK RESULTS regardless of URI exit codes
+            self.assertIn('BATCH CHECK RESULTS', result.stdout)
+        finally:
+            os.unlink(list_file)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1665,5 +1665,67 @@ server {
         self.assertIn('SSL Certificate File Validation', output)
 
 
+class TestExpiringWithinExitCode(unittest.TestCase):
+    """Tests for BACK-061: --expiring-within N affects exit code via warn_days."""
+
+    def _make_adapter(self):
+        adapter = SSLAdapter.__new__(SSLAdapter)
+        adapter.host = 'test.com'
+        adapter.port = 443
+        adapter.element = None
+        adapter._nginx_path = None
+        adapter._cert_file_path = None
+        adapter._certificate = None
+        adapter._chain = []
+        adapter._verification = None
+        adapter._fetcher = MagicMock()
+        return adapter
+
+    def test_expiring_within_sets_warn_days(self):
+        """check() with expiring_within='60' passes warn_days=60 to check_ssl_health."""
+        adapter = self._make_adapter()
+
+        with patch('reveal.adapters.ssl.adapter.check_ssl_health') as mock_check:
+            mock_check.return_value = {'status': 'warning', 'exit_code': 1}
+            adapter.check(expiring_within='60')
+            call_kwargs = mock_check.call_args[1]
+            self.assertEqual(call_kwargs['warn_days'], 60)
+
+    def test_expiring_within_does_not_override_when_absent(self):
+        """check() without expiring_within uses default warn_days=30."""
+        adapter = self._make_adapter()
+
+        with patch('reveal.adapters.ssl.adapter.check_ssl_health') as mock_check:
+            mock_check.return_value = {'status': 'pass', 'exit_code': 0}
+            adapter.check()
+            call_kwargs = mock_check.call_args[1]
+            self.assertEqual(call_kwargs['warn_days'], 30)
+
+    def test_expiring_within_accepts_d_suffix(self):
+        """check() with expiring_within='30d' strips the d suffix."""
+        adapter = self._make_adapter()
+
+        with patch('reveal.adapters.ssl.adapter.check_ssl_health') as mock_check:
+            mock_check.return_value = {'status': 'pass', 'exit_code': 0}
+            adapter.check(expiring_within='30d')
+            call_kwargs = mock_check.call_args[1]
+            self.assertEqual(call_kwargs['warn_days'], 30)
+
+    def test_routing_passes_expiring_within_to_check(self):
+        """_build_check_kwargs should include expiring_within when set on args."""
+        from reveal.cli.routing import _build_check_kwargs
+        from argparse import Namespace
+
+        adapter = self._make_adapter()
+
+        def mock_check(**kwargs): return {}
+        adapter.check = mock_check
+
+        args = Namespace(expiring_within='60', advanced=False, validate_nginx=False,
+                         local_certs=False, select=None, ignore=None)
+        kwargs = _build_check_kwargs(adapter, args)
+        self.assertEqual(kwargs.get('expiring_within'), '60')
+
+
 if __name__ == '__main__':
     unittest.main()

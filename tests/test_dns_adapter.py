@@ -452,5 +452,70 @@ class TestCheckDnsPropagation:
                 assert 'Propagation check failed' in result['message']
 
 
+class TestIsSubdomain:
+    """Tests for _is_subdomain helper (BACK-047)."""
+
+    def test_apex_domain_is_not_subdomain(self):
+        """Apex domains with 2 labels are not subdomains."""
+        from reveal.adapters.domain.dns import _is_subdomain
+        assert _is_subdomain('example.com') is False
+        assert _is_subdomain('rfr.bz') is False
+
+    def test_three_label_domain_is_subdomain(self):
+        """Domains with 3+ labels are subdomains."""
+        from reveal.adapters.domain.dns import _is_subdomain
+        assert _is_subdomain('stg.rfr.bz') is True
+        assert _is_subdomain('www.example.com') is True
+        assert _is_subdomain('sub.domain.example.com') is True
+
+    def test_trailing_dot_handled(self):
+        """Trailing dots (FQDN notation) are stripped before counting."""
+        from reveal.adapters.domain.dns import _is_subdomain
+        assert _is_subdomain('rfr.bz.') is False
+        assert _is_subdomain('stg.rfr.bz.') is True
+
+
+class TestNameserverSubdomainSkip:
+    """Tests for BACK-047: NS checks skipped for subdomains."""
+
+    def test_check_nameserver_response_skips_subdomain(self):
+        """check_nameserver_response returns pass/skipped for subdomains."""
+        from reveal.adapters.domain.dns import check_nameserver_response
+
+        result = check_nameserver_response('stg.rfr.bz')
+
+        assert result['name'] == 'nameserver_response'
+        assert result['status'] == 'pass'
+        assert 'subdomain' in result['value'].lower() or 'subdomain' in result['message'].lower()
+
+    def test_check_dns_propagation_skips_subdomain(self):
+        """check_dns_propagation returns pass/skipped for subdomains."""
+        from reveal.adapters.domain.dns import check_dns_propagation
+
+        result = check_dns_propagation('stg.rfr.bz')
+
+        assert result['name'] == 'dns_propagation'
+        assert result['status'] == 'pass'
+        assert 'subdomain' in result['value'].lower() or 'subdomain' in result['message'].lower()
+
+    def test_check_nameserver_response_still_checks_apex(self):
+        """check_nameserver_response does NOT skip for apex domains."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', False):
+            from reveal.adapters.domain.dns import check_nameserver_response
+
+            # Apex domain — should fall through to real check logic (returns warning when no dnspython)
+            result = check_nameserver_response('example.com')
+            # Should NOT be the subdomain skip result
+            assert 'Subdomain' not in result.get('value', '')
+
+    def test_check_dns_propagation_still_checks_apex(self):
+        """check_dns_propagation does NOT skip for apex domains."""
+        with patch('reveal.adapters.domain.dns.HAS_DNSPYTHON', False):
+            from reveal.adapters.domain.dns import check_dns_propagation
+
+            result = check_dns_propagation('example.com')
+            assert 'Subdomain' not in result.get('value', '')
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

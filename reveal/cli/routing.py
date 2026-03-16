@@ -150,6 +150,7 @@ def _build_check_kwargs(adapter, args: 'Namespace') -> dict:
     add_if_supported('advanced')
     add_if_supported('validate_nginx')
     add_if_supported('local_certs')
+    add_if_supported('expiring_within')
 
     return kwargs
 

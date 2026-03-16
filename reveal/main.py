@@ -271,6 +271,19 @@ def _handle_at_file(file_path: str, args):
         print(f"Error: No URIs found in {file_path}", file=sys.stderr)
         sys.exit(1)
 
+    # When batch or check mode is active, route through handle_stdin_mode for
+    # proper aggregation (equivalent to: cat @file | reveal --stdin --batch)
+    is_batch_mode = getattr(args, 'batch', False)
+    is_check_mode = getattr(args, 'check', False)
+    if is_batch_mode or is_check_mode:
+        old_stdin = sys.stdin
+        sys.stdin = io.StringIO('\n'.join(lines))
+        try:
+            handle_stdin_mode(args, handle_file)
+        finally:
+            sys.stdin = old_stdin
+        return
+
     for target in lines:
         _process_at_file_target(target, args)
 
