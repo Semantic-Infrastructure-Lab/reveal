@@ -339,6 +339,9 @@ reveal src/module.py --check --select D001,D002
 # Who calls this function across the whole project? (reverse/impact)
 reveal 'calls://src/?target=validate_item'
 
+# Shorthand — colon syntax (equivalent to ?target=)
+reveal 'calls://src/auth.py:validate_item'
+
 # What does this function call? (forward/dependency, builtins hidden)
 reveal 'calls://src/?callees=process_request'
 
@@ -347,6 +350,10 @@ reveal 'calls://src/?callees=process_request&builtins=true'
 
 # Transitive: callers-of-callers (2 levels deep)
 reveal 'calls://src/?target=validate_item&depth=2'
+
+# Most-called functions in the project (coupling hotspots)
+reveal 'calls://src/?rank=callers'
+reveal 'calls://src/?rank=callers&top=20'
 
 # Generate Graphviz call graph (pipe to dot)
 reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
@@ -1120,7 +1127,9 @@ reveal 'ast://./src?complexity>10'       # Find by complexity
 reveal 'imports://src?circular'          # Find circular imports
 reveal hotspots ./src                    # Find technical debt
 reveal 'calls://src/?target=fn'          # Who calls fn? (cross-file reverse)
+reveal 'calls://src/file.py:fn'          # Shorthand for ?target=fn
 reveal 'calls://src/?callees=fn'         # What does fn call? (cross-file forward)
+reveal 'calls://src/?rank=callers'       # Most-called functions (coupling metrics)
 reveal 'claude://?search=term'           # Search session history for keyword
 reveal 'claude://files/path/to/file.py'  # Sessions that touched this file
 reveal 'markdown://docs/?link-graph'     # Cross-file doc link graph

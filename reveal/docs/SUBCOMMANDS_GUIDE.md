@@ -70,6 +70,7 @@ reveal review HEAD~3..HEAD         # Review last 3 commits
 
 | Flag | Description |
 |------|-------------|
+| `--select RULES` | Rule categories (default: B,S,I,C,M) |
 | `--format json` | Machine-readable output for CI/CD gating |
 | `--verbose` | Show detailed violation messages |
 
@@ -134,6 +135,7 @@ reveal health --all
 | Flag | Description |
 |------|-------------|
 | `--all` | Check all resources detectable in context (source dir or configured targets) |
+| `--select RULES` | Rule categories to check (e.g., `B,S,I,C`) |
 | `--format json` | Machine-readable output |
 | `--verbose` | Show detailed check results |
 
@@ -197,9 +199,9 @@ reveal pack PATH [--budget N] [--focus TOPIC] [--verbose]
 
 | Flag | Description |
 |------|-------------|
-| `--budget N` | Token budget (e.g., `--budget 10000`). Default: 4000 |
+| `--budget N` | Token budget (e.g., `--budget 4000`). Default: 2000 |
 | `--budget N-lines` | Line budget instead of tokens (e.g., `--budget 500-lines`) |
-| `--focus TOPIC` | Boost files matching this topic (e.g., `--focus authentication`) |
+| `--focus TOPIC` | Emphasize files matching this name pattern (e.g., `--focus auth`) |
 | `--verbose` | Show per-file token/line counts |
 | `--format json` | Machine-readable output |
 
@@ -207,20 +209,20 @@ reveal pack PATH [--budget N] [--focus TOPIC] [--verbose]
 
 Files are scored and selected in this order:
 
-1. **Entry points** — `main.py`, `app.py`, `cli.py`, config files, etc.
-2. **Focus matches** — files whose path contains the `--focus` topic
-3. **Key directories** — `core/`, `api/`, `models/`, `auth/`, etc.
-4. **Recency** — recently modified files ranked higher
+1. **Entry points** — `main.py`, `app.py`, `index.js`, config files, etc.
+2. **High-complexity files** — ranked by complexity score
+3. **Recently modified files** — ranked by mtime
+4. **Other files** — fills remaining budget
 
 Near-empty files (e.g., stub `__init__.py`) are excluded automatically.
 
 ### Examples
 
 ```bash
-reveal pack .                              # Default 4000-token budget
-reveal pack . --budget 10000              # Larger budget
+reveal pack .                              # Default 2000-token budget
+reveal pack . --budget 4000              # Larger budget
 reveal pack . --budget 500-lines          # Line-based budget
-reveal pack . --focus authentication      # Boost auth-related files
+reveal pack . --focus auth                # Emphasize auth module
 reveal pack ./src --budget 8000 --verbose # Show per-file token counts
 reveal pack . --format json               # For agent consumption
 ```
@@ -237,3 +239,43 @@ Returns the relative paths of selected files, ready for agent `Read` calls.
 
 - `reveal review` — Code quality review
 - `reveal pack --help` — Full flag reference
+
+---
+
+## reveal hotspots — Complexity Hotspot Finder
+
+Identifies high-complexity files and functions that need the most attention.
+Surfaces the worst 10 (or N) files by cyclomatic complexity.
+
+### Usage
+
+```
+reveal hotspots [PATH] [--top N] [--min-complexity N]
+```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--top N` | Number of hotspot files to show (default: 10) |
+| `--min-complexity N` | Minimum cyclomatic complexity to report (default: 10) |
+| `--functions-only` | Show only complex functions, skip file-level hotspots |
+| `--files-only` | Show only file-level hotspots, skip function analysis |
+| `--format json` | Machine-readable output |
+
+### Examples
+
+```bash
+reveal hotspots ./src              # Hotspots in a directory
+reveal hotspots .                  # Entire project
+reveal hotspots ./src --top 20     # Show top 20 files
+reveal hotspots . --format json    # Machine-readable output
+reveal hotspots . --functions-only # Only show complex functions
+reveal hotspots . --files-only     # Only file-level view
+```
+
+### See Also
+
+- `reveal check` — Full quality rules (not just complexity)
+- `reveal review` — Combined review with hotspots + violations
+- `reveal hotspots --help` — Full flag reference
