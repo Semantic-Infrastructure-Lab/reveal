@@ -176,6 +176,24 @@ def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[s
     return changed, None
 
 
+def _get_file_raw_content(file_path: str, max_lines: int = 500) -> str:
+    """Return raw file content, truncated to max_lines if needed.
+
+    Used for changed files in ``--content`` mode — raw content lets the agent
+    see exactly what changed, not just the structural outline.
+    """
+    try:
+        text = Path(file_path).read_text(encoding='utf-8', errors='replace')
+    except Exception:
+        return ''
+    lines = text.splitlines(keepends=True)
+    if len(lines) > max_lines:
+        truncated = ''.join(lines[:max_lines])
+        remaining = len(lines) - max_lines
+        return truncated + f'[... {remaining} more lines not shown — use reveal {file_path} to see full file]\n'
+    return text
+
+
 def _get_file_structure(file_path: str) -> str:
     """Return reveal structure output for a file as a string.
 
@@ -207,40 +225,81 @@ def _get_file_structure(file_path: str) -> str:
 
 
 def _emit_content_section(selected: List[Dict[str, Any]]) -> None:
-    """Emit reveal structure content for each selected file.
+    """Emit tiered content for each selected file.
 
-    Outputs a CONTENT section after the manifest with the reveal structure
-    of each file — the same output as `reveal file.py`. This makes pack
-    output agent-consumable without a second round-trip.
+    Three tiers based on priority and change status:
+    - **Changed files** → full raw content (see exactly what changed)
+    - **Non-changed, priority >= 2** → reveal structure (function signatures, imports)
+    - **Non-changed, priority < 2** → name-only listing (preserve token budget)
     """
+    _STRUCTURE_THRESHOLD = 2.0
+
     print()
     print('━' * 70)
-    print('CONTENT  (reveal structure for each selected file)')
+    print('CONTENT  (changed=full · key files=structure · low priority=names)')
     print('━' * 70)
+
+    name_only: List[Dict[str, Any]] = []
 
     for file_info in selected:
         rel = file_info['relative']
         file_path = file_info['path']
-        changed_tag = '  ◀ CHANGED' if file_info.get('changed') else ''
+        is_changed = file_info.get('changed', False)
+        priority = file_info.get('priority', _STRUCTURE_THRESHOLD)
 
-        content = _get_file_structure(file_path)
-
-        print(f'\n── {rel}{changed_tag} ──')
-        if content.strip():
-            print(content, end='' if content.endswith('\n') else '\n')
+        if is_changed:
+            # Tier 0: full raw content — agent needs to see what actually changed
+            content = _get_file_raw_content(file_path)
+            print(f'\n── {rel}  ◀ CHANGED (full content) ──')
+            if content.strip():
+                print(content, end='' if content.endswith('\n') else '\n')
+            else:
+                print('[unreadable]')
+        elif priority >= _STRUCTURE_THRESHOLD:
+            # Tier 1/2: reveal structure — function signatures, class defs, imports
+            content = _get_file_structure(file_path)
+            print(f'\n── {rel} ──')
+            if content.strip():
+                print(content, end='' if content.endswith('\n') else '\n')
+            else:
+                print('[no structure analysis available]')
         else:
-            print('[no structure analysis available]')
+            # Tier 3: name only — deferred to summary to save tokens
+            name_only.append(file_info)
+
+    if name_only:
+        print('\n── Low-priority files (selected, structure omitted) ──')
+        for file_info in name_only:
+            print(f'  {file_info["relative"]}')
 
 
 def _collect_file_contents(selected: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Return structure content for each selected file as a list of dicts (JSON mode)."""
+    """Return tiered content for each selected file as a list of dicts (JSON mode).
+
+    Each entry includes ``content_type``: ``'full'`` (changed files), ``'structure'``
+    (key files), or ``'name_only'`` (low-priority files).
+    """
+    _STRUCTURE_THRESHOLD = 2.0
     result = []
     for file_info in selected:
-        content = _get_file_structure(file_info['path'])
+        is_changed = file_info.get('changed', False)
+        priority = file_info.get('priority', _STRUCTURE_THRESHOLD)
+
+        if is_changed:
+            content = _get_file_raw_content(file_info['path'])
+            content_type = 'full'
+        elif priority >= _STRUCTURE_THRESHOLD:
+            content = _get_file_structure(file_info['path'])
+            content_type = 'structure'
+        else:
+            content = ''
+            content_type = 'name_only'
+
         result.append({
             'file': file_info['relative'],
-            'changed': file_info.get('changed', False),
-            'structure': content,
+            'changed': is_changed,
+            'content_type': content_type,
+            'content': content,
         })
     return result
 

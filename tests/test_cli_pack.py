@@ -19,6 +19,7 @@ from reveal.cli.commands.pack import (
     _collect_candidates,
     _get_changed_files,
     _get_file_structure,
+    _get_file_raw_content,
     _emit_content_section,
     _collect_file_contents,
     _render_pack,
@@ -833,13 +834,60 @@ class TestGetFileStructure(unittest.TestCase):
         self.assertIsInstance(result, str)
 
 
+class TestGetFileRawContent(unittest.TestCase):
+
+    def test_returns_file_content(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("def hello():\n    return 42\n")
+            fpath = f.name
+        result = _get_file_raw_content(fpath)
+        self.assertIn('def hello', result)
+        self.assertIn('return 42', result)
+
+    def test_missing_file_returns_empty(self):
+        result = _get_file_raw_content('/nonexistent/path/file.py')
+        self.assertEqual(result, '')
+
+    def test_truncates_at_max_lines(self):
+        lines = [f"line {i}\n" for i in range(600)]
+        with tempfile.NamedTemporaryFile(suffix='.txt', mode='w', delete=False) as f:
+            f.writelines(lines)
+            fpath = f.name
+        result = _get_file_raw_content(fpath, max_lines=100)
+        result_lines = result.splitlines()
+        # Last line is the truncation notice
+        self.assertIn('more lines not shown', result_lines[-1])
+        # Content lines only up to max_lines
+        content_lines = [l for l in result_lines if 'more lines not shown' not in l]
+        self.assertLessEqual(len(content_lines), 100)
+
+    def test_short_file_not_truncated(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("x = 1\ny = 2\n")
+            fpath = f.name
+        result = _get_file_raw_content(fpath, max_lines=500)
+        self.assertNotIn('more lines not shown', result)
+
+    def test_returns_string_type(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("pass\n")
+            fpath = f.name
+        result = _get_file_raw_content(fpath)
+        self.assertIsInstance(result, str)
+
+
 class TestEmitContentSection(unittest.TestCase):
 
     def _make_file_infos(self, files):
-        """Build minimal file info dicts for testing."""
+        """Build minimal file info dicts for testing.
+
+        Each entry: (path, rel, changed, priority=2.0)
+        """
         infos = []
-        for fp, rel, changed in files:
-            infos.append({'path': fp, 'relative': rel, 'changed': changed})
+        for entry in files:
+            fp, rel, changed = entry[0], entry[1], entry[2]
+            priority = entry[3] if len(entry) > 3 else 2.0
+            infos.append({'path': fp, 'relative': rel, 'changed': changed, 'priority': priority})
         return infos
 
     def test_emits_content_header(self):
@@ -862,11 +910,59 @@ class TestEmitContentSection(unittest.TestCase):
         with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
             f.write("def foo(): pass\n")
             fpath = f.name
-        infos = self._make_file_infos([(fpath, 'foo.py', True)])
+        infos = self._make_file_infos([(fpath, 'foo.py', True, 20.0)])
         buf = io.StringIO()
         with redirect_stdout(buf):
             _emit_content_section(infos)
         self.assertIn('CHANGED', buf.getvalue())
+
+    def test_changed_file_gets_full_content_not_structure(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("def secret_impl():\n    return 42\n")
+            fpath = f.name
+        infos = self._make_file_infos([(fpath, 'impl.py', True, 20.0)])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _emit_content_section(infos)
+        output = buf.getvalue()
+        # Full content includes the actual implementation body
+        self.assertIn('return 42', output)
+        self.assertIn('full content', output)
+
+    def test_low_priority_file_shown_as_name_only(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("x = 1\n")
+            fpath = f.name
+        infos = self._make_file_infos([(fpath, 'misc.py', False, 0.0)])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _emit_content_section(infos)
+        output = buf.getvalue()
+        self.assertIn('misc.py', output)
+        self.assertIn('Low-priority', output)
+        # Should NOT include file content (just name)
+        self.assertNotIn('x = 1', output)
+
+    def test_high_priority_non_changed_gets_structure(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("def authenticate(): pass\n")
+            fpath = f.name
+        infos = self._make_file_infos([(fpath, 'auth.py', False, 10.0)])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _emit_content_section(infos)
+        output = buf.getvalue()
+        self.assertIn('auth.py', output)
+        # Should NOT have 'full content' tag
+        self.assertNotIn('full content', output)
+        # Should NOT have 'Low-priority' section
+        self.assertNotIn('Low-priority', output)
 
     def test_unknown_file_type_shows_fallback_message(self):
         import io
@@ -890,24 +986,52 @@ class TestCollectFileContents(unittest.TestCase):
         with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
             f.write("x = 1\n")
             fpath = f.name
-        infos = [{'path': fpath, 'relative': 'x.py', 'changed': False}]
+        infos = [{'path': fpath, 'relative': 'x.py', 'changed': False, 'priority': 2.0}]
         result = _collect_file_contents(infos)
         self.assertEqual(len(result), 1)
         item = result[0]
         self.assertIn('file', item)
         self.assertIn('changed', item)
-        self.assertIn('structure', item)
+        self.assertIn('content', item)
+        self.assertIn('content_type', item)
         self.assertEqual(item['file'], 'x.py')
         self.assertFalse(item['changed'])
 
-    def test_structure_is_string(self):
+    def test_content_is_string(self):
         with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
             f.write("def bar(): pass\n")
             fpath = f.name
-        infos = [{'path': fpath, 'relative': 'bar.py', 'changed': True}]
+        infos = [{'path': fpath, 'relative': 'bar.py', 'changed': False, 'priority': 5.0}]
         result = _collect_file_contents(infos)
-        self.assertIsInstance(result[0]['structure'], str)
-        self.assertTrue(result[0]['changed'])
+        self.assertIsInstance(result[0]['content'], str)
+        self.assertFalse(result[0]['changed'])
+
+    def test_changed_file_gets_full_content_type(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("def bar(): pass\n")
+            fpath = f.name
+        infos = [{'path': fpath, 'relative': 'bar.py', 'changed': True, 'priority': 20.0}]
+        result = _collect_file_contents(infos)
+        self.assertEqual(result[0]['content_type'], 'full')
+        # Full content should include actual source code
+        self.assertIn('def bar', result[0]['content'])
+
+    def test_non_changed_high_priority_gets_structure_type(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("def foo():\n    pass\n")
+            fpath = f.name
+        infos = [{'path': fpath, 'relative': 'foo.py', 'changed': False, 'priority': 5.0}]
+        result = _collect_file_contents(infos)
+        self.assertEqual(result[0]['content_type'], 'structure')
+
+    def test_low_priority_file_gets_name_only_type(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("x = 1\n")
+            fpath = f.name
+        infos = [{'path': fpath, 'relative': 'misc.py', 'changed': False, 'priority': 0.0}]
+        result = _collect_file_contents(infos)
+        self.assertEqual(result[0]['content_type'], 'name_only')
+        self.assertEqual(result[0]['content'], '')
 
 
 class TestRunPackContent(unittest.TestCase):
