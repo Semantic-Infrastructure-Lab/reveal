@@ -185,14 +185,14 @@ reveal health . --format json | jq '.exit_code == 0'
 
 ## reveal pack — Token-Budgeted Context Snapshot
 
-Creates a curated file list that fits within a token budget. Designed for
-providing AI agents with the right files to understand a codebase — without
-exceeding context limits.
+Creates a curated context snapshot that fits within a token budget. With `--content`,
+emits the reveal structure of each selected file — making pack directly agent-consumable
+without a second round-trip of `Read` calls.
 
 ### Usage
 
 ```
-reveal pack PATH [--budget N] [--focus TOPIC] [--verbose]
+reveal pack PATH [--budget N] [--focus TOPIC] [--since REF] [--content] [--verbose]
 ```
 
 ### CLI Flags
@@ -201,7 +201,9 @@ reveal pack PATH [--budget N] [--focus TOPIC] [--verbose]
 |------|-------------|
 | `--budget N` | Token budget (e.g., `--budget 4000`). Default: 2000 |
 | `--budget N-lines` | Line budget instead of tokens (e.g., `--budget 500-lines`) |
+| `--since REF` | Boost files changed since `REF` (branch, commit, or `HEAD~N`) to top priority |
 | `--focus TOPIC` | Emphasize files matching this name pattern (e.g., `--focus auth`) |
+| `--content` | Emit reveal structure output for each selected file (agent-ready context) |
 | `--verbose` | Show per-file token/line counts |
 | `--format json` | Machine-readable output |
 
@@ -209,10 +211,11 @@ reveal pack PATH [--budget N] [--focus TOPIC] [--verbose]
 
 Files are scored and selected in this order:
 
-1. **Entry points** — `main.py`, `app.py`, `index.js`, config files, etc.
-2. **High-complexity files** — ranked by complexity score
-3. **Recently modified files** — ranked by mtime
-4. **Other files** — fills remaining budget
+1. **Changed files** (when `--since` is used) — files in `git diff --name-only <ref>...HEAD`, boosted above all else
+2. **Entry points** — `main.py`, `app.py`, `index.js`, config files, etc.
+3. **High-complexity files** — ranked by complexity score
+4. **Recently modified files** — ranked by mtime
+5. **Other files** — fills remaining budget
 
 Near-empty files (e.g., stub `__init__.py`) are excluded automatically.
 
@@ -224,18 +227,50 @@ reveal pack . --budget 4000              # Larger budget
 reveal pack . --budget 500-lines          # Line-based budget
 reveal pack . --focus auth                # Emphasize auth module
 reveal pack ./src --budget 8000 --verbose # Show per-file token counts
+reveal pack . --content                   # Structure content, not just file list
+reveal pack src/ --since main --content --budget 8000  # Full agent context: changed + structure
+reveal pack src/ --since main --budget 8000    # PR context: changed files first (manifest only)
+reveal pack src/ --since HEAD~3 --budget 4000  # Since 3 commits ago
 reveal pack . --format json               # For agent consumption
+```
+
+### Agent-Ready Output with --content
+
+Without `--content`, pack outputs a file manifest — which files are most important. Agents still have to read those files themselves.
+
+With `--content`, pack emits the reveal structure of each selected file after the manifest:
+
+```
+Pack: src/  [~8000 tokens budget]  [since main]
+Changed files: 3 (boosted to top priority)
+Selected 12 of 47 files (~7340 tokens, 892 lines)
+
+── Changed files (since main) ──
+  auth.py
+  ...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CONTENT  (reveal structure for each selected file)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+── auth.py  ◀ CHANGED ──
+File: auth.py (3.2KB, 94 lines)
+Imports (3): ...
+Functions (4): authenticate_user, refresh_token, ...
 ```
 
 ### JSON Output for Agents
 
 ```bash
+# File list only (for targeted Read calls):
 reveal pack . --budget 8000 --format json | jq '.files[].relative'
+
+# Structure content in JSON (agent-consumable):
+reveal pack . --budget 8000 --content --format json
 ```
 
-Returns the relative paths of selected files, ready for agent `Read` calls.
-
-Top-level JSON keys: `path`, `budget`, `meta`, `files`. Each `files[]` entry has: `path`, `relative`, `priority`, `tokens_approx`, `lines`, `mtime`, `size`.
+Without `--content`: top-level JSON keys: `path`, `budget`, `since`, `meta`, `files`.
+With `--content`: also includes `content` — a list of `{file, changed, structure}` dicts.
 
 ### See Also
 

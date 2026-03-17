@@ -364,6 +364,22 @@ reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
 **Dead code hunt:** if `?target=fn` returns 0 callers, it's a candidate for removal.
 
 ```bash
+# Dead code: all functions defined but never called anywhere in the project
+reveal 'calls://src/?uncalled'
+
+# Functions only (skip methods and class-level definitions)
+reveal 'calls://src/?uncalled&type=function'
+
+# Top 20 most-recently-added uncalled functions
+reveal 'calls://src/?uncalled&top=20'
+
+# JSON output — pipe to jq, filter private vs public
+reveal 'calls://src/?uncalled' --format json | jq '.uncalled[] | select(.is_private == false)'
+```
+
+**What to expect:** `__dunder__` methods and functions decorated with `@property`, `@classmethod`, `@staticmethod` are excluded (they're called implicitly). Functions imported under aliases are correctly resolved — `from utils import helper as h` means `helper` is treated as called when `h` is called.
+
+```bash
 # Within a single file (cheaper — no cross-file index)
 reveal 'ast://src/auth.py?calls=validate_item'    # who calls it in this file?
 reveal 'ast://src/auth.py?callee_of=process'      # what does process call?

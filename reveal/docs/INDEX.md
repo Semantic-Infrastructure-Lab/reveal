@@ -21,11 +21,12 @@ category: reference
 
 ---
 
-## User Guides (4 files)
+## User Guides (5 files)
 
 | File | Lines | Description |
 |------|-------|-------------|
 | [README.md](README.md) | 147 | Documentation overview and navigation |
+| [WHY_REVEAL.md](WHY_REVEAL.md) | — | What makes Reveal powerful — key capabilities with examples |
 | [QUICK_START.md](QUICK_START.md) | 374 | 5-minute introduction for new users |
 | [RECIPES.md](RECIPES.md) | 1023 | Task-based workflows and common patterns |
 | [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) | 1386 | Complete codebase review workflows |
@@ -85,7 +86,7 @@ Language and infrastructure analyzer guides:
 
 ---
 
-## Reference Documentation (11 files)
+## Reference Documentation (10 files)
 
 Core reference and technical specifications:
 
@@ -155,7 +156,7 @@ Complete reference for AI agent integration:
 
 **Total**: 44 files, ~40,355 lines
 
-**Last Updated**: 2026-03-14 (Session: lunar-pulsar-0314)
+**Last Updated**: 2026-03-16 (Session: infernal-earth-0316)
 
 ---
 
@@ -163,6 +164,7 @@ Complete reference for AI agent integration:
 
 **By Task**:
 - "How do I start?" → [QUICK_START.md](QUICK_START.md)
+- "What makes Reveal different?" → [WHY_REVEAL.md](WHY_REVEAL.md)
 - "What can Reveal do?" → [RECIPES.md](RECIPES.md)
 - "How do I use X adapter?" → [Adapter Guides](#adapter-guides-17-files)
 - "How do queries work?" → [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md)
@@ -181,5 +183,5 @@ Internal maintainer documentation (planning, research, architecture) is maintain
 
 ---
 
-**Last Updated**: 2026-03-14 (Session: lunar-pulsar-0314)
+**Last Updated**: 2026-03-16 (Session: infernal-earth-0316)
 **Navigation**: [README](README.md) | [Project Root](../../README.md)

@@ -289,8 +289,8 @@ class TestDocumentationAccuracy(unittest.TestCase):
 
         readme_content = readme_file.read_text(encoding='utf-8')
 
-        # Look for "N adapters" or "N built-in adapters" claim
-        match = re.search(r'(\d+)\s+(?:built-in\s+)?adapters', readme_content, re.IGNORECASE)
+        # Look for "N adapters", "N built-in adapters", or "N URI adapters" claim
+        match = re.search(r'(\d+)\s+(?:[\w-]+\s+)*adapters', readme_content, re.IGNORECASE)
         if not match:
             self.skipTest("README doesn't claim adapter count")
 

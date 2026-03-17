@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-15 (kumewu-0315 — v0.63.0)
+> **Last updated**: 2026-03-16 (warming-ice-0316 — BACK-076 shipped; 6,268 tests)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -266,7 +266,7 @@ This document outlines reveal's development priorities and future direction. For
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: **5,904 passing** (v0.64.0)
+- Test count: **6,268 passing** (v0.64.x)
 - UX Phases 3/4/5: ✅ **ALL COMPLETE** (query operators, field selection, element discovery)
 - Target: 80%+ coverage for core adapters — scaffold 100%, tools 100%, adapter 94%
 
@@ -281,7 +281,105 @@ This document outlines reveal's development priorities and future direction. For
 
 ---
 
-## Post-v1.0 Features
+## Backlog: Awesomeness Gaps
+
+> Identified via gap analysis between WHY_REVEAL.md description and actual behavior (session hovori-0316, 2026-03-16). All five items complete existing capabilities — infrastructure is present, the last piece is missing.
+
+### BACK-071: `calls://src/?uncalled` — dead code detection
+
+**Status**: ✅ Shipped (session frost-matrix-0316)
+**Value**: High | **Lift**: Low
+
+`?rank=callers` surfaces the most-coupled functions. The natural counterpart — functions defined but never called — doesn't exist. Dead code candidates are a set-difference between ast:// definitions and calls index entries (in-degree = 0).
+
+```bash
+reveal 'calls://src/?uncalled'                # all uncalled functions
+reveal 'calls://src/?uncalled&type=function'  # skip methods
+reveal 'calls://src/?uncalled&top=20'         # most-recently-added uncalled (by file mtime)
+```
+
+Implementation: after building callers index, collect all function names from ast:// scan, subtract those appearing as callees in the index. Flag private functions separately (`_` prefix). Exclude `__dunder__` methods and decorated functions with `@property`, `@classmethod`, `@staticmethod` (called implicitly).
+
+---
+
+### BACK-072: `reveal pack --since <branch>` — git-aware context snapshots
+
+**Status**: ✅ Shipped (session frost-matrix-0316)
+**Value**: High | **Lift**: Medium
+
+Pack currently ranks by entry points, complexity, and recency — but it's not git-aware. The most common "PR review context" use case is: *give me the changed files plus their key dependencies, within a token budget.*
+
+```bash
+reveal pack src/ --since main --budget 8000
+reveal pack src/ --since HEAD~3 --budget 4000
+```
+
+Implementation: run `git diff --name-only <ref>...HEAD` to get changed file set. Boost those files to priority tier 0 (above entry points). Remaining budget fills with current priority logic (entry points → complexity → recency). Changed files that exceed the budget alone truncate by complexity rank.
+
+---
+
+### BACK-073: `diff://` per-function complexity delta
+
+**Status**: ✅ Shipped (session obsidian-prism-0316)
+**Value**: High | **Lift**: Medium
+
+The diff JSON has a `diff.functions` list of changed functions but no before/after complexity. The natural CI gate — "did this PR make anything meaningfully more complex?" — isn't possible without this field.
+
+```bash
+reveal diff://git://main/.:git://HEAD/. --format json | \
+  jq '.diff.functions[] | select(.complexity_delta > 5)'
+```
+
+Implementation: for each function in `diff.functions.changed`, call the AST analyzer on both left and right sides to get complexity, then add `complexity_before`, `complexity_after`, `complexity_delta` to the entry. `reveal review` should surface functions where `complexity_delta > 5` as a named check.
+
+---
+
+### BACK-074: `claude://sessions/?search=term` — cross-session search
+
+**Status**: ✅ Shipped (session obsidian-prism-0316)
+**Value**: Medium | **Lift**: Medium
+
+The CLAUDE_ADAPTER_GUIDE explicitly notes "No cross-session full-text search" as a known limitation, pointing users to `tia search sessions`. The `grep_files` utility from BACK-029 exists — it just isn't wired to a URI query.
+
+```bash
+reveal 'claude://sessions/?search=validate_token'   # sessions mentioning this term
+reveal 'claude://sessions/?search=auth&since=2026-03-01'  # scoped to recent sessions
+```
+
+Implementation: `grep_files` scans all session JSONL files. Wire `?search=` on the sessions listing URI to run grep and return matching session names with a snippet per match. Limit to 20 results by default; `--all` for full scan. Add to schema and help.
+
+---
+
+### BACK-075: Frontmatter adoption in reveal's own docs
+
+**Status**: Skipped — low value (deferred indefinitely)
+**Value**: Low | **Lift**: Low (docs-only)
+
+`reveal 'markdown://docs/?aggregate=type'` is in WHY_REVEAL.md as a showcase example. Running it against reveal's own docs returns 2 of 44 files — the feature works but looks weak on its own documentation. The example only demonstrates the feature if the docs themselves are tagged.
+
+Add `type:` frontmatter to the 42 docs that lack it, using the taxonomy already implied by INDEX.md: `guide`, `reference`, `adapter-guide`, `analyzer-guide`, `development`. Verify `?aggregate=type` returns a meaningful distribution.
+
+---
+
+### BACK-076: Wire Phase 3 import resolution into `build_callers_index`
+
+**Status**: ✅ Shipped (session warming-ice-0316)
+**Value**: Medium | **Lift**: Medium
+
+`?uncalled` uses bare name matching against the callers index. A function imported under an alias (`from utils import helper as h`) is only called as `h` — the definition name `helper` never appears in the index, so it's incorrectly flagged as dead code.
+
+Phase 3 already built `resolve_callees()` and `build_symbol_map()` which map import aliases to their resolved names. These are wired into the `ast://` adapter's element output but not into `build_callers_index`.
+
+```python
+# Current: index maps 'h' → caller record
+# Fixed: index also maps 'helper' → same caller record (resolved via import graph)
+```
+
+Implementation: in `build_callers_index`, optionally call `build_symbol_map` per file and use `resolve_callees` to expand aliased calls to their canonical names before inserting into the index. Both resolved and bare names should be indexed (aliases could point to third-party names we don't want to falsely exclude).
+
+This benefits `?uncalled` accuracy and also `?target=helper` (currently misses callers using the alias).
+
+---
 
 > **Status**: Strategic backlog. Not prioritized for implementation yet.
 
@@ -297,13 +395,8 @@ reveal deps                  # Full dependency analysis (wraps imports://)
 ```
 
 ### Relationship Queries (Call Graphs)
-```bash
-reveal calls://src/api.py:handle_request  # Who calls this?
-reveal depends://src/module/              # What depends on this?
-```
-**Why valuable**: Structure tells you what exists; relationships tell you what *matters*.
-
-**Current limitation**: Requires cross-file static analysis. Tree-sitter infrastructure is ready, but call resolution is non-trivial.
+- ✅ **`calls://` shipped v0.62.0** — `?target=fn`, `?callees=fn`, `?depth=N`, `?rank=callers`, `?format=dot`. See [CALLS_ADAPTER_GUIDE.md](reveal/docs/CALLS_ADAPTER_GUIDE.md).
+- 🔲 **`depends://src/module/`** — inverse module dependency graph (what depends *on* this module, not just what this module imports). Different from `imports://` which is forward-only.
 
 ### Git-Aware Defaults
 ```bash
@@ -345,7 +438,7 @@ These violate reveal's mission ("reveal reveals, doesn't modify") or have unclea
 
 ## Language Support Status
 
-**Current**: 31 built-in analyzers + 165+ via tree-sitter fallback
+**Current**: 37 built-in analyzers + 165+ via tree-sitter fallback = 190+ languages total
 
 ### Production-Ready
 Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Ruby, PHP, Kotlin, Swift, Dart, Zig, Scala, Lua, GDScript, Bash, SQL
@@ -363,11 +456,12 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 
 ## Adapter Status
 
-### Implemented (21)
+### Implemented (22)
 | Adapter | Description |
 |---------|-------------|
 | `ast://` | Query code as database (complexity, size, type filters) |
 | `autossl://` | cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures |
+| `calls://` | Cross-file call graph — callers, callees, coupling metrics, Graphviz export |
 | `claude://` | Claude conversation analysis |
 | `cpanel://` | cPanel user environments — domains, SSL certs, ACL health |
 | `diff://` | Compare files or git revisions |
@@ -390,7 +484,7 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 ### Planned
 | Adapter | Notes |
 |---------|-------|
-| `calls://` | Call graph analysis — who calls what (post-v1.0) |
+| `depends://` | Inverse module dependency graph — what depends on this module (post-v1.0) |
 
 ---
 
