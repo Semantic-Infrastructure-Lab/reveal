@@ -92,6 +92,7 @@ reveal_query("ssl://api.example.com")
 reveal_query("domain://example.com")
 reveal_query("imports://src/?unused")
 reveal_query("diff://git://main/.:git://HEAD/.")
+reveal_query("xlsx://model.xlsx?powerpivot=tables")
 ```
 
 ### `reveal_pack(path, budget, since, content, focus)`

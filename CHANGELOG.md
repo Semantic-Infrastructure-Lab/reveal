@@ -12,7 +12,14 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316, heating-blizzard-0316, ascending-journey-0316, spinning-observatory-0316, frost-matrix-0316, obsidian-prism-0316, warming-ice-0316, tempestuous-sunshine-0316, bojififo-0317, serene-mist-0317, galactic-quasar-0317, dowepeva-0317, timeless-launch-0317)
+## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316, heating-blizzard-0316, ascending-journey-0316, spinning-observatory-0316, frost-matrix-0316, obsidian-prism-0316, warming-ice-0316, tempestuous-sunshine-0316, bojififo-0317, serene-mist-0317, galactic-quasar-0317, dowepeva-0317, timeless-launch-0317, zifaxo-0317)
+
+### Added
+- **`?powerpivot=relationships`** — new query mode extracts the full relationship graph from the SSAS ASSL model. Parses `Relationship` elements, resolves dimension GUIDs to table names, extracts join columns from `Attributes/Attribute/AttributeID`, shows cardinality (Many/One) per end. Output grouped by from-table. Gracefully reports "not available" when XMLA is absent (pivotCache fallback). 11 new unit tests + 3 integration tests (113 total). (session zifaxo-0317)
+
+### Fixed
+- **Power Pivot DAX regex handles tableless `CREATE MEASURE` format** — the original regex required `[Database].'Table'[Name]` syntax (Contoso tutorial era) but real-world files emit `'Table'[Name]` without the database prefix. Made `[Database].` optional with `(?:\[[^\]]+\]\.)?`. (session zifaxo-0317)
+- **Power Pivot detection extended to external SSAS/OLAP workbooks** — files connected to an external SSAS cube have no embedded model path but do have `xl/pivotCache/` entries with `cacheHierarchies`. `_detect_powerpivot` now recognises these via a sentinel `'xl/pivotCache/'` return value so the banner and `?powerpivot=` modes fire correctly. (session zifaxo-0317)
 
 ### Added
 - **Power Pivot model extraction for `xlsx://`** — `reveal xlsx:///file.xlsx` now detects Power Pivot workbooks and shows a banner listing table names. Four new query modes: `?powerpivot=tables` (table names + column counts), `?powerpivot=schema` (full table + column listing + measure names), `?powerpivot=measures` (measure names + owning table), `?powerpivot=dax` (measure names + full DAX expressions). Pure stdlib — no new dependencies. Handles Excel 2010 (`xl/customData/item1.data`), Excel 2013+ (`xl/model/item.data`), and modern Power BI exports (pivotCache fallback when XMLA absent). XMLA items are UTF-16 XML with a `<Gemini><CustomContent><![CDATA[...]]>` wrapper containing full SSAS ASSL — tables extracted from `Dimension`/`Attributes`, DAX from `MdxScript/Command/Text`. 44 new tests. Design doc: `internal-docs/planning/POWERPIVOT_SUPPORT.md`. (sessions diabolic-quake-0317 design, timeless-launch-0317 implementation)

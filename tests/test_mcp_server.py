@@ -212,6 +212,82 @@ class TestRevealCheckTool(unittest.TestCase):
         self.assertIsInstance(result, str)
 
 
+class TestCaptureHelper(unittest.TestCase):
+    """Tests for the _capture() internal helper."""
+
+    def setUp(self):
+        from reveal.mcp_server import _capture
+        self._capture = _capture
+
+    def test_captures_stdout(self):
+        def fn():
+            print("hello stdout")
+        result = self._capture(fn)
+        self.assertIn("hello stdout", result)
+
+    def test_captures_stderr_on_exit_1(self):
+        """Non-zero SystemExit: stderr message should appear in the response."""
+        def fn():
+            print("error detail", file=sys.stderr)
+            raise SystemExit(1)
+        result = self._capture(fn)
+        self.assertIn("error detail", result)
+        self.assertIn("1", result)  # exit code mentioned
+
+    def test_captures_stderr_appended_to_stdout(self):
+        """When both stdout and stderr produced, both appear in result."""
+        def fn():
+            print("normal output")
+            print("warning detail", file=sys.stderr)
+        result = self._capture(fn)
+        self.assertIn("normal output", result)
+        self.assertIn("warning detail", result)
+
+    def test_stderr_only_returned_as_stderr_prefix(self):
+        """Stderr with no stdout is returned with [stderr: ...] prefix."""
+        def fn():
+            print("just stderr", file=sys.stderr)
+        result = self._capture(fn)
+        self.assertIn("just stderr", result)
+
+    def test_systemexit_0_swallowed(self):
+        def fn():
+            print("clean exit")
+            raise SystemExit(0)
+        result = self._capture(fn)
+        self.assertIn("clean exit", result)
+
+    def test_exception_returns_error_string(self):
+        def fn():
+            raise ValueError("something broke")
+        result = self._capture(fn)
+        self.assertIn("reveal error", result)
+        self.assertIn("something broke", result)
+
+
+class TestUpdateCheckSuppressed(unittest.TestCase):
+    """MCP server must suppress reveal's update-check stdout injection."""
+
+    def test_reveal_no_update_check_set(self):
+        """REVEAL_NO_UPDATE_CHECK must be set at import time."""
+        import os
+        self.assertEqual(os.environ.get('REVEAL_NO_UPDATE_CHECK'), '1')
+
+    def test_reveal_check_output_has_no_update_notice(self):
+        """reveal_check output must not contain update notice text."""
+        from reveal.mcp_server import reveal_check
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("x = 1\n")
+            fpath = f.name
+        try:
+            result = reveal_check(fpath)
+            self.assertNotIn('Update available', result)
+            self.assertNotIn('pip install --upgrade', result)
+        finally:
+            os.unlink(fpath)
+
+
 class TestMcpServerRegistration(unittest.TestCase):
     """Verify the MCP server registers all expected tools."""
 

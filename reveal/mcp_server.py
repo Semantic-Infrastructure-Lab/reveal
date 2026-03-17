@@ -18,12 +18,18 @@ Configuration example (Claude Code settings.json):
 """
 
 import io
+import os
 import sys
 import threading
 from argparse import Namespace
-from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
+
+# Suppress update-check prints from appearing in MCP tool responses.
+# reveal's check_for_updates() prints to stdout; since _capture() redirects
+# sys.stdout before invoking reveal functions, the notice would be injected
+# into tool output and corrupt the response seen by the MCP client.
+os.environ.setdefault('REVEAL_NO_UPDATE_CHECK', '1')
 
 mcp = FastMCP(
     "reveal",
@@ -44,25 +50,45 @@ _capture_lock = threading.Lock()
 
 
 def _capture(fn, *args, **kwargs) -> str:
-    """Run *fn* with stdout captured; return captured text.
+    """Run *fn* with stdout+stderr captured; return captured text.
 
     Thread-safe: acquires lock so concurrent calls don't interleave.
     Swallows SystemExit(0) (reveal uses it for clean exit on some paths).
+    Stderr is appended to the result so MCP clients see error messages
+    rather than a blank response or a bare exit-code string.
     """
     with _capture_lock:
-        buf = io.StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = buf
+        out_buf = io.StringIO()
+        err_buf = io.StringIO()
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        sys.stdout = out_buf
+        sys.stderr = err_buf
+        exit_code = None
+        exc_msg = None
         try:
             fn(*args, **kwargs)
         except SystemExit as e:
-            if e.code not in (0, None):
-                return f"[reveal exited with code {e.code}]"
+            exit_code = e.code
         except Exception as exc:  # noqa: BLE001
-            return f"[reveal error: {exc}]"
+            exc_msg = str(exc)
         finally:
             sys.stdout = old_stdout
-        return buf.getvalue()
+            sys.stderr = old_stderr
+
+        out = out_buf.getvalue()
+        err = err_buf.getvalue().strip()
+
+        if exc_msg is not None:
+            return f"[reveal error: {exc_msg}]"
+        if exit_code not in (0, None):
+            detail = err or out.strip()
+            msg = f"[reveal exited with code {exit_code}]"
+            return f"{msg}: {detail}" if detail else msg
+        if err and not out.strip():
+            return f"[stderr: {err}]"
+        if err:
+            return f"{out}\n[stderr: {err}]"
+        return out
 
 
 def _default_args(**overrides) -> Namespace:
