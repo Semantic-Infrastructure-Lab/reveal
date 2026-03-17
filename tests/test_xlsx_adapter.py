@@ -1186,5 +1186,175 @@ class TestPowerPivotIntegrationModern:
         assert result['has_model'] is True
 
 
+def _make_xmla_item_bytes_with_relationships(tables, measures=None, relationships=None):
+    """Build a UTF-16 XMLA item blob including Relationship elements."""
+    dims_xml = ''
+    for tname, cols in tables.items():
+        attrs_xml = '<Attribute><ID>RowNumber</ID><Name>RowNumber</Name><Type>RowNumber</Type></Attribute>'
+        for col in cols:
+            attrs_xml += f'<Attribute><ID>{col}</ID><Name>{col}</Name></Attribute>'
+        dims_xml += (
+            f'<Dimension><ID>{tname}</ID><Name>{tname}</Name>'
+            f'<Attributes>{attrs_xml}</Attributes></Dimension>'
+        )
+
+    mdx_text = ''
+    for tname, mname, expr in (measures or []):
+        mdx_text += f"CREATE MEASURE [Sandbox].'{tname}'[{mname}]={expr};"
+
+    rels_xml = ''
+    for from_table, from_col, to_table, to_col in (relationships or []):
+        rels_xml += (
+            f'<Relationship><ID>R_{from_table}_{to_table}</ID>'
+            f'<FromRelationshipEnd>'
+            f'<DimensionID>{from_table}</DimensionID>'
+            f'<Multiplicity>Many</Multiplicity>'
+            f'<Attributes><Attribute><AttributeID>{from_col}</AttributeID></Attribute></Attributes>'
+            f'</FromRelationshipEnd>'
+            f'<ToRelationshipEnd>'
+            f'<DimensionID>{to_table}</DimensionID>'
+            f'<Multiplicity>One</Multiplicity>'
+            f'<Attributes><Attribute><AttributeID>{to_col}</AttributeID></Attribute></Attributes>'
+            f'</ToRelationshipEnd>'
+            f'</Relationship>'
+        )
+
+    inner_xml = (
+        '<?xml version="1.0" encoding="utf-16"?>'
+        '<Create AllowOverwrite="true" xmlns="http://schemas.microsoft.com/analysisservices/2003/engine">'
+        '<ObjectDefinition><Database>'
+        f'<Dimensions>{dims_xml}</Dimensions>'
+        f'<MdxScripts><MdxScript><Commands><Command><Text>{mdx_text}</Text></Command></Commands></MdxScript></MdxScripts>'
+        f'<Relationships>{rels_xml}</Relationships>'
+        '</Database></ObjectDefinition></Create>'
+    )
+    outer_xml = (
+        '<?xml version="1.0" encoding="UTF-16"?>'
+        '<Gemini xmlns="http://gemini/pivotcustomization/http://gemini/workbookcustomization/MetadataRecoveryInformation">'
+        f'<CustomContent><![CDATA[{inner_xml}]]></CustomContent>'
+        '</Gemini>'
+    )
+    return outer_xml.encode('utf-16')
+
+
+class TestPowerPivotRelationships:
+    """Unit tests for ?powerpivot=relationships extraction and rendering."""
+
+    @pytest.fixture
+    def rel_adapter(self, tmp_path):
+        tables = {
+            'Orders': ['OrderID', 'CustomerID', 'Amount'],
+            'Customers': ['CustID', 'Name'],
+            'Calendar': ['DateKey', 'Year'],
+        }
+        relationships = [
+            ('Orders', 'CustomerID', 'Customers', 'CustID'),
+            ('Orders', 'OrderDate', 'Calendar', 'DateKey'),
+        ]
+        xmla_bytes = _make_xmla_item_bytes_with_relationships(tables, relationships=relationships)
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'customXml/item1.xml': xmla_bytes,
+        })
+        return XlsxAdapter(f"xlsx://{p}")
+
+    def test_relationships_mode_returns_powerpivot_type(self, rel_adapter):
+        rel_adapter.query_params['powerpivot'] = 'relationships'
+        result = rel_adapter.get_structure()
+        assert result['type'] == 'xlsx_powerpivot'
+
+    def test_relationships_extracted_count(self, rel_adapter):
+        rel_adapter.query_params['powerpivot'] = 'relationships'
+        result = rel_adapter.get_structure()
+        assert len(result['relationships']) == 2
+
+    def test_relationship_from_fields(self, rel_adapter):
+        rel_adapter.query_params['powerpivot'] = 'relationships'
+        result = rel_adapter.get_structure()
+        rel = next(r for r in result['relationships'] if r['from']['table'] == 'Orders'
+                   and r['to']['table'] == 'Customers')
+        assert rel['from']['columns'] == ['CustomerID']
+        assert rel['from']['multiplicity'] == 'Many'
+
+    def test_relationship_to_fields(self, rel_adapter):
+        rel_adapter.query_params['powerpivot'] = 'relationships'
+        result = rel_adapter.get_structure()
+        rel = next(r for r in result['relationships'] if r['to']['table'] == 'Customers')
+        assert rel['to']['columns'] == ['CustID']
+        assert rel['to']['multiplicity'] == 'One'
+
+    def test_schema_result_includes_relationships(self, rel_adapter):
+        rel_adapter.query_params['powerpivot'] = 'schema'
+        result = rel_adapter.get_structure()
+        assert 'relationships' in result
+        assert len(result['relationships']) == 2
+
+    def test_pivot_cache_fallback_returns_empty_relationships(self, tmp_path):
+        import zipfile
+        cache_bytes = _make_pivot_cache_bytes(['Sales', 'Products'])
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'xl/pivotCache/pivotCacheDefinition1.xml': cache_bytes,
+        })
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        with zipfile.ZipFile(p) as zf:
+            data = adapter._parse_pivot_cache(zf)
+        assert data['relationships'] == []
+
+    def test_renderer_relationships_mode(self, rel_adapter):
+        old_stdout = sys.stdout
+        sys.stdout = StringIO()
+        try:
+            rel_adapter.query_params['powerpivot'] = 'relationships'
+            result = rel_adapter.get_structure()
+            XlsxRenderer.render_structure(result, 'text')
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        assert 'Orders' in output
+        assert 'Customers' in output
+        assert 'Many' in output
+        assert 'One' in output
+
+    def test_renderer_relationships_no_xmla(self):
+        old_stdout = sys.stdout
+        sys.stdout = StringIO()
+        try:
+            result = {
+                'type': 'xlsx_powerpivot', 'file': '/tmp/test.xlsx',
+                'has_model': True, 'mode': 'relationships',
+                'xmla_available': False, 'relationships': [],
+            }
+            XlsxRenderer.render_structure(result, 'text')
+            output = sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        assert 'not available' in output.lower() or 'XMLA' in output
+
+
+@pytest.mark.skipif(not POWERPIVOT_2013.exists(), reason="Power Pivot sample files not in /tmp/powerpivot-samples/")
+class TestPowerPivotRelationshipsIntegration2013:
+    """Integration tests for ?powerpivot=relationships against the Contoso 2013 sample."""
+
+    def test_relationships_mode_returns_list(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2013}?powerpivot=relationships")
+        result = adapter.get_structure()
+        assert isinstance(result['relationships'], list)
+
+    def test_relationships_have_expected_fields(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2013}?powerpivot=relationships")
+        result = adapter.get_structure()
+        for rel in result['relationships']:
+            assert 'from' in rel and 'to' in rel
+            assert 'table' in rel['from'] and 'columns' in rel['from']
+            assert 'multiplicity' in rel['from']
+
+    def test_relationships_result_is_list(self):
+        # Contoso tutorial has no explicit relationships defined; verify we return an empty list
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2013}?powerpivot=relationships")
+        result = adapter.get_structure()
+        assert result['relationships'] == []
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

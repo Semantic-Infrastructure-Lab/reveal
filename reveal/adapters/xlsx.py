@@ -232,6 +232,31 @@ class XlsxRenderer:
             for m in measures:
                 print(f"[{m['name']:<{max_name}}]  = {m['expr']}")
 
+        elif mode == 'relationships':
+            relationships = result.get('relationships', [])
+            print(f"Power Pivot Relationships: {filename}\n")
+            if not relationships:
+                if not xmla_available:
+                    print("Relationships not available — XMLA schema absent.")
+                else:
+                    print("No relationships found.")
+                return
+            # Group by from-table for readable output
+            from collections import defaultdict
+            by_table: dict = defaultdict(list)
+            for r in relationships:
+                by_table[r['from']['table']].append(r)
+            for tname in sorted(by_table):
+                rels = by_table[tname]
+                print(f"  {tname}")
+                for r in rels:
+                    fc = ', '.join(r['from']['columns']) or '?'
+                    tc = ', '.join(r['to']['columns']) or '?'
+                    tt = r['to']['table']
+                    fm = r['from']['multiplicity']
+                    tm = r['to']['multiplicity']
+                    print(f"    [{fc}] ({fm})  ->  {tt}[{tc}] ({tm})")
+
     @staticmethod
     def render_element(result: dict, format: str = 'text') -> None:
         """Render specific xlsx element (same as structure for sheets)."""
@@ -941,11 +966,50 @@ class XlsxAdapter(ResourceAdapter):
                     'expr': m.group(3).strip().rstrip(';').strip(),
                 })
 
+        # Build dim ID -> name map for relationship resolution.
+        dim_id_to_name: Dict[str, str] = {}
+        for dim in root.iter():
+            if local(dim.tag) != 'Dimension':
+                continue
+            did = next((c.text for c in dim if local(c.tag) == 'ID'), None)
+            dname = next((c.text for c in dim if local(c.tag) == 'Name'), None)
+            if did and dname:
+                dim_id_to_name[did] = dname
+
+        # Extract relationships from Relationship elements.
+        relationships = []
+        for rel in root.iter():
+            if local(rel.tag) != 'Relationship':
+                continue
+            from_end = next((c for c in rel if local(c.tag) == 'FromRelationshipEnd'), None)
+            to_end = next((c for c in rel if local(c.tag) == 'ToRelationshipEnd'), None)
+            if from_end is None or to_end is None:
+                continue
+
+            def _parse_end(end: ET.Element) -> Dict[str, Any]:
+                did = next((c.text for c in end if local(c.tag) == 'DimensionID'), None) or ''
+                mult = next((c.text for c in end if local(c.tag) == 'Multiplicity'), None) or 'Unknown'
+                tname = dim_id_to_name.get(did, did)
+                attrs_el = next((c for c in end if local(c.tag) == 'Attributes'), None)
+                cols: List[str] = []
+                if attrs_el is not None:
+                    for attr in attrs_el:
+                        aid = next((c.text for c in attr if local(c.tag) == 'AttributeID'), None)
+                        if aid:
+                            cols.append(aid)
+                return {'table': tname, 'columns': cols, 'multiplicity': mult}
+
+            relationships.append({
+                'from': _parse_end(from_end),
+                'to': _parse_end(to_end),
+            })
+
         return {
             'has_model': True,
             'xmla_available': True,
             'tables': [{'name': k, 'columns': v} for k, v in tables.items()],
             'measures': measures,
+            'relationships': relationships,
         }
 
     def _parse_pivot_cache(self, zf: zipfile.ZipFile) -> Dict[str, Any]:
@@ -968,6 +1032,7 @@ class XlsxAdapter(ResourceAdapter):
             'xmla_available': False,
             'tables': [{'name': t, 'columns': []} for t in sorted(table_names)],
             'measures': [],
+            'relationships': [],
         }
 
     def _build_powerpivot_banner(self) -> Optional[Dict[str, Any]]:
@@ -992,7 +1057,7 @@ class XlsxAdapter(ResourceAdapter):
 
     def _get_powerpivot(self, mode: str) -> Dict[str, Any]:
         """Extract Power Pivot model for a ?powerpivot=<mode> request."""
-        valid_modes = ('tables', 'schema', 'measures', 'dax')
+        valid_modes = ('tables', 'schema', 'measures', 'dax', 'relationships')
         if mode not in valid_modes:
             mode = 'schema'
 
