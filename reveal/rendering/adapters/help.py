@@ -814,6 +814,14 @@ def _render_help_quick(data: Dict[str, Any]) -> None:
         col_cmd = max(len(c['cmd']) for c in commands)
         for c in commands:
             print(f"  {c['cmd']:<{col_cmd}}  — {c['description']}")
+    decision_tree = data.get('decision_tree', [])
+    if decision_tree:
+        print()
+        print("What do you want to do?")
+        col_want = max(len(e['want']) for e in decision_tree)
+        for e in decision_tree:
+            print(f"  {e['want']:<{col_want}}  →  {e['use']}")
+            print(f"    {e['example']}")
     next_steps = data.get('next_steps', [])
     if next_steps:
         print()
