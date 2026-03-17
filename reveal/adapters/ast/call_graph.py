@@ -74,6 +74,49 @@ def _strip_alias(name_spec: str) -> str:
     return name_spec.strip()
 
 
+def build_alias_map(file_path: str) -> Dict[str, str]:
+    """Map imported aliases to their canonical (original) names for a single file.
+
+    For ``from utils import helper as h`` → ``{'h': 'helper'}``.
+    For ``import numpy as np`` → ``{'np': 'numpy'}``.
+
+    Only entries WITH an explicit alias are included.  Unaliased imports
+    (``from utils import helper``) are omitted because the call name and
+    the definition name are already identical.
+
+    Args:
+        file_path: Absolute or relative path to the source file.
+
+    Returns:
+        Dict mapping alias → original_name.  Empty dict on any failure or
+        unsupported language.
+    """
+    path = Path(file_path)
+    try:
+        from ...analyzers.imports.base import get_extractor
+        extractor = get_extractor(path)
+        if not extractor:
+            return {}
+        imports = extractor.extract_imports(path)
+    except Exception:  # noqa: BLE001
+        return {}
+
+    alias_map: Dict[str, str] = {}
+    for stmt in imports:
+        if stmt.imported_names:
+            # from X import Y as Z  →  Z (alias) → Y (original)
+            for name_spec in stmt.imported_names:
+                if ' as ' in name_spec:
+                    original, alias = name_spec.split(' as ', 1)
+                    alias_map[alias.strip()] = original.strip()
+        elif stmt.alias and stmt.module_name:
+            # import X as alias  →  alias → top-level module name
+            top = stmt.module_name.split('.')[0]
+            if stmt.alias != top:
+                alias_map[stmt.alias] = top
+    return alias_map
+
+
 def resolve_callees(
     calls: List[str],
     symbol_map: Dict[str, Optional[str]],

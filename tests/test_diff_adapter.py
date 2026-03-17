@@ -1160,5 +1160,137 @@ class TestDiffMetadata(unittest.TestCase):
         self.assertGreaterEqual(len(help_doc['examples']), 3)
 
 
+class TestComplexityDeltaFields(unittest.TestCase):
+    """Tests for BACK-073: complexity_before/after/delta on all function diff entries."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        safe_rmtree(self.tmp)
+
+    def create_file(self, content: str, filename: str) -> str:
+        path = os.path.join(self.tmp, filename)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def test_added_function_has_complexity_fields(self):
+        """Added functions get complexity_before=None, complexity_after=N, complexity_delta=N."""
+        v1 = "def foo(): pass\n"
+        v2 = "def foo(): pass\n\ndef bar(): pass\n"
+        p1 = self.create_file(v1, 'v1.py')
+        p2 = self.create_file(v2, 'v2.py')
+        result = DiffAdapter(p1, p2).get_structure()
+        added = [f for f in result['diff']['functions'] if f['type'] == 'added']
+        self.assertEqual(len(added), 1)
+        fn = added[0]
+        self.assertIsNone(fn['complexity_before'])
+        self.assertIsNotNone(fn['complexity_after'])
+        self.assertEqual(fn['complexity_delta'], fn['complexity_after'])
+
+    def test_removed_function_has_complexity_fields(self):
+        """Removed functions get complexity_before=N, complexity_after=None, complexity_delta=-N."""
+        v1 = "def foo(): pass\n\ndef bar(): pass\n"
+        v2 = "def foo(): pass\n"
+        p1 = self.create_file(v1, 'v1.py')
+        p2 = self.create_file(v2, 'v2.py')
+        result = DiffAdapter(p1, p2).get_structure()
+        removed = [f for f in result['diff']['functions'] if f['type'] == 'removed']
+        self.assertEqual(len(removed), 1)
+        fn = removed[0]
+        self.assertIsNotNone(fn['complexity_before'])
+        self.assertIsNone(fn['complexity_after'])
+        self.assertIsNotNone(fn['complexity_delta'])
+        self.assertLessEqual(fn['complexity_delta'], 0)
+
+    def test_modified_function_has_complexity_fields(self):
+        """Modified functions get all three complexity fields."""
+        v1 = "def process(x):\n    return x\n"
+        v2 = ("def process(x):\n"
+              "    if x > 0:\n"
+              "        if x > 10:\n"
+              "            return x * 2\n"
+              "        return x\n"
+              "    return 0\n")
+        p1 = self.create_file(v1, 'v1.py')
+        p2 = self.create_file(v2, 'v2.py')
+        result = DiffAdapter(p1, p2).get_structure()
+        modified = [f for f in result['diff']['functions'] if f['type'] == 'modified']
+        self.assertEqual(len(modified), 1)
+        fn = modified[0]
+        self.assertIn('complexity_before', fn)
+        self.assertIn('complexity_after', fn)
+        self.assertIn('complexity_delta', fn)
+        self.assertEqual(fn['complexity_delta'], fn['complexity_after'] - fn['complexity_before'])
+
+    def test_modified_function_complexity_increased(self):
+        """complexity_delta is positive when complexity grows."""
+        v1 = "def process(x):\n    return x\n"
+        v2 = ("def process(x):\n"
+              "    if x > 0:\n"
+              "        if x > 10:\n"
+              "            return x * 2\n"
+              "        return x\n"
+              "    return 0\n")
+        p1 = self.create_file(v1, 'v1.py')
+        p2 = self.create_file(v2, 'v2.py')
+        result = DiffAdapter(p1, p2).get_structure()
+        modified = [f for f in result['diff']['functions'] if f['type'] == 'modified']
+        self.assertGreater(modified[0]['complexity_delta'], 0)
+
+    def test_modified_function_no_complexity_change_delta_zero(self):
+        """Modified functions with identical complexity have complexity_delta=0."""
+        v1 = "def foo(x):\n    return x + 1\n"
+        # Change line count but keep same branching (same complexity)
+        v2 = "def foo(x):\n    y = x + 1\n    return y\n"
+        p1 = self.create_file(v1, 'v1.py')
+        p2 = self.create_file(v2, 'v2.py')
+        result = DiffAdapter(p1, p2).get_structure()
+        modified = [f for f in result['diff']['functions'] if f['type'] == 'modified']
+        if modified:  # only assert if modification was detected
+            self.assertEqual(modified[0]['complexity_delta'], 0)
+
+    def test_all_function_types_have_delta_field(self):
+        """Every entry in diff.functions has complexity_delta key regardless of type."""
+        v1 = "def foo(): pass\n\ndef keep(): pass\n"
+        v2 = "def bar(): pass\n\ndef keep(): pass\n"
+        p1 = self.create_file(v1, 'v1.py')
+        p2 = self.create_file(v2, 'v2.py')
+        result = DiffAdapter(p1, p2).get_structure()
+        for fn in result['diff']['functions']:
+            self.assertIn('complexity_before', fn, f"missing field on {fn['type']} {fn['name']}")
+            self.assertIn('complexity_after', fn, f"missing field on {fn['type']} {fn['name']}")
+            self.assertIn('complexity_delta', fn, f"missing field on {fn['type']} {fn['name']}")
+
+    def test_jq_style_filter_complexity_delta(self):
+        """Functions with complexity_delta > 5 can be selected directly."""
+        from reveal.diff.structure_diff import diff_functions
+        added = [{'name': 'big_fn', 'complexity': 8, 'line': 1, 'signature': 'big_fn()', 'line_count': 30}]
+        removed = []
+        # Simulate: old had a simple function, new has a complex one
+        left_funcs = [{'name': 'evolve', 'complexity': 1, 'line': 1, 'signature': 'evolve()', 'line_count': 3}]
+        right_funcs = [
+            {'name': 'evolve', 'complexity': 8, 'line': 1, 'signature': 'evolve(x)', 'line_count': 20},
+            {'name': 'big_fn', 'complexity': 8, 'line': 40, 'signature': 'big_fn()', 'line_count': 30},
+        ]
+        _, details = diff_functions(left_funcs, right_funcs)
+        spikes = [f for f in details if (f.get('complexity_delta') or 0) > 5]
+        # big_fn is added with delta=8, evolve is modified with delta=7 — both > 5
+        self.assertGreaterEqual(len(spikes), 1)
+        for s in spikes:
+            self.assertGreater(s['complexity_delta'], 5)
+
+    def test_removed_function_no_complexity_delta_is_none(self):
+        """Removed function with no complexity field has complexity_delta=None."""
+        from reveal.diff.structure_diff import diff_functions
+        left_funcs = [{'name': 'gone', 'line': 1, 'signature': 'gone()', 'line_count': 3}]
+        right_funcs = []
+        _, details = diff_functions(left_funcs, right_funcs)
+        removed = [f for f in details if f['type'] == 'removed']
+        self.assertEqual(len(removed), 1)
+        self.assertIsNone(removed[0]['complexity_delta'])
+
+
 if __name__ == '__main__':
     unittest.main()

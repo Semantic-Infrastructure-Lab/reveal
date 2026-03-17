@@ -268,7 +268,23 @@ reveal diff://api.py:old_api.py/APIHandler.process_request
 
 ### 6. Complexity Delta Tracking
 
-Detect if code got more or less complex:
+Every function entry in `.diff.functions` now carries top-level complexity fields:
+
+| Field | Added | Removed | Modified |
+|-------|-------|---------|----------|
+| `complexity_before` | `null` | prior value | prior value |
+| `complexity_after` | new value | `null` | new value |
+| `complexity_delta` | new value | −prior value | after − before |
+
+**Filter by complexity spike in JSON output**:
+```bash
+# Functions that got >5 more complex (CI gate pattern)
+reveal diff://git://main/.:git://HEAD/. --format json | \
+  jq '.diff.functions[] | select(.complexity_delta > 5)'
+
+# `reveal review` surfaces this automatically as a named section
+reveal review main..feature
+```
 
 **Output**:
 ```

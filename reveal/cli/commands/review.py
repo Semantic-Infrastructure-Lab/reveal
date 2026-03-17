@@ -57,6 +57,7 @@ def run_review(args: Namespace) -> None:
     if is_git_range:
         diff_data = _run_diff(target)
         report['sections']['diff'] = diff_data
+        report['sections']['complexity_spikes'] = _extract_complexity_spikes(diff_data)
 
     # Step 2: Determine the path to analyze
     if is_git_range:
@@ -176,6 +177,32 @@ def _detect_source_root() -> Path:
         return Path('.')
 
 
+def _extract_complexity_spikes(diff_data: Dict[str, Any], threshold: int = 5) -> List[Dict[str, Any]]:
+    """Extract functions whose complexity increased beyond threshold.
+
+    Args:
+        diff_data: Diff section data from _run_diff (has 'data' key with full diff result)
+        threshold: Minimum complexity_delta to flag (default 5)
+
+    Returns:
+        List of dicts with name, complexity_before, complexity_after, complexity_delta
+    """
+    spikes = []
+    data = diff_data.get('data', {})
+    functions = data.get('diff', {}).get('functions', [])
+    for fn in functions:
+        delta = fn.get('complexity_delta')
+        if delta is not None and delta > threshold:
+            spikes.append({
+                'name': fn.get('name', '?'),
+                'complexity_before': fn.get('complexity_before'),
+                'complexity_after': fn.get('complexity_after'),
+                'complexity_delta': delta,
+            })
+    spikes.sort(key=lambda x: x['complexity_delta'], reverse=True)
+    return spikes
+
+
 def _render_diff_section(diff: Dict[str, Any]) -> None:
     if not diff or diff.get('status') != 'ok':
         return
@@ -209,6 +236,17 @@ def _render_violations_section(violations: list, verbose: bool) -> None:
             for item in items[:5]:
                 loc = f"{item.get('file', '')}:{item.get('line', '')}"
                 print(f"    {item.get('rule', '')} {loc}: {item.get('message', '')}")
+
+
+def _render_complexity_spikes_section(spikes: list) -> None:
+    if not spikes:
+        return
+    print(f"\nComplexity spikes (delta > 5): {len(spikes)} function(s)")
+    for fn in spikes[:10]:
+        before = fn.get('complexity_before', 0) or 0
+        after = fn.get('complexity_after', 0) or 0
+        delta = fn.get('complexity_delta', 0)
+        print(f"  {fn.get('name', '?'):40}  {before} → {after}  (+{delta})")
 
 
 def _render_hotspots_section(hotspots: list) -> None:
@@ -251,6 +289,7 @@ def _render_report(report: Dict[str, Any], verbose: bool) -> None:
     print(f"Review: {report['target']}")
     print("━" * 50)
     _render_diff_section(sections.get('diff', {}))
+    _render_complexity_spikes_section(sections.get('complexity_spikes', []))
     violations = sections.get('violations', [])
     _render_violations_section(violations, verbose)
     _render_hotspots_section(sections.get('hotspots', []))

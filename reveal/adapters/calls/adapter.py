@@ -21,7 +21,7 @@ import os
 from typing import Any, Dict, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from .index import PYTHON_BUILTINS, find_callers, find_callees, rank_by_callers
+from .index import PYTHON_BUILTINS, find_callers, find_callees, find_uncalled, rank_by_callers
 from .renderer import render_calls_structure
 from ...utils.query import parse_query_params
 from ...utils.results import ResultBuilder
@@ -36,7 +36,9 @@ _HELP: Dict[str, Any] = {
         'target':   'Function name to find callers of (reverse lookup)',
         'callees':  'Function name to find callees of — what does it call? (forward lookup)',
         'rank':     'Set to "callers" to rank all functions by in-degree (most-called first)',
-        'top':      'Max results for ?rank=callers (default: 10, max: 100)',
+        'uncalled': 'List all functions/methods with no callers (dead code candidates)',
+        'top':      'Max results for ?rank=callers or ?uncalled (default: 10/?rank, unlimited/?uncalled)',
+        'type':     'For ?uncalled: filter to "function" (module-level only) or "method"',
         'depth':    'Transitive caller depth (default 1, max 5) — applies to ?target only',
         'format':   'Output format: text (default), dot (Graphviz), or json',
         'builtins': 'Include Python builtins in callees output (default: false). '
@@ -57,6 +59,12 @@ _HELP: Dict[str, Any] = {
          'description': 'Top 10 most-called functions (coupling hotspot ranking)'},
         {'uri': 'calls://src/?rank=callers&top=20',
          'description': 'Top 20 most-called functions'},
+        {'uri': 'calls://src/?uncalled',
+         'description': 'Dead code candidates — all functions/methods with no callers'},
+        {'uri': 'calls://src/?uncalled&type=function',
+         'description': 'Dead code — module-level functions only (skip methods)'},
+        {'uri': 'calls://src/?uncalled&top=20',
+         'description': 'Top 20 most-recently-added uncalled functions'},
         {'uri': 'calls://src/?target=main&format=dot',
          'description': 'Output callers graph as Graphviz dot (pipe to dot -Tsvg)'},
         {'uri': 'calls://src/?target=main&format=json',
@@ -80,7 +88,9 @@ _SCHEMA: Dict[str, Any] = {
         'target':   {'type': 'string',  'description': 'Function name to find callers of (reverse lookup)'},
         'callees':  {'type': 'string',  'description': 'Function name to find callees of (forward lookup)'},
         'rank':     {'type': 'string',  'description': 'Set to "callers" to rank all functions by in-degree'},
-        'top':      {'type': 'integer', 'description': 'Max results for ?rank=callers (default 10, max 100)'},
+        'uncalled': {'type': 'boolean', 'description': 'List all functions/methods with no callers (dead code candidates)'},
+        'top':      {'type': 'integer', 'description': 'Max results for ?rank=callers or ?uncalled (default 10/?rank, unlimited/?uncalled)'},
+        'type':     {'type': 'string',  'description': 'For ?uncalled: "function" (module-level only) or "method"'},
         'depth':    {'type': 'integer', 'description': 'Transitive depth 1-5 (default 1), applies to ?target'},
         'format':   {'type': 'string',  'description': 'Output format: text (default), dot (Graphviz), or json'},
         'builtins': {'type': 'boolean', 'description': 'Include Python builtins in callees output (default: false)'},
@@ -263,6 +273,7 @@ class CallsAdapter(ResourceAdapter):
         target = self.query_params.get('target', '')
         callees_target = self.query_params.get('callees', '')
         rank = self.query_params.get('rank', '')
+        uncalled = self.query_params.get('uncalled', False)
 
         if rank == 'callers':
             top = int(self.query_params.get('top', 10))
@@ -271,6 +282,21 @@ class CallsAdapter(ResourceAdapter):
             result_data['path'] = self.path
             return ResultBuilder.create(
                 result_type='calls_ranking',
+                source=self.path,
+                contract_version='1.1',
+                data=result_data,
+            )
+
+        if uncalled:
+            top = int(self.query_params.get('top', 0))
+            type_filter = self.query_params.get('type', '')
+            only_functions = type_filter == 'function'
+            result_data = find_uncalled(self.path, only_functions=only_functions, top=top)
+            query_format = self.query_params.get('format', '')
+            if query_format:
+                result_data['_query_format'] = query_format
+            return ResultBuilder.create(
+                result_type='calls_uncalled',
                 source=self.path,
                 contract_version='1.1',
                 data=result_data,

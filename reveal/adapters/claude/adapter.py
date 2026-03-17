@@ -116,6 +116,14 @@ _SCHEMA_OUTPUT_TYPES = [
     _make_output_type('claude_search_results', 'Search results across all session content (text, thinking, tool inputs)', {
         'query': {'type': 'string'}, 'matches': {'type': 'array'}, 'total': {'type': 'integer'}
     }),
+    _make_output_type('claude_cross_session_search', 'Cross-session content search results (one snippet per matching session)', {
+        'term': {'type': 'string'},
+        'since': {'type': 'string'},
+        'sessions_scanned': {'type': 'integer'},
+        'match_count': {'type': 'integer'},
+        'displayed_count': {'type': 'integer'},
+        'matches': {'type': 'array'},
+    }),
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
@@ -142,6 +150,9 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'claude://session/infernal-earth-0118?last', 'description': 'Last assistant turn — fast recovery ("where did it stop?")', 'query_param': '?last', 'output_type': 'claude_messages'},
     {'uri': 'claude://session/infernal-earth-0118?tail=3', 'description': 'Last 3 assistant turns', 'query_param': '?tail=N', 'output_type': 'claude_messages'},
     {'uri': 'claude://session/infernal-earth-0118/message/-1', 'description': 'Last message (negative index)', 'element': 'message/<n>', 'output_type': 'claude_message'},
+    {'uri': "claude://sessions/?search=validate_token", 'description': 'Cross-session content search — sessions mentioning a term (20 results by default)', 'query_param': '?search=<term>', 'output_type': 'claude_cross_session_search'},
+    {'uri': "claude://sessions/?search=auth&since=2026-03-01", 'description': 'Cross-session search scoped to recent sessions', 'query_param': '?search=<term>&since=<date>', 'output_type': 'claude_cross_session_search'},
+    {'uri': "claude://search/validate_token", 'description': 'Path-based alias for cross-session search', 'output_type': 'claude_cross_session_search'},
 ]
 
 _SCHEMA_NOTES = [
@@ -149,7 +160,8 @@ _SCHEMA_NOTES = [
     'Supports composite queries (e.g., ?tools=Bash&errors)',
     'Workflow tracking shows tool operation sequences',
     'File tracking shows all Read/Write/Edit operations',
-    'Tool success rates calculated from result vs error status'
+    'Tool success rates calculated from result vs error status',
+    'Cross-session search: claude://sessions/?search=term scans all JSONL files (parallel grep + snippet extraction). Default 20 results; use --all for full scan. ?since=DATE narrows corpus.',
 ]
 
 
@@ -970,6 +982,14 @@ class ClaudeAdapter(ResourceAdapter):
                 'uri': 'claude://session/infernal-earth-0118?search=verify',
                 'description': 'Search all content (text, thinking, tool inputs) for a term'
             },
+            {
+                'uri': "claude://sessions/?search=validate_token",
+                'description': 'Cross-session content search — find sessions mentioning a term (20 by default)'
+            },
+            {
+                'uri': "claude://sessions/?search=auth&since=2026-03-01",
+                'description': 'Cross-session search scoped to recent sessions (?since= reduces scan time)'
+            },
         ]
 
     @staticmethod
@@ -1051,6 +1071,8 @@ class ClaudeAdapter(ResourceAdapter):
             self._post_process_session_list(result, args)
         elif result_type == 'claude_messages':
             self._post_process_messages(result, args)
+        elif result_type == 'claude_cross_session_search':
+            self._post_process_search_results(result, args)
 
         return result
 
@@ -1095,6 +1117,18 @@ class ClaudeAdapter(ResourceAdapter):
         result['displayed_steps'] = len(workflow)
         if len(workflow) < total_before:
             result['filtered_from'] = total_before
+
+    @staticmethod
+    def _post_process_search_results(result: Dict[str, Any], args: Any) -> None:
+        """Apply --head/--all display limits to claude_cross_session_search results."""
+        matches = result.get('matches')
+        if matches is None:
+            return
+        if not getattr(args, 'all', False):
+            head = getattr(args, 'head', None)
+            matches = matches[:head if head else 20]
+        result['matches'] = matches
+        result['displayed_count'] = len(matches)
 
     @staticmethod
     def _post_process_session_list(result: Dict[str, Any], args: Any) -> None:

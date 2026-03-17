@@ -24,6 +24,10 @@ def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
         _render_ranking_text(data)
         return
 
+    if data.get('query') == 'uncalled':
+        _render_uncalled_text(data)
+        return
+
     if output_format == 'dot':
         _render_dot(data)
         return
@@ -131,6 +135,33 @@ def _render_ranking_text(data: Dict[str, Any]) -> None:
         if len(callers) > 5:
             print(f"    … and {len(callers) - 5} more")
         print()
+
+
+def _render_uncalled_text(data: Dict[str, Any]) -> None:
+    """Render ?uncalled output — functions/methods with no callers."""
+    path = data.get('path', '.')
+    total_defined = data.get('total_defined', 0)
+    total_uncalled = data.get('total_uncalled', 0)
+    entries = data.get('entries', [])
+
+    print(f"Dead code candidates: {path}")
+    print(f"Total defined:        {total_defined} functions/methods")
+    print(f"Uncalled:             {total_uncalled}")
+    print(f"Note: excludes __dunder__ methods and @property/@classmethod/@staticmethod")
+    print()
+
+    if not entries:
+        print("  No uncalled functions found.")
+        return
+
+    for entry in entries:
+        name = entry['name']
+        file_path = entry['file']
+        line = entry['line']
+        category = entry.get('category', 'functions')
+        kind = 'method' if category == 'methods' else 'function'
+        private_tag = ', private' if entry.get('is_private') else ''
+        print(f"  {file_path}:{line}  {name}  ({kind}{private_tag})")
 
 
 def _render_dot(data: Dict[str, Any]) -> None:

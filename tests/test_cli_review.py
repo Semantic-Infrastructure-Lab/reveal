@@ -15,6 +15,7 @@ from reveal.cli.commands.review import (
     _render_violations_section,
     _render_hotspots_section,
     _render_complexity_section,
+    _render_complexity_spikes_section,
     _render_recommendation,
     _render_report,
     _run_diff,
@@ -22,6 +23,7 @@ from reveal.cli.commands.review import (
     _run_hotspots,
     _run_complexity,
     _detect_source_root,
+    _extract_complexity_spikes,
     run_review,
 )
 
@@ -402,6 +404,122 @@ class TestRunReview(unittest.TestCase):
             data = json.loads(buf.getvalue())
             self.assertIn('sections', data)
             self.assertIn('target', data)
+
+
+# ---------------------------------------------------------------------------
+# _extract_complexity_spikes
+
+
+class TestExtractComplexitySpikes(unittest.TestCase):
+    """Tests for BACK-073: _extract_complexity_spikes."""
+
+    def _diff_data(self, functions):
+        return {'status': 'ok', 'data': {'diff': {'functions': functions}}}
+
+    def test_empty_diff_data_returns_empty(self):
+        self.assertEqual(_extract_complexity_spikes({}), [])
+
+    def test_no_functions_returns_empty(self):
+        data = {'status': 'ok', 'data': {'diff': {}}}
+        self.assertEqual(_extract_complexity_spikes(data), [])
+
+    def test_functions_below_threshold_excluded(self):
+        fns = [
+            {'name': 'small', 'complexity_delta': 3, 'complexity_before': 1, 'complexity_after': 4},
+            {'name': 'equal', 'complexity_delta': 5, 'complexity_before': 2, 'complexity_after': 7},
+        ]
+        result = _extract_complexity_spikes(self._diff_data(fns))
+        self.assertEqual(result, [])
+
+    def test_functions_above_threshold_included(self):
+        fns = [
+            {'name': 'big', 'complexity_delta': 8, 'complexity_before': 2, 'complexity_after': 10},
+            {'name': 'small', 'complexity_delta': 2, 'complexity_before': 1, 'complexity_after': 3},
+        ]
+        result = _extract_complexity_spikes(self._diff_data(fns))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['name'], 'big')
+        self.assertEqual(result[0]['complexity_delta'], 8)
+
+    def test_results_sorted_by_delta_descending(self):
+        fns = [
+            {'name': 'b', 'complexity_delta': 7, 'complexity_before': 1, 'complexity_after': 8},
+            {'name': 'a', 'complexity_delta': 12, 'complexity_before': 1, 'complexity_after': 13},
+            {'name': 'c', 'complexity_delta': 9, 'complexity_before': 1, 'complexity_after': 10},
+        ]
+        result = _extract_complexity_spikes(self._diff_data(fns))
+        deltas = [r['complexity_delta'] for r in result]
+        self.assertEqual(deltas, sorted(deltas, reverse=True))
+
+    def test_none_delta_excluded(self):
+        """Functions with complexity_delta=None (e.g. removed with no complexity) are skipped."""
+        fns = [
+            {'name': 'removed', 'complexity_delta': None, 'complexity_before': None, 'complexity_after': None},
+            {'name': 'big', 'complexity_delta': 9, 'complexity_before': 1, 'complexity_after': 10},
+        ]
+        result = _extract_complexity_spikes(self._diff_data(fns))
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['name'], 'big')
+
+    def test_custom_threshold(self):
+        fns = [
+            {'name': 'medium', 'complexity_delta': 3, 'complexity_before': 1, 'complexity_after': 4},
+            {'name': 'large', 'complexity_delta': 8, 'complexity_before': 1, 'complexity_after': 9},
+        ]
+        result = _extract_complexity_spikes(self._diff_data(fns), threshold=2)
+        self.assertEqual(len(result), 2)
+
+    def test_spike_fields_preserved(self):
+        fns = [{'name': 'fn', 'complexity_delta': 7, 'complexity_before': 3, 'complexity_after': 10}]
+        result = _extract_complexity_spikes(self._diff_data(fns))
+        self.assertEqual(result[0]['complexity_before'], 3)
+        self.assertEqual(result[0]['complexity_after'], 10)
+        self.assertEqual(result[0]['complexity_delta'], 7)
+
+
+# ---------------------------------------------------------------------------
+# _render_complexity_spikes_section
+
+
+class TestRenderComplexitySpikesSection(unittest.TestCase):
+    """Tests for BACK-073: _render_complexity_spikes_section."""
+
+    def _capture(self, spikes):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _render_complexity_spikes_section(spikes)
+        return buf.getvalue()
+
+    def test_empty_list_renders_nothing(self):
+        self.assertEqual(self._capture([]), '')
+
+    def test_renders_spike_count(self):
+        spikes = [{'name': 'big', 'complexity_before': 2, 'complexity_after': 10, 'complexity_delta': 8}]
+        output = self._capture(spikes)
+        self.assertIn('1 function', output)
+        self.assertIn('delta > 5', output)
+
+    def test_renders_function_name_and_delta(self):
+        spikes = [{'name': 'process_data', 'complexity_before': 2, 'complexity_after': 9, 'complexity_delta': 7}]
+        output = self._capture(spikes)
+        self.assertIn('process_data', output)
+        self.assertIn('+7', output)
+
+    def test_limits_to_ten(self):
+        spikes = [
+            {'name': f'fn{i}', 'complexity_before': 1, 'complexity_after': 8, 'complexity_delta': 7}
+            for i in range(15)
+        ]
+        output = self._capture(spikes)
+        # Should only show 10 lines of function output
+        lines = [l for l in output.splitlines() if l.strip().startswith('fn')]
+        self.assertLessEqual(len(lines), 10)
+
+    def test_renders_before_after_values(self):
+        spikes = [{'name': 'fn', 'complexity_before': 3, 'complexity_after': 11, 'complexity_delta': 8}]
+        output = self._capture(spikes)
+        self.assertIn('3', output)
+        self.assertIn('11', output)
 
 
 if __name__ == '__main__':

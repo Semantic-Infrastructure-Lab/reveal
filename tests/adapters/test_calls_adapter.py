@@ -20,7 +20,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, Dict
 
-from reveal.adapters.ast.call_graph import build_symbol_map, resolve_callees
+from reveal.adapters.ast.call_graph import build_symbol_map, resolve_callees, build_alias_map
 from reveal.adapters.ast.adapter import AstAdapter
 from reveal.adapters.calls.index import build_callers_index, find_callers, find_callees, rank_by_callers
 from reveal.adapters.calls.adapter import CallsAdapter, CallsRenderer
@@ -91,6 +91,57 @@ class TestBuildSymbolMap(unittest.TestCase):
         # (could be either key present with None or absent depending on search path)
         # Just check no exception was raised
         self.assertIsInstance(sym_map, dict)
+
+
+# ---------------------------------------------------------------------------
+# Unit: build_alias_map
+# ---------------------------------------------------------------------------
+
+class TestBuildAliasMap(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_from_import_with_alias(self):
+        """from utils import helper as h → {'h': 'helper'}."""
+        _write(self.tmpdir, 'utils.py', 'def helper(): pass\n')
+        main = _write(self.tmpdir, 'main.py',
+                      'from utils import helper as h\n\ndef run(): h()\n')
+        result = build_alias_map(main)
+        self.assertEqual(result.get('h'), 'helper')
+
+    def test_module_import_with_alias(self):
+        """import numpy as np → {'np': 'numpy'}."""
+        main = _write(self.tmpdir, 'main.py', 'import numpy as np\n')
+        result = build_alias_map(main)
+        self.assertEqual(result.get('np'), 'numpy')
+
+    def test_no_alias_returns_empty(self):
+        """from utils import helper (no alias) → empty map."""
+        _write(self.tmpdir, 'utils.py', 'def helper(): pass\n')
+        main = _write(self.tmpdir, 'main.py',
+                      'from utils import helper\n\ndef run(): helper()\n')
+        result = build_alias_map(main)
+        self.assertNotIn('helper', result)
+
+    def test_multiple_aliases(self):
+        """Multiple aliased imports all appear in the map."""
+        _write(self.tmpdir, 'utils.py', 'def foo(): pass\ndef bar(): pass\n')
+        main = _write(self.tmpdir, 'main.py',
+                      'from utils import foo as f, bar as b\n')
+        result = build_alias_map(main)
+        self.assertEqual(result.get('f'), 'foo')
+        self.assertEqual(result.get('b'), 'bar')
+
+    def test_unsupported_language_returns_empty(self):
+        """Files with no registered extractor return an empty map."""
+        path = _write(self.tmpdir, 'script.lua', '-- no extractor')
+        result = build_alias_map(path)
+        self.assertEqual(result, {})
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +308,87 @@ def run_job(x):
     def test_total_callers_count(self):
         result = find_callers(self.tmpdir, 'validate_item', depth=1)
         self.assertEqual(result['total_callers'], len(result['levels'][0]['callers']))
+
+
+# ---------------------------------------------------------------------------
+# Unit: import alias resolution in build_callers_index / find_callers /
+#        find_uncalled  (BACK-076)
+# ---------------------------------------------------------------------------
+
+class TestAliasResolutionInIndex(unittest.TestCase):
+    """build_callers_index must index canonical names when a call uses an alias.
+
+    Scenario: utils.py defines `helper`.  caller.py does
+    ``from utils import helper as h`` then calls ``h()``.  The callers index
+    must contain `helper` (the definition name) so that find_uncalled does not
+    flag `helper` as dead code and find_callers('helper') finds the caller.
+    """
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        import shutil
+        # utils.py defines the function
+        _write(self.tmpdir, 'utils.py', textwrap.dedent('''\
+            def helper():
+                return 42
+        '''))
+        # caller.py imports it under an alias and calls the alias
+        _write(self.tmpdir, 'caller.py', textwrap.dedent('''\
+            from utils import helper as h
+
+            def run():
+                return h()
+        '''))
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_canonical_name_in_index(self):
+        """Index must contain the definition name 'helper', not just the alias 'h'."""
+        index = build_callers_index(self.tmpdir)
+        self.assertIn('helper', index,
+                      "canonical name 'helper' missing — aliased call to 'h' not resolved")
+
+    def test_alias_name_still_in_index(self):
+        """Index must still contain 'h' (the alias) for direct alias lookups."""
+        index = build_callers_index(self.tmpdir)
+        self.assertIn('h', index)
+
+    def test_find_callers_via_canonical_name(self):
+        """find_callers('helper') must find run() even though it calls via alias h."""
+        result = find_callers(self.tmpdir, 'helper', depth=1)
+        callers = [r['caller'] for lvl in result['levels'] for r in lvl['callers']]
+        self.assertIn('run', callers,
+                      "find_callers('helper') missed caller that uses alias 'h'")
+
+    def test_find_uncalled_does_not_flag_aliased_function(self):
+        """find_uncalled must NOT report 'helper' as dead code when called via alias."""
+        from reveal.adapters.calls.index import find_uncalled
+        result = find_uncalled(self.tmpdir)
+        uncalled_names = {e['name'] for e in result['entries']}
+        self.assertNotIn('helper', uncalled_names,
+                         "'helper' incorrectly flagged as dead code — alias 'h' not resolved")
+
+    def test_module_level_alias_resolved(self):
+        """import utils as u; u.helper() — module alias, not function alias."""
+        import shutil
+        tmpdir2 = tempfile.mkdtemp()
+        try:
+            _write(tmpdir2, 'utils.py', 'def helper(): pass\n')
+            _write(tmpdir2, 'main.py', textwrap.dedent('''\
+                import utils as u
+
+                def run():
+                    u.helper()
+            '''))
+            index = build_callers_index(tmpdir2)
+            # 'helper' is accessed as u.helper — bare is 'helper' (split on dot),
+            # so it's indexed directly without needing alias resolution.
+            # This test confirms the existing dot-split path still works.
+            self.assertIn('helper', index)
+        finally:
+            shutil.rmtree(tmpdir2, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
@@ -989,6 +1121,327 @@ class TestCallsRendererMissingTarget(unittest.TestCase):
             render_calls_structure(data, 'text')
         stdout = buf.getvalue()
         self.assertNotIn('Callers of: ?', stdout)
+
+
+# ---------------------------------------------------------------------------
+# Unit: find_uncalled — dead code detection
+# ---------------------------------------------------------------------------
+
+class TestFindUncalled(unittest.TestCase):
+
+    def setUp(self):
+        import shutil
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _write(self, filename, content):
+        return _write(self.tmpdir, filename, textwrap.dedent(content))
+
+    def test_uncalled_function_detected(self):
+        """A function that is defined but never called anywhere is flagged."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('a.py', '''\
+            def used():
+                pass
+
+            def never_called():
+                pass
+
+            def main():
+                used()
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        self.assertIn('never_called', names)
+        self.assertNotIn('used', names)
+
+    def test_called_function_excluded(self):
+        """A function called by another function is not in the uncalled list."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('b.py', '''\
+            def helper():
+                pass
+
+            def caller():
+                helper()
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        self.assertNotIn('helper', names)
+
+    def test_dunder_methods_excluded(self):
+        """__dunder__ methods are excluded even if nothing calls them directly."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('c.py', '''\
+            class Foo:
+                def __init__(self):
+                    pass
+                def __str__(self):
+                    return "Foo"
+                def regular(self):
+                    pass
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        self.assertNotIn('__init__', names)
+        self.assertNotIn('__str__', names)
+
+    def test_property_decorator_excluded(self):
+        """@property methods are excluded (called implicitly by attribute access)."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('d.py', '''\
+            class Bar:
+                @property
+                def value(self):
+                    return self._value
+
+                def other(self):
+                    pass
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        self.assertNotIn('value', names)
+
+    def test_private_flag_set(self):
+        """Functions starting with _ have is_private=True."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('e.py', '''\
+            def _internal():
+                pass
+
+            def public():
+                pass
+        ''')
+        result = find_uncalled(self.tmpdir)
+        private_entries = [e for e in result['entries'] if e['name'] == '_internal']
+        public_entries = [e for e in result['entries'] if e['name'] == 'public']
+        self.assertTrue(private_entries[0]['is_private'])
+        self.assertFalse(public_entries[0]['is_private'])
+
+    def test_only_functions_skips_methods(self):
+        """only_functions=True excludes methods (category='methods')."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('f.py', '''\
+            class MyClass:
+                def method_never_called(self):
+                    pass
+
+            def func_never_called():
+                pass
+        ''')
+        result = find_uncalled(self.tmpdir, only_functions=True)
+        names = [e['name'] for e in result['entries']]
+        self.assertIn('func_never_called', names)
+        self.assertNotIn('method_never_called', names)
+
+    def test_top_limits_results(self):
+        """top=N caps the number of returned entries."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('g.py', '''\
+            def a(): pass
+            def b(): pass
+            def c(): pass
+            def d(): pass
+            def e(): pass
+        ''')
+        result = find_uncalled(self.tmpdir, top=3)
+        self.assertLessEqual(len(result['entries']), 3)
+
+    def test_total_counts_accurate(self):
+        """total_defined and total_uncalled fields are correct.
+
+        Note: 'runner' is never called by anything (it's an entry point), so
+        it will appear in the uncalled list.  Only 'called' (called by runner)
+        should be excluded.
+        """
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('h.py', '''\
+            def called():
+                pass
+
+            def uncalled1():
+                pass
+
+            def uncalled2():
+                pass
+
+            def runner():
+                called()
+        ''')
+        result = find_uncalled(self.tmpdir)
+        self.assertGreaterEqual(result['total_defined'], 4)
+        names = [e['name'] for e in result['entries']]
+        self.assertIn('uncalled1', names)
+        self.assertIn('uncalled2', names)
+        # 'called' is invoked by runner — should not be in uncalled list
+        self.assertNotIn('called', names)
+        # 'runner' has no callers (entry point) — correctly flagged as uncalled
+        self.assertIn('runner', names)
+
+    def test_cross_file_call_removes_from_uncalled(self):
+        """A function called from a different file is not flagged as uncalled."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('lib.py', '''\
+            def shared_util():
+                pass
+        ''')
+        self._write('main.py', '''\
+            from lib import shared_util
+
+            def run():
+                shared_util()
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        self.assertNotIn('shared_util', names)
+
+    def test_single_file_scopes_definitions(self):
+        """When a file path is given, only definitions from that file appear.
+
+        The callers index still uses the full parent directory, so a function
+        called from a sibling file is correctly excluded.
+        """
+        from reveal.adapters.calls.index import find_uncalled
+        import os
+        lib_path = self._write('lib2.py', '''\
+            def orphan_in_lib():
+                pass
+            def used_in_lib():
+                pass
+        ''')
+        self._write('consumer2.py', '''\
+            def consumer():
+                used_in_lib()
+        ''')
+        result = find_uncalled(lib_path)
+        names = [e['name'] for e in result['entries']]
+        # Only lib2.py definitions reported
+        self.assertIn('orphan_in_lib', names)
+        self.assertNotIn('used_in_lib', names)
+        # consumer (from sibling file) must not appear
+        self.assertNotIn('consumer', names)
+
+
+# ---------------------------------------------------------------------------
+# Integration: CallsAdapter ?uncalled query param
+# ---------------------------------------------------------------------------
+
+class TestCallsAdapterUncalled(unittest.TestCase):
+
+    def setUp(self):
+        import shutil
+        self.tmpdir = tempfile.mkdtemp()
+        _write(self.tmpdir, 'src.py', textwrap.dedent('''\
+            def used():
+                pass
+
+            def orphan():
+                pass
+
+            def _private_orphan():
+                pass
+
+            def entry():
+                used()
+        '''))
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_uncalled_param_returns_uncalled_query(self):
+        adapter = CallsAdapter(self.tmpdir, 'uncalled')
+        result = adapter.get_structure()
+        self.assertEqual(result.get('query'), 'uncalled')
+
+    def test_uncalled_entries_present(self):
+        # 'orphan' and '_private_orphan' are never called — flagged.
+        # 'used' is called by entry — not flagged.
+        # 'entry' has no callers (entry point) — also flagged; that's correct behaviour.
+        adapter = CallsAdapter(self.tmpdir, 'uncalled')
+        result = adapter.get_structure()
+        names = [e['name'] for e in result.get('entries', [])]
+        self.assertIn('orphan', names)
+        self.assertIn('_private_orphan', names)
+        self.assertNotIn('used', names)
+
+    def test_uncalled_type_function_filter(self):
+        adapter = CallsAdapter(self.tmpdir, 'uncalled&type=function')
+        result = adapter.get_structure()
+        for entry in result.get('entries', []):
+            self.assertNotEqual(entry.get('category'), 'methods')
+
+    def test_uncalled_top_limits_results(self):
+        adapter = CallsAdapter(self.tmpdir, 'uncalled&top=1')
+        result = adapter.get_structure()
+        self.assertLessEqual(len(result.get('entries', [])), 1)
+
+    def test_uncalled_format_json_sets_query_format(self):
+        adapter = CallsAdapter(self.tmpdir, 'uncalled&format=json')
+        result = adapter.get_structure()
+        self.assertEqual(result.get('_query_format'), 'json')
+
+
+# ---------------------------------------------------------------------------
+# Renderer: ?uncalled text output
+# ---------------------------------------------------------------------------
+
+class TestUncalledRenderer(unittest.TestCase):
+
+    def _capture(self, data, fmt='text'):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            render_calls_structure(data, fmt)
+        return buf.getvalue()
+
+    def _make_data(self, entries=None):
+        return {
+            'query': 'uncalled',
+            'path': 'src/',
+            'total_defined': 10,
+            'total_uncalled': len(entries or []),
+            'entries': entries or [],
+        }
+
+    def test_header_lines_present(self):
+        out = self._capture(self._make_data())
+        self.assertIn('Dead code candidates', out)
+        self.assertIn('Total defined', out)
+        self.assertIn('Uncalled', out)
+
+    def test_no_entries_shows_none_found(self):
+        out = self._capture(self._make_data([]))
+        self.assertIn('No uncalled functions found', out)
+
+    def test_entries_rendered_with_file_and_line(self):
+        entries = [{'name': 'orphan', 'file': 'src/utils.py', 'line': 42,
+                    'category': 'functions', 'is_private': False}]
+        out = self._capture(self._make_data(entries))
+        self.assertIn('src/utils.py:42', out)
+        self.assertIn('orphan', out)
+        self.assertIn('function', out)
+
+    def test_private_tag_shown(self):
+        entries = [{'name': '_helper', 'file': 'src/a.py', 'line': 5,
+                    'category': 'functions', 'is_private': True}]
+        out = self._capture(self._make_data(entries))
+        self.assertIn('private', out)
+
+    def test_method_kind_shown(self):
+        entries = [{'name': 'unused_method', 'file': 'src/b.py', 'line': 10,
+                    'category': 'methods', 'is_private': False}]
+        out = self._capture(self._make_data(entries))
+        self.assertIn('method', out)
+
+    def test_json_format_renders_json(self):
+        data = self._make_data([])
+        out = self._capture(data, 'json')
+        import json
+        parsed = json.loads(out)
+        self.assertIn('query', parsed)
 
 
 if __name__ == '__main__':

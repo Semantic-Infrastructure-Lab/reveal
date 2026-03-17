@@ -1594,17 +1594,17 @@ reveal claude://session/my-session/tools --format json | jq '.tools[] | select(.
    - **Limitation**: Read-only analysis (can't edit conversations)
    - **Design**: Intentional (inspection tool, not editor)
 
-6. **No cross-session full-text search**
-   - **Limitation**: `claude://search?query=` is not implemented — returns a structured error
-   - **Impact**: Can't search text across all sessions from reveal
-   - **Workaround**: `tia search sessions "<term>"` — scans all session transcripts
+6. **Cross-session search available via `claude://sessions/?search=term`**
+   - **Status**: Implemented — scans all session JSONL files, returns one snippet per match
+   - **Default**: 20 results; use `--all` for full scan; `?since=DATE` narrows corpus
+   - **Examples**: `reveal 'claude://sessions/?search=validate_token'`, `reveal 'claude://sessions/?search=auth&since=2026-03-01'`
 
 ---
 
 ### Design Limitations (Intentional)
 
 1. **No conversation editing**: Read-only (by design)
-2. **No cross-session analysis**: One session at a time (by design)
+2. **Cross-session search available** via `claude://sessions/?search=term`; full multi-session analysis not supported (by design)
 3. **No real-time monitoring**: File-based analysis only (by design)
 
 ---
@@ -1630,17 +1630,22 @@ reveal claude://
 
 ---
 
-#### Error: "cross-session search not implemented"
+#### Cross-session search
 
-**Meaning**: `claude://search?query=` is not yet implemented
+Cross-session content search is fully implemented via `claude://sessions/?search=term`:
 
-**Solutions**:
 ```bash
-# Use TIA search instead
-tia search sessions "<term>"
+# Find sessions mentioning a term (20 most recent matches by default)
+reveal 'claude://sessions/?search=validate_token'
 
-# Or search locally with ripgrep
-rg "<term>" ~/.claude/projects/
+# Scope to recent sessions (much faster on large stores)
+reveal 'claude://sessions/?search=auth&since=2026-03-01'
+
+# Path-based alias
+reveal 'claude://search/validate_token'
+
+# Show all matches (no 20-result limit)
+reveal 'claude://sessions/?search=auth' --all
 ```
 
 ---

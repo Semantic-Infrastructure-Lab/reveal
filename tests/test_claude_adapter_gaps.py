@@ -901,3 +901,102 @@ class TestGetChain:
         adapter.__class__.SESSIONS_DIR = None
         result = adapter._get_chain()
         assert result['sessions_dir'] is None
+
+
+# ─── BACK-074: _post_process_search_results ────────────────────────────────────
+
+class TestPostProcessSearchResults:
+
+    def _args(self, **kwargs) -> Namespace:
+        defaults = dict(head=None, tail=None, range=None, verbose=False,
+                        max_snippet_chars=None, all=False)
+        defaults.update(kwargs)
+        return Namespace(**defaults)
+
+    def _result(self, n: int) -> dict:
+        return {
+            'type': 'claude_cross_session_search',
+            'term': 'foo',
+            'matches': [{'session': f'sess-{i}'} for i in range(n)],
+            'match_count': n,
+        }
+
+    def test_default_limits_to_20(self, tmp_path):
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('')
+        result = adapter.post_process(self._result(50), self._args())
+        assert len(result['matches']) == 20
+        assert result['displayed_count'] == 20
+
+    def test_all_flag_skips_limit(self, tmp_path):
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('')
+        result = adapter.post_process(self._result(50), self._args(**{'all': True}))
+        assert len(result['matches']) == 50
+
+    def test_head_overrides_default(self, tmp_path):
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('')
+        result = adapter.post_process(self._result(50), self._args(head=5))
+        assert len(result['matches']) == 5
+        assert result['displayed_count'] == 5
+
+    def test_fewer_than_20_returns_all(self, tmp_path):
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('')
+        result = adapter.post_process(self._result(8), self._args())
+        assert len(result['matches']) == 8
+
+    def test_empty_matches_returns_zero(self, tmp_path):
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('')
+        result = adapter.post_process(self._result(0), self._args())
+        assert result['displayed_count'] == 0
+
+    def test_post_process_attaches_display_block(self, tmp_path):
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('')
+        result = adapter.post_process(self._result(5), self._args())
+        assert '_display' in result
+
+    def test_missing_matches_key_no_crash(self, tmp_path):
+        with patch.object(ClaudeAdapter, 'CONVERSATION_BASE', tmp_path):
+            adapter = ClaudeAdapter('')
+        result = adapter.post_process(
+            {'type': 'claude_cross_session_search', 'term': 'x'},
+            self._args()
+        )
+        # No 'matches' key — should not raise
+        assert result['type'] == 'claude_cross_session_search'
+
+
+# ─── BACK-074: schema includes cross-session search ────────────────────────────
+
+class TestSchemaIncludesCrossSessionSearch:
+
+    def test_output_types_include_cross_session_search(self):
+        schema = ClaudeAdapter.get_schema()
+        types = [t['type'] for t in schema['output_types']]
+        assert 'claude_cross_session_search' in types
+
+    def test_example_queries_include_sessions_search(self):
+        schema = ClaudeAdapter.get_schema()
+        uris = [e['uri'] for e in schema['example_queries']]
+        assert any('sessions' in u and 'search' in u for u in uris)
+
+    def test_notes_mention_cross_session_search(self):
+        schema = ClaudeAdapter.get_schema()
+        notes_text = ' '.join(schema['notes'])
+        assert 'cross-session' in notes_text.lower() or 'sessions' in notes_text.lower()
+
+    def test_cross_session_schema_has_match_count_field(self):
+        schema = ClaudeAdapter.get_schema()
+        cs_type = next(t for t in schema['output_types'] if t['type'] == 'claude_cross_session_search')
+        props = cs_type['schema']['properties']
+        assert 'match_count' in props
+        assert 'matches' in props
+
+    def test_help_examples_include_cross_session_search(self):
+        help_data = ClaudeAdapter.get_help()
+        example_uris = [e.get('uri', '') for e in help_data.get('examples', [])]
+        assert any('sessions' in u and 'search' in u for u in example_uris)

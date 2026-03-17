@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
 
 from ..ast.analysis import collect_structures, is_code_file
+from ..ast.call_graph import build_alias_map
 
 # Module-level cache: directory → (cache_key, index)
 # cache_key is a frozenset of (abspath_str, mtime_ns) so it's hashable.
@@ -77,6 +78,12 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
 
     for file_struct in structures:
         file_path = file_struct.get('file', '')
+        # Build alias → canonical name map for this file so that calls using
+        # an import alias (e.g. `h` for `from utils import helper as h`) also
+        # index the definition name (`helper`).  This prevents find_uncalled
+        # from falsely reporting `helper` as dead code and lets find_callers
+        # locate callers that use the alias.
+        alias_map = build_alias_map(file_path)
         for elem in file_struct.get('elements', []):
             if elem.get('category') not in ('functions', 'methods'):
                 continue
@@ -95,6 +102,10 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
                 # Also index the full dotted form in case callers use it
                 if bare != callee:
                     index.setdefault(callee, []).append(record)
+                # Also index the canonical name when bare is an import alias
+                canonical = alias_map.get(bare)
+                if canonical and canonical != bare:
+                    index.setdefault(canonical, []).append(record)
 
     _INDEX_CACHE[dir_str] = (cache_key, index)
     return index
@@ -206,6 +217,126 @@ def find_callers(
         'depth': depth,
         'total_callers': sum(len(lvl['callers']) for lvl in levels),
         'levels': levels,
+    }
+
+
+def find_uncalled(
+    path: str,
+    only_functions: bool = False,
+    top: int = 0,
+) -> Dict[str, Any]:
+    """Find functions/methods defined but never called within the project.
+
+    Uses the callers index (set of all callees) and subtracts from the full
+    set of function/method definitions.  In-degree = 0 → nothing in the
+    project statically calls this symbol.
+
+    Automatically excluded (implicitly invoked, not statically reachable):
+    - ``__dunder__`` methods (``__init__``, ``__str__``, etc.)
+    - Functions decorated with ``@property``, ``@classmethod``, ``@staticmethod``
+
+    Args:
+        path: Root directory (or file) to analyse.
+        only_functions: If True, skip methods (category='methods') — useful
+            to focus on module-level dead code.
+        top: If > 0, limit results to this many entries sorted by file mtime
+            descending (most-recently-added uncalled first).
+
+    Returns:
+        Dict with ``path``, ``total_defined``, ``total_uncalled``, and
+        ``entries`` (list of uncalled symbols).
+    """
+    path_obj = Path(path)
+    is_file = path_obj.is_file()
+    directory = path_obj.parent if is_file else path_obj
+    # When a single file is given, scope definitions to that file only.
+    # The callers index is still built from the full directory so cross-file
+    # call sites are counted (a file-local function called from a sibling is
+    # NOT dead code).
+    file_filter: Optional[str] = str(path_obj.resolve()) if is_file else None
+
+    # Build the callers index — keys are all names that appear as callees.
+    callers_index = build_callers_index(path)
+    called_names: Set[str] = set(callers_index.keys())
+
+    # Implicit-call decorators — these are dispatched by the runtime, not
+    # by explicit call expressions in source code.
+    _IMPLICIT_DECORATORS = frozenset({'property', 'classmethod', 'staticmethod'})
+
+    structures = collect_structures(str(directory))
+
+    total_defined = 0
+    entries = []
+
+    for file_struct in structures:
+        file_path = file_struct.get('file', '')
+        # When scoped to a single file, skip definitions from other files.
+        if file_filter and str(Path(file_path).resolve()) != file_filter:
+            continue
+        for elem in file_struct.get('elements', []):
+            if elem.get('category') not in ('functions', 'methods'):
+                continue
+
+            name = elem.get('name', '')
+            if not name:
+                continue
+
+            # Determine if this looks like a class method based on signature.
+            # Analyzers commonly emit everything as 'functions', so we use the
+            # first parameter name as the signal: self/cls → method.
+            sig = elem.get('signature', '')
+            decorators = elem.get('decorators', [])
+            decorator_names = {d.split('.')[-1].lstrip('@') for d in decorators}
+            is_method = (
+                elem.get('category') == 'methods'
+                or sig.startswith('(self') or sig.startswith('(cls')
+                or 'classmethod' in decorator_names
+                or 'staticmethod' in decorator_names
+            )
+
+            if only_functions and is_method:
+                continue
+
+            total_defined += 1
+
+            # Skip dunders — they are called implicitly by Python protocols.
+            if name.startswith('__') and name.endswith('__'):
+                continue
+
+            # Skip implicitly-dispatched decorators.
+            if decorator_names & _IMPLICIT_DECORATORS:
+                continue
+
+            # Check both the bare name and any dotted aliases (e.g. "self.foo").
+            if name in called_names:
+                continue
+
+            entries.append({
+                'name': name,
+                'file': file_path,
+                'line': elem.get('line', 0),
+                'category': 'methods' if is_method else 'functions',
+                'is_private': name.startswith('_'),
+            })
+
+    # Sort by file mtime descending (most-recently-added first), then file+line.
+    def _mtime(entry: Dict[str, Any]) -> float:
+        try:
+            return -os.stat(entry['file']).st_mtime
+        except OSError:
+            return 0.0
+
+    entries.sort(key=lambda e: (_mtime(e), e['file'], e['line']))
+
+    if top > 0:
+        entries = entries[:top]
+
+    return {
+        'query': 'uncalled',
+        'path': path,
+        'total_defined': total_defined,
+        'total_uncalled': len(entries),
+        'entries': entries,
     }
 
 

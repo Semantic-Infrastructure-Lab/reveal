@@ -140,25 +140,33 @@ def diff_functions(left_funcs: List[Dict],
     # Added functions
     for name in sorted(added_names):
         func = right_names[name]
+        cx_after = func.get('complexity')
         details.append({
             'type': 'added',
             'name': name,
             'line': func.get('line'),
             'signature': func.get('signature'),
             'complexity': func.get('complexity'),
-            'line_count': func.get('line_count')
+            'line_count': func.get('line_count'),
+            'complexity_before': None,
+            'complexity_after': cx_after,
+            'complexity_delta': cx_after,
         })
 
     # Removed functions
     for name in sorted(removed_names):
         func = left_names[name]
+        cx_before = func.get('complexity')
         details.append({
             'type': 'removed',
             'name': name,
             'line': func.get('line'),
             'signature': func.get('signature'),
             'complexity': func.get('complexity'),
-            'line_count': func.get('line_count')
+            'line_count': func.get('line_count'),
+            'complexity_before': cx_before,
+            'complexity_after': None,
+            'complexity_delta': -cx_before if cx_before is not None else None,
         })
 
     # Modified functions
@@ -170,12 +178,17 @@ def diff_functions(left_funcs: List[Dict],
         if function_changed(left_func, right_func):
             modified_count += 1
             changes = _compute_function_changes(left_func, right_func)
+            cx_before = left_func.get('complexity', 0)
+            cx_after = right_func.get('complexity', 0)
             details.append({
                 'type': 'modified',
                 'name': name,
                 'changes': changes,
                 'left': left_func,
-                'right': right_func
+                'right': right_func,
+                'complexity_before': cx_before,
+                'complexity_after': cx_after,
+                'complexity_delta': cx_after - cx_before,
             })
 
     summary = {
