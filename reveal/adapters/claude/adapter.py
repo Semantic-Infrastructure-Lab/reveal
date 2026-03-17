@@ -130,6 +130,12 @@ _SCHEMA_OUTPUT_TYPES = [
     _make_output_type('claude_file_sessions', 'Sessions that touched a specific file', {
         'file': {'type': 'string'}, 'sessions': {'type': 'array'}, 'total': {'type': 'integer'}
     }),
+    _make_output_type('claude_chain', 'Session continuation chain traversal via README continuing_from: links', {
+        'session': {'type': 'string'},
+        'chain': {'type': 'array'},
+        'chain_length': {'type': 'integer'},
+        'sessions_dir': {'type': 'string'},
+    }),
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [

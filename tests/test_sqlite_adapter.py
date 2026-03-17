@@ -409,6 +409,84 @@ class TestSQLiteAdapterErrors(unittest.TestCase):
             if os.path.exists(db_path):
                 safe_unlink(db_path)
 
+    def test_corrupt_database(self):
+        """Should raise IOError for corrupt database file."""
+        temp_db = tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.db')
+        temp_db.write(b'this is not a sqlite database - just garbage bytes')
+        temp_db.close()
+        db_path = temp_db.name
+
+        try:
+            adapter = SQLiteAdapter(f"sqlite://{db_path}")
+            with self.assertRaises(IOError):
+                adapter.get_structure()
+        finally:
+            if os.path.exists(db_path):
+                safe_unlink(db_path)
+
+    def test_unreadable_database(self):
+        """Should raise PermissionError for unreadable database file."""
+        if os.getuid() == 0:
+            self.skipTest("Cannot test file permissions as root")
+
+        temp_db = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.db')
+        temp_db.close()
+        db_path = temp_db.name
+
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.close()
+            os.chmod(db_path, 0o000)
+
+            adapter = SQLiteAdapter(f"sqlite://{db_path}")
+            with self.assertRaises(PermissionError):
+                adapter.get_structure()
+        finally:
+            os.chmod(db_path, 0o600)
+            if os.path.exists(db_path):
+                safe_unlink(db_path)
+
+    def test_get_element_missing_table(self):
+        """get_element returns None for non-existent table."""
+        temp_db = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.db')
+        temp_db.close()
+        db_path = temp_db.name
+
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.close()
+
+            adapter = SQLiteAdapter(f"sqlite://{db_path}")
+            result = adapter.get_element("nonexistent_table")
+            self.assertIsNone(result)
+        finally:
+            if os.path.exists(db_path):
+                safe_unlink(db_path)
+
+    def test_get_element_output_contract_fields(self):
+        """get_element result must include output contract fields."""
+        temp_db = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.db')
+        temp_db.close()
+        db_path = temp_db.name
+
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT)")
+            conn.commit()
+            conn.close()
+
+            adapter = SQLiteAdapter(f"sqlite://{db_path}")
+            result = adapter.get_element("items")
+            self.assertIsNotNone(result)
+            self.assertIn('contract_version', result)
+            self.assertIn('type', result)
+            self.assertIn('source', result)
+            self.assertIn('source_type', result)
+            self.assertEqual(result['type'], 'sqlite_table')
+        finally:
+            if os.path.exists(db_path):
+                safe_unlink(db_path)
+
 
 class TestSQLiteAdapterHelp(unittest.TestCase):
     """Test help documentation."""

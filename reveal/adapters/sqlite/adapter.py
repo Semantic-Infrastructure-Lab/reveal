@@ -218,6 +218,11 @@ class SQLiteAdapter(ResourceAdapter):
 
         Returns:
             SQLite connection object
+
+        Raises:
+            FileNotFoundError: When database file does not exist
+            PermissionError: When database file cannot be read
+            IOError: When database cannot be opened (corrupt, encrypted, locked)
         """
         if self._connection is None:
             if not self.db_path:
@@ -226,10 +231,23 @@ class SQLiteAdapter(ResourceAdapter):
             if not os.path.exists(self.db_path):
                 raise FileNotFoundError(f"Database file not found: {self.db_path}")
 
+            if not os.access(self.db_path, os.R_OK):
+                raise PermissionError(f"Database file is not readable: {self.db_path}")
+
             # Open in read-only mode for safety
             uri = f"file:{self.db_path}?mode=ro"
-            self._connection = sqlite3.connect(uri, uri=True)
-            self._connection.row_factory = sqlite3.Row
+            try:
+                self._connection = sqlite3.connect(uri, uri=True)
+                self._connection.row_factory = sqlite3.Row
+                # Verify the file is actually a valid SQLite database
+                self._connection.execute("SELECT sqlite_version()")
+            except sqlite3.DatabaseError as e:
+                raise IOError(
+                    f"Cannot open '{self.db_path}': file is not a valid SQLite database "
+                    f"(corrupt or encrypted): {e}"
+                ) from e
+            except sqlite3.OperationalError as e:
+                raise IOError(f"Cannot open database '{self.db_path}': {e}") from e
 
         return self._connection
 
@@ -241,11 +259,20 @@ class SQLiteAdapter(ResourceAdapter):
 
         Returns:
             List of result rows as dictionaries
+
+        Raises:
+            RuntimeError: When query execution fails
+            IOError: When database becomes unreadable during execution
         """
         conn = self._get_connection()
-        cursor = conn.execute(query)
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
+        try:
+            cursor = conn.execute(query)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+        except sqlite3.DatabaseError as e:
+            raise IOError(f"Database error during query: {e}") from e
+        except sqlite3.OperationalError as e:
+            raise RuntimeError(f"Query failed: {e}") from e
 
     def _execute_single(self, query: str) -> Optional[Dict[str, Any]]:
         """Execute a query and return single result as dict.
@@ -269,25 +296,29 @@ class SQLiteAdapter(ResourceAdapter):
 
         Returns:
             Dict with page_size, page_count, journal_mode, encoding, foreign_keys
+
+        Raises:
+            IOError: When PRAGMA queries fail (database may be corrupt)
         """
-        # PRAGMA queries always return results, so we can safely assert non-None
-        page_size_result = self._execute_single("PRAGMA page_size")
-        assert page_size_result is not None
-        page_count_result = self._execute_single("PRAGMA page_count")
-        assert page_count_result is not None
-        journal_mode_result = self._execute_single("PRAGMA journal_mode")
-        assert journal_mode_result is not None
-        encoding_result = self._execute_single("PRAGMA encoding")
-        assert encoding_result is not None
-        foreign_keys_result = self._execute_single("PRAGMA foreign_keys")
-        assert foreign_keys_result is not None
+        pragmas = {
+            'page_size': self._execute_single("PRAGMA page_size"),
+            'page_count': self._execute_single("PRAGMA page_count"),
+            'journal_mode': self._execute_single("PRAGMA journal_mode"),
+            'encoding': self._execute_single("PRAGMA encoding"),
+            'foreign_keys': self._execute_single("PRAGMA foreign_keys"),
+        }
+        for name, result in pragmas.items():
+            if result is None:
+                raise IOError(
+                    f"PRAGMA {name} returned no results — database may be corrupt: {self.db_path}"
+                )
 
         return {
-            'page_size': page_size_result['page_size'],
-            'page_count': page_count_result['page_count'],
-            'journal_mode': journal_mode_result['journal_mode'],
-            'encoding': encoding_result['encoding'],
-            'foreign_keys': foreign_keys_result['foreign_keys'],
+            'page_size': pragmas['page_size']['page_size'],
+            'page_count': pragmas['page_count']['page_count'],
+            'journal_mode': pragmas['journal_mode']['journal_mode'],
+            'encoding': pragmas['encoding']['encoding'],
+            'foreign_keys': pragmas['foreign_keys']['foreign_keys'],
         }
 
     def _get_table_stats(self, tables: list) -> list:
@@ -365,11 +396,12 @@ class SQLiteAdapter(ResourceAdapter):
                 return element_data
             raise ValueError(f"Table not found: {self.table}")
 
-        # Validate connection first (checks file existence)
+        # Validate connection first (checks file existence, permissions, and validity)
         self._get_connection()
 
-        # After successful connection, db_path is guaranteed to be non-None
-        assert self.db_path is not None
+        # db_path is guaranteed non-None after successful _parse_connection_string
+        if not self.db_path:
+            raise ValueError("No database path available after connection")
 
         # Get database file info
         db_size = os.path.getsize(self.db_path)
@@ -377,7 +409,8 @@ class SQLiteAdapter(ResourceAdapter):
 
         # Get SQLite version
         version_info = self._execute_single("SELECT sqlite_version() as version")
-        assert version_info is not None, "SQLite version query should always return a result"
+        if version_info is None:
+            raise IOError(f"Failed to read SQLite version — database may be corrupt: {self.db_path}")
 
         # Get PRAGMA information
         pragma_info = self._get_pragma_info()
@@ -502,7 +535,10 @@ class SQLiteAdapter(ResourceAdapter):
         )
 
         return {
+            'contract_version': '1.0',
             'type': 'sqlite_table',
+            'source': self.db_path,
+            'source_type': 'table',
             'database': self.db_path,
             'table': element_name,
             'row_count': row_count,
