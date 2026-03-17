@@ -385,10 +385,9 @@ This benefits `?uncalled` accuracy and also `?target=helper` (currently misses c
 
 ### Additional Subcommands
 
-Six subcommands (`check`, `review`, `pack`, `health`, `dev`, `hotspots`) shipped. Remaining subcommand ideas:
+Seven subcommands (`check`, `review`, `pack`, `health`, `dev`, `hotspots`, `overview`) shipped. Remaining subcommand ideas:
 
 ```bash
-reveal overview              # Auto-generated repo summary
 reveal onboarding            # First-day guide for unfamiliar codebases
 reveal audit                 # Security/compliance focus (S, B, N rules)
 reveal deps                  # Full dependency analysis (wraps imports://)

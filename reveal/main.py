@@ -78,6 +78,7 @@ def _dispatch_subcommand() -> bool:
         'dev':      ('reveal.cli.commands.dev',      'create_dev_parser',      'run_dev'),
         'health':   ('reveal.cli.commands.health',   'create_health_parser',   'run_health'),
         'hotspots': ('reveal.cli.commands.hotspots', 'create_hotspots_parser', 'run_hotspots'),
+        'overview': ('reveal.cli.commands.overview', 'create_overview_parser', 'run_overview'),
         'pack':     ('reveal.cli.commands.pack',     'create_pack_parser',     'run_pack'),
         'review':   ('reveal.cli.commands.review',   'create_review_parser',   'run_review'),
         'scaffold': ('reveal.cli.commands.scaffold', 'create_scaffold_parser', 'run_scaffold'),
