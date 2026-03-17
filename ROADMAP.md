@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-16 (warming-ice-0316 — BACK-076 shipped; 6,268 tests)
+> **Last updated**: 2026-03-17 (timeless-antimatter-0317 — BACK-077/078 shipped; 6,550 tests; BACK-079–084 filed)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -378,6 +378,126 @@ Phase 3 already built `resolve_callees()` and `build_symbol_map()` which map imp
 Implementation: in `build_callers_index`, optionally call `build_symbol_map` per file and use `resolve_callees` to expand aliased calls to their canonical names before inserting into the index. Both resolved and bare names should be indexed (aliases could point to third-party names we don't want to falsely exclude).
 
 This benefits `?uncalled` accuracy and also `?target=helper` (currently misses callers using the alias).
+
+---
+
+### BACK-077: `--validate-nginx` KeyError crash
+
+**Status**: ✅ Shipped (session topaz-flash-0317)
+**Value**: High | **Lift**: Small
+
+`render_check()` had no routing branch for the `ssl_nginx_validation` result type. Every invocation of `--validate-nginx` crashed with a `KeyError` on `result['host']`. Added the missing branch. Also removed a duplicate `@staticmethod` decorator. 3 tests.
+
+---
+
+### BACK-078: OCSP URL availability in `--advanced`
+
+**Status**: ✅ Shipped (session topaz-flash-0317)
+**Value**: Medium | **Lift**: Small
+
+`CertificateInfo` gains `ocsp_url: Optional[str]` extracted from the AIA extension via the `cryptography` library. `_check_ocsp_availability()` added to `_run_advanced_checks`; emits `info`-level finding. Let's Encrypt ECDSA certs (which dropped OCSP stapling in 2024) get a specific explanatory note. 4 tests.
+
+---
+
+### BACK-079: `letsencrypt://` adapter — orphan and duplicate cert detection
+
+**Status**: 🔲 Not started
+**Value**: High | **Lift**: Medium
+
+Reveal already reads nginx configs and knows which `ssl_certificate` paths are in active use. A `letsencrypt://` adapter can cross-reference `/etc/letsencrypt/live/` against those paths to surface orphaned certs (present on disk but not referenced by any vhost) and duplicate certs (different paths, identical SANs).
+
+```bash
+reveal letsencrypt://                    # list all certs + expiry
+reveal letsencrypt:// --check-orphans    # certs not referenced by any nginx ssl_certificate
+reveal letsencrypt:// --check-duplicates # certs with identical SANs
+```
+
+Implementation: walks `/etc/letsencrypt/live/*/cert.pem`, reads SANs + expiry via the `cryptography` lib, joins against `extract_ssl_domains()` output from the nginx analyzer. No new dependencies. `certbot renew --dry-run` (command execution) is out of scope unless explicitly requested.
+
+---
+
+### BACK-080: Remote nginx HTTP probe mode
+
+**Status**: 🔲 Not started
+**Value**: Medium | **Lift**: Medium
+
+Complement to `--validate-nginx`: instead of parsing config files locally, issue a live HTTP probe to a running nginx instance to verify redirect chains, ACME challenge paths, and header presence. Useful when config files are on a remote server or inside a container.
+
+```bash
+reveal ssl://example.com --probe-http     # follow redirect chain, verify HTTPS
+reveal nginx://example.com --probe        # live HTTP vs config cross-check
+```
+
+---
+
+### BACK-081: Refactor `_parse_xmla` — complexity 64
+
+**Status**: 🔲 Not started
+**Value**: Medium | **Lift**: Medium
+**Location**: `reveal/adapters/xlsx.py:903`
+
+One 111-line function doing four unrelated things: UTF-16 decode + CDATA unwrap, table/column extraction, DAX measure extraction, and relationship graph parsing (including a nested `_parse_end` closure inside a loop). Cyclomatic complexity: 64.
+
+Refactor path:
+```python
+_parse_xmla_tables(root, local)       # ~25L — table/column extraction
+_parse_xmla_measures(root, local)     # ~20L — DAX regex extraction
+_parse_xmla_dim_id_map(root, local)   # ~10L — dim ID → name map
+_parse_xmla_relationships(root, local, dim_id_to_name)  # ~25L — relationship graph
+_parse_end(end, local, dim_id_to_name)  # module-level helper, not a closure
+```
+
+`_parse_xmla` becomes an ~20-line orchestrator that calls these and merges results.
+
+---
+
+### BACK-082: Refactor `_render_powerpivot` — complexity 34
+
+**Status**: 🔲 Not started
+**Value**: Low | **Lift**: Small
+**Location**: `reveal/adapters/xlsx.py:153`
+
+106-line function with five `elif mode ==` branches, each a separate rendering path. Classic "one function with a mode flag" antipattern.
+
+Refactor path: dispatch table or named helpers:
+```python
+_render_powerpivot_tables(result, filename, tables, xmla_available)
+_render_powerpivot_schema(result, filename, tables, measures, xmla_available)
+_render_powerpivot_measures(filename, measures)
+_render_powerpivot_dax(filename, measures)
+_render_powerpivot_relationships(filename, relationships, xmla_available)
+```
+
+`_render_powerpivot` becomes a ~15-line dispatcher.
+
+---
+
+### BACK-083: `calls://?uncalled` false positives for runtime-dispatched functions
+
+**Status**: 🔲 Not started
+**Value**: Medium | **Lift**: Small
+**Location**: `reveal/adapters/calls/index.py`, `reveal/docs/CALLS_ADAPTER_GUIDE.md`
+
+Dogfooding reveal on itself (session timeless-antimatter-0317) shows 20 "uncalled" results, all false positives:
+- **MCP `@tool`-decorated functions** (`reveal_structure`, `reveal_element`, etc.) — called by FastMCP at runtime via decorator registration, not via explicit call expressions
+- **Console script entry points** (`main`, `list_supported_types`, `create_deps_parser`, `run_deps`) — called by pip-installed scripts
+- **Renderer dispatch functions** (`_render_help_static_guide`, etc.) — called via dict lookup, not explicit call syntax
+
+Two fixes needed:
+1. **Docs**: Add a "Known false-positive patterns" section to `CALLS_ADAPTER_GUIDE.md` explaining these three cases with examples
+2. **Code**: Consider a `# noqa: uncalled` inline suppression so users can annotate known entry points. Currently there is no escape hatch.
+
+---
+
+### BACK-084: Split `_handle_validate_nginx_acme` text/json render paths — complexity 25
+
+**Status**: 🔲 Not started
+**Value**: Low | **Lift**: Small
+**Location**: `reveal/file_handler.py:212`
+
+77-line function with interleaved json/text output branches plus verbose handling. Complexity 25.
+
+Refactor path: extract `_render_acme_json(results, only_failures)` and `_render_acme_text(results, analyzer, only_failures, verbose)`. `_handle_validate_nginx_acme` becomes ~20 lines of setup + dispatch.
 
 ---
 

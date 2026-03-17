@@ -164,6 +164,8 @@ class HelpAdapter(ResourceAdapter):
         'health': 'SUBCOMMANDS_GUIDE.md',  # reveal health subcommand
         'pack': 'SUBCOMMANDS_GUIDE.md',    # reveal pack subcommand
         'schema': 'SCHEMA_VALIDATION_HELP.md',  # schema validation (alias)
+        'mcp': 'MCP_SETUP.md',             # MCP server setup and tools
+        'mcp-setup': 'MCP_SETUP.md',       # Alias for mcp
     }
 
     @staticmethod

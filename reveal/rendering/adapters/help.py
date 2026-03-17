@@ -13,7 +13,7 @@ PROJECT_ADAPTERS = {'claude'}
 
 GUIDE_CATEGORIES = {
     'getting_started': ['quick-start'],
-    'ai_guides': ['agent', 'agent-full'],
+    'ai_guides': ['agent', 'agent-full', 'mcp'],
     'feature_guides': ['python-guide', 'markdown', 'reveal-guide', 'html', 'configuration', 'schemas', 'duplicates'],
     'best_practices': ['anti-patterns', 'tricks'],
     'dev_guides': ['adapter-authoring', 'help', 'release'],
@@ -306,7 +306,9 @@ def _get_guide_description(topic: str) -> str:
         'adapter-authoring': 'Build your own adapters',
         'tricks': 'Cool tricks and hidden features',
         'help': 'How the help system works (meta!)',
-        'release': 'Release process for maintainers'
+        'release': 'Release process for maintainers',
+        'mcp': 'MCP server setup — 5 tools for Claude Code, Cursor, Windsurf',
+        'mcp-setup': 'Alias for mcp',
     }
     return descriptions.get(topic, 'Static guide')
 
