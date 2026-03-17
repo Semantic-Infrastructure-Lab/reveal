@@ -667,7 +667,10 @@ class NginxUriAdapter(ResourceAdapter):
             )
 
         return {
+            'contract_version': '1.0',
             'type': 'nginx_sites_overview',
+            'source': 'nginx://',
+            'source_type': 'runtime',
             'sites': sites,
             'artifact_files': artifact_files,
             'next_steps': next_steps,

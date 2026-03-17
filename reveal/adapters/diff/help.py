@@ -13,15 +13,15 @@ _SCHEMA_COMPARISON_TYPES = [
 
 _SCHEMA_OUTPUT_TYPES = [
     {
-        'type': 'diff',
+        'type': 'diff_comparison',
         'description': 'Comparison result showing differences between resources',
         'schema': {
             'type': 'object',
             'properties': {
                 'contract_version': {'type': 'string'},
-                'type': {'type': 'string', 'const': 'diff'},
+                'type': {'type': 'string', 'const': 'diff_comparison'},
                 'source': {'type': 'string'},
-                'source_type': {'type': 'string', 'const': 'comparison'},
+                'source_type': {'type': 'string', 'const': 'runtime'},
                 'left': {'type': 'object', 'properties': {'uri': {'type': 'string'}, 'type': {'type': 'string'}}},
                 'right': {'type': 'object', 'properties': {'uri': {'type': 'string'}, 'type': {'type': 'string'}}},
                 'summary': {
@@ -38,9 +38,9 @@ _SCHEMA_OUTPUT_TYPES = [
         },
         'example': {
             'contract_version': '1.0',
-            'type': 'diff',
+            'type': 'diff_comparison',
             'source': 'diff://app.py:backup/app.py',
-            'source_type': 'comparison',
+            'source_type': 'runtime',
             'left': {'uri': 'app.py', 'type': 'file'},
             'right': {'uri': 'backup/app.py', 'type': 'file'},
             'summary': {'added': 5, 'removed': 3, 'modified': 2, 'unchanged': 100}
@@ -49,21 +49,21 @@ _SCHEMA_OUTPUT_TYPES = [
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
-    {'uri': 'diff://app.py:backup/app.py', 'description': 'Compare two files', 'output_type': 'diff'},
+    {'uri': 'diff://app.py:backup/app.py', 'description': 'Compare two files', 'output_type': 'diff_comparison'},
     {
         'uri': 'diff://app.py:git://app.py@HEAD~1',
         'description': 'Compare current file to git version (1 commit ago)',
-        'output_type': 'diff',
+        'output_type': 'diff_comparison',
         'note': 'Git URIs use path@ref format, not ref:path'
     },
-    {'uri': 'diff://git://app.py@main:git://app.py@develop', 'description': 'Compare file across two git branches', 'output_type': 'diff'},
-    {'uri': 'diff://env://:env://production', 'description': 'Compare local environment to production', 'output_type': 'diff'},
-    {'uri': 'diff://mysql://prod/db:mysql://staging/db', 'description': 'Database schema drift detection', 'output_type': 'diff'},
+    {'uri': 'diff://git://app.py@main:git://app.py@develop', 'description': 'Compare file across two git branches', 'output_type': 'diff_comparison'},
+    {'uri': 'diff://env://:env://production', 'description': 'Compare local environment to production', 'output_type': 'diff_comparison'},
+    {'uri': 'diff://mysql://prod/db:mysql://staging/db', 'description': 'Database schema drift detection', 'output_type': 'diff_comparison'},
     {
         'uri': 'diff://app.py:old.py/handle_request',
         'description': 'Compare specific function across versions',
         'element': 'handle_request',
-        'output_type': 'diff'
+        'output_type': 'diff_comparison'
     }
 ]
 

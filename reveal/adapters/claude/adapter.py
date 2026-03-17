@@ -124,6 +124,12 @@ _SCHEMA_OUTPUT_TYPES = [
         'displayed_count': {'type': 'integer'},
         'matches': {'type': 'array'},
     }),
+    _make_output_type('claude_session_list', 'List of all Claude sessions with metadata', {
+        'sessions': {'type': 'array'}, 'total': {'type': 'integer'}
+    }),
+    _make_output_type('claude_file_sessions', 'Sessions that touched a specific file', {
+        'file': {'type': 'string'}, 'sessions': {'type': 'array'}, 'total': {'type': 'integer'}
+    }),
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [

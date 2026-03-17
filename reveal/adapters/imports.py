@@ -42,6 +42,21 @@ _SCHEMA_QUERY_PARAMS = {
 
 _SCHEMA_OUTPUT_TYPES = [
     {
+        'type': 'imports',
+        'description': 'Full import listing for all files in the codebase (default output)',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'imports'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string'},
+                'files': {'type': 'object'},
+                'metadata': {'type': 'object'}
+            }
+        }
+    },
+    {
         'type': 'import_summary',
         'description': 'Overview of all imports in codebase',
         'schema': {

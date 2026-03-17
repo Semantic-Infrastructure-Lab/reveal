@@ -821,9 +821,9 @@ class TestDiffAdapterSchema(unittest.TestCase):
         self.assertIn('output_types', schema)
         self.assertTrue(len(schema['output_types']) >= 1)
 
-        # Should have diff output type
+        # Should have diff_comparison output type
         output_types = [ot['type'] for ot in schema['output_types']]
-        self.assertIn('diff', output_types)
+        self.assertIn('diff_comparison', output_types)
 
     def test_schema_examples(self):
         """Schema should include usage examples."""
