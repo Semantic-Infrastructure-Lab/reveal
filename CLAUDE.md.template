@@ -1,0 +1,61 @@
+# Code Exploration: Use Reveal Instead of Cat
+
+This project uses **reveal** (`pip install reveal-cli`) for token-efficient codebase exploration.
+
+## Always Use Reveal for Code Navigation
+
+Replace these common patterns:
+
+| Instead of | Use |
+|-----------|-----|
+| `cat src/auth.py` | `reveal src/auth.py` |
+| `cat src/auth.py \| grep def` | `reveal src/auth.py` |
+| `find . -name "*.py" \| head -20` | `reveal src/` |
+| `grep -r "validate_token" src/` | `reveal 'calls://src/?target=validate_token'` |
+
+## Progressive Disclosure Workflow
+
+Always go structure → element, never file-dump first:
+
+```bash
+reveal src/                          # 1. What files exist? (50-200 tokens)
+reveal src/auth.py                   # 2. What functions? (200-500 tokens)
+reveal src/auth.py validate_token    # 3. One function (100-300 tokens)
+```
+
+This costs ~500 tokens total. `cat src/auth.py` alone costs 2,000-8,000 tokens.
+
+## PR Review Context
+
+```bash
+reveal pack src/ --since main --budget 8000 --content
+```
+
+One call: changed files first, then key dependencies, structure included.
+No need to read each changed file separately.
+
+## Common Queries
+
+```bash
+# Find dead code
+reveal 'calls://src/?uncalled'
+
+# Impact radius before refactoring
+reveal 'calls://src/?target=my_function&depth=3'
+
+# Unused imports
+reveal 'imports://src/?unused'
+
+# High-complexity code
+reveal 'ast://src/?complexity>10&sort=-complexity'
+
+# Quality check
+reveal check src/
+```
+
+## Key Rules
+
+1. **Never `cat` a file you haven't first `reveal`ed** — you'll read 10× more than you need
+2. **`reveal dir/` before `reveal file.py`** — understand the shape before the content
+3. **`reveal file.py fn`** to read one function — don't read the whole file for one function
+4. If you're about to read more than 3 files with `cat`, use `reveal pack` instead
