@@ -75,6 +75,7 @@ def _dispatch_subcommand() -> bool:
     # Each entry: subcommand name -> (parser_factory, runner)
     _SUBCOMMANDS = {
         'check':    ('reveal.cli.commands.check',    'create_check_parser',    'run_check'),
+        'deps':     ('reveal.cli.commands.deps',     'create_deps_parser',     'run_deps'),
         'dev':      ('reveal.cli.commands.dev',      'create_dev_parser',      'run_dev'),
         'health':   ('reveal.cli.commands.health',   'create_health_parser',   'run_health'),
         'hotspots': ('reveal.cli.commands.hotspots', 'create_hotspots_parser', 'run_hotspots'),

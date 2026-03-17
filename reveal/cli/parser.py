@@ -133,6 +133,7 @@ def _build_subcommands_section() -> str:
     return '''
 Subcommands (reveal <subcommand> --help for details):
   reveal overview [path]  One-glance dashboard: languages, quality, hotspots, recent git
+  reveal deps [path]      Dependency health: external packages, circular deps, unused imports
   reveal check <path>     Run quality rules on a file or directory
                           (replaces: reveal <path> --check)
 '''
