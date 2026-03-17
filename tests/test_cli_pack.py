@@ -17,6 +17,10 @@ from reveal.cli.commands.pack import (
     _walk_files,
     _count_lines,
     _collect_candidates,
+    _get_changed_files,
+    _get_file_structure,
+    _emit_content_section,
+    _collect_file_contents,
     _render_pack,
     _print_file_line,
     run_pack,
@@ -529,6 +533,462 @@ class TestRunPack(unittest.TestCase):
                 run_pack(args)
             # Should not crash; auth.py should appear
             self.assertIn("auth.py", buf.getvalue())
+
+
+# ---------------------------------------------------------------------------
+# _compute_priority: is_changed boost
+# ---------------------------------------------------------------------------
+
+class TestComputePriorityChanged(unittest.TestCase):
+
+    def _make_file(self, tmpdir: Path, rel: str, content: str = "x") -> tuple:
+        p = tmpdir / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content)
+        return p, Path(rel)
+
+    def test_changed_file_gets_highest_priority(self):
+        with tempfile.TemporaryDirectory() as d:
+            p, rel = self._make_file(Path(d), "utils.py")
+            changed = _compute_priority(p, rel, focus=None, is_changed=True)
+            unchanged = _compute_priority(p, rel, focus=None, is_changed=False)
+            self.assertGreater(changed, unchanged)
+
+    def test_changed_score_above_entry_point(self):
+        """Changed file should rank above entry points (score > 10)."""
+        with tempfile.TemporaryDirectory() as d:
+            p, rel = self._make_file(Path(d), "utils.py")
+            entry, entry_rel = self._make_file(Path(d), "main.py")
+            changed_score = _compute_priority(p, rel, focus=None, is_changed=True)
+            entry_score = _compute_priority(entry, entry_rel, focus=None, is_changed=False)
+            self.assertGreater(changed_score, entry_score)
+
+    def test_changed_entry_point_stacks(self):
+        """A changed entry point gets both boosts."""
+        with tempfile.TemporaryDirectory() as d:
+            p, rel = self._make_file(Path(d), "main.py")
+            changed = _compute_priority(p, rel, focus=None, is_changed=True)
+            unchanged = _compute_priority(p, rel, focus=None, is_changed=False)
+            self.assertGreater(changed, unchanged + 15)  # 20 point boost
+
+
+# ---------------------------------------------------------------------------
+# _collect_candidates: changed_files set
+# ---------------------------------------------------------------------------
+
+class TestCollectCandidatesChanged(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.path = Path(self.tmpdir)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _make(self, rel: str, content: str = "x\n") -> Path:
+        p = self.path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content)
+        return p
+
+    def test_changed_file_gets_changed_flag(self):
+        f = self._make("utils.py", "x\n")
+        candidates = _collect_candidates(self.path, focus=None, changed_files={str(f.resolve())})
+        entry = next(c for c in candidates if c['relative'] == 'utils.py')
+        self.assertTrue(entry['changed'])
+
+    def test_unchanged_file_has_changed_false(self):
+        self._make("utils.py")
+        candidates = _collect_candidates(self.path, focus=None, changed_files=set())
+        entry = next(c for c in candidates if c['relative'] == 'utils.py')
+        self.assertFalse(entry['changed'])
+
+    def test_changed_file_sorts_first(self):
+        self._make("aaa.py", "x\n")
+        changed = self._make("zzz.py", "x\n")
+        candidates = _collect_candidates(
+            self.path, focus=None, changed_files={str(changed.resolve())}
+        )
+        self.assertEqual(candidates[0]['relative'], 'zzz.py')
+
+    def test_no_changed_files_arg_defaults_to_no_boost(self):
+        self._make("utils.py")
+        candidates = _collect_candidates(self.path, focus=None)
+        for c in candidates:
+            self.assertFalse(c.get('changed'))
+
+
+# ---------------------------------------------------------------------------
+# _get_changed_files: git subprocess
+# ---------------------------------------------------------------------------
+
+class TestGetChangedFiles(unittest.TestCase):
+
+    def test_not_a_git_repo_returns_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            changed, err = _get_changed_files(Path(d), 'main')
+            self.assertEqual(changed, set())
+            self.assertIsNotNone(err)
+            self.assertIn('git', err.lower())
+
+    def test_bad_ref_returns_error(self):
+        """An unknown git ref returns an error message, not an exception."""
+        import subprocess as sp
+        # Only run if the test directory is inside a git repo
+        try:
+            result = sp.run(['git', 'rev-parse', '--show-toplevel'],
+                            capture_output=True, text=True,
+                            cwd=str(Path(__file__).parent))
+            if result.returncode != 0:
+                self.skipTest("not in a git repo")
+        except FileNotFoundError:
+            self.skipTest("git not available")
+
+        changed, err = _get_changed_files(Path(__file__).parent, 'nonexistent-ref-xyz-12345')
+        self.assertEqual(changed, set())
+        self.assertIsNotNone(err)
+
+    def test_returns_set_of_abs_paths(self):
+        """When run in a real git repo with HEAD~1, returns a set of strings."""
+        import subprocess as sp
+        try:
+            result = sp.run(['git', 'rev-parse', 'HEAD~1'],
+                            capture_output=True, text=True,
+                            cwd=str(Path(__file__).parent))
+            if result.returncode != 0:
+                self.skipTest("not enough commits")
+        except FileNotFoundError:
+            self.skipTest("git not available")
+
+        changed, err = _get_changed_files(Path(__file__).parent, 'HEAD~1')
+        # No error expected (HEAD~1 always exists if we got past the check above)
+        self.assertIsNone(err)
+        # All entries should be strings (absolute paths)
+        for p in changed:
+            self.assertIsInstance(p, str)
+
+
+# ---------------------------------------------------------------------------
+# _render_pack: --since display
+# ---------------------------------------------------------------------------
+
+class TestRenderPackSince(unittest.TestCase):
+
+    def _capture(self, selected, meta, verbose=False, budget_tokens=2000, budget_lines=None):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _render_pack(Path('src/'), selected, meta, verbose, budget_tokens, budget_lines)
+        return buf.getvalue()
+
+    def _meta(self, **kwargs):
+        base = {
+            'total_candidates': 5, 'selected': 1, 'skipped': 0,
+            'used_tokens_approx': 100, 'used_lines': 10,
+            'budget_tokens': 2000, 'budget_lines': None,
+        }
+        base.update(kwargs)
+        return base
+
+    def _candidate(self, rel, changed=False, priority=1.0):
+        return {
+            'relative': rel, 'path': f'/tmp/{rel}',
+            'priority': priority, 'tokens_approx': 100, 'lines': 10,
+            'mtime': 0.0, 'size': 400, 'changed': changed,
+        }
+
+    def test_since_shown_in_header(self):
+        meta = self._meta(since='main', changed_files_count=2)
+        out = self._capture([self._candidate('a.py')], meta)
+        self.assertIn('since main', out)
+
+    def test_changed_files_count_shown(self):
+        meta = self._meta(since='main', changed_files_count=3)
+        out = self._capture([self._candidate('a.py')], meta)
+        self.assertIn('3', out)
+
+    def test_changed_tier_heading(self):
+        meta = self._meta(since='HEAD~3', changed_files_count=1)
+        candidates = [self._candidate('changed.py', changed=True, priority=20.0)]
+        out = self._capture(candidates, meta)
+        self.assertIn('Changed files', out)
+        self.assertIn('HEAD~3', out)
+
+    def test_changed_file_not_in_other_tiers(self):
+        meta = self._meta(since='main', changed_files_count=1)
+        candidates = [
+            self._candidate('changed.py', changed=True, priority=20.0),
+            self._candidate('entry.py', changed=False, priority=10.0),
+        ]
+        out = self._capture(candidates, meta)
+        self.assertIn('Changed files', out)
+        self.assertIn('Entry points', out)
+        # changed.py should appear only once
+        self.assertEqual(out.count('changed.py'), 1)
+
+    def test_no_since_no_changed_tier(self):
+        meta = self._meta()
+        out = self._capture([self._candidate('a.py')], meta)
+        self.assertNotIn('Changed files', out)
+        self.assertNotIn('since', out)
+
+
+# ---------------------------------------------------------------------------
+# run_pack: --since integration
+# ---------------------------------------------------------------------------
+
+class TestRunPackSince(unittest.TestCase):
+
+    def _make_args(self, path, budget="2000", focus=None, fmt="text", verbose=False, since=None):
+        return Namespace(path=path, budget=budget, focus=focus, format=fmt,
+                         verbose=verbose, since=since)
+
+    def test_since_none_runs_normally(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "app.py").write_text("x = 1\n")
+            args = self._make_args(d, since=None)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run_pack(args)
+            self.assertIn("Selected", buf.getvalue())
+
+    def test_since_bad_ref_emits_warning_not_crash(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "app.py").write_text("x = 1\n")
+            args = self._make_args(d, since='nonexistent-branch-xyz')
+            buf = io.StringIO()
+            stderr_buf = io.StringIO()
+            import sys
+            old_err = sys.stderr
+            sys.stderr = stderr_buf
+            try:
+                with redirect_stdout(buf):
+                    run_pack(args)
+            finally:
+                sys.stderr = old_err
+            # Should still produce output (graceful degradation)
+            self.assertIn("Selected", buf.getvalue())
+            # Warning should mention --since
+            self.assertIn('--since', stderr_buf.getvalue())
+
+    def test_since_meta_in_json_output(self):
+        import io, json
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "app.py").write_text("x = 1\n")
+            args = self._make_args(d, fmt='json', since='HEAD~1')
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run_pack(args)
+            data = json.loads(buf.getvalue())
+            self.assertIn('since', data)
+
+    def test_changed_flag_in_json_candidates(self):
+        """Every file in JSON output has a 'changed' field."""
+        import io, json
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "app.py").write_text("x = 1\n")
+            args = self._make_args(d, fmt='json', since=None)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run_pack(args)
+            data = json.loads(buf.getvalue())
+            for f in data['files']:
+                self.assertIn('changed', f)
+
+
+# ---------------------------------------------------------------------------
+# Content emission: _get_file_structure, _emit_content_section,
+# _collect_file_contents, run_pack --content
+# ---------------------------------------------------------------------------
+
+class TestGetFileStructure(unittest.TestCase):
+
+    def test_returns_string_for_python_file(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("def hello():\n    pass\n")
+            fpath = f.name
+        result = _get_file_structure(fpath)
+        self.assertIsInstance(result, str)
+        # Should contain something about the function
+        self.assertIn('hello', result)
+
+    def test_returns_empty_string_for_missing_file(self):
+        result = _get_file_structure('/nonexistent/path/file.xyz_unknown')
+        self.assertEqual(result, '')
+
+    def test_returns_empty_string_for_unanalyzable_extension(self):
+        with tempfile.NamedTemporaryFile(suffix='.xyz_custom_unknown', mode='w', delete=False) as f:
+            f.write("content\n")
+            fpath = f.name
+        # May or may not get tree-sitter fallback; should not crash
+        result = _get_file_structure(fpath)
+        self.assertIsInstance(result, str)
+
+
+class TestEmitContentSection(unittest.TestCase):
+
+    def _make_file_infos(self, files):
+        """Build minimal file info dicts for testing."""
+        infos = []
+        for fp, rel, changed in files:
+            infos.append({'path': fp, 'relative': rel, 'changed': changed})
+        return infos
+
+    def test_emits_content_header(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("x = 1\n")
+            fpath = f.name
+        infos = self._make_file_infos([(fpath, 'x.py', False)])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _emit_content_section(infos)
+        output = buf.getvalue()
+        self.assertIn('CONTENT', output)
+        self.assertIn('x.py', output)
+
+    def test_changed_file_gets_tag(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("def foo(): pass\n")
+            fpath = f.name
+        infos = self._make_file_infos([(fpath, 'foo.py', True)])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _emit_content_section(infos)
+        self.assertIn('CHANGED', buf.getvalue())
+
+    def test_unknown_file_type_shows_fallback_message(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.NamedTemporaryFile(suffix='.xyzunknownext', mode='w', delete=False) as f:
+            f.write("no analyzer here\n")
+            fpath = f.name
+        infos = self._make_file_infos([(fpath, 'mystery.xyzunknownext', False)])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _emit_content_section(infos)
+        output = buf.getvalue()
+        self.assertIn('mystery.xyzunknownext', output)
+        # Either structure output or fallback message — no crash
+        self.assertIn('\n', output)
+
+
+class TestCollectFileContents(unittest.TestCase):
+
+    def test_returns_list_of_dicts(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("x = 1\n")
+            fpath = f.name
+        infos = [{'path': fpath, 'relative': 'x.py', 'changed': False}]
+        result = _collect_file_contents(infos)
+        self.assertEqual(len(result), 1)
+        item = result[0]
+        self.assertIn('file', item)
+        self.assertIn('changed', item)
+        self.assertIn('structure', item)
+        self.assertEqual(item['file'], 'x.py')
+        self.assertFalse(item['changed'])
+
+    def test_structure_is_string(self):
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write("def bar(): pass\n")
+            fpath = f.name
+        infos = [{'path': fpath, 'relative': 'bar.py', 'changed': True}]
+        result = _collect_file_contents(infos)
+        self.assertIsInstance(result[0]['structure'], str)
+        self.assertTrue(result[0]['changed'])
+
+
+class TestRunPackContent(unittest.TestCase):
+
+    def _make_args(self, path, budget='2000', fmt='text', since=None, content=False):
+        return Namespace(
+            path=str(path),
+            budget=budget,
+            focus=None,
+            since=since,
+            content=content,
+            format=fmt,
+            verbose=False,
+        )
+
+    def test_content_flag_adds_content_section(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "app.py").write_text("def main():\n    pass\n")
+            args = self._make_args(d, content=True)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run_pack(args)
+            output = buf.getvalue()
+            self.assertIn('CONTENT', output)
+            self.assertIn('app.py', output)
+
+    def test_no_content_flag_no_content_section(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "app.py").write_text("x = 1\n")
+            args = self._make_args(d, content=False)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run_pack(args)
+            output = buf.getvalue()
+            self.assertNotIn('CONTENT', output)
+
+    def test_content_json_includes_content_key(self):
+        import io, json
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "app.py").write_text("def main(): pass\n")
+            args = self._make_args(d, fmt='json', content=True)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run_pack(args)
+            data = json.loads(buf.getvalue())
+            self.assertIn('content', data)
+            self.assertIsInstance(data['content'], list)
+            self.assertGreater(len(data['content']), 0)
+
+    def test_content_json_without_flag_no_content_key(self):
+        import io, json
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "app.py").write_text("x = 1\n")
+            args = self._make_args(d, fmt='json', content=False)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run_pack(args)
+            data = json.loads(buf.getvalue())
+            self.assertNotIn('content', data)
+
+    def test_content_structure_contains_function_names(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "auth.py").write_text(
+                "def authenticate(user, pwd):\n    return True\n\ndef logout():\n    pass\n"
+            )
+            args = self._make_args(d, content=True, budget='5000')
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run_pack(args)
+            output = buf.getvalue()
+            # Structure output should reference function names
+            self.assertIn('authenticate', output)
+            self.assertIn('logout', output)
 
 
 if __name__ == '__main__':

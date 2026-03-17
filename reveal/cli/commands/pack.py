@@ -1,11 +1,13 @@
 """reveal pack — token-budgeted context snapshot for LLM consumption."""
 
 import argparse
+import io
 import json
+import subprocess
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Set, Tuple
 
 
 # Entry point filename patterns (highest priority)
@@ -42,13 +44,18 @@ def create_pack_parser() -> argparse.ArgumentParser:
             "  reveal pack ./src --budget 4000        # 4000-token budget\n"
             "  reveal pack ./src --budget 500-lines   # 500-line budget\n"
             "  reveal pack ./src --focus auth         # Emphasize auth module\n"
+            "  reveal pack ./src --since main         # PR review: changed files first\n"
+            "  reveal pack ./src --since HEAD~3       # Changes since 3 commits ago\n"
+            "  reveal pack ./src --content            # Emit structure content (agent-ready)\n"
+            "  reveal pack ./src --content --since main --budget 8000  # Full agent context\n"
             "  reveal pack ./src --format json        # Structured output for tooling\n"
             "\n"
-            "Prioritization order:\n"
-            "  1. Entry points (main.py, index.js, etc.)\n"
-            "  2. High-complexity files\n"
-            "  3. Recently modified files\n"
-            "  4. Other files (fills remaining budget)\n"
+            "Prioritization order (with --since):\n"
+            "  1. Changed files (git diff vs ref)\n"
+            "  2. Entry points (main.py, index.js, etc.)\n"
+            "  3. High-complexity files\n"
+            "  4. Recently modified files\n"
+            "  5. Other files (fills remaining budget)\n"
         )
     )
     parser.add_argument(
@@ -67,6 +74,17 @@ def create_pack_parser() -> argparse.ArgumentParser:
         metavar='TOPIC',
         help='Emphasize files matching this name pattern (e.g., auth, api, models)'
     )
+    parser.add_argument(
+        '--since',
+        metavar='REF',
+        help='Git ref to diff against (e.g., main, HEAD~3). Changed files are boosted to top priority.'
+    )
+    parser.add_argument(
+        '--content',
+        action='store_true',
+        default=False,
+        help='Emit reveal structure output for each selected file (agent-ready context, not just file list).'
+    )
     return parser
 
 
@@ -79,23 +97,152 @@ def run_pack(args: Namespace) -> None:
 
     budget_tokens, budget_lines = _parse_budget(args.budget)
     focus = getattr(args, 'focus', None)
+    since = getattr(args, 'since', None)
+
+    # Resolve changed files for --since
+    changed_files: Set[str] = set()
+    since_error: Optional[str] = None
+    if since:
+        changed_files, since_error = _get_changed_files(path, since)
+        if since_error:
+            print(f"Warning: --since: {since_error}", file=sys.stderr)
 
     # Collect candidate files
-    candidates = _collect_candidates(path, focus)
+    candidates = _collect_candidates(path, focus, changed_files)
 
     # Apply budget
     selected, meta = _apply_budget(candidates, budget_tokens, budget_lines, path)
+    if since:
+        meta['since'] = since
+        meta['changed_files_count'] = len(changed_files)
+
+    emit_content = getattr(args, 'content', False)
 
     if args.format == 'json':
-        print(json.dumps({
+        result: Dict[str, Any] = {
             'path': str(path),
             'budget': args.budget,
+            'since': since,
             'meta': meta,
-            'files': selected
-        }, indent=2, default=str))
+            'files': selected,
+        }
+        if emit_content:
+            result['content'] = _collect_file_contents(selected)
+        print(json.dumps(result, indent=2, default=str))
         return
 
     _render_pack(path, selected, meta, args.verbose, budget_tokens, budget_lines)
+    if emit_content:
+        _emit_content_section(selected)
+
+
+def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[str]]:
+    """Return absolute paths of files changed since *since_ref* via git diff.
+
+    Uses ``git diff --name-only <ref>...HEAD`` (triple-dot = since branch point).
+    Returns (set_of_abs_paths, error_message_or_None).
+    """
+    # Find git root (may be above path)
+    try:
+        root_result = subprocess.run(
+            ['git', 'rev-parse', '--show-toplevel'],
+            capture_output=True, text=True, cwd=str(path),
+        )
+        if root_result.returncode != 0:
+            return set(), "not a git repository"
+        git_root = Path(root_result.stdout.strip())
+    except FileNotFoundError:
+        return set(), "git not found"
+
+    try:
+        diff_result = subprocess.run(
+            ['git', 'diff', '--name-only', f'{since_ref}...HEAD'],
+            capture_output=True, text=True, cwd=str(git_root),
+        )
+        if diff_result.returncode != 0:
+            err = diff_result.stderr.strip().splitlines()[0] if diff_result.stderr.strip() else f"unknown ref '{since_ref}'"
+            return set(), err
+    except FileNotFoundError:
+        return set(), "git not found"
+
+    changed: Set[str] = set()
+    for rel in diff_result.stdout.splitlines():
+        rel = rel.strip()
+        if not rel:
+            continue
+        abs_path = git_root / rel
+        changed.add(str(abs_path.resolve()))
+
+    return changed, None
+
+
+def _get_file_structure(file_path: str) -> str:
+    """Return reveal structure output for a file as a string.
+
+    Uses reveal's own progressive-disclosure analysis — same output as `reveal file.py`.
+    Returns empty string if no analyzer is available or analysis fails.
+    """
+    from reveal.registry import get_analyzer  # noqa: I006 — avoid circular import at module level
+    from reveal.display.structure import show_structure  # noqa: I006
+
+    try:
+        analyzer_class = get_analyzer(file_path, allow_fallback=True)
+        if not analyzer_class:
+            return ''
+        analyzer = analyzer_class(file_path)
+    except Exception:
+        return ''
+
+    buffer = io.StringIO()
+    old_stdout = sys.stdout
+    sys.stdout = buffer
+    try:
+        show_structure(analyzer, 'text')
+    except Exception:
+        return ''
+    finally:
+        sys.stdout = old_stdout
+
+    return buffer.getvalue()
+
+
+def _emit_content_section(selected: List[Dict[str, Any]]) -> None:
+    """Emit reveal structure content for each selected file.
+
+    Outputs a CONTENT section after the manifest with the reveal structure
+    of each file — the same output as `reveal file.py`. This makes pack
+    output agent-consumable without a second round-trip.
+    """
+    print()
+    print('━' * 70)
+    print('CONTENT  (reveal structure for each selected file)')
+    print('━' * 70)
+
+    for file_info in selected:
+        rel = file_info['relative']
+        file_path = file_info['path']
+        changed_tag = '  ◀ CHANGED' if file_info.get('changed') else ''
+
+        content = _get_file_structure(file_path)
+
+        print(f'\n── {rel}{changed_tag} ──')
+        if content.strip():
+            print(content, end='' if content.endswith('\n') else '\n')
+        else:
+            print('[no structure analysis available]')
+
+
+def _collect_file_contents(selected: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Return structure content for each selected file as a list of dicts (JSON mode)."""
+    result = []
+    for file_info in selected:
+        content = _get_file_structure(file_info['path'])
+        result.append({
+            'file': file_info['relative'],
+            'changed': file_info.get('changed', False),
+            'structure': content,
+        })
+    return result
 
 
 def _parse_budget(budget_str: str) -> Tuple[Optional[int], Optional[int]]:
@@ -111,7 +258,11 @@ def _parse_budget(budget_str: str) -> Tuple[Optional[int], Optional[int]]:
         return 2000, None
 
 
-def _collect_candidates(path: Path, focus: Optional[str]) -> List[Dict[str, Any]]:
+def _collect_candidates(
+    path: Path,
+    focus: Optional[str],
+    changed_files: Optional[Set[str]] = None,
+) -> List[Dict[str, Any]]:
     """Collect and score candidate files for the pack."""
     candidates: List[Dict[str, Any]] = []
 
@@ -127,7 +278,8 @@ def _collect_candidates(path: Path, focus: Optional[str]) -> List[Dict[str, Any]
         tokens_approx = size_chars // _APPROX_CHARS_PER_TOKEN
         lines = _count_lines(f)
 
-        priority = _compute_priority(f, rel, focus)
+        is_changed = bool(changed_files and str(f.resolve()) in changed_files)
+        priority = _compute_priority(f, rel, focus, is_changed=is_changed)
 
         candidates.append({
             'path': str(f),
@@ -137,6 +289,7 @@ def _collect_candidates(path: Path, focus: Optional[str]) -> List[Dict[str, Any]
             'lines': lines,
             'mtime': stat.st_mtime,
             'size': stat.st_size,
+            'changed': is_changed,
         })
 
     # Sort: priority descending, then mtime descending
@@ -144,7 +297,7 @@ def _collect_candidates(path: Path, focus: Optional[str]) -> List[Dict[str, Any]
     return candidates
 
 
-def _compute_priority(path: Path, rel: Path, focus: Optional[str]) -> float:
+def _compute_priority(path: Path, rel: Path, focus: Optional[str], is_changed: bool = False) -> float:
     """Score a file's priority for inclusion in the pack."""
     name = path.name.lower()
     rel_str = str(rel).lower()
@@ -152,6 +305,10 @@ def _compute_priority(path: Path, rel: Path, focus: Optional[str]) -> float:
     rel_parts = {p.lower() for p in rel.parts}
     rel_stem = path.stem.lower()
     score = 0.0
+
+    # Changed files (--since): highest priority — above entry points
+    if is_changed:
+        score += 20.0
 
     # Entry points: highest priority
     if name in _ENTRY_POINT_PATTERNS:
@@ -276,7 +433,12 @@ def _render_pack(
     """Render pack output as text."""
     budget_desc = (f"~{budget_tokens} tokens" if budget_tokens
                    else f"{budget_lines} lines")
-    print(f"Pack: {path}  [{budget_desc} budget]")
+    since = meta.get('since')
+    since_desc = f"  [since {since}]" if since else ""
+    print(f"Pack: {path}  [{budget_desc} budget]{since_desc}")
+    if since:
+        n_changed = meta.get('changed_files_count', 0)
+        print(f"Changed files:  {n_changed} (boosted to top priority)")
     print(f"Selected {meta['selected']} of {meta['total_candidates']} files "
           f"(~{meta['used_tokens_approx']} tokens, {meta['used_lines']} lines)")
     print()
@@ -286,9 +448,16 @@ def _render_pack(
         return
 
     # Group by priority tier for display
-    high = [f for f in selected if f['priority'] >= 8]
-    medium = [f for f in selected if 2 <= f['priority'] < 8]
-    low = [f for f in selected if f['priority'] < 2]
+    changed = [f for f in selected if f.get('changed')]
+    high = [f for f in selected if not f.get('changed') and f['priority'] >= 8]
+    medium = [f for f in selected if not f.get('changed') and 2 <= f['priority'] < 8]
+    low = [f for f in selected if not f.get('changed') and f['priority'] < 2]
+
+    if changed:
+        print(f"── Changed files (since {since}) ──")
+        for f in changed:
+            _print_file_line(f, verbose)
+        print()
 
     if high:
         print("── Entry points / focus files ──")
