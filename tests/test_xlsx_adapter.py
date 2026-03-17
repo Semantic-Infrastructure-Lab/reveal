@@ -676,5 +676,515 @@ class TestXlsxCrossSheetSearchIntegration:
         assert result['total_matches'] == 0
 
 
+# ---------------------------------------------------------------------------
+# Power Pivot test infrastructure
+# ---------------------------------------------------------------------------
+
+POWERPIVOT_2013 = Path("/tmp/powerpivot-samples/Excel2013/PowerPivotTutorialSample.xlsx")
+POWERPIVOT_2010 = Path("/tmp/powerpivot-samples/Excel2010/PowerPivotTutorialSample.xlsx")
+POWERPIVOT_MODERN = Path("/tmp/powerpivot-samples/RetailAnalysis-no-PV.xlsx")
+
+
+def _make_minimal_xlsx(tmp_path, extra_files=None):
+    """Create a minimal valid xlsx zip file.  extra_files = {name: bytes}."""
+    import zipfile
+    p = tmp_path / "test.xlsx"
+    with zipfile.ZipFile(p, 'w') as zf:
+        zf.writestr('[Content_Types].xml', (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            '</Types>'
+        ))
+        zf.writestr('_rels/.rels', (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            '</Relationships>'
+        ))
+        zf.writestr('xl/workbook.xml', (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+            ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            '<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>'
+            '</workbook>'
+        ))
+        zf.writestr('xl/_rels/workbook.xml.rels', (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            '</Relationships>'
+        ))
+        zf.writestr('xl/worksheets/sheet1.xml', (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            '<sheetData/></worksheet>'
+        ))
+        for name, content in (extra_files or {}).items():
+            if isinstance(content, str):
+                zf.writestr(name, content)
+            else:
+                zf.writestr(name, content)
+    return p
+
+
+def _make_xmla_item_bytes(tables, measures=None):
+    """Build a minimal UTF-16 XMLA item blob with the Gemini CDATA wrapper."""
+    dims_xml = ''
+    for tname, cols in tables.items():
+        attrs_xml = '<Attribute><ID>RowNumber</ID><Name>RowNumber</Name><Type>RowNumber</Type></Attribute>'
+        for col in cols:
+            attrs_xml += f'<Attribute><ID>{col}</ID><Name>{col}</Name></Attribute>'
+        dims_xml += (
+            f'<Dimension><ID>{tname}</ID><Name>{tname}</Name>'
+            f'<Attributes>{attrs_xml}</Attributes></Dimension>'
+        )
+
+    mdx_text = ''
+    for tname, mname, expr in (measures or []):
+        mdx_text += f"CREATE MEASURE [Sandbox].'{tname}'[{mname}]={expr};"
+
+    inner_xml = (
+        '<?xml version="1.0" encoding="utf-16"?>'
+        '<Create AllowOverwrite="true" xmlns="http://schemas.microsoft.com/analysisservices/2003/engine">'
+        '<ObjectDefinition><Database>'
+        f'<Dimensions>{dims_xml}</Dimensions>'
+        f'<MdxScripts><MdxScript><Commands><Command><Text>{mdx_text}</Text></Command></Commands></MdxScript></MdxScripts>'
+        '</Database></ObjectDefinition></Create>'
+    )
+    outer_xml = (
+        '<?xml version="1.0" encoding="UTF-16"?>'
+        '<Gemini xmlns="http://gemini/pivotcustomization/http://gemini/workbookcustomization/MetadataRecoveryInformation">'
+        f'<CustomContent><![CDATA[{inner_xml}]]></CustomContent>'
+        '</Gemini>'
+    )
+    return outer_xml.encode('utf-16')
+
+
+def _make_pivot_cache_bytes(table_names):
+    """Build a minimal pivotCacheDefinition with cacheHierarchy elements."""
+    hierarchies = ''.join(
+        f'<cacheHierarchy uniqueName="[{t}].[Col].[Col]"/>' for t in table_names
+    ) + '<cacheHierarchy uniqueName="[Measures].[Total]"/>'
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        f'<cacheHierarchies count="{len(table_names) + 1}">{hierarchies}</cacheHierarchies>'
+        '</pivotCacheDefinition>'
+    ).encode('utf-8')
+
+
+class TestPowerPivotDetection:
+    """Unit tests for _detect_powerpivot (model path detection)."""
+
+    def test_detects_excel_2013_model_path(self, tmp_path):
+        import zipfile
+        p = _make_minimal_xlsx(tmp_path, {'xl/model/item.data': b''})
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        with zipfile.ZipFile(p) as zf:
+            assert adapter._detect_powerpivot(zf) == 'xl/model/item.data'
+
+    def test_detects_excel_2010_model_path(self, tmp_path):
+        import zipfile
+        p = _make_minimal_xlsx(tmp_path, {'xl/customData/item1.data': b''})
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        with zipfile.ZipFile(p) as zf:
+            assert adapter._detect_powerpivot(zf) == 'xl/customData/item1.data'
+
+    def test_prefers_2013_path_when_both_present(self, tmp_path):
+        import zipfile
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'xl/customData/item1.data': b'',
+        })
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        with zipfile.ZipFile(p) as zf:
+            assert adapter._detect_powerpivot(zf) == 'xl/model/item.data'
+
+    def test_returns_none_for_plain_xlsx(self, tmp_path):
+        import zipfile
+        p = _make_minimal_xlsx(tmp_path)
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        with zipfile.ZipFile(p) as zf:
+            assert adapter._detect_powerpivot(zf) is None
+
+
+class TestXmlaItemDetection:
+    """Unit tests for _find_xmla_item (XMLA CDATA item location)."""
+
+    def test_finds_xmla_item(self, tmp_path):
+        import zipfile
+        xmla_bytes = _make_xmla_item_bytes({'MyTable': ['Col1', 'Col2']})
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'customXml/item1.xml': xmla_bytes,
+        })
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        with zipfile.ZipFile(p) as zf:
+            found = adapter._find_xmla_item(zf)
+        assert found == 'customXml/item1.xml'
+
+    def test_returns_none_when_no_xmla(self, tmp_path):
+        import zipfile
+        non_xmla = '<?xml version="1.0"?><root/>'.encode('utf-8')
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'customXml/item1.xml': non_xmla,
+        })
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        with zipfile.ZipFile(p) as zf:
+            assert adapter._find_xmla_item(zf) is None
+
+    def test_ignores_non_customxml_items(self, tmp_path):
+        import zipfile
+        xmla_bytes = _make_xmla_item_bytes({'T': ['C']})
+        # Put XMLA in a path that doesn't match customXml/itemN.xml
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'xl/metadata/item1.xml': xmla_bytes,
+        })
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        with zipfile.ZipFile(p) as zf:
+            assert adapter._find_xmla_item(zf) is None
+
+
+class TestXmlaParsing:
+    """Unit tests for _parse_xmla with synthetic XMLA content."""
+
+    @pytest.fixture
+    def adapter_with_model(self, tmp_path):
+        tables = {
+            'SalesTable': ['Region', 'Amount', 'Date'],
+            'ProductTable': ['SKU', 'Name', 'Price'],
+        }
+        measures = [('SalesTable', 'TotalSales', "SUM('SalesTable'[Amount])")]
+        xmla_bytes = _make_xmla_item_bytes(tables, measures)
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'customXml/item1.xml': xmla_bytes,
+        })
+        return XlsxAdapter(f"xlsx://{p}"), p
+
+    def test_extracts_table_names(self, adapter_with_model, tmp_path):
+        import zipfile
+        adapter, p = adapter_with_model
+        with zipfile.ZipFile(p) as zf:
+            item = adapter._find_xmla_item(zf)
+            data = adapter._parse_xmla(zf, item)
+        table_names = {t['name'] for t in data['tables']}
+        assert 'SalesTable' in table_names
+        assert 'ProductTable' in table_names
+
+    def test_extracts_column_names(self, adapter_with_model, tmp_path):
+        import zipfile
+        adapter, p = adapter_with_model
+        with zipfile.ZipFile(p) as zf:
+            item = adapter._find_xmla_item(zf)
+            data = adapter._parse_xmla(zf, item)
+        sales_cols = next(t['columns'] for t in data['tables'] if t['name'] == 'SalesTable')
+        assert 'Region' in sales_cols
+        assert 'Amount' in sales_cols
+        assert 'Date' in sales_cols
+
+    def test_excludes_rownumber_column(self, adapter_with_model, tmp_path):
+        import zipfile
+        adapter, p = adapter_with_model
+        with zipfile.ZipFile(p) as zf:
+            item = adapter._find_xmla_item(zf)
+            data = adapter._parse_xmla(zf, item)
+        all_cols = [c for t in data['tables'] for c in t['columns']]
+        assert 'RowNumber' not in all_cols
+
+    def test_extracts_measures(self, adapter_with_model, tmp_path):
+        import zipfile
+        adapter, p = adapter_with_model
+        with zipfile.ZipFile(p) as zf:
+            item = adapter._find_xmla_item(zf)
+            data = adapter._parse_xmla(zf, item)
+        assert len(data['measures']) == 1
+        m = data['measures'][0]
+        assert m['name'] == 'TotalSales'
+        assert m['table'] == 'SalesTable'
+        assert 'SUM' in m['expr']
+
+    def test_xmla_available_flag(self, adapter_with_model, tmp_path):
+        import zipfile
+        adapter, p = adapter_with_model
+        with zipfile.ZipFile(p) as zf:
+            item = adapter._find_xmla_item(zf)
+            data = adapter._parse_xmla(zf, item)
+        assert data['xmla_available'] is True
+
+
+class TestPivotCacheFallback:
+    """Unit tests for _parse_pivot_cache."""
+
+    def test_extracts_table_names_from_pivot_cache(self, tmp_path):
+        import zipfile
+        tables = ['Sales', 'Products', 'Customers']
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'xl/pivotCache/pivotCacheDefinition1.xml': _make_pivot_cache_bytes(tables),
+        })
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        with zipfile.ZipFile(p) as zf:
+            data = adapter._parse_pivot_cache(zf)
+        table_names = {t['name'] for t in data['tables']}
+        assert 'Sales' in table_names
+        assert 'Products' in table_names
+        assert 'Customers' in table_names
+
+    def test_excludes_measures_table(self, tmp_path):
+        import zipfile
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'xl/pivotCache/pivotCacheDefinition1.xml': _make_pivot_cache_bytes(['MyTable']),
+        })
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        with zipfile.ZipFile(p) as zf:
+            data = adapter._parse_pivot_cache(zf)
+        table_names = {t['name'] for t in data['tables']}
+        assert 'Measures' not in table_names
+
+    def test_returns_empty_measures(self, tmp_path):
+        import zipfile
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'xl/pivotCache/pivotCacheDefinition1.xml': _make_pivot_cache_bytes(['T']),
+        })
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        with zipfile.ZipFile(p) as zf:
+            data = adapter._parse_pivot_cache(zf)
+        assert data['measures'] == []
+        assert data['xmla_available'] is False
+
+
+class TestPowerPivotGetStructure:
+    """Unit tests for the get_structure() powerpivot dispatch and result shapes."""
+
+    @pytest.fixture
+    def pp_adapter(self, tmp_path):
+        tables = {'Orders': ['OrderID', 'Amount'], 'Customers': ['CustID', 'Name']}
+        measures = [('Orders', 'TotalRevenue', "SUM('Orders'[Amount])")]
+        xmla_bytes = _make_xmla_item_bytes(tables, measures)
+        p = _make_minimal_xlsx(tmp_path, {
+            'xl/model/item.data': b'',
+            'customXml/item1.xml': xmla_bytes,
+        })
+        return XlsxAdapter(f"xlsx://{p}")
+
+    def test_powerpivot_tables_returns_powerpivot_type(self, pp_adapter):
+        pp_adapter.query_params['powerpivot'] = 'tables'
+        result = pp_adapter.get_structure()
+        assert result['type'] == 'xlsx_powerpivot'
+
+    def test_powerpivot_schema_has_tables(self, pp_adapter):
+        pp_adapter.query_params['powerpivot'] = 'schema'
+        result = pp_adapter.get_structure()
+        assert result['has_model'] is True
+        assert len(result['tables']) == 2
+
+    def test_powerpivot_dax_has_measures(self, pp_adapter):
+        pp_adapter.query_params['powerpivot'] = 'dax'
+        result = pp_adapter.get_structure()
+        assert len(result['measures']) == 1
+        assert result['measures'][0]['name'] == 'TotalRevenue'
+
+    def test_workbook_overview_has_banner(self, pp_adapter):
+        result = pp_adapter.get_structure()
+        assert result['type'] == 'xlsx_workbook'
+        assert 'powerpivot_banner' in result
+        banner = result['powerpivot_banner']
+        assert banner['model_path'] == 'xl/model/item.data'
+        assert 'Orders' in banner['table_names']
+
+    def test_plain_xlsx_has_no_banner(self, tmp_path):
+        p = _make_minimal_xlsx(tmp_path)
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_workbook'
+        assert 'powerpivot_banner' not in result
+
+    def test_no_model_returns_has_model_false(self, tmp_path):
+        p = _make_minimal_xlsx(tmp_path)
+        adapter = XlsxAdapter(f"xlsx://{p}")
+        adapter.query_params['powerpivot'] = 'schema'
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_powerpivot'
+        assert result['has_model'] is False
+
+
+class TestPowerPivotRenderer:
+    """Unit tests for XlsxRenderer._render_powerpivot output."""
+
+    def _capture(self, result, format='text'):
+        old_stdout = sys.stdout
+        sys.stdout = StringIO()
+        try:
+            XlsxRenderer.render_structure(result, format)
+            return sys.stdout.getvalue()
+        finally:
+            sys.stdout = old_stdout
+
+    def _make_result(self, mode='schema', xmla=True, tables=None, measures=None):
+        return {
+            'type': 'xlsx_powerpivot',
+            'file': '/tmp/test.xlsx',
+            'has_model': True,
+            'mode': mode,
+            'xmla_available': xmla,
+            'model_path': 'xl/model/item.data',
+            'tables': tables or [
+                {'name': 'SalesTable', 'columns': ['Region', 'Amount']},
+                {'name': 'ProductTable', 'columns': ['SKU', 'Price']},
+            ],
+            'measures': measures or [
+                {'name': 'TotalSales', 'table': 'SalesTable', 'expr': "SUM('SalesTable'[Amount])"},
+            ],
+        }
+
+    def test_schema_shows_table_names(self):
+        output = self._capture(self._make_result(mode='schema'))
+        assert 'SalesTable' in output
+        assert 'ProductTable' in output
+
+    def test_schema_shows_column_names(self):
+        output = self._capture(self._make_result(mode='schema'))
+        assert 'Region' in output
+        assert 'Amount' in output
+
+    def test_schema_shows_measures(self):
+        output = self._capture(self._make_result(mode='schema'))
+        assert 'TotalSales' in output
+
+    def test_tables_mode_shows_column_count(self):
+        output = self._capture(self._make_result(mode='tables'))
+        assert '2 columns' in output
+
+    def test_dax_mode_shows_expression(self):
+        output = self._capture(self._make_result(mode='dax'))
+        assert 'SUM' in output
+        assert 'TotalSales' in output
+
+    def test_measures_mode_shows_table_name(self):
+        output = self._capture(self._make_result(mode='measures'))
+        assert 'SalesTable' in output
+
+    def test_no_model_shows_message(self):
+        result = {'type': 'xlsx_powerpivot', 'file': '/tmp/test.xlsx', 'has_model': False, 'mode': 'schema'}
+        output = self._capture(result)
+        assert 'No Power Pivot' in output
+
+    def test_modern_file_dax_shows_install_hint(self):
+        result = self._make_result(mode='dax', xmla=False, measures=[])
+        output = self._capture(result)
+        assert 'powerpivot' in output.lower() or 'XMLA' in output
+
+    def test_json_format_returns_valid_json(self):
+        import json
+        result = self._make_result(mode='schema')
+        output = self._capture(result, format='json')
+        parsed = json.loads(output)
+        assert parsed['type'] == 'xlsx_powerpivot'
+
+
+@pytest.mark.skipif(not POWERPIVOT_2013.exists(), reason="Power Pivot sample files not in /tmp/powerpivot-samples/")
+class TestPowerPivotIntegration2013:
+    """Integration tests against the real Excel 2013 Contoso sample file."""
+
+    def test_banner_shown_in_overview(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2013}")
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_workbook'
+        assert 'powerpivot_banner' in result
+
+    def test_banner_has_9_tables(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2013}")
+        result = adapter.get_structure()
+        assert len(result['powerpivot_banner']['table_names']) == 9
+
+    def test_schema_extracts_9_tables(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2013}?powerpivot=schema")
+        result = adapter.get_structure()
+        assert result['has_model'] is True
+        assert result['xmla_available'] is True
+        assert len(result['tables']) == 9
+
+    def test_schema_extracts_dimdatecol_columns(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2013}?powerpivot=schema")
+        result = adapter.get_structure()
+        dim_date = next(t for t in result['tables'] if t['name'] == 'dbo_DimDate')
+        assert len(dim_date['columns']) == 29
+
+    def test_dax_extracts_3_measures(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2013}?powerpivot=dax")
+        result = adapter.get_structure()
+        assert len(result['measures']) == 3
+
+    def test_dax_measure_names(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2013}?powerpivot=dax")
+        result = adapter.get_structure()
+        names = {m['name'] for m in result['measures']}
+        assert 'Sum of TotalSales' in names
+
+    def test_dax_expressions_have_sum(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2013}?powerpivot=dax")
+        result = adapter.get_structure()
+        exprs = {m['expr'] for m in result['measures']}
+        assert any('SUM' in e for e in exprs)
+
+    def test_tables_mode(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2013}?powerpivot=tables")
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_powerpivot'
+        assert len(result['tables']) == 9
+
+
+@pytest.mark.skipif(not POWERPIVOT_2010.exists(), reason="Power Pivot sample files not in /tmp/powerpivot-samples/")
+class TestPowerPivotIntegration2010:
+    """Integration tests against the real Excel 2010 Contoso sample file."""
+
+    def test_detects_2010_model_path(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2010}")
+        result = adapter.get_structure()
+        banner = result.get('powerpivot_banner', {})
+        assert banner.get('model_path') == 'xl/customData/item1.data'
+
+    def test_extracts_same_9_tables_as_2013(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2010}?powerpivot=schema")
+        result = adapter.get_structure()
+        assert len(result['tables']) == 9
+
+
+@pytest.mark.skipif(not POWERPIVOT_MODERN.exists(), reason="Power Pivot sample files not in /tmp/powerpivot-samples/")
+class TestPowerPivotIntegrationModern:
+    """Integration tests against a modern Power BI xlsx file (no XMLA)."""
+
+    def test_banner_present(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_MODERN}")
+        result = adapter.get_structure()
+        assert 'powerpivot_banner' in result
+
+    def test_xmla_not_available(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_MODERN}?powerpivot=schema")
+        result = adapter.get_structure()
+        assert result['xmla_available'] is False
+
+    def test_table_names_from_pivot_cache(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_MODERN}?powerpivot=tables")
+        result = adapter.get_structure()
+        assert len(result['tables']) > 0
+
+    def test_dax_mode_shows_not_available(self):
+        adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_MODERN}?powerpivot=dax")
+        result = adapter.get_structure()
+        # Should not raise, should return gracefully
+        assert result['type'] == 'xlsx_powerpivot'
+        assert result['has_model'] is True
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

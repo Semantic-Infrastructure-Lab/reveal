@@ -75,6 +75,17 @@ whois = [
 mcp = [
     "mcp>=1.0.0",  # Model Context Protocol SDK — required for reveal-mcp server
 ]
+# Excel/xlsx test fixture creation (openpyxl used in tests only; production adapter is pure stdlib)
+xlsx = [
+    "openpyxl>=3.1.0",  # Used by test suite to create .xlsx fixture files
+]
+# Power Pivot / modern Excel data model extraction (heavy — ~100MB with pandas+numpy)
+# Enables full schema extraction from modern Power BI-generated xlsx files (xl/model/item.data)
+# Excel 2010/2013 files are fully supported without this extra (pure stdlib XMLA path)
+# Install: pip install reveal-cli[powerpivot]
+powerpivot = [
+    "pbixray>=0.5.0",  # Parses binary VertiPaq/SSAS model — brings apsw, kaitaistruct, xpress9, pandas
+]
 
 [project.urls]
 Homepage = "https://github.com/Semantic-Infrastructure-Lab/reveal"

@@ -2,8 +2,10 @@
 
 import sys
 import re
+import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Set
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.office.openxml import XlsxAnalyzer
 from ..utils.query import parse_query_params
@@ -36,6 +38,8 @@ class XlsxRenderer:
             XlsxRenderer._render_sheet_data(result, preferred_format)
         elif result_type == 'xlsx_search':
             XlsxRenderer._render_search_results(result, preferred_format)
+        elif result_type == 'xlsx_powerpivot':
+            XlsxRenderer._render_powerpivot(result, preferred_format)
         else:
             XlsxRenderer._render_workbook(result, preferred_format)
 
@@ -61,6 +65,18 @@ class XlsxRenderer:
             dim_str = f" ({dim})" if dim else ""
             formula_str = f", {formulas} formulas" if formulas > 0 else ""
             print(f"  :{i:2}   {name}{dim_str} - {rows} rows, {cols} cols{formula_str}")
+
+        banner = result.get('powerpivot_banner')
+        if banner:
+            model_path = banner.get('model_path', '')
+            table_names = banner.get('table_names', [])
+            print(f"\n\u26a1 Power Pivot model detected ({model_path})")
+            if table_names:
+                names_str = ', '.join(table_names[:8])
+                if len(table_names) > 8:
+                    names_str += f', ... ({len(table_names)} total)'
+                print(f"   Tables: {names_str}")
+            print(f"   Run with ?powerpivot=schema to explore the full model")
 
     @staticmethod
     def _render_sheet_data(result: dict, format: str) -> None:
@@ -135,6 +151,88 @@ class XlsxRenderer:
             print()
 
     @staticmethod
+    def _render_powerpivot(result: dict, format: str) -> None:
+        """Render Power Pivot model output for all ?powerpivot= modes."""
+        from ..utils import safe_json_dumps
+
+        if format == 'json':
+            print(safe_json_dumps(result))
+            return
+
+        file_path = result.get('file', result.get('source', 'Unknown'))
+        filename = Path(file_path).name
+        mode = result.get('mode', 'schema')
+
+        if not result.get('has_model'):
+            print(f"No Power Pivot model found in {filename}")
+            return
+
+        xmla_available = result.get('xmla_available', False)
+        tables = result.get('tables', [])
+        measures = result.get('measures', [])
+        message = result.get('message')
+
+        if mode in ('measures', 'dax') and not xmla_available:
+            print(f"Power Pivot Model: {filename}\n")
+            if message:
+                print(message)
+            else:
+                print("DAX measures not available — XMLA schema absent (modern Power BI export).")
+                print("Install reveal-cli[powerpivot] for full extraction.")
+            return
+
+        if mode == 'tables':
+            print(f"Power Pivot Model: {filename}\n")
+            print(f"Tables ({len(tables)}):")
+            for t in tables:
+                col_count = len(t.get('columns', []))
+                if col_count:
+                    print(f"  {t['name']} ({col_count} columns)")
+                else:
+                    print(f"  {t['name']}")
+            if not xmla_available:
+                print("\n(Column counts not available — XMLA schema absent)")
+
+        elif mode == 'schema':
+            print(f"Power Pivot Model: {filename}\n")
+            print(f"Tables ({len(tables)}):")
+            for t in tables:
+                cols = t.get('columns', [])
+                if cols:
+                    cols_preview = ', '.join(cols[:6])
+                    if len(cols) > 6:
+                        cols_preview += f', ... ({len(cols)} total)'
+                    print(f"  {t['name']} ({len(cols)} columns)")
+                    print(f"    {cols_preview}")
+                else:
+                    print(f"  {t['name']}")
+            if measures:
+                print(f"\nMeasures ({len(measures)}):")
+                max_name = max(len(m['name']) for m in measures)
+                for m in measures:
+                    print(f"  [{m['name']:<{max_name}}]  {m['table']}")
+            if not xmla_available:
+                print("\n(Schema limited — XMLA absent; table names from pivotCache only)")
+
+        elif mode == 'measures':
+            print(f"Power Pivot Measures: {filename}\n")
+            if not measures:
+                print("No measures found.")
+                return
+            max_name = max(len(m['name']) for m in measures)
+            for m in measures:
+                print(f"  [{m['name']:<{max_name}}]  {m['table']}")
+
+        elif mode == 'dax':
+            print(f"Power Pivot Measures: {filename}\n")
+            if not measures:
+                print("No measures found.")
+                return
+            max_name = max(len(m['name']) for m in measures)
+            for m in measures:
+                print(f"[{m['name']:<{max_name}}]  = {m['expr']}")
+
+    @staticmethod
     def render_element(result: dict, format: str = 'text') -> None:
         """Render specific xlsx element (same as structure for sheets)."""
         XlsxRenderer.render_structure(result, format)
@@ -152,6 +250,7 @@ _SCHEMA_QUERY_PARAMS = {
     'format': {'type': 'string', 'description': 'Output format (text, json, csv)', 'examples': ['format=csv', 'format=json']},
     'limit': {'type': 'integer', 'description': 'Maximum number of rows to return', 'examples': ['limit=100', 'limit=50']},
     'formulas': {'type': 'boolean', 'description': 'Show formulas instead of values', 'examples': ['formulas=true']},
+    'powerpivot': {'type': 'string', 'description': 'Extract Power Pivot model (tables|schema|measures|dax)', 'examples': ['powerpivot=schema', 'powerpivot=dax', 'powerpivot=tables', 'powerpivot=measures']},
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -183,15 +282,33 @@ _SCHEMA_OUTPUT_TYPES = [
             }}},
         }},
     },
+    {
+        'type': 'xlsx_powerpivot',
+        'description': 'Power Pivot data model: tables, columns, DAX measures',
+        'schema': {'type': 'object', 'properties': {
+            'type': {'type': 'string', 'const': 'xlsx_powerpivot'},
+            'has_model': {'type': 'boolean'},
+            'xmla_available': {'type': 'boolean'},
+            'model_path': {'type': 'string'},
+            'tables': {'type': 'array', 'items': {'type': 'object', 'properties': {
+                'name': {'type': 'string'}, 'columns': {'type': 'array'},
+            }}},
+            'measures': {'type': 'array', 'items': {'type': 'object', 'properties': {
+                'name': {'type': 'string'}, 'table': {'type': 'string'}, 'expr': {'type': 'string'},
+            }}},
+        }},
+    },
 ]
 
 _SCHEMA_NOTES = [
-    'Requires openpyxl — install with: pip install openpyxl',
+    'Pure stdlib implementation — no extra dependencies required',
     'Sheet can be specified by name or 0-based integer index (sheet=0 for first sheet)',
     '?range=A1:C10 uses standard A1 notation; omit to get the entire sheet',
     '?search=term is case-insensitive and searches all sheets simultaneously',
     '?formulas=true shows raw formulas instead of computed cell values',
     '?format=csv exports the sheet as CSV — pipe to other tools or save to file',
+    '?powerpivot=schema shows Power Pivot tables and columns (Excel 2010/2013 XMLA format)',
+    '?powerpivot=dax shows DAX measure expressions (requires Excel 2010/2013 XMLA; modern Power BI exports not supported without reveal-cli[powerpivot])',
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
@@ -201,6 +318,9 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': 'xlsx:///path/to/file.xlsx?sheet=Sales&format=csv', 'description': 'Export sheet as CSV', 'output_type': 'xlsx_sheet'},
     {'uri': 'xlsx:///path/to/file.xlsx?search=revenue', 'description': 'Search all sheets for matching rows (case-insensitive)', 'output_type': 'xlsx_search'},
     {'uri': 'xlsx:///path/to/file.xlsx?search=error&limit=20', 'description': 'Cross-sheet search with result limit', 'output_type': 'xlsx_search'},
+    {'uri': 'xlsx:///path/to/file.xlsx?powerpivot=tables', 'description': 'List Power Pivot tables with column counts', 'output_type': 'xlsx_powerpivot'},
+    {'uri': 'xlsx:///path/to/file.xlsx?powerpivot=schema', 'description': 'Show Power Pivot tables with all column names', 'output_type': 'xlsx_powerpivot'},
+    {'uri': 'xlsx:///path/to/file.xlsx?powerpivot=dax', 'description': 'Show DAX measure expressions', 'output_type': 'xlsx_powerpivot'},
 ]
 
 
@@ -379,6 +499,11 @@ class XlsxAdapter(ResourceAdapter):
         if not self.analyzer:
             raise ValueError("No file loaded")
 
+        # Check for powerpivot parameter
+        powerpivot_param = self.query_params.get('powerpivot')
+        if powerpivot_param is not None:
+            return self._get_powerpivot(powerpivot_param)
+
         # Check for sheet parameter - if present, extract sheet data
         sheet_param = self.query_params.get('sheet')
         if sheet_param is not None:
@@ -443,6 +568,11 @@ class XlsxAdapter(ResourceAdapter):
         format_param = self.query_params.get('format')
         if format_param:
             result_data['preferred_format'] = format_param
+
+        # Power Pivot banner: detect model and show table names
+        banner = self._build_powerpivot_banner()
+        if banner:
+            result_data['powerpivot_banner'] = banner
 
         return ResultBuilder.create(
             result_type='xlsx_workbook',
@@ -695,6 +825,220 @@ class XlsxAdapter(ResourceAdapter):
             source=self.file_path or Path('unknown'),
             data=result_data
         )
+
+    # -------------------------------------------------------------------------
+    # Power Pivot helpers
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _local(tag: str) -> str:
+        """Strip XML namespace from an ElementTree tag."""
+        return tag.split('}')[-1] if '}' in tag else tag
+
+    def _detect_powerpivot(self, zf: zipfile.ZipFile) -> Optional[str]:
+        """Return the model data path if this workbook contains a Power Pivot model.
+
+        Returns a real zip path for embedded models, or the sentinel 'xl/pivotCache/'
+        for external SSAS/OLAP workbooks that have pivot caches with OLAP hierarchies.
+        """
+        names = set(zf.namelist())
+        if 'xl/model/item.data' in names:
+            return 'xl/model/item.data'
+        if 'xl/customData/item1.data' in names:
+            return 'xl/customData/item1.data'
+        # External SSAS/OLAP: no embedded model, but pivotCaches reference a cube.
+        # Detect by checking for cacheHierarchy elements (OLAP-only attribute).
+        for name in names:
+            if not re.match(r'xl/pivotCache/pivotCacheDefinition\d+\.xml$', name):
+                continue
+            try:
+                root = ET.fromstring(zf.read(name))
+                for el in root.iter():
+                    if self._local(el.tag) == 'cacheHierarchies':
+                        return 'xl/pivotCache/'
+            except Exception:
+                pass
+        return None
+
+    def _find_xmla_item(self, zf: zipfile.ZipFile) -> Optional[str]:
+        """Return the customXml item path containing Gemini SSAS XMLA metadata, or None."""
+        for name in zf.namelist():
+            if not re.match(r'customXml/item\d+\.xml$', name):
+                continue
+            try:
+                raw = zf.read(name)
+                if raw[:2] in (b'\xff\xfe', b'\xfe\xff'):  # UTF-16 BOM
+                    text = raw.decode('utf-16', errors='replace')
+                    if 'MetadataRecoveryInformation' in text:
+                        return name
+            except Exception:
+                pass
+        return None
+
+    def _parse_xmla(self, zf: zipfile.ZipFile, item_path: str) -> Dict[str, Any]:
+        """Parse SSAS XMLA item — extract tables, columns, and DAX measures.
+
+        The item is a UTF-16 XML file with the XMLA wrapped in a CDATA section
+        inside a <Gemini><CustomContent><![CDATA[...]]></CustomContent></Gemini>
+        envelope.  We parse the outer doc first, then the inner XMLA.
+        """
+        raw = zf.read(item_path)
+        text = raw.decode('utf-16', errors='replace')
+        outer = ET.fromstring(text)
+        # Unwrap CDATA from <CustomContent> element (if present)
+        cc = next((e for e in outer.iter() if self._local(e.tag) == 'CustomContent'), None)
+        if cc is not None and cc.text:
+            root = ET.fromstring(cc.text)
+        else:
+            root = outer
+
+        local = self._local
+
+        # Collect tables from Dimension elements that have Attributes children.
+        # The XMLA has both full definitions and lightweight MeasureGroup refs;
+        # keep whichever has the most columns per name.
+        tables: Dict[str, List[str]] = {}
+        for dim in root.iter():
+            if local(dim.tag) != 'Dimension':
+                continue
+            attrs_elem = next((c for c in dim if local(c.tag) == 'Attributes'), None)
+            if attrs_elem is None:
+                continue
+            name = next((c.text for c in dim if local(c.tag) == 'Name'), None) or \
+                   next((c.text for c in dim if local(c.tag) == 'ID'), None)
+            if not name:
+                continue
+            cols: List[str] = []
+            for attr in attrs_elem:
+                if local(attr.tag) != 'Attribute':
+                    continue
+                attr_type = next((c.text for c in attr if local(c.tag) == 'Type'), None)
+                if attr_type == 'RowNumber':
+                    continue
+                col_name = next((c.text for c in attr if local(c.tag) == 'Name'), None) or \
+                           next((c.text for c in attr if local(c.tag) == 'ID'), None)
+                if col_name:
+                    cols.append(col_name)
+            if name not in tables or len(cols) > len(tables[name]):
+                tables[name] = cols
+
+        # Extract DAX measures from MdxScript Command/Text elements.
+        measure_pattern = re.compile(
+            r"CREATE\s+MEASURE\s+(?:\[[^\]]+\]\.)?'?([^'\[\r\n]+?)'?\[([^\]]+)\]\s*=\s*(.+?)(?=\s*;|\s*CREATE\s+MEASURE|\s*$)",
+            re.IGNORECASE | re.DOTALL,
+        )
+        measures = []
+        for cmd in root.iter():
+            if local(cmd.tag) != 'Text':
+                continue
+            content = cmd.text or ''
+            if 'CREATE MEASURE' not in content.upper():
+                continue
+            for m in measure_pattern.finditer(content):
+                measures.append({
+                    'table': m.group(1).strip(),
+                    'name': m.group(2).strip(),
+                    'expr': m.group(3).strip().rstrip(';').strip(),
+                })
+
+        return {
+            'has_model': True,
+            'xmla_available': True,
+            'tables': [{'name': k, 'columns': v} for k, v in tables.items()],
+            'measures': measures,
+        }
+
+    def _parse_pivot_cache(self, zf: zipfile.ZipFile) -> Dict[str, Any]:
+        """Fallback: extract table names from pivotCacheDefinition files."""
+        table_names: Set[str] = set()
+        for name in zf.namelist():
+            if not re.match(r'xl/pivotCache/pivotCacheDefinition\d+\.xml$', name):
+                continue
+            try:
+                root = ET.fromstring(zf.read(name))
+                for h in root.iter():
+                    if self._local(h.tag) == 'cacheHierarchy':
+                        m = re.match(r'\[([^\]]+)\]', h.get('uniqueName', ''))
+                        if m and m.group(1) != 'Measures':
+                            table_names.add(m.group(1))
+            except Exception:
+                pass
+        return {
+            'has_model': True,
+            'xmla_available': False,
+            'tables': [{'name': t, 'columns': []} for t in sorted(table_names)],
+            'measures': [],
+        }
+
+    def _build_powerpivot_banner(self) -> Optional[Dict[str, Any]]:
+        """Return banner dict for workbook overview, or None if no model detected."""
+        if not self.file_path:
+            return None
+        try:
+            with zipfile.ZipFile(self.file_path) as zf:
+                model_path = self._detect_powerpivot(zf)
+                if model_path is None:
+                    return None
+                xmla_item = self._find_xmla_item(zf)
+                if xmla_item:
+                    data = self._parse_xmla(zf, xmla_item)
+                    table_names = [t['name'] for t in data['tables']]
+                else:
+                    data = self._parse_pivot_cache(zf)
+                    table_names = [t['name'] for t in data['tables']]
+                return {'model_path': model_path, 'table_names': table_names}
+        except Exception:
+            return None
+
+    def _get_powerpivot(self, mode: str) -> Dict[str, Any]:
+        """Extract Power Pivot model for a ?powerpivot=<mode> request."""
+        valid_modes = ('tables', 'schema', 'measures', 'dax')
+        if mode not in valid_modes:
+            mode = 'schema'
+
+        if not self.file_path:
+            return ResultBuilder.create_error(
+                result_type='xlsx_powerpivot',
+                source=Path('unknown'),
+                error="No file loaded",
+            )
+
+        try:
+            with zipfile.ZipFile(self.file_path) as zf:
+                model_path = self._detect_powerpivot(zf)
+                if model_path is None:
+                    return ResultBuilder.create(
+                        result_type='xlsx_powerpivot',
+                        source=self.file_path,
+                        data={'file': str(self.file_path), 'has_model': False, 'mode': mode},
+                    )
+
+                xmla_item = self._find_xmla_item(zf)
+                if xmla_item:
+                    data = self._parse_xmla(zf, xmla_item)
+                else:
+                    data = self._parse_pivot_cache(zf)
+                    if mode in ('measures', 'dax'):
+                        data['message'] = (
+                            'DAX measures not available — XMLA schema absent (modern Power BI export). '
+                            'Install reveal-cli[powerpivot] for full extraction.'
+                        )
+
+                data['file'] = str(self.file_path)
+                data['model_path'] = model_path
+                data['mode'] = mode
+
+                return ResultBuilder.create(
+                    result_type='xlsx_powerpivot',
+                    source=self.file_path,
+                    data=data,
+                )
+        except Exception as e:
+            return ResultBuilder.create_error(
+                result_type='xlsx_powerpivot',
+                source=self.file_path,
+                error=str(e),
+            )
 
     def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         """Get specific sheet by name.
