@@ -79,19 +79,31 @@ This makes Reveal **self-describing infrastructure** — a property that enables
 
 #### 2. Adapter quality variance is a real risk
 
-**Evidence from LOC analysis**:
+**Evidence from LOC and test analysis**:
 
-| Adapter | Lines of Code | Test Files | Maturity |
-|---------|--------------|------------|----------|
-| claude:// | 3,478 | 5 | Deep, complex |
-| ssl:// | 2,651 | 2 | Deep, production-hardened |
-| mysql:// | 2,118 | 2 | Deep |
-| ast:// | 1,335 | 2 | Mature, well-tested |
-| calls:// | 722 | 1 | Newer, functional |
-| sqlite:// | 634 | 1 | Lighter |
-| autossl:// | 754 | 1 | Domain-specific |
+| Adapter | Lines of Code | Unit Tests | Error Handling (except blocks) | Maturity |
+|---------|--------------|------------|-------------------------------|----------|
+| claude:// | 3,478 | 5 test files | Moderate | Deep, complex |
+| ssl:// | 2,651 | 0 unit tests | 17 except blocks (highest) | Production-hardened via incidents |
+| mysql:// | 2,118 | 0 unit tests | 8 except blocks | Deep, modular |
+| python:// | 1,529 | 0 unit tests | Unknown | Moderate depth |
+| domain:// | 1,456 | 0 unit tests | 18 except blocks | Feature-rich |
+| ast:// | 1,335 | 38 unit tests | 5 except blocks | Mature, well-tested |
+| markdown:// | 1,304 | 0 unit tests | 9 except blocks | Active development |
+| nginx:// | 1,042 | 109 combined tests | 6 except blocks | Battle-tested |
+| calls:// | 722 | 68 unit tests (highest ratio) | 3 except blocks | Newest, most active |
+| sqlite:// | 634 | 0 unit tests | **0 except blocks** | Minimal error handling |
+| autossl:// | 754 | 0 unit tests | Unknown | Domain-specific |
 
-The variance is significant: `claude://` is 5.5x larger than `calls://`. Test file counts range from 1 to 5. Some adapters (ssl, mysql, nginx) have been hardened through production incidents (B1, B3, N003 fixes documented in CHANGELOG). Newer adapters haven't had this exposure yet.
+The variance is multi-dimensional:
+
+1. **Size**: `claude://` (3,478 LOC) is 5.5x larger than `calls://` (722 LOC)
+2. **Test coverage inversion**: `calls://` has 68 unit tests for 722 LOC (best ratio), while `ssl://` has 0 unit tests for 2,651 LOC — relying on production hardening instead
+3. **Error handling gap**: `sqlite://` has zero `except` blocks despite being a database adapter. Compare to `ssl://` (17) and `domain://` (18)
+4. **Documentation depth**: `ast://` has 429-line help.py; `sqlite://` has 87-line YAML — a 5x difference
+5. **Development velocity**: `calls://` had 7 commits in 2 weeks; most others had 1
+
+Some adapters (ssl, mysql, nginx) have been hardened through production incidents (B1, B3, N003 fixes documented in CHANGELOG). Newer adapters haven't had this exposure yet. The `sqlite://` adapter's zero error handling is the most concrete risk.
 
 #### 3. Operational scope is read-only by design
 
@@ -161,15 +173,17 @@ Auto-compute tier from test coverage, conformance results, and LOC metrics.
 
 ### B. Adapters
 
-#### B1. Strengthen newer adapters
+#### B1. Strengthen adapters with the largest quality gaps
 
-**Priority targets** (by LOC/test ratio):
+**Priority targets** (by risk, not recency):
 
-| Adapter | Action |
-|---------|--------|
-| `calls://` (722 LOC, 1 test file) | Add edge case tests: recursive calls, circular call chains, large codebases, multi-language |
-| `sqlite://` (634 LOC, 1 test file) | Add schema inspection depth, index analysis, query plan output |
-| `autossl://` (754 LOC, 1 test file) | Add failure mode tests, malformed log handling |
+| Adapter | Gap | Action |
+|---------|-----|--------|
+| `sqlite://` (634 LOC, 0 tests, 0 except blocks) | **Critical**: zero error handling for a database adapter | Add try/except for connection failures, corrupt databases, locked files, permission errors. Add unit tests. |
+| `ssl://` (2,651 LOC, 0 unit tests) | High: most complex adapter with no unit tests | Extract testable units from the 104 methods. Production incidents prove it works, but regressions are undetectable. |
+| `mysql://` (2,118 LOC, 0 unit tests) | High: 74 methods, 8 classes, zero unit test coverage | Add connection mock tests, health check validation, replication monitoring edge cases. |
+| `domain://` (1,456 LOC, 0 unit tests) | Medium: 53 methods with good error handling but no test verification | Add DNS resolution tests, timeout handling, partial propagation scenarios. |
+| `autossl://` (754 LOC, 0 unit tests) | Medium: log parsing with no failure mode tests | Add malformed log handling, multi-run edge cases. |
 
 #### B2. Cross-adapter integration tests
 
@@ -385,14 +399,16 @@ Overlaps with but is not a competitor to:
 
 | # | Improvement | Impact | Effort |
 |---|------------|--------|--------|
-| 1 | Fix ROADMAP `calls://` "Planned" -> "Implemented" | Accuracy | Trivial |
-| 2 | Update README adapter count and language count | Accuracy | Trivial |
-| 3 | Add `reveal --discover` (dump full adapter registry as JSON) | Discoverability | Low |
-| 4 | Add adapter conformance smoke test to CI | Quality floor | Medium |
-| 5 | Add "local-first" to README features section | Positioning | Trivial |
-| 6 | Create task-oriented decision tree in help://quick-start | UX | Low |
-| 7 | Add `related_adapters` to all adapter schemas | Navigation | Low |
-| 8 | Lint rule blocking raw query parsing in adapters | Consistency | Low |
+| 1 | Add error handling to `sqlite://` adapter (0 except blocks) | **Safety** | Low |
+| 2 | Fix ROADMAP `calls://` "Planned" -> "Implemented" | Accuracy | Trivial |
+| 3 | Update README adapter count and language count | Accuracy | Trivial |
+| 4 | Add unit tests for `ssl://` (2,651 LOC, 0 unit tests) | Reliability | Medium |
+| 5 | Add adapter conformance smoke test to CI | Quality floor | Medium |
+| 6 | Add `reveal --discover` (dump full adapter registry as JSON) | Discoverability | Low |
+| 7 | Add "local-first" to README features section | Positioning | Trivial |
+| 8 | Create task-oriented decision tree in help://quick-start | UX | Low |
+| 9 | Add `related_adapters` to all adapter schemas | Navigation | Low |
+| 10 | Lint rule blocking raw query parsing in adapters | Consistency | Low |
 
 ---
 
