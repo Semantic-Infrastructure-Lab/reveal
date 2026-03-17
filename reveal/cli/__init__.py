@@ -26,6 +26,7 @@ from .handlers import (
     handle_schema,
     handle_explain_rule,
     handle_list_schemas,
+    handle_discover,
     handle_stdin_mode,
     handle_decorator_stats,
 )
@@ -64,6 +65,7 @@ __all__ = [
     'handle_schema',
     'handle_explain_rule',
     'handle_list_schemas',
+    'handle_discover',
     'handle_stdin_mode',
     'handle_decorator_stats',
     # Scaffolding

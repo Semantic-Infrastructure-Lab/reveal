@@ -350,6 +350,65 @@ def handle_explain_rule(rule_code: str):
     sys.exit(0)
 
 
+def handle_discover():
+    """Handle --discover flag.
+
+    Dumps the full adapter registry as a single JSON document.
+    Each adapter entry includes its schema (output_types, query_params,
+    example_queries, notes) for programmatic discovery by agents and scripts.
+    """
+    import json
+    from ..adapters.base import _ADAPTER_REGISTRY
+
+    adapters = {}
+    for scheme in sorted(_ADAPTER_REGISTRY.keys()):
+        adapter_class = _ADAPTER_REGISTRY[scheme]
+        entry: dict = {'scheme': scheme}
+        try:
+            schema = adapter_class.get_schema()  # type: ignore[attr-defined]
+            entry['description'] = schema.get('description', '')
+            entry['uri_syntax'] = schema.get('uri_syntax', f'{scheme}://<target>')
+            entry['output_types'] = [
+                t.get('type') for t in schema.get('output_types', [])
+                if isinstance(t, dict) and 'type' in t
+            ]
+            entry['query_params'] = list(schema.get('query_params', {}).keys())
+            entry['cli_flags'] = schema.get('cli_flags', [])
+            entry['supports_batch'] = schema.get('supports_batch', False)
+            entry['supports_advanced'] = schema.get('supports_advanced', False)
+            entry['example_queries'] = [
+                q.get('uri') for q in schema.get('example_queries', [])
+                if isinstance(q, dict) and 'uri' in q
+            ]
+            notes = schema.get('notes', [])
+            entry['notes'] = notes if isinstance(notes, list) else [notes]
+        except (AttributeError, TypeError):
+            entry['description'] = 'Schema not available'
+            entry.setdefault('output_types', [])
+            entry.setdefault('query_params', [])
+            entry.setdefault('cli_flags', [])
+            entry.setdefault('supports_batch', False)
+            entry.setdefault('supports_advanced', False)
+            entry.setdefault('example_queries', [])
+            entry.setdefault('notes', [])
+
+        adapters[scheme] = entry
+
+    result = {
+        'reveal_version': None,
+        'adapter_count': len(adapters),
+        'adapters': adapters,
+    }
+    try:
+        from .. import __version__ as _ver
+        result['reveal_version'] = _ver
+    except ImportError:
+        pass
+
+    print(json.dumps(result, indent=2))
+    sys.exit(0)
+
+
 def handle_list_schemas():
     """Handle --list-schemas flag to list all built-in schemas."""
     from ..schemas.frontmatter import list_schemas, load_schema

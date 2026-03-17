@@ -209,6 +209,8 @@ def _add_discovery_options(group) -> None:
                        help='Show agent usage guide (llms.txt-style brief reference)')
     group.add_argument('--agent-help-full', action='store_true',
                        help='Show comprehensive agent guide (complete examples, patterns, troubleshooting)')
+    group.add_argument('--discover', action='store_true',
+                       help='Dump full adapter registry as JSON (schemas, output types, query params — for programmatic discovery)')
 
 
 def _add_input_output_options(parser: argparse.ArgumentParser) -> None:

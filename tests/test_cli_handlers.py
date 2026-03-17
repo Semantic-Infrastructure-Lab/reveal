@@ -9,6 +9,8 @@ from unittest.mock import patch, MagicMock
 import sys
 from io import StringIO
 
+import json
+
 from reveal.cli.handlers import (
     handle_rules_list,
     handle_explain_rule,
@@ -16,6 +18,7 @@ from reveal.cli.handlers import (
     handle_list_schemas,
     handle_list_supported,
     handle_adapters,
+    handle_discover,
     handle_explain_file,
     handle_capabilities,
     handle_show_ast,
@@ -278,6 +281,72 @@ class TestHandleAdapters(unittest.TestCase):
         self.assertIn('Usage:', output)
         self.assertIn('help://adapters', output)
         mock_exit.assert_called_once_with(0)
+
+
+class TestHandleDiscover(unittest.TestCase):
+    """Tests for handle_discover function."""
+
+    @patch('sys.exit')
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_handle_discover_returns_json(self, mock_stdout, mock_exit):
+        """--discover outputs valid JSON."""
+        handle_discover()
+        output = mock_stdout.getvalue()
+        parsed = json.loads(output)
+        self.assertIsInstance(parsed, dict)
+        mock_exit.assert_called_once_with(0)
+
+    @patch('sys.exit')
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_handle_discover_top_level_fields(self, mock_stdout, mock_exit):
+        """--discover output has expected top-level fields."""
+        handle_discover()
+        parsed = json.loads(mock_stdout.getvalue())
+        self.assertIn('reveal_version', parsed)
+        self.assertIn('adapter_count', parsed)
+        self.assertIn('adapters', parsed)
+        self.assertIsInstance(parsed['adapters'], dict)
+
+    @patch('sys.exit')
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_handle_discover_adapter_count_matches_entries(self, mock_stdout, mock_exit):
+        """adapter_count must equal number of keys in adapters dict."""
+        handle_discover()
+        parsed = json.loads(mock_stdout.getvalue())
+        self.assertEqual(parsed['adapter_count'], len(parsed['adapters']))
+
+    @patch('sys.exit')
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_handle_discover_known_adapters_present(self, mock_stdout, mock_exit):
+        """Core adapters should appear in output."""
+        handle_discover()
+        parsed = json.loads(mock_stdout.getvalue())
+        adapters = parsed['adapters']
+        for scheme in ('ast', 'calls', 'diff', 'git', 'sqlite', 'ssl', 'help'):
+            self.assertIn(scheme, adapters, f"Expected '{scheme}' in --discover output")
+
+    @patch('sys.exit')
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_handle_discover_adapter_entry_fields(self, mock_stdout, mock_exit):
+        """Each adapter entry has the required structural fields."""
+        handle_discover()
+        parsed = json.loads(mock_stdout.getvalue())
+        for scheme, entry in parsed['adapters'].items():
+            self.assertIn('scheme', entry, f"{scheme}: missing 'scheme'")
+            self.assertIn('description', entry, f"{scheme}: missing 'description'")
+            self.assertIn('output_types', entry, f"{scheme}: missing 'output_types'")
+            self.assertIn('example_queries', entry, f"{scheme}: missing 'example_queries'")
+            self.assertIsInstance(entry['output_types'], list, f"{scheme}: output_types not a list")
+
+    @patch('sys.exit')
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_handle_discover_version_string(self, mock_stdout, mock_exit):
+        """reveal_version should be a non-empty string."""
+        handle_discover()
+        parsed = json.loads(mock_stdout.getvalue())
+        self.assertIsNotNone(parsed['reveal_version'])
+        self.assertIsInstance(parsed['reveal_version'], str)
+        self.assertGreater(len(parsed['reveal_version']), 0)
 
 
 class TestHandleExplainFile(unittest.TestCase):
