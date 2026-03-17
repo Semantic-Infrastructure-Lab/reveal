@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from reveal.adapters.ssl import SSLAdapter, SSLFetcher, CertificateInfo
-from reveal.adapters.ssl.certificate import check_ssl_health
+from reveal.adapters.ssl.certificate import check_ssl_health, _check_ocsp_availability
 from reveal.adapters.ssl.renderer import SSLRenderer
 
 
@@ -1741,6 +1741,105 @@ server {
         output = buf.getvalue()
 
         self.assertIn('SSL Certificate File Validation', output)
+
+
+class TestValidateNginxRendering(unittest.TestCase):
+    """Tests for BACK-077: render_check routes ssl_nginx_validation without crashing."""
+
+    def _make_result(self, failed=0, passed=2):
+        results = [{'domain': f'ok{i}.example.com', 'status': 'pass', 'issues': []}
+                   for i in range(passed)]
+        if failed:
+            results.append({
+                'domain': 'bad.example.com',
+                'status': 'failure',
+                'issues': [{'type': 'cert_mismatch', 'severity': 'critical',
+                             'message': 'Cert path does not exist'}],
+            })
+        return {
+            'type': 'ssl_nginx_validation',
+            'source': '/etc/nginx/sites-enabled/*',
+            'domains_validated': passed + failed,
+            'status': 'pass' if failed == 0 else 'failure',
+            'summary': {'total': passed + failed, 'passed': passed, 'failed': failed},
+            'results': results,
+            'next_steps': [],
+            'exit_code': 0 if failed == 0 else 2,
+        }
+
+    def test_render_check_dispatches_nginx_validation(self):
+        """render_check() routes ssl_nginx_validation to the correct renderer."""
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            SSLRenderer.render_check(self._make_result())
+        output = buf.getvalue()
+        self.assertIn('SSL/Nginx Configuration Validation', output)
+        self.assertIn('PASS', output)
+
+    def test_render_check_nginx_validation_shows_failures(self):
+        """render_check() shows failure domain and issue for ssl_nginx_validation."""
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            SSLRenderer.render_check(self._make_result(failed=1))
+        output = buf.getvalue()
+        self.assertIn('bad.example.com', output)
+        self.assertIn('cert_mismatch', output)
+
+    def test_render_check_nginx_validation_error_path(self):
+        """render_check() handles ssl_nginx_validation error result without crashing."""
+        result = {'type': 'ssl_nginx_validation', 'error': 'No nginx path', 'exit_code': 2}
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            SSLRenderer.render_check(result)
+        output = buf.getvalue()
+        self.assertIn('No nginx path', output)
+
+
+class TestOCSPAvailabilityCheck(unittest.TestCase):
+    """Tests for BACK-078: _check_ocsp_availability surfaces OCSP URL absence."""
+
+    def _make_cert(self, issuer_name='DigiCert', ocsp_url=None):
+        return CertificateInfo(
+            subject={'commonName': 'example.com'},
+            issuer={'organizationName': issuer_name},
+            not_before=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            not_after=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            serial_number='abc123',
+            version=3,
+            san=['example.com'],
+            ocsp_url=ocsp_url,
+        )
+
+    def test_ocsp_url_present_returns_available(self):
+        cert = self._make_cert(ocsp_url='http://ocsp.example.com')
+        result = _check_ocsp_availability(cert)
+        self.assertEqual(result['name'], 'ocsp_stapling')
+        self.assertEqual(result['status'], 'info')
+        self.assertIn('Available', result['value'])
+        self.assertIn('http://ocsp.example.com', result['message'])
+
+    def test_ocsp_url_absent_non_le(self):
+        cert = self._make_cert(issuer_name='DigiCert', ocsp_url=None)
+        result = _check_ocsp_availability(cert)
+        self.assertEqual(result['status'], 'info')
+        self.assertEqual(result['value'], 'No OCSP URL')
+        self.assertNotIn("Let's Encrypt", result['message'])
+
+    def test_ocsp_url_absent_lets_encrypt(self):
+        """LE certs with no OCSP URL should mention ssl_stapling remediation."""
+        cert = self._make_cert(issuer_name="Let's Encrypt", ocsp_url=None)
+        result = _check_ocsp_availability(cert)
+        self.assertEqual(result['status'], 'info')
+        self.assertIn("Let's Encrypt", result['message'])
+        self.assertIn('ssl_stapling', result['message'])
+
+    def test_ocsp_check_included_in_advanced_checks(self):
+        """_run_advanced_checks includes ocsp_stapling check."""
+        from reveal.adapters.ssl.certificate import _run_advanced_checks
+        cert = self._make_cert(issuer_name="Let's Encrypt", ocsp_url=None)
+        result = _run_advanced_checks('example.com', 443, cert)
+        names = [c['name'] for c in result['checks']]
+        self.assertIn('ocsp_stapling', names)
 
 
 class TestExpiringWithinExitCode(unittest.TestCase):

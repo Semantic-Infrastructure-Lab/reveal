@@ -22,6 +22,7 @@ class CertificateInfo:
     version: int
     san: List[str]  # Subject Alternative Names
     signature_algorithm: Optional[str] = None
+    ocsp_url: Optional[str] = None
 
     @property
     def days_until_expiry(self) -> int:
@@ -62,6 +63,7 @@ class CertificateInfo:
             'version': self.version,
             'san': self.san,
             'signature_algorithm': self.signature_algorithm,
+            'ocsp_url': self.ocsp_url,
             'common_name': self.common_name,
             'issuer_name': self.issuer_name,
         }
@@ -87,10 +89,11 @@ class SSLFetcher:
             if binary_cert:
                 try:
                     x509_cert = x509.load_der_x509_certificate(binary_cert, default_backend())
+                    cert = dict(cert)
                     sig_hash = x509_cert.signature_hash_algorithm
                     if sig_hash:
-                        cert = dict(cert)
                         cert['signatureAlgorithm'] = sig_hash.name.upper()
+                    cert['ocspUrl'] = self._extract_ocsp_url(binary_cert)
                 except Exception:
                     pass
             return cert
@@ -151,9 +154,12 @@ class SSLFetcher:
             with socket.create_connection((host, port), timeout=self.timeout) as sock:
                 with context.wrap_socket(sock, server_hostname=host) as ssock:
                     cert = ssock.getpeercert()
+                    binary_cert = ssock.getpeercert(binary_form=True)
                     verification['verified'] = True
                     verification['hostname_match'] = True
                     leaf = self._parse_certificate(cert)  # type: ignore[arg-type]
+                    if binary_cert:
+                        leaf.ocsp_url = self._extract_ocsp_url(binary_cert)
                     return leaf, [], verification
         except ssl.CertificateError as e:
             verification['error'] = str(e)
@@ -205,6 +211,7 @@ class SSLFetcher:
             version=cert.get('version', 0),
             san=san,
             signature_algorithm=cert.get('signatureAlgorithm'),
+            ocsp_url=cert.get('ocspUrl'),
         )
 
     @staticmethod
@@ -223,6 +230,25 @@ class SSLFetcher:
         except x509.ExtensionNotFound:
             pass
         return san
+
+    @staticmethod
+    def _extract_ocsp_url(binary_cert: bytes) -> Optional[str]:
+        """Extract OCSP responder URL from certificate AIA extension.
+
+        Returns the URL string, or None if no OCSP entry is present (common
+        for Let's Encrypt ECDSA certs issued mid-2025+).
+        """
+        try:
+            cert = x509.load_der_x509_certificate(binary_cert, default_backend())
+            aia = cert.extensions.get_extension_for_oid(
+                x509.oid.ExtensionOID.AUTHORITY_INFORMATION_ACCESS
+            )
+            for desc in aia.value:  # type: ignore[attr-defined]
+                if desc.access_method == x509.oid.AuthorityInformationAccessOID.OCSP:
+                    return desc.access_location.value
+        except (x509.ExtensionNotFound, Exception):
+            pass
+        return None
 
     def _parse_binary_cert(self, binary_cert: bytes) -> Dict:
         """Parse binary certificate when getpeercert() returns None.
@@ -669,6 +695,40 @@ def _check_signature_algorithm(cert: CertificateInfo):
             'severity': 'low'}, False
 
 
+def _check_ocsp_availability(cert: CertificateInfo) -> Dict[str, Any]:
+    """Return an info check for OCSP stapling feasibility.
+
+    Surfaces absence of OCSP URL, which is common for Let's Encrypt ECDSA certs
+    issued mid-2025+ after LE retired their OCSP service for these certs.
+    """
+    if cert.ocsp_url:
+        return {
+            'name': 'ocsp_stapling',
+            'status': 'info',
+            'value': 'Available',
+            'threshold': 'N/A',
+            'message': f'OCSP responder available ({cert.ocsp_url})',
+            'severity': 'info',
+        }
+    is_le = "let's encrypt" in cert.issuer_name.lower()
+    if is_le:
+        message = (
+            "No OCSP responder URL in certificate (Let's Encrypt ECDSA certs "
+            "issued mid-2025+ omit OCSP). Remove ssl_stapling from nginx config "
+            "to suppress reload warnings."
+        )
+    else:
+        message = "No OCSP responder URL in certificate AIA extension."
+    return {
+        'name': 'ocsp_stapling',
+        'status': 'info',
+        'value': 'No OCSP URL',
+        'threshold': 'N/A',
+        'message': message,
+        'severity': 'info',
+    }
+
+
 def _run_advanced_checks(
     host: str, port: int, cert: CertificateInfo, timeout: float = 10.0
 ) -> Dict[str, Any]:
@@ -684,6 +744,7 @@ def _run_advanced_checks(
         _check_cert_type(cert, is_wildcard),
         _check_issuer_type(cert),
         sig_check,
+        _check_ocsp_availability(cert),
     ]
     return {
         'checks': checks,

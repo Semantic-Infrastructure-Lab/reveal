@@ -353,6 +353,11 @@ class SSLRenderer(TypeDispatchRenderer):
             cls._render_ssl_cert_file_validation(result, only_failures)
             return
 
+        # Route to nginx SSL validation renderer
+        if result_type == 'ssl_nginx_validation':
+            cls._render_ssl_nginx_validation(result)
+            return
+
         # Single host check
         cls._render_single_host_header(result['host'], result['port'],
                                         result['status'], result['summary'])
@@ -701,7 +706,6 @@ class SSLRenderer(TypeDispatchRenderer):
 
         print(f"Exit code: {result['exit_code']}")
 
-    @staticmethod
     @staticmethod
     def _render_cert_file_failures(failures: list) -> None:
         if not failures:
