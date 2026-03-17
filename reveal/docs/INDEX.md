@@ -29,6 +29,7 @@ category: reference
 | [WHY_REVEAL.md](WHY_REVEAL.md) | — | What makes Reveal powerful — key capabilities with examples |
 | [QUICK_START.md](QUICK_START.md) | 374 | 5-minute introduction for new users |
 | [BENCHMARKS.md](BENCHMARKS.md) | — | Measured 3.9–33x token reduction — 5 real scenarios with exact numbers |
+| [MCP_SETUP.md](MCP_SETUP.md) | — | MCP server setup for Claude Code, Cursor, Windsurf — 5 tools, stdio/SSE transports |
 | [RECIPES.md](RECIPES.md) | 1023 | Task-based workflows and common patterns |
 | [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) | 1386 | Complete codebase review workflows |
 
