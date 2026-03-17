@@ -379,6 +379,7 @@ reveal ssl://example.com --check
 2. **Key strength** - Is key size adequate (RSA 2048+, ECDSA 256+)?
 3. **Issuer type** - Is issuer a trusted CA (not self-signed)?
 4. **Self-signed detection** - Is certificate self-signed?
+5. **OCSP URL availability** - Does the AIA extension include an OCSP responder URL? Emitted as `info` (not a failure). Note: Let's Encrypt ECDSA certs removed OCSP stapling in 2024; the field may be absent on valid LE certs.
 
 **Example**:
 ```bash
@@ -1144,11 +1145,11 @@ reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check --only-failures
 
 ## Limitations
 
-### 1. No OCSP/Revocation Checking
+### 1. No OCSP Revocation Status Checking
 
-**Limitation**: SSL adapter does NOT check certificate revocation status (OCSP, CRL).
+**Limitation**: SSL adapter checks for an OCSP responder URL in the certificate's AIA extension (`--check --advanced`) but does NOT query the OCSP responder to verify revocation status.
 
-**Workaround**: Use `openssl s_client -status` for OCSP checking.
+**Workaround**: Use `openssl s_client -status` to perform a live OCSP revocation check.
 
 ### 2. Chain Limited Without PyOpenSSL
 
@@ -1361,9 +1362,9 @@ fi
 
 ## FAQ
 
-### Q1: Why doesn't ssl:// check certificate revocation?
+### Q1: Does ssl:// check certificate revocation?
 
-**A**: OCSP/CRL checking requires external service queries and adds latency. Use `openssl s_client -status` for OCSP checking if needed.
+**A**: Partially. `reveal ssl://example.com --check --advanced` checks whether the certificate's AIA extension contains an OCSP responder URL (and notes Let's Encrypt ECDSA certs that no longer include one). However, it does NOT query the OCSP responder to verify actual revocation status — that requires external service calls and adds latency. Use `openssl s_client -status` for a live revocation check.
 
 ### Q2: Can I check certificates from a load balancer?
 

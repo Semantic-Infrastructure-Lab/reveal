@@ -12,7 +12,15 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316, heating-blizzard-0316, ascending-journey-0316, spinning-observatory-0316, frost-matrix-0316, obsidian-prism-0316, warming-ice-0316, tempestuous-sunshine-0316, bojififo-0317, serene-mist-0317, galactic-quasar-0317, dowepeva-0317, timeless-launch-0317, zifaxo-0317)
+## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316, heating-blizzard-0316, ascending-journey-0316, spinning-observatory-0316, frost-matrix-0316, obsidian-prism-0316, warming-ice-0316, tempestuous-sunshine-0316, bojififo-0317, serene-mist-0317, galactic-quasar-0317, dowepeva-0317, timeless-launch-0317, zifaxo-0317, topaz-flash-0317)
+
+### Added
+- **BACK-078: OCSP URL availability in `--advanced`** — `CertificateInfo` gains `ocsp_url: Optional[str]` extracted from the AIA extension via the `cryptography` library. `_check_ocsp_availability()` added to `_run_advanced_checks`; emits an `info`-level finding when the OCSP URL is present (not a failure). Let's Encrypt ECDSA certs get a specific note that OCSP stapling was removed in 2024 and the field may be absent. 4 new tests. (session topaz-flash-0317)
+
+### Fixed
+- **BACK-077: `--validate-nginx` KeyError crash** — `render_check()` had no routing branch for the `ssl_nginx_validation` result type, falling through to the single-host path that expected a `result['host']` key. Added the missing branch. Also removed a duplicate `@staticmethod` decorator. 3 new tests. (session topaz-flash-0317)
+- **MCP: update-check stdout injection** — `check_for_updates()` prints to stdout; since `_capture()` redirects `sys.stdout` before invoking reveal functions, update notices were appearing at the top of every tool response. Fix: `os.environ.setdefault('REVEAL_NO_UPDATE_CHECK', '1')` at module import time. 2 new tests. (session topaz-flash-0317)
+- **MCP: stderr swallowed on tool errors** — `_capture()` only redirected stdout. Errors written to stderr before `sys.exit(1)` were silently dropped; MCP clients received only `[reveal exited with code 1]` with no context. Now captures stderr and includes it in the response (appended to stdout, or as a `[stderr: …]` prefix when stdout is empty). 6 new tests. (session topaz-flash-0317)
 
 ### Added
 - **`?powerpivot=relationships`** — new query mode extracts the full relationship graph from the SSAS ASSL model. Parses `Relationship` elements, resolves dimension GUIDs to table names, extracts join columns from `Attributes/Attribute/AttributeID`, shows cardinality (Many/One) per end. Output grouped by from-table. Gracefully reports "not available" when XMLA is absent (pivotCache fallback). 11 new unit tests + 3 integration tests (113 total). (session zifaxo-0317)

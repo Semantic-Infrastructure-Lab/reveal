@@ -151,6 +151,7 @@ Summary sheet:
 | `format` | string | Output format: `text` (default), `json`, `csv` | `?format=csv` |
 | `search` | string | Search term (case-insensitive) | `?search=revenue` |
 | `limit` | int | Max rows to display (default: 25) | `?limit=100` |
+| `powerpivot` | string | Power Pivot query mode (see below) | `?powerpivot=tables` |
 
 **Parameter combinations:**
 ```bash
@@ -234,6 +235,76 @@ Output characteristics:
 - Quoted fields (handles commas, quotes, newlines)
 - UTF-8 encoding
 - CRLF line endings
+
+---
+
+## Power Pivot Workbooks
+
+Reveal detects Excel workbooks with an embedded Power Pivot / SSAS data model and
+surfaces the model's structure via `?powerpivot=` query modes.
+
+### Detection
+
+Power Pivot workbooks are automatically detected at the overview level:
+
+```bash
+reveal model.xlsx
+# Workbook: model.xlsx (2.4 MB)  ★ Power Pivot model detected
+# Sheets (2): ...
+```
+
+Supported formats: Excel 2010 (`xl/customData/item1.data`), Excel 2013+
+(`xl/model/item.data`), modern Power BI exports (pivotCache fallback when XMLA
+is absent), and external SSAS/OLAP connections (`xl/pivotCache/` with
+`cacheHierarchies`).
+
+### Query Modes
+
+| Mode | Description |
+|------|-------------|
+| `?powerpivot=tables` | Table names + column counts |
+| `?powerpivot=schema` | Full table + column listing + measure names |
+| `?powerpivot=measures` | Measure names + owning table |
+| `?powerpivot=dax` | Measure names + full DAX expressions |
+| `?powerpivot=relationships` | Full relationship graph (from-table → to-table, join columns, cardinality) |
+
+### Examples
+
+```bash
+# List all tables in the model
+reveal xlsx://model.xlsx?powerpivot=tables
+
+# Full schema: tables, columns, measures
+reveal xlsx://model.xlsx?powerpivot=schema
+
+# DAX expressions for all measures
+reveal xlsx://model.xlsx?powerpivot=dax
+
+# Relationship graph
+reveal xlsx://model.xlsx?powerpivot=relationships
+```
+
+**`?powerpivot=relationships` output:**
+```
+Relationships (3):
+  Sales → Product
+    Sales[ProductKey] → Product[ProductKey]  (Many → One)
+  Sales → Date
+    Sales[OrderDate] → Date[Date]  (Many → One)
+  Sales → Customer
+    Sales[CustomerKey] → Customer[CustomerKey]  (Many → One)
+```
+
+When XMLA is absent (pivotCache fallback or external SSAS connection), modes that
+require the full model (schema, measures, dax, relationships) report "not available"
+gracefully.
+
+### Use with MCP
+
+```
+reveal_query("xlsx://model.xlsx?powerpivot=tables")
+reveal_query("xlsx://model.xlsx?powerpivot=relationships")
+```
 
 ---
 
@@ -391,7 +462,7 @@ reveal file.xlsx?sheet=Sales&format=csv | tail -11
 2. **Formatting** - No colors, fonts, borders, cell styles
 3. **Charts/Images** - Not extracted
 4. **Macros/VBA** - Not executed or extracted
-5. **Pivot tables** - Shown as static data only
+5. **Standard pivot tables** - Shown as static data only (regular Excel pivot tables, not Power Pivot). Power Pivot / SSAS data models are fully supported via `?powerpivot=` — see Power Pivot section above.
 6. **Multiple sheets simultaneously** - One sheet per query
 7. **Password-protected files** - Not supported
 8. **Binary XLS files** - Only .xlsx (XML-based) supported
@@ -534,6 +605,18 @@ sqlite3 data.db ".import --csv transactions.csv transactions"
 ---
 
 ## Version History
+
+### v0.64.0+ (2026-03-17, sessions timeless-launch-0317, zifaxo-0317)
+- ✅ `?powerpivot=relationships` — full relationship graph from SSAS ASSL model
+- ✅ DAX regex fix: handles tableless `CREATE MEASURE` format (real-world files)
+- ✅ External SSAS/OLAP workbook detection via `xl/pivotCache/` sentinel
+- ✅ 113 tests total
+
+### v0.64.0 (2026-03-17, session timeless-launch-0317)
+- ✅ Power Pivot model extraction: `?powerpivot=tables/schema/measures/dax`
+- ✅ Detects Excel 2010, 2013+, and Power BI export formats
+- ✅ Pure stdlib — no new dependencies
+- ✅ 44 new tests
 
 ### v0.49.0 (2024-02-10)
 - ✅ Initial release
