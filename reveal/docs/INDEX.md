@@ -17,7 +17,7 @@ category: reference
 - **Adapters** → See [Adapter Guides](#adapter-guides-17-files) below
 - **nginx / cPanel operator** → [NGINX_GUIDE.md](NGINX_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md)
 - **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2766 lines)
-- **Developers** → [Development Guides](#development-guides-3-files)
+- **Developers** → [Development Guides](#development-guides-4-files)
 
 ---
 
@@ -118,17 +118,18 @@ Reference guides for `reveal dev`, `review`, `health`, and `pack` subcommands:
 
 ---
 
-## Development Guides (3 files)
+## Development Guides (4 files)
 
 For contributors and adapter authors:
 
 | File | Lines | Description |
 |------|-------|-------------|
+| [../../ARCHITECTURE.md](../../ARCHITECTURE.md) | 312 | **Start here**: URI routing, adapter lifecycle, output contract, query pipeline, help tiers, subcommand model |
 | [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) | 454 | Create custom adapters |
 | [ADAPTER_CONSISTENCY.md](ADAPTER_CONSISTENCY.md) | 388 | Adapter UX patterns and consistency |
 | [SCAFFOLDING_GUIDE.md](SCAFFOLDING_GUIDE.md) | 390 | CLI scaffolding system |
 
-**Total**: ~1,230 lines
+**Total**: ~1,542 lines
 
 ---
 
@@ -170,6 +171,7 @@ Complete reference for AI agent integration:
 - "How do I use X adapter?" → [Adapter Guides](#adapter-guides-17-files)
 - "How do queries work?" → [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md)
 - "For AI agents?" → [AGENT_HELP.md](AGENT_HELP.md)
+- "How does Reveal work internally?" → [ARCHITECTURE.md](../../ARCHITECTURE.md)
 - "Create custom adapter?" → [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md)
 
 **By Adapter**:
