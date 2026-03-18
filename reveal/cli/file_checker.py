@@ -26,7 +26,7 @@ _PARALLEL_THRESHOLD = 4
 from reveal.checks import _GROUP_THRESHOLD, _is_generated_file  # noqa: E402
 
 
-def _parallel_worker(packed_args: tuple) -> tuple:  # noqa: uncalled
+def _parallel_worker(packed_args: tuple) -> tuple:
     """Check one file and return results without printing.
 
     Module-level so it is picklable by multiprocessing.
@@ -63,7 +63,7 @@ def _i002_preload(directory: Path, ignore) -> dict:
         return {}
 
 
-def _i002_init_worker(graph_cache: dict) -> None:  # noqa: uncalled
+def _i002_init_worker(graph_cache: dict) -> None:
     """ProcessPoolExecutor initializer: seed each worker's I002 cache.
 
     Runs once per worker process, before any files are checked.  Importing
@@ -232,7 +232,7 @@ def collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> Li
     return files_to_check
 
 
-def check_and_report_file(  # noqa: uncalled
+def check_and_report_file(
     file_path: Path,
     directory: Path,
     select: Optional[list[str]],

@@ -163,7 +163,7 @@ def _preprocess_sort_arg() -> None:
         i += 1
 
 
-def main() -> None:  # noqa: uncalled
+def main() -> None:
     """Main CLI entry point."""
     _setup_windows_console()
     _preprocess_sort_arg()
@@ -393,7 +393,7 @@ def _print_fallback_languages(fallbacks: List[Tuple[str, str]]) -> None:
     print("Note: Contributions for full analyzers welcome!")
 
 
-def list_supported_types() -> None:  # noqa: uncalled
+def list_supported_types() -> None:
     """List all supported file types."""
     analyzers = get_all_analyzers()
 

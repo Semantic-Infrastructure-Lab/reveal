@@ -30,7 +30,7 @@ _APPROX_CHARS_PER_TOKEN = 4
 _KEY_DIR_SEGMENTS = {'main', 'core', 'api', 'routes', 'models', 'schema', 'auth', 'config'}
 
 
-def create_pack_parser() -> argparse.ArgumentParser:  # noqa: uncalled
+def create_pack_parser() -> argparse.ArgumentParser:
     """Create parser for reveal pack subcommand."""
     from reveal.cli.parser import _build_global_options_parser
     parser = argparse.ArgumentParser(
@@ -88,7 +88,7 @@ def create_pack_parser() -> argparse.ArgumentParser:  # noqa: uncalled
     return parser
 
 
-def run_pack(args: Namespace) -> None:  # noqa: uncalled
+def run_pack(args: Namespace) -> None:
     """Run the pack workflow."""
     path = Path(args.path)
     if not path.exists():

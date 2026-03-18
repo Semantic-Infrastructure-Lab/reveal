@@ -28,7 +28,7 @@ _SCHEMA_QUERY_PARAMS = {
     'ref': {'type': 'string', 'description': 'Override starting ref — alias for @ref in the URI (branch, tag, or commit)', 'examples': ['?type=history&ref=v0.63.0', '?ref=main']},
 }
 
-def _git_output_type(type_name: str, description: str, extra_props: dict) -> dict:  # noqa: uncalled
+def _git_output_type(type_name: str, description: str, extra_props: dict) -> dict:
     base = {
         'contract_version': {'type': 'string'},
         'type': {'type': 'string', 'const': type_name},

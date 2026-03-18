@@ -454,10 +454,10 @@ Split into `_render_powerpivot_tables`, `_render_powerpivot_schema`,
 
 ### BACK-083: `calls://?uncalled` false positives for runtime-dispatched functions
 
-**Status**: ✅ Shipped (session rainbow-aurora-0317)
+**Status**: ✅ Shipped (session rainbow-aurora-0317) / revised copper-tint-0317
 **Value**: Medium | **Lift**: Small
 
-`# noqa: uncalled` suppression implemented in `find_uncalled` — checks the reported line and up to 3 lines forward (handles decorator-first reporting). `CALLS_ADAPTER_GUIDE.md` gains "Known False Positives" section covering @tool decorators, console scripts, and dispatch table functions. Module-level call-site limitation documented. Stale FAQ corrected. 3 new tests. reveal/ annotated: 35+ `# noqa: uncalled` comments across handlers.py, mcp_server.py, main.py, cli/commands/*, rendering/adapters/help.py.
+`# noqa: uncalled` suppression implemented in `find_uncalled` — checks the reported line and up to 3 lines forward (handles decorator-first reporting). Module-level call-site limitation documented. Stale FAQ corrected. 3 new tests. Revised (copper-tint-0317): removed 35+ `# noqa: uncalled` annotations from reveal's own codebase; feature kept but no longer advertised as a primary workflow. `CALLS_ADAPTER_GUIDE.md` false-positives section condensed.
 
 ---
 

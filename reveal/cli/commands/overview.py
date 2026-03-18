@@ -31,7 +31,7 @@ _EXT_LANG: Dict[str, str] = {
 }
 
 
-def create_overview_parser() -> argparse.ArgumentParser:  # noqa: uncalled
+def create_overview_parser() -> argparse.ArgumentParser:
     """Create parser for reveal overview subcommand."""
     from reveal.cli.parser import _build_global_options_parser
     parser = argparse.ArgumentParser(
@@ -68,7 +68,7 @@ def create_overview_parser() -> argparse.ArgumentParser:  # noqa: uncalled
     return parser
 
 
-def run_overview(args: Namespace) -> None:  # noqa: uncalled
+def run_overview(args: Namespace) -> None:
     """Run the overview dashboard."""
     path = Path(args.path).resolve()
     if not path.exists():

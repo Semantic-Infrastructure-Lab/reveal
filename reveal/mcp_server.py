@@ -201,7 +201,7 @@ def _default_args(**overrides) -> Namespace:
 
 
 @mcp.tool()
-def reveal_structure(path: str) -> str:  # noqa: uncalled
+def reveal_structure(path: str) -> str:
     """Get the semantic structure of a file or directory.
 
     For **directories**: returns the file tree with sizes and language types.
@@ -221,7 +221,7 @@ def reveal_structure(path: str) -> str:  # noqa: uncalled
 
 
 @mcp.tool()
-def reveal_element(path: str, element: str) -> str:  # noqa: uncalled
+def reveal_element(path: str, element: str) -> str:
     """Extract a specific function or class from a file.
 
     Use after reveal_structure to drill into the exact code you need.
@@ -239,7 +239,7 @@ def reveal_element(path: str, element: str) -> str:  # noqa: uncalled
 
 
 @mcp.tool()
-def reveal_query(uri: str) -> str:  # noqa: uncalled
+def reveal_query(uri: str) -> str:
     """Run a reveal URI query across any of 22 adapters.
 
     Full access to all reveal adapters using the ``scheme://resource?query`` syntax.
@@ -270,7 +270,7 @@ def reveal_query(uri: str) -> str:  # noqa: uncalled
 
 
 @mcp.tool()
-def reveal_pack(  # noqa: uncalled
+def reveal_pack(
     path: str,
     budget: int = 8000,
     since: str = '',
@@ -310,7 +310,7 @@ def reveal_pack(  # noqa: uncalled
 
 
 @mcp.tool()
-def reveal_check(path: str, severity: str = '') -> str:  # noqa: uncalled
+def reveal_check(path: str, severity: str = '') -> str:
     """Run quality checks on a file or directory.
 
     Detects: cyclomatic complexity hotspots, maintainability issues, style
@@ -337,7 +337,7 @@ def reveal_check(path: str, severity: str = '') -> str:  # noqa: uncalled
     return _capture(run_check, args)
 
 
-def main() -> None:  # noqa: uncalled
+def main() -> None:
     """Entry point for the ``reveal-mcp`` command."""
     import argparse
 

@@ -555,7 +555,7 @@ def validate_navigation_args(args):
 
 # Backward compatibility aliases (private names)
 _build_help_epilog = build_help_epilog
-def _create_argument_parser():  # noqa: E302 (backward compat alias)  # noqa: uncalled
+def _create_argument_parser():  # noqa: E302 (backward compat alias)
     return create_argument_parser('')  # Will be overridden
 
 

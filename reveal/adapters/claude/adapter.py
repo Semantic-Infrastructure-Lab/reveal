@@ -66,7 +66,7 @@ _SCHEMA_ELEMENTS = {
     'message/<n>': 'Single message by zero-based index (or negative: message/-1 = last message)'
 }
 
-def _make_output_type(type_name: str, description: str, extra_props: dict) -> dict:  # noqa: uncalled
+def _make_output_type(type_name: str, description: str, extra_props: dict) -> dict:
     """Build a standard claude output_type schema entry."""
     props = {
         'contract_version': {'type': 'string'},
@@ -901,12 +901,12 @@ class ClaudeAdapter(ResourceAdapter):
         conversation_path_str = str(self.conversation_path) if self.conversation_path else ''
         return get_overview(messages, self.session_name, conversation_path_str, self._get_contract_base())
 
-    def _get_summary(self, messages: List[Dict]) -> Dict[str, Any]:  # noqa: uncalled
+    def _get_summary(self, messages: List[Dict]) -> Dict[str, Any]:
         """Wrapper for backward compatibility."""
         conversation_path_str = str(self.conversation_path) if self.conversation_path else ''
         return get_summary(messages, self.session_name, conversation_path_str, self._get_contract_base())
 
-    def _calculate_tool_success_rate(self, messages: List[Dict]) -> Dict[str, Dict[str, Any]]:  # noqa: uncalled
+    def _calculate_tool_success_rate(self, messages: List[Dict]) -> Dict[str, Dict[str, Any]]:
         """Wrapper for backward compatibility."""
         return calculate_tool_success_rate(messages)
 

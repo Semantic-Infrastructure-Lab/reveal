@@ -31,7 +31,7 @@ _STDLIB_FALLBACK = frozenset({
 _KNOWN_STDLIB = _STDLIB | _STDLIB_FALLBACK
 
 
-def create_deps_parser() -> argparse.ArgumentParser:  # noqa: uncalled
+def create_deps_parser() -> argparse.ArgumentParser:
     """Create parser for reveal deps subcommand."""
     from reveal.cli.parser import _build_global_options_parser
     parser = argparse.ArgumentParser(
@@ -74,7 +74,7 @@ def create_deps_parser() -> argparse.ArgumentParser:  # noqa: uncalled
     return parser
 
 
-def run_deps(args: Namespace) -> None:  # noqa: uncalled
+def run_deps(args: Namespace) -> None:
     """Run the dependency dashboard."""
     path = Path(args.path).resolve()
     if not path.exists():

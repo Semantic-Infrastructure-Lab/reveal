@@ -398,18 +398,12 @@ reveal 'calls://src/?target=parse_config' --format=json | \
 ### Workflow 2: Find Unused Functions (Dead Code)
 
 ```bash
-# Step 1: List all functions in the project
-reveal 'ast://src/?type=function' --format=json | \
-  jq -r '.results[].name' | sort > all_functions.txt
-
-# Step 2: For each function, check if it has callers
-while read fn; do
-  count=$(reveal "calls://src/?target=$fn" --format=json | jq '.total_callers')
-  if [ "$count" -eq 0 ]; then
-    echo "UNUSED: $fn"
-  fi
-done < all_functions.txt
+reveal 'calls://src/?uncalled'                # all functions/methods with no callers
+reveal 'calls://src/?uncalled&type=function'  # module-level only (skip methods)
+reveal 'calls://src/?uncalled&top=20'         # most-recently-modified uncalled first
 ```
+
+Note: static analysis produces false positives for runtime-dispatched functions (framework entry points, console scripts, dispatch tables). Treat results as candidates to investigate, not definitive dead code.
 
 ### Workflow 3: Trace an Execution Path
 
@@ -531,54 +525,11 @@ reveal 'calls://.?target=fn'       # use project root for full coverage
 
 **Language support.** Call extraction relies on tree-sitter analyzers. Python has the best support. JS/TS/Go/Rust work but have shallower call extraction for complex expressions.
 
-### Known False Positives in `?uncalled`
+### False Positives in `?uncalled`
 
-Static analysis cannot see runtime dispatch. Three patterns consistently produce false positives:
+`?uncalled` uses static name matching and cannot see runtime dispatch. Common sources of false positives: framework entry points (`@mcp.tool()`, `@app.route()`), console scripts wired in `pyproject.toml`, dispatch table functions (`_RENDERERS = {'key': fn}`), and functions called only at module level outside any function body.
 
-**1. Framework entry points (`@tool`, `@app.route`, etc.)**
-
-Functions registered via decorator at runtime are never called by an explicit `fn()` expression in source:
-
-```python
-@mcp.tool()
-def reveal_structure(path: str) -> str:  # noqa: uncalled
-    ...
-```
-
-**2. Console script entry points**
-
-Functions wired as `[project.scripts]` in `pyproject.toml` are called by pip-installed scripts, not by source code:
-
-```python
-def main() -> None:  # noqa: uncalled
-    ...
-```
-
-**3. Dispatch table functions**
-
-Functions stored in a dict and called via key lookup:
-
-```python
-_RENDERERS = {
-    'check': _render_check,    # never appears as _render_check()
-    'tables': _render_tables,
-}
-
-def _render_check(data):  # noqa: uncalled
-    ...
-```
-
-### Suppressing False Positives: `# noqa: uncalled`
-
-Add `# noqa: uncalled` to the function's `def` line to exclude it from `?uncalled` results:
-
-```python
-def main() -> None:  # noqa: uncalled
-    """Console script entry point."""
-    ...
-```
-
-The suppression is narrow: it only affects `?uncalled`. The function still appears in all other `calls://` queries (`?target=`, `?callees=`, `?rank=callers`).
+Add `# noqa: uncalled` to a `def` line to exclude a specific function from results. The suppression is narrow — the function still appears in all other `calls://` queries.
 
 ---
 

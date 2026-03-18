@@ -2798,7 +2798,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
-- **v0.64.0** (unreleased) - `reveal overview` + `reveal deps` subcommands; `reveal-mcp` MCP server (5 tools); `pack --content` tiered emission; `xlsx://` Power Pivot extraction (`?powerpivot=tables/schema/measures/dax/relationships`); `calls://?uncalled` dead code detection; `diff://` per-function complexity delta; `claude://sessions/?search=`; `# noqa: uncalled` suppression; Output contract compliance tests; ARCHITECTURE.md; `--discover` flag
+- **v0.64.0** (unreleased) - `reveal overview` + `reveal deps` subcommands; `reveal-mcp` MCP server (5 tools); `pack --content` tiered emission; `xlsx://` Power Pivot extraction (`?powerpivot=tables/schema/measures/dax/relationships`); `calls://?uncalled` dead code candidates; `diff://` per-function complexity delta; `claude://sessions/?search=`; Output contract compliance tests; ARCHITECTURE.md; `--discover` flag
 - **v0.63.0** - `calls://` complete: `?callees=`, `?rank=callers`, `?builtins=` filtering; I005 + I006 import rules; `reveal hotspots` subcommand; B006 false-positive fixes; cpanel `full-audit`, `?domain_type=`
 - **v0.61.0** - markdown cross-file link graph; claude:// cross-session file tracking + content search; json:// `?flatten` fix; domain:// task section; cpanel `--only-failures` for acl-check; I001 `__init__.py` re-export fix; B006 multi-attempt fallback fix; M102 dynamic dispatch fix
 - **v0.60.0** - `nginx://` URI adapter (21st adapter); nginx vhost inspection by domain name; nginx bug fixes (glob + nesting); N007 rule
