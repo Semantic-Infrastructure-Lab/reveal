@@ -130,12 +130,31 @@ def _check_target(target: str, args: Namespace):
     return 1, f"not found: {target}"
 
 
+# Maximum supported files before health bails and tells the user to run reveal check directly.
+# At this scale, capture_output=True in the subprocess double-buffers all output in the parent
+# process which can exhaust RAM on machines with limited swap.
+_HEALTH_MAX_FILES = 5000
+
+
 def _check_code(path: Path, args: Namespace):
     """Run code quality health check."""
     import subprocess
+    # Guard: count files before spawning subprocess.  Running reveal check on a large
+    # tree (>5000 files) can exhaust memory because the subprocess buffers all JSON
+    # output and the parent captures it all via capture_output=True.
+    if path.is_dir():
+        from reveal.cli.file_checker import collect_files_to_check, load_gitignore_patterns
+        resolved = path.resolve()
+        gitignore_patterns = load_gitignore_patterns(resolved)
+        files = collect_files_to_check(resolved, gitignore_patterns)
+        if len(files) > _HEALTH_MAX_FILES:
+            return 1, (
+                f"code: skipped — {len(files)} files exceeds health check limit "
+                f"({_HEALTH_MAX_FILES}). Use `reveal check {path}` directly."
+            )
     select = getattr(args, 'select', None) or 'B,S,I,C'
     cmd = ['reveal', 'check', str(path), f'--select={select}', '--only-failures', '--format=json']
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     output = result.stdout.strip()
 
     try:

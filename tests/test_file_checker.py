@@ -170,6 +170,37 @@ class TestCollectFilesToCheck:
         assert len(files) == 1
         assert files[0].name == 'included.py'
 
+    def test_additional_excluded_directories(self, tmp_path):
+        """Test that additional cache/artifact directories are also excluded (BACK-093)."""
+        for dirname in ['.pytest_cache', '.tox', '.eggs', 'env', '.benchmarks',
+                        '.deepeval', '.mypy_cache', '.ruff_cache', '.cache', '.hypothesis']:
+            subdir = tmp_path / dirname
+            subdir.mkdir()
+            (subdir / 'file.py').write_text('# Should be skipped')
+
+        (tmp_path / 'included.py').write_text('# Should be included')
+
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+            files = collect_files_to_check(tmp_path, [])
+
+        assert len(files) == 1
+        assert files[0].name == 'included.py'
+
+    def test_egg_info_directories_excluded(self, tmp_path):
+        """Test that *.egg-info directories are excluded (BACK-093)."""
+        egg_info = tmp_path / 'my_package.egg-info'
+        egg_info.mkdir()
+        (egg_info / 'top_level.py').write_text('# artifact')
+        (tmp_path / 'included.py').write_text('# included')
+
+        with patch('reveal.registry.get_analyzer') as mock_get_analyzer:
+            mock_get_analyzer.return_value = Mock()
+            files = collect_files_to_check(tmp_path, [])
+
+        assert len(files) == 1
+        assert files[0].name == 'included.py'
+
     def test_gitignore_patterns(self, tmp_path):
         """Test that gitignore patterns are respected."""
         (tmp_path / 'keep.py').write_text('# Keep this')
@@ -372,6 +403,26 @@ class TestI002Preload:
         """_i002_init_worker silently ignores import errors."""
         with patch.dict("sys.modules", {"reveal.rules.imports.I002": None}):
             _i002_init_worker({"some_key": "some_value"})  # must not raise
+
+    def test_run_parallel_streaming_yields_all_results(self, tmp_path):
+        """_run_parallel_streaming yields one result per file (BACK-092).
+
+        Uses real worker processes (no mock) because _parallel_worker must be picklable.
+        """
+        from reveal.cli.file_checker import _run_parallel_streaming
+
+        files = [tmp_path / f"f{i}.py" for i in range(3)]
+        for f in files:
+            f.write_text("x = 1\n")
+
+        results = list(_run_parallel_streaming(files, tmp_path, select=None, ignore=None))
+
+        assert len(results) == 3
+        returned_paths = {r[0] for r in results}
+        assert returned_paths == set(files)
+        for file_path, issue_count, detections in results:
+            assert isinstance(issue_count, int)
+            assert isinstance(detections, list)
 
     def test_run_parallel_uses_preload(self, tmp_path):
         """_run_parallel calls _i002_preload and passes result to workers."""

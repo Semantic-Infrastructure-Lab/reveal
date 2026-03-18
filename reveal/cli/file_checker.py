@@ -108,6 +108,43 @@ def _run_parallel(files: List[Path], directory: Path, select, ignore) -> list:
         return list(pool.map(_parallel_worker, args_iter))
 
 
+def _run_parallel_streaming(files: List[Path], directory: Path, select, ignore):
+    """Run file checks in parallel, yielding results as each future completes.
+
+    Unlike _run_parallel, results are emitted as soon as they are ready rather
+    than buffering the entire list before returning.  At most max_workers
+    results are held in memory simultaneously.  Output order is non-deterministic
+    (completion order), which is acceptable for text output but not JSON.
+
+    Use _run_parallel for JSON output where deterministic ordering matters.
+
+    Args:
+        files: Files to check
+        directory: Base directory for relative paths
+        select: Rule codes to select
+        ignore: Rule codes to ignore
+
+    Yields:
+        (file_path, issue_count, detections) tuples as futures complete
+    """
+    from concurrent.futures import as_completed
+    workers = min(4, os.cpu_count() or 4, len(files))
+    args_list = [(f, directory, select, ignore) for f in files]
+    graph_cache = _i002_preload(directory, ignore)
+    with ProcessPoolExecutor(
+        max_workers=workers,
+        initializer=_i002_init_worker,
+        initargs=(graph_cache,),
+    ) as pool:
+        futures = {pool.submit(_parallel_worker, args): args[0] for args in args_list}
+        for future in as_completed(futures):
+            try:
+                yield future.result()
+            except Exception as e:
+                file_path = futures[future]
+                logging.warning("check: skipped %s — %s: %s", file_path, type(e).__name__, e)
+
+
 def _print_grouped_detections(detections: list, relative: Path, no_group: bool = False) -> None:
     """Print detections for one file, collapsing rules that repeat excessively.
 
@@ -210,11 +247,15 @@ def collect_files_to_check(directory: Path, gitignore_patterns: List[str]) -> Li
     from ..registry import get_analyzer
 
     files_to_check = []
-    excluded_dirs = {'.git', '__pycache__', 'node_modules', '.venv', 'venv', 'build', 'dist'}
+    excluded_dirs = {
+        '.git', '__pycache__', 'node_modules', '.venv', 'venv', 'build', 'dist',
+        '.pytest_cache', '.tox', '.eggs', 'env', '.benchmarks', '.deepeval',
+        '.mypy_cache', '.ruff_cache', '.cache', '.hypothesis',
+    }
 
     for root, dirs, files in os.walk(directory):
-        # Filter out excluded directories
-        dirs[:] = [d for d in dirs if d not in excluded_dirs]
+        # Filter out excluded directories and *.egg-info build artifacts
+        dirs[:] = [d for d in dirs if d not in excluded_dirs and not d.endswith('.egg-info')]
 
         root_path = Path(root)
         for filename in files:
@@ -482,16 +523,25 @@ def _check_files_text(
     files_with_issues = 0
     sorted_files = sorted(files)
 
+    # Use streaming parallel execution so results are processed as they complete
+    # rather than buffering the full result set in memory first.  Non-deterministic
+    # output order is acceptable for text mode (matches ruff/flake8 parallel behaviour).
     if len(sorted_files) >= _PARALLEL_THRESHOLD:
         try:
-            results = _run_parallel(sorted_files, directory, select, ignore)
+            result_iter = _run_parallel_streaming(sorted_files, directory, select, ignore)
         except Exception:
-            results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
+            result_iter = (
+                (f, *check_and_collect_file(f, directory, select, ignore))
+                for f in sorted_files
+            )
     else:
-        results = [(f, *check_and_collect_file(f, directory, select, ignore)) for f in sorted_files]
+        result_iter = (
+            (f, *check_and_collect_file(f, directory, select, ignore))
+            for f in sorted_files
+        )
 
     cwd = Path.cwd()
-    for file_path, issue_count, detections in results:
+    for file_path, issue_count, detections in result_iter:
         detections = _apply_severity_filter(detections, severity)
         issue_count = len(detections)
         if issue_count > 0:

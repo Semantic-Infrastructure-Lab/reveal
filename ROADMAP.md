@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-17 (kuzujuwe-0317 — BACK-081/082 shipped; 6,552 tests)
+> **Last updated**: 2026-03-18 (strong-temple-0318 — BACK-092–094 resolved: OOM perf bugs fixed in `reveal check`/`health`)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -288,7 +288,7 @@ This document outlines reveal's development priorities and future direction. For
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: **6,268 passing** (v0.64.x)
+- Test count: **~6,560 passing** (v0.64.x)
 - UX Phases 3/4/5: ✅ **ALL COMPLETE** (query operators, field selection, element discovery)
 - Target: 80%+ coverage for core adapters — scaffold 100%, tools 100%, adapter 94%
 
@@ -495,6 +495,151 @@ Refactor path: extract `_render_acme_json(results, only_failures)` and `_render_
 
 ---
 
+### BACK-085: N008 — HTTPS server missing `Strict-Transport-Security`
+
+**Status**: 🔲 Not started
+**Value**: High | **Lift**: Small
+**Source**: Real tia-proxy audit (onyx-crystal-0318) — 46/46 sites affected
+
+A server block listening on port 443 with no `Strict-Transport-Security` header. Browsers never pin to HTTPS; an intercepted first HTTP request can strip TLS for the entire session.
+
+**Detection**: `listen 443` (or `listen [::]:443`) in server block + no `add_header Strict-Transport-Security` in block or any resolved `include`. Follows includes one level deep (reuses N003's snippet-following logic). Suppress with `# reveal:allow-no-hsts`.
+
+**Finding format**:
+```
+N008  HIGH  'motion.mytia.net' (line 8): HTTPS site missing Strict-Transport-Security header
+            Fix: add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+```
+
+---
+
+### BACK-086: N009 — `server_tokens` not disabled
+
+**Status**: 🔲 Not started
+**Value**: Medium | **Lift**: Small
+**Source**: Real tia-proxy audit (onyx-crystal-0318) — 32/46 sites affected
+
+nginx defaults to `server_tokens on`, advertising `Server: nginx/1.18.0` on every response. Two lines in `nginx.conf` http{} fix all sites at once.
+
+**Detection**: server block has no `server_tokens off` AND the main `nginx.conf` http{} block also lacks it (check global first; don't fire per-vhost if global is set). Requires reading `nginx.conf`.
+
+**Finding format**:
+```
+N009  MEDIUM  'belize.mytia.net' (line 1): server_tokens not disabled
+              Fix: add 'server_tokens off;' to nginx.conf http{} block (applies globally)
+```
+
+---
+
+### BACK-087: N010 — Deprecated `X-XSS-Protection` header
+
+**Status**: 🔲 Not started
+**Value**: Low | **Lift**: Small
+**Source**: Real tia-proxy audit (onyx-crystal-0318) — 38/46 sites via shared snippet
+
+`X-XSS-Protection` was removed from the W3C spec and ignored by Chrome since 2019. Its presence signals an outdated config.
+
+**Detection**: `add_header X-XSS-Protection` in server block or any resolved include. When the header comes from a snippet, surface the snippet file path so the fix is obvious (editing one snippet fixes all 38 sites).
+
+**Finding format**:
+```
+N010  LOW  'belize.mytia.net' via snippets/tia-security-headers.conf (line 6): X-XSS-Protection is deprecated
+           Remove and add Content-Security-Policy instead.
+```
+
+---
+
+### BACK-088: N011 — SSL listener without `http2`
+
+**Status**: 🔲 Not started
+**Value**: Low | **Lift**: Small
+**Source**: Real tia-proxy audit (onyx-crystal-0318) — 25/46 sites affected
+
+`listen 443 ssl` without `http2` on the same line. Certbot's `--nginx` plugin consistently strips `http2` when it rewrites listen directives, creating a repeat pattern.
+
+**Detection**: `listen 443 ssl` or `listen [::]:443 ssl` without `http2` on the same line. Suppress with `# reveal:allow-no-http2`.
+
+**Finding format**:
+```
+N011  LOW  'patmatch.mytia.net' (line 9): SSL listener missing http2
+           listen 443 ssl;  →  listen 443 ssl http2;
+           (Certbot strips http2 when it rewrites listen directives — re-add after certbot runs)
+```
+
+---
+
+### BACK-089: N012 — No rate limiting on server block
+
+**Status**: 🔲 Not started
+**Value**: Low | **Lift**: Small
+**Source**: Real tia-proxy audit (onyx-crystal-0318) — 45/46 sites affected
+
+Without `limit_req`, server blocks are open to flood attacks and credential stuffing at full connection speed.
+
+**Detection — two levels**:
+- `limit_req_zone` is defined in nginx.conf but this server block has no `limit_req` anywhere (server or location level) → LOW
+- No `limit_req_zone` defined anywhere → elevate to MEDIUM
+
+**Finding format**:
+```
+N012  LOW  'belize.mytia.net': no rate limiting applied
+           limit_req_zone is configured (admin_limit) but not used here
+```
+
+---
+
+### BACK-090: `reveal nginx:// --audit` — fleet consistency matrix
+
+**Status**: 🔲 Not started
+**Value**: Medium | **Lift**: Medium
+**Source**: tia-proxy fleet audit (onyx-crystal-0318)
+**Design**: `internal-docs/planning/NGINX_FLEET_AUDIT_2026-03-18.md`
+
+Fleet-level cross-site analysis: reads all enabled site configs + `nginx.conf`, produces a matrix showing where the fleet diverges from its own majority pattern.
+
+```bash
+reveal nginx:// --audit                    # full fleet consistency matrix
+reveal nginx:// --audit --only-failures    # directives with gaps only
+reveal nginx:// --audit --format json      # machine-readable
+```
+
+**Checks**: `server_tokens off`, `Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `http2` on 443, `limit_req` applied, deprecated headers, snippet consistency.
+
+**Consolidation hint logic**: if a directive appears in ≥50% of server blocks but NOT in `nginx.conf` http{}, flag as "consolidation opportunity — move to global block".
+
+---
+
+### BACK-091: `reveal nginx.conf --global-audit` — http{} block audit
+
+**Status**: 🔲 Not started
+**Value**: Medium | **Lift**: Small
+**Source**: tia-proxy fleet audit (onyx-crystal-0318)
+**Design**: `internal-docs/planning/NGINX_FLEET_AUDIT_2026-03-18.md`
+
+Audits the global `nginx.conf` http{} block for missing security and operational directives.
+
+```bash
+reveal /etc/nginx/nginx.conf --global-audit
+```
+
+**Directives audited**: `server_tokens off` (MEDIUM), `Strict-Transport-Security` (HIGH), `X-Content-Type-Options` (MEDIUM), `X-Frame-Options` (MEDIUM), `ssl_protocols` (MEDIUM), `resolver` (LOW), `limit_req_zone` (LOW), `client_max_body_size` (LOW), `gzip on` (INFO), `worker_processes` (INFO).
+
+Natural companion to `--audit` (BACK-090): `--audit` surfaces the fleet pattern, `--global-audit` surfaces what's missing from nginx.conf itself.
+
+---
+
+---
+
+### BACK-092/093/094: OOM perf bugs in `reveal check` / `reveal health`
+
+**Status**: ✅ **Resolved** — v0.64.x (strong-temple-0318)
+
+- **BACK-092**: `_check_files_text` switched to `_run_parallel_streaming` (`as_completed` generator) — results processed as each future completes rather than buffering all. At most 4 results held in memory simultaneously.
+- **BACK-093**: `collect_files_to_check` `excluded_dirs` expanded to include `.pytest_cache`, `.tox`, `.eggs`, `env`, `.benchmarks`, `.deepeval`, `.mypy_cache`, `.ruff_cache`, `.cache`, `.hypothesis`; `*.egg-info` dirs filtered by suffix.
+- **BACK-094**: `_check_code()` in `health.py` now counts files before spawning subprocess; bails with exit 1 + actionable message if count > `_HEALTH_MAX_FILES` (5000). `timeout=120` added to `subprocess.run`. 8 new tests.
+
+---
+
 > **Status**: Strategic backlog. Not prioritized for implementation yet.
 
 ### Additional Subcommands
@@ -576,6 +721,7 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 | `calls://` | Cross-file call graph — callers, callees, coupling metrics, Graphviz export |
 | `claude://` | Claude conversation analysis |
 | `cpanel://` | cPanel user environments — domains, SSL certs, ACL health |
+| `demo://` | Demo resources (internal/examples) |
 | `diff://` | Compare files or git revisions |
 | `domain://` | Domain registration, DNS records, health status + HTTP response check |
 | `env://` | Environment variable inspection |

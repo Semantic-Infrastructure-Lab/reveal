@@ -99,6 +99,22 @@ class TestCheckTarget(unittest.TestCase):
 
 class TestCheckCode(unittest.TestCase):
 
+    def setUp(self):
+        # Prevent _check_code from walking real directories during these unit tests.
+        # Tests that specifically exercise the file-count guard patch this themselves.
+        self._collect_patcher = patch(
+            'reveal.cli.file_checker.collect_files_to_check', return_value=[]
+        )
+        self._gitignore_patcher = patch(
+            'reveal.cli.file_checker.load_gitignore_patterns', return_value=[]
+        )
+        self._collect_patcher.start()
+        self._gitignore_patcher.start()
+
+    def tearDown(self):
+        self._collect_patcher.stop()
+        self._gitignore_patcher.stop()
+
     @patch('subprocess.run')
     def test_healthy_returns_0(self, mock_run):
         data = {'total_violations': 0, 'violations': []}
@@ -140,6 +156,50 @@ class TestCheckCode(unittest.TestCase):
         mock_run.return_value = MagicMock(returncode=1, stdout='not valid json')
         code, summary = _check_code(Path('/tmp'), Namespace(select=None))
         self.assertEqual(code, 1)
+
+    @patch('subprocess.run')
+    def test_subprocess_called_with_timeout(self, mock_run):
+        """subprocess.run must include timeout= to prevent indefinite hangs (BACK-094)."""
+        mock_run.return_value = MagicMock(returncode=0, stdout='')
+        _check_code(Path('/tmp'), Namespace(select=None))
+        call_kwargs = mock_run.call_args[1]
+        self.assertIn('timeout', call_kwargs)
+        self.assertGreater(call_kwargs['timeout'], 0)
+
+    def test_large_directory_skipped_without_subprocess(self):
+        """_check_code returns warning (exit 1) for directories exceeding file limit (BACK-094)."""
+        from reveal.cli.commands.health import _HEALTH_MAX_FILES
+        with tempfile.TemporaryDirectory() as d:
+            fake_files = [Path(d) / f'f{i}.py' for i in range(_HEALTH_MAX_FILES + 1)]
+            with patch(
+                'reveal.cli.file_checker.collect_files_to_check',
+                return_value=fake_files,
+            ), patch(
+                'reveal.cli.file_checker.load_gitignore_patterns',
+                return_value=[],
+            ), patch('subprocess.run') as mock_run:
+                code, summary = _check_code(Path(d), Namespace(select=None))
+            # subprocess must NOT have been called
+            mock_run.assert_not_called()
+        self.assertEqual(code, 1)
+        self.assertIn('skipped', summary)
+        self.assertIn(str(_HEALTH_MAX_FILES), summary)
+
+    def test_small_directory_proceeds_to_subprocess(self):
+        """_check_code proceeds normally for directories under the file limit (BACK-094)."""
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'a.py').write_text('x = 1')
+            fake_files = [Path(d) / f'f{i}.py' for i in range(10)]
+            with patch(
+                'reveal.cli.file_checker.collect_files_to_check',
+                return_value=fake_files,
+            ), patch(
+                'reveal.cli.file_checker.load_gitignore_patterns',
+                return_value=[],
+            ), patch('subprocess.run') as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stdout='')
+                _check_code(Path(d), Namespace(select=None))
+            mock_run.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
