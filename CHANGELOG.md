@@ -12,7 +12,10 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316, heating-blizzard-0316, ascending-journey-0316, spinning-observatory-0316, frost-matrix-0316, obsidian-prism-0316, warming-ice-0316, tempestuous-sunshine-0316, bojififo-0317, serene-mist-0317, galactic-quasar-0317, dowepeva-0317, timeless-launch-0317, zifaxo-0317, topaz-flash-0317)
+## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316, heating-blizzard-0316, ascending-journey-0316, spinning-observatory-0316, frost-matrix-0316, obsidian-prism-0316, warming-ice-0316, tempestuous-sunshine-0316, bojififo-0317, serene-mist-0317, galactic-quasar-0317, dowepeva-0317, timeless-launch-0317, zifaxo-0317, topaz-flash-0317, timeless-antimatter-0317, kuzujuwe-0317)
+
+### Refactored
+- **BACK-081/082: `_parse_xmla` (cx:64) and `_render_powerpivot` (cx:34) split** — `_parse_xmla` (111L) broken into `_xmla_decode_root`, `_parse_xmla_tables`, `_parse_xmla_measures`, `_parse_xmla_dim_id_map`, `_parse_xmla_end`, `_parse_xmla_relationships`; orchestrator is now ~15 lines. `_render_powerpivot` (106L) broken into `_render_powerpivot_{tables,schema,measures,dax,relationships}` with a dispatch dict; dispatcher is ~25 lines. No behavior change. Helpers are now directly callable for the planned `?powerpivot=check` mode. (session kuzujuwe-0317)
 
 ### Added
 - **BACK-078: OCSP URL availability in `--advanced`** — `CertificateInfo` gains `ocsp_url: Optional[str]` extracted from the AIA extension via the `cryptography` library. `_check_ocsp_availability()` added to `_run_advanced_checks`; emits an `info`-level finding when the OCSP URL is present (not a failure). Let's Encrypt ECDSA certs get a specific note that OCSP stapling was removed in 2024 and the field may be absent. 4 new tests. (session topaz-flash-0317)
