@@ -287,13 +287,15 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 9. **`claude://sessions/` session archaeology** — your AI work history as queryable structured data.
 
+10. **Native MCP server (`reveal-mcp`)** — exposes all reveal capabilities as MCP tools for Claude Code, Cursor, and Windsurf. One install, five tools: `reveal_structure`, `reveal_element`, `reveal_query`, `reveal_pack`, `reveal_check`. Agents get progressive disclosure and call-graph analysis without subprocess overhead.
+
 ---
 
 ## Adapters at a Glance
 
 | Adapter | What it queries |
 |---|---|
-| `ast://` | Functions, classes, complexity, decorators — 50+ languages |
+| `ast://` | Functions, classes, complexity, decorators — 190+ languages |
 | `calls://` | Cross-file call graph with coupling metrics |
 | `stats://` | Codebase quality scores, hotspots, duplication |
 | `imports://` | Dependency graph, circular imports, unused imports |
@@ -313,6 +315,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 | `xlsx://` | Excel data extraction and analysis |
 | `claude://` | AI session history, tool usage, file access patterns |
 | `reveal://` | Reveal introspects itself: adapters, rules, config |
+| `help://` | Built-in documentation, searchable from the CLI |
 
 ---
 
