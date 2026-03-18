@@ -28,6 +28,7 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
   - [Inspect a session](#inspect-a-session)
 - [JSON Navigation](#json-navigation)
 - [Database Operations](#database-operations)
+- [Infrastructure](#infrastructure)
   - [SSL certificate inspection](#ssl-certificate-inspection)
   - [On-disk certificate inspection](#on-disk-certificate-inspection)
   - [SSL expiry monitoring](#ssl-expiry-monitoring)
@@ -625,6 +626,10 @@ reveal diff://mysql://localhost/users:mysql://staging/users
 # Compare SQLite schemas
 reveal diff://sqlite://./dev.db:sqlite://./prod.db
 ```
+
+---
+
+## Infrastructure
 
 ### SSL certificate inspection
 

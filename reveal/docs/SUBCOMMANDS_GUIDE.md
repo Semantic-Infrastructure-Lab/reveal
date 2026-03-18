@@ -43,7 +43,7 @@ reveal dev inspect-config /some/project/      # See config for another dir
 ### Scaffold Output
 
 New adapters and analyzers are created in the current reveal source tree.
-Rules are added to `reveal/quality/rules/`.
+Rules are added to `reveal/rules/`.
 
 ### See Also
 
@@ -430,10 +430,17 @@ reveal check [path] [flags]
 |----------|------|----------------|
 | Bugs | B | Bare excepts, bad decorators, unresolvable imports |
 | Complexity | C | Cyclomatic complexity, function length, nesting depth |
+| Duplicates | D | Duplicate function detection |
+| Errors | E | Line length and style errors |
+| Frontmatter | F | Markdown frontmatter presence, required fields, type validity |
 | Imports | I | Unused imports, circular dependencies, layer violations |
-| Maintainability | M | Code health metrics |
-| Security | S | Security anti-patterns |
-| Types | T | Type annotation issues |
+| Links | L | Broken internal links, missing index files, low cross-reference density |
+| Maintainability | M | File size, orphaned files, version mismatches, hardcoded lists |
+| Infrastructure | N | nginx config: SSL, ACME, proxy headers, timeout mismatches |
+| Refactoring | R | Too many function arguments |
+| Security | S | Docker `:latest` tags and security anti-patterns |
+| Types | T | Missing `Optional[]` on nullable parameters |
+| URLs | U | Insecure `http://` GitHub URLs, URL/canonical mismatches |
 | Validation | V | Reveal self-checks: version consistency, adapter contracts, doc accuracy |
 
 ### Examples

@@ -7,7 +7,7 @@ category: reference
 **Complete catalog of all user-facing documentation**
 
 **Last Updated**: 2026-03-18
-**Total**: 48 markdown files, ~41,500 lines
+**Total**: 48 markdown files, ~41,000 lines
 
 ---
 
@@ -16,7 +16,7 @@ category: reference
 - **New users** → [QUICK_START.md](QUICK_START.md) → [RECIPES.md](RECIPES.md)
 - **Adapters** → See [Adapter Guides](#adapter-guides-17-files) below
 - **nginx / cPanel operator** → [NGINX_GUIDE.md](NGINX_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md)
-- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2766 lines)
+- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2824 lines)
 - **Developers** → [Development Guides](#development-guides-4-files)
 
 ---
@@ -31,38 +31,38 @@ category: reference
 | [BENCHMARKS.md](BENCHMARKS.md) | — | Measured 3.9–33x token reduction — 5 real scenarios with exact numbers |
 | [MCP_SETUP.md](MCP_SETUP.md) | — | MCP server setup for Claude Code, Cursor, Windsurf — 5 tools, stdio/SSE transports |
 | [CI_RECIPES.md](CI_RECIPES.md) | — | GitHub Actions and GitLab CI ready-to-paste YAML: PR review, complexity gate, hotspot tracking, SSL checks |
-| [RECIPES.md](RECIPES.md) | 1023 | Task-based workflows and common patterns |
+| [RECIPES.md](RECIPES.md) | 1255 | Task-based workflows and common patterns |
 | [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) | 1386 | Complete codebase review workflows |
 
-**Total**: ~3,140 lines
+**Total**: ~4,100 lines
 
 ---
 
 ## Adapter Guides (17 files)
 
-Complete guides for all URI protocol adapters (~24,500 lines):
+Complete guides for all URI protocol adapters (~23,300 lines):
 
 | File | Lines | Purpose |
 |------|-------|---------|
 | [AST_ADAPTER_GUIDE.md](AST_ADAPTER_GUIDE.md) | 1329 | AST-based code analysis with complexity/size filtering |
 | [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) | 622 | Cross-file call graph queries (calls://) |
-| [CLAUDE_ADAPTER_GUIDE.md](CLAUDE_ADAPTER_GUIDE.md) | 2316 | Claude CLI session analysis and tool usage tracking |
+| [CLAUDE_ADAPTER_GUIDE.md](CLAUDE_ADAPTER_GUIDE.md) | 2321 | Claude CLI session analysis and tool usage tracking |
 | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md) | 328 | cPanel user environment: domains, SSL, ACL health |
-| [DIFF_ADAPTER_GUIDE.md](DIFF_ADAPTER_GUIDE.md) | 1932 | Git diff analysis and structure comparison |
+| [DIFF_ADAPTER_GUIDE.md](DIFF_ADAPTER_GUIDE.md) | 1948 | Git diff analysis and structure comparison |
 | [DOMAIN_ADAPTER_GUIDE.md](DOMAIN_ADAPTER_GUIDE.md) | 2297 | Domain/DNS/WHOIS information analysis |
 | [ENV_ADAPTER_GUIDE.md](ENV_ADAPTER_GUIDE.md) | 1351 | Environment variable analysis and validation |
-| [GIT_ADAPTER_GUIDE.md](GIT_ADAPTER_GUIDE.md) | 1879 | Git repository analysis (commits, branches, tags) |
+| [GIT_ADAPTER_GUIDE.md](GIT_ADAPTER_GUIDE.md) | 1880 | Git repository analysis (commits, branches, tags) |
 | [IMPORTS_ADAPTER_GUIDE.md](IMPORTS_ADAPTER_GUIDE.md) | 1639 | Import dependency analysis across languages |
 | [JSON_ADAPTER_GUIDE.md](JSON_ADAPTER_GUIDE.md) | 1327 | JSON/JSONL data analysis with JMESPath queries |
 | [MYSQL_ADAPTER_GUIDE.md](MYSQL_ADAPTER_GUIDE.md) | 2116 | MySQL database introspection and schema analysis |
 | [PYTHON_ADAPTER_GUIDE.md](PYTHON_ADAPTER_GUIDE.md) | 464 | Python runtime introspection (modules, objects) |
 | [REVEAL_ADAPTER_GUIDE.md](REVEAL_ADAPTER_GUIDE.md) | 536 | Reveal introspection (analyzers, adapters, config) |
 | [SQLITE_ADAPTER_GUIDE.md](SQLITE_ADAPTER_GUIDE.md) | 1161 | SQLite database introspection and schema analysis |
-| [SSL_ADAPTER_GUIDE.md](SSL_ADAPTER_GUIDE.md) | 1484 | SSL/TLS certificate analysis and validation |
-| [STATS_ADAPTER_GUIDE.md](STATS_ADAPTER_GUIDE.md) | 1868 | Codebase statistics and metrics collection |
-| [XLSX_ADAPTER_GUIDE.md](XLSX_ADAPTER_GUIDE.md) | 568 | Excel/XLSX file analysis and data extraction |
+| [SSL_ADAPTER_GUIDE.md](SSL_ADAPTER_GUIDE.md) | 1488 | SSL/TLS certificate analysis and validation |
+| [STATS_ADAPTER_GUIDE.md](STATS_ADAPTER_GUIDE.md) | 1874 | Codebase statistics and metrics collection |
+| [XLSX_ADAPTER_GUIDE.md](XLSX_ADAPTER_GUIDE.md) | 651 | Excel/XLSX file analysis and data extraction |
 
-**Total**: ~24,500 lines
+**Total**: ~23,300 lines
 
 **Adapters without dedicated guides** (covered elsewhere or minimal):
 - `autossl://` — see [NGINX_GUIDE.md](NGINX_GUIDE.md) (cPanel AutoSSL logs)
@@ -143,24 +143,24 @@ Complete reference for AI agent integration:
 |------|-------|-------------|
 | [AGENT_HELP.md](AGENT_HELP.md) | 2824 | Complete AI agent reference (~68KB) |
 
-**Total**: 2,391 lines
+**Total**: 2,824 lines
 
 ---
 
 ## Documentation Statistics
 
 **By Category**:
-- Adapter Guides: 17 files, ~24,500 lines (59%)
-- Reference: 10 files, ~6,300 lines (15%)
-- User Guides: 8 files, ~4,500 lines (11%)
+- Adapter Guides: 17 files, ~23,300 lines (57%)
+- Reference: 10 files, ~5,800 lines (14%)
+- User Guides: 8 files, ~4,100 lines (10%)
 - AI Agent: 1 file, ~2,824 lines (7%)
-- Analyzer Guides: 5 files, ~2,555 lines (6%)
-- Development: 4 files, ~1,500 lines (4%)
-- Subcommand Guides: 1 file, ~580 lines (1%)
+- Analyzer Guides: 5 files, ~2,800 lines (7%)
+- Development: 4 files, ~1,600 lines (4%)
+- Subcommand Guides: 1 file, ~500 lines (1%)
 
-**Total**: 48 files, ~41,500 lines
+**Total**: 48 files, ~41,000 lines
 
-**Last Updated**: 2026-03-18 (Session: copper-tint-0317)
+**Last Updated**: 2026-03-18 (Session: foggy-flood-0318)
 
 ---
 
@@ -188,5 +188,5 @@ Internal maintainer documentation (planning, research, architecture) is maintain
 
 ---
 
-**Last Updated**: 2026-03-18 (Session: copper-tint-0317)
+**Last Updated**: 2026-03-18 (Session: foggy-flood-0318)
 **Navigation**: [README](README.md) | [Project Root](../../README.md)

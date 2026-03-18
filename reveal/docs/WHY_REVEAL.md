@@ -273,7 +273,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 2. **`reveal health` spanning code + certs + DB + DNS** — a category collapse. One command, one JSON blob, one exit code.
 
-3. **64 quality rules via `reveal check`** — B/C/I/M/S/T/V categories covering bugs, complexity, imports, security, types, and Reveal's own adapter contract validation. One CLI, no config file required.
+3. **64 quality rules via `reveal check`** — 14 categories: bugs (B), complexity (C), duplicates (D), errors (E), frontmatter (F), imports (I), links (L), maintainability (M), infrastructure/nginx (N), refactoring (R), security (S), types (T), URLs (U), and Reveal's own adapter contract validation (V). One CLI, no config file required.
 
 4. **`reveal pack --since <branch> --budget N`** — PR-aware codebase snapshots. Changed files boosted to priority tier 0; remaining budget fills with entry points and complexity leaders. Built for agents, not retrofitted.
 
