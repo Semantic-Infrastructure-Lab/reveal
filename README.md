@@ -98,6 +98,8 @@ reveal review main..HEAD       # PR review: diff + check + hotspots, one pass
 reveal health ssl://site.com   # health check with exit codes 0/1/2
 reveal pack src/ --budget 8000 # token-budgeted snapshot for LLM context
 reveal hotspots src/           # top complexity hotspots
+reveal overview .              # one-glance dashboard: stats, quality, git activity
+reveal deps .                  # dependency health: circular imports, unused, packages
 reveal dev new-adapter <name>  # scaffold new adapters/rules
 ```
 
