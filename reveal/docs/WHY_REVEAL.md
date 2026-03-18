@@ -60,11 +60,8 @@ reveal 'calls://src/auth.py:validate_token'
 # Visual call graph (pipe to graphviz)
 reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
 
-# Dead code: functions defined but never called anywhere
-reveal 'calls://src/?uncalled'
-
-# Filter to functions only (skip methods), show top candidates
-reveal 'calls://src/?uncalled&type=function&top=20'
+# Rough dead code check — functions with no callers in the index
+reveal 'calls://src/?uncalled&type=function&top=20'  # verify results: entry points and decorators may appear
 ```
 
 **What you get:** Cross-file, language-aware call graph analysis from a CLI — no IDE, no language server, no configuration. The `?rank=callers` metric surfaces architecturally load-bearing functions before you know to look for them. `?uncalled` lists functions with no callers in the index — useful as a rough post-refactor check, but expect false positives for framework entry points and dispatch tables.
@@ -191,9 +188,29 @@ reveal review main..HEAD || exit 1
 
 ---
 
-### 7. Session Archaeology (`claude://`)
+### 7. Codebase Dashboard (`reveal overview` and `reveal deps`)
 
-Reveal can query its own AI session history as structured data.
+Two commands for answering the orientation question before you start reading code.
+
+```bash
+# One-glance codebase dashboard
+reveal overview .
+# → file count, language breakdown, quality score, top hotspots, recent git activity
+
+# Dependency health
+reveal deps .
+# → circular import chains, unused imports, package count, top importers
+reveal deps . --no-unused        # circular deps only
+reveal deps . --format json      # CI-friendly output
+```
+
+**What you get:** `reveal overview` replaces the multi-command orientation sequence — file count, language breakdown, quality score, and recent git activity in one output. `reveal deps` surfaces structural debt that `reveal check` doesn't: import-level coupling and circular dependency cycles that accumulate quietly over time. Both exit 1 on actionable findings for CI use.
+
+---
+
+### 8. Session Archaeology (`claude://`)
+
+Reveal can query AI session history as structured data — useful for workflows built on Claude Code.
 
 ```bash
 # List recent sessions
@@ -202,20 +219,11 @@ reveal claude://sessions/
 # What files did I touch in a session?
 reveal claude://session/my-session-0316/files
 
-# What tools did I use and how often?
-reveal claude://session/my-session-0316/tools
-
-# Recover context — last 3 assistant turns
-reveal 'claude://session/my-session-0316?tail=3'
-
-# Search a session for a specific topic
-reveal 'claude://session/my-session-0316?search=validate_token'
-
-# See errors and exceptions from a session
-reveal claude://session/my-session-0316/errors
+# Search across all sessions
+reveal 'claude://sessions/?search=validate_token'
 ```
 
-**What you get:** Your AI work history is queryable. "When did I last touch this function? What was the context?" is now answerable from the CLI. The `/files` element shows every file read, written, and edited with operation counts — useful for understanding what a session actually changed.
+**What you get:** Your AI work history is queryable. The `/files` element shows every file read, written, and edited with operation counts — useful for auditing what a session actually changed.
 
 ---
 
@@ -273,21 +281,23 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 2. **`reveal health` spanning code + certs + DB + DNS** — a category collapse. One command, one JSON blob, one exit code.
 
-3. **64 quality rules via `reveal check`** — 14 categories: bugs (B), complexity (C), duplicates (D), errors (E), frontmatter (F), imports (I), links (L), maintainability (M), infrastructure/nginx (N), refactoring (R), security (S), types (T), URLs (U), and Reveal's own adapter contract validation (V). One CLI, no config file required.
+3. **Native MCP server (`reveal-mcp`)** — exposes all reveal capabilities as MCP tools for Claude Code, Cursor, and Windsurf. One install, five tools: `reveal_structure`, `reveal_element`, `reveal_query`, `reveal_pack`, `reveal_check`. Agents get progressive disclosure and call-graph analysis without subprocess overhead.
 
-4. **`reveal pack --since <branch> --budget N`** — PR-aware codebase snapshots. Changed files boosted to priority tier 0; remaining budget fills with entry points and complexity leaders. Built for agents, not retrofitted.
+4. **`reveal overview` + `reveal deps`** — codebase orientation dashboard and dependency health in one command each. `reveal deps` finds circular import chains and unused imports across a full project; `reveal overview` synthesises file count, language breakdown, quality score, and git velocity into a single output.
 
-5. **`markdown://docs/?link-graph`** — bidirectional doc link analysis with orphan detection. Rare in any tool category.
+5. **64 quality rules via `reveal check`** — 14 categories: bugs (B), complexity (C), duplicates (D), errors (E), frontmatter (F), imports (I), links (L), maintainability (M), infrastructure/nginx (N), refactoring (R), security (S), types (T), URLs (U), and Reveal's own adapter contract validation (V). One CLI, no config file required.
 
-6. **`?depth=N` transitive call graphs** — callers-of-callers up to 5 levels. Impact radius before a refactor, not just immediate callers.
+6. **`reveal pack --since <branch> --budget N`** — PR-aware codebase snapshots. Changed files boosted to priority tier 0; remaining budget fills with entry points and complexity leaders. Built for agents, not retrofitted.
 
-7. **`complexity_delta` on every changed function** — `diff://` carries before/after complexity for each modified function. "Did this PR make anything harder to maintain?" is now a scriptable CI check.
+7. **`markdown://docs/?link-graph`** — bidirectional doc link analysis with orphan detection. Rare in any tool category.
 
-8. **`?decorator=*cache*` wildcard matching** — surfaces patterns across a codebase without knowing exact names.
+8. **`?depth=N` transitive call graphs** — callers-of-callers up to 5 levels. Impact radius before a refactor, not just immediate callers.
 
-9. **`claude://sessions/` session archaeology** — your AI work history as queryable structured data.
+9. **`complexity_delta` on every changed function** — `diff://` carries before/after complexity for each modified function. "Did this PR make anything harder to maintain?" is now a scriptable CI check.
 
-10. **Native MCP server (`reveal-mcp`)** — exposes all reveal capabilities as MCP tools for Claude Code, Cursor, and Windsurf. One install, five tools: `reveal_structure`, `reveal_element`, `reveal_query`, `reveal_pack`, `reveal_check`. Agents get progressive disclosure and call-graph analysis without subprocess overhead.
+10. **`?decorator=*cache*` wildcard matching** — surfaces patterns across a codebase without knowing exact names.
+
+11. **`claude://sessions/` session archaeology** — AI work history as queryable structured data, for workflows built on Claude Code.
 
 ---
 

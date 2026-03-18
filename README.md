@@ -7,7 +7,7 @@ A local-first, adapter-driven semantic inspection layer — progressive disclosu
 ```bash
 reveal src/auth.py validate_token           # What does this function do?
 reveal 'calls://src/?target=validate_token' # Who calls it? (cross-file)
-reveal 'calls://src/?uncalled'              # What's dead code?
+reveal overview .                           # one-glance dashboard: quality, activity, deps
 reveal 'ast://src/?complexity>10'           # What's too complex?
 reveal health ssl://api.example.com domain://example.com ./src  # One-shot health check
 reveal pack src/ --since main --budget 8000 # PR context snapshot for AI agents
@@ -33,11 +33,11 @@ reveal src/auth.py validate_token    # exact code (~100-300 tokens)
 
 **Everything is a URI.** `ast://`, `calls://`, `ssl://`, `mysql://`, `markdown://`, `claude://` — same query operators, same output format, same piping model across all of them.
 
-**Dead code detection from the CLI:**
+**Cross-file call graph analysis:**
 ```bash
-reveal 'calls://src/?uncalled'             # functions defined but never called
-reveal 'calls://src/?rank=callers&top=20'  # most architecturally coupled functions
 reveal 'calls://src/?target=fn&depth=3'    # full impact radius before a refactor
+reveal 'calls://src/?rank=callers&top=20'  # most architecturally coupled functions
+reveal 'calls://src/?uncalled'             # functions with no callers — rough check, verify results
 ```
 
 **PR-aware context snapshots for AI agents:**
@@ -59,6 +59,15 @@ reveal diff://git://main/.:git://HEAD/. --format json | \
 reveal @domains.txt --check
 ```
 
+**Native MCP server (`reveal-mcp`) for AI agent integration:**
+```bash
+# Install once, works in Claude Code, Cursor, Windsurf, any MCP-compatible agent
+pip install reveal-cli
+reveal-mcp  # starts the server
+# Five tools: reveal_structure, reveal_element, reveal_query, reveal_pack, reveal_check
+# Agents get progressive disclosure and call-graph analysis — no subprocess overhead
+```
+
 **Unified health checks across categories:**
 ```bash
 reveal health ./src ssl://api.example.com domain://example.com mysql://prod
@@ -72,12 +81,10 @@ reveal 'markdown://docs/?link-graph'             # bidirectional link analysis +
 reveal 'markdown://docs/?body-contains=retry&type=procedure'  # full-text + metadata
 ```
 
-**AI session history as structured data:**
+**AI session history as structured data** *(useful for workflows built on Claude Code)*:
 ```bash
 reveal claude://sessions/                          # list all sessions
-reveal claude://session/my-session-0316/files     # what files were touched
 reveal 'claude://sessions/?search=validate_token' # cross-session search
-reveal 'claude://session/my-session-0316?tail=3'  # recover last 3 turns
 ```
 
 ## What Reveal Does (and Doesn't)
@@ -135,7 +142,7 @@ reveal dev new-adapter <name>  # scaffold new adapters/rules
 - **[Quick Start](reveal/docs/QUICK_START.md)** — 5-minute introduction
 - **[MCP Server](reveal/docs/MCP_SETUP.md)** — native integration with Claude Code, Cursor, Windsurf
 - **[CI/CD Recipes](reveal/docs/CI_RECIPES.md)** — GitHub Actions and GitLab CI ready-to-paste YAML
-- **[Benchmarks](reveal/docs/BENCHMARKS.md)** — measured 3.9–33x token reduction on real scenarios
+- **[Benchmarks](reveal/docs/BENCHMARKS.md)** — measured 3.9–15x token reduction on real scenarios
 - **[Recipes](reveal/docs/RECIPES.md)** — task-based workflows
 - **[All Docs](reveal/docs/INDEX.md)** — complete documentation index
 - **AI Agents**: `reveal --agent-help`

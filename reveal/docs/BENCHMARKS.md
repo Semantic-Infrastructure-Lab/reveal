@@ -12,7 +12,7 @@ beth_topics:
 
 > **Measured, not estimated.** Every number below is an actual measurement on reveal's own codebase (v0.64.x, 357 Python files). Token counts use the standard approximation of 1 token ≈ 4 characters — actual LLM tokenization varies ±10%.
 
-The core claim: reveal's progressive disclosure reduces token usage **6–33x** compared to reading files directly. Below are five real scenarios with exact numbers.
+The core claim: reveal's progressive disclosure reduces token usage **3.9–15x** compared to reading files directly on typical tasks. Below are five real scenarios with exact numbers.
 
 ---
 
@@ -100,9 +100,9 @@ Total:      4
 
 ---
 
-## Scenario 5: Dead Code Detection
+## Scenario 5: Rough Dead Code Scan
 
-**Goal**: Find functions that are defined but never called.
+**Goal**: Get a list of uncalled function candidates for post-refactor inspection.
 
 | Approach | Tokens | How |
 |----------|--------|-----|
@@ -117,6 +117,8 @@ reveal 'calls://reveal/?uncalled&top=10' # top 10 by file recency
 
 Output (220 tokens, 15 lines) lists exactly the uncalled candidates with file and line — no manual cross-referencing needed.
 
+The 33x reduction is real: Reveal eliminates the manual cross-reference work. What it doesn't eliminate is the inspection step — each candidate still needs 30 seconds of human review.
+
 > **Note on accuracy**: Functions called via dynamic dispatch (e.g., registered via decorator, looked up by name at runtime) may appear as "uncalled". Treat results as candidates requiring 30 seconds of inspection, not confirmed dead code.
 
 ---
@@ -129,9 +131,9 @@ Output (220 tokens, 15 lines) lists exactly the uncalled candidates with file an
 | Understand focused module | cat: 4,128 tokens | struct: 275 tokens | **15x** |
 | PR context (24 changed files) | git diff \| cat: 12,000+ | pack --content: ~4,000 | **3–4x** |
 | Find callers of a function | grep: 560 tokens | calls://?target: 84 tokens | **6.7x** |
-| Dead code detection | ast:// all + manual: 7,196 tokens | calls://?uncalled: 220 tokens | **33x** |
+| Uncalled function scan | ast:// all + manual: 7,196 tokens | calls://?uncalled: 220 tokens | **33x** *(candidates, not confirmed)* |
 
-**The range is 3.9–33x**, with the gap widening when:
+**The typical range is 3.9–15x** for file inspection and call graph queries. Scenario 5 reaches 33x but requires human verification of results. The gap widens when:
 - The file is large and only part of it matters (structure vs cat)
 - The question has a direct answer (uncalled, callers) vs requiring synthesis (manual cross-reference)
 
