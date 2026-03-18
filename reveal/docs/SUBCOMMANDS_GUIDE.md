@@ -316,3 +316,84 @@ reveal hotspots . --files-only     # Only file-level view
 - `reveal check` — Full quality rules (not just complexity)
 - `reveal review` — Combined review with hotspots + violations
 - `reveal hotspots --help` — Full flag reference
+
+---
+
+## reveal overview — Codebase Dashboard
+
+One-glance dashboard synthesising stats, language breakdown, quality pulse, top
+hotspots, complex functions, and recent git activity into a single view.
+
+### Usage
+
+```
+reveal overview [PATH] [--top N] [--no-git]
+```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--top N` | Items to show per section (default: 5) |
+| `--no-git` | Skip the recent git activity section |
+| `--format json` | Machine-readable output |
+
+### Examples
+
+```bash
+reveal overview                      # Current directory
+reveal overview ./src                # Specific directory
+reveal overview . --top 10           # 10 items per section
+reveal overview . --no-git           # Skip git history
+reveal overview . --format json      # Machine-readable output
+```
+
+### See Also
+
+- `reveal hotspots` — Deep dive into complexity hotspots
+- `reveal deps` — Dependency health details
+- `reveal overview --help` — Full flag reference
+
+---
+
+## reveal deps — Dependency Health Dashboard
+
+Wraps `imports://` to give a one-pass dependency health summary: external
+package count, circular dependency detection, unused imports, top importers.
+
+### Usage
+
+```
+reveal deps [PATH] [--top N] [--no-unused] [--no-circular]
+```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--top N` | Top packages/importers to show (default: 10) |
+| `--no-unused` | Skip unused imports section |
+| `--no-circular` | Skip circular dependency section |
+| `--format json` | Machine-readable output |
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | No issues |
+| 1 | Circular deps or unused imports found |
+
+### Examples
+
+```bash
+reveal deps                          # Current directory
+reveal deps ./src                    # Specific directory
+reveal deps . --no-unused            # Skip unused imports
+reveal deps . --format json          # Machine-readable for CI
+```
+
+### See Also
+
+- `imports://` — Full import graph queries
+- `reveal overview` — Includes dependency summary
+- `reveal deps --help` — Full flag reference

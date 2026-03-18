@@ -723,6 +723,41 @@ reveal stats://. --hotspots
 
 ---
 
+### Task: "Get a one-glance codebase dashboard"
+
+**Pattern:**
+```bash
+reveal overview .                  # Full dashboard: stats, languages, quality, hotspots, git
+reveal overview ./src              # Scope to a subdirectory
+reveal overview . --top 10         # 10 items per section
+reveal overview . --no-git         # Skip git history (useful in CI or non-git dirs)
+reveal overview . --format json    # Machine-readable output
+```
+
+**Output sections:** codebase stats (files, lines, functions, classes) · language breakdown · quality pulse (avg score, hotspot count) · top hotspots with `→ reveal <file>` hints · top complex functions · recent git commits with age labels.
+
+**Use case:** Fast orientation for an unfamiliar codebase. Combined entry point before deciding which area to investigate with `reveal hotspots`, `reveal deps`, or `ast://`.
+
+---
+
+### Task: "Check dependency health"
+
+**Pattern:**
+```bash
+reveal deps .                      # Full dependency dashboard
+reveal deps ./src                  # Scope to a subdirectory
+reveal deps . --no-unused          # Skip unused imports (focus on structure)
+reveal deps . --format json        # Machine-readable for CI
+```
+
+**Output:** Third-party package summary · health line (circular deps + unused imports) · top packages by usage · circular dependency cycles · unused imports with file:line · top importers.
+
+**Exit codes:** 0 (clean) · 1 (circular deps or unused imports found — CI-friendly gate).
+
+**Use case:** Before a release or major refactor — confirm no accidental circular imports crept in, surface unused imports to clean up, see dependency surface area at a glance.
+
+---
+
 ### Task: "Find duplicate code"
 
 **Pattern:**
@@ -2763,7 +2798,8 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
-- **v0.62.0** - `calls://` complete: `?callees=`, `?rank=callers`, `?builtins=` filtering; I005 + I006 import rules; `reveal hotspots` subcommand; B006 false-positive fixes; cpanel `full-audit`, `?domain_type=`
+- **v0.64.0** (unreleased) - `reveal overview` + `reveal deps` subcommands; `reveal-mcp` MCP server (5 tools); `pack --content` tiered emission; `xlsx://` Power Pivot extraction (`?powerpivot=tables/schema/measures/dax/relationships`); `calls://?uncalled` dead code detection; `diff://` per-function complexity delta; `claude://sessions/?search=`; `# noqa: uncalled` suppression; Output contract compliance tests; ARCHITECTURE.md; `--discover` flag
+- **v0.63.0** - `calls://` complete: `?callees=`, `?rank=callers`, `?builtins=` filtering; I005 + I006 import rules; `reveal hotspots` subcommand; B006 false-positive fixes; cpanel `full-audit`, `?domain_type=`
 - **v0.61.0** - markdown cross-file link graph; claude:// cross-session file tracking + content search; json:// `?flatten` fix; domain:// task section; cpanel `--only-failures` for acl-check; I001 `__init__.py` re-export fix; B006 multi-attempt fallback fix; M102 dynamic dispatch fix
 - **v0.60.0** - `nginx://` URI adapter (21st adapter); nginx vhost inspection by domain name; nginx bug fixes (glob + nesting); N007 rule
 - **v0.59.0** - `--help` argument groups (12 named sections, no more flag wall); 20 adapters support `help://schemas/`; CLI flag taxonomy documented

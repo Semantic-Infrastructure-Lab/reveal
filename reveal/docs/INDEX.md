@@ -112,11 +112,11 @@ Core reference and technical specifications:
 
 ## Subcommand Guides (1 file)
 
-Reference guides for `reveal dev`, `review`, `health`, and `pack` subcommands:
+Reference guides for all reveal subcommands (`dev`, `review`, `health`, `pack`, `hotspots`, `overview`, `deps`):
 
 | File | Lines | Description |
 |------|-------|-------------|
-| [SUBCOMMANDS_GUIDE.md](SUBCOMMANDS_GUIDE.md) | — | `reveal dev`, `review`, `health`, `pack` — all subcommand reference |
+| [SUBCOMMANDS_GUIDE.md](SUBCOMMANDS_GUIDE.md) | — | `reveal dev`, `review`, `health`, `pack`, `hotspots`, `overview`, `deps` — all subcommand reference |
 
 ---
 
