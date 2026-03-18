@@ -7,6 +7,28 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.64.0
+- ✅ **`reveal deps`** — dependency health dashboard: circular deps, unused imports, top packages, CI exit codes. 59 new tests.
+- ✅ **`reveal overview`** — one-glance codebase dashboard: stats, language breakdown, quality pulse, top hotspots, complex functions, recent commits. 71 new tests.
+- ✅ **`reveal-mcp`** — MCP server with 5 tools (`reveal_structure`, `reveal_element`, `reveal_query`, `reveal_pack`, `reveal_check`) for Claude Code, Cursor, Windsurf. 27 new tests.
+- ✅ **Power Pivot / SSAS support** (`xlsx://` `?powerpivot=tables/schema/measures/dax/relationships`) — pure stdlib; handles Excel 2010/2013+/Power BI exports. 44+ new tests.
+- ✅ **`reveal pack --since <ref>`** — git-aware context snapshots; changed files boosted to priority tier 0. 20 new tests.
+- ✅ **`reveal pack --content`** — tiered content emission (full/structure/name-only by priority + change status). 11 new tests.
+- ✅ **`calls://` `?uncalled`** — dead code detection (zero in-degree); excludes dunders, `@property`, `@classmethod`, `@staticmethod`. 20 new tests.
+- ✅ **`# noqa: uncalled` suppression** — entry-point exclusion for framework decorators, console scripts, dispatch tables. 3 new tests.
+- ✅ **`claude://session/<id>/chain`** — session continuation chain traversal via README frontmatter. 22 new tests.
+- ✅ **`domain://DOMAIN/ns-audit`** — NS authority cross-check; detects orphaned NS entries, unreachable servers, inconsistent sets. 11 new tests.
+- ✅ **`help://quick` decision tree** — 10 task-oriented entries mapping user intent to the right adapter/command.
+- ✅ **`reveal --discover`** — full adapter registry as JSON (all 22 adapters). 6 new tests.
+- ✅ **OCSP URL in `ssl://` `--advanced`** — extracts OCSP URL from AIA extension via `cryptography`. 4 new tests.
+- ✅ **`ARCHITECTURE.md`** — end-to-end architecture doc: URI routing, adapter lifecycle, output contract, query pipeline, help system, renderer layer.
+- ✅ **`CI_RECIPES.md`** — ready-to-paste GitHub Actions + GitLab CI YAML for PR gate, complexity delta, hotspot tracking, SSL checks.
+- ✅ **`BENCHMARKS.md`** — measured token reduction evidence (3.9–33× across 5 real scenarios on reveal's own codebase).
+- ✅ **`ARCHITECTURE.md`, `CLAUDE.md.template`** — agent-first README rewrite; `local-first` + `progressive disclosure` positioning.
+- ✅ **BACK-081/082: `_parse_xmla` + `_render_powerpivot` split** — both cx:64/cx:34 functions decomposed into named helpers; orchestrators ~15–25 lines.
+- ✅ **Doc accuracy audit** (spinning-observatory-0316, foggy-flood-0318) — 14 discrepancies fixed across 9 files; rule categories table expanded from 7 to all 14 (B,C,D,E,F,I,L,M,N,R,S,T,U,V).
+- ✅ **~6,560 tests** — up from 6,009.
+
 ### v0.63.0
 - ✅ **`calls://` `?rank=callers`** — coupling metrics via in-degree ranking; ranks functions by unique caller count. `?top=N`, `?builtins=true`.
 - ✅ **`ast://` builtin filtering** — `show=calls` + element-level `calls:` field now filter Python builtins by default (consistent with `calls://?callees=`). `?builtins=true` restores raw output.
