@@ -12,6 +12,15 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - (session strong-temple-0318)
+
+### Fixed
+- **BACK-092: `reveal check` text output OOM on large directory trees** — `_check_files_text` now uses `_run_parallel_streaming` (ProcessPoolExecutor + `as_completed`) instead of `list(pool.map(...))`. Results are emitted as each future completes; at most `max_workers` (4) results are held in memory simultaneously. Prevents the scenario where `reveal check <large-dir>` buffered all worker results before printing any output.
+- **BACK-093: `collect_files_to_check` expanded excluded dirs** — added `.pytest_cache`, `.tox`, `.eggs`, `env`, `.benchmarks`, `.deepeval`, `.mypy_cache`, `.ruff_cache`, `.cache`, `.hypothesis` to `excluded_dirs`; `*.egg-info` directories excluded via `endswith` check. Prevents walking virtualenv packages on projects with non-standard venv names.
+- **BACK-094: `reveal health` file count guard + timeout** — `_check_code()` now counts supported files before spawning the `reveal check` subprocess. Returns exit 1 with an actionable message if count exceeds `_HEALTH_MAX_FILES` (5000). `timeout=120` added to `subprocess.run` to prevent indefinite hangs. Root cause of the original OOM: `health._check_code` used `capture_output=True` with no size guard, double-buffering all JSON output on large trees. 8 new tests.
+
+---
+
 ## [0.64.0] - 2026-03-18 (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316, heating-blizzard-0316, ascending-journey-0316, spinning-observatory-0316, frost-matrix-0316, obsidian-prism-0316, warming-ice-0316, tempestuous-sunshine-0316, bojififo-0317, serene-mist-0317, galactic-quasar-0317, dowepeva-0317, timeless-launch-0317, zifaxo-0317, topaz-flash-0317, timeless-antimatter-0317, kuzujuwe-0317, rainbow-aurora-0317, copper-tint-0317, foggy-flood-0318)
 
 ### Added
