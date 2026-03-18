@@ -151,8 +151,96 @@ class XlsxRenderer:
             print()
 
     @staticmethod
+    def _render_powerpivot_tables(filename: str, tables: list, xmla_available: bool) -> None:
+        """Render ?powerpivot=tables output."""
+        print(f"Power Pivot Model: {filename}\n")
+        print(f"Tables ({len(tables)}):")
+        for t in tables:
+            col_count = len(t.get('columns', []))
+            if col_count:
+                print(f"  {t['name']} ({col_count} columns)")
+            else:
+                print(f"  {t['name']}")
+        if not xmla_available:
+            print("\n(Column counts not available — XMLA schema absent)")
+
+    @staticmethod
+    def _render_powerpivot_schema(
+        filename: str, tables: list, measures: list, xmla_available: bool
+    ) -> None:
+        """Render ?powerpivot=schema output."""
+        print(f"Power Pivot Model: {filename}\n")
+        print(f"Tables ({len(tables)}):")
+        for t in tables:
+            cols = t.get('columns', [])
+            if cols:
+                cols_preview = ', '.join(cols[:6])
+                if len(cols) > 6:
+                    cols_preview += f', ... ({len(cols)} total)'
+                print(f"  {t['name']} ({len(cols)} columns)")
+                print(f"    {cols_preview}")
+            else:
+                print(f"  {t['name']}")
+        if measures:
+            print(f"\nMeasures ({len(measures)}):")
+            max_name = max(len(m['name']) for m in measures)
+            for m in measures:
+                print(f"  [{m['name']:<{max_name}}]  {m['table']}")
+        if not xmla_available:
+            print("\n(Schema limited — XMLA absent; table names from pivotCache only)")
+
+    @staticmethod
+    def _render_powerpivot_measures(filename: str, measures: list) -> None:
+        """Render ?powerpivot=measures output."""
+        print(f"Power Pivot Measures: {filename}\n")
+        if not measures:
+            print("No measures found.")
+            return
+        max_name = max(len(m['name']) for m in measures)
+        for m in measures:
+            print(f"  [{m['name']:<{max_name}}]  {m['table']}")
+
+    @staticmethod
+    def _render_powerpivot_dax(filename: str, measures: list) -> None:
+        """Render ?powerpivot=dax output."""
+        print(f"Power Pivot Measures: {filename}\n")
+        if not measures:
+            print("No measures found.")
+            return
+        max_name = max(len(m['name']) for m in measures)
+        for m in measures:
+            print(f"[{m['name']:<{max_name}}]  = {m['expr']}")
+
+    @staticmethod
+    def _render_powerpivot_relationships(
+        filename: str, relationships: list, xmla_available: bool
+    ) -> None:
+        """Render ?powerpivot=relationships output."""
+        from collections import defaultdict
+        print(f"Power Pivot Relationships: {filename}\n")
+        if not relationships:
+            if not xmla_available:
+                print("Relationships not available — XMLA schema absent.")
+            else:
+                print("No relationships found.")
+            return
+        by_table: dict = defaultdict(list)
+        for r in relationships:
+            by_table[r['from']['table']].append(r)
+        for tname in sorted(by_table):
+            rels = by_table[tname]
+            print(f"  {tname}")
+            for r in rels:
+                fc = ', '.join(r['from']['columns']) or '?'
+                tc = ', '.join(r['to']['columns']) or '?'
+                tt = r['to']['table']
+                fm = r['from']['multiplicity']
+                tm = r['to']['multiplicity']
+                print(f"    [{fc}] ({fm})  ->  {tt}[{tc}] ({tm})")
+
+    @staticmethod
     def _render_powerpivot(result: dict, format: str) -> None:
-        """Render Power Pivot model output for all ?powerpivot= modes."""
+        """Render Power Pivot model output — dispatches to per-mode helpers."""
         from ..utils import safe_json_dumps
 
         if format == 'json':
@@ -181,81 +269,18 @@ class XlsxRenderer:
                 print("Install reveal-cli[powerpivot] for full extraction.")
             return
 
-        if mode == 'tables':
-            print(f"Power Pivot Model: {filename}\n")
-            print(f"Tables ({len(tables)}):")
-            for t in tables:
-                col_count = len(t.get('columns', []))
-                if col_count:
-                    print(f"  {t['name']} ({col_count} columns)")
-                else:
-                    print(f"  {t['name']}")
-            if not xmla_available:
-                print("\n(Column counts not available — XMLA schema absent)")
-
-        elif mode == 'schema':
-            print(f"Power Pivot Model: {filename}\n")
-            print(f"Tables ({len(tables)}):")
-            for t in tables:
-                cols = t.get('columns', [])
-                if cols:
-                    cols_preview = ', '.join(cols[:6])
-                    if len(cols) > 6:
-                        cols_preview += f', ... ({len(cols)} total)'
-                    print(f"  {t['name']} ({len(cols)} columns)")
-                    print(f"    {cols_preview}")
-                else:
-                    print(f"  {t['name']}")
-            if measures:
-                print(f"\nMeasures ({len(measures)}):")
-                max_name = max(len(m['name']) for m in measures)
-                for m in measures:
-                    print(f"  [{m['name']:<{max_name}}]  {m['table']}")
-            if not xmla_available:
-                print("\n(Schema limited — XMLA absent; table names from pivotCache only)")
-
-        elif mode == 'measures':
-            print(f"Power Pivot Measures: {filename}\n")
-            if not measures:
-                print("No measures found.")
-                return
-            max_name = max(len(m['name']) for m in measures)
-            for m in measures:
-                print(f"  [{m['name']:<{max_name}}]  {m['table']}")
-
-        elif mode == 'dax':
-            print(f"Power Pivot Measures: {filename}\n")
-            if not measures:
-                print("No measures found.")
-                return
-            max_name = max(len(m['name']) for m in measures)
-            for m in measures:
-                print(f"[{m['name']:<{max_name}}]  = {m['expr']}")
-
-        elif mode == 'relationships':
-            relationships = result.get('relationships', [])
-            print(f"Power Pivot Relationships: {filename}\n")
-            if not relationships:
-                if not xmla_available:
-                    print("Relationships not available — XMLA schema absent.")
-                else:
-                    print("No relationships found.")
-                return
-            # Group by from-table for readable output
-            from collections import defaultdict
-            by_table: dict = defaultdict(list)
-            for r in relationships:
-                by_table[r['from']['table']].append(r)
-            for tname in sorted(by_table):
-                rels = by_table[tname]
-                print(f"  {tname}")
-                for r in rels:
-                    fc = ', '.join(r['from']['columns']) or '?'
-                    tc = ', '.join(r['to']['columns']) or '?'
-                    tt = r['to']['table']
-                    fm = r['from']['multiplicity']
-                    tm = r['to']['multiplicity']
-                    print(f"    [{fc}] ({fm})  ->  {tt}[{tc}] ({tm})")
+        _mode_renderers = {
+            'tables': lambda: XlsxRenderer._render_powerpivot_tables(filename, tables, xmla_available),
+            'schema': lambda: XlsxRenderer._render_powerpivot_schema(filename, tables, measures, xmla_available),
+            'measures': lambda: XlsxRenderer._render_powerpivot_measures(filename, measures),
+            'dax': lambda: XlsxRenderer._render_powerpivot_dax(filename, measures),
+            'relationships': lambda: XlsxRenderer._render_powerpivot_relationships(
+                filename, result.get('relationships', []), xmla_available
+            ),
+        }
+        renderer = _mode_renderers.get(mode)
+        if renderer:
+            renderer()
 
     @staticmethod
     def render_element(result: dict, format: str = 'text') -> None:
@@ -900,28 +925,25 @@ class XlsxAdapter(ResourceAdapter):
                 pass
         return None
 
-    def _parse_xmla(self, zf: zipfile.ZipFile, item_path: str) -> Dict[str, Any]:
-        """Parse SSAS XMLA item — extract tables, columns, and DAX measures.
-
-        The item is a UTF-16 XML file with the XMLA wrapped in a CDATA section
-        inside a <Gemini><CustomContent><![CDATA[...]]></CustomContent></Gemini>
-        envelope.  We parse the outer doc first, then the inner XMLA.
-        """
+    @staticmethod
+    def _xmla_decode_root(zf: zipfile.ZipFile, item_path: str) -> ET.Element:
+        """UTF-16 decode + CDATA unwrap → parsed ET.Element root."""
         raw = zf.read(item_path)
         text = raw.decode('utf-16', errors='replace')
         outer = ET.fromstring(text)
-        # Unwrap CDATA from <CustomContent> element (if present)
-        cc = next((e for e in outer.iter() if self._local(e.tag) == 'CustomContent'), None)
+        cc = next((e for e in outer.iter() if XlsxAdapter._local(e.tag) == 'CustomContent'), None)
         if cc is not None and cc.text:
-            root = ET.fromstring(cc.text)
-        else:
-            root = outer
+            return ET.fromstring(cc.text)
+        return outer
 
-        local = self._local
+    @staticmethod
+    def _parse_xmla_tables(root: ET.Element) -> Dict[str, List[str]]:
+        """Extract table→columns mapping from XMLA root.
 
-        # Collect tables from Dimension elements that have Attributes children.
-        # The XMLA has both full definitions and lightweight MeasureGroup refs;
-        # keep whichever has the most columns per name.
+        The XMLA has both full Dimension definitions and lightweight MeasureGroup
+        refs; keep whichever entry has the most columns per table name.
+        """
+        local = XlsxAdapter._local
         tables: Dict[str, List[str]] = {}
         for dim in root.iter():
             if local(dim.tag) != 'Dimension':
@@ -946,13 +968,17 @@ class XlsxAdapter(ResourceAdapter):
                     cols.append(col_name)
             if name not in tables or len(cols) > len(tables[name]):
                 tables[name] = cols
+        return tables
 
-        # Extract DAX measures from MdxScript Command/Text elements.
+    @staticmethod
+    def _parse_xmla_measures(root: ET.Element) -> List[Dict[str, str]]:
+        """Extract DAX measures from MdxScript Command/Text elements."""
+        local = XlsxAdapter._local
         measure_pattern = re.compile(
             r"CREATE\s+MEASURE\s+(?:\[[^\]]+\]\.)?'?([^'\[\r\n]+?)'?\[([^\]]+)\]\s*=\s*(.+?)(?=\s*;|\s*CREATE\s+MEASURE|\s*$)",
             re.IGNORECASE | re.DOTALL,
         )
-        measures = []
+        measures: List[Dict[str, str]] = []
         for cmd in root.iter():
             if local(cmd.tag) != 'Text':
                 continue
@@ -965,8 +991,12 @@ class XlsxAdapter(ResourceAdapter):
                     'name': m.group(2).strip(),
                     'expr': m.group(3).strip().rstrip(';').strip(),
                 })
+        return measures
 
-        # Build dim ID -> name map for relationship resolution.
+    @staticmethod
+    def _parse_xmla_dim_id_map(root: ET.Element) -> Dict[str, str]:
+        """Build dim ID → name map from XMLA root (used for relationship resolution)."""
+        local = XlsxAdapter._local
         dim_id_to_name: Dict[str, str] = {}
         for dim in root.iter():
             if local(dim.tag) != 'Dimension':
@@ -975,9 +1005,32 @@ class XlsxAdapter(ResourceAdapter):
             dname = next((c.text for c in dim if local(c.tag) == 'Name'), None)
             if did and dname:
                 dim_id_to_name[did] = dname
+        return dim_id_to_name
 
-        # Extract relationships from Relationship elements.
-        relationships = []
+    @staticmethod
+    def _parse_xmla_end(end: ET.Element, dim_id_to_name: Dict[str, str]) -> Dict[str, Any]:
+        """Parse a single relationship end (FromRelationshipEnd / ToRelationshipEnd)."""
+        local = XlsxAdapter._local
+        did = next((c.text for c in end if local(c.tag) == 'DimensionID'), None) or ''
+        mult = next((c.text for c in end if local(c.tag) == 'Multiplicity'), None) or 'Unknown'
+        tname = dim_id_to_name.get(did, did)
+        attrs_el = next((c for c in end if local(c.tag) == 'Attributes'), None)
+        cols: List[str] = []
+        if attrs_el is not None:
+            for attr in attrs_el:
+                aid = next((c.text for c in attr if local(c.tag) == 'AttributeID'), None)
+                if aid:
+                    cols.append(aid)
+        return {'table': tname, 'columns': cols, 'multiplicity': mult}
+
+    @staticmethod
+    def _parse_xmla_relationships(
+        root: ET.Element,
+        dim_id_to_name: Dict[str, str],
+    ) -> List[Dict[str, Any]]:
+        """Extract relationship list from XMLA root."""
+        local = XlsxAdapter._local
+        relationships: List[Dict[str, Any]] = []
         for rel in root.iter():
             if local(rel.tag) != 'Relationship':
                 continue
@@ -985,25 +1038,24 @@ class XlsxAdapter(ResourceAdapter):
             to_end = next((c for c in rel if local(c.tag) == 'ToRelationshipEnd'), None)
             if from_end is None or to_end is None:
                 continue
-
-            def _parse_end(end: ET.Element) -> Dict[str, Any]:
-                did = next((c.text for c in end if local(c.tag) == 'DimensionID'), None) or ''
-                mult = next((c.text for c in end if local(c.tag) == 'Multiplicity'), None) or 'Unknown'
-                tname = dim_id_to_name.get(did, did)
-                attrs_el = next((c for c in end if local(c.tag) == 'Attributes'), None)
-                cols: List[str] = []
-                if attrs_el is not None:
-                    for attr in attrs_el:
-                        aid = next((c.text for c in attr if local(c.tag) == 'AttributeID'), None)
-                        if aid:
-                            cols.append(aid)
-                return {'table': tname, 'columns': cols, 'multiplicity': mult}
-
             relationships.append({
-                'from': _parse_end(from_end),
-                'to': _parse_end(to_end),
+                'from': XlsxAdapter._parse_xmla_end(from_end, dim_id_to_name),
+                'to': XlsxAdapter._parse_xmla_end(to_end, dim_id_to_name),
             })
+        return relationships
 
+    def _parse_xmla(self, zf: zipfile.ZipFile, item_path: str) -> Dict[str, Any]:
+        """Parse SSAS XMLA item — extract tables, columns, DAX measures, and relationships.
+
+        The item is a UTF-16 XML file with the XMLA wrapped in a CDATA section
+        inside a <Gemini><CustomContent><![CDATA[...]]></CustomContent></Gemini>
+        envelope.  We parse the outer doc first, then the inner XMLA.
+        """
+        root = self._xmla_decode_root(zf, item_path)
+        tables = self._parse_xmla_tables(root)
+        measures = self._parse_xmla_measures(root)
+        dim_id_to_name = self._parse_xmla_dim_id_map(root)
+        relationships = self._parse_xmla_relationships(root, dim_id_to_name)
         return {
             'has_model': True,
             'xmla_available': True,
