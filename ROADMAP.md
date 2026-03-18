@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-17 (timeless-antimatter-0317 — BACK-077/078 shipped; 6,550 tests; BACK-079–084 filed)
+> **Last updated**: 2026-03-17 (kuzujuwe-0317 — BACK-081/082 shipped; 6,552 tests)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -432,43 +432,23 @@ reveal nginx://example.com --probe        # live HTTP vs config cross-check
 
 ### BACK-081: Refactor `_parse_xmla` — complexity 64
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session kuzujuwe-0317, commit `8fa1e31`)
 **Value**: Medium | **Lift**: Medium
-**Location**: `reveal/adapters/xlsx.py:903`
 
-One 111-line function doing four unrelated things: UTF-16 decode + CDATA unwrap, table/column extraction, DAX measure extraction, and relationship graph parsing (including a nested `_parse_end` closure inside a loop). Cyclomatic complexity: 64.
-
-Refactor path:
-```python
-_parse_xmla_tables(root, local)       # ~25L — table/column extraction
-_parse_xmla_measures(root, local)     # ~20L — DAX regex extraction
-_parse_xmla_dim_id_map(root, local)   # ~10L — dim ID → name map
-_parse_xmla_relationships(root, local, dim_id_to_name)  # ~25L — relationship graph
-_parse_end(end, local, dim_id_to_name)  # module-level helper, not a closure
-```
-
-`_parse_xmla` becomes an ~20-line orchestrator that calls these and merges results.
+Split into `_xmla_decode_root`, `_parse_xmla_tables`, `_parse_xmla_measures`,
+`_parse_xmla_dim_id_map`, `_parse_xmla_end`, `_parse_xmla_relationships`.
+`_parse_xmla` is now a ~15-line orchestrator. No behavior change.
 
 ---
 
 ### BACK-082: Refactor `_render_powerpivot` — complexity 34
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session kuzujuwe-0317, commit `8fa1e31`)
 **Value**: Low | **Lift**: Small
-**Location**: `reveal/adapters/xlsx.py:153`
 
-106-line function with five `elif mode ==` branches, each a separate rendering path. Classic "one function with a mode flag" antipattern.
-
-Refactor path: dispatch table or named helpers:
-```python
-_render_powerpivot_tables(result, filename, tables, xmla_available)
-_render_powerpivot_schema(result, filename, tables, measures, xmla_available)
-_render_powerpivot_measures(filename, measures)
-_render_powerpivot_dax(filename, measures)
-_render_powerpivot_relationships(filename, relationships, xmla_available)
-```
-
-`_render_powerpivot` becomes a ~15-line dispatcher.
+Split into `_render_powerpivot_tables`, `_render_powerpivot_schema`,
+`_render_powerpivot_measures`, `_render_powerpivot_dax`,
+`_render_powerpivot_relationships`. `_render_powerpivot` is now a ~25-line dispatcher.
 
 ---
 
