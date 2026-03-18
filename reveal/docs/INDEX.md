@@ -6,8 +6,8 @@ category: reference
 
 **Complete catalog of all user-facing documentation**
 
-**Last Updated**: 2026-03-14
-**Total**: 44 markdown files, ~38,600 lines
+**Last Updated**: 2026-03-18
+**Total**: 48 markdown files, ~41,500 lines
 
 ---
 
@@ -21,7 +21,7 @@ category: reference
 
 ---
 
-## User Guides (5 files)
+## User Guides (8 files)
 
 | File | Lines | Description |
 |------|-------|-------------|
@@ -44,8 +44,8 @@ Complete guides for all URI protocol adapters (~24,500 lines):
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| [AST_ADAPTER_GUIDE.md](AST_ADAPTER_GUIDE.md) | 1192 | AST-based code analysis with complexity/size filtering |
-| [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) | 592 | Cross-file call graph queries (calls://) |
+| [AST_ADAPTER_GUIDE.md](AST_ADAPTER_GUIDE.md) | 1329 | AST-based code analysis with complexity/size filtering |
+| [CALLS_ADAPTER_GUIDE.md](CALLS_ADAPTER_GUIDE.md) | 622 | Cross-file call graph queries (calls://) |
 | [CLAUDE_ADAPTER_GUIDE.md](CLAUDE_ADAPTER_GUIDE.md) | 2316 | Claude CLI session analysis and tool usage tracking |
 | [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md) | 328 | cPanel user environment: domains, SSL, ACL health |
 | [DIFF_ADAPTER_GUIDE.md](DIFF_ADAPTER_GUIDE.md) | 1932 | Git diff analysis and structure comparison |
@@ -112,11 +112,11 @@ Core reference and technical specifications:
 
 ## Subcommand Guides (1 file)
 
-Reference guides for all reveal subcommands (`dev`, `review`, `health`, `pack`, `hotspots`, `overview`, `deps`):
+Reference guides for all reveal subcommands (`check`, `deps`, `dev`, `health`, `hotspots`, `overview`, `pack`, `review`, `scaffold`):
 
 | File | Lines | Description |
 |------|-------|-------------|
-| [SUBCOMMANDS_GUIDE.md](SUBCOMMANDS_GUIDE.md) | — | `reveal dev`, `review`, `health`, `pack`, `hotspots`, `overview`, `deps` — all subcommand reference |
+| [SUBCOMMANDS_GUIDE.md](SUBCOMMANDS_GUIDE.md) | — | All subcommand reference: `check`, `deps`, `dev`, `health`, `hotspots`, `overview`, `pack`, `review`, `scaffold` |
 
 ---
 
@@ -141,7 +141,7 @@ Complete reference for AI agent integration:
 
 | File | Lines | Description |
 |------|-------|-------------|
-| [AGENT_HELP.md](AGENT_HELP.md) | 2391 | Complete AI agent reference (~62KB) |
+| [AGENT_HELP.md](AGENT_HELP.md) | 2824 | Complete AI agent reference (~68KB) |
 
 **Total**: 2,391 lines
 
@@ -150,17 +150,17 @@ Complete reference for AI agent integration:
 ## Documentation Statistics
 
 **By Category**:
-- Adapter Guides: 17 files, ~24,500 lines (63%)
-- Reference: 11 files, ~6,300 lines (16%)
-- Analyzer Guides: 5 files, ~2,555 lines (7%)
-- User Guides: 4 files, ~3,140 lines (8%)
-- Subcommand Guides: 4 files, ~239 lines (1%)
-- AI Agent: 1 file, ~2,391 lines (6%)
-- Development: 3 files, ~1,230 lines (3%)
+- Adapter Guides: 17 files, ~24,500 lines (59%)
+- Reference: 10 files, ~6,300 lines (15%)
+- User Guides: 8 files, ~4,500 lines (11%)
+- AI Agent: 1 file, ~2,824 lines (7%)
+- Analyzer Guides: 5 files, ~2,555 lines (6%)
+- Development: 4 files, ~1,500 lines (4%)
+- Subcommand Guides: 1 file, ~580 lines (1%)
 
-**Total**: 44 files, ~40,355 lines
+**Total**: 48 files, ~41,500 lines
 
-**Last Updated**: 2026-03-16 (Session: infernal-earth-0316)
+**Last Updated**: 2026-03-18 (Session: copper-tint-0317)
 
 ---
 
@@ -188,5 +188,5 @@ Internal maintainer documentation (planning, research, architecture) is maintain
 
 ---
 
-**Last Updated**: 2026-03-16 (Session: infernal-earth-0316)
+**Last Updated**: 2026-03-18 (Session: copper-tint-0317)
 **Navigation**: [README](README.md) | [Project Root](../../README.md)

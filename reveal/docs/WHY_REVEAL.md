@@ -67,7 +67,7 @@ reveal 'calls://src/?uncalled'
 reveal 'calls://src/?uncalled&type=function&top=20'
 ```
 
-**What you get:** Cross-file, language-aware call graph analysis from a CLI — no IDE, no language server, no configuration. The `?rank=callers` metric surfaces architecturally load-bearing functions before you know to look for them. The `?uncalled` query identifies dead code candidates as a pure set-difference between defined functions and the callers index — private functions flagged separately, `__dunder__` and decorated methods excluded. No static analysis plugin, no IDE, no config.
+**What you get:** Cross-file, language-aware call graph analysis from a CLI — no IDE, no language server, no configuration. The `?rank=callers` metric surfaces architecturally load-bearing functions before you know to look for them. `?uncalled` lists functions with no callers in the index — useful as a rough post-refactor check, but expect false positives for framework entry points and dispatch tables.
 
 ---
 
@@ -269,11 +269,11 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 ## Things Nobody Else Does
 
-1. **`calls://src/?uncalled`** — dead code detection from the CLI. Pure set-difference: defined functions minus everything in the callers index. No IDE, no plugin, no config. Private functions flagged separately; decorators like `@property` excluded.
+1. **`?rank=callers`** — coupling metrics from the CLI. Not "who calls this" but "what is most called across the project." Graph analysis, not search.
 
-2. **`?rank=callers`** — coupling metrics from the CLI. Not "who calls this" but "what is most called across the project." Graph analysis, not search.
+2. **`reveal health` spanning code + certs + DB + DNS** — a category collapse. One command, one JSON blob, one exit code.
 
-3. **`reveal health` spanning code + certs + DB + DNS** — a category collapse. One command, one JSON blob, one exit code.
+3. **64 quality rules via `reveal check`** — B/C/I/M/S/T/V categories covering bugs, complexity, imports, security, types, and Reveal's own adapter contract validation. One CLI, no config file required.
 
 4. **`reveal pack --since <branch> --budget N`** — PR-aware codebase snapshots. Changed files boosted to priority tier 0; remaining budget fills with entry points and complexity leaders. Built for agents, not retrofitted.
 

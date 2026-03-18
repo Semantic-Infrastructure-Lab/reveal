@@ -397,3 +397,93 @@ reveal deps . --format json          # Machine-readable for CI
 - `imports://` — Full import graph queries
 - `reveal overview` — Includes dependency summary
 - `reveal deps --help` — Full flag reference
+
+---
+
+## reveal check — Quality Rule Engine
+
+Run 64 built-in quality rules against a file or directory. Covers bugs, complexity, imports, maintainability, security, types, and more. Exit code 0 = clean, 1 = issues found.
+
+### Usage
+
+```
+reveal check [path] [flags]
+```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--select RULES` | Run only specific rules or categories: `B,S` or `B001,I002` |
+| `--ignore RULES` | Skip rules or categories |
+| `--only-failures` | Hide passing checks; show violations only |
+| `--recursive, -r` | Recurse into directories (default: on) |
+| `--advanced` | Enable deeper validation checks |
+| `--severity LEVEL` | Minimum level: `low`, `medium`, `high`, `critical` |
+| `--format` | `text` (default), `json`, `typed`, `grep` |
+| `--rules` | List all available rules with descriptions |
+| `--explain CODE` | Explain a specific rule (e.g., `--explain B001`) |
+
+### Rule Categories
+
+| Category | Code | What it checks |
+|----------|------|----------------|
+| Bugs | B | Bare excepts, bad decorators, unresolvable imports |
+| Complexity | C | Cyclomatic complexity, function length, nesting depth |
+| Imports | I | Unused imports, circular dependencies, layer violations |
+| Maintainability | M | Code health metrics |
+| Security | S | Security anti-patterns |
+| Types | T | Type annotation issues |
+| Validation | V | Reveal self-checks: version consistency, adapter contracts, doc accuracy |
+
+### Examples
+
+```bash
+reveal check src/                          # check all files recursively
+reveal check file.py                       # single file
+reveal check src/ --select B,S            # bugs and security only
+reveal check src/ --only-failures         # show violations only
+reveal check src/ --format json           # machine-readable
+reveal check src/ --severity high         # high/critical issues only
+reveal check --rules                      # list all 64 rules
+reveal check --explain C901              # explain the complexity rule
+```
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | No violations found |
+| `1` | One or more violations found |
+
+### See Also
+
+- `reveal review` — Full PR review orchestrator (runs check + hotspots + summary)
+- `reveal hotspots` — Complexity-focused view
+- `reveal check --help` — Full flag reference
+
+---
+
+## reveal scaffold — Component Generator
+
+Scaffold new reveal components (adapters, analyzers, rules) with correct structure and boilerplate.
+
+### Usage
+
+```
+reveal scaffold {adapter,analyzer,rule} [options]
+```
+
+### Examples
+
+```bash
+reveal scaffold adapter mydb --uri mydb://    # new URI adapter skeleton
+reveal scaffold analyzer toml --ext .toml     # new file type analyzer
+reveal scaffold rule B007                     # new quality rule stub
+```
+
+### See Also
+
+- `reveal dev` — Developer tooling (includes scaffold wrappers)
+- `ADAPTER_AUTHORING_GUIDE.md` — Full adapter authoring guide
+- `reveal help://scaffolding` — In-tool scaffolding reference
