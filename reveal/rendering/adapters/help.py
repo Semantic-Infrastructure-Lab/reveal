@@ -313,7 +313,7 @@ def _get_guide_description(topic: str) -> str:
     return descriptions.get(topic, 'Static guide')
 
 
-def _render_help_static_guide(data: Dict[str, Any]) -> None:
+def _render_help_static_guide(data: Dict[str, Any]) -> None:  # noqa: uncalled
     """Render static guide from markdown file."""
     if 'error' in data:
         print(f"Error: {data['message']}", file=sys.stderr)
@@ -329,7 +329,7 @@ def _render_help_static_guide(data: Dict[str, Any]) -> None:
     print(data['content'])
 
 
-def _render_help_adapter_summary(data: Dict[str, Any]) -> None:
+def _render_help_adapter_summary(data: Dict[str, Any]) -> None:  # noqa: uncalled
     """Render summary of all adapters."""
     print(f"# URI Adapters ({data['count']} total)")
     print()
@@ -342,7 +342,7 @@ def _render_help_adapter_summary(data: Dict[str, Any]) -> None:
         print()
 
 
-def _render_workflows(content: list) -> None:
+def _render_workflows(content: list) -> None:  # noqa: uncalled
     """Render workflows section."""
     for workflow in content:
         print(f"## {workflow['name']}")
@@ -354,7 +354,7 @@ def _render_workflows(content: list) -> None:
         print()
 
 
-def _render_try_now(content: list) -> None:
+def _render_try_now(content: list) -> None:  # noqa: uncalled
     """Render try-now section."""
     print("Run these in your current directory:")
     print()
@@ -363,7 +363,7 @@ def _render_try_now(content: list) -> None:
     print()
 
 
-def _render_anti_patterns(content: list) -> None:
+def _render_anti_patterns(content: list) -> None:  # noqa: uncalled
     """Render anti-patterns section."""
     for ap in content:
         print(f"X {ap['bad']}")
@@ -380,7 +380,7 @@ _SECTION_RENDERERS = {
 }
 
 
-def _render_help_section(data: Dict[str, Any]) -> None:
+def _render_help_section(data: Dict[str, Any]) -> None:  # noqa: uncalled
     """Render specific help section (help://ast/workflows)."""
     if 'error' in data:
         print(f"Error: {data['message']}", file=sys.stderr)
@@ -566,7 +566,7 @@ def _render_help_see_also(data: Dict[str, Any]) -> None:
         print()
 
 
-def _render_query_recipes(data: Dict[str, Any]) -> None:
+def _render_query_recipes(data: Dict[str, Any]) -> None:  # noqa: uncalled
     """Render help://examples/<task> — canonical query recipes for a task."""
     if 'error' in data:
         available = data.get('available_tasks', [])
@@ -760,7 +760,7 @@ def _render_schema_footer(adapter: str) -> None:
     print()
 
 
-def _render_adapter_schema(data: Dict[str, Any]) -> None:
+def _render_adapter_schema(data: Dict[str, Any]) -> None:  # noqa: uncalled
     """Render help://schemas/<adapter> — machine-readable adapter schema."""
     if 'error' in data:
         _render_schema_error(data)
@@ -808,7 +808,7 @@ def _render_help_adapter_specific(data: Dict[str, Any]) -> None:
     _render_help_breadcrumbs(scheme, data)
 
 
-def _render_help_quick(data: Dict[str, Any]) -> None:
+def _render_help_quick(data: Dict[str, Any]) -> None:  # noqa: uncalled
     """Render help://quick — concise orientation cheat-sheet."""
     print(f"\n{data.get('title', 'Reveal — Quick Reference')}\n")
     commands = data.get('commands', [])

@@ -1,5 +1,6 @@
 """Tests for reveal/utils/updates.py - update checking."""
 
+import os
 import pytest
 import json
 from datetime import datetime, timedelta
@@ -10,6 +11,17 @@ from reveal.utils.updates import check_for_updates
 
 class TestCheckForUpdates:
     """Test check_for_updates() function."""
+
+    def setup_method(self):
+        """Clear REVEAL_NO_UPDATE_CHECK so mcp_server import pollution doesn't leak in."""
+        self._saved_no_update = os.environ.pop('REVEAL_NO_UPDATE_CHECK', None)
+
+    def teardown_method(self):
+        """Restore REVEAL_NO_UPDATE_CHECK to its pre-test state."""
+        if self._saved_no_update is not None:
+            os.environ['REVEAL_NO_UPDATE_CHECK'] = self._saved_no_update
+        else:
+            os.environ.pop('REVEAL_NO_UPDATE_CHECK', None)
 
     @patch.dict('os.environ', {'REVEAL_NO_UPDATE_CHECK': '1'})
     def test_skips_when_disabled_via_env(self):

@@ -12,7 +12,7 @@ per directory when any file changes (simple and correct).
 import builtins as _builtins_module
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..ast.analysis import collect_structures, is_code_file
 from ..ast.call_graph import build_alias_map
@@ -220,6 +220,30 @@ def find_callers(
     }
 
 
+def _has_noqa_uncalled(
+    file_path: str,
+    line_no: int,
+    cache: Dict[str, List[str]],
+) -> bool:
+    """Return True if the function at ``line_no`` has a ``# noqa: uncalled`` comment.
+
+    Checks ``line_no`` through ``line_no + 3`` to handle decorators: analyzers
+    often report the first decorator line as the function's start, while the
+    noqa comment lives on the ``def`` line one or two lines later.
+    """
+    if file_path not in cache:
+        try:
+            with open(file_path, encoding='utf-8', errors='replace') as fh:
+                cache[file_path] = fh.readlines()
+        except OSError:
+            cache[file_path] = []
+    lines = cache[file_path]
+    for ln in range(line_no, min(line_no + 4, len(lines) + 1)):
+        if 1 <= ln <= len(lines) and '# noqa: uncalled' in lines[ln - 1]:
+            return True
+    return False
+
+
 def find_uncalled(
     path: str,
     only_functions: bool = False,
@@ -262,6 +286,9 @@ def find_uncalled(
     # Implicit-call decorators — these are dispatched by the runtime, not
     # by explicit call expressions in source code.
     _IMPLICIT_DECORATORS = frozenset({'property', 'classmethod', 'staticmethod'})
+
+    # Cache source file lines to avoid re-reading the same file for every element.
+    _file_lines: Dict[str, List[str]] = {}
 
     structures = collect_structures(str(directory))
 
@@ -311,10 +338,15 @@ def find_uncalled(
             if name in called_names:
                 continue
 
+            # Check for # noqa: uncalled suppression on the definition line.
+            line_no = elem.get('line', 0)
+            if line_no and _has_noqa_uncalled(file_path, line_no, _file_lines):
+                continue
+
             entries.append({
                 'name': name,
                 'file': file_path,
-                'line': elem.get('line', 0),
+                'line': line_no,
                 'category': 'methods' if is_method else 'functions',
                 'is_private': name.startswith('_'),
             })

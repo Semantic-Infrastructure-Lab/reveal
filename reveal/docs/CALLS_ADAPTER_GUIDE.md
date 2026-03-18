@@ -525,9 +525,60 @@ reveal 'calls://src/?target=fn'   # won't see callers in tests/ above src/
 reveal 'calls://.?target=fn'       # use project root for full coverage
 ```
 
+**Module-level call sites are not indexed.** The callers index tracks calls inside function and method bodies only. A function called only at module level — e.g., in a list literal, dict literal, or top-level code outside any function — will not appear in the index and will be flagged as uncalled. This affects factory helpers like `_make_output_type('...', ...)` called to build module-level data structures.
+
 **`called_by` in `ast://` is within-file only.** If a function has callers only in other files, `called_by` will be empty in `ast://` output. The `calls://` adapter is the authoritative source for cross-file callers.
 
 **Language support.** Call extraction relies on tree-sitter analyzers. Python has the best support. JS/TS/Go/Rust work but have shallower call extraction for complex expressions.
+
+### Known False Positives in `?uncalled`
+
+Static analysis cannot see runtime dispatch. Three patterns consistently produce false positives:
+
+**1. Framework entry points (`@tool`, `@app.route`, etc.)**
+
+Functions registered via decorator at runtime are never called by an explicit `fn()` expression in source:
+
+```python
+@mcp.tool()
+def reveal_structure(path: str) -> str:  # noqa: uncalled
+    ...
+```
+
+**2. Console script entry points**
+
+Functions wired as `[project.scripts]` in `pyproject.toml` are called by pip-installed scripts, not by source code:
+
+```python
+def main() -> None:  # noqa: uncalled
+    ...
+```
+
+**3. Dispatch table functions**
+
+Functions stored in a dict and called via key lookup:
+
+```python
+_RENDERERS = {
+    'check': _render_check,    # never appears as _render_check()
+    'tables': _render_tables,
+}
+
+def _render_check(data):  # noqa: uncalled
+    ...
+```
+
+### Suppressing False Positives: `# noqa: uncalled`
+
+Add `# noqa: uncalled` to the function's `def` line to exclude it from `?uncalled` results:
+
+```python
+def main() -> None:  # noqa: uncalled
+    """Console script entry point."""
+    ...
+```
+
+The suppression is narrow: it only affects `?uncalled`. The function still appears in all other `calls://` queries (`?target=`, `?callees=`, `?rank=callers`).
 
 ---
 
@@ -582,7 +633,15 @@ A: A few possibilities:
 
 **Q: How do I find all functions that are never called (dead code)?**
 
-A: There's no built-in filter yet. Use the shell loop pattern from Workflow 2 above, or check `called_by` from `ast://` as a quick heuristic for within-file isolation.
+A: Use `?uncalled`:
+
+```bash
+reveal 'calls://src/?uncalled'              # all uncalled functions + methods
+reveal 'calls://src/?uncalled&type=function' # skip methods
+reveal 'calls://src/?uncalled&top=20'       # most-recently-added uncalled first
+```
+
+See the Known False Positives section above for patterns that produce false positives, and `# noqa: uncalled` for suppression.
 
 **Q: How do I audit code for dangerous builtins like `eval` or `open`?**
 

@@ -12,7 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316, heating-blizzard-0316, ascending-journey-0316, spinning-observatory-0316, frost-matrix-0316, obsidian-prism-0316, warming-ice-0316, tempestuous-sunshine-0316, bojififo-0317, serene-mist-0317, galactic-quasar-0317, dowepeva-0317, timeless-launch-0317, zifaxo-0317, topaz-flash-0317, timeless-antimatter-0317, kuzujuwe-0317)
+## [Unreleased] - (sessions awakened-pegasus-0315, slate-spectrum-0315, lightning-shield-0315, emerald-shade-0315, wise-temple-0316, heating-blizzard-0316, ascending-journey-0316, spinning-observatory-0316, frost-matrix-0316, obsidian-prism-0316, warming-ice-0316, tempestuous-sunshine-0316, bojififo-0317, serene-mist-0317, galactic-quasar-0317, dowepeva-0317, timeless-launch-0317, zifaxo-0317, topaz-flash-0317, timeless-antimatter-0317, kuzujuwe-0317, rainbow-aurora-0317)
+
+### Added
+- **BACK-083: `# noqa: uncalled` suppression + false-positive docs** — `find_uncalled` now honours `# noqa: uncalled` on a function's definition line (or its decorator line) to exclude known entry points from dead-code results. Checked via a line-window reader that handles decorator-first reporting. `CALLS_ADAPTER_GUIDE.md` gains a "Known False Positives" section documenting three patterns (framework `@tool` decorators, console script entry points, dispatch table functions) and a module-level call sites limitation. Stale FAQ entry about `?uncalled` corrected. 3 new tests. (session rainbow-aurora-0317)
+
+### Fixed
+- **`test_updates.py` test isolation** — `mcp_server.py` sets `REVEAL_NO_UPDATE_CHECK=1` at import time; when `test_mcp_server.py` runs first in the full suite it pollutes `os.environ` and causes 6 update tests to fail. Fix: `setup_method`/`teardown_method` in `TestCheckForUpdates` clear and restore the env var so each test runs in a clean state. (session rainbow-aurora-0317)
 
 ### Refactored
 - **BACK-081/082: `_parse_xmla` (cx:64) and `_render_powerpivot` (cx:34) split** — `_parse_xmla` (111L) broken into `_xmla_decode_root`, `_parse_xmla_tables`, `_parse_xmla_measures`, `_parse_xmla_dim_id_map`, `_parse_xmla_end`, `_parse_xmla_relationships`; orchestrator is now ~15 lines. `_render_powerpivot` (106L) broken into `_render_powerpivot_{tables,schema,measures,dax,relationships}` with a dispatch dict; dispatcher is ~25 lines. No behavior change. Helpers are now directly callable for the planned `?powerpivot=check` mode. (session kuzujuwe-0317)

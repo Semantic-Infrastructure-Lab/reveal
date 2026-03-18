@@ -36,7 +36,7 @@ def _collect_decorator_counts(structure: dict) -> Dict[str, int]:
     return counts
 
 
-def handle_list_supported(list_supported_types_func):
+def handle_list_supported(list_supported_types_func):  # noqa: uncalled
     """Handle --list-supported flag.
 
     Args:
@@ -46,7 +46,7 @@ def handle_list_supported(list_supported_types_func):
     sys.exit(0)
 
 
-def handle_languages():
+def handle_languages():  # noqa: uncalled
     """Handle --languages flag.
 
     Shows all supported languages with distinction between explicit
@@ -57,7 +57,7 @@ def handle_languages():
     sys.exit(0)
 
 
-def handle_adapters():
+def handle_adapters():  # noqa: uncalled
     """Handle --adapters flag.
 
     Shows all URI adapters with their syntax and purpose.
@@ -103,7 +103,7 @@ def handle_adapters():
     sys.exit(0)
 
 
-def handle_explain_file(path: str, verbose: bool = False):
+def handle_explain_file(path: str, verbose: bool = False):  # noqa: uncalled
     """Handle --explain-file flag.
 
     Shows how reveal will analyze a file, including analyzer type,
@@ -117,7 +117,7 @@ def handle_explain_file(path: str, verbose: bool = False):
     sys.exit(0)
 
 
-def handle_capabilities(path: str):
+def handle_capabilities(path: str):  # noqa: uncalled
     """Handle --capabilities flag.
 
     Shows file capabilities as JSON for agent consumption.
@@ -133,7 +133,7 @@ def handle_capabilities(path: str):
     sys.exit(0)
 
 
-def handle_show_ast(path: str, max_depth: int = 10):
+def handle_show_ast(path: str, max_depth: int = 10):  # noqa: uncalled
     """Handle --show-ast flag.
 
     Displays the tree-sitter AST for a file.
@@ -146,7 +146,7 @@ def handle_show_ast(path: str, max_depth: int = 10):
     sys.exit(0)
 
 
-def handle_language_info(language: str):
+def handle_language_info(language: str):  # noqa: uncalled
     """Handle --language-info flag.
 
     Shows detailed information about a language's capabilities.
@@ -169,7 +169,7 @@ def handle_agent_help():
     sys.exit(0)
 
 
-def handle_agent_help_full():
+def handle_agent_help_full():  # noqa: uncalled
     """Handle --agent-help-full flag.
 
     AGENT_HELP.md and AGENT_HELP_FULL.md were consolidated into a single file
@@ -178,7 +178,7 @@ def handle_agent_help_full():
     handle_agent_help()
 
 
-def handle_schema(version: Optional[str] = None):
+def handle_schema(version: Optional[str] = None):  # noqa: uncalled
     """Handle --schema flag to show Output Contract specification.
 
     Displays the v1.0 Output Contract schema that all adapters/analyzers
@@ -350,7 +350,7 @@ def handle_explain_rule(rule_code: str):
     sys.exit(0)
 
 
-def handle_discover():
+def handle_discover():  # noqa: uncalled
     """Handle --discover flag.
 
     Dumps the full adapter registry as a single JSON document.
@@ -409,7 +409,7 @@ def handle_discover():
     sys.exit(0)
 
 
-def handle_list_schemas():
+def handle_list_schemas():  # noqa: uncalled
     """Handle --list-schemas flag to list all built-in schemas."""
     from ..schemas.frontmatter import list_schemas, load_schema
 
@@ -1050,7 +1050,7 @@ def _scan_python_files(target_path):
     return decorator_counts, decorator_files, total_files, total_decorated
 
 
-def handle_decorator_stats(path: str):
+def handle_decorator_stats(path: str):  # noqa: uncalled
     """Handle --decorator-stats flag to show decorator usage statistics.
 
     Scans Python files and reports decorator usage across the codebase.

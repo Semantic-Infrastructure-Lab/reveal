@@ -758,7 +758,7 @@ class NginxUriAdapter(ResourceAdapter):
             return handler(config_path, content, server_block)
         return None
 
-    def _element_ports(self, config_path: str, content: str, server_block: str) -> Dict[str, Any]:
+    def _element_ports(self, config_path: str, content: str, server_block: str) -> Dict[str, Any]:  # noqa: uncalled
         ports = _extract_ports(server_block)
         return {
             'type': 'nginx_vhost_ports',
@@ -771,7 +771,7 @@ class NginxUriAdapter(ResourceAdapter):
             ],
         }
 
-    def _element_upstream(self, config_path: str, content: str, server_block: str) -> Dict[str, Any]:
+    def _element_upstream(self, config_path: str, content: str, server_block: str) -> Dict[str, Any]:  # noqa: uncalled
         upstream_names = _extract_upstreams_referenced(server_block)
         upstream_defs = _find_upstream_definitions(content, upstream_names)
         reachability = {name: _check_upstream_reachability(defn) for name, defn in upstream_defs.items()}
@@ -791,7 +791,7 @@ class NginxUriAdapter(ResourceAdapter):
             ],
         }
 
-    def _element_auth(self, config_path: str, content: str, server_block: str) -> Dict[str, Any]:
+    def _element_auth(self, config_path: str, content: str, server_block: str) -> Dict[str, Any]:  # noqa: uncalled
         auth = _extract_auth_directives(server_block)
         return {
             'type': 'nginx_vhost_auth',
@@ -803,7 +803,7 @@ class NginxUriAdapter(ResourceAdapter):
             ],
         }
 
-    def _element_locations(self, config_path: str, content: str, server_block: str) -> Dict[str, Any]:
+    def _element_locations(self, config_path: str, content: str, server_block: str) -> Dict[str, Any]:  # noqa: uncalled
         locations = _extract_location_blocks(server_block)
         return {
             'type': 'nginx_vhost_locations',
@@ -816,7 +816,7 @@ class NginxUriAdapter(ResourceAdapter):
             ],
         }
 
-    def _element_config(self, config_path: str, content: str, server_block: str) -> Dict[str, Any]:
+    def _element_config(self, config_path: str, content: str, server_block: str) -> Dict[str, Any]:  # noqa: uncalled
         return {
             'type': 'nginx_vhost_config',
             'domain': self.domain,

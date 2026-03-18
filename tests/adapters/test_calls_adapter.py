@@ -1324,6 +1324,53 @@ class TestFindUncalled(unittest.TestCase):
         # consumer (from sibling file) must not appear
         self.assertNotIn('consumer', names)
 
+    def test_noqa_uncalled_suppresses_def_line(self):
+        """# noqa: uncalled on the def line excludes the function from results."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('noqa1.py', '''\
+            def suppressed():  # noqa: uncalled
+                pass
+
+            def reported():
+                pass
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        self.assertNotIn('suppressed', names)
+        self.assertIn('reported', names)
+
+    def test_noqa_uncalled_on_decorator_line(self):
+        """# noqa: uncalled on a decorator line also suppresses the function."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('noqa2.py', '''\
+            def decorator(fn):
+                return fn
+
+            @decorator  # noqa: uncalled
+            def registered():
+                pass
+
+            def other():
+                pass
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        self.assertNotIn('registered', names)
+
+    def test_noqa_uncalled_does_not_affect_called_function(self):
+        """# noqa: uncalled on a function that IS called has no visible effect."""
+        from reveal.adapters.calls.index import find_uncalled
+        self._write('noqa3.py', '''\
+            def helper():  # noqa: uncalled
+                pass
+
+            def runner():
+                helper()
+        ''')
+        result = find_uncalled(self.tmpdir)
+        names = [e['name'] for e in result['entries']]
+        self.assertNotIn('helper', names)
+
 
 # ---------------------------------------------------------------------------
 # Integration: CallsAdapter ?uncalled query param

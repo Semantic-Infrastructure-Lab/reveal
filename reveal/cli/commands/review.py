@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, Any, List, cast
 
 
-def create_review_parser() -> argparse.ArgumentParser:
+def create_review_parser() -> argparse.ArgumentParser:  # noqa: uncalled
     """Create parser for reveal review subcommand."""
     from reveal.cli.parser import _build_global_options_parser
     parser = argparse.ArgumentParser(
@@ -39,7 +39,7 @@ def create_review_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_review(args: Namespace) -> None:
+def run_review(args: Namespace) -> None:  # noqa: uncalled
     """Run the review workflow."""
     target = args.target
     is_git_range = '..' in target and not Path(target).exists()

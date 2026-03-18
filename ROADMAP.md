@@ -454,18 +454,10 @@ Split into `_render_powerpivot_tables`, `_render_powerpivot_schema`,
 
 ### BACK-083: `calls://?uncalled` false positives for runtime-dispatched functions
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session rainbow-aurora-0317)
 **Value**: Medium | **Lift**: Small
-**Location**: `reveal/adapters/calls/index.py`, `reveal/docs/CALLS_ADAPTER_GUIDE.md`
 
-Dogfooding reveal on itself (session timeless-antimatter-0317) shows 20 "uncalled" results, all false positives:
-- **MCP `@tool`-decorated functions** (`reveal_structure`, `reveal_element`, etc.) — called by FastMCP at runtime via decorator registration, not via explicit call expressions
-- **Console script entry points** (`main`, `list_supported_types`, `create_deps_parser`, `run_deps`) — called by pip-installed scripts
-- **Renderer dispatch functions** (`_render_help_static_guide`, etc.) — called via dict lookup, not explicit call syntax
-
-Two fixes needed:
-1. **Docs**: Add a "Known false-positive patterns" section to `CALLS_ADAPTER_GUIDE.md` explaining these three cases with examples
-2. **Code**: Consider a `# noqa: uncalled` inline suppression so users can annotate known entry points. Currently there is no escape hatch.
+`# noqa: uncalled` suppression implemented in `find_uncalled` — checks the reported line and up to 3 lines forward (handles decorator-first reporting). `CALLS_ADAPTER_GUIDE.md` gains "Known False Positives" section covering @tool decorators, console scripts, and dispatch table functions. Module-level call-site limitation documented. Stale FAQ corrected. 3 new tests. reveal/ annotated: 35+ `# noqa: uncalled` comments across handlers.py, mcp_server.py, main.py, cli/commands/*, rendering/adapters/help.py.
 
 ---
 
