@@ -70,6 +70,12 @@ class SSLRenderer(TypeDispatchRenderer):
                 example = result['available_elements'][0]['example']
                 print(f"💡 Try: {example}")
 
+        # HTTP probe section (--probe-http)
+        if result.get('http_probe'):
+            print()
+            from .probe import render_probe_text
+            render_probe_text(result['http_probe'])
+
     @staticmethod
     def _render_ssl_san(result: dict) -> None:
         """Render Subject Alternative Names."""

@@ -440,7 +440,7 @@ Implementation: walks `/etc/letsencrypt/live/*/cert.pem`, reads SANs + expiry vi
 
 ### BACK-080: Remote nginx HTTP probe mode
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session bright-star-0319)
 **Value**: Medium | **Lift**: Medium
 
 Complement to `--validate-nginx`: instead of parsing config files locally, issue a live HTTP probe to a running nginx instance to verify redirect chains, ACME challenge paths, and header presence. Useful when config files are on a remote server or inside a container.

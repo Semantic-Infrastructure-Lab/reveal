@@ -176,6 +176,13 @@ class NginxUriRenderer(TypeDispatchRenderer):
                 print(f"  • {w}")
             print()
 
+        # HTTP probe (--probe)
+        if result.get('http_probe'):
+            print()
+            from ..ssl.probe import render_probe_text
+            render_probe_text(result['http_probe'])
+            print()
+
         # Next steps
         if result.get('next_steps'):
             print(f"{'-'*60}")

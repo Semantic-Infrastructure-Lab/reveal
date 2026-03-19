@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
+from ..ssl.probe import probe_http_redirect
 from .renderer import NginxUriRenderer
 
 
@@ -816,8 +817,21 @@ class NginxUriAdapter(ResourceAdapter):
         server_block = _parse_server_block_for_domain(content, self.domain)
         return config_path, content, server_block
 
-    def get_structure(self, audit: bool = False, only_failures: bool = False, **kwargs) -> Dict[str, Any]:
-        """Get nginx vhost summary for the domain."""
+    def get_structure(
+        self,
+        audit: bool = False,
+        only_failures: bool = False,
+        probe: bool = False,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Get nginx vhost summary for the domain.
+
+        Args:
+            audit: Run fleet consistency audit across all enabled vhosts.
+            only_failures: Filter to gap rows (used with audit=True).
+            probe: Issue live HTTP probe to verify redirect chain and security
+                   headers. Only applies when a domain is specified.
+        """
         if self.domain is None:
             if audit:
                 result = _run_fleet_audit(_NGINX_SEARCH_DIRS, _NGINX_MAIN_CONFIGS)
@@ -831,7 +845,10 @@ class NginxUriAdapter(ResourceAdapter):
                 return result
             raise ValueError(f"Unknown element: {self.element}. Use: ports, upstream, auth, locations, config")
 
-        return self._get_vhost_summary()
+        result = self._get_vhost_summary()
+        if probe:
+            result['http_probe'] = probe_http_redirect(self.domain)
+        return result
 
     def _get_overview(self) -> Dict[str, Any]:
         """List all enabled nginx sites."""

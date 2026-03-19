@@ -6,6 +6,7 @@ from typing import Dict, Any, List, Optional
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from ..help_data import load_help_data
 from .certificate import SSLFetcher, CertificateInfo, check_ssl_health, load_certificate_from_file
+from .probe import probe_http_redirect
 from .renderer import SSLRenderer
 from reveal.analyzers.nginx import NginxAnalyzer
 
@@ -270,8 +271,12 @@ class SSLAdapter(ResourceAdapter):
             'domain_count': len(all_domains),
         }
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, probe_http: bool = False, **kwargs) -> Dict[str, Any]:
         """Get SSL certificate overview.
+
+        Args:
+            probe_http: When True, issue an HTTP probe to verify redirect chain
+                        and security headers at the live HTTPS endpoint.
 
         Returns:
             Dict containing certificate summary (~150 tokens)
@@ -295,10 +300,13 @@ class SSLAdapter(ResourceAdapter):
                       else f'ssl://{self.host}')
 
         if not cert:
-            return {'contract_version': '1.0', 'type': 'ssl_certificate',
-                    'source': source_uri,
-                    'source_type': 'file' if is_file_mode else 'network',
-                    'error': 'Failed to fetch certificate'}
+            result = {'contract_version': '1.0', 'type': 'ssl_certificate',
+                      'source': source_uri,
+                      'source_type': 'file' if is_file_mode else 'network',
+                      'error': 'Failed to fetch certificate'}
+            if probe_http and self.host and not is_file_mode:
+                result['http_probe'] = probe_http_redirect(self.host)
+            return result
 
         # Determine health status
         days = cert.days_until_expiry
@@ -359,6 +367,10 @@ class SSLAdapter(ResourceAdapter):
                 'hostname_match': self._verification.get('hostname_match', False) if self._verification else False,
                 'error': self._verification.get('error') if self._verification else None,
             }
+
+        if probe_http and self.host and not is_file_mode:
+            result['http_probe'] = probe_http_redirect(self.host)
+
         return result
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:

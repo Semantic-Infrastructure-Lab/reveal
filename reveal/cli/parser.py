@@ -443,6 +443,14 @@ def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
                              '(letsencrypt:// only)')
     parser.add_argument('--check-duplicates', action='store_true', dest='check_duplicates',
                         help='Find Let\'s Encrypt certs with identical SANs (letsencrypt:// only)')
+    parser.add_argument('--probe-http', action='store_true', dest='probe_http',
+                        help='Issue a live HTTP probe: follow redirect chain from port 80 and verify '
+                             'the server redirects to HTTPS; report HSTS, X-Content-Type-Options, '
+                             'X-Frame-Options headers at the HTTPS endpoint (ssl:// only)')
+    parser.add_argument('--probe', action='store_true', dest='probe',
+                        help='Issue a live HTTP probe alongside the static config analysis: '
+                             'verify redirect chain and security headers at the live endpoint '
+                             '(nginx:// with domain only)')
     parser.add_argument('--cpanel-certs', action='store_true', dest='cpanel_certs',
                         help='Compare cPanel on-disk certs (/var/cpanel/ssl/apache_tls/DOMAIN/combined) against live certs; flags domains where nginx has not reloaded after AutoSSL renewal (nginx only)')
     parser.add_argument('--diagnose', action='store_true',
