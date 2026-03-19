@@ -295,7 +295,7 @@ def build_connection_string(
 
     # Add host:port
     uri += host
-    if port:
+    if port is not None:
         uri += f":{port}"
 
     # Add path or element

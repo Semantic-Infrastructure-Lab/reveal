@@ -854,9 +854,9 @@ def _calculate_batch_exit_code(failures: int, warnings: int) -> int:
     Returns:
         Exit code (0, 1, or 2)
     """
-    if failures == 0:
-        return 0
-    return 1 if warnings > 0 else 2
+    if failures > 0:
+        return 2
+    return 0
 
 
 def _render_batch_results(results: list, args: 'Namespace') -> None:

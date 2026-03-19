@@ -692,7 +692,7 @@ def apply_budget_limits(
             accumulated_bytes += len(item_json.encode('utf-8'))
 
             if accumulated_bytes > max_bytes:
-                truncated_at = i
+                truncated_at = max(i, 1)
                 truncated = True
                 truncation_reason = 'max_bytes_exceeded'
                 break

@@ -728,7 +728,7 @@ class TestBatchHelpers(unittest.TestCase):
     def test_calculate_batch_exit_code_failure_with_warnings(self):
         """Test _calculate_batch_exit_code for failures with warnings."""
         exit_code = _calculate_batch_exit_code(failures=1, warnings=2)
-        self.assertEqual(exit_code, 1)  # 1 when both failures and warnings
+        self.assertEqual(exit_code, 2)  # failures always exit code 2, regardless of warnings
 
 
 class TestStdinProcessing(unittest.TestCase):
