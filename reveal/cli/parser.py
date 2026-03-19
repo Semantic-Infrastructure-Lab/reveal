@@ -431,6 +431,9 @@ def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
                         help='Full ACME pipeline audit: per-domain table of acme root path, nobody ACL status, and live SSL cert status (nginx only)')
     parser.add_argument('--check-conflicts', action='store_true', dest='check_conflicts',
                         help='Detect nginx location block prefix overlaps and regex/prefix conflicts (nginx only)')
+    parser.add_argument('--global-audit', action='store_true', dest='global_audit',
+                        help='Audit the http{} block and main context in nginx.conf for missing security '
+                             'and operational directives (server_tokens, HSTS, ssl_protocols, etc.) (nginx only)')
     parser.add_argument('--cpanel-certs', action='store_true', dest='cpanel_certs',
                         help='Compare cPanel on-disk certs (/var/cpanel/ssl/apache_tls/DOMAIN/combined) against live certs; flags domains where nginx has not reloaded after AutoSSL renewal (nginx only)')
     parser.add_argument('--diagnose', action='store_true',

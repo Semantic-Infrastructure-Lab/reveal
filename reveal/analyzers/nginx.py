@@ -1051,3 +1051,117 @@ class NginxAnalyzer(FileAnalyzer):
 
         hits = self._scan_log_for_patterns(recent_lines, domains, PATTERNS)
         return sorted(hits.values(), key=lambda r: (r['domain'], r['pattern']))
+
+    # ------------------------------------------------------------------
+    # Global directive audit (BACK-091)
+    # ------------------------------------------------------------------
+
+    _GLOBAL_AUDIT_HTTP_CHECKS = [
+        # (id, label, severity, regex_pattern)
+        # Regex tested against each line in the http{} block at depth 1.
+        ('server_tokens', 'server_tokens off',               'MEDIUM',
+         r'^\s*server_tokens\s+off\s*;'),
+        ('hsts',          'add_header Strict-Transport-Security', 'HIGH',
+         r'^\s*add_header\s+Strict-Transport-Security\b'),
+        ('xcto',          'add_header X-Content-Type-Options', 'MEDIUM',
+         r'^\s*add_header\s+X-Content-Type-Options\b'),
+        ('xfo',           'add_header X-Frame-Options',       'MEDIUM',
+         r'^\s*add_header\s+X-Frame-Options\b'),
+        ('ssl_protocols', 'ssl_protocols',                    'MEDIUM',
+         r'^\s*ssl_protocols\s+'),
+        ('resolver',      'resolver',                         'LOW',
+         r'^\s*resolver\s+'),
+        ('limit_req_zone','limit_req_zone',                   'LOW',
+         r'^\s*limit_req_zone\s+'),
+        ('client_max_body_size', 'client_max_body_size',      'LOW',
+         r'^\s*client_max_body_size\s+'),
+        ('gzip',          'gzip on',                          'INFO',
+         r'^\s*gzip\s+on\s*;'),
+    ]
+
+    _GLOBAL_AUDIT_MAIN_CHECKS = [
+        # (id, label, severity, regex_pattern) — tested against main-context lines (depth 0)
+        ('worker_processes', 'worker_processes', 'INFO',
+         r'^\s*worker_processes\s+'),
+    ]
+
+    def _extract_block_lines(self, block_name: str) -> List[str]:
+        """Return lines that are direct children (depth 1) of the named top-level block."""
+        lines: List[str] = []
+        depth = 0
+        in_block = False
+        block_pattern = re.compile(r'^' + re.escape(block_name) + r'\s*[\{;]')
+
+        for line in self.lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+
+            if not in_block and depth == 0 and block_pattern.match(stripped):
+                in_block = True
+                depth += stripped.count('{') - stripped.count('}')
+                continue
+
+            if not in_block:
+                continue
+
+            depth += stripped.count('{') - stripped.count('}')
+            if depth <= 0:
+                break
+
+            if depth == 1:
+                lines.append(line)
+
+        return lines
+
+    def _extract_main_lines(self) -> List[str]:
+        """Return lines at the main context (depth 0, outside all blocks)."""
+        lines: List[str] = []
+        depth = 0
+        for line in self.lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if depth == 0 and not stripped.startswith('}'):
+                lines.append(line)
+            depth += stripped.count('{') - stripped.count('}')
+        return lines
+
+    def audit_global_directives(self) -> List[Dict[str, Any]]:
+        """Audit the http{} block and main context for security/operational directives.
+
+        Returns a list of findings ordered by severity then directive label:
+            id        – machine-readable check identifier
+            label     – human-readable directive name
+            severity  – HIGH | MEDIUM | LOW | INFO
+            present   – bool: True if the directive was found
+            context   – 'http{}' or 'main'
+        """
+        http_lines = self._extract_block_lines('http')
+        main_lines = self._extract_main_lines()
+
+        results: List[Dict[str, Any]] = []
+
+        for check_id, label, severity, pattern in self._GLOBAL_AUDIT_HTTP_CHECKS:
+            compiled = re.compile(pattern)
+            present = any(compiled.search(ln) for ln in http_lines)
+            results.append({
+                'id': check_id,
+                'label': label,
+                'severity': severity,
+                'present': present,
+                'context': 'http{}',
+            })
+
+        for check_id, label, severity, pattern in self._GLOBAL_AUDIT_MAIN_CHECKS:
+            compiled = re.compile(pattern)
+            present = any(compiled.search(ln) for ln in main_lines)
+            results.append({
+                'id': check_id,
+                'label': label,
+                'severity': severity,
+                'present': present,
+                'context': 'main',
+            })
+
+        return results

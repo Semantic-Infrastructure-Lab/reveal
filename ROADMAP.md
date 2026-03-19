@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-19 (universal-journey-0319 — BACK-085–089 shipped: N008–N012 nginx security rules)
+> **Last updated**: 2026-03-19 (xaxegotu-0319 — BACK-091 shipped: --global-audit for nginx.conf http{} block)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -611,7 +611,7 @@ reveal nginx:// --audit --format json      # machine-readable
 
 ### BACK-091: `reveal nginx.conf --global-audit` — http{} block audit
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session xaxegotu-0319)
 **Value**: Medium | **Lift**: Small
 **Source**: tia-proxy fleet audit (onyx-crystal-0318)
 **Design**: `internal-docs/planning/NGINX_FLEET_AUDIT_2026-03-18.md`

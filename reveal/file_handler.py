@@ -288,6 +288,62 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
         sys.exit(2)
 
 
+_SEVERITY_ORDER = {'HIGH': 0, 'MEDIUM': 1, 'LOW': 2, 'INFO': 3}
+_SEVERITY_LABEL = {
+    'HIGH':   ('HIGH  ', True),
+    'MEDIUM': ('MED   ', True),
+    'LOW':    ('LOW   ', False),
+    'INFO':   ('INFO  ', False),
+}
+
+
+def _handle_global_audit(analyzer, args=None) -> None:
+    """Audit http{} block + main context for security/operational directives (--global-audit)."""
+    if not hasattr(analyzer, 'audit_global_directives'):
+        print("Error: --global-audit is only supported for nginx config files.", file=sys.stderr)
+        sys.exit(1)
+
+    only_failures = getattr(args, 'only_failures', False)
+    output_format = getattr(args, 'format', 'text')
+
+    findings = analyzer.audit_global_directives()
+    findings.sort(key=lambda f: (_SEVERITY_ORDER.get(f['severity'], 99), f['label']))
+
+    missing = [f for f in findings if not f['present']]
+    has_failures = bool(missing)
+
+    if output_format == 'json':
+        output = [f for f in findings if not only_failures or not f['present']]
+        print(json.dumps({
+            'type': 'nginx_global_audit',
+            'has_failures': has_failures,
+            'only_failures': only_failures,
+            'findings': output,
+        }))
+        if has_failures:
+            sys.exit(2)
+        return
+
+    col_label = max(len(f['label']) for f in findings)
+    header = f"  {'directive':<{col_label}}  severity  context  status"
+    print(header)
+    print("  " + "─" * (len(header) - 2))
+
+    printed = 0
+    for f in findings:
+        if only_failures and f['present']:
+            continue
+        sev_str, _ = _SEVERITY_LABEL.get(f['severity'], (f['severity'], False))
+        status = "✅ present" if f['present'] else "❌ missing"
+        print(f"  {f['label']:<{col_label}}  {sev_str}  {f['context']:<7}  {status}")
+        printed += 1
+
+    if only_failures and printed == 0:
+        print("✅ No missing directives.")
+    if has_failures:
+        sys.exit(2)
+
+
 def _handle_check_conflicts(analyzer) -> None:
     """Detect nginx location prefix overlaps and regex/prefix conflicts (N2)."""
     if not hasattr(analyzer, 'detect_location_conflicts'):
@@ -606,6 +662,10 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
 
     if args and getattr(args, 'validate_nginx_acme', False):
         _handle_validate_nginx_acme(analyzer, args)
+        return
+
+    if args and getattr(args, 'global_audit', False):
+        _handle_global_audit(analyzer, args)
         return
 
     if args and getattr(args, 'check_conflicts', False):

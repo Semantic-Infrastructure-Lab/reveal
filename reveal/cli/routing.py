@@ -594,6 +594,7 @@ _NGINX_ADAPTER_FLAGS = {
     'check_conflicts': '--check-conflicts',
     'cpanel_certs': '--cpanel-certs',
     'diagnose': '--diagnose',
+    'global_audit': '--global-audit',
 }
 _SSL_ADAPTER_FLAGS = {
     'expiring_within': '--expiring-within',
