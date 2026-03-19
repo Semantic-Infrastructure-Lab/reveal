@@ -12,7 +12,18 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions strong-temple-0318, cooling-current-0318, pulsing-cluster-0318, violet-brush-0318)
+## [Unreleased] - (sessions strong-temple-0318, cooling-current-0318, pulsing-cluster-0318, violet-brush-0318, crystal-laser-0318)
+
+### Fixed
+- **Exit code logic corrected** (`handlers.py`): `_calculate_batch_exit_code` returned exit code 1 when both failures and warnings were present, and 2 for failures-only — severity backwards. Correct behavior: failures always → exit code 2; warnings alone → 0. Scripts checking `exit_code >= 2` for hard failure now work correctly. (session crystal-laser-0318)
+- **Budget off-by-one** (`query.py`): `apply_budget_limits` returned an empty list when the first item exceeded `max_bytes`. Changed `truncated_at = i` to `truncated_at = max(i, 1)` to always return at least one item. (session crystal-laser-0318)
+- **Port 0 treated as falsy** (`uri.py`): `build_connection_string` used `if port:` which skipped port 0 (valid OS-assigned port). Changed to `if port is not None:`. (session crystal-laser-0318)
+
+### Refactored
+- **`ImportsAdapter` now conforms to adapter contract** (`adapters/imports.py`): Previously `__init__()` took no arguments and `get_structure(uri)` parsed the URI — the only adapter with this pattern. Now `__init__(path, query)` parses on construction, matching all other adapters. The router no longer needs to reconstruct and re-pass the URI. (session crystal-laser-0318)
+- **`RuleRegistry.discover()` is now lazy** (`rules/__init__.py`): Removed module-level `RuleRegistry.discover()` call that ran a filesystem scan on every `import reveal.rules`. All public entry points already had `if not cls._discovered: cls.discover()` guards. (session crystal-laser-0318)
+- **`_apply_rule_config` now uses allowlist** (`rules/__init__.py`): Previously used unrestricted `setattr` guarded only by `hasattr`. Now validates keys against `_ALLOWED_RULE_CONFIG_KEYS = {enabled, severity, threshold, message, description}`. Unknown keys log a warning and are ignored. (session crystal-laser-0318)
+- **Deleted orphaned `T = 'T'`** (`rules/base.py`): Leftover from a removed TypeVar import. (session crystal-laser-0318)
 
 ### Added
 - **`reveal help://relationships` — adapter ecosystem map**: New help topic that renders the 22 adapters as 5 functional clusters (Code Analysis, Infrastructure, Data & Config, Sessions & Docs, Self-Describing) with pairwise relationships and 5 "power pairs" — adapters that are best used together. Available as text or `--format=json` for programmatic use. 8 new tests. (session violet-brush-0318)
