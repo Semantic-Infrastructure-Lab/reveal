@@ -434,6 +434,11 @@ def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--global-audit', action='store_true', dest='global_audit',
                         help='Audit the http{} block and main context in nginx.conf for missing security '
                              'and operational directives (server_tokens, HSTS, ssl_protocols, etc.) (nginx only)')
+    parser.add_argument('--check-orphans', action='store_true', dest='check_orphans',
+                        help='Find Let\'s Encrypt certs not referenced by any nginx ssl_certificate directive '
+                             '(letsencrypt:// only)')
+    parser.add_argument('--check-duplicates', action='store_true', dest='check_duplicates',
+                        help='Find Let\'s Encrypt certs with identical SANs (letsencrypt:// only)')
     parser.add_argument('--cpanel-certs', action='store_true', dest='cpanel_certs',
                         help='Compare cPanel on-disk certs (/var/cpanel/ssl/apache_tls/DOMAIN/combined) against live certs; flags domains where nginx has not reloaded after AutoSSL renewal (nginx only)')
     parser.add_argument('--diagnose', action='store_true',

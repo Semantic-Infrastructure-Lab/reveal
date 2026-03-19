@@ -29,6 +29,7 @@ from .stats import StatsAdapter
 from .xlsx import XlsxAdapter
 from .cpanel import CpanelAdapter
 from .autossl import AutosslAdapter
+from .letsencrypt import LetsEncryptAdapter
 from .nginx import NginxUriAdapter
 from .calls import CallsAdapter
 
@@ -69,6 +70,7 @@ __all__ = [
     'XlsxAdapter',
     'CpanelAdapter',
     'AutosslAdapter',
+    'LetsEncryptAdapter',
     'NginxUriAdapter',
     'CallsAdapter',
 ]

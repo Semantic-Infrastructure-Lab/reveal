@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-19 (xaxegotu-0319 — BACK-091 shipped: --global-audit for nginx.conf http{} block)
+> **Last updated**: 2026-03-19 (xaxegotu-0319 — BACK-079+091 shipped: letsencrypt:// adapter + --global-audit)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -423,7 +423,7 @@ This benefits `?uncalled` accuracy and also `?target=helper` (currently misses c
 
 ### BACK-079: `letsencrypt://` adapter — orphan and duplicate cert detection
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session xaxegotu-0319)
 **Value**: High | **Lift**: Medium
 
 Reveal already reads nginx configs and knows which `ssl_certificate` paths are in active use. A `letsencrypt://` adapter can cross-reference `/etc/letsencrypt/live/` against those paths to surface orphaned certs (present on disk but not referenced by any vhost) and duplicate certs (different paths, identical SANs).
