@@ -713,7 +713,7 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 
 ## Adapter Status
 
-### Implemented (22)
+### Implemented (23)
 | Adapter | Description |
 |---------|-------------|
 | `ast://` | Query code as database (complexity, size, type filters) |
@@ -729,9 +729,10 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 | `help://` | Built-in documentation |
 | `imports://` | Dependency analysis, circular detection |
 | `json://` | JSON/JSONL deep inspection |
+| `letsencrypt://` | Let's Encrypt certificate inventory — orphan detection, duplicate SAN detection |
 | `markdown://` | Markdown document inspection and related-file discovery |
 | `mysql://` | MySQL database schema inspection |
-| `nginx://` | Nginx vhost inspection — config file, ports, upstreams, auth, locations |
+| `nginx://` | Nginx vhost inspection — config file, ports, upstreams, auth, locations, fleet audit |
 | `python://` | Python runtime inspection |
 | `reveal://` | Reveal's own codebase |
 | `sqlite://` | SQLite database inspection |

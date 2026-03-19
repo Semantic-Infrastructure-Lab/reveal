@@ -38,7 +38,7 @@ category: reference
 
 ---
 
-## Adapter Guides (17 files)
+## Adapter Guides (18 files)
 
 Complete guides for all URI protocol adapters (~23,300 lines).
 `XLSX_POWERBI_EXPANSION.md` is also listed here as a roadmap reference (not a usage guide).
@@ -55,6 +55,7 @@ Complete guides for all URI protocol adapters (~23,300 lines).
 | [GIT_ADAPTER_GUIDE.md](GIT_ADAPTER_GUIDE.md) | 1880 | Git repository analysis (commits, branches, tags) |
 | [IMPORTS_ADAPTER_GUIDE.md](IMPORTS_ADAPTER_GUIDE.md) | 1639 | Import dependency analysis across languages |
 | [JSON_ADAPTER_GUIDE.md](JSON_ADAPTER_GUIDE.md) | 1327 | JSON/JSONL data analysis with JMESPath queries |
+| [LETSENCRYPT_ADAPTER_GUIDE.md](LETSENCRYPT_ADAPTER_GUIDE.md) | — | Let's Encrypt cert inventory — orphan/duplicate detection |
 | [MYSQL_ADAPTER_GUIDE.md](MYSQL_ADAPTER_GUIDE.md) | 2116 | MySQL database introspection and schema analysis |
 | [PYTHON_ADAPTER_GUIDE.md](PYTHON_ADAPTER_GUIDE.md) | 464 | Python runtime introspection (modules, objects) |
 | [REVEAL_ADAPTER_GUIDE.md](REVEAL_ADAPTER_GUIDE.md) | 536 | Reveal introspection (analyzers, adapters, config) |
