@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions strong-temple-0318, cooling-current-0318, pulsing-cluster-0318, violet-brush-0318, crystal-laser-0318)
+## [Unreleased] - (sessions strong-temple-0318, cooling-current-0318, pulsing-cluster-0318, violet-brush-0318, crystal-laser-0318, universal-journey-0319)
 
 ### Fixed
 - **Exit code logic corrected** (`handlers.py`): `_calculate_batch_exit_code` returned exit code 1 when both failures and warnings were present, and 2 for failures-only — severity backwards. Correct behavior: failures always → exit code 2; warnings alone → 0. Scripts checking `exit_code >= 2` for hard failure now work correctly. (session crystal-laser-0318)
@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`RuleRegistry.discover()` is now lazy** (`rules/__init__.py`): Removed module-level `RuleRegistry.discover()` call that ran a filesystem scan on every `import reveal.rules`. All public entry points already had `if not cls._discovered: cls.discover()` guards. (session crystal-laser-0318)
 - **`_apply_rule_config` now uses allowlist** (`rules/__init__.py`): Previously used unrestricted `setattr` guarded only by `hasattr`. Now validates keys against `_ALLOWED_RULE_CONFIG_KEYS = {enabled, severity, threshold, message, description}`. Unknown keys log a warning and are ignored. (session crystal-laser-0318)
 - **Deleted orphaned `T = 'T'`** (`rules/base.py`): Leftover from a removed TypeVar import. (session crystal-laser-0318)
+
+### Added
+- **nginx security rules N008–N012** (`rules/infrastructure/`): Five new nginx rules sourced from the tia-proxy fleet audit (45–46/46 sites affected each). N008 HIGH: HTTPS server missing `Strict-Transport-Security` (follows includes one level deep); N009 MEDIUM: `server_tokens` not disabled (nginx version exposed in headers); N010 LOW: deprecated `X-XSS-Protection` header (surfaces snippet file path when header comes from an include); N011 LOW: SSL listener missing `http2` (Certbot strips it on renewal); N012 LOW/MEDIUM: no rate limiting on server block (escalates to MEDIUM when no `limit_req_zone` defined at all). All support `# reveal:allow-*` suppression comments. 37 new tests. Rule count: 64 → 69. (session universal-journey-0319)
+- **`ELEMENT_NAMESPACE_ADAPTER` class attribute** (`adapters/base.py`): Replaces hardcoded `ELEMENT_NAMESPACE_ADAPTERS = {'env', 'python', 'help'}` set in `routing.py`. New adapters where `scheme://RESOURCE` means "get element RESOURCE" (rather than "analyze path RESOURCE") now declare `ELEMENT_NAMESPACE_ADAPTER = True` on their class; routing reads the attribute directly. Attribute set on `EnvAdapter`, `HelpAdapter`, `PythonAdapter`. (session universal-journey-0319)
 
 ### Added
 - **`reveal help://relationships` — adapter ecosystem map**: New help topic that renders the 22 adapters as 5 functional clusters (Code Analysis, Infrastructure, Data & Config, Sessions & Docs, Self-Describing) with pairwise relationships and 5 "power pairs" — adapters that are best used together. Available as text or `--format=json` for programmatic use. 8 new tests. (session violet-brush-0318)
