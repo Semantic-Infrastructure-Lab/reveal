@@ -579,7 +579,7 @@ def _extract_includes(content: str) -> List[str]:
     """Return include directive paths from nginx config content."""
     return [
         m.group(1).strip()
-        for m in re.finditer(r'^\s*include\s+([^;]+);', content, re.MULTILINE)
+        for m in re.finditer(r'\binclude\s+([^;]+);', content)
     ]
 
 
