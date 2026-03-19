@@ -12,7 +12,11 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions strong-temple-0318, cooling-current-0318, pulsing-cluster-0318)
+## [Unreleased] - (sessions strong-temple-0318, cooling-current-0318, pulsing-cluster-0318, violet-brush-0318)
+
+### Added
+- **`reveal help://relationships` — adapter ecosystem map**: New help topic that renders the 22 adapters as 5 functional clusters (Code Analysis, Infrastructure, Data & Config, Sessions & Docs, Self-Describing) with pairwise relationships and 5 "power pairs" — adapters that are best used together. Available as text or `--format=json` for programmatic use. 8 new tests. (session violet-brush-0318)
+- **Related-adapter breadcrumbs expanded to all 22 adapters**: The "Next Steps" section shown after any `reveal help://<adapter>` now points to semantically related adapters for all registered adapters. Previously only 6 adapters had related-adapter hints; now all 22 do — grouped by cluster (e.g. `ssl://` points to `domain://` and `nginx://`; `calls://` points to `ast://` and `diff://`). (session violet-brush-0318)
 
 ### Fixed
 - **xlsx large sheet guard — silent zero rows/cols**: Individual worksheet XML parts > 50 MB are now detected before parsing and reported as `"too large to parse (N MB)"` in the workbook overview instead of silently showing `0 rows, 0 cols`. Other sheets in the same workbook parse normally. Affected real files: `FactInternetSales` (58.5 MB) in AdventureWorksDW, `Sales_data` (72.3 MB) in AdventureWorks Sales. (session cooling-current-0318)

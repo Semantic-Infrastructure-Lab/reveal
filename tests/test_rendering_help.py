@@ -43,12 +43,12 @@ class TestRenderHelpBreadcrumbs(unittest.TestCase):
         self.assertEqual(output, '')
 
     def test_ast_scheme_breadcrumbs(self):
-        """AST scheme should show related adapters."""
+        """AST scheme should show related adapters (calls + diff — core code analysis pair)."""
         output = capture_stdout(_render_help_breadcrumbs, 'ast', {})
         self.assertIn('---', output)
         self.assertIn('Next Steps', output)
-        self.assertIn('help://python', output)
-        self.assertIn('help://env', output)
+        self.assertIn('help://calls', output)
+        self.assertIn('help://diff', output)
         self.assertIn('Go Deeper', output)
         self.assertIn('help://tricks', output)
         self.assertIn('help://anti-patterns', output)
@@ -693,6 +693,98 @@ class TestHelpQuick(unittest.TestCase):
         import json
         data = json.loads(output)
         self.assertEqual(data['type'], 'help_quick')
+
+
+class TestRenderHelpRelationships(unittest.TestCase):
+    """Tests for help://relationships renderer."""
+
+    def _get_relationships(self):
+        from reveal.adapters.help import HelpAdapter
+        adapter = HelpAdapter('relationships')
+        return adapter.get_element('relationships')
+
+    def test_relationships_type(self):
+        result = self._get_relationships()
+        self.assertIsNotNone(result)
+        self.assertEqual(result['type'], 'help_relationships')
+
+    def test_relationships_has_clusters(self):
+        result = self._get_relationships()
+        clusters = result.get('clusters', [])
+        self.assertGreaterEqual(len(clusters), 4)
+
+    def test_relationships_has_power_pairs(self):
+        result = self._get_relationships()
+        power_pairs = result.get('power_pairs', [])
+        self.assertGreaterEqual(len(power_pairs), 4)
+        for pair in power_pairs:
+            self.assertIn('adapters', pair)
+            self.assertIn('description', pair)
+            self.assertIn('example', pair)
+
+    def test_relationships_clusters_have_required_keys(self):
+        result = self._get_relationships()
+        for cluster in result['clusters']:
+            self.assertIn('name', cluster)
+            self.assertIn('adapters', cluster)
+            self.assertIn('pairs', cluster)
+            self.assertGreater(len(cluster['adapters']), 0)
+
+    def test_render_relationships_text_output(self):
+        from reveal.rendering.adapters.help import _render_help_relationships
+        result = self._get_relationships()
+        output = capture_stdout(_render_help_relationships, result)
+        self.assertIn('Adapter Ecosystem', output)
+        self.assertIn('Code Analysis', output)
+        self.assertIn('Infrastructure', output)
+        self.assertIn('Power Pairs', output)
+        self.assertIn('ast://', output)
+        self.assertIn('calls://', output)
+        self.assertIn('nginx://', output)
+        self.assertIn('ssl://', output)
+
+    def test_render_via_render_help_dispatch(self):
+        result = self._get_relationships()
+        output = capture_stdout(render_help, result, 'text', False)
+        self.assertIn('Adapter Ecosystem', output)
+        self.assertIn('Power Pairs', output)
+
+    def test_json_format(self):
+        import json
+        result = self._get_relationships()
+        output = capture_stdout(render_help, result, 'json', False)
+        data = json.loads(output)
+        self.assertEqual(data['type'], 'help_relationships')
+        self.assertIn('clusters', data)
+        self.assertIn('power_pairs', data)
+
+    def test_all_adapters_in_relationships(self):
+        """All major adapters (excl. demo) should appear in at least one cluster."""
+        result = self._get_relationships()
+        adapters_in_clusters = {
+            a for cluster in result['clusters']
+            for a in cluster['adapters']
+        }
+        major_adapters = {'ast', 'calls', 'diff', 'stats', 'imports', 'git',
+                          'nginx', 'ssl', 'domain', 'cpanel', 'autossl',
+                          'sqlite', 'mysql', 'json', 'env', 'xlsx',
+                          'claude', 'markdown', 'python', 'reveal', 'help'}
+        missing = major_adapters - adapters_in_clusters
+        self.assertEqual(missing, set(), f"Adapters missing from relationship clusters: {missing}")
+
+    def test_related_adapters_expanded(self):
+        """Breadcrumbs should now cover all major adapters."""
+        from reveal.rendering.adapters.help import _render_help_breadcrumbs
+        # ssl should point to domain and nginx (infrastructure cluster)
+        output = capture_stdout(_render_help_breadcrumbs, 'ssl', {})
+        self.assertIn('help://domain', output)
+        self.assertIn('help://nginx', output)
+        # sqlite should point to mysql
+        output = capture_stdout(_render_help_breadcrumbs, 'sqlite', {})
+        self.assertIn('help://mysql', output)
+        # claude should point to git
+        output = capture_stdout(_render_help_breadcrumbs, 'claude', {})
+        self.assertIn('help://git', output)
 
 
 if __name__ == '__main__':

@@ -40,7 +40,8 @@ category: reference
 
 ## Adapter Guides (17 files)
 
-Complete guides for all URI protocol adapters (~23,300 lines):
+Complete guides for all URI protocol adapters (~23,300 lines).
+`XLSX_POWERBI_EXPANSION.md` is also listed here as a roadmap reference (not a usage guide).
 
 | File | Lines | Purpose |
 |------|-------|---------|
@@ -151,17 +152,18 @@ Complete reference for AI agent integration:
 ## Documentation Statistics
 
 **By Category**:
-- Adapter Guides: 17 files, ~23,300 lines (57%)
+- Adapter Guides: 17 guides + 1 roadmap (XLSX_POWERBI_EXPANSION), ~23,300 lines (57%)
 - Reference: 10 files, ~5,800 lines (14%)
 - User Guides: 8 files, ~4,100 lines (10%)
 - AI Agent: 1 file, ~2,824 lines (7%)
 - Analyzer Guides: 5 files, ~2,800 lines (7%)
 - Development: 4 files, ~1,600 lines (4%)
 - Subcommand Guides: 1 file, ~500 lines (1%)
+- Internal/WIP: 2 files (UX_ISSUES.md, REVIEW_VALIDATION_AND_IMPROVEMENTS.md — maintainer reference)
 
-**Total**: 48 files, ~41,000 lines
+**Total**: 49 files (47 user-facing + 2 maintainer reference)
 
-**Last Updated**: 2026-03-18 (Session: foggy-flood-0318)
+**Last Updated**: 2026-03-18 (Session: violet-brush-0318)
 
 ---
 

@@ -342,6 +342,10 @@ class HelpAdapter(ResourceAdapter):
         if topic == 'quick':
             return self._get_quick_help()
 
+        # Adapter ecosystem relationships map
+        if topic == 'relationships':
+            return self._get_adapter_relationships()
+
         # Check if it's a static guide (includes auto-discovered + manual)
         if topic in self.help_topics:
             return self._load_static_help(topic)
@@ -673,6 +677,96 @@ class HelpAdapter(ResourceAdapter):
                 'reveal help://ssl               # TLS cert adapter guide',
                 'reveal help://examples/security # security query recipes',
                 'reveal help://agent             # AI agent usage guide',
+            ],
+        }
+
+    def _get_adapter_relationships(self) -> Dict[str, Any]:
+        """Return the adapter ecosystem map (help://relationships)."""
+        return {
+            'type': 'help_relationships',
+            'title': 'Reveal Adapter Ecosystem',
+            'clusters': [
+                {
+                    'name': 'Code Analysis',
+                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'git'],
+                    'pairs': [
+                        ('ast', 'calls', 'structure feeds call-graph queries'),
+                        ('ast', 'diff', 'compare element complexity across versions'),
+                        ('ast', 'stats', 'same code, different lens: quality metrics'),
+                        ('ast', 'imports', 'structure + dependency graph'),
+                        ('calls', 'diff', 'impact analysis: who calls what changed'),
+                        ('stats', 'git', 'quality score over commit history'),
+                        ('git', 'diff', 'git history drives structural diff views'),
+                    ],
+                },
+                {
+                    'name': 'Infrastructure',
+                    'adapters': ['nginx', 'ssl', 'domain', 'cpanel', 'autossl'],
+                    'pairs': [
+                        ('nginx', 'ssl', 'validate certs referenced in nginx configs'),
+                        ('nginx', 'domain', 'DNS health for domains in nginx configs'),
+                        ('ssl', 'domain', 'cert chain + DNS/WHOIS in one pass'),
+                        ('cpanel', 'ssl', 'per-user cert inventory and health'),
+                        ('cpanel', 'autossl', 'AutoSSL run logs for cPanel users'),
+                        ('cpanel', 'nginx', 'nginx vhost config for this cPanel user'),
+                    ],
+                },
+                {
+                    'name': 'Data & Config',
+                    'adapters': ['sqlite', 'mysql', 'json', 'env', 'xlsx'],
+                    'pairs': [
+                        ('sqlite', 'mysql', 'same query API, two database backends'),
+                        ('json', 'sqlite', 'inspect app state: exported JSON or live DB'),
+                        ('env', 'python', 'runtime environment + live module introspection'),
+                        ('xlsx', 'sqlite', 'tabular data inspection across formats'),
+                        ('xlsx', 'json', 'structured data: Excel vs JSON'),
+                    ],
+                },
+                {
+                    'name': 'Sessions & Docs',
+                    'adapters': ['claude', 'git', 'markdown'],
+                    'pairs': [
+                        ('claude', 'git', 'cross-reference session work with code changes'),
+                        ('claude', 'markdown', 'session docs and knowledge base'),
+                        ('markdown', 'git', 'doc history and authorship'),
+                    ],
+                },
+                {
+                    'name': 'Self-Describing',
+                    'adapters': ['help', 'reveal', 'python', 'ast'],
+                    'pairs': [
+                        ('help', 'reveal', 'help:// documents it; reveal:// introspects it'),
+                        ('reveal', 'ast', 'reveal uses ast:// to analyze itself'),
+                        ('python', 'ast', 'runtime introspection vs static analysis'),
+                    ],
+                },
+            ],
+            'power_pairs': [
+                {
+                    'adapters': ['ast', 'calls'],
+                    'description': 'Core code understanding: structure + relationships',
+                    'example': "reveal src/auth.py  &&  reveal 'calls://src/?target=validate_token'",
+                },
+                {
+                    'adapters': ['diff', 'stats'],
+                    'description': 'PR review: what changed + quality impact',
+                    'example': "reveal pack src/ --since main --content  &&  reveal 'ast://src/?complexity>10'",
+                },
+                {
+                    'adapters': ['nginx', 'ssl'],
+                    'description': 'Infrastructure audit: config + cert validation',
+                    'example': "reveal nginx://example.com  &&  reveal ssl://example.com --check",
+                },
+                {
+                    'adapters': ['sqlite', 'mysql'],
+                    'description': 'Portable DB inspection: same syntax, two backends',
+                    'example': "reveal sqlite:///dev.db/users  →  reveal mysql://prod/users",
+                },
+                {
+                    'adapters': ['claude', 'git'],
+                    'description': 'Session archaeology: history + code changes',
+                    'example': "reveal 'claude://sessions/?search=auth'  &&  reveal 'git://src/?message~=auth'",
+                },
             ],
         }
 

@@ -53,14 +53,32 @@ def _render_help_breadcrumbs(scheme: str, data: Dict[str, Any]) -> None:
 
     # Related adapters - suggest complementary tools
     related = {
-        'ast': ['python', 'env'],
-        'python': ['ast', 'env'],
-        'env': ['python'],
-        'json': ['ast'],
-        'help': ['ast', 'python'],
+        # Code analysis cluster
+        'ast': ['calls', 'diff', 'stats'],
+        'calls': ['ast', 'diff'],
         'diff': ['stats', 'ast'],
         'stats': ['ast', 'diff'],
         'imports': ['ast', 'stats'],
+        'git': ['diff', 'claude'],
+        # Infrastructure cluster
+        'nginx': ['ssl', 'domain'],
+        'ssl': ['domain', 'nginx'],
+        'domain': ['ssl', 'nginx'],
+        'cpanel': ['ssl', 'autossl'],
+        'autossl': ['ssl', 'cpanel'],
+        # Data & config cluster
+        'sqlite': ['mysql', 'json'],
+        'mysql': ['sqlite'],
+        'json': ['sqlite', 'ast'],
+        'env': ['python', 'ast'],
+        'xlsx': ['sqlite', 'json'],
+        # Sessions & docs cluster
+        'claude': ['git', 'markdown'],
+        'markdown': ['claude', 'git'],
+        # Self-describing cluster
+        'python': ['ast', 'env'],
+        'reveal': ['help', 'ast'],
+        'help': ['ast', 'python'],
     }
 
     # Special workflow hints for diff adapter
@@ -187,6 +205,10 @@ def _render_special_topics_section() -> None:
     print("                     Type: Generated")
     print("                     Token cost: ~300 tokens")
     print()
+    print("  relationships    - Adapter ecosystem map: clusters, power pairs, cross-adapter workflows")
+    print("                     Type: Generated")
+    print("                     Token cost: ~400 tokens")
+    print()
 
 
 def _render_navigation_section() -> None:
@@ -205,9 +227,10 @@ def _render_navigation_section() -> None:
     print("  reveal --agent-help         # Complete agent guide (~12,000 tokens)")
     print()
     print("**Discover adapters:**")
-    print("  reveal help://adapters      # Summary of all URI adapters")
-    print("  reveal help://schemas       # Machine-readable schemas (AI agents)")
-    print("  reveal help://examples      # Canonical query recipes by task")
+    print("  reveal help://adapters       # Summary of all URI adapters")
+    print("  reveal help://relationships  # Adapter ecosystem map: clusters and power pairs")
+    print("  reveal help://schemas        # Machine-readable schemas (AI agents)")
+    print("  reveal help://examples       # Canonical query recipes by task")
     print()
     print("**Learn specific feature:**")
     print("  reveal help://ast           # Deep dive on ast://")
@@ -833,6 +856,51 @@ def _render_help_quick(data: Dict[str, Any]) -> None:
     print()
 
 
+def _render_help_relationships(data: Dict[str, Any]) -> None:
+    """Render help://relationships — adapter ecosystem map."""
+    total = len(set(
+        a for cluster in data.get('clusters', [])
+        for a in cluster.get('adapters', [])
+    ))
+    print(f"\n# {data.get('title', 'Adapter Ecosystem')}")
+    print()
+    print(f"{total} adapters organized into {len(data.get('clusters', []))} functional clusters.")
+    print()
+    print("---")
+
+    for cluster in data.get('clusters', []):
+        print()
+        adapters_str = ' · '.join(f"{a}://" for a in cluster['adapters'])
+        print(f"## {cluster['name']}")
+        print(f"  {adapters_str}")
+        print()
+        col = max(len(p[0]) for p in cluster['pairs']) if cluster['pairs'] else 0
+        for from_a, to_a, desc in cluster['pairs']:
+            print(f"  {from_a:<{col}}  ←→  {to_a:<{col}}  {desc}")
+        print()
+
+    power_pairs = data.get('power_pairs', [])
+    if power_pairs:
+        print("---")
+        print()
+        print("## Power Pairs  (best used together)")
+        print()
+        for pair in power_pairs:
+            adapters = ' + '.join(f"{a}://" for a in pair['adapters'])
+            print(f"  {adapters}")
+            print(f"    {pair['description']}")
+            print(f"    {pair['example']}")
+            print()
+
+    print("---")
+    print()
+    print("## More Help")
+    print("  reveal help://              # full adapter list")
+    print("  reveal help://quick         # command cheat-sheet")
+    print("  reveal help://relationships --format=json  # machine-readable graph")
+    print()
+
+
 def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = False) -> None:
     """Render help content.
 
@@ -859,6 +927,7 @@ def render_help(data: Dict[str, Any], output_format: str, list_mode: bool = Fals
         'query_recipes': _render_query_recipes,
         'adapter_schema': _render_adapter_schema,
         'help_quick': _render_help_quick,
+        'help_relationships': _render_help_relationships,
     }
 
     renderer = renderers.get(help_type)
