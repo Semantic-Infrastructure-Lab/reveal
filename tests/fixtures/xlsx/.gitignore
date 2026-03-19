@@ -1,0 +1,4 @@
+# Real-world xlsx fixtures — too large to commit, download via download.sh
+*.xlsx
+# Keep these
+!dynamic_arrays.xlsx

@@ -1,10 +1,11 @@
 """Comprehensive tests for xlsx adapter."""
 
+import io
+import sys
 import pytest
 from pathlib import Path
 from reveal.adapters.xlsx import XlsxAdapter, XlsxRenderer
 from io import StringIO
-import sys
 
 
 # Test data paths
@@ -1354,6 +1355,485 @@ class TestPowerPivotRelationshipsIntegration2013:
         adapter = XlsxAdapter(f"xlsx://{POWERPIVOT_2013}?powerpivot=relationships")
         result = adapter.get_structure()
         assert result['relationships'] == []
+
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures" / "xlsx"
+
+
+class TestXlsxRealWorldFixtures:
+    """Tests using real-world xlsx fixtures in tests/fixtures/xlsx/."""
+
+    @pytest.fixture
+    def adventure_dw(self):
+        path = FIXTURES_DIR / "AdventureWorksDW.xlsx"
+        if not path.exists():
+            pytest.skip("AdventureWorksDW.xlsx fixture not present")
+        return path
+
+    @pytest.fixture
+    def dynamic_arrays(self):
+        path = FIXTURES_DIR / "dynamic_arrays.xlsx"
+        if not path.exists():
+            pytest.skip("dynamic_arrays.xlsx fixture not present")
+        return path
+
+    def test_too_large_sheet_shows_message_not_zeros(self, adventure_dw):
+        """Sheet XML > 50 MB should surface a human-readable message, not silent 0 rows/0 cols."""
+        import io, sys
+        adapter = XlsxAdapter(f"xlsx://{adventure_dw}")
+        result = adapter.get_structure()
+        buf = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = buf
+        try:
+            XlsxRenderer.render_structure(result)
+        finally:
+            sys.stdout = old_stdout
+        output = buf.getvalue()
+        assert "too large to parse" in output
+        # Should NOT show "0 rows, 0 cols" for the oversized sheet
+        lines = [l for l in output.splitlines() if "FactInternetSales" in l]
+        assert lines, "FactInternetSales sheet not found in output"
+        assert "0 rows" not in lines[0]
+
+    def test_too_large_sheet_other_sheets_still_parsed(self, adventure_dw):
+        """Other sheets in the same workbook should parse normally despite one being too large."""
+        adapter = XlsxAdapter(f"xlsx://{adventure_dw}")
+        result = adapter.get_structure()
+        sheets = result.get('sheets', [])
+        dim_product = next((s for s in sheets if 'DimProduct' in s.get('name', '')), None)
+        assert dim_product is not None
+        assert dim_product.get('rows', 0) == 607
+
+    def test_column_count_from_dimension_ref_not_first_row(self, dynamic_arrays):
+        """Column count should come from dimension ref (sparse rows / dynamic array spill zones)."""
+        adapter = XlsxAdapter(f"xlsx://{dynamic_arrays}")
+        result = adapter.get_structure()
+        sheets = result.get('sheets', [])
+        da_sheet = next((s for s in sheets if 'DynamicArrays' in s.get('name', '')), None)
+        assert da_sheet is not None
+        # dimension A1:P11 = 16 cols; first row only has 7 header cells
+        assert da_sheet.get('cols') == 16
+
+    def test_dimension_ref_used_for_col_count(self, dynamic_arrays):
+        """Verify the dimension ref is read and stored for display."""
+        adapter = XlsxAdapter(f"xlsx://{dynamic_arrays}")
+        result = adapter.get_structure()
+        sheets = result.get('sheets', [])
+        da_sheet = next((s for s in sheets if 'DynamicArrays' in s.get('name', '')), None)
+        assert da_sheet is not None
+        assert da_sheet.get('dimension') == 'A1:P11'
+
+
+# ---------------------------------------------------------------------------
+# Fixtures for new feature tests
+# ---------------------------------------------------------------------------
+
+FIXTURE_ADV_SALES = FIXTURES_DIR / "AdventureWorks_Sales.xlsx"   # has PQ, connections, named ranges
+FIXTURE_FINANCIAL = FIXTURES_DIR / "Financial_Sample.xlsx"         # plain file, no PQ/connections/names
+FIXTURE_CONTOSO13 = FIXTURES_DIR / "powerpivot" / "Contoso_PnL_Excel2013.xlsx"
+FIXTURE_MODERN    = FIXTURES_DIR / "powerpivot" / "Retail_Analysis.xlsx"    # modern PP (no XMLA)
+
+
+def _capture(fn, *args, **kwargs) -> str:
+    """Run fn(*args, **kwargs), capturing stdout, and return it as a string."""
+    buf = io.StringIO()
+    old = sys.stdout
+    sys.stdout = buf
+    try:
+        fn(*args, **kwargs)
+    finally:
+        sys.stdout = old
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# split_m_section unit tests (pure logic, no file I/O)
+# ---------------------------------------------------------------------------
+
+class TestSplitMSection:
+    """Unit tests for the M code section splitter."""
+
+    def _split(self, code):
+        from reveal.adapters.xlsx import XlsxAdapter
+        return XlsxAdapter._split_m_section(code)
+
+    def test_single_simple_query(self):
+        code = 'section Section1;\nshared Sales = let\n  Source = 1\nin\n  Source'
+        queries = self._split(code)
+        assert len(queries) == 1
+        assert queries[0]['name'] == 'Sales'
+        assert 'Source' in queries[0]['expression']
+
+    def test_multiple_queries(self):
+        code = (
+            'section Section1;\n'
+            'shared Customer = let Source = 1 in Source;\n'
+            'shared Product = let Source = 2 in Source'
+        )
+        queries = self._split(code)
+        assert len(queries) == 2
+        assert queries[0]['name'] == 'Customer'
+        assert queries[1]['name'] == 'Product'
+
+    def test_quoted_name_with_spaces(self):
+        code = 'section Section1;\nshared #"Sales Data" = let x = 1 in x'
+        queries = self._split(code)
+        assert len(queries) == 1
+        assert queries[0]['name'] == 'Sales Data'
+
+    def test_trailing_semicolons_stripped(self):
+        code = 'section Section1;\nshared Q = 1;'
+        queries = self._split(code)
+        assert len(queries) == 1
+        assert not queries[0]['expression'].endswith(';')
+
+    def test_empty_string_returns_empty(self):
+        assert self._split('') == []
+
+
+# ---------------------------------------------------------------------------
+# Power Query integration tests (AdventureWorks_Sales.xlsx)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not FIXTURE_ADV_SALES.exists(), reason="AdventureWorks_Sales.xlsx not downloaded")
+class TestPowerQueryIntegration:
+    """Integration tests for ?powerquery= against AdventureWorks_Sales.xlsx."""
+
+    def test_list_returns_correct_type(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?powerquery=list")
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_powerquery'
+
+    def test_list_finds_all_queries(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?powerquery=list")
+        result = adapter.get_structure()
+        assert result['has_powerquery'] is True
+        assert result['query_count'] == 7
+
+    def test_query_names_correct(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?powerquery=list")
+        result = adapter.get_structure()
+        names = {q['name'] for q in result['queries']}
+        assert 'Customer' in names
+        assert 'Sales' in names
+        assert 'Product' in names
+
+    def test_expressions_contain_m_code(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?powerquery=list")
+        result = adapter.get_structure()
+        for q in result['queries']:
+            assert len(q['expression']) > 10  # non-trivial M expression
+
+    def test_specific_query_by_name(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?powerquery=Customer")
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_powerquery'
+        assert result['has_powerquery'] is True
+        # The Customer query has exactly one entry
+        assert len(result['queries']) == 7  # all queries loaded; renderer filters
+
+    def test_show_mode(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?powerquery=show")
+        result = adapter.get_structure()
+        assert result['mode'] == 'show'
+        assert result['has_powerquery'] is True
+
+    def test_render_list_output(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?powerquery=list")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert 'Power Query' in out
+        assert 'Customer' in out
+        assert 'lines' in out
+
+    def test_render_show_contains_m_code(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?powerquery=show")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert 'shared' in out
+        assert 'let' in out
+
+    def test_render_specific_query(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?powerquery=Customer")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert '// Customer' in out
+        assert 'Csv.Document' in out  # known source in the Customer query
+
+    def test_no_powerquery_file_graceful(self):
+        """A file without Power Query returns has_powerquery=False, no error."""
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_FINANCIAL}?powerquery=list")
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_powerquery'
+        assert result['has_powerquery'] is False
+        assert result['queries'] == []
+
+    def test_no_powerquery_render_informative(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_FINANCIAL}?powerquery=list")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert 'No Power Query' in out
+
+
+# ---------------------------------------------------------------------------
+# Named ranges integration tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not FIXTURE_ADV_SALES.exists(), reason="AdventureWorks_Sales.xlsx not downloaded")
+class TestNamedRangesIntegration:
+    """Integration tests for ?names= against AdventureWorks_Sales.xlsx."""
+
+    def test_returns_correct_type(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?names=list")
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_names'
+
+    def test_correct_count(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?names=list")
+        result = adapter.get_structure()
+        assert len(result['ranges']) == 7
+
+    def test_ranges_have_required_fields(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?names=list")
+        result = adapter.get_structure()
+        for r in result['ranges']:
+            assert 'name' in r
+            assert 'scope' in r
+            assert 'reference' in r
+
+    def test_hidden_ranges_flagged(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?names=list")
+        result = adapter.get_structure()
+        # ExternalData_* ranges in this file are hidden
+        hidden = [r for r in result['ranges'] if r.get('hidden')]
+        assert len(hidden) > 0
+
+    def test_sheet_scoped_ranges(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?names=list")
+        result = adapter.get_structure()
+        scoped = [r for r in result['ranges'] if r['scope'].startswith('sheet:')]
+        assert len(scoped) > 0
+
+    def test_render_output_table(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?names=list")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert 'Named Ranges' in out
+        assert 'Name' in out
+        assert 'Scope' in out
+        assert 'Reference' in out
+
+    def test_no_named_ranges_graceful(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_FINANCIAL}?names=list")
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_names'
+        assert result['ranges'] == []
+
+    def test_no_named_ranges_render_graceful(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_FINANCIAL}?names=list")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert 'No named ranges' in out
+
+
+# ---------------------------------------------------------------------------
+# External connections integration tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not FIXTURE_ADV_SALES.exists(), reason="AdventureWorks_Sales.xlsx not downloaded")
+class TestConnectionsIntegration:
+    """Integration tests for ?connections= against AdventureWorks_Sales.xlsx."""
+
+    def test_returns_correct_type(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?connections=list")
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_connections'
+
+    def test_correct_count(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?connections=list")
+        result = adapter.get_structure()
+        assert len(result['connections']) == 7
+
+    def test_connections_have_required_fields(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?connections=list")
+        result = adapter.get_structure()
+        for conn in result['connections']:
+            assert 'name' in conn
+            assert 'type' in conn
+
+    def test_show_mode_stored(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?connections=show")
+        result = adapter.get_structure()
+        assert result['mode'] == 'show'
+
+    def test_render_list_output(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?connections=list")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert 'External Connections' in out
+        assert 'Customer' in out  # connection name contains "Customer"
+
+    def test_render_show_output(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}?connections=show")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert 'Connection:' in out
+        assert 'Type:' in out
+
+    def test_no_connections_graceful(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_FINANCIAL}?connections=list")
+        result = adapter.get_structure()
+        assert result['type'] == 'xlsx_connections'
+        assert result['connections'] == []
+
+    def test_no_connections_render_graceful(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_FINANCIAL}?connections=list")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert 'No external connections' in out
+
+
+# ---------------------------------------------------------------------------
+# Workbook overview extras banner
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not FIXTURE_ADV_SALES.exists(), reason="AdventureWorks_Sales.xlsx not downloaded")
+class TestWorkbookOverviewExtras:
+    """Banner extras (Power Query, connections, named ranges) in workbook overview."""
+
+    def test_banner_has_powerquery_flag(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}")
+        result = adapter.get_structure()
+        banner = result.get('powerpivot_banner', {})
+        assert banner.get('has_powerquery') is True
+
+    def test_banner_has_connection_count(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}")
+        result = adapter.get_structure()
+        banner = result.get('powerpivot_banner', {})
+        assert banner.get('connection_count') == 7
+
+    def test_banner_has_named_range_count(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}")
+        result = adapter.get_structure()
+        banner = result.get('powerpivot_banner', {})
+        assert banner.get('named_range_count') == 7
+
+    def test_render_overview_shows_powerquery_line(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert 'Power Query' in out
+        assert '?powerquery=list' in out
+
+    def test_render_overview_shows_connections_line(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert 'connection' in out.lower()
+        assert '?connections=list' in out
+
+    def test_render_overview_shows_named_ranges_line(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert 'named range' in out.lower()
+        assert '?names=list' in out
+
+    def test_plain_file_has_none_banner_or_no_extras(self):
+        """A file with no model/PQ/connections/names may have no banner or empty banner."""
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_FINANCIAL}")
+        result = adapter.get_structure()
+        banner = result.get('powerpivot_banner')
+        # Either banner is None, or all extra counts are absent
+        if banner is not None:
+            assert not banner.get('has_powerquery')
+            assert not banner.get('connection_count')
+            assert not banner.get('named_range_count')
+
+
+# ---------------------------------------------------------------------------
+# Tier 2 pbixray tests (modern xlsx, no XMLA)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.skipif(not FIXTURE_MODERN.exists(), reason="Retail_Analysis.xlsx fixture not present")
+class TestTier2Pbixray:
+    """Tier 2 pbixray extraction on modern Power BI xlsx (no XMLA)."""
+
+    def test_pbixray_available_flag(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_MODERN}?powerpivot=schema")
+        result = adapter.get_structure()
+        assert result.get('pbixray_available') is True
+
+    def test_schema_has_columns(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_MODERN}?powerpivot=schema")
+        result = adapter.get_structure()
+        tables_with_cols = [t for t in result['tables'] if len(t.get('columns', [])) > 0]
+        assert len(tables_with_cols) > 0
+
+    def test_relationships_in_correct_format(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_MODERN}?powerpivot=relationships")
+        result = adapter.get_structure()
+        rels = result.get('relationships', [])
+        assert len(rels) > 0
+        # Each relationship must have from/to in XMLA-normalised structure
+        for r in rels:
+            assert 'from' in r and 'to' in r
+            assert 'table' in r['from']
+            assert 'columns' in r['from']
+            assert 'multiplicity' in r['from']
+
+    def test_render_schema_shows_columns(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_MODERN}?powerpivot=schema")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        # Should show column details, not "Schema limited" message
+        assert 'columns' in out.lower()
+        assert 'Schema limited' not in out
+
+    def test_render_relationships_shows_graph(self):
+        adapter = XlsxAdapter(f"xlsx://{FIXTURE_MODERN}?powerpivot=relationships")
+        result = adapter.get_structure()
+        out = _capture(XlsxRenderer.render_structure, result)
+        assert '->' in out  # relationship arrow in render output
+
+
+# ---------------------------------------------------------------------------
+# Help content coverage tests
+# ---------------------------------------------------------------------------
+
+class TestHelpContentCoverage:
+    """Verify the updated get_help() documents all new features."""
+
+    def test_help_mentions_powerpivot(self):
+        help_doc = XlsxAdapter.get_help()
+        uris = ' '.join(e['uri'] for e in help_doc['examples'])
+        assert 'powerpivot' in uris
+
+    def test_help_mentions_powerquery(self):
+        help_doc = XlsxAdapter.get_help()
+        uris = ' '.join(e['uri'] for e in help_doc['examples'])
+        assert 'powerquery' in uris
+
+    def test_help_mentions_names(self):
+        help_doc = XlsxAdapter.get_help()
+        uris = ' '.join(e['uri'] for e in help_doc['examples'])
+        assert 'names' in uris
+
+    def test_help_mentions_connections(self):
+        help_doc = XlsxAdapter.get_help()
+        uris = ' '.join(e['uri'] for e in help_doc['examples'])
+        assert 'connections' in uris
+
+    def test_help_features_include_powerquery(self):
+        help_doc = XlsxAdapter.get_help()
+        features = ' '.join(help_doc['features'])
+        assert 'Power Query' in features
+
+    def test_help_workflows_count(self):
+        help_doc = XlsxAdapter.get_help()
+        assert len(help_doc['workflows']) >= 4  # added two new workflows
 
 
 if __name__ == '__main__':

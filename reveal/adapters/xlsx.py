@@ -2,6 +2,8 @@
 
 import sys
 import re
+import base64
+import io
 import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -40,6 +42,12 @@ class XlsxRenderer:
             XlsxRenderer._render_search_results(result, preferred_format)
         elif result_type == 'xlsx_powerpivot':
             XlsxRenderer._render_powerpivot(result, preferred_format)
+        elif result_type == 'xlsx_powerquery':
+            XlsxRenderer._render_powerquery(result, preferred_format)
+        elif result_type == 'xlsx_names':
+            XlsxRenderer._render_named_ranges(result, preferred_format)
+        elif result_type == 'xlsx_connections':
+            XlsxRenderer._render_connections(result, preferred_format)
         else:
             XlsxRenderer._render_workbook(result, preferred_format)
 
@@ -64,19 +72,33 @@ class XlsxRenderer:
 
             dim_str = f" ({dim})" if dim else ""
             formula_str = f", {formulas} formulas" if formulas > 0 else ""
-            print(f"  :{i:2}   {name}{dim_str} - {rows} rows, {cols} cols{formula_str}")
+            if 'rows' in sheet:
+                print(f"  :{i:2}   {name}{dim_str} - {rows} rows, {cols} cols{formula_str}")
+            else:
+                print(f"  :{i:2}   {name}")
 
         banner = result.get('powerpivot_banner')
         if banner:
             model_path = banner.get('model_path', '')
-            table_names = banner.get('table_names', [])
-            print(f"\n\u26a1 Power Pivot model detected ({model_path})")
-            if table_names:
-                names_str = ', '.join(table_names[:8])
-                if len(table_names) > 8:
-                    names_str += f', ... ({len(table_names)} total)'
-                print(f"   Tables: {names_str}")
-            print(f"   Run with ?powerpivot=schema to explore the full model")
+            if model_path:
+                table_names = banner.get('table_names', [])
+                print(f"\n\u26a1 Power Pivot model detected ({model_path})")
+                if table_names:
+                    names_str = ', '.join(table_names[:8])
+                    if len(table_names) > 8:
+                        names_str += f', ... ({len(table_names)} total)'
+                    print(f"   Tables: {names_str}")
+                print(f"   Run with ?powerpivot=schema to explore the full model")
+            if banner.get('has_powerquery'):
+                print(f"\n\U0001f4e6 Power Query detected — run with ?powerquery=list to explore queries")
+            conn_count = banner.get('connection_count', 0)
+            if conn_count:
+                s = 's' if conn_count != 1 else ''
+                print(f"\n\U0001f517 {conn_count} external connection{s} — run with ?connections=list")
+            range_count = banner.get('named_range_count', 0)
+            if range_count:
+                s = 's' if range_count != 1 else ''
+                print(f"\n\U0001f4ce {range_count} named range{s} — run with ?names=list")
 
     @staticmethod
     def _render_sheet_data(result: dict, format: str) -> None:
@@ -162,7 +184,7 @@ class XlsxRenderer:
             else:
                 print(f"  {t['name']}")
         if not xmla_available:
-            print("\n(Column counts not available — XMLA schema absent)")
+            print("\n(Column counts not available — install pbixray for full schema)")
 
     @staticmethod
     def _render_powerpivot_schema(
@@ -187,7 +209,7 @@ class XlsxRenderer:
             for m in measures:
                 print(f"  [{m['name']:<{max_name}}]  {m['table']}")
         if not xmla_available:
-            print("\n(Schema limited — XMLA absent; table names from pivotCache only)")
+            print("\n(Schema limited — install pbixray for full columns and DAX)")
 
     @staticmethod
     def _render_powerpivot_measures(filename: str, measures: list) -> None:
@@ -260,27 +282,144 @@ class XlsxRenderer:
         measures = result.get('measures', [])
         message = result.get('message')
 
-        if mode in ('measures', 'dax') and not xmla_available:
+        pbixray_available = result.get('pbixray_available', False)
+        if mode in ('measures', 'dax') and not xmla_available and not pbixray_available:
             print(f"Power Pivot Model: {filename}\n")
             if message:
                 print(message)
             else:
                 print("DAX measures not available — XMLA schema absent (modern Power BI export).")
-                print("Install reveal-cli[powerpivot] for full extraction.")
+                print("Install pbixray (pip install pbixray) for full extraction.")
             return
 
+        has_full_schema = xmla_available or pbixray_available
         _mode_renderers = {
-            'tables': lambda: XlsxRenderer._render_powerpivot_tables(filename, tables, xmla_available),
-            'schema': lambda: XlsxRenderer._render_powerpivot_schema(filename, tables, measures, xmla_available),
+            'tables': lambda: XlsxRenderer._render_powerpivot_tables(filename, tables, has_full_schema),
+            'schema': lambda: XlsxRenderer._render_powerpivot_schema(filename, tables, measures, has_full_schema),
             'measures': lambda: XlsxRenderer._render_powerpivot_measures(filename, measures),
             'dax': lambda: XlsxRenderer._render_powerpivot_dax(filename, measures),
             'relationships': lambda: XlsxRenderer._render_powerpivot_relationships(
-                filename, result.get('relationships', []), xmla_available
+                filename, result.get('relationships', []), has_full_schema
             ),
         }
         renderer = _mode_renderers.get(mode)
         if renderer:
             renderer()
+
+    @staticmethod
+    def _render_powerquery(result: dict, format: str) -> None:
+        """Render Power Query M code output."""
+        from ..utils import safe_json_dumps
+        if format == 'json':
+            print(safe_json_dumps(result))
+            return
+
+        file_path = result.get('file', result.get('source', 'Unknown'))
+        filename = Path(file_path).name
+        mode = result.get('mode', 'list')
+
+        if not result.get('has_powerquery'):
+            print(f"No Power Query found in {filename}")
+            print("Power Query (Get & Transform) embeds M code in customXml/DataMashup.")
+            return
+
+        queries = result.get('queries', [])
+
+        if mode == 'list':
+            print(f"Power Query: {filename}\n")
+            print(f"Queries ({len(queries)}):")
+            for q in queries:
+                expr = q.get('expression', '')
+                lines = len(expr.splitlines())
+                print(f"  {q['name']}  ({lines} lines)")
+            print(f"\nRun with ?powerquery=show to see all M code")
+            print(f"Run with ?powerquery=<name> to see a specific query")
+        elif mode == 'show':
+            print(f"Power Query: {filename}\n")
+            for q in queries:
+                print(f"// {q['name']}")
+                print(q.get('expression', ''))
+                print()
+        else:
+            # Specific query name lookup
+            matches = [q for q in queries if q['name'].lower() == mode.lower()]
+            if matches:
+                q = matches[0]
+                print(f"// {q['name']}")
+                print(q.get('expression', ''))
+            else:
+                print(f"Query '{mode}' not found in {filename}")
+                if queries:
+                    print(f"Available: {', '.join(q['name'] for q in queries)}")
+
+    @staticmethod
+    def _render_named_ranges(result: dict, format: str) -> None:
+        """Render named ranges (defined names) output."""
+        from ..utils import safe_json_dumps
+        if format == 'json':
+            print(safe_json_dumps(result))
+            return
+
+        file_path = result.get('file', result.get('source', 'Unknown'))
+        filename = Path(file_path).name
+        ranges = result.get('ranges', [])
+
+        if not ranges:
+            print(f"No named ranges found in {filename}")
+            return
+
+        print(f"Named Ranges: {filename}\n")
+        max_name = max((len(r['name']) for r in ranges), default=4)
+        max_scope = max((len(r['scope']) for r in ranges), default=5)
+        print(f"  {'Name':<{max_name}}  {'Scope':<{max_scope}}  Reference")
+        print(f"  {'-' * max_name}  {'-' * max_scope}  ---------")
+        for r in ranges:
+            hidden = '  (hidden)' if r.get('hidden') else ''
+            print(f"  {r['name']:<{max_name}}  {r['scope']:<{max_scope}}  {r['reference']}{hidden}")
+
+    @staticmethod
+    def _render_connections(result: dict, format: str) -> None:
+        """Render external data connections output."""
+        from ..utils import safe_json_dumps
+        if format == 'json':
+            print(safe_json_dumps(result))
+            return
+
+        file_path = result.get('file', result.get('source', 'Unknown'))
+        filename = Path(file_path).name
+        connections = result.get('connections', [])
+        mode = result.get('mode', 'list')
+
+        if not connections:
+            print(f"No external connections found in {filename}")
+            return
+
+        print(f"External Connections: {filename}\n")
+
+        if mode == 'show':
+            for conn in connections:
+                print(f"Connection: {conn['name']}")
+                print(f"  Type:             {conn['type']}")
+                if conn.get('connection_string'):
+                    print(f"  Connection String: {conn['connection_string']}")
+                if conn.get('command'):
+                    cmd_type = f" ({conn['command_type']})" if conn.get('command_type') else ''
+                    print(f"  Command{cmd_type}:       {conn['command']}")
+                if conn.get('source_file'):
+                    print(f"  Source File:       {conn['source_file']}")
+                refresh = conn.get('refresh_on_load', False)
+                print(f"  Refresh On Load:   {refresh}")
+                print()
+        else:
+            print(f"Connections ({len(connections)}):")
+            for conn in connections:
+                name = conn.get('name', '')
+                conn_type = conn.get('type', '')
+                source = conn.get('connection_string') or conn.get('source_file') or ''
+                if len(source) > 60:
+                    source = source[:57] + '...'
+                print(f"  {name}  [{conn_type}]  {source}")
+            print(f"\nRun with ?connections=show for full connection strings and SQL")
 
     @staticmethod
     def render_element(result: dict, format: str = 'text') -> None:
@@ -441,6 +580,42 @@ class XlsxAdapter(ResourceAdapter):
                 {
                     'uri': 'xlsx:///data/sales.xlsx?search=revenue',
                     'description': 'Search for "revenue" across all sheets'
+                },
+                {
+                    'uri': 'xlsx:///data/model.xlsx?powerpivot=schema',
+                    'description': 'Show Power Pivot data model tables and columns'
+                },
+                {
+                    'uri': 'xlsx:///data/model.xlsx?powerpivot=dax',
+                    'description': 'Show all DAX measure expressions'
+                },
+                {
+                    'uri': 'xlsx:///data/model.xlsx?powerpivot=relationships',
+                    'description': 'Show table relationship graph'
+                },
+                {
+                    'uri': 'xlsx:///data/model.xlsx?powerquery=list',
+                    'description': 'List Power Query (M) queries embedded in the workbook'
+                },
+                {
+                    'uri': 'xlsx:///data/model.xlsx?powerquery=show',
+                    'description': 'Show all Power Query M code'
+                },
+                {
+                    'uri': 'xlsx:///data/model.xlsx?powerquery=SalesData',
+                    'description': 'Show M code for the "SalesData" query'
+                },
+                {
+                    'uri': 'xlsx:///data/model.xlsx?names=list',
+                    'description': 'List all named ranges and defined names'
+                },
+                {
+                    'uri': 'xlsx:///data/model.xlsx?connections=list',
+                    'description': 'List external data connections (ODBC, web, etc.)'
+                },
+                {
+                    'uri': 'xlsx:///data/model.xlsx?connections=show',
+                    'description': 'Show full connection strings and SQL commands'
                 }
             ],
             'features': [
@@ -450,11 +625,17 @@ class XlsxAdapter(ResourceAdapter):
                 'CSV export',
                 'Row limiting',
                 'Cross-sheet search',
+                'Power Pivot data model (tables, columns, DAX measures, relationships)',
+                'Power Query M code extraction (?powerquery=)',
+                'Named ranges / defined names (?names=list)',
+                'External data connections (?connections=)',
                 'JSON and text output'
             ],
             'try_now': [
                 "reveal xlsx:///path/to/file.xlsx",
                 "reveal xlsx:///path/to/file.xlsx?sheet=0",
+                "reveal xlsx:///path/to/file.xlsx?powerpivot=schema",
+                "reveal xlsx:///path/to/file.xlsx?powerquery=list",
             ],
             'workflows': [
                 {
@@ -471,6 +652,25 @@ class XlsxAdapter(ResourceAdapter):
                     'steps': [
                         "reveal xlsx:///data/huge.xlsx              # List sheets",
                         "reveal xlsx:///data/huge.xlsx?sheet=Summary&limit=20  # Preview first 20 rows",
+                    ],
+                },
+                {
+                    'name': 'Explore Power BI Export',
+                    'scenario': 'Understand a Power BI xlsx export data model',
+                    'steps': [
+                        "reveal xlsx:///data/report.xlsx                    # Overview — see model detected",
+                        "reveal xlsx:///data/report.xlsx?powerpivot=schema  # Tables + columns",
+                        "reveal xlsx:///data/report.xlsx?powerpivot=dax     # DAX measures",
+                        "reveal xlsx:///data/report.xlsx?powerquery=list    # Power Query ETL queries",
+                    ],
+                },
+                {
+                    'name': 'Audit Data Sources',
+                    'scenario': 'Find where a workbook pulls its data from',
+                    'steps': [
+                        "reveal xlsx:///data/report.xlsx?connections=list   # External connections",
+                        "reveal xlsx:///data/report.xlsx?connections=show   # Full connection strings + SQL",
+                        "reveal xlsx:///data/report.xlsx?powerquery=list    # Power Query sources",
                     ],
                 }
             ],
@@ -553,6 +753,20 @@ class XlsxAdapter(ResourceAdapter):
         powerpivot_param = self.query_params.get('powerpivot')
         if powerpivot_param is not None:
             return self._get_powerpivot(powerpivot_param)
+
+        # Check for powerquery parameter
+        powerquery_param = self.query_params.get('powerquery')
+        if powerquery_param is not None:
+            return self._get_powerquery(powerquery_param if powerquery_param else 'list')
+
+        # Check for names parameter (named ranges)
+        if 'names' in self.query_params:
+            return self._get_named_ranges()
+
+        # Check for connections parameter
+        connections_param = self.query_params.get('connections')
+        if connections_param is not None:
+            return self._get_connections(connections_param if connections_param else 'list')
 
         # Check for sheet parameter - if present, extract sheet data
         sheet_param = self.query_params.get('sheet')
@@ -925,6 +1139,213 @@ class XlsxAdapter(ResourceAdapter):
                 pass
         return None
 
+    def _find_datamashup_item(self, zf: zipfile.ZipFile) -> Optional[str]:
+        """Return the customXml item path containing a Power Query DataMashup blob, or None.
+
+        DataMashup items may be UTF-8 or UTF-16 XML.  The reliable distinguisher
+        from XMLA (also UTF-16) is the root element name — DataMashup vs Gemini.
+        We check for 'DataMashup' in text and absence of XMLA-specific markers.
+        """
+        for name in zf.namelist():
+            if not re.match(r'customXml/item\d+\.xml$', name):
+                continue
+            try:
+                raw = zf.read(name)
+                if raw[:2] in (b'\xff\xfe', b'\xfe\xff'):
+                    text = raw.decode('utf-16', errors='replace')
+                else:
+                    text = raw.decode('utf-8', errors='replace')
+                if 'DataMashup' in text and 'MetadataRecoveryInformation' not in text:
+                    return name
+            except Exception:
+                pass
+        return None
+
+    def _parse_powerquery_stdlib(self, zf: zipfile.ZipFile, item_path: str) -> Dict[str, Any]:
+        """Extract Power Query M code from a DataMashup blob using stdlib only.
+
+        The DataMashup XML contains a base64-encoded binary.  The binary is a
+        streaming ZIP (central directory may be empty) containing M formula
+        files.  We scan for local file headers directly rather than relying on
+        Python's ZipFile central-directory reader.
+        """
+        import struct
+        import zlib as _zlib
+
+        raw = zf.read(item_path)
+
+        # Decode the XML (may be UTF-16 or UTF-8)
+        if raw[:2] in (b'\xff\xfe', b'\xfe\xff'):
+            text = raw.decode('utf-16', errors='replace')
+        else:
+            text = raw.decode('utf-8', errors='replace')
+
+        # Extract base64 blob — the text content between > and < in the root
+        m = re.search(r'>([A-Za-z0-9+/=\s]{100,})<', text)
+        if not m:
+            return {'has_powerquery': False, 'queries': []}
+
+        blob_b64 = m.group(1).replace('\n', '').replace('\r', '').replace(' ', '')
+        try:
+            binary = base64.b64decode(blob_b64)
+        except Exception:
+            return {'has_powerquery': False, 'queries': []}
+
+        # Scan local file headers (streaming ZIP — central directory may be empty)
+        def _scan_local_headers(data: bytes) -> Dict[str, bytes]:
+            files: Dict[str, bytes] = {}
+            offset = 0
+            while offset + 30 < len(data):
+                if data[offset:offset + 4] != b'PK\x03\x04':
+                    offset += 1
+                    continue
+                chunk = data[offset + 4:offset + 30]
+                if len(chunk) < 26:
+                    break
+                _, flags, method = struct.unpack_from('<HHH', chunk, 0)
+                comp_sz, uncomp_sz = struct.unpack_from('<II', chunk, 14)
+                name_len, extra_len = struct.unpack_from('<HH', chunk, 22)
+                fname = data[offset + 30:offset + 30 + name_len].decode('utf-8', 'replace')
+                data_start = offset + 30 + name_len + extra_len
+                raw_data = data[data_start:data_start + comp_sz]
+                if method == 8 and comp_sz > 0:  # DEFLATE
+                    try:
+                        raw_data = _zlib.decompress(raw_data, -15)
+                    except Exception:
+                        pass
+                files[fname] = raw_data
+                offset = data_start + comp_sz
+            return files
+
+        inner_files = _scan_local_headers(binary)
+
+        queries: List[Dict[str, str]] = []
+        if 'Formulas/Section1.m' in inner_files:
+            m_code = inner_files['Formulas/Section1.m'].decode('utf-8', errors='replace')
+            queries = self._split_m_section(m_code)
+        else:
+            for fname, fdata in inner_files.items():
+                if fname.lower().endswith('.m'):
+                    code = fdata.decode('utf-8', errors='replace')
+                    queries.append({'name': Path(fname).stem, 'expression': code})
+
+        if not queries:
+            return {'has_powerquery': False, 'queries': []}
+
+        return {
+            'has_powerquery': True,
+            'query_count': len(queries),
+            'queries': queries,
+        }
+
+    @staticmethod
+    def _split_m_section(m_code: str) -> List[Dict[str, str]]:
+        """Split Section1.m M code into individual named queries.
+
+        Format::
+
+            section Section1;
+            shared #"Query Name" = let ... in ...;
+            shared OtherQuery = ...;
+        """
+        pattern = re.compile(
+            r'(?:^|\n)shared\s+(?:#"([^"]+)"|(\w[\w.]*))\s*=',
+            re.MULTILINE,
+        )
+        matches = list(pattern.finditer(m_code))
+        queries: List[Dict[str, str]] = []
+        for i, match in enumerate(matches):
+            name = match.group(1) or match.group(2)
+            start = match.start()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(m_code)
+            expression = m_code[start:end].rstrip()
+            if expression.endswith(';'):
+                expression = expression[:-1].rstrip()
+            queries.append({'name': name.strip(), 'expression': expression.strip()})
+        return queries
+
+    def _parse_pbixray(self) -> Optional[Dict[str, Any]]:
+        """Tier 2: use pbixray to extract the schema from a modern VertiPaq model.
+
+        Used when xl/model/item.data exists but no XMLA envelope is present
+        (modern Power BI export format).  Returns None when pbixray is not
+        installed or extraction fails, allowing Tier 3 fallback.
+        """
+        if not self.file_path:
+            return None
+        try:
+            from pbixray import PBIXRay  # optional dependency
+
+            px = PBIXRay(str(self.file_path))
+
+            # Tables and columns from schema DataFrame
+            tables: Dict[str, List[str]] = {}
+            schema_df = px.schema
+            if schema_df is not None and not schema_df.empty:
+                for _, row in schema_df.iterrows():
+                    tname = str(row.get('TableName', ''))
+                    col = str(row.get('ColumnName', ''))
+                    if tname and col:
+                        tables.setdefault(tname, []).append(col)
+
+            # Tables with no columns — px.tables is a numpy.ndarray of names
+            tables_arr = px.tables
+            if tables_arr is not None:
+                for tname in tables_arr:
+                    tname = str(tname)
+                    if tname and tname not in tables:
+                        tables[tname] = []
+
+            # DAX measures
+            measures: List[Dict[str, str]] = []
+            measures_df = px.dax_measures
+            if measures_df is not None and not measures_df.empty:
+                for _, row in measures_df.iterrows():
+                    measures.append({
+                        'table': str(row.get('TableName', '')),
+                        'name': str(row.get('Name', '')),
+                        'expr': str(row.get('Expression', '')),
+                    })
+
+            # Relationships — normalise to XMLA from/to structure
+            _card_map = {
+                'OneToMany': ('1', 'n'), 'ManyToOne': ('n', '1'),
+                'OneToOne': ('1', '1'), 'ManyToMany': ('n', 'n'),
+            }
+            relationships: List[Dict[str, Any]] = []
+            rels_df = px.relationships
+            if rels_df is not None and not rels_df.empty:
+                for _, row in rels_df.iterrows():
+                    card = str(row.get('Cardinality', ''))
+                    from_mult, to_mult = _card_map.get(card, (card, card))
+                    relationships.append({
+                        'from': {
+                            'table': str(row.get('FromTableName', '')),
+                            'columns': [str(row.get('FromColumnName', ''))],
+                            'multiplicity': from_mult,
+                        },
+                        'to': {
+                            'table': str(row.get('ToTableName', '')),
+                            'columns': [str(row.get('ToColumnName', ''))],
+                            'multiplicity': to_mult,
+                        },
+                        'active': bool(row.get('IsActive', True)),
+                        'cross_filter': str(row.get('CrossFilteringBehavior', '')),
+                    })
+
+            return {
+                'has_model': True,
+                'xmla_available': False,
+                'pbixray_available': True,
+                'tables': [{'name': k, 'columns': v} for k, v in tables.items()],
+                'measures': measures,
+                'relationships': relationships,
+            }
+        except ImportError:
+            return None
+        except Exception:
+            return None
+
     @staticmethod
     def _xmla_decode_root(zf: zipfile.ZipFile, item_path: str) -> ET.Element:
         """UTF-16 decode + CDATA unwrap → parsed ET.Element root."""
@@ -1088,24 +1509,208 @@ class XlsxAdapter(ResourceAdapter):
         }
 
     def _build_powerpivot_banner(self) -> Optional[Dict[str, Any]]:
-        """Return banner dict for workbook overview, or None if no model detected."""
+        """Return banner dict for workbook overview with model and extras info.
+
+        Returns None only if nothing interesting was found (no model, no Power
+        Query, no connections, no named ranges).
+        """
         if not self.file_path:
             return None
         try:
             with zipfile.ZipFile(self.file_path) as zf:
+                names_set = set(zf.namelist())
+                result: Dict[str, Any] = {}
+
+                # Power Pivot model
                 model_path = self._detect_powerpivot(zf)
-                if model_path is None:
-                    return None
-                xmla_item = self._find_xmla_item(zf)
-                if xmla_item:
-                    data = self._parse_xmla(zf, xmla_item)
-                    table_names = [t['name'] for t in data['tables']]
-                else:
-                    data = self._parse_pivot_cache(zf)
-                    table_names = [t['name'] for t in data['tables']]
-                return {'model_path': model_path, 'table_names': table_names}
+                if model_path:
+                    xmla_item = self._find_xmla_item(zf)
+                    if xmla_item:
+                        data = self._parse_xmla(zf, xmla_item)
+                    else:
+                        data = self._parse_pivot_cache(zf)
+                    result['model_path'] = model_path
+                    result['table_names'] = [t['name'] for t in data['tables']]
+
+                # Power Query (DataMashup presence check — no full extraction)
+                if self._find_datamashup_item(zf):
+                    result['has_powerquery'] = True
+
+                # External connections count
+                if 'xl/connections.xml' in names_set:
+                    try:
+                        root = ET.fromstring(zf.read('xl/connections.xml'))
+                        count = sum(1 for el in root.iter() if self._local(el.tag) == 'connection')
+                        if count:
+                            result['connection_count'] = count
+                    except Exception:
+                        pass
+
+                # Named ranges count (from workbook.xml definedNames)
+                if 'xl/workbook.xml' in names_set:
+                    try:
+                        root = ET.fromstring(zf.read('xl/workbook.xml'))
+                        count = sum(1 for el in root.iter() if self._local(el.tag) == 'definedName')
+                        if count:
+                            result['named_range_count'] = count
+                    except Exception:
+                        pass
+
+                return result if result else None
         except Exception:
             return None
+
+    def _get_powerquery(self, mode: str) -> Dict[str, Any]:
+        """Extract Power Query M code for a ?powerquery=<mode> request.
+
+        Modes:
+            list  — query names and line counts (default)
+            show  — full M code for all queries
+            <name> — M code for a specific named query
+        """
+        if not mode:
+            mode = 'list'
+        if not self.file_path:
+            return ResultBuilder.create_error(
+                result_type='xlsx_powerquery',
+                source=Path('unknown'),
+                error="No file loaded",
+            )
+        try:
+            with zipfile.ZipFile(self.file_path) as zf:
+                pq_item = self._find_datamashup_item(zf)
+                if not pq_item:
+                    return ResultBuilder.create(
+                        result_type='xlsx_powerquery',
+                        source=self.file_path,
+                        data={
+                            'file': str(self.file_path),
+                            'mode': mode,
+                            'has_powerquery': False,
+                            'queries': [],
+                        },
+                    )
+                data = self._parse_powerquery_stdlib(zf, pq_item)
+                data['file'] = str(self.file_path)
+                data['mode'] = mode
+                return ResultBuilder.create(
+                    result_type='xlsx_powerquery',
+                    source=self.file_path,
+                    data=data,
+                )
+        except Exception as e:
+            return ResultBuilder.create_error(
+                result_type='xlsx_powerquery',
+                source=self.file_path,
+                error=str(e),
+            )
+
+    def _get_named_ranges(self) -> Dict[str, Any]:
+        """Extract named ranges (defined names) from the workbook.
+
+        Reads xl/workbook.xml <definedNames> via raw ZIP/XML — no openpyxl
+        needed.  Returns all names including Excel internals (_xlnm.*).
+        """
+        if not self.file_path:
+            return ResultBuilder.create_error(
+                result_type='xlsx_names',
+                source=Path('unknown'),
+                error="No file loaded",
+            )
+        try:
+            with zipfile.ZipFile(self.file_path) as zf:
+                if 'xl/workbook.xml' not in zf.namelist():
+                    return ResultBuilder.create(
+                        result_type='xlsx_names',
+                        source=self.file_path,
+                        data={'file': str(self.file_path), 'ranges': []},
+                    )
+                root = ET.fromstring(zf.read('xl/workbook.xml'))
+                ranges: List[Dict[str, Any]] = []
+                for el in root.iter():
+                    if self._local(el.tag) != 'definedName':
+                        continue
+                    name = el.get('name', '')
+                    if not name:
+                        continue
+                    local_id = el.get('localSheetId')
+                    scope = 'global' if local_id is None else f'sheet:{local_id}'
+                    ref = (el.text or '').strip()
+                    hidden = el.get('hidden', '0') == '1'
+                    ranges.append({
+                        'name': name,
+                        'scope': scope,
+                        'reference': ref,
+                        'hidden': hidden,
+                    })
+                return ResultBuilder.create(
+                    result_type='xlsx_names',
+                    source=self.file_path,
+                    data={'file': str(self.file_path), 'ranges': ranges},
+                )
+        except Exception as e:
+            return ResultBuilder.create_error(
+                result_type='xlsx_names',
+                source=self.file_path,
+                error=str(e),
+            )
+
+    def _get_connections(self, mode: str = 'list') -> Dict[str, Any]:
+        """Extract external data connections from xl/connections.xml.
+
+        Modes:
+            list — connection name, type, and source summary (default)
+            show — full connection strings and SQL commands
+        """
+        if not self.file_path:
+            return ResultBuilder.create_error(
+                result_type='xlsx_connections',
+                source=Path('unknown'),
+                error="No file loaded",
+            )
+        _conn_types = {
+            '1': 'ODBC', '2': 'OLE DB', '3': 'Web', '4': 'Text File',
+            '5': 'ADO', '100': 'Power Query',
+        }
+        _cmd_types = {
+            '1': 'table', '2': 'SQL', '3': 'cube',
+            '4': 'statement', '5': 'file', '6': 'MDX',
+        }
+        try:
+            with zipfile.ZipFile(self.file_path) as zf:
+                if 'xl/connections.xml' not in zf.namelist():
+                    return ResultBuilder.create(
+                        result_type='xlsx_connections',
+                        source=self.file_path,
+                        data={'file': str(self.file_path), 'mode': mode, 'connections': []},
+                    )
+                root = ET.fromstring(zf.read('xl/connections.xml'))
+                connections: List[Dict[str, Any]] = []
+                for el in root.iter():
+                    if self._local(el.tag) != 'connection':
+                        continue
+                    type_id = el.get('type', '')
+                    cmd_type_id = el.get('commandType', '')
+                    connections.append({
+                        'name': el.get('name', ''),
+                        'type': _conn_types.get(type_id, f'type-{type_id}'),
+                        'connection_string': el.get('connectionString', ''),
+                        'command': el.get('command', ''),
+                        'command_type': _cmd_types.get(cmd_type_id, ''),
+                        'source_file': el.get('sourceFile', ''),
+                        'refresh_on_load': el.get('refreshOnLoad', '0') == '1',
+                    })
+                return ResultBuilder.create(
+                    result_type='xlsx_connections',
+                    source=self.file_path,
+                    data={'file': str(self.file_path), 'mode': mode, 'connections': connections},
+                )
+        except Exception as e:
+            return ResultBuilder.create_error(
+                result_type='xlsx_connections',
+                source=self.file_path,
+                error=str(e),
+            )
 
     def _get_powerpivot(self, mode: str) -> Dict[str, Any]:
         """Extract Power Pivot model for a ?powerpivot=<mode> request."""
@@ -1132,14 +1737,19 @@ class XlsxAdapter(ResourceAdapter):
 
                 xmla_item = self._find_xmla_item(zf)
                 if xmla_item:
+                    # Tier 1: full XMLA metadata (Excel 2010/2013)
                     data = self._parse_xmla(zf, xmla_item)
                 else:
-                    data = self._parse_pivot_cache(zf)
-                    if mode in ('measures', 'dax'):
-                        data['message'] = (
-                            'DAX measures not available — XMLA schema absent (modern Power BI export). '
-                            'Install reveal-cli[powerpivot] for full extraction.'
-                        )
+                    # Tier 2: try pbixray for modern files (Power BI export, no XMLA)
+                    data = self._parse_pbixray()
+                    if data is None:
+                        # Tier 3: pivot cache fallback (table names only)
+                        data = self._parse_pivot_cache(zf)
+                        if mode in ('measures', 'dax'):
+                            data['message'] = (
+                                'DAX measures not available — XMLA schema absent (modern Power BI export). '
+                                'Install pbixray (pip install pbixray) for full extraction.'
+                            )
 
                 data['file'] = str(self.file_path)
                 data['model_path'] = model_path

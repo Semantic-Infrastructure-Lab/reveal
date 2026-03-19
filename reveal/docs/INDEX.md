@@ -61,6 +61,7 @@ Complete guides for all URI protocol adapters (~23,300 lines):
 | [SSL_ADAPTER_GUIDE.md](SSL_ADAPTER_GUIDE.md) | 1488 | SSL/TLS certificate analysis and validation |
 | [STATS_ADAPTER_GUIDE.md](STATS_ADAPTER_GUIDE.md) | 1874 | Codebase statistics and metrics collection |
 | [XLSX_ADAPTER_GUIDE.md](XLSX_ADAPTER_GUIDE.md) | 651 | Excel/XLSX file analysis and data extraction |
+| [XLSX_POWERBI_EXPANSION.md](XLSX_POWERBI_EXPANSION.md) | — | Gap analysis and roadmap: Power Query, named ranges, pivot tables, connections, VBA, pbix/pbit/bim |
 
 **Total**: ~23,300 lines
 

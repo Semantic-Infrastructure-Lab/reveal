@@ -151,7 +151,10 @@ Summary sheet:
 | `format` | string | Output format: `text` (default), `json`, `csv` | `?format=csv` |
 | `search` | string | Search term (case-insensitive) | `?search=revenue` |
 | `limit` | int | Max rows to display (default: 25) | `?limit=100` |
-| `powerpivot` | string | Power Pivot query mode (see below) | `?powerpivot=tables` |
+| `powerpivot` | string | Power Pivot data model mode (see below) | `?powerpivot=schema` |
+| `powerquery` | string | Power Query M code mode: `list`, `show`, or query name | `?powerquery=list` |
+| `names` | string | Show named ranges / defined names | `?names=list` |
+| `connections` | string | External connections mode: `list` or `show` | `?connections=list` |
 
 **Parameter combinations:**
 ```bash
@@ -249,14 +252,47 @@ Power Pivot workbooks are automatically detected at the overview level:
 
 ```bash
 reveal model.xlsx
-# Workbook: model.xlsx (2.4 MB)  ★ Power Pivot model detected
-# Sheets (2): ...
+```
+```
+File: model.xlsx
+
+Sheets (2): ...
+
+⚡ Power Pivot model detected (xl/model/item.data)
+   Tables: Sales, Product, Date, Customer
+   Run with ?powerpivot=schema to explore the full model
 ```
 
-Supported formats: Excel 2010 (`xl/customData/item1.data`), Excel 2013+
-(`xl/model/item.data`), modern Power BI exports (pivotCache fallback when XMLA
-is absent), and external SSAS/OLAP connections (`xl/pivotCache/` with
-`cacheHierarchies`).
+### What Gets Extracted: Capability Matrix
+
+Reveal uses a three-tier extraction strategy depending on what metadata is embedded
+in the file. The tier is selected automatically — no configuration needed.
+
+| Format | How to identify | Tables | Columns | DAX | Relationships |
+|--------|----------------|--------|---------|-----|---------------|
+| **Excel 2010** | `xl/customData/item1.data` + XMLA in `customXml/` | ✅ | ✅ | ✅ full expressions | ✅ |
+| **Excel 2013+** | `xl/model/item.data` + XMLA in `customXml/` | ✅ | ✅ | ✅ full expressions | ✅ |
+| **Modern / Power BI export** | `xl/model/item.data`, no XMLA | ✅ | ✅ (via pbixray) | ⚠️ if authored | ✅ (via pbixray) |
+| **External SSAS/OLAP** | `xl/pivotCache/` with `cacheHierarchies` | ✅ names only | ❌ | ❌ | ❌ |
+| **Power Query (DataMashup)** | `customXml/` contains `DataMashup` | ❌ | ❌ | ❌ | ❌ |
+
+**Tier 1 — XMLA (Excel 2010 and 2013+)**: The old "Gemini" format stores a UTF-16
+XMLA metadata envelope in `customXml/itemN.xml` alongside the binary VertiPaq data.
+Reveal parses this directly — no dependencies beyond stdlib.
+
+**Tier 2 — pbixray (modern Excel 365 / Power BI exports)**: Modern files have the
+binary VertiPaq store but no XMLA envelope. If the optional `pbixray` library is
+installed (`pip install pbixray`), reveal reads the `metadata.sqlitedb` embedded in
+`xl/model/item.data` to get full columns and relationships. DAX measures are
+extracted when present (many demo/sample files have none).
+
+**Tier 3 — pivot cache fallback**: When neither XMLA nor pbixray is available,
+reveal scans `xl/pivotCache/pivotCacheDefinition*.xml` for `cacheHierarchy`
+elements to infer table names. Columns, DAX, and relationships are unavailable.
+
+**Power Query (DataMashup)** — files whose `customXml/` contains a `DataMashup`
+blob (M formula/query engine) are not Power Pivot workbooks. Use `?powerquery=list`
+to extract M code (see Power Query section below).
 
 ### Query Modes
 
@@ -284,20 +320,63 @@ reveal xlsx://model.xlsx?powerpivot=dax
 reveal xlsx://model.xlsx?powerpivot=relationships
 ```
 
+**`?powerpivot=schema` output (XMLA tier — full detail):**
+```
+Power Pivot Model: ContosoPnL.xlsx
+
+Tables (4):
+  Finance Data (10 columns)
+    Fiscal Month, Profit Center, Account, Actual, Budget, Forecast, ... (10 total)
+  Accounts (5 columns)
+    Account, Line Item, Group, Sub Class, Class
+  Executive Geography (9 columns)
+    Profit Center, Exec Org, Exec Function Summary, ... (9 total)
+  Date (5 columns)
+    Date, Fiscal Year, Fiscal Qtr, Fiscal Month, Month
+
+Measures (81):
+  [Actual $]  Finance Data
+  [Budget $]  Finance Data
+  ...
+```
+
+**`?powerpivot=schema` output (pivot cache fallback — table names only):**
+```
+Power Pivot Model: report.xlsx
+
+Tables (6):
+  SalesFact
+  Product
+  Date
+  ...
+
+(Schema limited — XMLA absent; table names from pivotCache only)
+```
+
 **`?powerpivot=relationships` output:**
 ```
 Relationships (3):
-  Sales → Product
-    Sales[ProductKey] → Product[ProductKey]  (Many → One)
-  Sales → Date
-    Sales[OrderDate] → Date[Date]  (Many → One)
-  Sales → Customer
-    Sales[CustomerKey] → Customer[CustomerKey]  (Many → One)
+  Finance Data
+    [Account] (Many)  ->  Accounts[Account] (One)
+    [Profit Center] (Many)  ->  Executive Geography[Profit Center] (One)
+    [CalculatedColumn1] (Many)  ->  Date[Date] (One)
 ```
 
-When XMLA is absent (pivotCache fallback or external SSAS connection), modes that
-require the full model (schema, measures, dax, relationships) report "not available"
-gracefully.
+### Optional: pbixray for Modern Files
+
+To unlock full column and relationship extraction from modern Excel 365 / Power BI
+export files (Tier 2), install `pbixray`:
+
+```bash
+pip install pbixray
+```
+
+Without it, modern files fall back to Tier 3 (table names only). With it, reveal
+automatically uses `pbixray` for any file that has `xl/model/item.data` but no XMLA
+envelope. No configuration needed — detection is automatic.
+
+`pbixray` requires a compiled C extension (`xpress9`). Pre-built wheels are available
+for x86_64 Linux on PyPI. ARM/other platforms may need to build from source.
 
 ### Use with MCP
 
@@ -305,6 +384,133 @@ gracefully.
 reveal_query("xlsx://model.xlsx?powerpivot=tables")
 reveal_query("xlsx://model.xlsx?powerpivot=relationships")
 ```
+
+---
+
+## Power Query (M Code)
+
+Power Query (also called "Get & Transform") embeds M language queries in the workbook. These define the ETL pipeline — where data comes from and how it's shaped. Reveal extracts this using stdlib only (no extra dependencies); the DataMashup inner ZIP is parsed directly.
+
+### How It Works
+
+Power Query M code is stored in a `customXml/itemN.xml` file that contains a base64-encoded inner ZIP. The ZIP contains `Formulas/Section1.m` with all query definitions. The workbook overview will show "📦 Power Query detected" when queries are present.
+
+### Query Modes
+
+| Mode | Description |
+|------|-------------|
+| `?powerquery=list` | Query names and line counts (default) |
+| `?powerquery=show` | Full M code for all queries |
+| `?powerquery=<name>` | M code for a specific named query |
+
+### Examples
+
+```bash
+# List all Power Query queries in the workbook
+reveal xlsx://file.xlsx?powerquery=list
+
+# Show full M code for all queries
+reveal xlsx://file.xlsx?powerquery=show
+
+# Show M code for a specific query
+reveal xlsx://file.xlsx?powerquery=SalesData
+
+# Quoted names with spaces still work (case-insensitive match)
+reveal xlsx://file.xlsx?powerquery=Sales Data
+```
+
+### Sample Output
+
+```
+Power Query: report.xlsx
+
+Queries (5):
+  Customer  (8 lines)
+  Product   (6 lines)
+  SalesData (12 lines)
+  DateDim   (5 lines)
+  Calendar  (3 lines)
+
+Run with ?powerquery=show to see all M code
+Run with ?powerquery=<name> to see a specific query
+```
+
+---
+
+## Named Ranges
+
+Named ranges (Excel "Defined Names") give human-readable names to cell ranges, formulas, or constants. They are the semantic API of the workbook — how formulas reference data.
+
+Extracted from `xl/workbook.xml` `<definedNames>` using stdlib XML parsing (no openpyxl needed).
+
+### Examples
+
+```bash
+# List all named ranges
+reveal xlsx://file.xlsx?names=list
+```
+
+### Sample Output
+
+```
+Named Ranges: model.xlsx
+
+  Name        Scope    Reference
+  ----------  -------  --------------------
+  TaxRate     global   0.08
+  SalesRange  global   Sheet1!$A$1:$Z$500
+  _Print_Area sheet:0  Sheet1!$A$1:$T$100   (hidden)
+```
+
+Scope: `global` = workbook-wide; `sheet:N` = visible only within that sheet (0-based index).
+Hidden ranges (internal Excel bookkeeping) are flagged with `(hidden)`.
+
+---
+
+## External Data Connections
+
+Connections reveal where the workbook pulls data from: ODBC databases, OLE DB, web queries, text files, or Power Query connections. Extracted from `xl/connections.xml`.
+
+### Connection Modes
+
+| Mode | Description |
+|------|-------------|
+| `?connections=list` | Connection names, types, and source summary (default) |
+| `?connections=show` | Full connection strings, SQL commands, and refresh settings |
+
+### Examples
+
+```bash
+# List all connections
+reveal xlsx://file.xlsx?connections=list
+
+# Full connection details (connection strings and SQL)
+reveal xlsx://file.xlsx?connections=show
+```
+
+### Sample Output — list
+
+```
+External Connections: report.xlsx
+
+Connections (3):
+  SalesDB  [ODBC]  DRIVER={SQL Server};SERVER=db01;DATABASE=Sales
+  WebQuery [Web]   https://api.example.com/data
+  Products [Power Query]
+
+Run with ?connections=show for full connection strings and SQL
+```
+
+### Connection Types
+
+| Type ID | Label |
+|---------|-------|
+| 1 | ODBC |
+| 2 | OLE DB |
+| 3 | Web |
+| 4 | Text File |
+| 5 | ADO |
+| 100 | Power Query |
 
 ---
 
@@ -427,7 +633,16 @@ reveal report.xlsx?sheet=Data --format json | jq '.columns | contains(["Date", "
 | < 1 MB | < 100ms | ~5 MB | Direct access |
 | 1-10 MB | 100ms-1s | ~20 MB | Direct access |
 | 10-50 MB | 1-5s | ~100 MB | Use `range=` for specific cells |
-| > 50 MB | 5s+ | ~500 MB+ | Extract to CSV first, process externally |
+| > 50 MB | guarded | — | Sheet skipped with "too large to parse" message; other sheets unaffected |
+
+**Large sheet guard:** Individual worksheet XML parts larger than 50 MB are skipped
+during workbook overview. The sheet appears in the listing with a clear message
+rather than silently showing `0 rows, 0 cols`. Other sheets in the same workbook
+parse normally. To access a large sheet's data, extract a specific range:
+
+```bash
+reveal xlsx://huge_file.xlsx?sheet=FactSales&range=A1:Z1000
+```
 
 ### Large File Strategies
 
@@ -461,12 +676,13 @@ reveal file.xlsx?sheet=Sales&format=csv | tail -11
 1. **Formulas** - Only values shown (formula results, not formula text)
 2. **Formatting** - No colors, fonts, borders, cell styles
 3. **Charts/Images** - Not extracted
-4. **Macros/VBA** - Not executed or extracted
-5. **Standard pivot tables** - Shown as static data only (regular Excel pivot tables, not Power Pivot). Power Pivot / SSAS data models are fully supported via `?powerpivot=` — see Power Pivot section above.
+4. **Macros/VBA** - Not executed or extracted (xlsm VBA remains in the binary `vbaProject.bin` blob)
+5. **Standard pivot tables** - Shown as static data only (regular Excel pivot tables, not Power Pivot). Power Pivot / SSAS data models are supported via `?powerpivot=` — see Power Pivot section above.
 6. **Multiple sheets simultaneously** - One sheet per query
 7. **Password-protected files** - Not supported
-8. **Binary XLS files** - Only .xlsx (XML-based) supported
+8. **Binary XLS files** - Only .xlsx/.xlsm (XML-based) supported; legacy `.xls` (BIFF format) is not
 9. **Write operations** - Read-only (no editing)
+10. **`.xlsb`, `.pbix`, `.pbit`, `.bim`** - Not supported as input formats (see [XLSX_POWERBI_EXPANSION.md](XLSX_POWERBI_EXPANSION.md) for roadmap)
 
 ### Known Edge Cases
 
@@ -606,6 +822,14 @@ sqlite3 data.db ".import --csv transactions.csv transactions"
 
 ## Version History
 
+### v0.65.0 (2026-03-18, session cooling-current-0318)
+- ✅ **Large sheet guard**: sheets > 50 MB show "too large to parse (N MB)" instead of silent `0 rows, 0 cols`
+- ✅ **Column count fix**: derived from `dimension` ref tag instead of first-row cell count — fixes sparse rows and dynamic array spill zones
+- ✅ **Real-world fixture coverage**: 8 new fixtures across `tests/fixtures/xlsx/` and `tests/fixtures/xlsx/powerpivot/` (general sheets, dynamic arrays, Contoso 2010/2013 XMLA, 4 Power BI service samples)
+- ✅ **Power Pivot capability matrix validated** against real files: Excel 2010 (customData), Excel 2013+ (model/item.data + XMLA), modern Power BI exports (no XMLA), Power Query (DataMashup — not PowerPivot)
+- ✅ `pbixray` identified as optional dependency for Tier 2 extraction (modern files): unlocks columns + relationships where only table names were previously available
+- ✅ 117 tests total (4 new real-world fixture tests)
+
 ### v0.64.0+ (2026-03-17, sessions timeless-launch-0317, zifaxo-0317)
 - ✅ `?powerpivot=relationships` — full relationship graph from SSAS ASSL model
 - ✅ DAX regex fix: handles tableless `CREATE MEASURE` format (real-world files)
@@ -637,6 +861,7 @@ sqlite3 data.db ".import --csv transactions.csv transactions"
 - [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md) - Query parameters
 - [FIELD_SELECTION_GUIDE.md](FIELD_SELECTION_GUIDE.md) - Token optimization with `--fields`
 - [OUTPUT_CONTRACT.md](OUTPUT_CONTRACT.md) - JSON output structure
+- [XLSX_POWERBI_EXPANSION.md](XLSX_POWERBI_EXPANSION.md) - Gap analysis and roadmap: Power Query M, named ranges, pivot tables, external connections, VBA extraction, .pbix/.pbit/.bim formats
 
 ---
 

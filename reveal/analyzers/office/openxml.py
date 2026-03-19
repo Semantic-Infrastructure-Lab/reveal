@@ -288,10 +288,14 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             # Format sheets with details in name
             formatted_sheets = []
             for s in sheets:
-                dim = f" ({s['dimension']})" if s.get('dimension') else ''
-                formulas = f", {s['formulas']} formulas" if s.get('formulas') else ''
+                if s.get('too_large'):
+                    label = f"{s['name']} - too large to parse ({s['size_mb']} MB)"
+                else:
+                    dim = f" ({s['dimension']})" if s.get('dimension') else ''
+                    formulas = f", {s['formulas']} formulas" if s.get('formulas') else ''
+                    label = f"{s['name']}{dim} - {s['rows']} rows, {s['cols']} cols{formulas}"
                 formatted_sheets.append({
-                    'name': f"{s['name']}{dim} - {s['rows']} rows, {s['cols']} cols{formulas}",
+                    'name': label,
                     'line_start': s['line_start'],
                 })
             formatted_sheets = self._apply_semantic_slice(formatted_sheets, head, tail, range)
@@ -299,8 +303,45 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
 
         return result
 
+    @staticmethod
+    def _col_letter_to_index(col: str) -> int:
+        """Convert column letter(s) to 1-based index (A=1, Z=26, AA=27)."""
+        result = 0
+        for ch in col.upper():
+            result = result * 26 + (ord(ch) - ord('A') + 1)
+        return result
+
+    @staticmethod
+    def _cols_from_dim_ref(dim_ref: str) -> int:
+        """Parse dimension ref like 'A1:P11' and return column count."""
+        if ':' not in dim_ref:
+            return 0
+        try:
+            import re as _re
+            parts = dim_ref.split(':')
+            end_col = _re.match(r'([A-Za-z]+)', parts[1])
+            if end_col:
+                return XlsxAnalyzer._col_letter_to_index(end_col.group(1))
+        except Exception:
+            pass
+        return 0
+
     def _analyze_sheet(self, sheet_path: str, sheet_name: str) -> Dict[str, Any]:
         """Analyze a single worksheet."""
+        # Check size before parsing — large sheets silently fail _read_xml
+        if self.archive and sheet_path in self.parts:
+            from .base import MAX_XML_PART_SIZE
+            info = self.archive.getinfo(sheet_path)
+            if info.file_size > MAX_XML_PART_SIZE:
+                size_mb = info.file_size / (1024 * 1024)
+                return {
+                    'name': sheet_name,
+                    'rows': 0,
+                    'cols': 0,
+                    'too_large': True,
+                    'size_mb': round(size_mb, 1),
+                }
+
         sheet_tree = self._read_xml(sheet_path)
         if sheet_tree is None:
             return {'name': sheet_name, 'rows': 0, 'cols': 0}
@@ -315,11 +356,11 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
         rows = list(sheet_tree.iter(f'{{{xl}}}row'))
         formula_count = len(list(sheet_tree.iter(f'{{{xl}}}f')))
 
-        # Estimate columns from first row
-        col_count = 0
-        if rows:
-            first_row = rows[0]
-            col_count = len(list(first_row.iter(f'{{{xl}}}c')))
+        # Derive column count from dimension ref (handles sparse rows / dynamic arrays)
+        # Fall back to counting cells in first row only when no dimension ref
+        col_count = self._cols_from_dim_ref(dim_ref)
+        if col_count == 0 and rows:
+            col_count = len(list(rows[0].iter(f'{{{xl}}}c')))
 
         return {
             'name': sheet_name,
