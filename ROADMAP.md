@@ -485,7 +485,7 @@ Split into `_render_powerpivot_tables`, `_render_powerpivot_schema`,
 
 ### BACK-084: Split `_handle_validate_nginx_acme` text/json render paths — complexity 25
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session fierce-pegasus-0319)
 **Value**: Low | **Lift**: Small
 **Location**: `reveal/file_handler.py:212`
 
@@ -590,7 +590,7 @@ N012  LOW  'belize.mytia.net': no rate limiting applied
 
 ### BACK-090: `reveal nginx:// --audit` — fleet consistency matrix
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session fierce-pegasus-0319)
 **Value**: Medium | **Lift**: Medium
 **Source**: tia-proxy fleet audit (onyx-crystal-0318)
 **Design**: `internal-docs/planning/NGINX_FLEET_AUDIT_2026-03-18.md`
