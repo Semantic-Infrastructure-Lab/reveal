@@ -126,6 +126,8 @@ _SCHEMA_NOTES = [
 class PythonAdapter(ResourceAdapter):
     """Adapter for Python runtime inspection via python:// URIs."""
 
+    ELEMENT_NAMESPACE_ADAPTER = True
+
     def __init__(self):
         """Initialize with runtime introspection capabilities."""
         self._packages_cache = None

@@ -237,9 +237,7 @@ def _handle_rendering(adapter, renderer_class: type[Any], scheme: str,
     # Adapters where resource is part of element namespace (not initialization path)
     # For these, `scheme://RESOURCE` means "get element RESOURCE"
     # For others, `scheme://RESOURCE` means "analyze path RESOURCE"
-    ELEMENT_NAMESPACE_ADAPTERS = {'env', 'python', 'help'}
-
-    resource_is_element = scheme in ELEMENT_NAMESPACE_ADAPTERS
+    resource_is_element = getattr(adapter.__class__, 'ELEMENT_NAMESPACE_ADAPTER', False)
 
     if supports_elements and (element or (resource and resource_is_element)):
         _render_element(adapter, renderer_class, element, resource, args)

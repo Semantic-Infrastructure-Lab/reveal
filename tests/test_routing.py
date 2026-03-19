@@ -694,6 +694,8 @@ class TestGenericAdapterHandlerEdgeCases(unittest.TestCase):
         """Verify error handling when requested element doesn't exist."""
 
         class ElementAdapter:
+            ELEMENT_NAMESPACE_ADAPTER = True
+
             def __init__(self):
                 # No-arg init for env-like adapter
                 pass

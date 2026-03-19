@@ -137,6 +137,10 @@ class ResourceAdapter(ABC):
     # None = this adapter has no budget-limitable list field.
     BUDGET_LIST_FIELD: Optional[str] = None
 
+    # Set True in subclasses where scheme://RESOURCE means "get element RESOURCE"
+    # rather than "analyze path RESOURCE" (e.g. env, python, help).
+    ELEMENT_NAMESPACE_ADAPTER: bool = False
+
     @classmethod
     def from_uri(cls, scheme: str, resource: str,
                  element: Optional[str]) -> 'ResourceAdapter':

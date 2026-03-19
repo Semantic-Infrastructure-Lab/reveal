@@ -141,6 +141,8 @@ class EnvRenderer:
 class EnvAdapter(ResourceAdapter):
     """Adapter for exploring environment variables via env:// URIs."""
 
+    ELEMENT_NAMESPACE_ADAPTER = True
+
     @staticmethod
     def get_schema() -> Dict[str, Any]:
         """Get machine-readable schema for env:// adapter.

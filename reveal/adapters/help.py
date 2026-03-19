@@ -116,6 +116,7 @@ class HelpAdapter(ResourceAdapter):
         help://ast                 # Get ast:// adapter help
         help://ast/workflows       # Just the workflows section
         help://ast/try-now         # Just the try-now examples
+
         help://ast/anti-patterns   # Just the anti-patterns
         help://env                 # Get env:// adapter help
         help://python-guide        # Python adapter comprehensive guide
@@ -132,6 +133,8 @@ class HelpAdapter(ResourceAdapter):
         help://examples/security   # Query recipes for security analysis
         help://examples/codebase   # Query recipes for codebase exploration
     """
+
+    ELEMENT_NAMESPACE_ADAPTER = True
 
     # Valid section names for help://adapter/section queries
     VALID_SECTIONS = {'workflows', 'try-now', 'anti-patterns'}
