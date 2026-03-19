@@ -274,10 +274,16 @@ def _handle_wildcard_operator(field_value: Any, target_value: Any, opts: dict) -
         return False
 
 
+_REGEX_MAX_LEN = 200  # Reject patterns longer than this to prevent ReDoS
+
+
 def _handle_regex_operator(field_value: Any, operator: str, target_value: Any) -> bool:
     """Handle regex operators (~=, !~)."""
+    pattern_str = str(target_value)
+    if len(pattern_str) > _REGEX_MAX_LEN:
+        return False if operator == '~=' else True
     try:
-        pattern = re.compile(str(target_value))
+        pattern = re.compile(pattern_str)
         matches = bool(pattern.search(str(field_value)))
         return matches if operator == '~=' else not matches
     except re.error:

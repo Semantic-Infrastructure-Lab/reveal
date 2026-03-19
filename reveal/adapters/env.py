@@ -1,6 +1,7 @@
 """Environment variable adapter (env://)."""
 
 import os
+import re
 import sys
 from typing import Dict, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer
@@ -263,6 +264,15 @@ class EnvAdapter(ResourceAdapter):
         'API_KEY', 'AUTH', 'PRIVATE', 'PASSPHRASE'
     ]
 
+    # Compiled regex: each pattern must appear as a whole word in the var name
+    # (delimited by _ or start/end of string, since env var names use _ not spaces)
+    _SENSITIVE_RE = re.compile(
+        '|'.join(
+            r'(?:^|_)' + p + r'(?:_|$)'
+            for p in SENSITIVE_PATTERNS
+        )
+    )
+
     SYSTEM_VARS = {
         # Unix/Linux/macOS
         'PATH', 'HOME', 'SHELL', 'USER', 'LANG', 'PWD',
@@ -367,8 +377,7 @@ class EnvAdapter(ResourceAdapter):
         Returns:
             True if name matches sensitive patterns
         """
-        upper_name = name.upper()
-        return any(pattern in upper_name for pattern in self.SENSITIVE_PATTERNS)
+        return bool(self._SENSITIVE_RE.search(name.upper()))
 
     def _maybe_redact(self, name: str, value: str, show_secrets: bool) -> str:
         """Redact sensitive values unless show_secrets=True.

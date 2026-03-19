@@ -170,6 +170,10 @@ class ResourceAdapter(ABC):
         """
         pass
 
+    def post_process(self, result: Dict[str, Any], args: Any) -> Dict[str, Any]:
+        """Post-process adapter result. Override in subclasses to transform output."""
+        return result
+
     @staticmethod
     def create_meta(
         parse_mode: Optional[str] = None,

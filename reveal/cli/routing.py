@@ -399,8 +399,8 @@ def _render_structure(adapter, renderer_class: type[Any], args: 'Namespace',
     # Apply post-processing
     result = _apply_field_selection(result, args)
     result = _apply_budget_constraints(result, args, adapter)
-    # Check class hierarchy (not instance attr) to avoid triggering Mock auto-attrs
-    if any('post_process' in cls.__dict__ for cls in type(adapter).__mro__[:-1]):
+    post_process = getattr(type(adapter), 'post_process', None)
+    if post_process is not None:
         result = adapter.post_process(result, args)
 
     # Add available elements if adapter supports discovery
