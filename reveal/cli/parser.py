@@ -434,6 +434,10 @@ def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--global-audit', action='store_true', dest='global_audit',
                         help='Audit the http{} block and main context in nginx.conf for missing security '
                              'and operational directives (server_tokens, HSTS, ssl_protocols, etc.) (nginx only)')
+    parser.add_argument('--audit', action='store_true', dest='audit',
+                        help='Fleet consistency matrix: cross-site analysis of nginx directives across all '
+                             'enabled vhosts — surfaces consolidation opportunities and missing security '
+                             'directives fleet-wide (nginx:// only)')
     parser.add_argument('--check-orphans', action='store_true', dest='check_orphans',
                         help='Find Let\'s Encrypt certs not referenced by any nginx ssl_certificate directive '
                              '(letsencrypt:// only)')

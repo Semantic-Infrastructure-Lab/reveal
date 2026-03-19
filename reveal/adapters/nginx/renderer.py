@@ -237,6 +237,97 @@ class NginxUriRenderer(TypeDispatchRenderer):
                 print(f"  • {step}")
 
     @staticmethod
+    def _render_nginx_fleet_audit(result: dict) -> None:
+        import sys
+        site_count = result.get('site_count', 0)
+        date = result.get('date', '')
+        matrix = result.get('matrix', [])
+        snippets = result.get('snippet_consistency', [])
+        nginx_conf = result.get('nginx_conf')
+        only_failures = result.get('only_failures', False)
+        has_gaps = result.get('has_gaps', False)
+
+        print(f"\nFleet Audit — ({site_count} sites, {date})\n")
+        if nginx_conf:
+            print(f"  nginx.conf: {nginx_conf}")
+        else:
+            print("  nginx.conf: not found — global column unavailable")
+        print()
+
+        if not matrix:
+            print("  No site configs found.")
+            return
+
+        # Column widths
+        col_directive = max(len(e['label']) for e in matrix)
+        col_directive = max(col_directive, len('Directive'))
+
+        header = (f"  {'Directive':<{col_directive}}  {'Global':^6}"
+                  f"  {'With':>5}  {'Without':>7}  Action")
+        separator = "  " + "─" * (len(header) - 2)
+        print(header)
+        print(separator)
+
+        _SEV_ORDER = {'HIGH': 0, 'MEDIUM': 1, 'LOW': 2, 'INFO': 3}
+        printed = 0
+        for entry in sorted(matrix, key=lambda e: (_SEV_ORDER.get(e['severity'], 9), e['label'])):
+            deprecated = entry.get('deprecated', False)
+            global_present = entry.get('global_present')
+            sites_with = entry['sites_with']
+            sites_without = entry['sites_without']
+            action = entry.get('action', '')
+            consol = entry.get('consolidation_opportunity', False)
+
+            # Skip passing checks in --only-failures mode
+            if only_failures:
+                is_gap = (not deprecated and sites_without > 0) or (deprecated and sites_with > 0)
+                if not is_gap:
+                    continue
+
+            if global_present is None:
+                global_col = '  —   '
+            elif global_present:
+                global_col = '  ✅  '
+            else:
+                global_col = '  ❌  '
+
+            with_col = f'{sites_with:>5}'
+            without_col = f'{"—":>7}' if deprecated else f'{sites_without:>7}'
+            consol_marker = ' ↑' if consol else ''
+            print(f"  {entry['label']:<{col_directive}}  {global_col}  {with_col}  {without_col}  {action}{consol_marker}")
+            printed += 1
+
+        if only_failures and printed == 0:
+            print("  ✅ No gaps found.")
+
+        print()
+
+        # Consolidation opportunities summary
+        consol_entries = [e for e in matrix if e.get('consolidation_opportunity')]
+        if consol_entries:
+            directives = ', '.join(e['label'] for e in consol_entries)
+            print(f"  ↑ Consolidation: {directives}")
+            print("    Move these to nginx.conf http{} — one change fixes all sites.")
+            print()
+
+        # Snippet consistency
+        if snippets:
+            print("  Snippet Consistency:")
+            for snip in snippets:
+                sw = snip['sites_with']
+                swo = snip['sites_without']
+                missing = snip.get('missing_from', [])
+                print(f"    {snip['snippet']}  — included by {sw}, missing from {swo}")
+                if missing and swo > 0:
+                    missing_str = ', '.join(missing[:6])
+                    extra = f' (+{len(missing) - 6} more)' if len(missing) > 6 else ''
+                    print(f"       Missing from: {missing_str}{extra}")
+            print()
+
+        if has_gaps:
+            sys.exit(2)
+
+    @staticmethod
     def render_error(error: Exception) -> None:
         import sys
         msg = str(error)

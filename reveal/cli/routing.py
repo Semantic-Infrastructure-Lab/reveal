@@ -310,6 +310,7 @@ def _build_adapter_kwargs(adapter, args: 'Namespace', scheme: Optional[str] = No
         'check_live': 'check_live',
         'check_orphans': 'check_orphans',
         'check_duplicates': 'check_duplicates',
+        'audit': 'audit',
     }
 
     for arg_name, param_name in param_mapping.items():

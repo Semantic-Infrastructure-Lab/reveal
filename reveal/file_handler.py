@@ -209,6 +209,56 @@ def _fetch_acme_ssl_data(rows: list, check_ssl_health) -> list:
     return results
 
 
+def _render_acme_json(results: list, only_failures: bool, has_failures: bool) -> None:
+    """Render ACME audit results as JSON and exit with code 2 on failures."""
+    output_rows = [r for r in results if not only_failures or r['has_failure']]
+    print(json.dumps({
+        'type': 'nginx_acme_audit',
+        'has_failures': has_failures,
+        'only_failures': only_failures,
+        'domains': output_rows,
+    }, default=str))
+    if has_failures:
+        sys.exit(2)
+
+
+def _render_acme_text(results: list, analyzer, only_failures: bool, verbose: bool,
+                      has_failures: bool) -> None:
+    """Render ACME audit results as a text table and exit with code 2 on failures."""
+    col_domain = max(len(r['domain']) for r in results)
+    col_path = max(len(r['acme_path']) for r in results)
+
+    header = (f"  {'domain':<{col_domain}}  {'acme root path':<{col_path}}"
+              f"  {'acl':<14}  ssl status")
+    print(header)
+    print("  " + "─" * (len(header) - 2))
+
+    printed = 0
+    analyzer_lines = getattr(analyzer, 'lines', [])
+    for r in results:
+        acl_col, _ = _format_acl_col(r['acl_status'])
+        ssl_col, _ = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'])
+        if only_failures and not r['has_failure']:
+            continue
+        print(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}"
+              f"  {acl_col:<14}  {ssl_col}")
+        if verbose and analyzer_lines:
+            line_no = r.get('line', 0)
+            if line_no and 0 < line_no <= len(analyzer_lines):
+                # Show the location block: the matched line + up to 3 lines ahead (closing brace)
+                snippet_lines = analyzer_lines[line_no - 1:line_no + 3]
+                snippet = ''.join(snippet_lines).rstrip()
+                for sl in snippet.splitlines():
+                    print(f"       {line_no}: {sl.rstrip()}")
+                    line_no += 1
+        printed += 1
+
+    if only_failures and printed == 0:
+        print("✅ No failures found.")
+    if has_failures:
+        sys.exit(2)
+
+
 def _handle_validate_nginx_acme(analyzer, args=None) -> None:
     """Full ACME pipeline audit: acme root + ACL + live SSL per domain (--validate-nginx-acme)."""
     if not hasattr(analyzer, 'extract_acme_roots'):
@@ -232,7 +282,6 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
 
     results = _fetch_acme_ssl_data(rows, check_ssl_health)
 
-    # Annotate each row with failure flag for both output paths
     for r in results:
         _, acl_fail = _format_acl_col(r['acl_status'])
         _, ssl_fail = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'])
@@ -241,51 +290,11 @@ def _handle_validate_nginx_acme(analyzer, args=None) -> None:
     has_failures = any(r['has_failure'] for r in results)
 
     if output_format == 'json':
-        output_rows = [r for r in results if not only_failures or r['has_failure']]
-        print(json.dumps({
-            'type': 'nginx_acme_audit',
-            'has_failures': has_failures,
-            'only_failures': only_failures,
-            'domains': output_rows,
-        }, default=str))
-        if has_failures:
-            sys.exit(2)
+        _render_acme_json(results, only_failures, has_failures)
         return
 
-    verbose = getattr(args, 'verbose', False)
-    col_domain = max(len(r['domain']) for r in results)
-    col_path = max(len(r['acme_path']) for r in results)
-
-    header = (f"  {'domain':<{col_domain}}  {'acme root path':<{col_path}}"
-              f"  {'acl':<14}  ssl status")
-    print(header)
-    print("  " + "─" * (len(header) - 2))
-
-    printed = 0
-    analyzer_lines = getattr(analyzer, 'lines', [])
-    for r in results:
-        acl_col, _ = _format_acl_col(r['acl_status'])
-        ssl_col, _ = _format_acme_ssl_col(r['ssl_status'], r['ssl_days'], r['ssl_not_after'])
-
-        if only_failures and not r['has_failure']:
-            continue
-        print(f"  {r['domain']:<{col_domain}}  {r['acme_path']:<{col_path}}"
-              f"  {acl_col:<14}  {ssl_col}")
-        if verbose and analyzer_lines:
-            line_no = r.get('line', 0)
-            if line_no and 0 < line_no <= len(analyzer_lines):
-                # Show the location block: the matched line + up to 3 lines ahead (closing brace)
-                snippet_lines = analyzer_lines[line_no - 1:line_no + 3]
-                snippet = ''.join(snippet_lines).rstrip()
-                for sl in snippet.splitlines():
-                    print(f"       {line_no}: {sl.rstrip()}")
-                    line_no += 1
-        printed += 1
-
-    if only_failures and printed == 0:
-        print("✅ No failures found.")
-    if has_failures:
-        sys.exit(2)
+    _render_acme_text(results, analyzer, only_failures,
+                      getattr(args, 'verbose', False), has_failures)
 
 
 _SEVERITY_ORDER = {'HIGH': 0, 'MEDIUM': 1, 'LOW': 2, 'INFO': 3}

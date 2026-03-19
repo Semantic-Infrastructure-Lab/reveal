@@ -534,6 +534,201 @@ def _detect_warnings(
     return warnings
 
 
+# Fleet audit check definitions
+# (id, label, severity, per_site_pattern, consolidation_eligible, deprecated, action_template)
+# consolidation_eligible: True if directive belongs in nginx.conf http{} and can be moved there
+# deprecated: True if having this directive is the problem (inverted check, e.g. X-XSS-Protection)
+_FLEET_CHECK_DEFS = [
+    ('server_tokens', 'server_tokens off',         'MEDIUM',
+     r'\bserver_tokens\s+off\b',     True,  False, 'Move to nginx.conf http{}'),
+    ('hsts',          'Strict-Transport-Security', 'HIGH',
+     r'\badd_header\s+Strict-Transport-Security\b', True, False, 'Move to nginx.conf http{}'),
+    ('xcto',          'X-Content-Type-Options',    'MEDIUM',
+     r'\badd_header\s+X-Content-Type-Options\b',  True,  False, 'Move to nginx.conf http{}'),
+    ('xfo',           'X-Frame-Options',           'MEDIUM',
+     r'\badd_header\s+X-Frame-Options\b',         True,  False, 'Move to nginx.conf http{}'),
+    ('http2',         'http2 on 443 listener',     'LOW',
+     r'\blisten\b[^;]*443\b[^;]*\bhttp2\b',       False, False,
+     'Add per-site (certbot strips http2 on renewal)'),
+    ('limit_req',     'limit_req applied',         'LOW',
+     r'\blimit_req\s',                             False, False,
+     'Add zones to nginx.conf, then limit_req per sensitive location'),
+    ('xss_prot',      'X-XSS-Protection (depr.)', 'LOW',
+     r'\badd_header\s+X-XSS-Protection\b',        False, True,
+     'Remove — deprecated since 2019, ignored by Chrome'),
+]
+
+
+def _find_nginx_conf(main_configs: List[str]) -> Optional[str]:
+    """Return the first readable nginx.conf path from the search list."""
+    for path in main_configs:
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def _audit_site_content(content: str) -> Dict[str, bool]:
+    """Check which fleet directives are present in a single site config's raw content."""
+    return {
+        check_id: bool(re.search(pattern, content, re.IGNORECASE))
+        for check_id, _label, _sev, pattern, _consol, _depr, _action in _FLEET_CHECK_DEFS
+    }
+
+
+def _extract_includes(content: str) -> List[str]:
+    """Return include directive paths from nginx config content."""
+    return [
+        m.group(1).strip()
+        for m in re.finditer(r'^\s*include\s+([^;]+);', content, re.MULTILINE)
+    ]
+
+
+def _normalize_include(path: str) -> str:
+    """Normalize an include path to a 2-component display key."""
+    parts = path.replace('\\', '/').split('/')
+    return '/'.join(parts[-2:]) if len(parts) > 1 else path
+
+
+def _build_snippet_consistency(site_records: List[Dict], site_count: int) -> List[Dict]:
+    """Find commonly-used include patterns and which sites are outliers."""
+    if site_count == 0:
+        return []
+    from collections import Counter, defaultdict as _defaultdict
+    counter: Counter = Counter()
+    sites_having: Dict[str, List[str]] = _defaultdict(list)
+
+    for record in site_records:
+        label = record['domains'][0] if record['domains'] else os.path.basename(record['file'])
+        seen: set = set()
+        for raw in record['includes']:
+            norm = _normalize_include(raw)
+            if norm not in seen:
+                seen.add(norm)
+                counter[norm] += 1
+                sites_having[norm].append(label)
+
+    threshold = max(2, site_count * 0.25)
+    all_labels = [
+        (r['domains'][0] if r['domains'] else os.path.basename(r['file']))
+        for r in site_records
+    ]
+    result = []
+    for inc_norm, count in counter.most_common():
+        if count < threshold:
+            continue
+        having = set(sites_having[inc_norm])
+        missing = [l for l in all_labels if l not in having]
+        result.append({
+            'snippet': inc_norm,
+            'sites_with': count,
+            'sites_without': len(missing),
+            'missing_from': missing,
+        })
+    return result
+
+
+def _run_fleet_audit(
+    search_dirs: List[str],
+    main_configs: List[str],
+) -> Dict[str, Any]:
+    """Build the fleet consistency matrix across all enabled nginx site configs."""
+    from datetime import date as _date
+
+    # --- Collect site configs ---
+    site_records: List[Dict] = []
+    for search_dir in search_dirs:
+        if not os.path.isdir(search_dir):
+            continue
+        for conf_file in _iter_nginx_configs(search_dir):
+            try:
+                content = Path(conf_file).read_text(errors='replace')
+            except OSError:
+                continue
+            site_records.append({
+                'file': conf_file,
+                'domains': _extract_domains_from_content(content),
+                'checks': _audit_site_content(content),
+                'includes': _extract_includes(content),
+            })
+
+    site_count = len(site_records)
+
+    # --- Read global directives from nginx.conf ---
+    nginx_conf_path = _find_nginx_conf(main_configs)
+    global_checks: Dict[str, bool] = {}
+    if nginx_conf_path:
+        try:
+            from ...analyzers.nginx import NginxAnalyzer
+            analyzer = NginxAnalyzer(nginx_conf_path)
+            for finding in analyzer.audit_global_directives():
+                global_checks[finding['id']] = finding['present']
+        except Exception:
+            pass
+
+    # --- Build matrix ---
+    matrix = []
+    for check_id, label, severity, _pattern, consol_eligible, deprecated, action_template in _FLEET_CHECK_DEFS:
+        sites_with = [r for r in site_records if r['checks'].get(check_id)]
+        sites_without = [r for r in site_records if not r['checks'].get(check_id)]
+
+        def _site_label(r: Dict) -> str:
+            return r['domains'][0] if r['domains'] else os.path.basename(r['file'])
+
+        global_present = global_checks.get(check_id)  # None if nginx.conf not found
+
+        consolidation_opportunity = (
+            consol_eligible
+            and global_present is False
+            and len(sites_with) >= site_count / 2
+        )
+
+        if deprecated:
+            action = action_template if sites_with else ''
+        elif global_present:
+            action = 'Globally set ✓'
+        elif consolidation_opportunity:
+            action = 'Move to nginx.conf http{}'
+        elif site_count > 0 and not sites_with:
+            action = 'Add to nginx.conf http{}'
+        else:
+            action = action_template
+
+        matrix.append({
+            'id': check_id,
+            'label': label,
+            'severity': severity,
+            'global_present': global_present,
+            'deprecated': deprecated,
+            'sites_with': len(sites_with),
+            'sites_without': len(sites_without),
+            'sites_with_names': [_site_label(r) for r in sites_with],
+            'sites_without_names': [_site_label(r) for r in sites_without],
+            'consolidation_opportunity': consolidation_opportunity,
+            'action': action,
+        })
+
+    # has_gaps: any missing directive that isn't a "deprecated header present" check
+    has_gaps = any(
+        e['sites_without'] > 0 and not e['deprecated']
+        for e in matrix
+    ) or any(
+        e['deprecated'] and e['sites_with'] > 0
+        for e in matrix
+    )
+
+    return {
+        'contract_version': '1.0',
+        'type': 'nginx_fleet_audit',
+        'source': 'nginx://',
+        'nginx_conf': nginx_conf_path,
+        'site_count': site_count,
+        'date': _date.today().isoformat(),
+        'matrix': matrix,
+        'snippet_consistency': _build_snippet_consistency(site_records, site_count),
+        'has_gaps': has_gaps,
+    }
+
+
 @register_adapter('nginx')
 @register_renderer(NginxUriRenderer)
 class NginxUriAdapter(ResourceAdapter):
@@ -621,9 +816,13 @@ class NginxUriAdapter(ResourceAdapter):
         server_block = _parse_server_block_for_domain(content, self.domain)
         return config_path, content, server_block
 
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, audit: bool = False, only_failures: bool = False, **kwargs) -> Dict[str, Any]:
         """Get nginx vhost summary for the domain."""
         if self.domain is None:
+            if audit:
+                result = _run_fleet_audit(_NGINX_SEARCH_DIRS, _NGINX_MAIN_CONFIGS)
+                result['only_failures'] = only_failures
+                return result
             return self._get_overview()
 
         if self.element:
