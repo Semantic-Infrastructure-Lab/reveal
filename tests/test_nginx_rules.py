@@ -1,4 +1,4 @@
-"""Tests for nginx configuration rules (N001, N002, N003, N007).
+"""Tests for nginx configuration rules (N001–N003, N007–N012).
 
 Tests pattern detection for common nginx misconfigurations.
 """
@@ -423,12 +423,17 @@ class TestNginxRulesIntegration(unittest.TestCase):
         rules = RuleRegistry.get_rules(select=['N'])
         rule_codes = [r.code for r in rules]
 
-        self.assertEqual(len(rules), 7)
+        self.assertEqual(len(rules), 12)
         self.assertIn('N001', rule_codes)
         self.assertIn('N002', rule_codes)
         self.assertIn('N003', rule_codes)
         self.assertIn('N004', rule_codes)
         self.assertIn('N007', rule_codes)
+        self.assertIn('N008', rule_codes)
+        self.assertIn('N009', rule_codes)
+        self.assertIn('N010', rule_codes)
+        self.assertIn('N011', rule_codes)
+        self.assertIn('N012', rule_codes)
 
 
 class TestN004ACMEPathInconsistency(unittest.TestCase):
@@ -961,6 +966,352 @@ server {
 
     def test_severity_is_low(self):
         """N007 should be LOW severity."""
+        from reveal.rules.base import Severity
+        self.assertEqual(self.rule.severity, Severity.LOW)
+
+
+class TestN008MissingHSTS(unittest.TestCase):
+    """Tests for N008: HTTPS server missing Strict-Transport-Security."""
+
+    def setUp(self):
+        from reveal.rules.infrastructure.N008 import N008
+        self.rule = N008()
+
+    def test_detects_missing_hsts(self):
+        """Should fire when 443 server block lacks HSTS header."""
+        content = """
+server {
+    listen 443 ssl;
+    server_name example.com;
+    ssl_certificate /etc/letsencrypt/live/example.com/fullchain.pem;
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn("Strict-Transport-Security", detections[0].message)
+
+    def test_no_detection_when_hsts_present(self):
+        """Should not fire when HSTS header is set inline."""
+        content = """
+server {
+    listen 443 ssl;
+    server_name example.com;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_no_detection_for_http_only_server(self):
+        """Should not fire for port-80 only server blocks."""
+        content = """
+server {
+    listen 80;
+    server_name example.com;
+    return 301 https://$host$request_uri;
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_suppression_comment(self):
+        """Should not fire when # reveal:allow-no-hsts is present."""
+        content = """
+server {
+    listen 443 ssl;
+    server_name example.com;
+    # reveal:allow-no-hsts
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_detects_hsts_via_include(self):
+        """Should not fire when HSTS comes from an included snippet."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snippet = os.path.join(tmpdir, "security-headers.conf")
+            with open(snippet, 'w') as fh:
+                fh.write('add_header Strict-Transport-Security "max-age=31536000" always;\n')
+
+            conf_file = os.path.join(tmpdir, "site.conf")
+            content = f"""
+server {{
+    listen 443 ssl;
+    server_name example.com;
+    include {snippet};
+}}
+"""
+            detections = self.rule.check(conf_file, None, content)
+            self.assertEqual(len(detections), 0)
+
+    def test_severity_is_high(self):
+        from reveal.rules.base import Severity
+        self.assertEqual(self.rule.severity, Severity.HIGH)
+
+
+class TestN009ServerTokens(unittest.TestCase):
+    """Tests for N009: server_tokens not disabled."""
+
+    def setUp(self):
+        from reveal.rules.infrastructure.N009 import N009
+        self.rule = N009()
+
+    def test_detects_missing_server_tokens(self):
+        """Should fire when a file with server blocks has no server_tokens off."""
+        content = """
+server {
+    listen 80;
+    server_name example.com;
+}
+"""
+        detections = self.rule.check("nginx.conf", None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn("server_tokens", detections[0].message)
+
+    def test_no_detection_when_tokens_disabled(self):
+        """Should not fire when server_tokens off is present anywhere in file."""
+        content = """
+http {
+    server_tokens off;
+}
+server {
+    listen 80;
+    server_name example.com;
+}
+"""
+        detections = self.rule.check("nginx.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_no_detection_without_server_block(self):
+        """Should not fire on files with no server blocks (e.g. snippet files)."""
+        content = """
+add_header X-Frame-Options SAMEORIGIN;
+add_header X-Content-Type-Options nosniff;
+"""
+        detections = self.rule.check("security-headers.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_suppression_comment(self):
+        content = """
+server {
+    listen 80;
+    # reveal:allow-server-tokens
+}
+"""
+        detections = self.rule.check("nginx.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_severity_is_medium(self):
+        from reveal.rules.base import Severity
+        self.assertEqual(self.rule.severity, Severity.MEDIUM)
+
+
+class TestN010DeprecatedXXSSProtection(unittest.TestCase):
+    """Tests for N010: Deprecated X-XSS-Protection header."""
+
+    def setUp(self):
+        from reveal.rules.infrastructure.N010 import N010
+        self.rule = N010()
+
+    def test_detects_xss_protection_inline(self):
+        """Should fire when X-XSS-Protection is set directly in the config."""
+        content = """
+server {
+    listen 443 ssl;
+    add_header X-XSS-Protection "1; mode=block";
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn("X-XSS-Protection", detections[0].message)
+
+    def test_no_detection_when_header_absent(self):
+        """Should not fire when X-XSS-Protection is not present."""
+        content = """
+server {
+    listen 443 ssl;
+    add_header X-Frame-Options SAMEORIGIN;
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_suppression_comment(self):
+        content = """
+server {
+    listen 443 ssl;
+    add_header X-XSS-Protection "1; mode=block";
+    # reveal:allow-xss-protection
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_detects_via_snippet(self):
+        """Should fire referencing snippet file when header comes from an include."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snippet = os.path.join(tmpdir, "tia-security-headers.conf")
+            with open(snippet, 'w') as fh:
+                fh.write('add_header X-XSS-Protection "1; mode=block";\n')
+
+            conf_file = os.path.join(tmpdir, "site.conf")
+            content = f"""
+server {{
+    listen 443 ssl;
+    server_name example.com;
+    include {snippet};
+}}
+"""
+            detections = self.rule.check(conf_file, None, content)
+            self.assertEqual(len(detections), 1)
+            self.assertIn("tia-security-headers.conf", detections[0].message)
+
+    def test_severity_is_low(self):
+        from reveal.rules.base import Severity
+        self.assertEqual(self.rule.severity, Severity.LOW)
+
+
+class TestN011SSLMissingHTTP2(unittest.TestCase):
+    """Tests for N011: SSL listener missing http2."""
+
+    def setUp(self):
+        from reveal.rules.infrastructure.N011 import N011
+        self.rule = N011()
+
+    def test_detects_missing_http2(self):
+        """Should fire when listen 443 ssl lacks http2."""
+        content = """
+server {
+    listen 443 ssl;
+    server_name example.com;
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn("http2", detections[0].message)
+
+    def test_no_detection_with_http2_inline(self):
+        """Should not fire when http2 is present on the listen line."""
+        content = """
+server {
+    listen 443 ssl http2;
+    server_name example.com;
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_no_detection_with_http2_on_directive(self):
+        """Should not fire when 'http2 on;' standalone directive is present."""
+        content = """
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name example.com;
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_no_detection_for_http_listener(self):
+        """Should not fire for port 80 listeners."""
+        content = """
+server {
+    listen 80;
+    server_name example.com;
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_suppression_comment(self):
+        content = """
+server {
+    listen 443 ssl;
+    # reveal:allow-no-http2
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_detects_ipv6_listener(self):
+        """Should fire for [::]:443 ssl without http2."""
+        content = """
+server {
+    listen [::]:443 ssl;
+    server_name example.com;
+}
+"""
+        detections = self.rule.check("site.conf", None, content)
+        self.assertEqual(len(detections), 1)
+
+    def test_severity_is_low(self):
+        from reveal.rules.base import Severity
+        self.assertEqual(self.rule.severity, Severity.LOW)
+
+
+class TestN012NoRateLimiting(unittest.TestCase):
+    """Tests for N012: No rate limiting on server block."""
+
+    def setUp(self):
+        from reveal.rules.infrastructure.N012 import N012
+        self.rule = N012()
+
+    def test_detects_missing_rate_limit_with_zone(self):
+        """Should fire LOW when limit_req_zone exists but server uses no limit_req."""
+        content = """
+limit_req_zone $binary_remote_addr zone=default:10m rate=10r/s;
+
+server {
+    listen 80;
+    server_name example.com;
+}
+"""
+        detections = self.rule.check("nginx.conf", None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn("limit_req_zone is configured", detections[0].message)
+        from reveal.rules.base import Severity
+        self.assertEqual(detections[0].severity, Severity.LOW)
+
+    def test_detects_missing_rate_limit_no_zone_is_medium(self):
+        """Should fire MEDIUM when no limit_req_zone defined at all."""
+        content = """
+server {
+    listen 80;
+    server_name example.com;
+}
+"""
+        detections = self.rule.check("nginx.conf", None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn("no limit_req_zone defined", detections[0].message)
+        from reveal.rules.base import Severity
+        self.assertEqual(detections[0].severity, Severity.MEDIUM)
+
+    def test_no_detection_when_limit_req_present(self):
+        """Should not fire when limit_req is applied in the server block."""
+        content = """
+limit_req_zone $binary_remote_addr zone=default:10m rate=10r/s;
+
+server {
+    listen 80;
+    limit_req zone=default burst=20 nodelay;
+    server_name example.com;
+}
+"""
+        detections = self.rule.check("nginx.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_suppression_comment(self):
+        content = """
+server {
+    listen 80;
+    # reveal:allow-no-rate-limit
+}
+"""
+        detections = self.rule.check("nginx.conf", None, content)
+        self.assertEqual(len(detections), 0)
+
+    def test_default_severity_is_low(self):
         from reveal.rules.base import Severity
         self.assertEqual(self.rule.severity, Severity.LOW)
 

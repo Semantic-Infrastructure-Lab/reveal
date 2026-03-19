@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-18 (strong-temple-0318 — BACK-092–094 resolved: OOM perf bugs fixed in `reveal check`/`health`)
+> **Last updated**: 2026-03-19 (universal-journey-0319 — BACK-085–089 shipped: N008–N012 nginx security rules)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -497,7 +497,7 @@ Refactor path: extract `_render_acme_json(results, only_failures)` and `_render_
 
 ### BACK-085: N008 — HTTPS server missing `Strict-Transport-Security`
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session universal-journey-0319)
 **Value**: High | **Lift**: Small
 **Source**: Real tia-proxy audit (onyx-crystal-0318) — 46/46 sites affected
 
@@ -515,7 +515,7 @@ N008  HIGH  'motion.mytia.net' (line 8): HTTPS site missing Strict-Transport-Sec
 
 ### BACK-086: N009 — `server_tokens` not disabled
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session universal-journey-0319)
 **Value**: Medium | **Lift**: Small
 **Source**: Real tia-proxy audit (onyx-crystal-0318) — 32/46 sites affected
 
@@ -533,7 +533,7 @@ N009  MEDIUM  'belize.mytia.net' (line 1): server_tokens not disabled
 
 ### BACK-087: N010 — Deprecated `X-XSS-Protection` header
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session universal-journey-0319)
 **Value**: Low | **Lift**: Small
 **Source**: Real tia-proxy audit (onyx-crystal-0318) — 38/46 sites via shared snippet
 
@@ -551,7 +551,7 @@ N010  LOW  'belize.mytia.net' via snippets/tia-security-headers.conf (line 6): X
 
 ### BACK-088: N011 — SSL listener without `http2`
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session universal-journey-0319)
 **Value**: Low | **Lift**: Small
 **Source**: Real tia-proxy audit (onyx-crystal-0318) — 25/46 sites affected
 
@@ -570,7 +570,7 @@ N011  LOW  'patmatch.mytia.net' (line 9): SSL listener missing http2
 
 ### BACK-089: N012 — No rate limiting on server block
 
-**Status**: 🔲 Not started
+**Status**: ✅ Shipped (session universal-journey-0319)
 **Value**: Low | **Lift**: Small
 **Source**: Real tia-proxy audit (onyx-crystal-0318) — 45/46 sites affected
 

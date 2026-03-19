@@ -132,6 +132,11 @@ class RulePrefix(Enum):
     # N005: Timeout/buffer values outside safe operational ranges
     # N006: send_timeout too short for client_max_body_size (HIGH)
     # N007: ssl_stapling enabled on cert without OCSP responder URL (LOW)
+    # N008: HTTPS server missing Strict-Transport-Security header (HIGH)
+    # N009: server_tokens not disabled — nginx version exposed (MEDIUM)
+    # N010: Deprecated X-XSS-Protection header present (LOW)
+    # N011: SSL listener missing http2 (LOW)
+    # N012: No rate limiting on server block (LOW/MEDIUM)
 
     # Validation (V) - reveal self-validation
     V = "V"  # Reveal internal validation rules
