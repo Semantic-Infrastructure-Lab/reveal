@@ -286,8 +286,8 @@ class TestImportsAdapter:
         (tmp_path / "a.py").write_text("import os\nimport sys\n")
         (tmp_path / "b.py").write_text("from pathlib import Path\n")
 
-        adapter = ImportsAdapter()
-        result = adapter.get_structure(f"imports://{tmp_path}")
+        adapter = ImportsAdapter(str(tmp_path))
+        result = adapter.get_structure()
 
         assert 'type' in result
         assert 'files' in result or 'error' not in result
@@ -298,15 +298,13 @@ class TestImportsAdapter:
         (tmp_path / "a.py").write_text("from . import b\n")
         (tmp_path / "b.py").write_text("from . import a\n")
 
-        adapter = ImportsAdapter()
-
         # Test flag-style param (?circular)
-        result_flag = adapter.get_structure(f"imports://{tmp_path}?circular")
+        result_flag = ImportsAdapter(str(tmp_path), 'circular').get_structure()
         assert result_flag.get('type') == 'circular_dependencies'
         assert 'cycles' in result_flag
 
         # Test key-value param (?circular=true)
-        result_kv = adapter.get_structure(f"imports://{tmp_path}?circular=true")
+        result_kv = ImportsAdapter(str(tmp_path), 'circular=true').get_structure()
         assert result_kv.get('type') == 'circular_dependencies'
         assert 'cycles' in result_kv
 
@@ -315,45 +313,38 @@ class TestImportsAdapter:
 
     def test_path_not_found(self):
         """Test error handling for non-existent paths."""
-        adapter = ImportsAdapter()
-        result = adapter.get_structure("imports:///nonexistent/path")
+        adapter = ImportsAdapter('/nonexistent/path')
+        result = adapter.get_structure()
 
         assert 'error' in result
         assert 'Path not found' in result['error']
 
     def test_unused_query_param(self, tmp_path):
         """Test ?unused query parameter."""
-        adapter = ImportsAdapter()
-
         # Create file with unused imports
         (tmp_path / "test.py").write_text("import os\nimport sys\n\nprint('hello')\n")
 
-        # Test unused detection
-        result = adapter.get_structure(f"imports://{tmp_path}?unused")
+        result = ImportsAdapter(str(tmp_path), 'unused').get_structure()
         assert result['type'] == 'unused_imports'
         assert isinstance(result.get('unused'), list)
 
     def test_violations_query_param(self, tmp_path):
         """Test ?violations query parameter."""
-        adapter = ImportsAdapter()
-
         # Create test file
         (tmp_path / "test.py").write_text("import os\n\nprint('hello')\n")
 
         # Test violations (placeholder - actual layer violations need config)
-        result = adapter.get_structure(f"imports://{tmp_path}?violations")
+        result = ImportsAdapter(str(tmp_path), 'violations').get_structure()
         assert result['type'] == 'layer_violations'
         assert 'violations' in result
 
     def test_get_element(self, tmp_path):
         """Test get_element method for specific file."""
-        adapter = ImportsAdapter()
-
         # Create test file
         (tmp_path / "test.py").write_text("import os\nimport sys\n")
 
-        # First, analyze the directory
-        adapter.get_structure(f"imports://{tmp_path}")
+        adapter = ImportsAdapter(str(tmp_path))
+        adapter.get_structure()
 
         # Then get specific element
         result = adapter.get_element("test.py")
@@ -394,8 +385,8 @@ class TestStdlibShadowing:
         # Create a directory structure with a local logging.py
         (tmp_path / "logging.py").write_text("import logging\n\nlogger = logging.getLogger(__name__)\n")
 
-        adapter = ImportsAdapter()
-        result = adapter.get_structure(f"imports://{tmp_path}?circular")
+        adapter = ImportsAdapter(str(tmp_path), 'circular')
+        result = adapter.get_structure()
 
         # Should find no cycles - the self-reference should be filtered out
         assert result['type'] == 'circular_dependencies'
@@ -409,8 +400,8 @@ class TestStdlibShadowing:
         # Create logging.py that imports logging (stdlib)
         (tmp_path / "logging.py").write_text("import logging\n")
 
-        adapter = ImportsAdapter()
-        adapter.get_structure(f"imports://{tmp_path}")
+        adapter = ImportsAdapter(str(tmp_path))
+        adapter.get_structure()
 
         # Get the internal graph
         graph = adapter._graph
@@ -506,8 +497,8 @@ class TestImportsRenderer:
         test_file = tmp_path / "test.py"
         test_file.write_text("import os\nimport sys\n")
 
-        adapter = ImportsAdapter()
-        result = adapter.get_structure(f"imports://{tmp_path}")
+        adapter = ImportsAdapter(str(tmp_path))
+        result = adapter.get_structure()
 
         # Capture stdout
         old_stdout = sys.stdout
@@ -533,8 +524,8 @@ class TestImportsRenderer:
         test_file = tmp_path / "test.py"
         test_file.write_text("import os\n")
 
-        adapter = ImportsAdapter()
-        result = adapter.get_structure(f"imports://{tmp_path}")
+        adapter = ImportsAdapter(str(tmp_path))
+        result = adapter.get_structure()
 
         # Capture stdout
         old_stdout = sys.stdout
@@ -578,8 +569,8 @@ class TestImportsRenderer:
         test_file = tmp_path / "test.py"
         test_file.write_text("import os  # unused\nprint('hello')\n")
 
-        adapter = ImportsAdapter()
-        result = adapter.get_structure(f"imports://{tmp_path}?unused")
+        adapter = ImportsAdapter(str(tmp_path), 'unused')
+        result = adapter.get_structure()
 
         # Capture stdout
         old_stdout = sys.stdout

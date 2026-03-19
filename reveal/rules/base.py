@@ -412,5 +412,3 @@ class BaseRule(ABC):
         return f"{self.code}: {self.message}"
 
 
-
-T = 'T'

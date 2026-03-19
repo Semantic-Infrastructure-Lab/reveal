@@ -15,7 +15,6 @@ Usage:
 import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
-from urllib.parse import urlparse
 
 from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
@@ -358,49 +357,36 @@ from ..analyzers.imports.base import get_extractor, get_all_extensions, get_supp
 class ImportsAdapter(ResourceAdapter):
     """Analyze import relationships in codebases."""
 
-    def __init__(self):
-        """Initialize imports adapter."""
+    def __init__(self, path: str = '.', query: Optional[str] = None):
+        """Initialize imports adapter.
+
+        Args:
+            path: Directory or file path to analyze (e.g., 'src', '/abs/path')
+            query: Query string portion (e.g., 'unused', 'circular=true')
+        """
         self._graph: Optional[ImportGraph] = None
         self._symbols_by_file: Dict[Path, set] = {}
-        self._target_path: Optional[Path] = None
+        # Handle both absolute and relative paths:
+        # - netloc component from URI parsing (imports://relative/path → 'relative/path')
+        # - absolute path (imports:///absolute/path → '/absolute/path')
+        self._target_path: Optional[Path] = Path(path).resolve() if path else None
+        self._query_params = parse_query_params(query or '')
 
-    def get_structure(self, uri: str = '', **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> Dict[str, Any]:
         """Analyze imports in directory or file.
 
         Args:
-            uri: imports:// URI (e.g., 'imports://src?unused')
-            **kwargs: Additional parameters
+            **kwargs: Additional parameters (unused, circular, violations flags)
 
         Returns:
             Dictionary with import analysis results
         """
-        # Parse URI
-        parsed = urlparse(uri if uri else 'imports://')
-
-        # Handle both absolute and relative paths:
-        # - imports:///absolute/path → netloc='', path='/absolute/path' → use path as-is
-        # - imports://relative/path  → netloc='relative', path='/path' → combine netloc + path
-        # - imports://. or imports:// → netloc='', path='' → use current dir
-        if parsed.netloc:
-            # Relative path with host component (imports://reveal/path)
-            path_str = f"{parsed.netloc}{parsed.path}"
-        elif parsed.path:
-            # Absolute path (imports:///absolute/path)
-            path_str = parsed.path
-        else:
-            # Default to current directory
-            path_str = '.'
-
-        # Parse query params - support both flag-style (?circular) and key-value (?circular=true)
-        query_params = parse_query_params(parsed.query or '')
-
-        # Resolve target path
-        target_path = Path(path_str).resolve()
+        target_path = self._target_path or Path('.').resolve()
+        query_params = self._query_params
 
         if not target_path.exists():
             return {
-                'error': f"Path not found: {path_str}",
-                'uri': uri
+                'error': f"Path not found: {target_path}",
             }
 
         # Extract imports and build graph

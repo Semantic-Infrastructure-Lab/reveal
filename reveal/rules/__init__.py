@@ -427,10 +427,15 @@ class RuleRegistry:
         sorted_rules = sorted(rules, key=lambda r: r.code)
         return [cls._rule_to_dict(rule_class) for rule_class in sorted_rules]
 
-    @staticmethod
-    def _apply_rule_config(rule, rule_config: dict) -> None:
+    _ALLOWED_RULE_CONFIG_KEYS = frozenset({'enabled', 'severity', 'threshold', 'message', 'description'})
+
+    @classmethod
+    def _apply_rule_config(cls, rule, rule_config: dict) -> None:
         """Apply config key-value pairs to a rule instance."""
         for key, value in rule_config.items():
+            if key not in cls._ALLOWED_RULE_CONFIG_KEYS:
+                logger.warning(f"Unknown rule config key {key!r} for rule {rule.code} — ignored")
+                continue
             if hasattr(rule, key):
                 setattr(rule, key, value)
 
@@ -502,10 +507,6 @@ class RuleRegistry:
                 )
 
         return detections
-
-
-# Auto-discover on import
-RuleRegistry.discover()
 
 
 # Export main classes
