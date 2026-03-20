@@ -12,13 +12,21 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-03-20 (sessions storm-eruption-0320, electric-ember-0320)
+## [Unreleased] - 2026-03-20 (sessions storm-eruption-0320, electric-ember-0320, oracular-anvil-0320)
 
 ### Refactored
 - **BACK-098: Split `handlers.py` and `routing.py` into subpackages** (`reveal/cli/`): `handlers.py` (1,104 lines) split into `handlers/introspection.py` (informational flags), `handlers/batch.py` (stdin/batch processing), `handlers/decorators.py` (--decorator-stats). `routing.py` (744 lines) split into `routing/uri.py` (adapter dispatch pipeline) and `routing/file.py` (file/directory routing and guards). All public names re-exported from `__init__.py`; backward-compat aliases preserved. 12 test mock patch targets updated to correct submodule locations. (session electric-ember-0320)
+- **`calls/index.py` complexity reduction** (`adapters/calls/index.py`): `find_uncalled` reduced from 126 → 84 lines (eliminating ❌ C902); `build_callers_index` and `find_callers` depth reduced from 5 → 3/2 (eliminating C905). Extracted 7 focused helpers: `_get_decorator_names`, `_is_method_elem`, `_is_implicit_element`, `_uncalled_entry_mtime`, `_index_callee`, `_bfs_level`, and module-level `_IMPLICIT_DECORATORS` constant. (session oracular-anvil-0320)
 
 ### Fixed
+- **Markdown ambiguous heading match now concatenates** (`analyzers/markdown.py`): When a partial heading query matched multiple sections (e.g. `"BACK-09"` matching 4 entries), reveal crashed with `ValueError: Ambiguous heading match`. Now returns all matching sections concatenated. Test updated from asserting ValueError to asserting both headings appear in the combined source. (session oracular-anvil-0320)
 - **Markdown section extraction substring match** (`analyzers/markdown.py`): Section extraction was exact-match only (case-insensitive). Agents passing partial heading text — especially emoji-prefixed headings like `🆕 Critical Status Corrections Since Last Doc` — received "Element not found" errors. Fix: exact match is tried first; if no exact match, falls back to substring match when exactly one heading contains the query; raises `ValueError` listing all candidates when multiple headings match. 4 new tests in `TestMarkdownSectionSubstringMatch`. (session storm-eruption-0320)
+
+### Tests
+- **Fixed tautology in `test_extract_element_at_line_no_match`** (`tests/test_display_element.py`): Assertion was `assert result is None or result is not None` (always passes). Fixed to `assert result is None`. Added `test_route_to_single_line_fallback_context_window` (verifies ±10 window fires for module-level lines) and strengthened `test_route_to_single_line_extraction` to assert function name and source content. (session oracular-anvil-0320)
+
+### Docs
+- **`:N` line-number extraction documented** (`cli/parser.py`, `docs/QUICK_START.md`, `docs/RECIPES.md`): The `element` argument help text now lists all syntaxes (`:N`, bare integer, `:N-M`, `@N`, `Class.method`). QUICK_START Example 3 adds line-number extraction examples. RECIPES "Find the code behind the error" now leads with `reveal file.py :166` workflow. (session oracular-anvil-0320)
 
 ## [0.65.1] - 2026-03-19 (session yapaxe-0319)
 
