@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions strong-temple-0318, cooling-current-0318, pulsing-cluster-0318, violet-brush-0318, crystal-laser-0318, universal-journey-0319, xaxegotu-0319, fierce-pegasus-0319, bright-star-0319)
+## [0.65.0] - 2026-03-19 (sessions strong-temple-0318, cooling-current-0318, pulsing-cluster-0318, violet-brush-0318, crystal-laser-0318, universal-journey-0319, xaxegotu-0319, fierce-pegasus-0319, bright-star-0319)
 
 ### Added
 - **BACK-080: HTTP probe mode** (`adapters/ssl/probe.py`, `--probe-http`, `--probe`): Live HTTP→HTTPS redirect verification and security header check. `reveal ssl://domain --probe-http` follows the redirect chain from port 80, verifies the server redirects to HTTPS, and captures HSTS / X-Content-Type-Options / X-Frame-Options / CSP headers from the final HTTPS endpoint — no second request, headers come from the last redirect hop directly. `reveal nginx://domain --probe` appends the same probe to the normal vhost summary. New `probe.py` module is fully testable via injectable `_opener`. 20 new tests in `test_http_probe.py`. (session bright-star-0319)

@@ -1,11 +1,24 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-19 (xaxegotu-0319 — BACK-079+091 shipped: letsencrypt:// adapter + --global-audit)
+> **Last updated**: 2026-03-19 (roaring-wind-0319 — v0.65.0 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.65.0
+- ✅ **`letsencrypt://` adapter** — cert inventory, orphan detection (cross-ref nginx ssl_certificate), duplicate detection (identical SANs). 33 new tests.
+- ✅ **`--probe-http` / `--probe`** — live HTTP→HTTPS redirect chain verification + security header check (HSTS, XCTO, XFO, CSP). `ssl://domain --probe-http`, `nginx://domain --probe`. 20 new tests.
+- ✅ **`reveal nginx:// --audit`** — fleet consistency matrix: 7 checks per site, consolidation hints, snippet consistency analysis. `--only-failures`, `--format json`, exit 2 on gaps. 43 new tests.
+- ✅ **`reveal nginx.conf --global-audit`** — http{} block audit, 10 directives (server_tokens, HSTS, XCTO, XFO, ssl_protocols, resolver, limit_req_zone, client_max_body_size, gzip, worker_processes). 42 new tests.
+- ✅ **N008–N012: 5 nginx security rules** — sourced from real tia-proxy fleet audit (45–46/46 sites affected each): missing HSTS (HIGH), server_tokens on (MEDIUM), deprecated X-XSS-Protection (LOW), SSL listener missing http2 (LOW), no rate limiting (LOW/MEDIUM). Rule count: 64 → 69. 37 new tests.
+- ✅ **xlsx Power Query M extraction** (`?powerquery=list/show/<name>`), named ranges (`?names=list`), external connections (`?connections=list/show`), pbixray Tier 2 for modern Power BI xlsx. Large sheet guard (>50 MB). Column count from dimension ref. 33+ new tests.
+- ✅ **`help://relationships`** — adapter ecosystem map: 5 clusters, pairwise relationships, 5 power pairs. Related-adapter breadcrumbs expanded to all 22 adapters. 8 new tests.
+- ✅ **Bug fixes**: exit code severity inverted (failures→2, warnings→0), budget off-by-one (always return ≥1 item), port 0 falsy, `_extract_includes` inline include regex anchor.
+- ✅ **Refactors**: `ImportsAdapter` adapter contract, lazy rule discovery, rule config allowlist, `ELEMENT_NAMESPACE_ADAPTER` class attribute.
+- ✅ **BACK-092/093/094: OOM fixes** — streaming `reveal check`, expanded excluded dirs, health file count guard + timeout. 8 new tests.
+- ✅ **~6,810 tests** — up from ~6,560.
 
 ### v0.64.0
 - ✅ **`reveal deps`** — dependency health dashboard: circular deps, unused imports, top packages, CI exit codes. 59 new tests.
