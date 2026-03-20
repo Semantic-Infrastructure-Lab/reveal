@@ -1,11 +1,17 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-19 (roaring-wind-0319 — v0.65.0 released)
+> **Last updated**: 2026-03-19 (yapaxe-0319 — v0.65.1 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.65.1
+- ✅ **Windows `claude://` UUID fix** — session listing truncated 36-char UUIDs to 34 chars; column widened + suffix match added so truncated IDs from prior installs still resolve.
+- ✅ **Windows `claude://` projects dir** — `_resolve_claude_projects_dir()` checks `~/.claude/projects` first (standard on all platforms), `%APPDATA%\Claude\projects` as fallback.
+- ✅ **CI fix** — `mcp>=1.0.0` + `pygit2>=1.14.0` added to `[dev]` extras; all 6 CI jobs (Linux/Mac/Windows × Python 3.10/3.12) were failing.
+- ✅ **Windows letsencrypt path separator** — `_find_orphans` now uses `rsplit('/', 1)` instead of `Path.parent` to keep server paths as POSIX.
 
 ### v0.65.0
 - ✅ **`letsencrypt://` adapter** — cert inventory, orphan detection (cross-ref nginx ssl_certificate), duplicate detection (identical SANs). 33 new tests.

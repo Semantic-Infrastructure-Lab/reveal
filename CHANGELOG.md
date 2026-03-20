@@ -12,6 +12,15 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.65.1] - 2026-03-19 (session yapaxe-0319)
+
+### Fixed
+- **Windows `claude://` UUID truncation** (`adapters/claude/renderer.py`): Session listing truncated 36-char UUIDs to 34 chars (`name[-34:]` cut first 2 chars). Column width widened to 36; truncation changed to `name[:33] + '...'` for long display names. (session roaring-wind-0319)
+- **Windows `claude://` suffix match** (`adapters/claude/adapter.py`): Added Strategy 3 suffix match in `_find_conversation` so truncated UUIDs from prior installs still resolve. (session roaring-wind-0319)
+- **Windows `claude://` projects dir** (`adapters/claude/adapter.py`): `_resolve_claude_projects_dir()` now checks `~/.claude/projects` first (standard on all platforms including Windows), with `%APPDATA%\Claude\projects` as fallback for non-standard installs. (session roaring-wind-0319)
+- **CI: `mcp` and `pygit2` missing from dev extras** (`pyproject.toml`): All 6 CI jobs (Linux/Mac/Windows × Python 3.10/3.12) failed because `mcp>=1.0.0` and `pygit2>=1.14.0` were not listed under `[project.optional-dependencies] dev`. (session roaring-wind-0319)
+- **Windows letsencrypt path separator** (`adapters/letsencrypt/adapter.py`): `_find_orphans` used `str(Path(cert_path).parent)` which returned `\`-separated paths on Windows; changed to `cert_path.rsplit('/', 1)[0]` since server cert paths are always POSIX. (session roaring-wind-0319)
+
 ## [0.65.0] - 2026-03-19 (sessions strong-temple-0318, cooling-current-0318, pulsing-cluster-0318, violet-brush-0318, crystal-laser-0318, universal-journey-0319, xaxegotu-0319, fierce-pegasus-0319, bright-star-0319)
 
 ### Added
