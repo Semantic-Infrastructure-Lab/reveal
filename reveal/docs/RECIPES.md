@@ -218,7 +218,15 @@ reveal python://module/requests
 ### Find the code behind the error
 
 ```bash
-# Locate error handling
+# Traceback says "file.py, line 166" — go straight to the enclosing function
+reveal src/app.py :166              # element at line 166
+reveal src/app.py 166               # bare integer works too
+
+# grep -n gives you line numbers — use them directly
+grep -n "raise ValueError" src/app.py
+reveal src/app.py :73               # jump to that element
+
+# Locate error handling by name
 reveal 'ast://src?name=*error*'
 reveal 'ast://src?name=*exception*'
 

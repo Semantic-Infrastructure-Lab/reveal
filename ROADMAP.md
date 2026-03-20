@@ -678,7 +678,7 @@ Natural companion to `--audit` (BACK-090): `--audit` surfaces the fleet pattern,
 
 ### BACK-099: `reveal file.py :N` — extract the semantic unit at a line number
 
-**Status**: Open
+**Status**: ✅ Already shipped (pre-existing, confirmed working oracular-anvil-0320)
 **Value**: Medium | **Lift**: Small
 
 When you have a line number (from a traceback, `grep -n`, a GitHub link, a diff), you want the *enclosing semantic element* — not raw lines. This is distinctly Reveal's territory: grep gives you the line, Reveal gives you the function/class/section that owns it.

@@ -121,6 +121,13 @@ app.py:15-27 | load_config
 
 **Token cost:** ~50 tokens (vs 7,500 for full file)
 
+**Also works with line numbers** — from a traceback, grep output, or GitHub link:
+```bash
+reveal src/app.py :166              # Element containing line 166
+reveal src/app.py 166               # Same — bare integer works too
+reveal src/app.py :42-80            # Exact line range
+```
+
 **Same pattern for markdown:**
 ```bash
 reveal README.md "Installation"      # Extract section by heading

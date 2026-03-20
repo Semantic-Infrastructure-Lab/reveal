@@ -187,7 +187,7 @@ def _build_global_options_parser() -> argparse.ArgumentParser:
 def _add_positional_arguments(parser: argparse.ArgumentParser, version: str) -> None:
     """Add positional arguments and --version (must go on the parser, not a group)."""
     parser.add_argument('path', nargs='?', help='File or directory to reveal')
-    parser.add_argument('element', nargs='?', help='Element to extract (function, class, etc.)')
+    parser.add_argument('element', nargs='?', help='Element to extract: name (load_config), Class.method, :N or bare integer (line number → enclosing element), :N-M (line range), @N (Nth element)')
     parser.add_argument('--version', action='version', version=f'reveal {version}')
 
 
