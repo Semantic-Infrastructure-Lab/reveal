@@ -61,6 +61,9 @@ from .analyzers import (  # noqa: F401
 # Import type definitions to auto-register them in TypeRegistry
 from .schemas import python  # noqa: F401
 
+# High-level Python API — programmatic access without subprocess overhead
+from .api import analyze, check, element, query
+
 __all__ = [
     '__version__',
     'FileAnalyzer',
@@ -68,4 +71,9 @@ __all__ = [
     'register',
     'get_analyzer',
     'get_all_analyzers',
+    # SDK
+    'analyze',
+    'element',
+    'query',
+    'check',
 ]
