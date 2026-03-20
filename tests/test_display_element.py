@@ -157,8 +157,7 @@ class TestExtractionRouting:
             os.unlink(temp_path)
 
     def test_route_to_single_line_extraction(self):
-        """Test routing to single line extraction (at_line)."""
-        # Create a Python file with a simple function
+        """Test routing to single line extraction (at_line) returns enclosing function."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
             f.write('def simple():\n    pass\n')
             f.flush()
@@ -169,11 +168,34 @@ class TestExtractionRouting:
             analyzer_class = get_analyzer(temp_path)
             analyzer = analyzer_class(temp_path)
 
-            syntax = {'type': 'line', 'start_line': 1, 'end_line': None}
-            result = _extract_by_syntax(analyzer, ':1', syntax)
+            syntax = {'type': 'line', 'start_line': 2, 'end_line': None}
+            result = _extract_by_syntax(analyzer, ':2', syntax)
 
-            # Should find the function at line 1
             assert result is not None
+            assert 'simple' in result['name']
+            assert 'def simple' in result['source']
+        finally:
+            os.unlink(temp_path)
+
+    def test_route_to_single_line_fallback_context_window(self):
+        """Line between elements falls back to ±10 context window."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write('def func_a():\n    pass\n\n# module-level comment\nx = 1\n\ndef func_b():\n    pass\n')
+            f.flush()
+            temp_path = f.name
+
+        try:
+            from reveal.registry import get_analyzer
+            analyzer_class = get_analyzer(temp_path)
+            analyzer = analyzer_class(temp_path)
+
+            # Line 5 (x = 1) is module-level — not inside any function
+            syntax = {'type': 'line', 'start_line': 5, 'end_line': None}
+            result = _extract_by_syntax(analyzer, ':5', syntax)
+
+            # Falls back to context window — result has a lines:N-M name
+            assert result is not None
+            assert result['line_start'] <= 5 <= result['line_end']
         finally:
             os.unlink(temp_path)
 
@@ -482,9 +504,9 @@ class TestLineBasedExtraction:
         assert result is None
 
     def test_extract_element_at_line_no_match(self):
-        """Test _extract_element_at_line when no element contains target line."""
+        """Test _extract_element_at_line returns None when no element contains target line."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            # Function on lines 1-2, comment on line 4
+            # Function on lines 1-2, then module-level code on line 4
             f.write('def func():\n    pass\n\n# Comment only\n')
             f.flush()
             temp_path = f.name
@@ -494,11 +516,9 @@ class TestLineBasedExtraction:
             analyzer_class = get_analyzer(temp_path)
             analyzer = analyzer_class(temp_path)
 
-            # Line 4 has no function/class containing it
+            # Line 4 is module-level — not inside any function or class
             result = _extract_element_at_line(analyzer, 4)
-            # Either returns None or returns some element (depends on tree-sitter parsing)
-            # The key is that the code path executes without error
-            assert result is None or result is not None
+            assert result is None
         finally:
             os.unlink(temp_path)
 
