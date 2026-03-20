@@ -15,12 +15,17 @@ Suppress per-server with: # reveal:allow-no-hsts
 Fix: add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 """
 
-import os
 import re
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from . import NGINX_FILE_PATTERNS
+from . import (
+    NGINX_FILE_PATTERNS,
+    NGINX_HTTP_BLOCK_PATTERN,
+    NGINX_INCLUDE_PATTERN,
+    nginx_find_nginx_conf,
+    nginx_resolve_include,
+)
 
 
 class N008(BaseRule):
@@ -36,17 +41,12 @@ class N008(BaseRule):
         r'server\s*\{((?:[^{}]|\{[^{}]*\})*)\}',
         re.MULTILINE | re.DOTALL
     )
-    HTTP_BLOCK_PATTERN = re.compile(
-        r'http\s*\{((?:[^{}]|\{[^{}]*\})*)\}',
-        re.MULTILINE | re.DOTALL
-    )
     SSL_LISTEN_PATTERN = re.compile(
         r'listen\s+(?:\[::\]:)?443\b', re.IGNORECASE
     )
     HSTS_PATTERN = re.compile(
         r'add_header\s+Strict-Transport-Security\b', re.IGNORECASE
     )
-    INCLUDE_PATTERN = re.compile(r'include\s+([^;]+);', re.IGNORECASE)
     SUPPRESS_PATTERN = re.compile(r'#\s*reveal:allow-no-hsts')
 
     def check(self,
@@ -95,7 +95,7 @@ class N008(BaseRule):
         Checks the http{} block and one level of includes from it.  When nginx.conf
         cannot be found or read, returns False (no suppression).
         """
-        nginx_conf = self._find_nginx_conf(file_path)
+        nginx_conf = nginx_find_nginx_conf(file_path)
         if nginx_conf is None:
             return False
         try:
@@ -103,12 +103,12 @@ class N008(BaseRule):
                 conf_content = fh.read()
         except OSError:
             return False
-        for match in self.HTTP_BLOCK_PATTERN.finditer(conf_content):
+        for match in NGINX_HTTP_BLOCK_PATTERN.finditer(conf_content):
             http_block = match.group(1)
             if self.HSTS_PATTERN.search(http_block):
                 return True
-            for inc_match in self.INCLUDE_PATTERN.finditer(http_block):
-                resolved = self._resolve_include(inc_match.group(1).strip(), nginx_conf)
+            for inc_match in NGINX_INCLUDE_PATTERN.finditer(http_block):
+                resolved = nginx_resolve_include(inc_match.group(1).strip(), nginx_conf)
                 if resolved is None:
                     continue  # can't verify — don't suppress on uncertainty
                 try:
@@ -119,30 +119,12 @@ class N008(BaseRule):
                     pass
         return False
 
-    def _find_nginx_conf(self, file_path: str) -> Optional[str]:
-        """Locate the main nginx.conf relative to a vhost config file.
-
-        Checks (in order): same directory, parent directory, standard system paths.
-        """
-        config_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else ""
-        nginx_root = os.path.dirname(config_dir) if config_dir else ""
-        candidates = [
-            os.path.join(config_dir, 'nginx.conf'),
-            os.path.join(nginx_root, 'nginx.conf'),
-            '/etc/nginx/nginx.conf',
-            '/usr/local/nginx/conf/nginx.conf',
-        ]
-        for path in candidates:
-            if path and os.path.isfile(path):
-                return path
-        return None
-
     def _has_hsts(self, block: str, file_path: str) -> bool:
         """Return True if HSTS header is set in block or any included snippet."""
         if self.HSTS_PATTERN.search(block):
             return True
-        for inc_match in self.INCLUDE_PATTERN.finditer(block):
-            resolved = self._resolve_include(inc_match.group(1).strip(), file_path)
+        for inc_match in NGINX_INCLUDE_PATTERN.finditer(block):
+            resolved = nginx_resolve_include(inc_match.group(1).strip(), file_path)
             if resolved is None:
                 return True  # can't verify — suppress rather than false-positive
             try:
@@ -152,17 +134,6 @@ class N008(BaseRule):
             except OSError:
                 return True  # unreadable — suppress
         return False
-
-    def _resolve_include(self, include_path: str, config_file: str) -> Optional[str]:
-        if os.path.isabs(include_path):
-            return include_path if os.path.exists(include_path) else None
-        config_dir = os.path.dirname(os.path.abspath(config_file)) if config_file else ""
-        nginx_root = os.path.dirname(config_dir) if config_dir else ""
-        for base in filter(None, [config_dir, nginx_root]):
-            candidate = os.path.join(base, include_path)
-            if os.path.exists(candidate):
-                return candidate
-        return None
 
     def _find_directive_line(self, block: str, block_start: int, directive: str) -> int:
         m = re.search(rf'{re.escape(directive)}\s', block, re.IGNORECASE)
