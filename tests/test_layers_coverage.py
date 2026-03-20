@@ -148,7 +148,7 @@ class TestNormalizeToModule:
         rule = LayerRule(name='test', paths=[], allow_imports=[], deny_imports=[])
         to_file = tmp_path / 'models.py'
         result = rule._normalize_to_module(to_file, None)
-        assert result == str(to_file) + '/'
+        assert result == str(to_file).replace("\\", "/") + '/'
 
 
 class TestIsTargetAllowed:

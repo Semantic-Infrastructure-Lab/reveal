@@ -66,8 +66,8 @@ class LayerRule:
                 if prefix and file_str.startswith(prefix):
                     return True
             else:
-                # Simple prefix or exact match
-                if file_str.startswith(pattern.rstrip("/")):
+                # Simple prefix or exact match (normalize pattern separators for Windows)
+                if file_str.startswith(pattern.replace("\\", "/").rstrip("/")):
                     return True
 
         return False

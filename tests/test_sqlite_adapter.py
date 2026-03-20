@@ -426,8 +426,8 @@ class TestSQLiteAdapterErrors(unittest.TestCase):
 
     def test_unreadable_database(self):
         """Should raise PermissionError for unreadable database file."""
-        if os.getuid() == 0:
-            self.skipTest("Cannot test file permissions as root")
+        if not hasattr(os, 'getuid') or os.getuid() == 0:
+            self.skipTest("Cannot test file permissions as root or on Windows")
 
         temp_db = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.db')
         temp_db.close()

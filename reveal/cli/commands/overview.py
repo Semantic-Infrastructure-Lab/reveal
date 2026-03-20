@@ -299,7 +299,7 @@ def _render_complex_functions(fns: List[Dict[str, Any]], base_path: Optional[Pat
         # Show relative path if possible
         if loc and base_path:
             try:
-                loc = str(Path(loc).relative_to(base_path))
+                loc = Path(loc).relative_to(base_path).as_posix()
             except ValueError:
                 pass
 

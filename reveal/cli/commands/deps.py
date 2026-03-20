@@ -292,7 +292,7 @@ def _render_circular(cycles: List, cycle_count: int, base_path: Path, top: int) 
         parts = []
         for fp in cycle:
             try:
-                parts.append(str(Path(fp).relative_to(base_path)))
+                parts.append(Path(fp).relative_to(base_path).as_posix())
             except ValueError:
                 parts.append(fp)
         print(f"  ❌ {' → '.join(parts)}")
@@ -311,7 +311,7 @@ def _render_unused(unused: List[Dict[str, Any]], base_path: Path, top: int) -> N
         module = imp.get('module', '?')
         names = imp.get('names', [])
         try:
-            rel = str(Path(filepath).relative_to(base_path))
+            rel = Path(filepath).relative_to(base_path).as_posix()
         except ValueError:
             rel = filepath
         name_str = f".{', '.join(names)}" if names else ''

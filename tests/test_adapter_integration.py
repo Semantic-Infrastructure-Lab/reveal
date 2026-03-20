@@ -346,14 +346,15 @@ class TestGitAdapterIntegration(unittest.TestCase):
 
     def test_git_adapter_outside_repo_fails_gracefully(self):
         """Test git:// adapter handles non-git directory gracefully."""
-        # Use /tmp which is unlikely to be a git repo
-        result = self.run_reveal_command("git://", cwd="/tmp")
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = self.run_reveal_command("git://", cwd=tmpdir)
 
-        # Should fail gracefully (non-zero exit or helpful message)
-        self.assertTrue(
-            result.returncode != 0 or 'not a git' in result.stderr.lower(),
-            f"Expected graceful failure outside git repo:\nreturncode: {result.returncode}\nstderr: {result.stderr}"
-        )
+            # Should fail gracefully (non-zero exit or helpful message)
+            self.assertTrue(
+                result.returncode != 0 or 'not a git' in result.stderr.lower(),
+                f"Expected graceful failure outside git repo:\nreturncode: {result.returncode}\nstderr: {result.stderr}"
+            )
 
 
 @pytest.mark.integration
