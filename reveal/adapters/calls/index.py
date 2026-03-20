@@ -28,6 +28,83 @@ PYTHON_BUILTINS: frozenset = frozenset(
     name for name in dir(_builtins_module) if not name.startswith('_')
 )
 
+# Decorators that cause the runtime to dispatch the function implicitly —
+# never appear as explicit call expressions in source code.
+_IMPLICIT_DECORATORS: frozenset = frozenset({'property', 'classmethod', 'staticmethod'})
+
+
+def _get_decorator_names(elem: Dict[str, Any]) -> Set[str]:
+    """Return the bare decorator names for *elem* (strips leading '@' and module prefix)."""
+    return {d.split('.')[-1].lstrip('@') for d in elem.get('decorators', [])}
+
+
+def _is_method_elem(elem: Dict[str, Any], decorator_names: Set[str]) -> bool:
+    """Return True if *elem* is a method (not a module-level function)."""
+    sig = elem.get('signature', '')
+    return (
+        elem.get('category') == 'methods'
+        or sig.startswith('(self') or sig.startswith('(cls')
+        or 'classmethod' in decorator_names
+        or 'staticmethod' in decorator_names
+    )
+
+
+def _is_implicit_element(
+    name: str,
+    is_method: bool,
+    decorator_names: Set[str],
+    only_functions: bool,
+) -> bool:
+    """Return True if element is implicitly invoked and should never be flagged as dead code."""
+    if only_functions and is_method:
+        return True
+    if name.startswith('__') and name.endswith('__'):
+        return True
+    return bool(decorator_names & _IMPLICIT_DECORATORS)
+
+
+def _uncalled_entry_mtime(entry: Dict[str, Any]) -> float:
+    """Return negated mtime for sort key (most-recently-modified first)."""
+    try:
+        return -os.stat(entry['file']).st_mtime
+    except OSError:
+        return 0.0
+
+
+def _index_callee(
+    index: Dict[str, List[Dict[str, Any]]],
+    callee: str,
+    record: Dict[str, Any],
+    alias_map: Dict[str, str],
+) -> None:
+    """Add *record* to *index* under the bare name, dotted form, and canonical alias."""
+    bare = callee.split('.')[-1] if '.' in callee else callee
+    index.setdefault(bare, []).append(record)
+    if bare != callee:
+        index.setdefault(callee, []).append(record)
+    canonical = alias_map.get(bare)
+    if canonical and canonical != bare:
+        index.setdefault(canonical, []).append(record)
+
+
+def _bfs_level(
+    index: Dict[str, List[Dict[str, Any]]],
+    current_targets: Set[str],
+    visited_callers: Set[Tuple[str, str]],
+) -> Tuple[List[Dict[str, Any]], Set[str]]:
+    """Run one BFS level: return (level_records, next_targets)."""
+    level_records: List[Dict[str, Any]] = []
+    next_targets: Set[str] = set()
+    for t in sorted(current_targets):
+        for record in index.get(t, []):
+            key = (record['file'], record['caller'])
+            if key in visited_callers:
+                continue
+            visited_callers.add(key)
+            level_records.append({**record, 'callee': t})
+            next_targets.add(record['caller'])
+    return level_records, next_targets
+
 
 def _dir_cache_key(directory: Path) -> Any:
     """Compute a hashable cache key from all code-file mtimes in *directory*."""
@@ -87,25 +164,13 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
         for elem in file_struct.get('elements', []):
             if elem.get('category') not in ('functions', 'methods'):
                 continue
-            caller_name = elem.get('name', '')
-            caller_line = elem.get('line', 0)
+            record_base = {
+                'file': file_path,
+                'caller': elem.get('name', ''),
+                'line': elem.get('line', 0),
+            }
             for callee in elem.get('calls', []):
-                # Normalise: "self.foo" → "foo" for lookup, keep original in record
-                bare = callee.split('.')[-1] if '.' in callee else callee
-                record = {
-                    'file': file_path,
-                    'caller': caller_name,
-                    'line': caller_line,
-                    'call_expr': callee,
-                }
-                index.setdefault(bare, []).append(record)
-                # Also index the full dotted form in case callers use it
-                if bare != callee:
-                    index.setdefault(callee, []).append(record)
-                # Also index the canonical name when bare is an import alias
-                canonical = alias_map.get(bare)
-                if canonical and canonical != bare:
-                    index.setdefault(canonical, []).append(record)
+                _index_callee(index, callee, {**record_base, 'call_expr': callee}, alias_map)
 
     _INDEX_CACHE[dir_str] = (cache_key, index)
     return index
@@ -193,21 +258,9 @@ def find_callers(
     levels: List[Dict[str, Any]] = []
 
     for level in range(depth):
-        level_records: List[Dict[str, Any]] = []
-        next_targets: Set[str] = set()
-
-        for t in sorted(current_targets):
-            for record in index.get(t, []):
-                key = (record['file'], record['caller'])
-                if key in visited_callers:
-                    continue
-                visited_callers.add(key)
-                level_records.append({**record, 'callee': t})
-                next_targets.add(record['caller'])
-
+        level_records, next_targets = _bfs_level(index, current_targets, visited_callers)
         if level_records:
             levels.append({'level': level + 1, 'callers': level_records})
-
         if not next_targets:
             break
         current_targets = next_targets
@@ -279,17 +332,8 @@ def find_uncalled(
     # NOT dead code).
     file_filter: Optional[str] = str(path_obj.resolve()) if is_file else None
 
-    # Build the callers index — keys are all names that appear as callees.
-    callers_index = build_callers_index(path)
-    called_names: Set[str] = set(callers_index.keys())
-
-    # Implicit-call decorators — these are dispatched by the runtime, not
-    # by explicit call expressions in source code.
-    _IMPLICIT_DECORATORS = frozenset({'property', 'classmethod', 'staticmethod'})
-
-    # Cache source file lines to avoid re-reading the same file for every element.
-    _file_lines: Dict[str, List[str]] = {}
-
+    called_names: Set[str] = set(build_callers_index(path).keys())
+    file_lines: Dict[str, List[str]] = {}
     structures = collect_structures(str(directory))
 
     total_defined = 0
@@ -297,50 +341,25 @@ def find_uncalled(
 
     for file_struct in structures:
         file_path = file_struct.get('file', '')
-        # When scoped to a single file, skip definitions from other files.
         if file_filter and str(Path(file_path).resolve()) != file_filter:
             continue
         for elem in file_struct.get('elements', []):
             if elem.get('category') not in ('functions', 'methods'):
                 continue
-
             name = elem.get('name', '')
             if not name:
                 continue
 
-            # Determine if this looks like a class method based on signature.
-            # Analyzers commonly emit everything as 'functions', so we use the
-            # first parameter name as the signal: self/cls → method.
-            sig = elem.get('signature', '')
-            decorators = elem.get('decorators', [])
-            decorator_names = {d.split('.')[-1].lstrip('@') for d in decorators}
-            is_method = (
-                elem.get('category') == 'methods'
-                or sig.startswith('(self') or sig.startswith('(cls')
-                or 'classmethod' in decorator_names
-                or 'staticmethod' in decorator_names
-            )
-
-            if only_functions and is_method:
-                continue
-
+            decorator_names = _get_decorator_names(elem)
+            is_method = _is_method_elem(elem, decorator_names)
             total_defined += 1
 
-            # Skip dunders — they are called implicitly by Python protocols.
-            if name.startswith('__') and name.endswith('__'):
+            line_no = elem.get('line', 0)
+            if _is_implicit_element(name, is_method, decorator_names, only_functions):
                 continue
-
-            # Skip implicitly-dispatched decorators.
-            if decorator_names & _IMPLICIT_DECORATORS:
-                continue
-
-            # Check both the bare name and any dotted aliases (e.g. "self.foo").
             if name in called_names:
                 continue
-
-            # Check for # noqa: uncalled suppression on the definition line.
-            line_no = elem.get('line', 0)
-            if line_no and _has_noqa_uncalled(file_path, line_no, _file_lines):
+            if line_no and _has_noqa_uncalled(file_path, line_no, file_lines):
                 continue
 
             entries.append({
@@ -351,15 +370,7 @@ def find_uncalled(
                 'is_private': name.startswith('_'),
             })
 
-    # Sort by file mtime descending (most-recently-added first), then file+line.
-    def _mtime(entry: Dict[str, Any]) -> float:
-        try:
-            return -os.stat(entry['file']).st_mtime
-        except OSError:
-            return 0.0
-
-    entries.sort(key=lambda e: (_mtime(e), e['file'], e['line']))
-
+    entries.sort(key=lambda e: (_uncalled_entry_mtime(e), e['file'], e['line']))
     if top > 0:
         entries = entries[:top]
 
@@ -396,7 +407,8 @@ def rank_by_callers(
             "name": "validate_item",
             "caller_count": 5,
             "callers": [
-                {"file": "app.py", "caller": "process_batch", "line": 42, "call_expr": "validate_item"},
+                {"file": "app.py", "caller": "process_batch", "line": 42,
+                 "call_expr": "validate_item"},
                 ...
             ]
         }
