@@ -100,7 +100,7 @@ def _find_orphans(certs: List[Dict], nginx_cert_paths: List[str]) -> List[Dict]:
         # ssl_certificate directive references it (exact match or symlink target).
         # We also check the parent directory name appearing in any referenced path,
         # since certbot often uses fullchain.pem rather than cert.pem.
-        cert_dir = str(Path(cert_path).parent)
+        cert_dir = cert_path.rsplit('/', 1)[0]  # POSIX split — cert_path is always a server path
         in_use = any(
             p == cert_path or p.startswith(cert_dir + '/')
             for p in referenced
