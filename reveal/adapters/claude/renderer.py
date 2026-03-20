@@ -23,12 +23,12 @@ class ClaudeRenderer(TypeDispatchRenderer):
         count_line += " | --all to show all | --head N for more | --since YYYY-MM-DD (or today)"
         print(count_line)
         print()
-        print(f"  {'SESSION':<34} {'MODIFIED':<17} {'SIZE':>6}  {'R':<1}  {'PROJECT':<12}  TITLE")
-        print(f"  {'-'*34} {'-'*17} {'-'*6}  {'-':<1}  {'-'*12}  {'-'*25}")
+        print(f"  {'SESSION':<36} {'MODIFIED':<17} {'SIZE':>6}  {'R':<1}  {'PROJECT':<12}  TITLE")
+        print(f"  {'-'*36} {'-'*17} {'-'*6}  {'-':<1}  {'-'*12}  {'-'*25}")
         for s in recent:
             name = s.get('session', '?')
-            if len(name) > 34:
-                name = name[-34:]
+            if len(name) > 36:
+                name = name[:33] + '...'
             mod = s.get('modified', '')[:16].replace('T', ' ')
             kb = s.get('size_kb', 0)
             readme = '✓' if s.get('readme_present') else '✗'
@@ -36,7 +36,7 @@ class ClaudeRenderer(TypeDispatchRenderer):
             title = s.get('title', '') or ''
             if len(title) > 25:
                 title = title[:22] + '...'
-            print(f"  {name:<34} {mod:<17} {kb:>4}kb  {readme:<1}  {project:<12}  {title}")
+            print(f"  {name:<36} {mod:<17} {kb:>4}kb  {readme:<1}  {project:<12}  {title}")
         print()
         usage = result.get('usage', {})
         if usage:

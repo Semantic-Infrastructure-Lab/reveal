@@ -1340,5 +1340,110 @@ class TestClaudeChainRenderer:
         assert 'REVEAL_SESSIONS_DIR' not in out
 
 
+class TestSessionListRenderer:
+    """Tests for _render_claude_session_list — UUID column width bug (Windows)."""
+
+    UUID = '5c7c9453-dc58-4d01-b18c-1208f16fba87'  # 36 chars — standard Claude session UUID
+
+    def _result(self, name):
+        return {
+            'type': 'claude_sessions',
+            'session_count': 1,
+            'displayed_count': 1,
+            'recent_sessions': [{'session': name, 'modified': '2026-03-19T12:00:00',
+                                  'size_kb': 10, 'readme_present': False,
+                                  'project': 'proj', 'title': 'Test session'}],
+            'usage': {},
+        }
+
+    def test_uuid_shown_in_full(self, capsys):
+        """36-char UUID must appear untruncated in the listing."""
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        ClaudeRenderer._render_claude_session_list(self._result(self.UUID))
+        out = capsys.readouterr().out
+        assert self.UUID in out, f"Full UUID not found in listing:\n{out}"
+
+    def test_uuid_not_left_truncated(self, capsys):
+        """name[-34:] bug stripped first 2 chars — must not happen."""
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        ClaudeRenderer._render_claude_session_list(self._result(self.UUID))
+        out = capsys.readouterr().out
+        truncated = self.UUID[2:]  # what the old bug produced
+        assert truncated not in out or self.UUID in out  # full UUID must be present
+
+    def test_long_name_truncated_from_right(self, capsys):
+        """Names longer than 36 chars are truncated on the right with ellipsis."""
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        long_name = 'a' * 40
+        ClaudeRenderer._render_claude_session_list(self._result(long_name))
+        out = capsys.readouterr().out
+        assert '...' in out
+        assert 'a' * 40 not in out  # never show full 40-char name
+
+    def test_named_session_fits_without_truncation(self, capsys):
+        """TIA-style named sessions (e.g. 'roaring-wind-0319') fit in 36 chars."""
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        ClaudeRenderer._render_claude_session_list(self._result('roaring-wind-0319'))
+        out = capsys.readouterr().out
+        assert 'roaring-wind-0319' in out
+
+
+class TestFindConversationSuffixMatch:
+    """Tests for _find_conversation strategy 3: suffix match for truncated UUIDs."""
+
+    def test_suffix_match_finds_truncated_uuid(self, tmp_path):
+        """A truncated UUID (first 2 chars stripped) still resolves via suffix match."""
+        from unittest.mock import patch
+        from reveal.adapters.claude.adapter import ClaudeAdapter
+
+        full_uuid = '5c7c9453-dc58-4d01-b18c-1208f16fba87'
+        truncated = full_uuid[2:]  # what the old renderer showed
+
+        project_dir = tmp_path / '-home-user-.claude'
+        project_dir.mkdir()
+        jsonl_file = project_dir / f'{full_uuid}.jsonl'
+        jsonl_file.write_text('{}')
+
+        adapter = ClaudeAdapter.__new__(ClaudeAdapter)
+        adapter.session_name = truncated
+        adapter.CONVERSATION_BASE = tmp_path
+
+        result = adapter._find_conversation()
+        assert result == jsonl_file
+
+    def test_exact_uuid_still_works(self, tmp_path):
+        """Full UUID still resolves via strategy 2 (exact match)."""
+        from reveal.adapters.claude.adapter import ClaudeAdapter
+
+        full_uuid = '5c7c9453-dc58-4d01-b18c-1208f16fba87'
+
+        project_dir = tmp_path / '-home-user-.claude'
+        project_dir.mkdir()
+        jsonl_file = project_dir / f'{full_uuid}.jsonl'
+        jsonl_file.write_text('{}')
+
+        adapter = ClaudeAdapter.__new__(ClaudeAdapter)
+        adapter.session_name = full_uuid
+        adapter.CONVERSATION_BASE = tmp_path
+
+        result = adapter._find_conversation()
+        assert result == jsonl_file
+
+    def test_no_match_returns_none(self, tmp_path):
+        """Non-matching session name returns None."""
+        from reveal.adapters.claude.adapter import ClaudeAdapter
+
+        project_dir = tmp_path / '-home-user-.claude'
+        project_dir.mkdir()
+        (project_dir / 'other-uuid.jsonl').write_text('{}')
+
+        adapter = ClaudeAdapter.__new__(ClaudeAdapter)
+        adapter.session_name = 'nonexistent-session'
+        adapter.CONVERSATION_BASE = tmp_path
+
+        result = adapter._find_conversation()
+        assert result is None
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

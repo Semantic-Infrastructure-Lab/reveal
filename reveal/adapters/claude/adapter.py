@@ -1,6 +1,7 @@
 """Claude Code conversation adapter implementation."""
 
 import os
+import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime
@@ -177,6 +178,28 @@ _SCHEMA_NOTES = [
 ]
 
 
+def _resolve_claude_projects_dir() -> Path:
+    """Return the Claude sessions directory, checking platform-specific locations.
+
+    Search order:
+    1. ``~/.claude/projects`` (standard on Linux, macOS, and Windows)
+    2. ``%APPDATA%\\Claude\\projects`` (Windows fallback for non-standard installs)
+
+    Returns the primary path even when it doesn't exist so callers get a
+    consistent, actionable path in error messages.
+    """
+    primary = Path.home() / '.claude' / 'projects'
+    if primary.exists():
+        return primary
+    if sys.platform == 'win32':
+        appdata = os.environ.get('APPDATA', '')
+        if appdata:
+            alt = Path(appdata) / 'Claude' / 'projects'
+            if alt.exists():
+                return alt
+    return primary
+
+
 @register_adapter('claude')
 @register_renderer(ClaudeRenderer)
 class ClaudeAdapter(ResourceAdapter):
@@ -192,7 +215,7 @@ class ClaudeAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'results'
 
-    CONVERSATION_BASE = Path(os.environ.get('REVEAL_CLAUDE_DIR', str(Path.home() / '.claude' / 'projects')))
+    CONVERSATION_BASE = Path(os.environ.get('REVEAL_CLAUDE_DIR', '')) or _resolve_claude_projects_dir()
     SESSIONS_DIR = Path(os.environ.get('REVEAL_SESSIONS_DIR', '')) if os.environ.get('REVEAL_SESSIONS_DIR') else None
 
     def __init__(self, resource: str, query: Optional[str] = None):
@@ -275,6 +298,12 @@ class ClaudeAdapter(ResourceAdapter):
             jsonl_file = project_dir / f"{self.session_name}.jsonl"
             if jsonl_file.exists():
                 return jsonl_file
+
+        # Strategy 3: suffix match — handles truncated UUIDs from the session listing
+        for project_dir in dirs:
+            for jsonl_file in project_dir.glob('*.jsonl'):
+                if jsonl_file.stem.endswith(self.session_name):
+                    return jsonl_file
 
         return None
 
