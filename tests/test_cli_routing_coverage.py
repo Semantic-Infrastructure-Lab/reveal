@@ -63,7 +63,7 @@ class TestHandleUriSortDesc:
         # get_adapter_class is imported inside handle_uri, patch at source
         with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
             with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-                with patch('reveal.cli.routing.handle_adapter') as mock_handler:
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
                     from reveal.cli.routing import handle_uri
                     args = _args(sort='name', desc=True, base_path=None)
                     handle_uri('ast://myfile.py', None, args)
@@ -86,7 +86,7 @@ class TestGenericAdapterHandlerBasePath:
         args = _args(base_path='/new', format='text')
 
         # _default_from_uri is called when adapter_class is not a real type
-        with patch('reveal.cli.routing._handle_rendering'):
+        with patch('reveal.cli.routing.uri._handle_rendering'):
             with patch('reveal.adapters.base._default_from_uri', return_value=mock_adapter):
                 from reveal.cli.routing import generic_adapter_handler
                 generic_adapter_handler(mock_adapter_cls, mock_renderer_cls, 'claude', 'session/X', None, args)
@@ -102,8 +102,8 @@ class TestGenericAdapterHandlerBasePath:
         mock_renderer_cls = MagicMock()
         args = _args(check=True, base_path=None, format='text')
 
-        with patch('reveal.cli.routing._handle_check_mode') as mock_check:
-            with patch('reveal.cli.routing._handle_rendering') as mock_render:
+        with patch('reveal.cli.routing.uri._handle_check_mode') as mock_check:
+            with patch('reveal.cli.routing.uri._handle_rendering') as mock_render:
                 from reveal.cli.routing import generic_adapter_handler
                 generic_adapter_handler(mock_adapter_cls, mock_renderer_cls, 'domain', 'example.com', None, args)
 
@@ -597,8 +597,8 @@ class TestGenericAdapterHandlerFromUri:
                      fields=None, max_items=None, max_bytes=None,
                      max_depth=None, max_snippet_chars=None)
 
-        with patch('reveal.cli.routing._build_adapter_kwargs', return_value={}):
-            with patch('reveal.cli.routing._handle_rendering'):
+        with patch('reveal.cli.routing.uri._build_adapter_kwargs', return_value={}):
+            with patch('reveal.cli.routing.uri._handle_rendering'):
                 generic_adapter_handler(FakeAdapter, FakeRenderer, 'fake', 'res', None, args)
 
 
@@ -663,7 +663,7 @@ class TestHandleAdapter:
         args = _args()
 
         with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
-            with patch('reveal.cli.routing.generic_adapter_handler') as mock_generic:
+            with patch('reveal.cli.routing.uri.generic_adapter_handler') as mock_generic:
                 handle_adapter(mock_adapter_cls, 'env', '.env', None, args)
                 mock_generic.assert_called_once_with(
                     mock_adapter_cls, mock_renderer_cls, 'env', '.env', None, args
@@ -691,7 +691,7 @@ class TestCollectDirStatsStatFailure:
             s = os.stat(fpath)
             return s.st_size, s.st_mtime
 
-        with patch('reveal.cli.routing._stat_one_file', side_effect=fake_stat_one_file):
+        with patch('reveal.cli.routing.file._stat_one_file', side_effect=fake_stat_one_file):
             ext_counts, total_files, total_size, newest, oldest = _collect_dir_stats(tmp_path)
 
         assert total_files == 1  # bad.py skipped
@@ -708,7 +708,7 @@ class TestHandleDirectoryPath:
                      ext=None, depth=3, max_entries=100, fast=False,
                      respect_gitignore=True, exclude=[], dir_limit=0)
 
-        with patch('reveal.cli.routing._show_directory_meta') as mock_meta:
+        with patch('reveal.cli.routing.file._show_directory_meta') as mock_meta:
             _handle_directory_path(tmp_path, args)
             mock_meta.assert_called_once_with(tmp_path, args)
 
@@ -742,8 +742,8 @@ class TestHandleFilePathSearchFlag:
                      max_entries=100, fast=False, asc=False, desc=False,
                      ext=None, dir_limit=0)
 
-        with patch('reveal.cli.routing.handle_uri') as mock_handle_uri:
-            with patch('reveal.cli.routing._build_ast_query_from_flags', return_value='ast://app.py?search=foo'):
+        with patch('reveal.cli.routing.file.handle_uri') as mock_handle_uri:
+            with patch('reveal.cli.routing.file._build_ast_query_from_flags', return_value='ast://app.py?search=foo'):
                 _handle_file_path(f, None, args)
                 mock_handle_uri.assert_called_once()
 
@@ -763,7 +763,7 @@ class TestHandleFilePathSectionOnMarkdown:
                      max_entries=100, fast=False, asc=False, desc=False,
                      ext=None, dir_limit=0)
 
-        with patch('reveal.cli.routing.handle_file') as mock_handle_file:
+        with patch('reveal.cli.routing.file.handle_file') as mock_handle_file:
             _handle_file_path(f, None, args)
             mock_handle_file.assert_called_once()
             call_args = mock_handle_file.call_args[0]

@@ -914,10 +914,10 @@ class TestHandleFileOrDirectory(unittest.TestCase):
                 format='text'
             )
 
-            # Need to import handle_file in the module scope first
-            from reveal.cli import routing
+            # Patch handle_file where _handle_file_path binds it (routing.file submodule)
+            from reveal.cli.routing import file as routing_file
 
-            with patch.object(routing, 'handle_file') as mock_handle:
+            with patch.object(routing_file, 'handle_file') as mock_handle:
                 handle_file_or_directory(temp_path, mock_args)
 
                 # Verify handle_file was called
