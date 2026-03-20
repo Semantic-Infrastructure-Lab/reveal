@@ -1006,6 +1006,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         start_line = None
         heading_level = None
 
+        substring_matches = []
+
         for i, line in enumerate(self.lines, 1):
             match = re.match(r'^(#{1,6})\s+(.+)$', line)
             if match:
@@ -1014,9 +1016,19 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                     start_line = i
                     heading_level = len(match.group(1))
                     break
+                if name.lower() in title.lower():
+                    substring_matches.append((i, len(match.group(1)), title))
 
         if not start_line or heading_level is None:
-            return super().extract_element(element_type, name)
+            if len(substring_matches) == 1:
+                start_line, heading_level, _ = substring_matches[0]
+            elif len(substring_matches) > 1:
+                candidates = ', '.join(f'"{t}"' for _, _, t in substring_matches)
+                raise ValueError(
+                    f"Ambiguous heading match for {name!r}: {candidates}"
+                )
+            else:
+                return super().extract_element(element_type, name)
 
         # Find the end of this section (next heading of same or higher level)
         end_line = len(self.lines)

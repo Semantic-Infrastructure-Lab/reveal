@@ -1447,5 +1447,53 @@ related:
         self.assertTrue(structure['related'][0]['exists'])
 
 
+class TestMarkdownSectionSubstringMatch(unittest.TestCase):
+    """Substring heading match for section extraction."""
+
+    CONTENT = (
+        "# \U0001f195 Critical Status Corrections Since Last Doc\n"
+        "some content here\n"
+        "\n"
+        "# Unrelated Section\n"
+        "other content\n"
+        "\n"
+        "# Another Critical Thing\n"
+        "more content\n"
+    )
+
+    def setUp(self):
+        import tempfile
+        self.temp_dir = tempfile.mkdtemp()
+        path = os.path.join(self.temp_dir, 'doc.md')
+        with open(path, 'w') as f:
+            f.write(self.CONTENT)
+        self.analyzer = MarkdownAnalyzer(path)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_exact_match_preferred(self):
+        result = self.analyzer.extract_element(
+            'section', '\U0001f195 Critical Status Corrections Since Last Doc'
+        )
+        self.assertIn('Critical Status Corrections Since Last Doc', result['source'])
+
+    def test_substring_match_single(self):
+        result = self.analyzer.extract_element('section', 'Critical Status Corrections')
+        self.assertIn('Critical Status Corrections Since Last Doc', result['source'])
+
+    def test_substring_match_ambiguous_raises(self):
+        with self.assertRaises(ValueError) as ctx:
+            self.analyzer.extract_element('section', 'Critical')
+        self.assertIn('Ambiguous', str(ctx.exception))
+        self.assertIn('Critical Status Corrections Since Last Doc', str(ctx.exception))
+        self.assertIn('Another Critical Thing', str(ctx.exception))
+
+    def test_no_match_falls_through(self):
+        result = self.analyzer.extract_element('section', 'Nonexistent Heading')
+        self.assertIsNone(result)
+
+
 if __name__ == '__main__':
     unittest.main()
