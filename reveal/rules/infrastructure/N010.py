@@ -17,7 +17,7 @@ import re
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from . import NGINX_FILE_PATTERNS
+from . import NGINX_FILE_PATTERNS, nginx_resolve_include
 
 
 class N010(BaseRule):
@@ -67,7 +67,7 @@ class N010(BaseRule):
                 continue
             for inc_match in self.INCLUDE_PATTERN.finditer(block):
                 include_path = inc_match.group(1).strip()
-                resolved = self._resolve_include(include_path, file_path)
+                resolved = nginx_resolve_include(include_path, file_path)
                 if resolved is None or resolved in reported_snippets:
                     continue
                 try:
@@ -92,17 +92,6 @@ class N010(BaseRule):
                     pass
 
         return detections
-
-    def _resolve_include(self, include_path: str, config_file: str) -> Optional[str]:
-        if os.path.isabs(include_path):
-            return include_path if os.path.exists(include_path) else None
-        config_dir = os.path.dirname(os.path.abspath(config_file)) if config_file else ""
-        nginx_root = os.path.dirname(config_dir) if config_dir else ""
-        for base in filter(None, [config_dir, nginx_root]):
-            candidate = os.path.join(base, include_path)
-            if os.path.exists(candidate):
-                return candidate
-        return None
 
     def _find_pattern_line(self, content: str, pattern: re.Pattern) -> int:
         m = pattern.search(content)

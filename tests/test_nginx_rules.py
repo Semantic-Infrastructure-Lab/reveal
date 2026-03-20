@@ -1175,6 +1175,57 @@ server {
         from reveal.rules.base import Severity
         self.assertEqual(self.rule.severity, Severity.MEDIUM)
 
+    def test_suppressed_when_global_nginx_conf_has_server_tokens(self):
+        """Should not fire when nginx.conf http{} contains server_tokens off globally."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sites_dir = os.path.join(tmpdir, 'sites-enabled')
+            os.makedirs(sites_dir)
+
+            nginx_conf = os.path.join(tmpdir, 'nginx.conf')
+            with open(nginx_conf, 'w') as fh:
+                fh.write('http {\n    server_tokens off;\n}\n')
+
+            vhost = os.path.join(sites_dir, 'example.com')
+            content = 'server {\n    listen 80;\n    server_name example.com;\n}\n'
+            detections = self.rule.check(vhost, None, content)
+            self.assertEqual(len(detections), 0,
+                             "Should suppress when server_tokens off is in global http{}")
+
+    def test_fires_when_global_nginx_conf_missing_server_tokens(self):
+        """Should fire when nginx.conf http{} exists but has no server_tokens off."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sites_dir = os.path.join(tmpdir, 'sites-enabled')
+            os.makedirs(sites_dir)
+
+            nginx_conf = os.path.join(tmpdir, 'nginx.conf')
+            with open(nginx_conf, 'w') as fh:
+                fh.write('http {\n    keepalive_timeout 65;\n}\n')
+
+            vhost = os.path.join(sites_dir, 'example.com')
+            content = 'server {\n    listen 80;\n    server_name example.com;\n}\n'
+            detections = self.rule.check(vhost, None, content)
+            self.assertEqual(len(detections), 1)
+
+    def test_suppressed_when_global_server_tokens_in_nginx_conf_include(self):
+        """Should not fire when server_tokens off comes from an include in nginx.conf http{}."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sites_dir = os.path.join(tmpdir, 'sites-enabled')
+            os.makedirs(sites_dir)
+
+            snippet = os.path.join(tmpdir, 'hardening.conf')
+            with open(snippet, 'w') as fh:
+                fh.write('server_tokens off;\n')
+
+            nginx_conf = os.path.join(tmpdir, 'nginx.conf')
+            with open(nginx_conf, 'w') as fh:
+                fh.write(f'http {{\n    include {snippet};\n}}\n')
+
+            vhost = os.path.join(sites_dir, 'example.com')
+            content = 'server {\n    listen 80;\n    server_name example.com;\n}\n'
+            detections = self.rule.check(vhost, None, content)
+            self.assertEqual(len(detections), 0,
+                             "Should suppress when server_tokens off is in http{} include")
+
 
 class TestN010DeprecatedXXSSProtection(unittest.TestCase):
     """Tests for N010: Deprecated X-XSS-Protection header."""

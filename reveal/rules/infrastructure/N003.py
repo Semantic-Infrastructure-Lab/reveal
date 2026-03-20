@@ -10,12 +10,11 @@ Example of violation:
     }
 """
 
-import os
 import re
 from typing import List, Dict, Any, Optional, Set
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from . import NGINX_FILE_PATTERNS
+from . import NGINX_FILE_PATTERNS, nginx_resolve_include
 
 
 class N003(BaseRule):
@@ -96,7 +95,7 @@ class N003(BaseRule):
         # Resolve include directives and check included files for headers
         for inc_match in self.INCLUDE_PATTERN.finditer(location_body):
             include_path = inc_match.group(1).strip()
-            resolved = self._resolve_include(include_path, file_path)
+            resolved = nginx_resolve_include(include_path, file_path)
             if resolved is None:
                 # Can't find the include file — assume it may satisfy the requirement
                 present.update(self.MINIMUM_HEADERS)
@@ -111,26 +110,6 @@ class N003(BaseRule):
                 present.update(self.MINIMUM_HEADERS)
 
         return present
-
-    def _resolve_include(self, include_path: str, config_file: str) -> Optional[str]:
-        """Resolve an nginx include path to an absolute path.
-
-        Tries the include path relative to the config file's directory and then
-        relative to the nginx root (one level up, e.g. /etc/nginx).
-        Returns None if the file cannot be found.
-        """
-        if os.path.isabs(include_path):
-            return include_path if os.path.exists(include_path) else None
-
-        config_dir = os.path.dirname(os.path.abspath(config_file)) if config_file else ""
-        nginx_root = os.path.dirname(config_dir) if config_dir else ""
-
-        for base in filter(None, [config_dir, nginx_root]):
-            candidate = os.path.join(base, include_path)
-            if os.path.exists(candidate):
-                return candidate
-
-        return None
 
     def _find_proxy_pass_line(self, location_body: str, location_start: int) -> int:
         """Find the line number of the proxy_pass directive."""

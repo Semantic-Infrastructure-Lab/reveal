@@ -7,11 +7,9 @@ shortlist for the exact version.
 Two lines in nginx.conf http{} block fix all sites at once:
     server_tokens off;
 
-Detection: a server block has no 'server_tokens off' AND the main nginx.conf
-http{} block also lacks it. We check for 'server_tokens off' in the file
-globally (since http{} and server{} directives are both present in the same
-files we scan). Fires once per file that has a server block but no
-server_tokens directive anywhere.
+Detection: a file contains a server block, AND server_tokens is absent both in
+the file itself AND in the global nginx.conf http{} block (and its includes).
+Fires once per file — it's a config gap, not a per-server issue.
 
 Suppress with: # reveal:allow-server-tokens
 """
@@ -20,7 +18,13 @@ import re
 from typing import List, Dict, Any, Optional
 
 from ..base import BaseRule, Detection, RulePrefix, Severity
-from . import NGINX_FILE_PATTERNS
+from . import (
+    NGINX_FILE_PATTERNS,
+    NGINX_HTTP_BLOCK_PATTERN,
+    NGINX_INCLUDE_PATTERN,
+    nginx_find_nginx_conf,
+    nginx_resolve_include,
+)
 
 
 class N009(BaseRule):
@@ -55,6 +59,11 @@ class N009(BaseRule):
         if self.SERVER_TOKENS_OFF.search(content):
             return []
 
+        # Also check the global nginx.conf http{} block — a global setting covers
+        # all vhosts and should not trigger per-vhost detections.
+        if self._has_global_server_tokens(file_path):
+            return []
+
         # Fire once at line 1 — it's a file-level config gap, not per-server
         return [self.create_detection(
             file_path=file_path,
@@ -63,3 +72,33 @@ class N009(BaseRule):
             suggestion="Add 'server_tokens off;' to the http{} block in nginx.conf",
             context="nginx.conf http { server_tokens off; }",
         )]
+
+    def _has_global_server_tokens(self, file_path: str) -> bool:
+        """Return True if server_tokens off is set in the global nginx.conf http{} block.
+
+        Checks the http{} block and one level of includes from it.  When nginx.conf
+        cannot be found or read, returns False (no suppression).
+        """
+        nginx_conf = nginx_find_nginx_conf(file_path)
+        if nginx_conf is None:
+            return False
+        try:
+            with open(nginx_conf) as fh:
+                conf_content = fh.read()
+        except OSError:
+            return False
+        for match in NGINX_HTTP_BLOCK_PATTERN.finditer(conf_content):
+            http_block = match.group(1)
+            if self.SERVER_TOKENS_OFF.search(http_block):
+                return True
+            for inc_match in NGINX_INCLUDE_PATTERN.finditer(http_block):
+                resolved = nginx_resolve_include(inc_match.group(1).strip(), nginx_conf)
+                if resolved is None:
+                    continue
+                try:
+                    with open(resolved) as fh:
+                        if self.SERVER_TOKENS_OFF.search(fh.read()):
+                            return True
+                except OSError:
+                    pass
+        return False
