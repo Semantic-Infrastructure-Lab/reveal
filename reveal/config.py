@@ -785,8 +785,6 @@ class RevealConfig:
         if not sys.stdout.isatty():
             return False
 
-        # First time in terminal: hint about disabling
-        _show_breadcrumb_hint_once()
         return True
 
 
@@ -914,28 +912,6 @@ def get_data_path(name: str) -> Path:
     data_dir = Path(os.getenv('XDG_DATA_HOME', Path.home() / '.local' / 'share')) / 'reveal'
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir / name
-
-
-def _show_breadcrumb_hint_once() -> None:
-    """Show a one-time hint about disabling breadcrumbs.
-
-    Prints to stderr so it doesn't interfere with piped output.
-    Only shows once per user (tracked via state file).
-    """
-    hint_file = get_data_path('seen_breadcrumb_hint')
-    if hint_file.exists():
-        return
-
-    # Mark as seen before printing to avoid race conditions
-    try:
-        hint_file.touch()
-    except OSError:
-        return  # Can't track state, skip the hint
-
-    print(
-        "Tip: Permanently disable navigation hints with: reveal --disable-breadcrumbs",
-        file=sys.stderr
-    )
 
 
 def disable_breadcrumbs_permanently() -> bool:

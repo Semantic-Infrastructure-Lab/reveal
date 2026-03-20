@@ -141,6 +141,23 @@ def _get_config_for_path(path):
     return RevealConfig.get(start_path=start_path)
 
 
+def _show_breadcrumb_hint_once() -> None:
+    """Show a one-time hint about disabling breadcrumbs (stderr, no pipe interference)."""
+    import sys
+    from reveal.config import get_data_path
+    hint_file = get_data_path('seen_breadcrumb_hint')
+    if hint_file.exists():
+        return
+    try:
+        hint_file.touch()
+    except OSError:
+        return
+    print(
+        "Tip: Permanently disable navigation hints with: reveal --disable-breadcrumbs",
+        file=sys.stderr,
+    )
+
+
 def _print_type_specific_hints(path, file_type):
     """Print file-type-specific command hints."""
     if file_type in _CODE_TYPES:
@@ -428,6 +445,7 @@ def print_breadcrumbs(context, path, file_type=None, config=None, **kwargs):
     if not config.is_breadcrumbs_enabled():
         return
 
+    _show_breadcrumb_hint_once()
     print()  # Blank line before breadcrumbs
 
     handler = _CONTEXT_HANDLERS.get(context)
