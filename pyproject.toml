@@ -50,6 +50,8 @@ dev = [
     "numpy>=1.20.0",  # Required for duplicate detection tests
     "pymysql>=1.0.0",  # Required for MySQL adapter tests
     "dnspython>=2.0.0",  # Required for DNS adapter tests
+    "mcp>=1.0.0",  # Required for MCP server tests
+    "pygit2>=1.14.0",  # Required for git:// adapter tests
 ]
 # DEPRECATED in v0.8.0: tree-sitter is now included by default
 # Kept for backward compatibility (install commands with [treesitter] still work)
