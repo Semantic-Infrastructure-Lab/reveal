@@ -661,6 +661,21 @@ Natural companion to `--audit` (BACK-090): `--audit` surfaces the fleet pattern,
 
 > **Status**: Strategic backlog. Not prioritized for implementation yet.
 
+---
+
+### BACK-098: Split `handlers.py` and `routing.py` into focused subpackages
+
+**Status**: ✅ Shipped (session electric-ember-0320, commit `3d57caf`)
+**Value**: Medium | **Lift**: Medium
+
+`handlers.py` (1,104 lines) and `routing.py` (744 lines) were monolithic files accumulating unrelated concerns.
+
+- `handlers.py` → `handlers/` package: `introspection.py` (informational flags), `batch.py` (stdin/batch), `decorators.py` (--decorator-stats)
+- `routing.py` → `routing/` package: `uri.py` (adapter dispatch), `file.py` (file/dir routing)
+- All re-exports preserved via `__init__.py`; 12 test patch targets updated to point at correct submodule.
+
+---
+
 ### Additional Subcommands
 
 Eight subcommands (`check`, `review`, `pack`, `health`, `dev`, `hotspots`, `overview`, `deps`) shipped. Remaining subcommand ideas:
