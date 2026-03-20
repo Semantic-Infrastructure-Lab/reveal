@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-03-20 (sessions storm-eruption-0320, electric-ember-0320, oracular-anvil-0320)
+## [0.66.0] - 2026-03-20 (sessions storm-eruption-0320, electric-ember-0320, oracular-anvil-0320)
 
 ### Refactored
 - **BACK-098: Split `handlers.py` and `routing.py` into subpackages** (`reveal/cli/`): `handlers.py` (1,104 lines) split into `handlers/introspection.py` (informational flags), `handlers/batch.py` (stdin/batch processing), `handlers/decorators.py` (--decorator-stats). `routing.py` (744 lines) split into `routing/uri.py` (adapter dispatch pipeline) and `routing/file.py` (file/directory routing and guards). All public names re-exported from `__init__.py`; backward-compat aliases preserved. 12 test mock patch targets updated to correct submodule locations. (session electric-ember-0320)

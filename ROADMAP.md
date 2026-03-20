@@ -1,11 +1,20 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-19 (yapaxe-0319 — v0.65.1 released)
+> **Last updated**: 2026-03-20 (blazing-paint-0320 — v0.66.0 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.66.0
+- ✅ **Public Python SDK** — `analyze()`, `element()`, `query()`, `check()` — programmatic access without subprocess overhead.
+- ✅ **`letsencrypt://` renewal timer detection** (BACK-079) — flags certs expiring within 30 days.
+- ✅ **Markdown ambiguous heading match** — partial heading queries matching multiple sections now concatenate results instead of crashing with `ValueError`.
+- ✅ **`calls/index.py` complexity reduction** — eliminated only ❌ hotspot; `find_uncalled` 126→84 lines, depth 5→3/2 across build/find functions.
+- ✅ **`handlers.py` + `routing.py` split into subpackages** (BACK-097/098) — 1,104/744-line files split into focused modules.
+- ✅ **Bug fixes**: Windows CI (6 failures), quality rules N008/N009/N010, config §§ placeholder, health subprocess removal.
+- ✅ **6,861 tests** — up from ~6,810.
 
 ### v0.65.1
 - ✅ **Windows `claude://` UUID fix** — session listing truncated 36-char UUIDs to 34 chars; column widened + suffix match added so truncated IDs from prior installs still resolve.
