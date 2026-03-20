@@ -4,8 +4,12 @@ A server block listening on port 443 with no Strict-Transport-Security (HSTS)
 header means browsers never learn to pin this site to HTTPS. An intercepted
 first HTTP request can strip TLS for the entire session (SSL stripping).
 
-Detection checks the server block and any resolved includes one level deep,
-so sites using a shared security-headers snippet are correctly handled.
+Detection checks (in priority order):
+1. The global nginx.conf http{} block and its one-level-deep includes.
+2. The server block itself and any resolved includes one level deep.
+
+If HSTS is set globally (http{} level), all vhosts are covered — no per-site
+detections are emitted.
 
 Suppress per-server with: # reveal:allow-no-hsts
 Fix: add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
@@ -32,6 +36,10 @@ class N008(BaseRule):
         r'server\s*\{((?:[^{}]|\{[^{}]*\})*)\}',
         re.MULTILINE | re.DOTALL
     )
+    HTTP_BLOCK_PATTERN = re.compile(
+        r'http\s*\{((?:[^{}]|\{[^{}]*\})*)\}',
+        re.MULTILINE | re.DOTALL
+    )
     SSL_LISTEN_PATTERN = re.compile(
         r'listen\s+(?:\[::\]:)?443\b', re.IGNORECASE
     )
@@ -46,6 +54,10 @@ class N008(BaseRule):
               structure: Optional[Dict[str, Any]],
               content: str) -> List[Detection]:
         detections: List[Detection] = []
+
+        # If HSTS is set globally in nginx.conf http{}, all vhosts are covered.
+        if self._has_global_hsts(file_path):
+            return detections
 
         for match in self.SERVER_BLOCK_PATTERN.finditer(content):
             block = match.group(1)
@@ -76,6 +88,54 @@ class N008(BaseRule):
             ))
 
         return detections
+
+    def _has_global_hsts(self, file_path: str) -> bool:
+        """Return True if HSTS is set in the global nginx.conf http{} block.
+
+        Checks the http{} block and one level of includes from it.  When nginx.conf
+        cannot be found or read, returns False (no suppression).
+        """
+        nginx_conf = self._find_nginx_conf(file_path)
+        if nginx_conf is None:
+            return False
+        try:
+            with open(nginx_conf) as fh:
+                conf_content = fh.read()
+        except OSError:
+            return False
+        for match in self.HTTP_BLOCK_PATTERN.finditer(conf_content):
+            http_block = match.group(1)
+            if self.HSTS_PATTERN.search(http_block):
+                return True
+            for inc_match in self.INCLUDE_PATTERN.finditer(http_block):
+                resolved = self._resolve_include(inc_match.group(1).strip(), nginx_conf)
+                if resolved is None:
+                    continue  # can't verify — don't suppress on uncertainty
+                try:
+                    with open(resolved) as fh:
+                        if self.HSTS_PATTERN.search(fh.read()):
+                            return True
+                except OSError:
+                    pass
+        return False
+
+    def _find_nginx_conf(self, file_path: str) -> Optional[str]:
+        """Locate the main nginx.conf relative to a vhost config file.
+
+        Checks (in order): same directory, parent directory, standard system paths.
+        """
+        config_dir = os.path.dirname(os.path.abspath(file_path)) if file_path else ""
+        nginx_root = os.path.dirname(config_dir) if config_dir else ""
+        candidates = [
+            os.path.join(config_dir, 'nginx.conf'),
+            os.path.join(nginx_root, 'nginx.conf'),
+            '/etc/nginx/nginx.conf',
+            '/usr/local/nginx/conf/nginx.conf',
+        ]
+        for path in candidates:
+            if path and os.path.isfile(path):
+                return path
+        return None
 
     def _has_hsts(self, block: str, file_path: str) -> bool:
         """Return True if HSTS header is set in block or any included snippet."""

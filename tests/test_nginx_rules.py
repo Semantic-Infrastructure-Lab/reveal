@@ -1048,6 +1048,76 @@ server {{
         from reveal.rules.base import Severity
         self.assertEqual(self.rule.severity, Severity.HIGH)
 
+    def test_suppressed_when_global_nginx_conf_has_hsts(self):
+        """Should not fire when nginx.conf http{} block contains HSTS globally."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sites_dir = os.path.join(tmpdir, 'sites-enabled')
+            os.makedirs(sites_dir)
+
+            nginx_conf = os.path.join(tmpdir, 'nginx.conf')
+            with open(nginx_conf, 'w') as fh:
+                fh.write(
+                    'http {\n'
+                    '    add_header Strict-Transport-Security "max-age=31536000" always;\n'
+                    '}\n'
+                )
+
+            vhost = os.path.join(sites_dir, 'example.com')
+            content = (
+                'server {\n'
+                '    listen 443 ssl;\n'
+                '    server_name example.com;\n'
+                '}\n'
+            )
+            detections = self.rule.check(vhost, None, content)
+            self.assertEqual(len(detections), 0,
+                             "Should suppress when HSTS is set globally in nginx.conf http{}")
+
+    def test_fires_when_global_nginx_conf_missing_hsts(self):
+        """Should still fire when nginx.conf http{} block exists but has no HSTS."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sites_dir = os.path.join(tmpdir, 'sites-enabled')
+            os.makedirs(sites_dir)
+
+            nginx_conf = os.path.join(tmpdir, 'nginx.conf')
+            with open(nginx_conf, 'w') as fh:
+                fh.write('http {\n    server_tokens off;\n}\n')
+
+            vhost = os.path.join(sites_dir, 'example.com')
+            content = (
+                'server {\n'
+                '    listen 443 ssl;\n'
+                '    server_name example.com;\n'
+                '}\n'
+            )
+            detections = self.rule.check(vhost, None, content)
+            self.assertEqual(len(detections), 1)
+
+    def test_suppressed_when_global_hsts_in_nginx_conf_include(self):
+        """Should not fire when HSTS comes from an include in nginx.conf http{}."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sites_dir = os.path.join(tmpdir, 'sites-enabled')
+            os.makedirs(sites_dir)
+
+            snippet = os.path.join(tmpdir, 'security-headers.conf')
+            with open(snippet, 'w') as fh:
+                fh.write('add_header Strict-Transport-Security "max-age=31536000" always;\n')
+
+            nginx_conf = os.path.join(tmpdir, 'nginx.conf')
+            with open(nginx_conf, 'w') as fh:
+                fh.write(f'http {{\n    include {snippet};\n}}\n')
+
+            vhost = os.path.join(sites_dir, 'example.com')
+            content = (
+                'server {\n'
+                '    listen 443 ssl;\n'
+                '    server_name example.com;\n'
+                '}\n'
+            )
+            detections = self.rule.check(vhost, None, content)
+            self.assertEqual(len(detections), 0,
+                             "Should suppress when HSTS is in an http{} include")
+
 
 class TestN009ServerTokens(unittest.TestCase):
     """Tests for N009: server_tokens not disabled."""

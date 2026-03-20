@@ -6,7 +6,9 @@ from reveal.adapters.base import (
     register_adapter,
     get_adapter_class,
     list_supported_schemes,
-    _ADAPTER_REGISTRY
+    _ADAPTER_REGISTRY,
+    _is_constructor_error,
+    _default_from_uri,
 )
 
 
@@ -122,6 +124,56 @@ class TestAdapterRegistry(unittest.TestCase):
         # Should contain our test schemes
         self.assertIn('test-z', schemes)
         self.assertIn('test-a', schemes)
+
+
+class TestIsConstructorError(unittest.TestCase):
+    """Tests for _is_constructor_error helper (BACK-099)."""
+
+    def test_call_site_type_error_is_not_constructor_error(self):
+        """TypeError from wrong number of args (call site) should return False."""
+        def one_arg(x):
+            pass
+
+        try:
+            one_arg(1, 2)  # too many args — raised at call site
+        except TypeError as e:
+            result = _is_constructor_error(e)
+        self.assertFalse(result,
+                         "Call-site TypeError (wrong arg count) should not be a constructor error")
+
+    def test_constructor_body_type_error_is_constructor_error(self):
+        """TypeError raised inside a constructor body should return True."""
+        class BrokenAdapter:
+            def __init__(self, resource):
+                x = "string"
+                _ = x + 42  # TypeError inside __init__ body
+
+        try:
+            BrokenAdapter("test")
+        except TypeError as e:
+            result = _is_constructor_error(e)
+        self.assertTrue(result,
+                        "TypeError inside constructor body should be a constructor error")
+
+    def test_default_from_uri_propagates_constructor_body_error(self):
+        """_default_from_uri should raise TypeError that came from constructor body."""
+        class BrokenAdapter:
+            def __init__(self, resource, query=None):
+                x: str = "not_an_int"
+                _ = x + 42  # TypeError inside __init__ body
+
+        with self.assertRaises(TypeError):
+            _default_from_uri(BrokenAdapter, 'test', 'resource', None)
+
+    def test_default_from_uri_continues_on_call_site_type_error(self):
+        """_default_from_uri should try next pattern on call-site TypeError."""
+        class SucceedsWithNoArgs:
+            def __init__(self):
+                self.ok = True
+
+        # This adapter only accepts zero args; _try_no_args_init will succeed.
+        adapter = _default_from_uri(SucceedsWithNoArgs, 'test', '', None)
+        self.assertTrue(adapter.ok)
 
 
 if __name__ == '__main__':

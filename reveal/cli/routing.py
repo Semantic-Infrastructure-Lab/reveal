@@ -100,14 +100,11 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
         print(f"Error initializing {scheme}:// adapter: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Apply --base-path override for adapters that use a base directory (e.g., claude://)
+    # Apply --base-path override for adapters that support it (e.g., claude://)
     path_override = getattr(args, 'base_path', None)
-    if path_override and hasattr(adapter, 'CONVERSATION_BASE'):
+    if path_override and hasattr(adapter, 'reconfigure_base_path'):
         from pathlib import Path as _Path
-        adapter.CONVERSATION_BASE = _Path(path_override)
-        # Re-locate the conversation file under the new base
-        if hasattr(adapter, '_find_conversation'):
-            adapter.conversation_path = adapter._find_conversation()
+        adapter.reconfigure_base_path(_Path(path_override))
 
     # Handle --check mode if requested
     if getattr(args, 'check', False) and hasattr(adapter, 'check'):

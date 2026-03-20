@@ -239,6 +239,15 @@ class ClaudeAdapter(ResourceAdapter):
         self.conversation_path = self._find_conversation()
         self.messages: Optional[List[Dict]] = None  # Lazy load
 
+    def reconfigure_base_path(self, path: Path) -> None:
+        """Update the conversation base directory and re-resolve the conversation path.
+
+        Called when --base-path is provided after initial construction, so the
+        adapter can locate conversations under the overridden directory.
+        """
+        self.CONVERSATION_BASE = path
+        self.conversation_path = self._find_conversation()
+
     def _get_contract_base(self) -> Dict[str, Any]:
         """Get Output Contract v1.0 base fields.
 

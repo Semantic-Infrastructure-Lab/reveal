@@ -76,11 +76,9 @@ class TestHandleUriSortDesc:
 # ─── generic_adapter_handler — base_path override ────────────────────────────
 
 class TestGenericAdapterHandlerBasePath:
-    def test_base_path_sets_conversation_base(self):
-        """Cover lines 105-109: base_path override applies to adapter."""
+    def test_base_path_calls_reconfigure_base_path(self):
+        """base_path override delegates to adapter.reconfigure_base_path (BACK-100)."""
         mock_adapter = MagicMock()
-        mock_adapter.CONVERSATION_BASE = Path('/old')
-        mock_adapter._find_conversation = MagicMock(return_value=Path('/new/session'))
         mock_adapter_cls = MagicMock()
 
         mock_renderer_cls = MagicMock()
@@ -93,8 +91,7 @@ class TestGenericAdapterHandlerBasePath:
                 from reveal.cli.routing import generic_adapter_handler
                 generic_adapter_handler(mock_adapter_cls, mock_renderer_cls, 'claude', 'session/X', None, args)
 
-        assert mock_adapter.CONVERSATION_BASE == Path('/new')
-        mock_adapter._find_conversation.assert_called_once()
+        mock_adapter.reconfigure_base_path.assert_called_once_with(Path('/new'))
 
     def test_check_mode_returns_early(self):
         """Cover line 114: --check mode calls _handle_check_mode then returns."""

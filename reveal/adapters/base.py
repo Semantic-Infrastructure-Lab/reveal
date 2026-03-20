@@ -11,6 +11,19 @@ from typing import Dict, Any, Optional, List, Tuple
 # reporting if all attempts fail.
 # ---------------------------------------------------------------------------
 
+def _is_constructor_error(exc: TypeError) -> bool:
+    """Return True if TypeError originated inside a constructor body.
+
+    A call-site TypeError (wrong number/type of arguments) is raised before
+    Python enters the constructor frame — its traceback has only one frame.
+    A TypeError raised inside __init__ has at least two frames (call site +
+    constructor body).  Detecting this lets _default_from_uri propagate real
+    constructor bugs rather than silently trying the next init pattern.
+    """
+    tb = exc.__traceback__
+    return tb is not None and tb.tb_next is not None
+
+
 def _try_no_args_init(adapter_class: type) -> Tuple[Any, Optional[Exception]]:
     """Try no-argument initialization (env, python adapters)."""
     try:
@@ -120,6 +133,11 @@ def _default_from_uri(adapter_class: type, scheme: str, resource: str,
         if adapter is not None:
             return adapter
         if error is not None:
+            # TypeError that originated inside the constructor body (not a
+            # call-site signature mismatch) is a real bug — propagate it
+            # immediately rather than silently trying the next init pattern.
+            if isinstance(error, TypeError) and _is_constructor_error(error):
+                raise error
             init_error = error
 
     if isinstance(init_error, ImportError):
