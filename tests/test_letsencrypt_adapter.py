@@ -13,6 +13,7 @@ from reveal.adapters.letsencrypt.adapter import (
     _find_orphans,
     _find_duplicates,
     _load_cert_info,
+    _check_renewal_timer,
 )
 
 
@@ -320,6 +321,69 @@ class TestLetsEncryptAdapter(unittest.TestCase):
         ns = result['next_steps']
         self.assertFalse(any('check-orphans' in s for s in ns))
         self.assertFalse(any('check-duplicates' in s for s in ns))
+
+
+# ---------------------------------------------------------------------------
+# Renewal timer detection (BACK-079)
+# ---------------------------------------------------------------------------
+
+class TestCheckRenewalTimer(unittest.TestCase):
+
+    def test_returns_unconfigured_when_no_paths_exist(self):
+        """Should report not configured when no timer/cron paths are found."""
+        with patch('reveal.adapters.letsencrypt.adapter.Path') as MockPath:
+            MockPath.return_value.exists.return_value = False
+            result = _check_renewal_timer()
+        self.assertFalse(result['configured'])
+        self.assertEqual(result['mechanisms'], [])
+        self.assertIsNotNone(result['warning'])
+        self.assertIn('renewal timer', result['warning'])
+
+    def test_detects_systemd_timer(self):
+        """Should report configured when a systemd certbot.timer file exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            timer_path = os.path.join(tmpdir, 'certbot.timer')
+            Path(timer_path).touch()
+
+            from reveal.adapters.letsencrypt import adapter as le_mod
+            original_paths = le_mod._RENEWAL_TIMER_PATHS
+            le_mod._RENEWAL_TIMER_PATHS = [timer_path]
+            try:
+                result = _check_renewal_timer()
+            finally:
+                le_mod._RENEWAL_TIMER_PATHS = original_paths
+
+        self.assertTrue(result['configured'])
+        self.assertEqual(len(result['mechanisms']), 1)
+        self.assertIsNone(result['warning'])
+
+    def test_detects_cron_timer(self):
+        """Should detect cron-based renewal and label kind as 'cron'."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cron_path = os.path.join(tmpdir, 'certbot')
+            Path(cron_path).touch()
+
+            from reveal.adapters.letsencrypt import adapter as le_mod
+            original_paths = le_mod._RENEWAL_TIMER_PATHS
+            le_mod._RENEWAL_TIMER_PATHS = [cron_path]
+            try:
+                result = _check_renewal_timer()
+            finally:
+                le_mod._RENEWAL_TIMER_PATHS = original_paths
+
+        self.assertTrue(result['configured'])
+        self.assertEqual(result['mechanisms'][0]['kind'], 'cron')
+
+    def test_renewal_timer_included_in_get_structure(self):
+        """get_structure() should always include renewal_timer key."""
+        adapter = LetsEncryptAdapter('letsencrypt://')
+        with patch.object(adapter, 'live_dir', '/nonexistent'), \
+             patch('reveal.adapters.letsencrypt.adapter._check_renewal_timer',
+                   return_value={'configured': False, 'mechanisms': [], 'warning': 'none'}), \
+             patch('reveal.adapters.letsencrypt.adapter._walk_live_dir', return_value=[]):
+            result = adapter.get_structure()
+        self.assertIn('renewal_timer', result)
+        self.assertEqual(result['renewal_timer']['configured'], False)
 
 
 # ---------------------------------------------------------------------------

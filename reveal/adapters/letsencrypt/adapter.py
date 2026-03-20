@@ -123,6 +123,38 @@ def _find_duplicates(certs: List[Dict]) -> List[List[Dict]]:
     return [group for group in groups.values() if len(group) > 1]
 
 
+_RENEWAL_TIMER_PATHS = [
+    # systemd units (distro-specific locations)
+    '/etc/systemd/system/certbot.timer',
+    '/lib/systemd/system/certbot.timer',
+    '/usr/lib/systemd/system/certbot.timer',
+    # cron-based renewal
+    '/etc/cron.d/certbot',
+    '/etc/cron.daily/certbot',
+]
+
+
+def _check_renewal_timer() -> Dict[str, Any]:
+    """Return renewal automation status by probing well-known timer/cron paths.
+
+    No subprocess execution — filesystem presence only.  A missing timer means
+    certs will expire silently even though certbot is installed.
+    """
+    found = []
+    for path in _RENEWAL_TIMER_PATHS:
+        if Path(path).exists():
+            kind = 'systemd' if 'systemd' in path else 'cron'
+            found.append({'path': path, 'kind': kind})
+    return {
+        'configured': bool(found),
+        'mechanisms': found,
+        'warning': None if found else (
+            'No certbot renewal timer or cron job found — '
+            'certs will expire without automatic renewal'
+        ),
+    }
+
+
 @register_adapter('letsencrypt')
 @register_renderer(LetsEncryptRenderer)
 class LetsEncryptAdapter(ResourceAdapter):
@@ -167,6 +199,7 @@ class LetsEncryptAdapter(ResourceAdapter):
             'live_dir_exists': live_dir_exists,
             'cert_count': len(certs),
             'certs': certs,
+            'renewal_timer': _check_renewal_timer(),
         }
 
         if check_orphans:
@@ -220,6 +253,15 @@ class LetsEncryptAdapter(ResourceAdapter):
                                         'not_after': {'type': 'string'},
                                         'is_expired': {'type': 'boolean'},
                                     },
+                                },
+                            },
+                            'renewal_timer': {
+                                'type': 'object',
+                                'description': 'Renewal automation status (systemd timer or cron)',
+                                'properties': {
+                                    'configured': {'type': 'boolean'},
+                                    'mechanisms': {'type': 'array'},
+                                    'warning': {'type': ['string', 'null']},
                                 },
                             },
                         },

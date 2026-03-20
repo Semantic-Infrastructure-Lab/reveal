@@ -28,6 +28,11 @@ class LetsEncryptRenderer:
 
         _render_cert_table(certs)
 
+        renewal_timer = result.get('renewal_timer')
+        if renewal_timer is not None:
+            print()
+            _render_renewal_timer(renewal_timer)
+
         orphan_check = result.get('orphan_check')
         if orphan_check is not None:
             print()
@@ -78,6 +83,18 @@ def _render_cert_table(certs: list) -> None:
         san_count = len(cert.get('san', []))
         expiry_str = _expiry_label(days, is_expired)
         print(f"  {name:<{col_name}}  {cn:<{col_cn}}  {expiry_str:<8}  {san_count} name(s)")
+
+
+def _render_renewal_timer(renewal_timer: dict) -> None:
+    if renewal_timer.get('configured'):
+        mechanisms = renewal_timer.get('mechanisms', [])
+        kinds = {m['kind'] for m in mechanisms}
+        label = ' + '.join(sorted(kinds))
+        print(f"  ✅ Renewal timer configured ({label})")
+        for m in mechanisms:
+            print(f"      {m['path']}")
+    else:
+        print(f"  ⚠️  {renewal_timer.get('warning', 'No renewal timer found')}")
 
 
 def _render_orphan_check(orphan_check: dict) -> None:
