@@ -48,12 +48,6 @@ def _capture(fn, *args, **kwargs):
     return buf.getvalue()
 
 
-def _mock_run(stdout='', returncode=0):
-    m = MagicMock()
-    m.stdout = stdout
-    m.returncode = returncode
-    return m
-
 
 def _make_import(module, is_relative=False, names=None, line=1):
     return {
@@ -254,64 +248,52 @@ class TestAnalyseImports(unittest.TestCase):
 
 class TestRunBase(unittest.TestCase):
 
-    @patch('subprocess.run')
-    def test_returns_parsed_json(self, mock_run):
-        mock_run.return_value = _mock_run(_BASE_JSON)
+    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    def test_returns_adapter_data(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = json.loads(_BASE_JSON)
         result = _run_base(Path('/project'))
         self.assertIn('files', result)
+        MockAdapter.assert_called_once_with('/project')
 
-    @patch('subprocess.run')
-    def test_empty_stdout_returns_empty_dict(self, mock_run):
-        mock_run.return_value = _mock_run('')
-        self.assertEqual(_run_base(Path('/project')), {})
-
-    @patch('subprocess.run')
-    def test_exception_returns_empty_dict(self, mock_run):
-        mock_run.side_effect = Exception('fail')
+    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    def test_exception_returns_empty_dict(self, MockAdapter):
+        MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         self.assertEqual(_run_base(Path('/project')), {})
 
 
 class TestRunCircular(unittest.TestCase):
 
-    @patch('subprocess.run')
-    def test_returns_cycles(self, mock_run):
-        mock_run.return_value = _mock_run(_CIRCULAR_JSON)
+    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    def test_returns_cycles(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = json.loads(_CIRCULAR_JSON)
         result = _run_circular(Path('/project'))
         self.assertEqual(result['count'], 2)
         self.assertEqual(len(result['cycles']), 2)
+        MockAdapter.assert_called_once_with('/project', 'circular')
 
-    @patch('subprocess.run')
-    def test_empty_stdout_returns_empty_dict(self, mock_run):
-        mock_run.return_value = _mock_run('')
-        self.assertEqual(_run_circular(Path('/project')), {})
-
-    @patch('subprocess.run')
-    def test_exception_returns_empty_dict(self, mock_run):
-        mock_run.side_effect = Exception('fail')
+    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    def test_exception_returns_empty_dict(self, MockAdapter):
+        MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         self.assertEqual(_run_circular(Path('/project')), {})
 
 
 class TestRunUnused(unittest.TestCase):
 
-    @patch('subprocess.run')
-    def test_returns_unused_list(self, mock_run):
-        mock_run.return_value = _mock_run(_UNUSED_JSON)
+    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    def test_returns_unused_list(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = json.loads(_UNUSED_JSON)
         result = _run_unused(Path('/project'))
         self.assertEqual(len(result), 2)
+        MockAdapter.assert_called_once_with('/project', 'unused')
 
-    @patch('subprocess.run')
-    def test_empty_stdout_returns_empty_list(self, mock_run):
-        mock_run.return_value = _mock_run('')
+    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    def test_exception_returns_empty_list(self, MockAdapter):
+        MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         self.assertEqual(_run_unused(Path('/project')), [])
 
-    @patch('subprocess.run')
-    def test_exception_returns_empty_list(self, mock_run):
-        mock_run.side_effect = Exception('fail')
-        self.assertEqual(_run_unused(Path('/project')), [])
-
-    @patch('subprocess.run')
-    def test_missing_unused_key_returns_empty(self, mock_run):
-        mock_run.return_value = _mock_run(json.dumps({'other': 'data'}))
+    @patch('reveal.cli.commands.deps.ImportsAdapter')
+    def test_missing_unused_key_returns_empty(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = {'other': 'data'}
         self.assertEqual(_run_unused(Path('/project')), [])
 
 
@@ -487,107 +469,104 @@ class TestRenderTopImporters(unittest.TestCase):
 
 # ── Integration: run_deps ──────────────────────────────────────────────────────
 
+_BASE_DATA = json.loads(_BASE_JSON)
+_CIRCULAR_DATA = json.loads(_CIRCULAR_JSON)
+_UNUSED_DATA = json.loads(_UNUSED_JSON)['unused']
+
+
 class TestRunDeps(unittest.TestCase):
 
-    def _side_effect(self, base=_BASE_JSON, circular=_CIRCULAR_JSON, unused=_UNUSED_JSON):
-        def _se(cmd, **kwargs):
-            uri = cmd[1] if len(cmd) > 1 else ''
-            if 'circular' in uri:
-                return _mock_run(circular)
-            if 'unused' in uri:
-                return _mock_run(unused)
-            if 'imports://' in uri:
-                return _mock_run(base)
-            return _mock_run('')
-        return _se
+    def _patch_runners(self, base=None, circular=None, unused=None):
+        """Return context managers patching all three data collectors."""
+        base_val = base if base is not None else _BASE_DATA
+        circ_val = circular if circular is not None else _CIRCULAR_DATA
+        unused_val = unused if unused is not None else _UNUSED_DATA
+        return (
+            patch('reveal.cli.commands.deps._run_base', return_value=base_val),
+            patch('reveal.cli.commands.deps._run_circular', return_value=circ_val),
+            patch('reveal.cli.commands.deps._run_unused', return_value=unused_val),
+        )
 
     def test_nonexistent_path_exits_1(self):
         with self.assertRaises(SystemExit) as ctx:
             run_deps(_args(path='/no/such/xyz'))
         self.assertEqual(ctx.exception.code, 1)
 
-    @patch('subprocess.run')
-    def test_json_format_outputs_valid_json(self, mock_run):
+    def test_json_format_outputs_valid_json(self):
         import tempfile
-        mock_run.side_effect = self._side_effect()
-        with tempfile.TemporaryDirectory() as tmp:
-            buf = StringIO()
-            with patch('sys.stdout', buf):
-                # JSON format returns early before exit-code logic
-                run_deps(_args(path=tmp, format='json'))
-            data = json.loads(buf.getvalue())
-            self.assertIn('path', data)
-            self.assertIn('base', data)
-            self.assertIn('circular', data)
-            self.assertIn('unused', data)
+        p_base, p_circ, p_unused = self._patch_runners()
+        with p_base, p_circ, p_unused:
+            with tempfile.TemporaryDirectory() as tmp:
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_deps(_args(path=tmp, format='json'))
+                data = json.loads(buf.getvalue())
+                self.assertIn('path', data)
+                self.assertIn('base', data)
+                self.assertIn('circular', data)
+                self.assertIn('unused', data)
 
-    @patch('subprocess.run')
-    def test_text_output_shows_header(self, mock_run):
+    def test_text_output_shows_header(self):
         import tempfile
-        mock_run.side_effect = self._side_effect(circular='', unused='')
-        with tempfile.TemporaryDirectory() as tmp:
-            buf = StringIO()
-            with patch('sys.stdout', buf):
-                run_deps(_args(path=tmp))
-            self.assertIn('Dependencies:', buf.getvalue())
-
-    @patch('subprocess.run')
-    def test_no_circular_skips_circular_queries(self, mock_run):
-        import tempfile
-        mock_run.side_effect = self._side_effect(circular='', unused='')
-        with tempfile.TemporaryDirectory() as tmp:
-            buf = StringIO()
-            with patch('sys.stdout', buf):
-                run_deps(_args(path=tmp, no_circular=True))
-            for call in mock_run.call_args_list:
-                cmd = call[0][0]
-                uri = cmd[1] if len(cmd) > 1 else ''
-                self.assertNotIn('circular', uri)
-
-    @patch('subprocess.run')
-    def test_no_unused_skips_unused_queries(self, mock_run):
-        import tempfile
-        mock_run.side_effect = self._side_effect(circular='', unused='')
-        with tempfile.TemporaryDirectory() as tmp:
-            buf = StringIO()
-            with patch('sys.stdout', buf):
-                run_deps(_args(path=tmp, no_unused=True))
-            for call in mock_run.call_args_list:
-                cmd = call[0][0]
-                uri = cmd[1] if len(cmd) > 1 else ''
-                self.assertNotIn('unused', uri)
-
-    @patch('subprocess.run')
-    def test_exits_0_when_no_issues(self, mock_run):
-        import tempfile
-        clean_circular = json.dumps({'cycles': [], 'count': 0})
-        mock_run.side_effect = self._side_effect(circular=clean_circular, unused='')
-        with tempfile.TemporaryDirectory() as tmp:
-            buf = StringIO()
-            with patch('sys.stdout', buf):
-                run_deps(_args(path=tmp))
-            # No SystemExit (or exit code 0) — method returns normally
-
-    @patch('subprocess.run')
-    def test_exits_1_when_circular_deps(self, mock_run):
-        import tempfile
-        mock_run.side_effect = self._side_effect(unused='')
-        with tempfile.TemporaryDirectory() as tmp:
-            buf = StringIO()
-            with patch('sys.stdout', buf):
-                with self.assertRaises(SystemExit) as ctx:
+        p_base, p_circ, p_unused = self._patch_runners(circular={}, unused=[])
+        with p_base, p_circ, p_unused:
+            with tempfile.TemporaryDirectory() as tmp:
+                buf = StringIO()
+                with patch('sys.stdout', buf):
                     run_deps(_args(path=tmp))
-            self.assertEqual(ctx.exception.code, 1)
+                self.assertIn('Dependencies:', buf.getvalue())
 
-    @patch('subprocess.run')
-    def test_empty_data_no_crash(self, mock_run):
+    def test_no_circular_skips_circular_runner(self):
         import tempfile
-        mock_run.side_effect = self._side_effect(base='', circular='', unused='')
-        with tempfile.TemporaryDirectory() as tmp:
-            buf = StringIO()
-            with patch('sys.stdout', buf):
-                run_deps(_args(path=tmp))
-            self.assertIn('Dependencies:', buf.getvalue())
+        p_base, p_circ, p_unused = self._patch_runners(circular={}, unused=[])
+        with p_base, p_circ as mock_circ, p_unused:
+            with tempfile.TemporaryDirectory() as tmp:
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_deps(_args(path=tmp, no_circular=True))
+                mock_circ.assert_not_called()
+
+    def test_no_unused_skips_unused_runner(self):
+        import tempfile
+        p_base, p_circ, p_unused = self._patch_runners(circular={}, unused=[])
+        with p_base, p_circ, p_unused as mock_unused:
+            with tempfile.TemporaryDirectory() as tmp:
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_deps(_args(path=tmp, no_unused=True))
+                mock_unused.assert_not_called()
+
+    def test_exits_0_when_no_issues(self):
+        import tempfile
+        clean_circular = {'cycles': [], 'count': 0}
+        p_base, p_circ, p_unused = self._patch_runners(circular=clean_circular, unused=[])
+        with p_base, p_circ, p_unused:
+            with tempfile.TemporaryDirectory() as tmp:
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_deps(_args(path=tmp))
+                # No SystemExit — method returns normally
+
+    def test_exits_1_when_circular_deps(self):
+        import tempfile
+        p_base, p_circ, p_unused = self._patch_runners(unused=[])
+        with p_base, p_circ, p_unused:
+            with tempfile.TemporaryDirectory() as tmp:
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    with self.assertRaises(SystemExit) as ctx:
+                        run_deps(_args(path=tmp))
+                self.assertEqual(ctx.exception.code, 1)
+
+    def test_empty_data_no_crash(self):
+        import tempfile
+        p_base, p_circ, p_unused = self._patch_runners(base={}, circular={}, unused=[])
+        with p_base, p_circ, p_unused:
+            with tempfile.TemporaryDirectory() as tmp:
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_deps(_args(path=tmp))
+                self.assertIn('Dependencies:', buf.getvalue())
 
 
 if __name__ == '__main__':

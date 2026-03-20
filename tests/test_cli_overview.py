@@ -7,7 +7,7 @@ import unittest
 from argparse import Namespace
 from io import StringIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 
 from reveal.cli.commands.overview import (
     _age_label,
@@ -47,12 +47,6 @@ def _capture(fn, *args, **kwargs):
         fn(*args, **kwargs)
     return buf.getvalue()
 
-
-def _mock_run(stdout='', returncode=0):
-    m = MagicMock()
-    m.stdout = stdout
-    m.returncode = returncode
-    return m
 
 
 _STATS_JSON = json.dumps({
@@ -220,79 +214,67 @@ class TestAgeLabel(unittest.TestCase):
 
 class TestRunStats(unittest.TestCase):
 
-    @patch('subprocess.run')
-    def test_returns_parsed_json(self, mock_run):
-        mock_run.return_value = _mock_run(_STATS_JSON)
+    @patch('reveal.cli.commands.overview.StatsAdapter')
+    def test_returns_adapter_data(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = json.loads(_STATS_JSON)
         result = _run_stats(Path('/project'))
         self.assertIn('summary', result)
         self.assertEqual(result['summary']['total_files'], 100)
+        MockAdapter.assert_called_once_with('/project', 'hotspots=true')
 
-    @patch('subprocess.run')
-    def test_empty_stdout_returns_empty_dict(self, mock_run):
-        mock_run.return_value = _mock_run('')
-        result = _run_stats(Path('/project'))
-        self.assertEqual(result, {})
-
-    @patch('subprocess.run')
-    def test_exception_returns_empty_dict(self, _mock):
-        _mock.side_effect = Exception('fail')
+    @patch('reveal.cli.commands.overview.StatsAdapter')
+    def test_exception_returns_empty_dict(self, MockAdapter):
+        MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         result = _run_stats(Path('/project'))
         self.assertEqual(result, {})
 
 
 class TestRunGitLog(unittest.TestCase):
 
-    @patch('subprocess.run')
-    def test_returns_history_list(self, mock_run):
-        mock_run.return_value = _mock_run(_GIT_JSON)
+    @patch('reveal.cli.commands.overview.GitAdapter')
+    def test_returns_history_list(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = json.loads(_GIT_JSON)
         result = _run_git_log(Path('/project'), 5)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]['hash'], 'abc1234')
 
-    @patch('subprocess.run')
-    def test_empty_stdout_returns_empty(self, mock_run):
-        mock_run.return_value = _mock_run('')
+    @patch('reveal.cli.commands.overview.GitAdapter')
+    def test_exception_returns_empty(self, MockAdapter):
+        MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         result = _run_git_log(Path('/project'), 5)
         self.assertEqual(result, [])
 
-    @patch('subprocess.run')
-    def test_exception_returns_empty(self, _mock):
-        _mock.side_effect = Exception('fail')
+    @patch('reveal.cli.commands.overview.GitAdapter')
+    def test_missing_history_key_returns_empty(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = {'other': 'data'}
         result = _run_git_log(Path('/project'), 5)
         self.assertEqual(result, [])
 
-    @patch('subprocess.run')
-    def test_missing_history_key_returns_empty(self, mock_run):
-        mock_run.return_value = _mock_run(json.dumps({'other': 'data'}))
-        result = _run_git_log(Path('/project'), 5)
-        self.assertEqual(result, [])
+    @patch('reveal.cli.commands.overview.GitAdapter')
+    def test_limit_passed_as_query_param(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = {}
+        _run_git_log(Path('/project'), 7)
+        MockAdapter.assert_called_once_with(path='/project', query={'type': 'log', 'limit': '7'})
 
 
 class TestRunComplexFunctions(unittest.TestCase):
 
-    @patch('subprocess.run')
-    def test_returns_results_list(self, mock_run):
-        mock_run.return_value = _mock_run(_AST_JSON)
+    @patch('reveal.cli.commands.overview.AstAdapter')
+    def test_returns_results_list(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = json.loads(_AST_JSON)
         result = _run_complex_functions(Path('/project'), 5)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]['name'], 'complex_fn')
 
-    @patch('subprocess.run')
-    def test_falls_back_to_elements_key(self, mock_run):
-        data = json.dumps({'elements': [{'name': 'fn', 'complexity': 15}]})
-        mock_run.return_value = _mock_run(data)
+    @patch('reveal.cli.commands.overview.AstAdapter')
+    def test_falls_back_to_elements_key(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = {'elements': [{'name': 'fn', 'complexity': 15}]}
         result = _run_complex_functions(Path('/project'), 5)
         self.assertEqual(result[0]['name'], 'fn')
 
-    @patch('subprocess.run')
-    def test_empty_stdout_returns_empty(self, mock_run):
-        mock_run.return_value = _mock_run('')
-        result = _run_complex_functions(Path('/project'), 5)
-        self.assertEqual(result, [])
-
-    @patch('subprocess.run')
-    def test_exception_returns_empty(self, _mock):
-        _mock.side_effect = Exception('fail')
+    @patch('reveal.cli.commands.overview.AstAdapter')
+    def test_exception_returns_empty(self, MockAdapter):
+        MockAdapter.return_value.get_structure.side_effect = Exception('fail')
         result = _run_complex_functions(Path('/project'), 5)
         self.assertEqual(result, [])
 
@@ -503,75 +485,76 @@ class TestRenderGitLog(unittest.TestCase):
 
 # ── Integration: run_overview ──────────────────────────────────────────────────
 
+_STATS_DATA = json.loads(_STATS_JSON)
+_GIT_DATA = json.loads(_GIT_JSON)['history']
+_AST_DATA = json.loads(_AST_JSON)['results']
+
+
 class TestRunOverview(unittest.TestCase):
 
-    def _make_mocks(self, stats=_STATS_JSON, git=_GIT_JSON, ast=_AST_JSON):
-        """Return a side_effect function for subprocess.run."""
-        def side_effect(cmd, **kwargs):
-            uri = cmd[1] if len(cmd) > 1 else ''
-            if 'stats://' in uri:
-                return _mock_run(stats)
-            if 'git://' in uri:
-                return _mock_run(git)
-            if 'ast://' in uri:
-                return _mock_run(ast)
-            return _mock_run('')
-        return side_effect
+    def _patch_runners(self, stats=None, git=None, ast=None):
+        """Return context managers patching all three data collectors."""
+        import contextlib
+        stats_val = stats if stats is not None else _STATS_DATA
+        git_val = git if git is not None else _GIT_DATA
+        ast_val = ast if ast is not None else _AST_DATA
+        return (
+            patch('reveal.cli.commands.overview._run_stats', return_value=stats_val),
+            patch('reveal.cli.commands.overview._run_git_log', return_value=git_val),
+            patch('reveal.cli.commands.overview._run_complex_functions', return_value=ast_val),
+        )
 
     def test_nonexistent_path_exits_1(self):
         with self.assertRaises(SystemExit) as ctx:
             run_overview(_args(path='/no/such/dir/xyz'))
         self.assertEqual(ctx.exception.code, 1)
 
-    @patch('subprocess.run')
-    def test_json_format_outputs_valid_json(self, mock_run):
+    def test_json_format_outputs_valid_json(self):
         import tempfile
-        mock_run.side_effect = self._make_mocks()
-        with tempfile.TemporaryDirectory() as tmp:
-            buf = StringIO()
-            with patch('sys.stdout', buf):
-                run_overview(_args(path=tmp, format='json'))
-            data = json.loads(buf.getvalue())
-            self.assertIn('path', data)
-            self.assertIn('stats', data)
-            self.assertIn('git_log', data)
-            self.assertIn('complex_functions', data)
+        p_stats, p_git, p_ast = self._patch_runners()
+        with p_stats, p_git, p_ast:
+            with tempfile.TemporaryDirectory() as tmp:
+                buf = StringIO()
+                with patch('sys.stdout', buf):
+                    run_overview(_args(path=tmp, format='json'))
+                data = json.loads(buf.getvalue())
+                self.assertIn('path', data)
+                self.assertIn('stats', data)
+                self.assertIn('git_log', data)
+                self.assertIn('complex_functions', data)
 
-    @patch('subprocess.run')
-    def test_text_output_contains_overview_header(self, mock_run):
+    def test_text_output_contains_overview_header(self):
         import tempfile
-        mock_run.side_effect = self._make_mocks()
-        with tempfile.TemporaryDirectory() as tmp:
-            out = _capture(run_overview, _args(path=tmp))
-            self.assertIn('Overview:', out)
+        p_stats, p_git, p_ast = self._patch_runners()
+        with p_stats, p_git, p_ast:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = _capture(run_overview, _args(path=tmp))
+                self.assertIn('Overview:', out)
 
-    @patch('subprocess.run')
-    def test_no_git_skips_git_section(self, mock_run):
+    def test_no_git_skips_git_adapter(self):
         import tempfile
-        mock_run.side_effect = self._make_mocks()
-        with tempfile.TemporaryDirectory() as tmp:
-            out = _capture(run_overview, _args(path=tmp, no_git=True))
-            self.assertNotIn('Recent changes', out)
-            # git:// should never be called
-            for call in mock_run.call_args_list:
-                cmd = call[0][0]
-                self.assertNotIn('git://', cmd[1] if len(cmd) > 1 else '')
+        p_stats, p_git, p_ast = self._patch_runners()
+        with p_stats as mock_stats, p_git as mock_git, p_ast:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = _capture(run_overview, _args(path=tmp, no_git=True))
+                self.assertNotIn('Recent changes', out)
+                mock_git.assert_not_called()
 
-    @patch('subprocess.run')
-    def test_text_output_shows_next_steps(self, mock_run):
+    def test_text_output_shows_next_steps(self):
         import tempfile
-        mock_run.side_effect = self._make_mocks()
-        with tempfile.TemporaryDirectory() as tmp:
-            out = _capture(run_overview, _args(path=tmp))
-            self.assertIn('Next steps', out)
+        p_stats, p_git, p_ast = self._patch_runners()
+        with p_stats, p_git, p_ast:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = _capture(run_overview, _args(path=tmp))
+                self.assertIn('Next steps', out)
 
-    @patch('subprocess.run')
-    def test_empty_stats_no_crash(self, mock_run):
+    def test_empty_data_no_crash(self):
         import tempfile
-        mock_run.side_effect = self._make_mocks(stats='', git='', ast='')
-        with tempfile.TemporaryDirectory() as tmp:
-            out = _capture(run_overview, _args(path=tmp))
-            self.assertIn('Overview:', out)  # Header always shows
+        p_stats, p_git, p_ast = self._patch_runners(stats={}, git=[], ast=[])
+        with p_stats, p_git, p_ast:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = _capture(run_overview, _args(path=tmp))
+                self.assertIn('Overview:', out)  # Header always shows
 
 
 if __name__ == '__main__':

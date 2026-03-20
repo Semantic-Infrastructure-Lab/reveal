@@ -2,12 +2,16 @@
 
 import argparse
 import json
-import subprocess
+import logging
 import sys
 from argparse import Namespace
 from collections import Counter
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional
+
+from reveal.adapters.imports import ImportsAdapter
+
+logger = logging.getLogger(__name__)
 
 # Python stdlib module names (Python 3.10+, with fallback set for older versions)
 try:
@@ -112,46 +116,31 @@ def run_deps(args: Namespace) -> None:
 # ── Data collectors ────────────────────────────────────────────────────────────
 
 def _run_base(path: Path) -> Dict[str, Any]:
-    """Fetch base import map via imports://."""
+    """Fetch base import map via ImportsAdapter."""
     try:
-        result = subprocess.run(
-            ['reveal', f'imports://{path}', '--format=json'],
-            capture_output=True, text=True, timeout=120
-        )
-        if result.stdout.strip():
-            return json.loads(result.stdout)
-    except Exception:
-        pass
-    return {}
+        return ImportsAdapter(str(path)).get_structure()
+    except Exception as exc:
+        logger.warning("import map collection failed for %s: %s", path, exc)
+        return {}
 
 
 def _run_circular(path: Path) -> Dict[str, Any]:
-    """Fetch circular dependency cycles via imports://?circular."""
+    """Fetch circular dependency cycles via ImportsAdapter."""
     try:
-        result = subprocess.run(
-            ['reveal', f'imports://{path}?circular', '--format=json'],
-            capture_output=True, text=True, timeout=60
-        )
-        if result.stdout.strip():
-            return json.loads(result.stdout)
-    except Exception:
-        pass
-    return {}
+        return ImportsAdapter(str(path), 'circular').get_structure()
+    except Exception as exc:
+        logger.warning("circular dependency collection failed for %s: %s", path, exc)
+        return {}
 
 
 def _run_unused(path: Path) -> List[Dict[str, Any]]:
-    """Fetch unused imports via imports://?unused."""
+    """Fetch unused imports via ImportsAdapter."""
     try:
-        result = subprocess.run(
-            ['reveal', f'imports://{path}?unused', '--format=json'],
-            capture_output=True, text=True, timeout=60
-        )
-        if result.stdout.strip():
-            data = json.loads(result.stdout)
-            return data.get('unused', [])
-    except Exception:
-        pass
-    return []
+        data = ImportsAdapter(str(path), 'unused').get_structure()
+        return data.get('unused', [])
+    except Exception as exc:
+        logger.warning("unused imports collection failed for %s: %s", path, exc)
+        return []
 
 
 def _local_package_names(base_path: Path) -> frozenset:

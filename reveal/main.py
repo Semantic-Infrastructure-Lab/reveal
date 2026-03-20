@@ -27,6 +27,7 @@ class TeeWriter:
 
     def flush(self) -> None:
         self.original.flush()
+        self.capture.flush()
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.original, name)

@@ -70,8 +70,8 @@ IMPORT_NODE_TYPES = (
 
 # Mapping from element type to node types (for element extraction)
 ELEMENT_TYPE_MAP = {
-    'function': FUNCTION_NODE_TYPES[:4],  # Most common function types
-    'class': CLASS_NODE_TYPES[:2],        # Most common class types
+    'function': FUNCTION_NODE_TYPES,
+    'class': CLASS_NODE_TYPES,
     'struct': STRUCT_NODE_TYPES,
 }
 

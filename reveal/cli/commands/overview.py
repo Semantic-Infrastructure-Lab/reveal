@@ -2,13 +2,19 @@
 
 import argparse
 import json
-import subprocess
+import logging
 import sys
 from argparse import Namespace
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+
+from reveal.adapters.stats import StatsAdapter
+from reveal.adapters.git import GitAdapter
+from reveal.adapters.ast import AstAdapter
+
+logger = logging.getLogger(__name__)
 
 
 # Map common extensions to display names
@@ -99,49 +105,32 @@ def run_overview(args: Namespace) -> None:
 # ── Data collectors ────────────────────────────────────────────────────────────
 
 def _run_stats(path: Path) -> Dict[str, Any]:
-    """Fetch stats and hotspots via stats://."""
+    """Fetch stats and hotspots via StatsAdapter."""
     try:
-        result = subprocess.run(
-            ['reveal', f'stats://{path}?hotspots=true', '--format=json'],
-            capture_output=True, text=True, timeout=120
-        )
-        if result.stdout.strip():
-            return json.loads(result.stdout)
-    except Exception:
-        pass
-    return {}
+        return StatsAdapter(str(path), 'hotspots=true').get_structure()
+    except Exception as exc:
+        logger.warning("stats collection failed for %s: %s", path, exc)
+        return {}
 
 
 def _run_git_log(path: Path, limit: int) -> List[Dict[str, Any]]:
-    """Fetch recent commits via git://."""
+    """Fetch recent commits via GitAdapter."""
     try:
-        result = subprocess.run(
-            ['reveal', f'git://{path}?type=log&limit={limit}', '--format=json'],
-            capture_output=True, text=True, timeout=30
-        )
-        if result.stdout.strip():
-            data = json.loads(result.stdout)
-            return data.get('history', [])
-    except Exception:
-        pass
-    return []
+        data = GitAdapter(path=str(path), query={'type': 'log', 'limit': str(limit)}).get_structure()
+        return data.get('history', [])
+    except Exception as exc:
+        logger.warning("git log collection failed for %s: %s", path, exc)
+        return []
 
 
 def _run_complex_functions(path: Path, limit: int) -> List[Dict[str, Any]]:
-    """Fetch top complex functions via ast://."""
+    """Fetch top complex functions via AstAdapter."""
     try:
-        result = subprocess.run(
-            ['reveal',
-             f'ast://{path}?complexity>9&sort=-complexity&limit={limit}',
-             '--format=json'],
-            capture_output=True, text=True, timeout=60
-        )
-        if result.stdout.strip():
-            data = json.loads(result.stdout)
-            return data.get('results', data.get('elements', []))
-    except Exception:
-        pass
-    return []
+        data = AstAdapter(str(path), f'complexity>9&sort=-complexity&limit={limit}').get_structure()
+        return data.get('results', data.get('elements', []))
+    except Exception as exc:
+        logger.warning("AST collection failed for %s: %s", path, exc)
+        return []
 
 
 def _language_breakdown(files: List[Dict[str, Any]]) -> List[tuple]:

@@ -32,6 +32,7 @@ class FileAnalyzer(ABC):
 
     def __init__(self, path: str):
         self.path = Path(path)
+        self._detected_encoding: str = 'utf-8'
         self.lines = self._read_file()
         self.content = '\n'.join(self.lines)
 
@@ -51,7 +52,9 @@ class FileAnalyzer(ABC):
         for encoding in encodings:
             try:
                 with open(self.path, 'r', encoding=encoding) as f:
-                    return f.read().splitlines()
+                    lines = f.read().splitlines()
+                    self._detected_encoding = encoding
+                    return lines
             except (UnicodeDecodeError, LookupError):
                 # Try next encoding
                 logger.debug(f"Failed to read {self.path} with {encoding}, trying next")
@@ -59,6 +62,7 @@ class FileAnalyzer(ABC):
 
         # Last resort: read as binary and decode with errors='replace'
         logger.debug(f"All encodings failed for {self.path}, using binary mode with error replacement")
+        self._detected_encoding = 'utf-8'
         with open(self.path, 'rb') as f:
             content = f.read().decode('utf-8', errors='replace')
             return content.splitlines()
@@ -149,19 +153,12 @@ class FileAnalyzer(ABC):
         return self._grep_extract(name)
 
     def _grep_extract(self, name: str) -> Optional[Dict[str, Any]]:
-        """Fallback: Extract by grepping for name."""
-        for i, line in enumerate(self.lines, 1):
-            if name in line:
-                # Found it - extract this line and a few after
-                line_start = i
-                line_end = min(i + 20, len(self.lines))  # Up to 20 lines
+        """Fallback: Extract by grepping for name.
 
-                return {
-                    'name': name,
-                    'line_start': line_start,
-                    'line_end': line_end,
-                    'source': '\n'.join(self.lines[line_start-1:line_end]),
-                }
+        Returns None — substring matching hits comments, strings, and variable
+        references, producing confidently wrong results.  Analyzers that need
+        element extraction should override extract_element() directly.
+        """
         return None
 
     def format_with_lines(self, source: str, start_line: int) -> str:
@@ -184,13 +181,8 @@ class FileAnalyzer(ABC):
         return '\n'.join(result)
 
     def _detect_encoding(self) -> str:
-        """Detect file encoding."""
-        # Simple heuristic for now
-        try:
-            self.content.encode('ascii')
-            return 'ASCII'
-        except UnicodeEncodeError:
-            return 'UTF-8'
+        """Return the encoding that successfully read this file."""
+        return self._detected_encoding.upper()
 
     def _extract_relationships(self, structure: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, Any]]]:
         """Extract relationships from structure.

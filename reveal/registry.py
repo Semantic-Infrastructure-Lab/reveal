@@ -14,10 +14,7 @@ Design:
 
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
+from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
