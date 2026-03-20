@@ -2,6 +2,8 @@
 
 import sys
 
+from ...rendering.diff import render_diff
+
 
 class DiffRenderer:
     """Renderer for diff comparison results."""
@@ -14,7 +16,6 @@ class DiffRenderer:
             result: Diff result from adapter
             format: Output format (text, json, grep)
         """
-        from ...rendering.diff import render_diff
         render_diff(result, format, is_element=False)
 
     @staticmethod
@@ -25,7 +26,6 @@ class DiffRenderer:
             result: Element diff result
             format: Output format
         """
-        from ...rendering.diff import render_diff
         render_diff(result, format, is_element=True)
 
     @staticmethod

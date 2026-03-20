@@ -3,7 +3,7 @@
 Targets: lines 46, 71-72, 81-82, 95-130, 152-153, 163, 188, 203-205, 245, 248-249, 251
 Current coverage: 71% → target: 90%+
 
-Note: get_analyzer is imported inside function bodies → patch reveal.registry.get_analyzer.
+Note: get_analyzer is hoisted to module level → patch reveal.adapters.diff.git.get_analyzer.
       GitAdapter is imported inside resolve_git_adapter → patch via sys.modules.
 """
 
@@ -61,7 +61,7 @@ class TestResolveGitAdapter:
         mock_git_module.GitAdapter = mock_adapter_cls
 
         with patch.dict(sys.modules, {'reveal.adapters.git.adapter': mock_git_module}):
-            with patch('reveal.registry.get_analyzer', return_value=mock_analyzer_cls):
+            with patch('reveal.adapters.diff.git.get_analyzer', return_value=mock_analyzer_cls):
                 result = resolve_git_adapter('test.py@HEAD')
         assert 'functions' in result
 
@@ -78,7 +78,7 @@ class TestResolveGitAdapter:
         mock_git_module.GitAdapter = mock_adapter_cls
 
         with patch.dict(sys.modules, {'reveal.adapters.git.adapter': mock_git_module}):
-            with patch('reveal.registry.get_analyzer', return_value=None):
+            with patch('reveal.adapters.diff.git.get_analyzer', return_value=None):
                 with pytest.raises(ValueError, match='No analyzer found'):
                     resolve_git_adapter('test.py@HEAD')
 
@@ -160,7 +160,7 @@ class TestResolveGitFile:
         mock_result.stdout = 'def foo(): pass'
 
         with patch('subprocess.run', return_value=mock_result):
-            with patch('reveal.registry.get_analyzer', return_value=None):
+            with patch('reveal.adapters.diff.git.get_analyzer', return_value=None):
                 with pytest.raises(ValueError, match='No analyzer found'):
                     resolve_git_file('HEAD', 'file.py')
 
@@ -172,7 +172,7 @@ class TestResolveGitFile:
         mock_cls = MagicMock(return_value=mock_analyzer)
 
         with patch('subprocess.run', return_value=mock_result):
-            with patch('reveal.registry.get_analyzer', return_value=mock_cls):
+            with patch('reveal.adapters.diff.git.get_analyzer', return_value=mock_cls):
                 result = resolve_git_file('HEAD', 'test.py')
         assert 'functions' in result
 
@@ -186,7 +186,7 @@ class TestFetchAndAnalyzeGitFile:
         mock_result.stdout = 'const x = 1;'
 
         with patch('subprocess.run', return_value=mock_result):
-            with patch('reveal.registry.get_analyzer', return_value=None):
+            with patch('reveal.adapters.diff.git.get_analyzer', return_value=None):
                 result = _fetch_and_analyze_git_file('HEAD', 'file.js')
         assert result == {}
 
@@ -198,7 +198,7 @@ class TestFetchAndAnalyzeGitFile:
         mock_cls = MagicMock(return_value=mock_analyzer)
 
         with patch('subprocess.run', return_value=mock_result):
-            with patch('reveal.registry.get_analyzer', return_value=mock_cls):
+            with patch('reveal.adapters.diff.git.get_analyzer', return_value=mock_cls):
                 result = _fetch_and_analyze_git_file('HEAD', 'test.py')
         assert 'functions' in result
 
@@ -256,7 +256,7 @@ class TestResolveGitDirectory:
     def test_skips_files_without_analyzer(self):
         """Cover line 245: no analyzer → continue."""
         with patch('reveal.adapters.diff.git._ls_tree_files', return_value=['dir/main.js']):
-            with patch('reveal.registry.get_analyzer', return_value=None):
+            with patch('reveal.adapters.diff.git.get_analyzer', return_value=None):
                 result = resolve_git_directory('HEAD', 'dir')
         assert result['file_count'] == 0
         assert result['functions'] == []
@@ -266,7 +266,7 @@ class TestResolveGitDirectory:
         mock_cls = MagicMock()
 
         with patch('reveal.adapters.diff.git._ls_tree_files', return_value=['dir/file.py']):
-            with patch('reveal.registry.get_analyzer', return_value=mock_cls):
+            with patch('reveal.adapters.diff.git.get_analyzer', return_value=mock_cls):
                 with patch('reveal.adapters.diff.git._fetch_and_analyze_git_file',
                            side_effect=RuntimeError('git exploded')):
                     result = resolve_git_directory('HEAD', 'dir')
@@ -277,7 +277,7 @@ class TestResolveGitDirectory:
         mock_cls = MagicMock()
 
         with patch('reveal.adapters.diff.git._ls_tree_files', return_value=['dir/file.py']):
-            with patch('reveal.registry.get_analyzer', return_value=mock_cls):
+            with patch('reveal.adapters.diff.git.get_analyzer', return_value=mock_cls):
                 with patch('reveal.adapters.diff.git._fetch_and_analyze_git_file', return_value={}):
                     result = resolve_git_directory('HEAD', 'dir')
         assert result['file_count'] == 0
@@ -287,7 +287,7 @@ class TestResolveGitDirectory:
         struct = {'functions': [{'name': 'foo'}], 'classes': [{'name': 'Bar'}], 'imports': []}
 
         with patch('reveal.adapters.diff.git._ls_tree_files', return_value=['dir/file.py']):
-            with patch('reveal.registry.get_analyzer', return_value=mock_cls):
+            with patch('reveal.adapters.diff.git.get_analyzer', return_value=mock_cls):
                 with patch('reveal.adapters.diff.git._fetch_and_analyze_git_file', return_value=struct):
                     result = resolve_git_directory('HEAD', 'dir')
 

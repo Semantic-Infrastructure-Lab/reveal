@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from ....utils.parallel import grep_files
-from .messages import _find_excerpt, _content_to_blocks, _collect_block_matches
+from .messages import _content_to_blocks, _collect_block_matches
 
 
 def _extract_first_snippet(jsonl_path: Path, term: str) -> Dict[str, str]:
@@ -48,7 +48,7 @@ def _extract_first_snippet(jsonl_path: Path, term: str) -> Dict[str, str]:
                         'role': role,
                         'timestamp': ts,
                     }
-    except Exception:
+    except Exception:  # noqa: BLE001 — file read errors must never surface in search results
         pass
     return {'excerpt': '', 'role': '', 'timestamp': ''}
 

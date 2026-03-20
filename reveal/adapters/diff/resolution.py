@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional, List, cast
 
 from .git import resolve_git_ref, resolve_git_adapter
 from ..base import get_adapter_class
+from ...registry import get_analyzer
 
 
 def resolve_uri(uri: str, **kwargs) -> Dict[str, Any]:
@@ -66,7 +67,6 @@ def resolve_uri(uri: str, **kwargs) -> Dict[str, Any]:
             return resolve_directory(str(file_path))
 
         # Single file - use analyzer
-        from ...registry import get_analyzer
         analyzer_class = get_analyzer(resource, allow_fallback=True)
         if not analyzer_class:
             raise ValueError(f"No analyzer found for file: {resource}")
@@ -92,7 +92,6 @@ def resolve_directory(dir_path: str) -> Dict[str, Any]:
     Returns:
         Dict with aggregated structures from all files
     """
-    from ...registry import get_analyzer
 
     directory = Path(dir_path).resolve()
     if not directory.is_dir():
@@ -156,7 +155,6 @@ def instantiate_adapter(adapter_class: type, scheme: str, resource: str):
     """
     # For file scheme, we need to use the file analyzer
     if scheme == 'file':
-        from ...registry import get_analyzer
         analyzer_class = get_analyzer(resource, allow_fallback=True)
         if not analyzer_class:
             raise ValueError(f"No analyzer found for file: {resource}")
@@ -195,7 +193,6 @@ def find_analyzable_files(directory: Path) -> List[Path]:
     Returns:
         List of file paths that have analyzers
     """
-    from ...registry import get_analyzer
 
     analyzable = []
     for root, dirs, files in os.walk(directory):

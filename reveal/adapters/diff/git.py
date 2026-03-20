@@ -6,6 +6,8 @@ import tempfile
 from pathlib import Path
 from typing import Dict, Any, cast
 
+from ...registry import get_analyzer
+
 
 def resolve_git_ref(git_ref: str, path: str) -> Dict[str, Any]:
     """Resolve a git reference to a structure.
@@ -106,7 +108,6 @@ def resolve_git_adapter(resource: str) -> Dict[str, Any]:
             file_path = git_result.get('path', resource.split('@')[0])
 
             # Analyze the content to get code structure
-            from ...registry import get_analyzer
             analyzer_class = get_analyzer(file_path, allow_fallback=True)
             if not analyzer_class:
                 raise ValueError(f"No analyzer found for file: {file_path}")
@@ -140,7 +141,6 @@ def resolve_git_file(git_ref: str, path: str) -> Dict[str, Any]:
     Returns:
         Structure dict
     """
-    from ...registry import get_analyzer
 
     # Get file content from git
     try:
@@ -172,7 +172,6 @@ def _fetch_and_analyze_git_file(git_ref: str, file_path: str) -> Dict[str, Any]:
 
     Returns the structure dict (functions/classes/imports), or raises on failure.
     """
-    from ...registry import get_analyzer
 
     content_result = subprocess.run(
         ['git', 'show', f'{git_ref}:{file_path}'],
@@ -231,7 +230,6 @@ def resolve_git_directory(git_ref: str, dir_path: str) -> Dict[str, Any]:
     Returns:
         Aggregated structure dict
     """
-    from ...registry import get_analyzer
 
     file_paths = _ls_tree_files(git_ref, dir_path)
 

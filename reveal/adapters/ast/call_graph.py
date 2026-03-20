@@ -10,6 +10,8 @@ with optional `resolved_file` + `resolved_name` keys.
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ...analyzers.imports.base import get_extractor
+
 
 def build_symbol_map(file_path: str) -> Dict[str, Optional[str]]:
     """Build a symbol → resolved-file-path map from a file's imports.
@@ -26,8 +28,6 @@ def build_symbol_map(file_path: str) -> Dict[str, Optional[str]]:
         absolute file path, or None when the import target could not be found
         on disk (e.g. stdlib or third-party package).
     """
-    from ...analyzers.imports.base import get_extractor
-
     path = Path(file_path)
     extractor = get_extractor(path)
     if not extractor:
@@ -93,7 +93,6 @@ def build_alias_map(file_path: str) -> Dict[str, str]:
     """
     path = Path(file_path)
     try:
-        from ...analyzers.imports.base import get_extractor
         extractor = get_extractor(path)
         if not extractor:
             return {}
