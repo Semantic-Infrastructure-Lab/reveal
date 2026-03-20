@@ -94,7 +94,7 @@ class SSLFetcher:
                     if sig_hash:
                         cert['signatureAlgorithm'] = sig_hash.name.upper()
                     cert['ocspUrl'] = self._extract_ocsp_url(binary_cert)
-                except Exception:
+                except Exception:  # noqa: BLE001 — X.509 augmentation is best-effort
                     pass
             return cert
         if binary_cert:
@@ -246,7 +246,7 @@ class SSLFetcher:
             for desc in aia.value:  # type: ignore[attr-defined]
                 if desc.access_method == x509.oid.AuthorityInformationAccessOID.OCSP:
                     return desc.access_location.value
-        except (x509.ExtensionNotFound, Exception):
+        except (x509.ExtensionNotFound, Exception):  # noqa: BLE001 — OCSP URL is optional
             pass
         return None
 
@@ -289,7 +289,7 @@ class SSLFetcher:
                 sig_hash = cert.signature_hash_algorithm
                 if sig_hash:
                     sig_algo = sig_hash.name.upper()
-            except Exception:
+            except Exception:  # noqa: BLE001 — sig algorithm is best-effort
                 pass
 
             result = {

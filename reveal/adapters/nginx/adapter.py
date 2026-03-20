@@ -663,7 +663,7 @@ def _run_fleet_audit(
             analyzer = NginxAnalyzer(nginx_conf_path)
             for finding in analyzer.audit_global_directives():
                 global_checks[finding['id']] = finding['present']
-        except Exception:
+        except Exception:  # noqa: BLE001 — nginx.conf may be unreadable; skip global checks
             pass
 
     # --- Build matrix ---

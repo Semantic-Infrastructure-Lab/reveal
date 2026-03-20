@@ -322,7 +322,7 @@ class XlsxAnalyzer(ZipXMLAnalyzer):
             end_col = _re.match(r'([A-Za-z]+)', parts[1])
             if end_col:
                 return XlsxAnalyzer._col_letter_to_index(end_col.group(1))
-        except Exception:
+        except Exception:  # noqa: BLE001 — dimension parsing is best-effort
             pass
         return 0
 

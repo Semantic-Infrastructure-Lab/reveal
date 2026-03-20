@@ -1120,7 +1120,7 @@ class XlsxAdapter(ResourceAdapter):
                 for el in root.iter():
                     if self._local(el.tag) == 'cacheHierarchies':
                         return 'xl/pivotCache/'
-            except Exception:
+            except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
                 pass
         return None
 
@@ -1135,7 +1135,7 @@ class XlsxAdapter(ResourceAdapter):
                     text = raw.decode('utf-16', errors='replace')
                     if 'MetadataRecoveryInformation' in text:
                         return name
-            except Exception:
+            except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
                 pass
         return None
 
@@ -1157,7 +1157,7 @@ class XlsxAdapter(ResourceAdapter):
                     text = raw.decode('utf-8', errors='replace')
                 if 'DataMashup' in text and 'MetadataRecoveryInformation' not in text:
                     return name
-            except Exception:
+            except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
                 pass
         return None
 
@@ -1211,7 +1211,7 @@ class XlsxAdapter(ResourceAdapter):
                 if method == 8 and comp_sz > 0:  # DEFLATE
                     try:
                         raw_data = _zlib.decompress(raw_data, -15)
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
                         pass
                 files[fname] = raw_data
                 offset = data_start + comp_sz
@@ -1498,7 +1498,7 @@ class XlsxAdapter(ResourceAdapter):
                         m = re.match(r'\[([^\]]+)\]', h.get('uniqueName', ''))
                         if m and m.group(1) != 'Measures':
                             table_names.add(m.group(1))
-            except Exception:
+            except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
                 pass
         return {
             'has_model': True,
@@ -1543,7 +1543,7 @@ class XlsxAdapter(ResourceAdapter):
                         count = sum(1 for el in root.iter() if self._local(el.tag) == 'connection')
                         if count:
                             result['connection_count'] = count
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
                         pass
 
                 # Named ranges count (from workbook.xml definedNames)
@@ -1553,7 +1553,7 @@ class XlsxAdapter(ResourceAdapter):
                         count = sum(1 for el in root.iter() if self._local(el.tag) == 'definedName')
                         if count:
                             result['named_range_count'] = count
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — defensive XML/zip parsing fallback
                         pass
 
                 return result if result else None

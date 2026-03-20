@@ -353,7 +353,7 @@ class ClaudeAdapter(ResourceAdapter):
                 if end != -1:
                     frontmatter_text = text[3:end].strip()
                     return yaml.safe_load(frontmatter_text) or {}
-        except Exception:
+        except Exception:  # noqa: BLE001 — README may be absent, unreadable, or malformed
             pass
         return {}
 
