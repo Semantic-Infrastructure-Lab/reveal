@@ -12,6 +12,11 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-03-20 (session storm-eruption-0320)
+
+### Fixed
+- **Markdown section extraction substring match** (`analyzers/markdown.py`): Section extraction was exact-match only (case-insensitive). Agents passing partial heading text — especially emoji-prefixed headings like `🆕 Critical Status Corrections Since Last Doc` — received "Element not found" errors. Fix: exact match is tried first; if no exact match, falls back to substring match when exactly one heading contains the query; raises `ValueError` listing all candidates when multiple headings match. 4 new tests in `TestMarkdownSectionSubstringMatch`. (session storm-eruption-0320)
+
 ## [0.65.1] - 2026-03-19 (session yapaxe-0319)
 
 ### Fixed
