@@ -1,5 +1,7 @@
 """Renderer for nginx:// URI adapter results."""
 
+import sys
+
 from reveal.rendering import TypeDispatchRenderer
 
 
@@ -245,7 +247,6 @@ class NginxUriRenderer(TypeDispatchRenderer):
 
     @staticmethod
     def _render_nginx_fleet_audit(result: dict) -> None:
-        import sys
         site_count = result.get('site_count', 0)
         date = result.get('date', '')
         matrix = result.get('matrix', [])
@@ -336,7 +337,6 @@ class NginxUriRenderer(TypeDispatchRenderer):
 
     @staticmethod
     def render_error(error: Exception) -> None:
-        import sys
         msg = str(error)
         if 'Unknown element' in msg:
             print(f"Error: {msg}", file=sys.stderr)

@@ -3,6 +3,8 @@
 from datetime import datetime
 from typing import Dict, Any, List, TYPE_CHECKING
 
+from ...utils.query import apply_result_control
+
 if TYPE_CHECKING:
     import pygit2
 
@@ -77,7 +79,6 @@ def get_recent_commits(
 
     # Apply result control if specified in query
     if result_control.limit or result_control.sort_field or result_control.offset:
-        from ...utils.query import apply_result_control
         commits = apply_result_control(commits, result_control)
 
     return commits
@@ -112,7 +113,6 @@ def get_commit_history(
 
     # Apply result control if specified in query
     if result_control.limit or result_control.sort_field or result_control.offset:
-        from ...utils.query import apply_result_control
         commits = apply_result_control(commits, result_control)
 
     return commits

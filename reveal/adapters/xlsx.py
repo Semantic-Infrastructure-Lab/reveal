@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Set
 from .base import ResourceAdapter, register_adapter, register_renderer
 from ..analyzers.office.openxml import XlsxAnalyzer
+from ..utils import safe_json_dumps
 from ..utils.query import parse_query_params
 from ..utils.results import ResultBuilder
 
@@ -25,7 +26,6 @@ class XlsxRenderer:
             result: Structure dict from XlsxAdapter.get_structure()
             format: Output format ('text', 'json', 'grep', 'csv')
         """
-        from ..utils import safe_json_dumps
 
         # Check for format preference in result (from ?format=csv query param)
         preferred_format = result.get('preferred_format', format)
@@ -114,7 +114,6 @@ class XlsxRenderer:
     def _render_csv(rows_data: List[List[Any]]) -> None:
         """Render as CSV format."""
         import csv
-        import io
         output = io.StringIO()
         writer = csv.writer(output)
         for row in rows_data:
@@ -263,7 +262,6 @@ class XlsxRenderer:
     @staticmethod
     def _render_powerpivot(result: dict, format: str) -> None:
         """Render Power Pivot model output — dispatches to per-mode helpers."""
-        from ..utils import safe_json_dumps
 
         if format == 'json':
             print(safe_json_dumps(result))
@@ -309,7 +307,6 @@ class XlsxRenderer:
     @staticmethod
     def _render_powerquery(result: dict, format: str) -> None:
         """Render Power Query M code output."""
-        from ..utils import safe_json_dumps
         if format == 'json':
             print(safe_json_dumps(result))
             return
@@ -355,7 +352,6 @@ class XlsxRenderer:
     @staticmethod
     def _render_named_ranges(result: dict, format: str) -> None:
         """Render named ranges (defined names) output."""
-        from ..utils import safe_json_dumps
         if format == 'json':
             print(safe_json_dumps(result))
             return
@@ -380,7 +376,6 @@ class XlsxRenderer:
     @staticmethod
     def _render_connections(result: dict, format: str) -> None:
         """Render external data connections output."""
-        from ..utils import safe_json_dumps
         if format == 'json':
             print(safe_json_dumps(result))
             return

@@ -3,6 +3,7 @@
 import sys
 from typing import Dict, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer
+from ..utils import safe_json_dumps
 
 
 class TestRenderer:
@@ -17,7 +18,6 @@ class TestRenderer:
             format: Output format ('text', 'json', 'grep')
         """
         # TODO: Implement custom rendering or use generic renderer
-        from ..utils import safe_json_dumps
 
         if format == 'json':
             print(safe_json_dumps(result))
@@ -35,7 +35,6 @@ class TestRenderer:
             result: Element dict from TestAdapter.get_element()
             format: Output format ('text', 'json', 'grep')
         """
-        from ..utils import safe_json_dumps
 
         if format == 'json':
             print(safe_json_dumps(result))

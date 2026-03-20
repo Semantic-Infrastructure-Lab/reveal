@@ -783,7 +783,6 @@ class DomainAdapter(ResourceAdapter):
 
     def _get_ssl_status(self) -> Dict[str, Any]:
         """Get SSL certificate status (delegates to ssl:// adapter)."""
-        from ..ssl.certificate import check_ssl_health
 
         assert self.domain is not None
         try:
@@ -914,7 +913,6 @@ class DomainAdapter(ResourceAdapter):
 
     def _get_ssl_summary(self) -> Dict[str, Any]:
         """Get summarized SSL information."""
-        from ..ssl.certificate import check_ssl_health
 
         assert self.domain is not None
         try:
