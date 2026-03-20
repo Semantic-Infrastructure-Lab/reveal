@@ -676,6 +676,29 @@ Natural companion to `--audit` (BACK-090): `--audit` surfaces the fleet pattern,
 
 ---
 
+### BACK-099: `reveal file.py :N` — extract the semantic unit at a line number
+
+**Status**: Open
+**Value**: Medium | **Lift**: Small
+
+When you have a line number (from a traceback, `grep -n`, a GitHub link, a diff), you want the *enclosing semantic element* — not raw lines. This is distinctly Reveal's territory: grep gives you the line, Reveal gives you the function/class/section that owns it.
+
+```bash
+reveal reveal/analyzers/markdown.py :1027   # → extract_element() method
+reveal tests/test_markdown_analyzer.py :1486 # → test_substring_match_ambiguous_raises()
+reveal docs/ROADMAP.md :610                  # → BACK-090 section
+```
+
+**Implementation:**
+- Detect `:N` syntax in the element argument (CLI + URI)
+- Add `extract_element_at_line(n)` to base analyzer: walk element list, return element where `line_start <= N <= line_end`
+- Edge case: line falls in module-level code (between named elements) → return nearest enclosing class, or a short window around the line
+- All analyzers that carry line info (Python, JS, Ruby, Markdown, YAML, etc.) get this for free via base class
+
+**Why it fits Reveal's core:** progressive disclosure from a line number — the same semantic-unit output as a named extraction, just addressed differently.
+
+---
+
 ### Additional Subcommands
 
 Eight subcommands (`check`, `review`, `pack`, `health`, `dev`, `hotspots`, `overview`, `deps`) shipped. Remaining subcommand ideas:

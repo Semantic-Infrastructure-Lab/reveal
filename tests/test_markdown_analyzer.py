@@ -1483,12 +1483,12 @@ class TestMarkdownSectionSubstringMatch(unittest.TestCase):
         result = self.analyzer.extract_element('section', 'Critical Status Corrections')
         self.assertIn('Critical Status Corrections Since Last Doc', result['source'])
 
-    def test_substring_match_ambiguous_raises(self):
-        with self.assertRaises(ValueError) as ctx:
-            self.analyzer.extract_element('section', 'Critical')
-        self.assertIn('Ambiguous', str(ctx.exception))
-        self.assertIn('Critical Status Corrections Since Last Doc', str(ctx.exception))
-        self.assertIn('Another Critical Thing', str(ctx.exception))
+    def test_substring_match_ambiguous_concatenates(self):
+        result = self.analyzer.extract_element('section', 'Critical')
+        self.assertIsNotNone(result)
+        self.assertIn('Critical Status Corrections Since Last Doc', result['source'])
+        self.assertIn('Another Critical Thing', result['source'])
+        self.assertNotIn('Unrelated Section', result['source'])
 
     def test_no_match_falls_through(self):
         result = self.analyzer.extract_element('section', 'Nonexistent Heading')

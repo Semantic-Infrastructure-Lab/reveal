@@ -1023,10 +1023,22 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             if len(substring_matches) == 1:
                 start_line, heading_level, _ = substring_matches[0]
             elif len(substring_matches) > 1:
-                candidates = ', '.join(f'"{t}"' for _, _, t in substring_matches)
-                raise ValueError(
-                    f"Ambiguous heading match for {name!r}: {candidates}"
-                )
+                # Multiple partial matches — extract and concatenate all of them
+                def _section_end(sl: int, hl: int) -> int:
+                    for i in range(sl, len(self.lines)):
+                        m = re.match(r'^(#{1,6})\s+', self.lines[i])
+                        if m and len(m.group(1)) <= hl:
+                            return i
+                    return len(self.lines)
+
+                spans = [(sl, _section_end(sl, hl)) for sl, hl, _ in substring_matches]
+                sources = ['\n'.join(self.lines[sl - 1:el]) for sl, el in spans]
+                return {
+                    'name': name,
+                    'line_start': spans[0][0],
+                    'line_end': spans[-1][1],
+                    'source': '\n\n'.join(sources),
+                }
             else:
                 return super().extract_element(element_type, name)
 
