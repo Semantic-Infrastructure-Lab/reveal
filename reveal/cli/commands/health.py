@@ -201,12 +201,19 @@ def _check_uri(scheme: str, uri: str, args: Namespace):
 
 
 def _check_nginx(path: Path, args: Namespace):
-    """Run nginx config health check."""
-    import subprocess
-    result = subprocess.run(['reveal', str(path), '--check', '--only-failures'],
-                           capture_output=True, text=True)
-    if result.returncode != 0 or result.stdout.strip():
-        return 1, f"nginx: violations found"
+    """Run nginx config health check via direct rule API (no subprocess)."""
+    from reveal.rules import RuleRegistry
+
+    try:
+        content = path.read_text(errors='replace')
+    except OSError as exc:
+        return 1, f"nginx: cannot read {path}: {exc}"
+
+    file_path = str(path)
+    detections = RuleRegistry.check_file(file_path, None, content, select=['N'])
+
+    if detections:
+        return 1, f"nginx: {len(detections)} violation(s)"
     return 0, "nginx: healthy"
 
 

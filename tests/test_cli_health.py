@@ -243,24 +243,35 @@ class TestCheckUri(unittest.TestCase):
 
 class TestCheckNginx(unittest.TestCase):
 
-    @patch('subprocess.run')
-    def test_clean_returns_0(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout='')
-        code, summary = _check_nginx(Path('/etc/nginx/nginx.conf'), Namespace())
-        self.assertEqual(code, 0)
-        self.assertIn('healthy', summary)
+    @patch('reveal.rules.RuleRegistry.check_file', return_value=[])
+    def test_clean_returns_0(self, mock_check):
+        with tempfile.NamedTemporaryFile(suffix='.conf', mode='w', delete=False) as f:
+            f.write('server { listen 80; }\n')
+            tmp = Path(f.name)
+        try:
+            code, summary = _check_nginx(tmp, Namespace())
+            self.assertEqual(code, 0)
+            self.assertIn('healthy', summary)
+        finally:
+            tmp.unlink()
 
-    @patch('subprocess.run')
-    def test_violations_returns_1(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout='violation found\n')
-        code, summary = _check_nginx(Path('/etc/nginx/nginx.conf'), Namespace())
-        self.assertEqual(code, 1)
+    @patch('reveal.rules.RuleRegistry.check_file')
+    def test_violations_returns_1(self, mock_check):
+        mock_check.return_value = [MagicMock(), MagicMock()]  # 2 detections
+        with tempfile.NamedTemporaryFile(suffix='.conf', mode='w', delete=False) as f:
+            f.write('server { listen 80; }\n')
+            tmp = Path(f.name)
+        try:
+            code, summary = _check_nginx(tmp, Namespace())
+            self.assertEqual(code, 1)
+            self.assertIn('2', summary)
+        finally:
+            tmp.unlink()
 
-    @patch('subprocess.run')
-    def test_nonzero_returncode_returns_1(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=1, stdout='')
-        code, summary = _check_nginx(Path('/etc/nginx/nginx.conf'), Namespace())
+    def test_unreadable_file_returns_1(self):
+        code, summary = _check_nginx(Path('/nonexistent/path.conf'), Namespace())
         self.assertEqual(code, 1)
+        self.assertIn('nginx:', summary)
 
 
 # ---------------------------------------------------------------------------
