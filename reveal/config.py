@@ -73,6 +73,11 @@ def _cached_resolve(path: Path) -> Path:
     return resolved
 
 
+# Null bytes cannot appear in filesystem paths on any OS, making this the
+# safest possible placeholder for the ** glob wildcard during fnmatch.translate.
+_GLOB_STAR_PLACEHOLDER = '\x00\x00'
+
+
 @functools.lru_cache(maxsize=512)
 def _compile_glob_regex(pattern: str) -> re.Pattern:
     """Compile a glob pattern to a regex object (cached).
@@ -80,16 +85,17 @@ def _compile_glob_regex(pattern: str) -> re.Pattern:
     Patterns are fixed across a run, so compiling them once eliminates
     thousands of redundant fnmatch.translate + re.compile calls.
     """
+    ph = _GLOB_STAR_PLACEHOLDER
     if '**' in pattern:
-        p = pattern.replace('/**/', '/§§/')  # Middle position
-        p = p.replace('**/', '§§/')           # Start position
-        p = p.replace('/**', '/§§')           # End position
-        p = p.replace('**', '§§')             # Standalone
+        p = pattern.replace('/**/', f'/{ph}/')  # Middle position
+        p = p.replace('**/', f'{ph}/')           # Start position
+        p = p.replace('/**', f'/{ph}')           # End position
+        p = p.replace('**', ph)                  # Standalone
         p = fnmatch.translate(p)
-        p = p.replace('/§§/', '(/|/.*/)')
-        p = p.replace('§§/', '(.*/)?')
-        p = p.replace('/§§', '(/.*)?')
-        p = p.replace('§§', '.*')
+        p = p.replace(f'/{ph}/', '(/|/.*/)')
+        p = p.replace(f'{ph}/', '(.*/)?')
+        p = p.replace(f'/{ph}', '(/.*)?')
+        p = p.replace(ph, '.*')
     else:
         p = fnmatch.translate(pattern)
     return re.compile(p)
