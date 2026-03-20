@@ -6,7 +6,9 @@ at the final HTTPS endpoint.
 """
 
 import socket
-from typing import Any, Callable, Dict, List, Optional
+import urllib.error
+import urllib.request
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 _SECURITY_HEADERS = [
@@ -22,7 +24,6 @@ _DEFAULT_TIMEOUT = 10
 
 def _build_opener():
     """Build a urllib opener that does NOT follow redirects."""
-    import urllib.request
 
     class _NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
@@ -53,8 +54,6 @@ def probe_http_redirect(
           host, start_url, redirect_chain, final_url, redirects_to_https,
           hop_count, https_headers, error
     """
-    import urllib.error
-    import urllib.request
 
     opener = _opener if _opener is not None else _build_opener()
     start_url = f"http://{host}/" if port == 80 else f"http://{host}:{port}/"

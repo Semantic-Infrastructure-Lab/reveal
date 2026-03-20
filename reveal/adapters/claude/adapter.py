@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from datetime import datetime
+from datetime import datetime, date as _date
 import json
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -791,7 +791,6 @@ class ClaudeAdapter(ResourceAdapter):
         since = self.query_params.get('since', '')
 
         if since == 'today':
-            from datetime import date as _date
             since = _date.today().isoformat()
 
         # Collect all sessions across all project directories.
@@ -850,7 +849,6 @@ class ClaudeAdapter(ResourceAdapter):
         since = self.query_params.get('since', '')
 
         if since == 'today':
-            from datetime import date as _date
             since = _date.today().isoformat()
 
         _error_base: Dict[str, Any] = {

@@ -9,6 +9,7 @@ from .dns import (
     check_email_dns, check_ns_authority,
 )
 from .renderer import DomainRenderer
+from ..ssl.certificate import check_ssl_health
 
 
 # Helper functions for domain health checks
@@ -99,7 +100,6 @@ def _check_ssl_certificate(domain: str, advanced: bool = False) -> Dict[str, Any
     Returns:
         SSL check result dict
     """
-    from ..ssl.certificate import check_ssl_health
 
     try:
         ssl_check = check_ssl_health(domain, 443, advanced=advanced)

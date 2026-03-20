@@ -1,6 +1,7 @@
 """MySQL connection management and credential resolution."""
 
 import os
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional, cast
 from urllib.parse import urlparse, unquote
 
@@ -207,7 +208,6 @@ class MySQLConnection:
             - uptime_seconds: Server uptime in seconds
             - measurement_window: Human-readable uptime (e.g., "23d 23h (since server start)")
         """
-        from datetime import datetime, timezone
 
         # Get MySQL's current timestamp (not local machine time)
         mysql_time = self.execute_single("SELECT UNIX_TIMESTAMP() as timestamp")
@@ -246,7 +246,6 @@ class MySQLConnection:
             - counters_reset_detected: bool - Whether reset was detected
             - likely_reset_time: Optional[str] - ISO timestamp of likely reset, or None
         """
-        from datetime import datetime, timezone
 
         # Check if performance_schema is enabled
         try:

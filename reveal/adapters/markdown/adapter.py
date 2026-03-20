@@ -11,6 +11,8 @@ from .renderer import MarkdownRenderer
 from .help import get_schema, get_help
 from . import query as query_module
 from . import operations
+from . import files
+from . import filtering
 
 
 def _extract_aggregate(filter_query: str) -> tuple:
@@ -231,20 +233,16 @@ class MarkdownQueryAdapter(ResourceAdapter):
 
     def _find_markdown_files(self):
         """Find markdown files (backward compatibility)."""
-        from . import files
         return files.find_markdown_files(self.base_path)
 
     def _extract_frontmatter(self, path):
         """Extract frontmatter (backward compatibility)."""
-        from . import files
         return files.extract_frontmatter(path)
 
     def _matches_filter(self, frontmatter, field, operator, value):
         """Match filter (backward compatibility)."""
-        from . import filtering
         return filtering.matches_filter(frontmatter, field, operator, value)
 
     def _matches_all_filters(self, frontmatter):
         """Match all filters (backward compatibility)."""
-        from . import filtering
         return filtering.matches_all_filters(frontmatter, self.filters, self.query_filters)

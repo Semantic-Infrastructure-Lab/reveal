@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from .base import ResourceAdapter, register_adapter, register_renderer, _ADAPTER_REGISTRY
+from ..rendering import render_help
 
 _EXAMPLE_RECIPES: Dict[str, Dict[str, Any]] = {
     'security': {
@@ -86,7 +87,6 @@ class HelpRenderer:
             result: Structure dict from HelpAdapter.get_structure()
             format: Output format ('text', 'json', 'grep')
         """
-        from ..rendering import render_help
         render_help(result, format, list_mode=True)
 
     @staticmethod
@@ -97,7 +97,6 @@ class HelpRenderer:
             result: Element dict from HelpAdapter.get_element()
             format: Output format ('text', 'json', 'grep')
         """
-        from ..rendering import render_help
         render_help(result, format)
 
     @staticmethod

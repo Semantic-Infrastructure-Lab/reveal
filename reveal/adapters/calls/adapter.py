@@ -21,7 +21,7 @@ import os
 from typing import Any, Dict, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from .index import PYTHON_BUILTINS, find_callers, find_callees, find_uncalled, rank_by_callers
+from .index import find_callers, find_callees, find_uncalled, rank_by_callers
 from .renderer import render_calls_structure
 from ...utils.query import parse_query_params
 from ...utils.results import ResultBuilder

@@ -2,6 +2,8 @@
 
 import sys
 
+from ...rendering.adapters.markdown_query import render_markdown_query
+
 
 class MarkdownRenderer:
     """Renderer for markdown query results."""
@@ -14,7 +16,6 @@ class MarkdownRenderer:
             result: Structure dict from MarkdownQueryAdapter.get_structure()
             format: Output format ('text', 'json', 'grep')
         """
-        from ...rendering.adapters.markdown_query import render_markdown_query
         render_markdown_query(result, format)
 
     @staticmethod
@@ -25,7 +26,6 @@ class MarkdownRenderer:
             result: Element dict from MarkdownQueryAdapter.get_element()
             format: Output format ('text', 'json', 'grep')
         """
-        from ...rendering.adapters.markdown_query import render_markdown_query
         render_markdown_query(result, format, single_file=True)
 
     @staticmethod
