@@ -14,7 +14,7 @@ class TestMarkdownAnalyzer(unittest.TestCase):
         """Helper: Create temp markdown file."""
         temp_dir = tempfile.mkdtemp()
         path = os.path.join(temp_dir, "test.md")
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
         return path
 
@@ -727,7 +727,7 @@ class TestMarkdownRegexFallback(unittest.TestCase):
 """
         temp_dir = tempfile.mkdtemp()
         path = os.path.join(temp_dir, "test.md")
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
 
         try:
@@ -752,7 +752,7 @@ class TestMarkdownLinkHelpers(unittest.TestCase):
         """Helper: Create temp markdown file."""
         temp_dir = tempfile.mkdtemp()
         path = os.path.join(temp_dir, "test.md")
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
         return path
 
@@ -1465,7 +1465,7 @@ class TestMarkdownSectionSubstringMatch(unittest.TestCase):
         import tempfile
         self.temp_dir = tempfile.mkdtemp()
         path = os.path.join(self.temp_dir, 'doc.md')
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(self.CONTENT)
         self.analyzer = MarkdownAnalyzer(path)
 
