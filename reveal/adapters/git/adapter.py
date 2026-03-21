@@ -3,6 +3,8 @@
 Progressive disclosure for Git repositories with token-efficient output.
 """
 
+import os
+
 from typing import Dict, Any, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
@@ -328,7 +330,7 @@ class GitAdapter(ResourceAdapter):
         # Logic: If resource starts with "." or "/", treat as repo path
         # Otherwise, treat as subpath within current directory
         if resource:
-            if resource == '.' or resource.startswith('/') or resource.startswith('./'):
+            if resource == '.' or resource.startswith('/') or resource.startswith('./') or os.path.isabs(resource):
                 path = resource
                 subpath = None
             else:

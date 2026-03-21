@@ -6,6 +6,7 @@ Tests pattern detection for common nginx misconfigurations.
 import os
 import tempfile
 import unittest
+import unittest.mock
 from reveal.rules.infrastructure.N001 import N001
 from reveal.rules.infrastructure.N002 import N002
 from reveal.rules.infrastructure.N003 import N003
@@ -1134,7 +1135,9 @@ server {
     server_name example.com;
 }
 """
-        detections = self.rule.check("nginx.conf", None, content)
+        # Mock global nginx.conf check to isolate from system nginx.conf on CI
+        with unittest.mock.patch.object(self.rule, '_has_global_server_tokens', return_value=False):
+            detections = self.rule.check("nginx.conf", None, content)
         self.assertEqual(len(detections), 1)
         self.assertIn("server_tokens", detections[0].message)
 
