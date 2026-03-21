@@ -327,10 +327,21 @@ class GitAdapter(ResourceAdapter):
             resource, ref = resource.rsplit('@', 1)
 
         # What's left is path or subpath
-        # Logic: If resource starts with "." or "/", treat as repo path
-        # Otherwise, treat as subpath within current directory
+        # Logic:
+        #   "."             → repo root at CWD (bare overview)
+        #   "/abs/repo"     → repo root at absolute path
+        #   "../other-repo" → repo root at relative path (no file extension heuristic)
+        #   "./file.py"     → file path relative to CWD (strip leading ./)
+        #   "path/file.py"  → file path relative to CWD
         if resource:
-            if resource == '.' or resource.startswith('/') or resource.startswith('./') or os.path.isabs(resource):
+            if resource in ('.', './'):
+                path = resource
+                subpath = None
+            elif resource.startswith('./'):
+                # "./path/to/file.py" — a file path written with explicit ./ prefix
+                path = '.'
+                subpath = resource[2:]
+            elif resource.startswith('/') or os.path.isabs(resource):
                 path = resource
                 subpath = None
             else:
@@ -380,9 +391,19 @@ class GitAdapter(ResourceAdapter):
         query_type = self.query.get('type', None)
 
         if self.subpath:
+            # Normalize subpath to be relative to the repo root, not CWD.
+            # pygit2 tree/blame APIs require repo-root-relative paths.
+            # self.path and self.subpath remain CWD-relative for filesystem ops
+            # (e.g. get_element_line_range reads the actual file on disk).
+            git_subpath = self.subpath
+            if repo.workdir:
+                abs_file = os.path.abspath(os.path.join(self.path, self.subpath))
+                repo_root = os.path.abspath(repo.workdir.rstrip('/\\'))
+                git_subpath = os.path.relpath(abs_file, repo_root)
+
             if query_type == 'history':
                 return files.get_file_history(
-                    repo, self.ref, self.subpath, self.query,
+                    repo, self.ref, git_subpath, self.query,
                     self.result_control, self.query_filters,
                     commits.format_commit,
                     lambda cd: queries.matches_all_filters(cd, self.query_filters),
@@ -390,11 +411,11 @@ class GitAdapter(ResourceAdapter):
                 )
             elif query_type == 'blame':
                 return files.get_file_blame(
-                    repo, self.ref, self.subpath, self.query, self.path,
+                    repo, self.ref, git_subpath, self.query, self.path,
                     lambda en, _path, _sub: files.get_element_line_range(en, self.path, self.subpath)
                 )
             else:
-                return files.get_file_at_ref(repo, self.ref, self.subpath)
+                return files.get_file_at_ref(repo, self.ref, git_subpath)
         elif self.ref != 'HEAD' or query_type:
             return refs.get_ref_structure(
                 repo, self.ref, self.query, self.query_filters,

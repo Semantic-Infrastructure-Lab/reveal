@@ -159,7 +159,10 @@ class GitRenderer:
         sorted_contributors = sorted(contributors.items(), key=lambda x: x[1]['lines'], reverse=True)
 
         print("Contributors (by lines owned):")
-        total_lines = result['lines']
+        if element:
+            total_lines = element['line_end'] - element['line_start'] + 1
+        else:
+            total_lines = result['lines']
         for author, stats in sorted_contributors[:5]:  # Top 5 contributors
             pct = (stats['lines'] / total_lines * 100) if total_lines > 0 else 0
             print(f"  {author:30} {stats['lines']:4} lines ({pct:5.1f}%)  Last: {stats['latest_date']}")
