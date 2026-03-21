@@ -92,16 +92,27 @@ reveal 'ast://src/?complexity>10'
 ### PR Review Workflow
 
 ```bash
-# 1. See what changed
-git diff --name-only origin/main | reveal --stdin
+# Full PR review: structural diff + quality violations + hotspots + complexity delta
+reveal review main..HEAD
 
-# 2. Check quality issues
-git diff --name-only origin/main | grep '\.py$' | reveal --stdin --check
+# Security and bugs only (fast path)
+reveal review main..HEAD --select B,S
 
-# 3. Find new complex functions
-git diff --name-only origin/main | grep '\.py$' | \
-  xargs -I{} reveal 'ast://{}?complexity>10'
+# JSON for CI/automated processing
+reveal review main..HEAD --format json
+
+# CI gate: exit 0 clean, exit 1 warnings, exit 2 errors
+reveal review main..HEAD || exit 1
+
+# See exactly what changed structurally (lower level)
+reveal diff://git://main/.:git://HEAD/.
+
+# Which functions got more complex in this PR?
+reveal diff://git://main/.:git://HEAD/. --format json | \
+  jq '.diff.functions[] | select(.complexity_delta > 5)'
 ```
+
+**What `reveal review` composes for you:** structural diff → quality checks → hotspot detection → complexity delta, all under consistent exit codes. Every changed function carries `complexity_before`, `complexity_after`, and `complexity_delta`.
 
 ---
 

@@ -285,7 +285,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 4. **`reveal overview` + `reveal deps`** — codebase orientation dashboard and dependency health in one command each. `reveal deps` finds circular import chains and unused imports across a full project; `reveal overview` synthesises file count, language breakdown, quality score, and git velocity into a single output.
 
-5. **67 quality rules via `reveal check`** — 14 categories: bugs (B), complexity (C), duplicates (D), errors (E), frontmatter (F), imports (I), links (L), maintainability (M), infrastructure/nginx (N), refactoring (R), security (S), types (T), URLs (U), and Reveal's own adapter contract validation (V). One CLI, no config file required.
+5. **69 quality rules via `reveal check`** — 14 categories: bugs (B), complexity (C), duplicates (D), errors (E), frontmatter (F), imports (I), links (L), maintainability (M), infrastructure/nginx (N), refactoring (R), security (S), types (T), URLs (U), and Reveal's own adapter contract validation (V). One CLI, no config file required.
 
 6. **`reveal pack --since <branch> --budget N`** — PR-aware codebase snapshots. Changed files boosted to priority tier 0; remaining budget fills with entry points and complexity leaders. Built for agents, not retrofitted.
 
@@ -323,6 +323,7 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 | `env://` | Environment variable analysis, `.env` validation |
 | `python://` | Runtime introspection of live Python modules |
 | `xlsx://` | Excel data extraction and analysis |
+| `letsencrypt://` | Let's Encrypt certificate inventory — orphan and duplicate SAN detection |
 | `claude://` | AI session history, tool usage, file access patterns |
 | `reveal://` | Reveal introspects itself: adapters, rules, config |
 | `help://` | Built-in documentation, searchable from the CLI |
