@@ -220,7 +220,7 @@ class TestRunStats(unittest.TestCase):
         result = _run_stats(Path('/project'))
         self.assertIn('summary', result)
         self.assertEqual(result['summary']['total_files'], 100)
-        MockAdapter.assert_called_once_with('/project', 'hotspots=true')
+        MockAdapter.assert_called_once_with(str(Path('/project')), 'hotspots=true')
 
     @patch('reveal.cli.commands.overview.StatsAdapter')
     def test_exception_returns_empty_dict(self, MockAdapter):
@@ -254,7 +254,7 @@ class TestRunGitLog(unittest.TestCase):
     def test_limit_passed_as_query_param(self, MockAdapter):
         MockAdapter.return_value.get_structure.return_value = {}
         _run_git_log(Path('/project'), 7)
-        MockAdapter.assert_called_once_with(path='/project', query={'type': 'log', 'limit': '7'})
+        MockAdapter.assert_called_once_with(path=str(Path('/project')), query={'type': 'log', 'limit': '7'})
 
 
 class TestRunComplexFunctions(unittest.TestCase):

@@ -253,7 +253,7 @@ class TestRunBase(unittest.TestCase):
         MockAdapter.return_value.get_structure.return_value = json.loads(_BASE_JSON)
         result = _run_base(Path('/project'))
         self.assertIn('files', result)
-        MockAdapter.assert_called_once_with('/project')
+        MockAdapter.assert_called_once_with(str(Path('/project')))
 
     @patch('reveal.cli.commands.deps.ImportsAdapter')
     def test_exception_returns_empty_dict(self, MockAdapter):
@@ -269,7 +269,7 @@ class TestRunCircular(unittest.TestCase):
         result = _run_circular(Path('/project'))
         self.assertEqual(result['count'], 2)
         self.assertEqual(len(result['cycles']), 2)
-        MockAdapter.assert_called_once_with('/project', 'circular')
+        MockAdapter.assert_called_once_with(str(Path('/project')), 'circular')
 
     @patch('reveal.cli.commands.deps.ImportsAdapter')
     def test_exception_returns_empty_dict(self, MockAdapter):
@@ -284,7 +284,7 @@ class TestRunUnused(unittest.TestCase):
         MockAdapter.return_value.get_structure.return_value = json.loads(_UNUSED_JSON)
         result = _run_unused(Path('/project'))
         self.assertEqual(len(result), 2)
-        MockAdapter.assert_called_once_with('/project', 'unused')
+        MockAdapter.assert_called_once_with(str(Path('/project')), 'unused')
 
     @patch('reveal.cli.commands.deps.ImportsAdapter')
     def test_exception_returns_empty_list(self, MockAdapter):
