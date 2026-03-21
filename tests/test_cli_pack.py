@@ -179,6 +179,32 @@ class TestComputePriority(unittest.TestCase):
             # Should not get the key-dir +2 bonus for 'main'
             self.assertLess(score, 2.0)
 
+    def test_large_init_scores_below_key_module_tier(self):
+        """__init__.py with substantial content should NOT reach 'Key modules' tier.
+
+        Large __init__.py files are packaging/re-export hubs, not logic. They
+        should score < 2.0 so they land in 'Other files' and don't displace
+        real modules from the key-module tier.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            # >2000 bytes triggers the __init__ bonus
+            path, rel = self._make_file(Path(d), "pkg/__init__.py", "x" * 2100)
+            score = _compute_priority(path, rel, focus=None)
+            self.assertLess(score, 2.0)
+
+    def test_large_init_scores_below_key_module(self):
+        """A substantial __init__.py should rank below a module in a key directory.
+
+        core/engine.py scores 2.0 (key-dir bonus); pkg/__init__.py scores 0.5.
+        This ensures __init__ files don't displace real logic from 'Key modules'.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            init_path, init_rel = self._make_file(Path(d), "pkg/__init__.py", "x" * 2100)
+            mod_path, mod_rel = self._make_file(Path(d), "core/engine.py", "x" * 100)
+            init_score = _compute_priority(init_path, init_rel, focus=None)
+            mod_score = _compute_priority(mod_path, mod_rel, focus=None)
+            self.assertLess(init_score, mod_score)
+
 
 # ---------------------------------------------------------------------------
 # _walk_files

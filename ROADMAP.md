@@ -714,6 +714,66 @@ reveal docs/ROADMAP.md :610                  # → BACK-090 section
 
 ---
 
+### BACK-100: `imports://src/?violations` — architecture layer enforcement
+
+**Status**: Planned (not started)
+**Value**: High | **Lift**: Medium
+**Surfaced**: toxic-xenon-0321 (article accuracy review)
+
+Enforce that code respects defined architectural layers (presentation → application → domain → infrastructure). Any import that crosses a layer boundary in the wrong direction is a violation.
+
+**How it works:**
+1. User defines layers in `.reveal.yaml`:
+   ```yaml
+   layers:
+     presentation: [src/api/, src/views/]
+     application:  [src/services/]
+     domain:       [src/models/]
+     infrastructure: [src/db/, src/cache/]
+   allowed_deps:
+     presentation: [application]
+     application:  [domain]
+     domain:       []
+     infrastructure: []
+   ```
+2. `reveal 'imports://src/?violations'` walks the import graph, classifies each file's layer, and flags any edge that violates the allowed_deps matrix.
+
+**Expected output:**
+```
+============================================================
+Layer Violations: 3
+============================================================
+  src/models/user.py:3 - domain importing infrastructure (src.db.session)
+  src/api/routes.py:12 - presentation importing infrastructure (src.db.connection)
+  src/services/auth.py:15 - application importing presentation (src.api.schemas)
+```
+
+**Why it matters:** Layer violations are the hardest structural problem to catch — they're syntactically valid, tests pass, but the codebase silently gains the wrong coupling. Static analysis + CI is the only reliable way to stop them from accumulating.
+
+**Note:** The command already exists and returns a placeholder message. The `.reveal.yaml` config schema and the graph classification logic need to be built.
+
+---
+
+### BACK-101: Fix false positive circular deps from multi-dot inline relative imports
+
+**Status**: Bug, not started
+**Value**: Medium | **Lift**: Small
+**Surfaced**: toxic-xenon-0321 (article accuracy review)
+
+The Python import extractor misreports `level=0` for inline relative imports with multiple dots (`from ... import X`). The resolver then navigates 0 levels up instead of the correct number, resolving the import to the wrong `__init__.py` and creating a false cycle edge.
+
+**Repro:** `reveal 'imports://reveal/cli/handlers/?circular'` reports:
+```
+reveal/cli/handlers/introspection.py → reveal/cli/handlers/__init__.py
+```
+But `introspection.py` has no imports pointing back to `handlers/__init__.py`. The false edge comes from `from ... import __version__ as _ver` (level 3) being extracted as level 0.
+
+**Root cause:** The extractor that calls `extract_imports()` — wherever it handles inline (non-top-level) `from` statements — needs to correctly propagate the `level` attribute from the AST node to the `ImportStatement`. Top-level imports get this right; inline ones don't.
+
+**Fix:** In the Python import extractor, ensure `ImportStatement.level` is set from the AST node's `level` field for all `from` statements, not just top-level ones.
+
+---
+
 ### Additional Subcommands
 
 Eight subcommands (`check`, `review`, `pack`, `health`, `dev`, `hotspots`, `overview`, `deps`) shipped. Remaining subcommand ideas:

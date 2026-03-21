@@ -183,8 +183,6 @@ class I002(BaseRule):
 
     def _resolve_graph_dependencies(self, graph: ImportGraph) -> None:
         """Phase 2: Resolve import statements to actual file paths and add edges."""
-        from reveal.analyzers.imports.resolver import resolve_python_import
-        from reveal.analyzers.imports.types import ImportStatement as IS
         from dataclasses import replace as dc_replace
 
         for file_path, imports in graph.files.items():

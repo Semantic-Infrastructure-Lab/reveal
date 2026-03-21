@@ -373,10 +373,12 @@ def _compute_priority(path: Path, rel: Path, focus: Optional[str], is_changed: b
     if name in _ENTRY_POINT_PATTERNS:
         score += 10.0
 
-    # __init__.py: only gives a bonus if it has substantial content.
-    # Near-empty ones (< 500 bytes) are already excluded by _collect_candidates.
+    # __init__.py: modest bonus only for substantial ones (re-export stubs
+    # < 500 bytes are already excluded by _collect_candidates). Score below
+    # regular modules (0.5 vs 2.0) so they land in "Other files" tier and
+    # don't displace real logic files from "Key modules" tier.
     if name == '__init__.py' and path.stat().st_size > 2000:
-        score += 2.0
+        score += 0.5
 
     # Focus pattern match: high bonus
     if focus and focus.lower() in rel_str:
