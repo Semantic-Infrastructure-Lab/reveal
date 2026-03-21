@@ -772,15 +772,19 @@ class HelpAdapter(ResourceAdapter):
             ],
         }
 
+    # Internal/scaffold adapters excluded from public listings
+    _INTERNAL_ADAPTERS = {'demo', 'test'}
+
     def _get_all_adapter_help(self) -> Dict[str, Any]:
         """Get help for all adapters."""
+        public_schemes = [s for s in _ADAPTER_REGISTRY.keys() if s not in self._INTERNAL_ADAPTERS]
         all_help: Dict[str, Any] = {
             'type': 'adapter_summary',
-            'count': len(_ADAPTER_REGISTRY),
+            'count': len(public_schemes),
             'adapters': {}
         }
 
-        for scheme in _ADAPTER_REGISTRY.keys():
+        for scheme in public_schemes:
             help_data = self._get_adapter_help(scheme)
             if help_data and 'error' not in help_data:
                 example = ''
