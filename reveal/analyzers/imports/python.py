@@ -201,6 +201,9 @@ class PythonExtractor(LanguageExtractor):
         for subchild in rel_node.children:
             if subchild.type == '.':
                 level += 1
+            elif subchild.type == 'import_prefix':
+                # tree-sitter-python wraps dots in import_prefix node
+                level += sum(1 for c in subchild.children if c.type == '.')
             elif subchild.type == 'dotted_name':
                 module_name = analyzer._get_node_text(subchild)
         return module_name, level

@@ -516,6 +516,62 @@ class TestResolverPureRelativeImports:
             "Got cycles: " + str(result.get('cycles', []))
         )
 
+    def test_multi_dot_relative_import_level_extracted(self, tmp_path):
+        """Multi-dot relative imports (from .. import X, from ... import Y) must
+        report the correct level — not 0. Level=0 on a relative import causes
+        the resolver to misidentify the target, producing false circular deps.
+
+        Regression for BACK-101: tree-sitter-python wraps dots in import_prefix
+        node; old code only checked direct '.' children of relative_import.
+        """
+        code = (
+            "from . import a\n"        # level 1
+            "from .. import b\n"       # level 2
+            "from ... import c\n"      # level 3
+            "from ..pkg import d\n"    # level 2, named module
+            "from ...pkg.sub import e\n"  # level 3, dotted module
+        )
+        test_file = tmp_path / "test.py"
+        test_file.write_text(code)
+
+        imports = extract_python_imports(test_file)
+        levels = {imp.module_name or imp.imported_names[0]: imp.level for imp in imports}
+
+        assert levels['a'] == 1
+        assert levels['b'] == 2
+        assert levels['c'] == 3
+        assert levels['pkg'] == 2
+        assert levels.get('pkg.sub', levels.get('e')) == 3  # module or fallback
+
+    def test_multi_dot_relative_import_no_false_cycle(self, tmp_path):
+        """Inline multi-dot relative imports inside functions must not create
+        false circular dependency edges. This is the exact pattern from
+        reveal/cli/handlers/introspection.py that triggered BACK-101.
+        """
+        pkg = tmp_path / "pkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("")
+
+        handlers = pkg / "handlers"
+        handlers.mkdir()
+        (handlers / "__init__.py").write_text("")
+
+        # introspection.py uses inline 'from .. import X' (level=2)
+        # which should resolve UP to pkg/, not to handlers/__init__.py
+        (handlers / "introspection.py").write_text(
+            "def handle():\n"
+            "    from .. import utils\n"
+        )
+        (pkg / "utils.py").write_text("def helper(): pass\n")
+
+        adapter = ImportsAdapter(str(handlers), 'circular')
+        result = adapter.get_structure()
+
+        assert result['count'] == 0, (
+            "Multi-dot inline relative import should not produce a false cycle. "
+            "Got cycles: " + str(result.get('cycles', []))
+        )
+
 
 class TestImportsAdapterSchema:
     """Test schema generation for AI agent integration."""
