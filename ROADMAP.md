@@ -756,7 +756,7 @@ Layer Violations: 3
 
 ### BACK-101: Fix false positive circular deps from multi-dot inline relative imports
 
-**Status**: Bug, not started
+**Status**: ✅ Shipped (session stormy-river-0321, commit `6c57ba4`)
 **Value**: Medium | **Lift**: Small
 **Surfaced**: toxic-xenon-0321 (article accuracy review)
 
