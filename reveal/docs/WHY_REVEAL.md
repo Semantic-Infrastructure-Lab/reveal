@@ -64,7 +64,7 @@ reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
 reveal 'calls://src/?uncalled&type=function&top=20'  # verify results: entry points and decorators may appear
 ```
 
-**What you get:** Cross-file, language-aware call graph analysis from a CLI — no IDE, no language server, no configuration. The `?rank=callers` metric surfaces architecturally load-bearing functions before you know to look for them. `?uncalled` lists functions with no callers in the index — useful as a rough post-refactor check, but expect false positives for framework entry points and dispatch tables.
+**What you get:** Static cross-file call graph analysis from the CLI — no IDE, no language server, no configuration. The index is name-based: it finds callers by function name, so two functions with the same name in different files will be merged, and `self.method()` calls index under `self.method` rather than `method`. Dynamic dispatch (getattr, callbacks in dicts, framework routing) won't appear. Best for uniquely-named utility functions in Python codebases. `?rank=callers` is reliably useful even with these constraints — you're looking for relative coupling, not exact provenance. `?uncalled` is a rough post-refactor check; expect false positives for framework entry points and decorator-dispatched functions.
 
 ---
 
