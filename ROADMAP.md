@@ -1,11 +1,17 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-20 (blazing-paint-0320 — v0.66.0 released)
+> **Last updated**: 2026-03-21 (wicked-grid-0321 — v0.66.1 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.66.1
+- ✅ **Circular dep false positives fixed** — `from . import X` (empty module_name) now resolves to `X.py` instead of `__init__.py`. Eliminated all false-positive cycles in standard Python `__init__.py` re-export patterns. Also handles aliased imports (`from . import query as q`). Multi-edge emission for `from . import X, Y, Z`.
+- ✅ **git blame: CWD nested inside repo** — `get_structure` normalises subpath to repo-root-relative before passing to pygit2; `./file.py` URI form also fixed.
+- ✅ **git blame: element % denominator** — sole author of a 100-line function now shows 100.0%, not 9.5%.
+- ✅ **8 regression tests** — 4 for git adapter bugs, 4 for import resolver. Test count: 6,863 → 6,871.
 
 ### v0.66.0
 - ✅ **Public Python SDK** — `analyze()`, `element()`, `query()`, `check()` — programmatic access without subprocess overhead.
