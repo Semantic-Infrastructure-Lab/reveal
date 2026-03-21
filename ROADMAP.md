@@ -716,7 +716,7 @@ reveal docs/ROADMAP.md :610                  # → BACK-090 section
 
 ### BACK-100: `imports://src/?violations` — architecture layer enforcement
 
-**Status**: Planned (not started)
+**Status**: ✅ Shipped (session stormy-river-0321, commit `3fe3c21`)
 **Value**: High | **Lift**: Medium
 **Surfaced**: toxic-xenon-0321 (article accuracy review)
 
