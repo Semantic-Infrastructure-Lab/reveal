@@ -402,7 +402,7 @@ reveal deps . --format json          # Machine-readable for CI
 
 ## reveal check — Quality Rule Engine
 
-Run 64 built-in quality rules against a file or directory. Covers bugs, complexity, imports, maintainability, security, types, and more. Exit code 0 = clean, 1 = issues found.
+Run 69 built-in quality rules against a file or directory. Covers bugs, complexity, imports, maintainability, security, types, and more. Exit code 0 = clean, 1 = issues found.
 
 ### Usage
 
@@ -452,7 +452,7 @@ reveal check src/ --select B,S            # bugs and security only
 reveal check src/ --only-failures         # show violations only
 reveal check src/ --format json           # machine-readable
 reveal check src/ --severity high         # high/critical issues only
-reveal check --rules                      # list all 64 rules
+reveal check --rules                      # list all 69 rules
 reveal check --explain C901              # explain the complexity rule
 ```
 
