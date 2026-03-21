@@ -183,17 +183,32 @@ class I002(BaseRule):
 
     def _resolve_graph_dependencies(self, graph: ImportGraph) -> None:
         """Phase 2: Resolve import statements to actual file paths and add edges."""
+        from reveal.analyzers.imports.resolver import resolve_python_import
+        from reveal.analyzers.imports.types import ImportStatement as IS
+        from dataclasses import replace as dc_replace
+
         for file_path, imports in graph.files.items():
             extractor = get_extractor(file_path)
             if not extractor:
                 continue
             base_path = file_path.parent
             for stmt in imports:
-                resolved = extractor.resolve_import(stmt, base_path)
-                # Skip self-references (e.g., logging.py importing stdlib logging
-                # should not create logging.py → logging.py dependency)
-                if resolved and resolved != file_path:
-                    graph.add_dependency(file_path, resolved)
+                # For `from . import X, Y, Z` (relative, no module path), each
+                # imported name may resolve to a distinct sibling module.  Emit
+                # one edge per name so that all submodule dependencies are tracked
+                # and resolver.py can match names to their actual files.
+                if stmt.is_relative and not stmt.module_name and stmt.imported_names:
+                    for name in stmt.imported_names:
+                        single = dc_replace(stmt, imported_names=[name])
+                        resolved = extractor.resolve_import(single, base_path)
+                        if resolved and resolved != file_path:
+                            graph.add_dependency(file_path, resolved)
+                else:
+                    resolved = extractor.resolve_import(stmt, base_path)
+                    # Skip self-references (e.g., logging.py importing stdlib logging
+                    # should not create logging.py → logging.py dependency)
+                    if resolved and resolved != file_path:
+                        graph.add_dependency(file_path, resolved)
 
     def _format_cycle(self, cycle: List[Path]) -> str:
         """Format a cycle for human-readable display.

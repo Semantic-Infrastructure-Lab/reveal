@@ -413,6 +413,110 @@ class TestStdlibShadowing:
         )
 
 
+class TestResolverPureRelativeImports:
+    """Regression tests for _resolve_relative with pure package-relative imports.
+
+    Bug: `from . import X` (empty module_name) resolved to __init__.py instead of
+    X.py, creating false-positive cycle edges __init__.py → adapter.py → __init__.py.
+    Fixed in session wicked-grid-0321.
+    """
+
+    def test_from_dot_import_resolves_to_submodule(self, tmp_path):
+        """from . import refs should resolve to refs.py, not __init__.py."""
+        from reveal.analyzers.imports.resolver import resolve_python_import
+
+        # Simulate: adapters/git/__init__.py and adapters/git/refs.py both exist.
+        (tmp_path / "__init__.py").write_text("from .adapter import GitAdapter\n")
+        (tmp_path / "refs.py").write_text("def list_branches(): pass\n")
+        (tmp_path / "adapter.py").write_text("from . import refs\n")
+
+        stmt = ImportStatement(
+            file_path=tmp_path / "adapter.py",
+            line_number=1,
+            module_name="",
+            imported_names=["refs"],
+            is_relative=True,
+            import_type="from_import",
+            level=1,
+            source_line="from . import refs",
+        )
+        resolved = resolve_python_import(stmt, base_path=tmp_path)
+
+        assert resolved == tmp_path / "refs.py", (
+            "from . import refs should resolve to refs.py, not __init__.py"
+        )
+
+    def test_from_dot_import_aliased_resolves_to_submodule(self, tmp_path):
+        """from . import query as q should resolve to query.py (strip alias)."""
+        from reveal.analyzers.imports.resolver import resolve_python_import
+
+        (tmp_path / "__init__.py").write_text("")
+        (tmp_path / "query.py").write_text("def run(): pass\n")
+
+        stmt = ImportStatement(
+            file_path=tmp_path / "adapter.py",
+            line_number=1,
+            module_name="",
+            imported_names=["query as query_module"],  # tree-sitter gives full text
+            is_relative=True,
+            import_type="from_import",
+            level=1,
+            source_line="from . import query as query_module",
+        )
+        resolved = resolve_python_import(stmt, base_path=tmp_path)
+
+        assert resolved == tmp_path / "query.py", (
+            "Aliased 'from . import X as Y' should resolve to X.py, not __init__.py"
+        )
+
+    def test_from_dot_import_class_falls_back_to_init(self, tmp_path):
+        """from . import MyClass (no sibling module) should fall back to __init__.py."""
+        from reveal.analyzers.imports.resolver import resolve_python_import
+
+        (tmp_path / "__init__.py").write_text("class MyClass: pass\n")
+        # No MyClass.py exists — MyClass is defined in __init__.py
+
+        stmt = ImportStatement(
+            file_path=tmp_path / "consumer.py",
+            line_number=1,
+            module_name="",
+            imported_names=["MyClass"],
+            is_relative=True,
+            import_type="from_import",
+            level=1,
+            source_line="from . import MyClass",
+        )
+        resolved = resolve_python_import(stmt, base_path=tmp_path)
+
+        assert resolved == tmp_path / "__init__.py", (
+            "When imported name is not a sibling module, fall back to __init__.py"
+        )
+
+    def test_init_re_export_pattern_no_false_cycle(self, tmp_path):
+        """__init__.py re-exporting from adapter.py should not create a cycle.
+
+        Structure: __init__.py imports GitAdapter from adapter.py,
+        adapter.py imports refs, commits (sibling modules).
+        This is the real pattern that triggered false-positive cycles.
+        """
+        # Create the __init__.py → adapter.py → refs.py structure
+        (tmp_path / "__init__.py").write_text("from .adapter import GitAdapter\n")
+        (tmp_path / "adapter.py").write_text(
+            "from . import refs\nfrom . import commits\nclass GitAdapter: pass\n"
+        )
+        (tmp_path / "refs.py").write_text("def list_branches(): pass\n")
+        (tmp_path / "commits.py").write_text("def get_history(): pass\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'circular')
+        result = adapter.get_structure()
+
+        assert result['type'] == 'circular_dependencies'
+        assert result['count'] == 0, (
+            "__init__.py re-export pattern should not be flagged as circular. "
+            "Got cycles: " + str(result.get('cycles', []))
+        )
+
+
 class TestImportsAdapterSchema:
     """Test schema generation for AI agent integration."""
 

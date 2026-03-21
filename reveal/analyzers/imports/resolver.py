@@ -50,7 +50,22 @@ def _resolve_relative(import_stmt: ImportStatement, base_path: Path) -> Optional
         target_path = target_path.parent
 
     if not parts:
-        # Pure relative import: `from . import x` — the module is the package itself
+        # Pure package-relative: `from . import X` or `from . import X, Y, Z`.
+        # Each imported name may be a sibling module (X.py) or a name defined in
+        # __init__.py.  Try submodule resolution first so that `from . import refs`
+        # in adapter.py resolves to refs.py, not __init__.py — the latter creates
+        # false-positive cycle edges __init__.py → adapter.py → __init__.py.
+        # Note: aliased imports like `from . import query as q` produce
+        # imported_names = ['query as q']; strip the alias before resolving.
+        for raw_name in import_stmt.imported_names:
+            name = raw_name.split()[0]  # 'query as q' → 'query'
+            mod_file = target_path / f"{name}.py"
+            if mod_file.exists():
+                return mod_file
+            pkg_init = target_path / name / "__init__.py"
+            if pkg_init.exists():
+                return pkg_init
+        # No imported name matched a submodule — the name lives in __init__.py.
         init = target_path / "__init__.py"
         return init if init.exists() else None
 

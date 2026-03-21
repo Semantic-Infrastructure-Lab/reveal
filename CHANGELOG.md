@@ -12,6 +12,17 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.66.1] - 2026-03-21 (session wicked-grid-0321)
+
+### Fixed
+- **False-positive circular deps from `from . import X` in packages** (`analyzers/imports/resolver.py`, `rules/imports/I002.py`): `_resolve_relative` incorrectly resolved `from . import refs` (empty `module_name`) to `__init__.py` instead of `refs.py`. This created spurious cycle edges `__init__.py → adapter.py → __init__.py` for any adapter using the standard `from . import submodule` pattern. Root cause: when `not parts`, the resolver fell through to `__init__.py` without checking whether the imported names were sibling modules. Fix: try each imported name as `name.py` / `name/__init__.py` first; fall back to `__init__.py` only when no sibling module matches. Also handles `from . import query as q` (tree-sitter yields `"query as q"` as the name; strip alias before resolving). `_resolve_graph_dependencies` updated to emit one edge per imported name for multi-name `from . import X, Y, Z` statements, restoring full submodule dependency tracking. Eliminated all 3 false-positive cycles in reveal's own adapter packages (git, markdown, reveal). (session wicked-grid-0321)
+- **git adapter: semantic blame broken when CWD is nested inside repo root** (`adapters/git/adapter.py`): `get_structure` now normalises `git_subpath` to repo-root-relative before passing to `pygit2` blame/tree APIs. `_parse_resource_string` also handles `./path/file.py` URI form (strips leading `./`, routes to blame). (session digital-vault-0321)
+- **git adapter: element blame percentage used total file lines as denominator** (`adapters/git/renderer.py`): `_render_file_blame_summary` now uses `element['line_end'] - element['line_start'] + 1` as denominator when rendering element-scoped blame, so a sole author of a 100-line function shows 100.0% instead of ~9.5%. (session digital-vault-0321)
+
+### Tests
+- **4 regression tests for git adapter bug fixes** (`tests/test_git_adapter.py`): `test_blame_cwd_nested_inside_repo` (CWD is a subdirectory of the repo root), `test_blame_element_percentage_uses_element_span` (element % denominator), `test_dotslash_uri_form_parses_to_subpath` (`./file.py` URI parses to `subpath`), `test_dotslash_root_still_means_repo_overview` (`.` and `./` still route to overview). (session wicked-grid-0321)
+- **4 regression tests for import resolver fix** (`tests/test_imports.py`): `test_from_dot_import_resolves_to_submodule`, `test_from_dot_import_aliased_resolves_to_submodule`, `test_from_dot_import_class_falls_back_to_init`, `test_init_re_export_pattern_no_false_cycle`. Test count: 6,863 → 6,871. (session wicked-grid-0321)
+
 ## [0.66.0] - 2026-03-20 (sessions storm-eruption-0320, electric-ember-0320, oracular-anvil-0320)
 
 ### Refactored

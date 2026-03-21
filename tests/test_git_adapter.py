@@ -701,6 +701,117 @@ class TestCommitFiltering:
             assert commit['author'] == 'Test User'
 
 
+class TestGitAdapterBugFixes:
+    """Regression tests for git adapter bugs fixed in session digital-vault-0321."""
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_blame_cwd_nested_inside_repo(self, git_repo, tmp_path, monkeypatch):
+        """Blame should work when CWD is a subdirectory of the git repo root.
+
+        Bug: pygit2 requires repo-root-relative paths but subpath was CWD-relative.
+        When CWD == src/ (inside the repo), 'main.py' was passed to pygit2 instead
+        of 'src/main.py', causing a KeyError in the tree lookup.
+        """
+        # The fixture already created src/main.py inside git_repo.
+        # Change CWD to the src/ subdirectory — this simulates the bug scenario.
+        src_dir = git_repo / "src"
+        monkeypatch.chdir(src_dir)
+
+        # Adapter sees path='.' (CWD = src/) and subpath='main.py'.
+        # Without the fix: git_subpath = 'main.py' → pygit2 can't find it in repo tree.
+        # With the fix: git_subpath = 'src/main.py' (repo-root-relative).
+        adapter = GitAdapter(
+            path='.',
+            subpath='main.py',
+            query={'type': 'blame'}
+        )
+        structure = adapter.get_structure()
+
+        assert structure['type'] == 'git_file_blame'
+        assert structure['path'] == 'src/main.py'
+        assert len(structure['hunks']) > 0
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_blame_element_percentage_uses_element_span(self, git_repo):
+        """Element blame % should use element line span, not total file lines.
+
+        Bug: _render_file_blame_summary used result['lines'] (total file lines) as
+        denominator for element blame. A sole author of a 3-line function in a 10-line
+        file showed 30% instead of 100%.
+        """
+        from io import StringIO
+        from reveal.adapters.git.renderer import GitRenderer
+
+        # Craft a blame result that would expose the bug:
+        # - file has 10 total lines
+        # - element spans lines 1-3 (3 lines)
+        # - one author owns all 3 lines in the element
+        # Bug: 3/10 = 30.0%; correct: 3/3 = 100.0%
+        result = {
+            'type': 'git_file_blame',
+            'path': 'src/main.py',
+            'lines': 10,
+            'hunks': [
+                {
+                    'lines': {'start': 1, 'count': 3},
+                    'commit': {
+                        'hash': 'abc1234',
+                        'author': 'Test User',
+                        'email': 'test@example.com',
+                        'date': '2026-01-01 00:00:00',
+                        'message': 'Add main function',
+                    },
+                }
+            ],
+            'element': {
+                'name': 'main',
+                'line_start': 1,
+                'line_end': 3,
+            },
+            'file_content': ['def main():', "    print('Hello')", '', '', '', '', '', '', '', ''],
+            'detail': False,
+            'ref': 'HEAD',
+            'commit': 'abc1234',
+            'contract_version': '1.0',
+            'source_type': 'file',
+            'source': 'src/main.py@HEAD',
+        }
+
+        old_stdout = sys.stdout
+        sys.stdout = captured = StringIO()
+        GitRenderer.render_structure(result, format='text')
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        # With the fix, sole author of all 3 element lines = 100.0%
+        assert '100.0%' in output
+        # Bug value (3/10) would show 30.0% — must not appear
+        assert '30.0%' not in output
+
+    def test_dotslash_uri_form_parses_to_subpath(self):
+        """'./path/file.py' URI form should set subpath, not be treated as repo root.
+
+        Bug: './src/main.py' was not handled, falling through to the bare-path branch
+        which set path='./src/main.py' and subpath=None — routing to repo overview
+        instead of file blame.
+        """
+        from reveal.adapters.git.adapter import GitAdapter
+        parsed = GitAdapter._parse_resource_string('./src/main.py?type=blame')
+
+        assert parsed['path'] == '.'
+        assert parsed['subpath'] == 'src/main.py'
+        assert parsed['query'] == {'type': 'blame'}
+
+    def test_dotslash_root_still_means_repo_overview(self):
+        """'.' and './' should still route to repo overview (path='.', subpath=None)."""
+        from reveal.adapters.git.adapter import GitAdapter
+
+        for resource in ('.', './'):
+            parsed = GitAdapter._parse_resource_string(resource)
+            assert parsed['path'] == resource
+            assert parsed['subpath'] is None
+
+
 class TestGitAdapterSchema(unittest.TestCase):
     """Test schema generation for AI agent integration."""
 
