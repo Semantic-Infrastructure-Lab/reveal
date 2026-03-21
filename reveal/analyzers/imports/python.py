@@ -422,18 +422,22 @@ class PythonExtractor(LanguageExtractor):
     def resolve_import(
         self,
         stmt: ImportStatement,
-        base_path: Path
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
     ) -> Optional[Path]:
         """Resolve Python import statement to file path.
 
         Args:
             stmt: Import statement to resolve
             base_path: Directory of the file containing the import
+            search_paths: Additional directories to search for absolute imports
+                (e.g., the project root so that ``from pkg.mod import X`` resolves
+                even when the file is in a sub-package directory)
 
         Returns:
             Absolute path to the imported file, or None if not resolvable
         """
-        return resolve_python_import(stmt, base_path)
+        return resolve_python_import(stmt, base_path, search_paths=search_paths or [])
 
 
 # Backward compatibility: Keep old function-based API

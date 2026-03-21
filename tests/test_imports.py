@@ -329,14 +329,61 @@ class TestImportsAdapter:
         assert isinstance(result.get('unused'), list)
 
     def test_violations_query_param(self, tmp_path):
-        """Test ?violations query parameter."""
-        # Create test file
+        """Test ?violations query parameter returns not-configured when no .reveal.yaml."""
         (tmp_path / "test.py").write_text("import os\n\nprint('hello')\n")
 
-        # Test violations (placeholder - actual layer violations need config)
         result = ImportsAdapter(str(tmp_path), 'violations').get_structure()
         assert result['type'] == 'layer_violations'
         assert 'violations' in result
+        # No config → count=0 and note explains configuration
+        assert result['count'] == 0
+        assert 'note' in result
+        assert 'reveal.yaml' in result['note'].lower() or '.reveal.yaml' in result['note']
+
+    def test_violations_detects_layer_violation(self, tmp_path):
+        """Layer violation is reported when import crosses a deny boundary."""
+        (tmp_path / "api").mkdir()
+        (tmp_path / "db").mkdir()
+        (tmp_path / "api" / "__init__.py").write_text("")
+        (tmp_path / "db" / "__init__.py").write_text("")
+        # api/routes.py imports from db/ — violates the deny rule
+        (tmp_path / "api" / "routes.py").write_text("from db.session import Session\n")
+        (tmp_path / "db" / "session.py").write_text("class Session: pass\n")
+        (tmp_path / ".reveal.yaml").write_text(
+            "architecture:\n"
+            "  layers:\n"
+            "    - name: presentation\n"
+            "      paths: [api/]\n"
+            "      allow_imports: []\n"
+            "      deny_imports: [db/]\n"
+        )
+
+        result = ImportsAdapter(str(tmp_path), 'violations').get_structure()
+        assert result['type'] == 'layer_violations'
+        assert result['count'] == 1
+        v = result['violations'][0]
+        assert 'api/routes.py' in v['from_file']
+        assert v['layer'] == 'presentation'
+
+    def test_violations_no_violation_when_import_allowed(self, tmp_path):
+        """No violation reported when import is within allowed_imports."""
+        (tmp_path / "api").mkdir()
+        (tmp_path / "models").mkdir()
+        (tmp_path / "api" / "__init__.py").write_text("")
+        (tmp_path / "models" / "__init__.py").write_text("")
+        (tmp_path / "api" / "views.py").write_text("from models.user import User\n")
+        (tmp_path / "models" / "user.py").write_text("class User: pass\n")
+        (tmp_path / ".reveal.yaml").write_text(
+            "architecture:\n"
+            "  layers:\n"
+            "    - name: presentation\n"
+            "      paths: [api/]\n"
+            "      allow_imports: [models/]\n"
+            "      deny_imports: []\n"
+        )
+
+        result = ImportsAdapter(str(tmp_path), 'violations').get_structure()
+        assert result['count'] == 0, f"Expected 0 violations, got: {result['violations']}"
 
     def test_get_element(self, tmp_path):
         """Test get_element method for specific file."""

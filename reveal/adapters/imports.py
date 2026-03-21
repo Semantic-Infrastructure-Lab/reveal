@@ -20,6 +20,7 @@ from .base import ResourceAdapter, register_adapter, register_renderer
 from .help_data import load_help_data
 from ..utils import safe_json_dumps
 from ..analyzers.imports import ImportGraph, ImportStatement
+from ..analyzers.imports.layers import load_layer_config
 from ..utils.query import parse_query_params
 
 _SCHEMA_QUERY_PARAMS = {
@@ -519,13 +520,17 @@ class ImportsAdapter(ResourceAdapter):
                 continue
 
             base_path = file_path.parent
+            # Pass project root as an extra search path so absolute intra-project
+            # imports resolve (e.g., `from db.session import X` from `api/routes.py`
+            # finds `db/session.py` under the project root, not just under `api/`).
+            extra_paths = [target_path] if target_path.is_dir() and target_path != base_path else []
             for stmt in imports:
                 # Skip TYPE_CHECKING imports - they're type-checking only, not runtime
                 # circular dependencies (this is a standard Python pattern to avoid real cycles)
                 if stmt.is_type_checking:
                     continue
 
-                resolved = extractor.resolve_import(stmt, base_path)
+                resolved = extractor.resolve_import(stmt, base_path, search_paths=extra_paths)
                 # Skip self-references (e.g., logging.py importing stdlib logging
                 # should not create logging.py → logging.py dependency)
                 if resolved and resolved != file_path:
@@ -591,16 +596,36 @@ class ImportsAdapter(ResourceAdapter):
         )
 
     def _format_violations(self) -> Dict[str, Any]:
-        """Format layer violations.
+        """Format layer violations using .reveal.yaml layer rules."""
+        layer_config = load_layer_config(self._target_path)
 
-        Note: Requires .reveal.yaml configuration (Phase 4).
-        For now, return placeholder.
-        """
+        if layer_config is None:
+            return self._build_response(
+                'layer_violations',
+                violations=[],
+                count=0,
+                note='Layer violation detection requires .reveal.yaml configuration'
+            )
+
+        project_root = self._target_path if self._target_path.is_dir() else self._target_path.parent
+        violations = []
+
+        for from_file, to_files in self._graph.dependencies.items():
+            for to_file in to_files:
+                result = layer_config.check_import(from_file, to_file, project_root)
+                if result is not None:
+                    layer_name, reason = result
+                    violations.append({
+                        'from_file': str(from_file.relative_to(project_root) if from_file.is_relative_to(project_root) else from_file),
+                        'to_file': str(to_file.relative_to(project_root) if to_file.is_relative_to(project_root) else to_file),
+                        'layer': layer_name,
+                        'reason': reason or f'{layer_name} layer violation',
+                    })
+
         return self._build_response(
             'layer_violations',
-            violations=[],
-            count=0,
-            note='Layer violation detection requires .reveal.yaml configuration (coming in Phase 4)'
+            violations=violations,
+            count=len(violations),
         )
 
     @staticmethod

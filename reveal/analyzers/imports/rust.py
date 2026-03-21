@@ -331,7 +331,8 @@ class RustExtractor(LanguageExtractor):
     def resolve_import(
         self,
         stmt: ImportStatement,
-        base_path: Path
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
     ) -> Optional[Path]:
         """Resolve Rust use statement to file path.
 

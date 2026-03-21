@@ -169,7 +169,8 @@ class LanguageExtractor(ABC):
     def resolve_import(
         self,
         stmt: ImportStatement,
-        base_path: Path
+        base_path: Path,
+        search_paths: Optional[List[Path]] = None,
     ) -> Optional[Path]:
         """Resolve import statement to absolute file path (for cycle detection).
 
