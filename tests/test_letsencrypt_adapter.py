@@ -257,10 +257,11 @@ class TestLetsEncryptAdapter(unittest.TestCase):
         self.assertEqual(result['source_type'], 'letsencrypt_directory')
 
     def test_source_reflects_custom_live_dir(self):
-        """BUG-04: 'source' must match whatever live_dir is set to."""
-        adapter = LetsEncryptAdapter('letsencrypt://?live_dir=/custom/path')
+        """BUG-04: 'source' must equal the actual live_dir path, not some other value."""
+        adapter = LetsEncryptAdapter('letsencrypt://')
+        adapter.live_dir = '/srv/certs/live'
         result = adapter.get_structure()
-        self.assertEqual(result['source'], result['live_dir'])
+        self.assertEqual(result['source'], '/srv/certs/live')
 
     def test_check_orphans_adds_orphan_check(self):
         adapter = LetsEncryptAdapter('letsencrypt://')

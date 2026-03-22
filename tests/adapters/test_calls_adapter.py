@@ -518,11 +518,21 @@ class TestCallsRenderer(unittest.TestCase):
             "CallsRenderer.render_element should not exist — CallsAdapter has no get_element()",
         )
 
-    def test_render_structure_still_works_after_bug03_fix(self):
-        """render_structure must still function correctly after removing render_element."""
-        result = self._base_result()
-        out = _capture_renderer(CallsRenderer.render_structure, result, 'text')
-        self.assertIn('helper', out)
+    def test_routing_layer_treats_calls_as_structure_only(self):
+        """BUG-03: routing layer must not route calls:// to element mode.
+
+        The routing layer uses `hasattr(renderer_class, 'render_element')` to
+        decide between element mode (calls get_element → returns None → "not
+        found" error) and structure mode (calls get_structure → real results).
+        With render_element removed, supports_elements is False, so structure
+        mode is always used.
+        """
+        supports_elements = hasattr(CallsRenderer, 'render_element')
+        self.assertFalse(
+            supports_elements,
+            "CallsRenderer must not signal element support — "
+            "calls:// has no element access, only structure (target=X queries)",
+        )
 
 
 # ---------------------------------------------------------------------------

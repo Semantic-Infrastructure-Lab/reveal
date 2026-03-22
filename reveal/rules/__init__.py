@@ -429,7 +429,7 @@ class RuleRegistry:
 
     _ALLOWED_RULE_CONFIG_KEYS = frozenset({
         'enabled', 'severity', 'threshold', 'message', 'description',
-        'max_length', 'max_depth', 'MAX_DEPTH', 'max_args',
+        'max_length', 'MAX_DEPTH', 'MAX_ARGS',
     })
 
     @classmethod

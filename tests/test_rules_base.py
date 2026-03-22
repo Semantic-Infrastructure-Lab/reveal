@@ -344,16 +344,12 @@ class TestBaseRule:
 # ---------------------------------------------------------------------------
 
 class _StubRule(BaseRule):
-    """Minimal rule for testing _apply_rule_config without a real rule file."""
+    """Minimal rule for testing unknown-key warning behavior."""
     code = "Z999"
     message = "stub"
     category = RulePrefix.E
     severity = Severity.LOW
     file_patterns = ['*.py']
-    max_length = 120
-    max_depth = 10
-    MAX_DEPTH = 10
-    max_args = 5
 
     def check(self, file_path, structure, content):
         return []
@@ -362,40 +358,72 @@ class _StubRule(BaseRule):
 class TestAllowedRuleConfigKeys:
     """CFG-01: _ALLOWED_RULE_CONFIG_KEYS must include all keys rules actually use."""
 
-    KNOWN_RULE_KEYS = {'enabled', 'severity', 'threshold', 'message', 'description',
-                       'max_length', 'max_depth', 'MAX_DEPTH', 'max_args'}
+    def test_real_rule_config_keys_in_allowlist(self):
+        """Keys that real built-in rules actually use must be in the allowlist.
 
-    def test_all_known_keys_in_allowlist(self):
-        """Every key used by built-in rules must be in the allowlist."""
-        for key in self.KNOWN_RULE_KEYS:
-            assert key in RuleRegistry._ALLOWED_RULE_CONFIG_KEYS, (
-                f"Key {key!r} missing from _ALLOWED_RULE_CONFIG_KEYS — "
-                "add it to silence spurious 'Unknown rule config key' warnings"
-            )
+        This imports each rule, reads its configurable class attributes, and
+        verifies they are in _ALLOWED_RULE_CONFIG_KEYS. Uses real rule instances
+        rather than a hand-maintained list to prevent the test mirroring the
+        implementation.
+        """
+        from reveal.rules.complexity.C905 import C905
+        from reveal.rules.refactoring.R913 import R913
 
-    def test_known_keys_applied_without_warning(self, caplog):
-        """Applying known keys must not produce 'Unknown rule config key' warnings."""
-        rule = _StubRule()
-        config = {
-            'max_length': 80,
-            'max_depth': 5,
-            'MAX_DEPTH': 5,
-            'max_args': 3,
-        }
-        with caplog.at_level(logging.WARNING, logger='reveal.rules'):
-            RuleRegistry._apply_rule_config(rule, config)
+        # C905 has MAX_DEPTH as a class attribute — users configure it as MAX_DEPTH
+        assert 'MAX_DEPTH' in RuleRegistry._ALLOWED_RULE_CONFIG_KEYS, (
+            "C905 uses MAX_DEPTH but it's missing from _ALLOWED_RULE_CONFIG_KEYS"
+        )
+        assert hasattr(C905, 'MAX_DEPTH'), "Sanity check: C905.MAX_DEPTH must exist"
+
+        # R913 has MAX_ARGS as a class attribute — users configure it as MAX_ARGS
+        assert 'MAX_ARGS' in RuleRegistry._ALLOWED_RULE_CONFIG_KEYS, (
+            "R913 uses MAX_ARGS but it's missing from _ALLOWED_RULE_CONFIG_KEYS"
+        )
+        assert hasattr(R913, 'MAX_ARGS'), "Sanity check: R913.MAX_ARGS must exist"
+
+        # E501 reads max_length via get_threshold() — users configure it as max_length
+        assert 'max_length' in RuleRegistry._ALLOWED_RULE_CONFIG_KEYS, (
+            "E501 reads max_length via get_threshold but it's missing from _ALLOWED_RULE_CONFIG_KEYS"
+        )
+
+    def test_real_rule_config_keys_applied_without_warning(self, caplog):
+        """Configuring built-in rules with their documented keys must not produce warnings.
+
+        Uses real rule instances (not a stub) so the test fails if a rule renames
+        its config attribute without updating _ALLOWED_RULE_CONFIG_KEYS.
+        """
+        from reveal.rules.complexity.C905 import C905
+        from reveal.rules.refactoring.R913 import R913
+
+        cases = [
+            (C905(), {'MAX_DEPTH': 6}),
+            (R913(), {'MAX_ARGS': 3}),
+        ]
+        for rule, config in cases:
+            with caplog.at_level(logging.WARNING, logger='reveal.rules'):
+                RuleRegistry._apply_rule_config(rule, config)
 
         unknown_warnings = [r for r in caplog.records if 'Unknown rule config key' in r.message]
         assert unknown_warnings == [], (
-            f"Unexpected 'Unknown rule config key' warnings: {[w.message for w in unknown_warnings]}"
+            f"Unexpected warnings when configuring real rules: {[w.message for w in unknown_warnings]}"
         )
 
-    def test_known_keys_are_actually_set(self):
-        """_apply_rule_config must set attributes for keys that exist on the rule."""
-        rule = _StubRule()
-        RuleRegistry._apply_rule_config(rule, {'max_length': 50, 'max_args': 2})
-        assert rule.max_length == 50
-        assert rule.max_args == 2
+    def test_real_rule_attributes_set_after_config(self):
+        """_apply_rule_config must actually mutate the rule's configurable attributes."""
+        from reveal.rules.complexity.C905 import C905
+        from reveal.rules.refactoring.R913 import R913
+
+        c905 = C905()
+        original_depth = c905.MAX_DEPTH
+        RuleRegistry._apply_rule_config(c905, {'MAX_DEPTH': original_depth + 10})
+        assert c905.MAX_DEPTH == original_depth + 10, (
+            f"MAX_DEPTH not updated — expected {original_depth + 10}, got {c905.MAX_DEPTH}"
+        )
+
+        r913 = R913()
+        original_args = r913.MAX_ARGS
+        RuleRegistry._apply_rule_config(r913, {'MAX_ARGS': original_args + 10})
+        assert r913.MAX_ARGS == original_args + 10
 
     def test_truly_unknown_key_logs_warning(self, caplog):
         """Keys not in the allowlist must still produce a warning (guard against over-permissive allowlist)."""
