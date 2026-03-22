@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-03-22 (session sacred-shrine-0321)
+## [0.66.2] - 2026-03-22 (sessions sacred-shrine-0321, noble-earth-0322)
 
 ### Fixed
 - **BUG-03: `CallsRenderer.render_element` removed** (`adapters/calls/adapter.py`): `render_element` was byte-for-byte identical to `render_structure` and caused the routing layer to treat `calls://` as element-capable. The routing layer calls `adapter.get_element()` when `render_element` exists — this returns `None` from the base class, producing a false "Element not found" error instead of the structure response. Removed `render_element`; `render_structure` is the only render path. (session sacred-shrine-0321)
@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CFG-01: `_ALLOWED_RULE_CONFIG_KEYS` too narrow** (`rules/__init__.py`): `max_length` (E501), `MAX_DEPTH` (C905), `MAX_ARGS` (R913) were not in the allowlist, causing hundreds of "Unknown rule config key … ignored" warnings on every `reveal check` run. Corrected allowlist to include the keys with correct case (`MAX_ARGS` not `max_args`). (session sacred-shrine-0321)
 - **PERF-01: `_dir_cache_key` full rglob on every cache miss** (`adapters/calls/index.py`): Replaced O(n-files) rglob walk with a single `os.stat(directory).st_mtime_ns` call. Directory mtime advances on any direct child change — sufficient for cache invalidation. OSError fallback preserves original per-file fingerprint. (session sacred-shrine-0321)
 - **MEM-08: `_collect_matching_files` builds full list before sort** (`tree_view.py`): Converted to a generator. `show_file_list` now uses `heapq.nlargest/nsmallest` for the default mtime sort, holding at most 500 tuples in memory regardless of directory size. Non-mtime sorts materialize and cap at 500. (session sacred-shrine-0321)
+- **`.reveal.yaml` R913 config key wrong case** (`.reveal.yaml`): Config used `max_args: 5` (lowercase) but R913's class attribute is `MAX_ARGS` (uppercase). The allowlist correctly requires `MAX_ARGS`, so the project's own config was triggering the "Unknown rule config key" warning that CFG-01 was meant to stop. Corrected to `MAX_ARGS: 5`. (session noble-earth-0322)
 
 ### Tests
 - **Test review pass**: replaced 3 tautological/redundant tests added for BUG-03/04/CFG-01. Discovered CFG-01 fix had wrong case (`max_args` vs `MAX_ARGS`); corrected. Tests now use real rule imports (C905, R913, E501) instead of stub mirrors of the implementation. (session sacred-shrine-0321)
