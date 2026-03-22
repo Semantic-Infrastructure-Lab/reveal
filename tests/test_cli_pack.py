@@ -259,7 +259,7 @@ class TestWalkFiles(unittest.TestCase):
 
     def test_single_file_returns_that_file(self):
         p = self._make("solo.py")
-        files = _walk_files(p)
+        files = list(_walk_files(p))
         self.assertEqual(files, [p])
 
     def test_includes_yaml_and_toml(self):

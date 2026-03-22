@@ -158,6 +158,13 @@ def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
                 element = create_element_dict(file_path, category, item, analyzer, symbol_map)
                 result['elements'].append(element)
 
+        # Free large per-file buffers held by the analyzer so directory scans
+        # (ast://, overview) don't accumulate memory proportional to all files.
+        analyzer.lines = []
+        analyzer.content = ''
+        if hasattr(analyzer, '_content_bytes'):
+            analyzer._content_bytes = None
+
         return result
 
     except Exception as e:

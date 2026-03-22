@@ -494,11 +494,9 @@ class ImportsAdapter(ResourceAdapter):
         if target_path.is_file():
             files = [target_path]
         else:
-            # Collect all supported file types using registry
-            files = []
-            for ext in get_all_extensions():
-                pattern = f'*{ext}'
-                files.extend(target_path.rglob(pattern))
+            # Single walk filtered by extension — avoids one rglob per extension (~100 walks).
+            supported_exts = frozenset(get_all_extensions())
+            files = [f for f in target_path.rglob('*') if f.is_file() and f.suffix in supported_exts]
 
         # Extract imports from all files using appropriate extractor
         all_imports = []

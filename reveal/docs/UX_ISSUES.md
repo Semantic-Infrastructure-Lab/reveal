@@ -49,46 +49,35 @@ Discovered via OOM kill post-mortem — `reveal stats://.` and `reveal overview 
 
 ---
 
-### MEM-04: `ast/analysis.py collect_structures()` — same pattern as MEM-02, not yet fixed
+### MEM-04: `ast/analysis.py collect_structures()` — FIXED
 
-**Severity:** High
-**File:** `reveal/adapters/ast/analysis.py` lines 22–42
-**Problem:** `collect_structures()` calls `try_add_file_structure()` for every file in a directory via `rglob('*')`. Each call instantiates an analyzer (loading full file content + tree-sitter parse), but unlike the stats path, analyzer content is never explicitly freed. Affects `ast://large_dir/` queries and `overview`.
-**Repro:** `reveal 'ast://large_python_project/'`
-**Fix needed:** Same as MEM-02 — explicitly clear `analyzer.lines`, `.content`, `._content_bytes` in `analyze_file()` after structure is extracted.
+**Severity:** High → **Resolved**
+**File:** `reveal/adapters/ast/analysis.py`
+**Fix:** Added explicit content cleanup in `analyze_file()` after the structure loop: `analyzer.lines = []`, `.content = ''`, `._content_bytes = None`. Peak memory now proportional to one file, not all files analyzed.
 
 ---
 
-### MEM-05: `imports.py` performs one `rglob()` per file extension (~100 walks)
+### MEM-05: `imports.py` performs one `rglob()` per file extension (~100 walks) — FIXED
 
-**Severity:** Medium
-**File:** `reveal/adapters/imports.py` lines 498–501
-**Problem:**
-```python
-for ext in get_all_extensions():          # 100+ extensions
-    files.extend(target_path.rglob(pattern))  # full tree walk each time
-```
-`get_all_extensions()` returns 100+ extensions; each gets its own full `rglob` walk. A 1000-file directory gets walked 100+ times instead of once. Pure I/O waste — not a memory bomb, but measurably slow on large codebases.
-**Fix needed:** Single `os.walk()` or `rglob('*')` pass with Python-side extension set filtering.
+**Severity:** Medium → **Resolved**
+**File:** `reveal/adapters/imports.py`
+**Fix:** Replaced `for ext in get_all_extensions(): rglob(pattern)` loop with a single `rglob('*')` walk filtered by `frozenset` of supported extensions.
 
 ---
 
-### MEM-06: `calls/index.py _INDEX_CACHE` — unbounded, no LRU
+### MEM-06: `calls/index.py _INDEX_CACHE` — unbounded, no LRU — FIXED
 
-**Severity:** Low-Medium
-**File:** `reveal/adapters/calls/index.py` line 22
-**Problem:** `_INDEX_CACHE: Dict[str, Tuple[...]]` stores full caller graphs keyed by directory string. No eviction. In practice low cardinality (one entry per unique directory scanned per process), but the same class of issue as `_parse_cache` before the fix. Each entry is a complete call graph; on a large codebase that's a large dict of function→callers mappings.
-**Additional issue:** `_dir_cache_key()` at line 109 does its own `rglob('*')` on every cache-miss to compute the fingerprint — another full directory walk on first call.
-**Fix needed:** LRU cap (e.g., 8 entries — call graphs are expensive to rebuild but rarely need more than a handful cached).
+**Severity:** Low-Medium → **Resolved**
+**File:** `reveal/adapters/calls/index.py`
+**Fix:** Replaced plain `dict` with `OrderedDict` LRU capped at 8 entries. Cache hits call `move_to_end()`; inserts evict oldest with `popitem(last=False)` when over limit.
 
 ---
 
-### MEM-07: `pack.py _walk_files()` materializes full file list before budget scoring
+### MEM-07: `pack.py _walk_files()` materializes full file list before budget scoring — FIXED
 
-**Severity:** Low
-**File:** `reveal/cli/commands/pack.py` line 443
-**Problem:** Returns `List[Path]` of all matching files before any budget scoring. For large repos this builds a full path list in memory unnecessarily since `pack` will select a small budget subset anyway.
-**Fix needed:** Convert to generator; apply budget scoring incrementally.
+**Severity:** Low → **Resolved**
+**File:** `reveal/cli/commands/pack.py`
+**Fix:** Converted `_walk_files()` from `List[Path]` to `Generator[Path, None, None]`; caller (`_collect_candidates`) already iterated, so no other changes needed.
 
 ---
 

@@ -7,7 +7,7 @@ import subprocess
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Set, Tuple
+from typing import Dict, Any, Generator, List, Optional, Set, Tuple
 
 
 # Entry point filename patterns (highest priority)
@@ -440,8 +440,8 @@ def _apply_budget(
     return selected, meta
 
 
-def _walk_files(path: Path) -> List[Path]:
-    """Walk directory and return code/config files (respects common ignores)."""
+def _walk_files(path: Path) -> Generator[Path, None, None]:
+    """Yield code/config files under *path* (respects common ignores)."""
     _SKIP_DIRS = {'.git', '__pycache__', 'node_modules', '.venv', 'venv',
                   '.mypy_cache', '.pytest_cache', 'dist', 'build', '.tox'}
     _CODE_EXTENSIONS = {
@@ -453,10 +453,9 @@ def _walk_files(path: Path) -> List[Path]:
     _ROOT_FILES = {'Makefile', 'Dockerfile', 'pyproject.toml', 'package.json',
                    'Cargo.toml', 'go.mod', 'requirements.txt', 'setup.py'}
 
-    results = []
-
     if path.is_file():
-        return [path]
+        yield path
+        return
 
     for item in path.rglob('*'):
         if item.is_dir():
@@ -466,13 +465,11 @@ def _walk_files(path: Path) -> List[Path]:
             continue
         # Include root config files
         if item.parent == path and item.name in _ROOT_FILES:
-            results.append(item)
+            yield item
             continue
         # Include code files by extension
         if item.suffix.lower() in _CODE_EXTENSIONS:
-            results.append(item)
-
-    return results
+            yield item
 
 
 def _count_lines(path: Path) -> int:

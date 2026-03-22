@@ -11,15 +11,19 @@ per directory when any file changes (simple and correct).
 
 import builtins as _builtins_module
 import os
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..ast.analysis import collect_structures, is_code_file
 from ..ast.call_graph import build_alias_map
 
-# Module-level cache: directory → (cache_key, index)
-# cache_key is a frozenset of (abspath_str, mtime_ns) so it's hashable.
-_INDEX_CACHE: Dict[str, Tuple[Any, Dict[str, List[Dict[str, Any]]]]] = {}
+# Module-level LRU cache: directory → (cache_key, index)
+# cache_key is a tuple of (abspath_str, mtime_ns) pairs so it's hashable.
+# Capped at 8 entries — call graphs are expensive to rebuild but rarely need
+# more than a handful cached simultaneously.
+_INDEX_CACHE: OrderedDict = OrderedDict()
+_INDEX_CACHE_MAX = 8
 
 # All public names in the Python builtins module — used to filter noise from
 # callees results.  Built at import time so it stays in sync with the running
@@ -147,6 +151,7 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
     # Check cache
     cache_key = _dir_cache_key(directory)
     if dir_str in _INDEX_CACHE and _INDEX_CACHE[dir_str][0] == cache_key:
+        _INDEX_CACHE.move_to_end(dir_str)
         return _INDEX_CACHE[dir_str][1]
 
     # Build index
@@ -173,6 +178,9 @@ def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:
                 _index_callee(index, callee, {**record_base, 'call_expr': callee}, alias_map)
 
     _INDEX_CACHE[dir_str] = (cache_key, index)
+    _INDEX_CACHE.move_to_end(dir_str)
+    if len(_INDEX_CACHE) > _INDEX_CACHE_MAX:
+        _INDEX_CACHE.popitem(last=False)
     return index
 
 
