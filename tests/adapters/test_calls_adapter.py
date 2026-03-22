@@ -1520,5 +1520,56 @@ class TestUncalledRenderer(unittest.TestCase):
         self.assertIn('query', parsed)
 
 
+# ---------------------------------------------------------------------------
+# PERF-01: _dir_cache_key uses os.stat fast path
+# ---------------------------------------------------------------------------
+
+class TestDirCacheKey(unittest.TestCase):
+    """PERF-01: _dir_cache_key must return a cheap O(1) key, not walk the tree."""
+
+    def test_returns_dir_mtime_tuple(self):
+        """Normal case: returns ('dir_mtime', int) without walking files."""
+        from reveal.adapters.calls.index import _dir_cache_key
+        with tempfile.TemporaryDirectory() as d:
+            key = _dir_cache_key(Path(d))
+        self.assertIsInstance(key, tuple)
+        self.assertEqual(key[0], 'dir_mtime')
+        self.assertIsInstance(key[1], int)
+
+    def test_same_dir_same_key(self):
+        """Two calls on an unchanged directory must return equal keys."""
+        from reveal.adapters.calls.index import _dir_cache_key
+        with tempfile.TemporaryDirectory() as d:
+            key1 = _dir_cache_key(Path(d))
+            key2 = _dir_cache_key(Path(d))
+        self.assertEqual(key1, key2)
+
+    def test_key_is_hashable(self):
+        """Cache key must be usable as a dict key."""
+        from reveal.adapters.calls.index import _dir_cache_key
+        with tempfile.TemporaryDirectory() as d:
+            key = _dir_cache_key(Path(d))
+        _ = {key: 'value'}  # must not raise
+
+    def test_no_rglob_on_normal_directory(self):
+        """Fast path must not call rglob — verify by counting os.stat calls."""
+        from reveal.adapters.calls.index import _dir_cache_key
+        import unittest.mock as mock
+        with tempfile.TemporaryDirectory() as d:
+            open(os.path.join(d, 'a.py'), 'w').close()
+            open(os.path.join(d, 'b.py'), 'w').close()
+            real_stat = os.stat
+            stat_calls = []
+            def counting_stat(path, *args, **kwargs):
+                stat_calls.append(path)
+                return real_stat(path, *args, **kwargs)
+            with mock.patch('reveal.adapters.calls.index.os.stat', side_effect=counting_stat):
+                _dir_cache_key(Path(d))
+        # Fast path: exactly 1 stat call (the directory itself), not one per file
+        self.assertEqual(len(stat_calls), 1, (
+            f"Expected 1 os.stat call (directory only), got {len(stat_calls)}: {stat_calls}"
+        ))
+
+
 if __name__ == '__main__':
     unittest.main()

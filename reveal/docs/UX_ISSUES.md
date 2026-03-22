@@ -16,7 +16,7 @@ beth_topics:
 
 Discovered via dogfooding on real codebases (morphogen, tiacad) — session shining-wormhole-0315, 2026-03-15.
 
-> **Status**: All 9 original UX/Bug issues resolved in awakened-pegasus-0315 (v0.63.x). Memory issues MEM-01 through MEM-07 fixed across vortex-isotope-0321 and floating-wormhole-0321. New code quality issues (BUG-03, BUG-04, CFG-01, PERF-01, TEST-01, TEST-02) discovered in full codebase review floating-wormhole-0321, 2026-03-21. BUG-03, BUG-04, CFG-01 fixed sacred-shrine-0321, 2026-03-22. Remaining open: PERF-01, TEST-01, TEST-02, MEM-08.
+> **Status**: All 9 original UX/Bug issues resolved in awakened-pegasus-0315 (v0.63.x). Memory issues MEM-01 through MEM-08 all fixed. Code quality issues BUG-03, BUG-04, CFG-01, PERF-01, TEST-01, TEST-02 all fixed in sacred-shrine-0321, 2026-03-22. All known issues resolved.
 
 ---
 
@@ -103,7 +103,7 @@ Discovered via OOM kill post-mortem — `reveal stats://.` and `reveal overview 
 | MEM-05 | Medium | `imports.py` | 100+ redundant rglob walks (one per extension) | ✅ Fixed floating-wormhole-0321 |
 | MEM-06 | Low-Medium | `calls/index.py` | Unbounded `_INDEX_CACHE`, extra rglob on miss | ✅ Fixed floating-wormhole-0321 |
 | MEM-07 | Low | `pack.py` | Full path list before budget scoring | ✅ Fixed floating-wormhole-0321 |
-| MEM-08 | Low | `tree_view.py` | Full list before sort+truncate | ⬜ Not yet fixed |
+| MEM-08 | Low | `tree_view.py` | Full list before sort+truncate | ✅ Fixed sacred-shrine-0321 |
 
 ---
 
@@ -389,9 +389,9 @@ Discovered: floating-wormhole-0321, 2026-03-21.
 | BUG-03 | Medium | `adapters/calls/adapter.py:220` | `render_element` identical to `render_structure` — dead code | ✅ Fixed sacred-shrine-0321 |
 | BUG-04 | **High** | `adapters/letsencrypt/adapter.py:195` | Missing `source` + `source_type` contract fields | ✅ Fixed sacred-shrine-0321 |
 | CFG-01 | Medium | `rules/__init__.py:430` | Config key allowlist too narrow — floods stderr with warnings | ✅ Fixed sacred-shrine-0321 |
-| PERF-01 | Medium | `adapters/calls/index.py:113` | Cache key does full `rglob` on every miss (~500ms on large repos) | ⬜ Open |
-| TEST-01 | Medium | `adapters/ast/adapter.py` | `AstAdapter` class has no unit tests | ⬜ Open |
-| TEST-02 | Low | `adapters/python/` | Python adapter has only 9 tests | ⬜ Open |
+| PERF-01 | Medium | `adapters/calls/index.py:113` | Cache key does full `rglob` on every miss (~500ms on large repos) | ✅ Fixed sacred-shrine-0321 |
+| TEST-01 | Medium | `adapters/ast/adapter.py` | `AstAdapter` class has no unit tests | ✅ Fixed sacred-shrine-0321 |
+| TEST-02 | Low | `adapters/python/` | Python adapter has only 9 tests | ✅ Fixed sacred-shrine-0321 |
 
 ---
 

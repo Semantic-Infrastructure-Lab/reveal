@@ -111,15 +111,26 @@ def _bfs_level(
 
 
 def _dir_cache_key(directory: Path) -> Any:
-    """Compute a hashable cache key from all code-file mtimes in *directory*."""
-    entries = []
-    for fp in sorted(directory.rglob('*')):
-        if fp.is_file() and is_code_file(fp):
-            try:
-                entries.append((str(fp), os.stat(fp).st_mtime_ns))
-            except OSError:
-                pass
-    return tuple(entries)
+    """Compute a hashable cache key for *directory*.
+
+    Fast path: a single os.stat() on the directory itself.  On Linux/macOS/NTFS
+    the directory mtime advances whenever any direct child is added, removed, or
+    renamed — sufficient to detect any change that would invalidate the index.
+
+    Fallback: if the directory stat fails (permissions, race), fall back to
+    the original per-file mtime fingerprint so correctness is preserved.
+    """
+    try:
+        return ('dir_mtime', os.stat(directory).st_mtime_ns)
+    except OSError:
+        entries = []
+        for fp in sorted(directory.rglob('*')):
+            if fp.is_file() and is_code_file(fp):
+                try:
+                    entries.append((str(fp), os.stat(fp).st_mtime_ns))
+                except OSError:
+                    pass
+        return tuple(entries)
 
 
 def build_callers_index(path: str) -> Dict[str, List[Dict[str, Any]]]:

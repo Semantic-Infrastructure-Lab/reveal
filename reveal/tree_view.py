@@ -1,10 +1,11 @@
 """Directory tree view for reveal."""
 
 import datetime
+import heapq
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Generator, List, Optional, Tuple
 from .registry import get_analyzer
 from .display.filtering import PathFilter
 from .utils import format_size
@@ -25,9 +26,10 @@ class TreeViewOptions:
     include_extensions: Optional[List[str]] = None
 
 
-def _collect_matching_files(root_path: Path, show_hidden: bool, path_filter: Any, exts: Optional[set]) -> list:
-    """Walk root_path and return list of (fpath, stat) for files passing all filters."""
-    files = []
+def _collect_matching_files(
+    root_path: Path, show_hidden: bool, path_filter: Any, exts: Optional[set]
+) -> Generator[Tuple[Path, os.stat_result], None, None]:
+    """Yield (fpath, stat) for each file in root_path that passes all filters."""
     for root, dirs, filenames in os.walk(root_path):
         if not show_hidden:
             dirs[:] = [d for d in dirs if not d.startswith('.')]
@@ -41,10 +43,9 @@ def _collect_matching_files(root_path: Path, show_hidden: bool, path_filter: Any
             if exts and fpath.suffix.lower().lstrip('.') not in exts:
                 continue
             try:
-                files.append((fpath, fpath.stat()))
+                yield fpath, fpath.stat()
             except OSError:
                 continue
-    return files
 
 
 def _sort_files(files: list, sort_by: Optional[str], sort_desc: bool) -> None:
@@ -90,12 +91,29 @@ def show_file_list(path: str, show_hidden: bool = False,
     )
     exts = {e.lower().lstrip('.') for e in include_extensions} if include_extensions else None
 
-    files = _collect_matching_files(root_path, show_hidden, path_filter, exts)
+    effective_sort = sort_by or 'mtime'
+    file_gen = _collect_matching_files(root_path, show_hidden, path_filter, exts)
+
+    # For mtime sort (the default and most common case) use a bounded heap so we
+    # never hold more than max_entries tuples in memory regardless of directory size.
+    # For name/size sorts we need a full pass anyway — materialize then sort.
+    _MAX_FILE_LIST = 500
+    if effective_sort in ('mtime', 'modified'):
+        mtime_key = lambda x: x[1].st_mtime  # noqa: E731
+        if sort_desc:
+            files = heapq.nlargest(_MAX_FILE_LIST, file_gen, key=mtime_key)
+        else:
+            files = heapq.nsmallest(_MAX_FILE_LIST, file_gen, key=mtime_key)
+            files.sort(key=mtime_key)  # nsmallest doesn't guarantee order
+    else:
+        files = list(file_gen)
+        _sort_files(files, sort_by, sort_desc)
+        if len(files) > _MAX_FILE_LIST:
+            files = files[:_MAX_FILE_LIST]
+
     if not files:
         ext_suffix = f" (ext: {','.join(include_extensions)})" if include_extensions else ""
         return f"No files found in {path}{ext_suffix}"
-
-    _sort_files(files, sort_by, sort_desc)
 
     lines = []
     for fpath, stat in files:

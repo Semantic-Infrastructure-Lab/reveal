@@ -392,5 +392,81 @@ class TestSortAliases(unittest.TestCase):
         self.assertEqual(result_mtime, result_modified)
 
 
+# ---------------------------------------------------------------------------
+# MEM-08: _collect_matching_files is a generator; show_file_list uses heapq
+# ---------------------------------------------------------------------------
+
+class TestCollectMatchingFilesGenerator(unittest.TestCase):
+    """MEM-08: _collect_matching_files must be a generator, not return a list."""
+
+    def test_returns_generator(self):
+        """_collect_matching_files must yield, not return a list."""
+        import types
+        from reveal.tree_view import _collect_matching_files
+        from reveal.display.filtering import PathFilter
+
+        with tempfile.TemporaryDirectory() as d:
+            Path(os.path.join(d, 'a.txt')).write_text('x')
+            pf = PathFilter(root_path=Path(d), respect_gitignore=False,
+                            exclude_patterns=None, include_defaults=False)
+            result = _collect_matching_files(Path(d), show_hidden=False, path_filter=pf, exts=None)
+        self.assertIsInstance(result, types.GeneratorType,
+                              "_collect_matching_files must be a generator (use yield, not return list)")
+
+    def test_generator_yields_correct_tuples(self):
+        """Yielded items must be (Path, stat_result) tuples."""
+        import stat
+        from reveal.tree_view import _collect_matching_files
+        from reveal.display.filtering import PathFilter
+
+        with tempfile.TemporaryDirectory() as d:
+            fpath = Path(os.path.join(d, 'sample.txt'))
+            fpath.write_text('hello')
+            pf = PathFilter(root_path=Path(d), respect_gitignore=False,
+                            exclude_patterns=None, include_defaults=False)
+            items = list(_collect_matching_files(Path(d), show_hidden=False, path_filter=pf, exts=None))
+
+        self.assertEqual(len(items), 1)
+        path, st = items[0]
+        self.assertIsInstance(path, Path)
+        self.assertTrue(hasattr(st, 'st_mtime'))
+
+    def test_heapq_bounds_memory_for_mtime_sort(self):
+        """show_file_list with mtime sort must never hold more than _MAX_FILE_LIST entries."""
+        # Create more files than _MAX_FILE_LIST (500) to confirm truncation
+        _MAX = 500
+        with tempfile.TemporaryDirectory() as d:
+            for i in range(_MAX + 50):
+                Path(os.path.join(d, f'f{i:04d}.txt')).write_text(str(i))
+            result = show_file_list(d)
+            lines = [l for l in result.strip().splitlines() if l]
+        self.assertLessEqual(len(lines), _MAX,
+                             f"show_file_list returned {len(lines)} lines, expected <= {_MAX}")
+
+    def test_sort_ascending_mtime_still_correct(self):
+        """sort_desc=False (oldest first) must still return files in ascending mtime order."""
+        with tempfile.TemporaryDirectory() as d:
+            older = Path(os.path.join(d, 'older.txt'))
+            newer = Path(os.path.join(d, 'newer.txt'))
+            older.write_text('old')
+            newer.write_text('new')
+            os.utime(str(older), (1000000, 1000000))
+            os.utime(str(newer), (2000000, 2000000))
+            result = show_file_list(d, sort_by='mtime', sort_desc=False)
+            lines = [l for l in result.strip().splitlines() if l]
+        self.assertIn('older.txt', lines[0])
+        self.assertIn('newer.txt', lines[1])
+
+    def test_sort_by_name_still_works(self):
+        """Name sort falls back to full list path — must still produce correct output."""
+        with tempfile.TemporaryDirectory() as d:
+            for name in ('charlie.txt', 'alpha.txt', 'beta.txt'):
+                Path(os.path.join(d, name)).write_text(name)
+            result = show_file_list(d, sort_by='name', sort_desc=False)
+            lines = [l for l in result.strip().splitlines() if l]
+        names_in_order = [l.split()[-1] for l in lines]
+        self.assertEqual(names_in_order, ['alpha.txt', 'beta.txt', 'charlie.txt'])
+
+
 if __name__ == '__main__':
     unittest.main()
