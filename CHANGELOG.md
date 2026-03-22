@@ -12,6 +12,25 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-03-22 (session sacred-shrine-0321)
+
+### Fixed
+- **BUG-03: `CallsRenderer.render_element` removed** (`adapters/calls/adapter.py`): `render_element` was byte-for-byte identical to `render_structure` and caused the routing layer to treat `calls://` as element-capable. The routing layer calls `adapter.get_element()` when `render_element` exists — this returns `None` from the base class, producing a false "Element not found" error instead of the structure response. Removed `render_element`; `render_structure` is the only render path. (session sacred-shrine-0321)
+- **BUG-04: `LetsEncryptAdapter.get_structure()` missing `source` / `source_type`** (`adapters/letsencrypt/adapter.py`): Both contract fields absent from result dict, breaking downstream consumers. Added `'source': self.live_dir` and `'source_type': 'letsencrypt_directory'`. (session sacred-shrine-0321)
+- **CFG-01: `_ALLOWED_RULE_CONFIG_KEYS` too narrow** (`rules/__init__.py`): `max_length` (E501), `MAX_DEPTH` (C905), `MAX_ARGS` (R913) were not in the allowlist, causing hundreds of "Unknown rule config key … ignored" warnings on every `reveal check` run. Corrected allowlist to include the keys with correct case (`MAX_ARGS` not `max_args`). (session sacred-shrine-0321)
+- **PERF-01: `_dir_cache_key` full rglob on every cache miss** (`adapters/calls/index.py`): Replaced O(n-files) rglob walk with a single `os.stat(directory).st_mtime_ns` call. Directory mtime advances on any direct child change — sufficient for cache invalidation. OSError fallback preserves original per-file fingerprint. (session sacred-shrine-0321)
+- **MEM-08: `_collect_matching_files` builds full list before sort** (`tree_view.py`): Converted to a generator. `show_file_list` now uses `heapq.nlargest/nsmallest` for the default mtime sort, holding at most 500 tuples in memory regardless of directory size. Non-mtime sorts materialize and cap at 500. (session sacred-shrine-0321)
+
+### Tests
+- **Test review pass**: replaced 3 tautological/redundant tests added for BUG-03/04/CFG-01. Discovered CFG-01 fix had wrong case (`max_args` vs `MAX_ARGS`); corrected. Tests now use real rule imports (C905, R913, E501) instead of stub mirrors of the implementation. (session sacred-shrine-0321)
+- **30 new tests for `AstAdapter`** (`tests/adapters/test_ast_adapter.py`, TEST-01): `__init__` query parsing, show_mode/builtins extraction, result_control, output contract (source/source_type/contract_version/meta), filtering, sort/limit/offset, 200-entry auto-cap, builtin filtering, edge cases (binary file, empty dir, colon syntax error). (session sacred-shrine-0321)
+- **33 new tests for `PythonAdapter`** (`tests/test_python_adapter_extended.py`, TEST-02): all 9 `get_element` routes, unknown element returns None, `_get_env`/`_get_venv` field contracts, packages/module sub-routes, `get_structure` contract, `get_available_elements` completeness, every listed element routes without returning None. (session sacred-shrine-0321)
+- **4 tests for PERF-01** (`tests/adapters/test_calls_adapter.py`): fast path returns `('dir_mtime', int)`, same key on unchanged dir, hashable, exactly 1 `os.stat` call (not per-file). (session sacred-shrine-0321)
+- **5 tests for MEM-08** (`tests/test_tree_view.py`): generator type, tuple shape, heap cap enforcement, ascending mtime sort, name sort fallback. (session sacred-shrine-0321)
+- **Test count: 6,860 → 6,932** (+72). All items in UX_ISSUES.md now resolved.
+
+---
+
 ## [0.66.1] - 2026-03-21 (session wicked-grid-0321)
 
 ### Fixed
