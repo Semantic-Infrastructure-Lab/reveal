@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional, List, cast
+from typing import Dict, Any, Optional, List, Iterator, cast
 
 from ...registry import get_analyzer
 
@@ -25,17 +25,17 @@ def _is_large_json(file_path: Path) -> bool:
         return False
 
 
-def find_analyzable_files(directory: Path, code_only: bool = False) -> List[Path]:
-    """Find all files that can be analyzed.
+def find_analyzable_files(directory: Path, code_only: bool = False) -> Iterator[Path]:
+    """Yield files that can be analyzed.
 
     Args:
         directory: Directory to search
         code_only: If True, exclude data/config files
 
-    Returns:
-        List of analyzable file paths
+    Yields:
+        Analyzable file paths one at a time (generator — avoids materializing
+        the full list into memory before analysis begins).
     """
-    analyzable = []
     for root, dirs, files in os.walk(directory):
         # Skip common ignore directories
         dirs[:] = [d for d in dirs if d not in {
@@ -54,9 +54,7 @@ def find_analyzable_files(directory: Path, code_only: bool = False) -> List[Path
             if code_only and _is_excluded_code_only(file_path):
                 continue
 
-            analyzable.append(file_path)
-
-    return analyzable
+            yield file_path
 
 
 def analyze_file(file_path: Path, calculate_file_stats_func) -> Optional[Dict[str, Any]]:
@@ -81,6 +79,16 @@ def analyze_file(file_path: Path, calculate_file_stats_func) -> Optional[Dict[st
 
         # Calculate statistics (analyzer has content)
         stats = calculate_file_stats_func(file_path, structure_dict, analyzer.content)
+
+        # Release large buffers immediately; don't wait for GC.
+        # During directory scans (stats://, overview) hundreds of analyzers are
+        # created sequentially — each holds the file's full content in memory.
+        # Clearing here keeps peak memory proportional to one file, not all files.
+        analyzer.lines = []
+        analyzer.content = ''
+        if hasattr(analyzer, '_content_bytes'):
+            analyzer._content_bytes = None
+
         return cast(Dict[str, Any], stats)
 
     except Exception:

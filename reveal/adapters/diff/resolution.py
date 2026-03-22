@@ -3,7 +3,7 @@
 import inspect
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional, List, cast
+from typing import Dict, Any, Optional, List, Iterator, cast
 
 from .git import resolve_git_ref, resolve_git_adapter
 from ..base import get_adapter_class
@@ -97,17 +97,17 @@ def resolve_directory(dir_path: str) -> Dict[str, Any]:
     if not directory.is_dir():
         raise ValueError(f"Not a directory: {dir_path}")
 
-    files = find_analyzable_files(directory)
-
     # Aggregate all structures
     all_functions = []
     all_classes = []
     all_imports = []
+    file_count = 0
 
-    for file_path in files:
+    for file_path in find_analyzable_files(directory):
         rel_path = file_path.relative_to(directory)
         analyzer_class = get_analyzer(str(file_path), allow_fallback=False)
         if analyzer_class:
+            file_count += 1
             analyzer = analyzer_class(str(file_path))
             structure = analyzer.get_structure()
 
@@ -130,7 +130,7 @@ def resolve_directory(dir_path: str) -> Dict[str, Any]:
     return {
         'type': 'directory',
         'path': str(directory),
-        'file_count': len(files),
+        'file_count': file_count,
         'functions': all_functions,
         'classes': all_classes,
         'imports': all_imports
@@ -184,17 +184,16 @@ def instantiate_adapter(adapter_class: type, scheme: str, resource: str):
             return adapter_class()
 
 
-def find_analyzable_files(directory: Path) -> List[Path]:
-    """Find all files in directory that can be analyzed.
+def find_analyzable_files(directory: Path) -> Iterator[Path]:
+    """Yield files in directory that can be analyzed.
 
     Args:
         directory: Directory path to scan
 
-    Returns:
-        List of file paths that have analyzers
+    Yields:
+        File paths that have analyzers (generator — avoids materializing
+        the full list into memory before processing begins).
     """
-
-    analyzable = []
     for root, dirs, files in os.walk(directory):
         # Skip common ignore directories
         dirs[:] = [d for d in dirs if d not in {
@@ -207,9 +206,7 @@ def find_analyzable_files(directory: Path) -> List[Path]:
             file_path = Path(root) / file
             # Check if reveal can analyze this file
             if get_analyzer(str(file_path), allow_fallback=False):
-                analyzable.append(file_path)
-
-    return analyzable
+                yield file_path
 
 
 def extract_metadata(structure: Dict[str, Any], uri: str) -> Dict[str, str]:

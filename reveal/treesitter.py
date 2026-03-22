@@ -1,6 +1,7 @@
 """Tree-sitter based analyzer for multi-language support."""
 
 import os
+from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Tuple
 from .base import FileAnalyzer
 from .core import suppress_treesitter_warnings
@@ -15,7 +16,13 @@ from tree_sitter_language_pack import get_parser  # noqa: E402
 # Eliminates redundant parses when multiple rules/callers analyze the same
 # unchanged file (e.g. extract_imports + extract_symbols + extract_exports
 # for the same .py file during `reveal --check`).
-_parse_cache: Dict[Tuple[str, int], Dict[str, Any]] = {}
+#
+# Bounded LRU: directory scans (stats://, overview) visit each file once so
+# the cache provides no hit benefit while growing to hold every file's parse
+# tree and node cache in memory indefinitely.  128 entries covers all
+# realistic single-file multi-adapter patterns without unbounded growth.
+_MAX_PARSE_CACHE = 128
+_parse_cache: OrderedDict[Tuple[str, int], Dict[str, Any]] = OrderedDict()
 
 
 # =============================================================================
@@ -195,6 +202,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         cached = _parse_cache.get(self._cache_key)
         if cached is not None:
+            # Move to end (most-recently-used) on hit
+            _parse_cache.move_to_end(self._cache_key)
             self.tree = cached['tree']
             if 'node_cache' in cached:
                 self._node_cache = cached['node_cache']
@@ -211,6 +220,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         if self.tree is not None:
             _parse_cache[self._cache_key] = {'tree': self.tree}
+            if len(_parse_cache) > _MAX_PARSE_CACHE:
+                _parse_cache.popitem(last=False)  # evict least-recently-used
 
     def get_structure(self, head: Optional[int] = None, tail: Optional[int] = None,
                       range: Optional[tuple] = None, **kwargs) -> Dict[str, Any]:
@@ -568,6 +579,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             # Write completed node_cache back to module-level cache
             if hasattr(self, '_cache_key') and self._cache_key in _parse_cache:
                 _parse_cache[self._cache_key]['node_cache'] = self._node_cache
+                _parse_cache.move_to_end(self._cache_key)  # refresh LRU position
 
         return (self._node_cache or {}).get(node_type, [])
 
