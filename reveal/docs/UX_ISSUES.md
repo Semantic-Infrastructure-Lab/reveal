@@ -8,13 +8,15 @@ beth_topics:
   - quality
   - memory
   - performance
+  - code-review
+  - contracts
 ---
 
 # Reveal UX Issues & Bugs
 
 Discovered via dogfooding on real codebases (morphogen, tiacad) — session shining-wormhole-0315, 2026-03-15.
 
-> **Status**: All 9 original issues resolved in awakened-pegasus-0315 (v0.63.x). Memory issues below discovered in vortex-isotope-0321, 2026-03-21 — partially fixed, remainder documented here.
+> **Status**: All 9 original UX/Bug issues resolved in awakened-pegasus-0315 (v0.63.x). Memory issues MEM-01 through MEM-07 fixed across vortex-isotope-0321 and floating-wormhole-0321. New code quality issues (BUG-03, BUG-04, CFG-01, PERF-01, TEST-01, TEST-02) discovered in full codebase review floating-wormhole-0321, 2026-03-21 — open.
 
 ---
 
@@ -97,10 +99,10 @@ Discovered via OOM kill post-mortem — `reveal stats://.` and `reveal overview 
 | MEM-01 | **Critical** | `treesitter.py` | Unbounded `_parse_cache` — 28GB OOM kill | ✅ Fixed vortex-isotope-0321 |
 | MEM-02 | **High** | `stats/analysis.py` | Analyzer content not freed after per-file stats | ✅ Fixed vortex-isotope-0321 |
 | MEM-03 | Low | `stats/analysis.py`, `diff/resolution.py` | Full path list before analysis | ✅ Fixed vortex-isotope-0321 |
-| MEM-04 | **High** | `ast/analysis.py` | Same as MEM-02 in `collect_structures()` | ⬜ Not yet fixed |
-| MEM-05 | Medium | `imports.py` | 100+ redundant rglob walks (one per extension) | ⬜ Not yet fixed |
-| MEM-06 | Low-Medium | `calls/index.py` | Unbounded `_INDEX_CACHE`, extra rglob on miss | ⬜ Not yet fixed |
-| MEM-07 | Low | `pack.py` | Full path list before budget scoring | ⬜ Not yet fixed |
+| MEM-04 | **High** | `ast/analysis.py` | Same as MEM-02 in `collect_structures()` | ✅ Fixed floating-wormhole-0321 |
+| MEM-05 | Medium | `imports.py` | 100+ redundant rglob walks (one per extension) | ✅ Fixed floating-wormhole-0321 |
+| MEM-06 | Low-Medium | `calls/index.py` | Unbounded `_INDEX_CACHE`, extra rglob on miss | ✅ Fixed floating-wormhole-0321 |
+| MEM-07 | Low | `pack.py` | Full path list before budget scoring | ✅ Fixed floating-wormhole-0321 |
 | MEM-08 | Low | `tree_view.py` | Full list before sort+truncate | ⬜ Not yet fixed |
 
 ---
@@ -270,7 +272,131 @@ Error: path/to/file.py not found
 
 ---
 
+---
+
+## Code Quality Issues
+
+Discovered via full codebase review (static analysis + manual audit) — session floating-wormhole-0321, 2026-03-21.
+
+### BUG-03: Duplicate method `render_element` in `calls/adapter.py` (D001)
+
+**Severity:** Medium
+**File:** `reveal/adapters/calls/adapter.py` lines 220–227
+**Problem:** `render_element` (line 225) and `render_structure` (line 220) are byte-for-byte identical — both delegate to `render_calls_structure()` with the same logic. One is dead code.
+```python
+def render_structure(result, format='text'):
+    effective_format = result.get('_query_format') or format
+    render_calls_structure(result, effective_format)
+
+def render_element(result, format='text'):   # identical
+    effective_format = result.get('_query_format') or format
+    render_calls_structure(result, effective_format)
+```
+**Fix needed:** Remove `render_element`; route any callers to `render_structure`.
+
+---
+
+### BUG-04: `letsencrypt/adapter.py` missing required contract fields `source` and `source_type` (V023)
+
+**Severity:** High
+**File:** `reveal/adapters/letsencrypt/adapter.py` lines ~195–223
+**Problem:** `get_structure()` returns a result dict without `source` or `source_type` — both required by the adapter output contract (see `adapters/base.py`). Every other adapter includes them. Downstream tools that consume the contract (V023 validator, structured output consumers) will fail or silently skip fields.
+**Fix needed:** Add to the returned dict in `get_structure()`:
+```python
+'source': self.live_dir,
+'source_type': 'letsencrypt_directory',
+```
+
+---
+
+### CFG-01: Rule config key allowlist rejects legitimate rule-specific keys (hundreds of warnings)
+
+**Severity:** Medium
+**File:** `reveal/rules/__init__.py` line 430
+**Problem:** `_ALLOWED_RULE_CONFIG_KEYS` is defined as:
+```python
+frozenset({'enabled', 'severity', 'threshold', 'message', 'description'})
+```
+Rules C905, E501, and R913 each register their own threshold keys (`MAX_DEPTH`, `max_length`, `max_args`), but these are not in the allowlist. Result: every file checked emits multiple "Unknown rule config key … ignored" warnings to stderr, drowning out real output.
+**Fix needed:** Expand the frozenset to include the keys actually used by built-in rules:
+```python
+_ALLOWED_RULE_CONFIG_KEYS = frozenset({
+    'enabled', 'severity', 'threshold', 'message', 'description',
+    'max_length', 'max_depth', 'MAX_DEPTH', 'max_args',
+})
+```
+**Longer-term:** Let each rule class declare `allowed_config_keys: Set[str]` so the registry can validate per-rule rather than via a central list.
+
+---
+
+### PERF-01: `_dir_cache_key` walks entire directory tree on every cache miss
+
+**Severity:** Medium
+**File:** `reveal/adapters/calls/index.py` lines 113–122
+**Problem:** The cache key function calls `directory.rglob('*')` and `os.stat()` on every file to build a mtime fingerprint. On a 5,000-file codebase this is ~500ms just for the key computation, on every cache miss. The LRU cap (MEM-06) bounds how many entries accumulate, but each miss is still slow.
+**Fix needed:** Use `os.stat(directory).st_mtime_ns` as the primary key (O(1), reliable on ext4/APFS/NTFS). Keep the full rglob as an OSError fallback only:
+```python
+def _dir_cache_key(directory: Path) -> Any:
+    try:
+        return ('dir_mtime', os.stat(directory).st_mtime_ns)
+    except OSError:
+        entries = []
+        for fp in sorted(directory.rglob('*')):
+            if fp.is_file() and is_code_file(fp):
+                try:
+                    entries.append((str(fp), os.stat(fp).st_mtime_ns))
+                except OSError:
+                    pass
+        return ('file_mtimes', tuple(entries))
+```
+**Trade-off:** Directory mtime is not updated on metadata-only changes (permissions). Acceptable for code analysis; edge case on NFS/FAT32.
+
+---
+
+## Test Coverage Gaps
+
+Discovered during full codebase review — session floating-wormhole-0321, 2026-03-21.
+
+### TEST-01: `AstAdapter` class has no unit tests
+
+**Severity:** Medium
+**File:** `reveal/adapters/ast/adapter.py`
+**Problem:** Only the call graph submodule (`test_ast_call_graph.py`, 38 tests) is unit tested. The main `AstAdapter` class — query parsing (lines 61–95), decorator filtering (lines 104–118), result sorting/limiting/offset, and the full `get_structure()` method — has no dedicated unit tests. Integration tests provide some coverage but don't exercise parameter combinations.
+**Fix needed:** Add `tests/adapters/test_ast_adapter.py` covering:
+- Query param parsing (`?type=`, `?complexity>N`, `?sort=`, `?limit=`, `?offset=`)
+- Decorator filtering (`?decorator=property`)
+- Builtins filtering (`?show=builtins`)
+- Edge cases: empty file, file with no functions, binary file
+
+---
+
+### TEST-02: Python adapter undertested (9 tests)
+
+**Severity:** Low
+**File:** `reveal/adapters/python/` (or equivalent)
+**Test file:** `tests/test_python_adapter.py`
+**Problem:** Only 9 tests cover what appears to be a substantial adapter implementation. Missing coverage for Python-specific features (runtime introspection, sys.path, installed packages, virtual environment detection).
+**Fix needed:** Expand to cover the adapter's core functionality surface.
+
+---
+
+## Code Quality Issues Summary
+
+Discovered: floating-wormhole-0321, 2026-03-21.
+
+| ID | Severity | File | Issue | Status |
+|----|----------|------|-------|--------|
+| BUG-03 | Medium | `adapters/calls/adapter.py:220` | `render_element` identical to `render_structure` — dead code | ⬜ Open |
+| BUG-04 | **High** | `adapters/letsencrypt/adapter.py:195` | Missing `source` + `source_type` contract fields | ⬜ Open |
+| CFG-01 | Medium | `rules/__init__.py:430` | Config key allowlist too narrow — floods stderr with warnings | ⬜ Open |
+| PERF-01 | Medium | `adapters/calls/index.py:113` | Cache key does full `rglob` on every miss (~500ms on large repos) | ⬜ Open |
+| TEST-01 | Medium | `adapters/ast/adapter.py` | `AstAdapter` class has no unit tests | ⬜ Open |
+| TEST-02 | Low | `adapters/python/` | Python adapter has only 9 tests | ⬜ Open |
+
+---
+
 ## Test Codebases Used
 
 - **morphogen** — `~/src/projects/morphogen` — 300 Python files, MLIR compiler, 39 domains
 - **tiacad** — `~/src/projects/tiacad` — 136 Python files, declarative CAD, 1,125 tests
+- **reveal itself** — `~/src/projects/reveal/external-git/reveal/` — 414 Python files, 124K lines (floating-wormhole-0321)
