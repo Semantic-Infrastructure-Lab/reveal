@@ -26,7 +26,7 @@ rules:
 
   # Function parameters
   R913:
-    max_args: 5  # Default is 5, made explicit
+    MAX_ARGS: 5  # Default is 5, made explicit (must match attribute name on R913 class)
 
   # Disable specific rules (currently none)
   # Uncomment and add rules as needed:
