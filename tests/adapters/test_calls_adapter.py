@@ -505,6 +505,25 @@ class TestCallsRenderer(unittest.TestCase):
             result = adapter.get_structure()
             self.assertEqual(result.get('_query_format'), 'dot')
 
+    def test_render_element_absent(self):
+        """BUG-03: CallsRenderer must NOT have render_element.
+
+        render_element signals to the routing layer that the adapter supports
+        element-based access and will call adapter.get_element(). CallsAdapter
+        has no get_element(), so having render_element causes an AttributeError
+        at runtime. Verify it has been removed.
+        """
+        self.assertFalse(
+            hasattr(CallsRenderer, 'render_element'),
+            "CallsRenderer.render_element should not exist — CallsAdapter has no get_element()",
+        )
+
+    def test_render_structure_still_works_after_bug03_fix(self):
+        """render_structure must still function correctly after removing render_element."""
+        result = self._base_result()
+        out = _capture_renderer(CallsRenderer.render_structure, result, 'text')
+        self.assertIn('helper', out)
+
 
 # ---------------------------------------------------------------------------
 # find_callees: forward direction — what does function X call?

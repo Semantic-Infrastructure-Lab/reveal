@@ -195,6 +195,8 @@ class LetsEncryptAdapter(ResourceAdapter):
         result: Dict[str, Any] = {
             'contract_version': '1.0',
             'type': 'letsencrypt_inventory',
+            'source': self.live_dir,
+            'source_type': 'letsencrypt_directory',
             'live_dir': self.live_dir,
             'live_dir_exists': live_dir_exists,
             'cert_count': len(certs),

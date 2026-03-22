@@ -427,7 +427,10 @@ class RuleRegistry:
         sorted_rules = sorted(rules, key=lambda r: r.code)
         return [cls._rule_to_dict(rule_class) for rule_class in sorted_rules]
 
-    _ALLOWED_RULE_CONFIG_KEYS = frozenset({'enabled', 'severity', 'threshold', 'message', 'description'})
+    _ALLOWED_RULE_CONFIG_KEYS = frozenset({
+        'enabled', 'severity', 'threshold', 'message', 'description',
+        'max_length', 'max_depth', 'MAX_DEPTH', 'max_args',
+    })
 
     @classmethod
     def _apply_rule_config(cls, rule, rule_config: dict) -> None:

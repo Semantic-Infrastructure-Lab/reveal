@@ -246,6 +246,22 @@ class TestLetsEncryptAdapter(unittest.TestCase):
         self.assertFalse(result['live_dir_exists'])
         self.assertEqual(result['cert_count'], 0)
 
+    def test_get_structure_includes_source_fields(self):
+        """BUG-04: get_structure() must include 'source' and 'source_type' keys."""
+        adapter = LetsEncryptAdapter('letsencrypt://')
+        adapter.live_dir = '/etc/letsencrypt/live'
+        result = adapter.get_structure()
+        self.assertIn('source', result)
+        self.assertIn('source_type', result)
+        self.assertEqual(result['source'], '/etc/letsencrypt/live')
+        self.assertEqual(result['source_type'], 'letsencrypt_directory')
+
+    def test_source_reflects_custom_live_dir(self):
+        """BUG-04: 'source' must match whatever live_dir is set to."""
+        adapter = LetsEncryptAdapter('letsencrypt://?live_dir=/custom/path')
+        result = adapter.get_structure()
+        self.assertEqual(result['source'], result['live_dir'])
+
     def test_check_orphans_adds_orphan_check(self):
         adapter = LetsEncryptAdapter('letsencrypt://')
         adapter.live_dir = '/nonexistent'
