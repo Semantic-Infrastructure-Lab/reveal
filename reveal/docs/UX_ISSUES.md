@@ -6,13 +6,113 @@ beth_topics:
   - bugs
   - ux
   - quality
+  - memory
+  - performance
 ---
 
 # Reveal UX Issues & Bugs
 
 Discovered via dogfooding on real codebases (morphogen, tiacad) — session shining-wormhole-0315, 2026-03-15.
 
-> **Status**: All 9 issues resolved in awakened-pegasus-0315 (v0.63.x). This doc is kept for historical reference.
+> **Status**: All 9 original issues resolved in awakened-pegasus-0315 (v0.63.x). Memory issues below discovered in vortex-isotope-0321, 2026-03-21 — partially fixed, remainder documented here.
+
+---
+
+## Memory / Performance Issues
+
+Discovered via OOM kill post-mortem — `reveal stats://.` and `reveal overview .` on the reveal codebase (554 Python files) consumed 28GB+ and killed the machine twice (Mar 18, Mar 21). Root cause was unbounded parse tree caching + file content retained across the entire directory scan.
+
+### MEM-01: `_parse_cache` unbounded growth during directory scans ✅ Fixed vortex-isotope-0321
+
+**Severity:** Critical
+**File:** `reveal/treesitter.py`
+**Problem:** Module-level `_parse_cache` dict accumulated parse trees + node caches for every file analyzed. During `stats://.` on a 554-file project it grew to hold all 554 trees indefinitely, contributing to 28GB memory use.
+**Fix:** Replaced plain dict with `OrderedDict` LRU capped at 128 entries. Cache-hit rate during directory scans is ~0% (each file visited once), so eviction costs nothing.
+
+---
+
+### MEM-02: Analyzer content not freed after `analyze_file()` in stats scan ✅ Fixed vortex-isotope-0321
+
+**Severity:** High
+**File:** `reveal/adapters/stats/analysis.py`
+**Problem:** After `calculate_file_stats_func()` returned, `analyzer.lines`, `.content`, and `._content_bytes` were retained until Python's GC decided to collect. During sequential scans of hundreds of files, multiple files' full content coexisted in memory at peak.
+**Fix:** Explicitly clear `analyzer.lines = []`, `.content = ''`, `._content_bytes = None` immediately after stats are computed.
+
+---
+
+### MEM-03: `find_analyzable_files()` materializes full path list before analysis ✅ Fixed vortex-isotope-0321
+
+**Severity:** Low
+**Files:** `reveal/adapters/stats/analysis.py`, `reveal/adapters/diff/resolution.py`
+**Problem:** Returned `List[Path]`, building the complete file list in memory before any analysis began.
+**Fix:** Converted to `Iterator[Path]` generator. One diff caller that used `len(files)` now counts during iteration.
+
+---
+
+### MEM-04: `ast/analysis.py collect_structures()` — same pattern as MEM-02, not yet fixed
+
+**Severity:** High
+**File:** `reveal/adapters/ast/analysis.py` lines 22–42
+**Problem:** `collect_structures()` calls `try_add_file_structure()` for every file in a directory via `rglob('*')`. Each call instantiates an analyzer (loading full file content + tree-sitter parse), but unlike the stats path, analyzer content is never explicitly freed. Affects `ast://large_dir/` queries and `overview`.
+**Repro:** `reveal 'ast://large_python_project/'`
+**Fix needed:** Same as MEM-02 — explicitly clear `analyzer.lines`, `.content`, `._content_bytes` in `analyze_file()` after structure is extracted.
+
+---
+
+### MEM-05: `imports.py` performs one `rglob()` per file extension (~100 walks)
+
+**Severity:** Medium
+**File:** `reveal/adapters/imports.py` lines 498–501
+**Problem:**
+```python
+for ext in get_all_extensions():          # 100+ extensions
+    files.extend(target_path.rglob(pattern))  # full tree walk each time
+```
+`get_all_extensions()` returns 100+ extensions; each gets its own full `rglob` walk. A 1000-file directory gets walked 100+ times instead of once. Pure I/O waste — not a memory bomb, but measurably slow on large codebases.
+**Fix needed:** Single `os.walk()` or `rglob('*')` pass with Python-side extension set filtering.
+
+---
+
+### MEM-06: `calls/index.py _INDEX_CACHE` — unbounded, no LRU
+
+**Severity:** Low-Medium
+**File:** `reveal/adapters/calls/index.py` line 22
+**Problem:** `_INDEX_CACHE: Dict[str, Tuple[...]]` stores full caller graphs keyed by directory string. No eviction. In practice low cardinality (one entry per unique directory scanned per process), but the same class of issue as `_parse_cache` before the fix. Each entry is a complete call graph; on a large codebase that's a large dict of function→callers mappings.
+**Additional issue:** `_dir_cache_key()` at line 109 does its own `rglob('*')` on every cache-miss to compute the fingerprint — another full directory walk on first call.
+**Fix needed:** LRU cap (e.g., 8 entries — call graphs are expensive to rebuild but rarely need more than a handful cached).
+
+---
+
+### MEM-07: `pack.py _walk_files()` materializes full file list before budget scoring
+
+**Severity:** Low
+**File:** `reveal/cli/commands/pack.py` line 443
+**Problem:** Returns `List[Path]` of all matching files before any budget scoring. For large repos this builds a full path list in memory unnecessarily since `pack` will select a small budget subset anyway.
+**Fix needed:** Convert to generator; apply budget scoring incrementally.
+
+---
+
+### MEM-08: `tree_view.py _collect_matching_files()` builds full list before sort+truncate
+
+**Severity:** Low
+**File:** `reveal/tree_view.py` line 28
+**Problem:** Collects all `(Path, stat)` tuples before sorting and applying `max_entries=200` cap. On a 50k-file directory this builds 50k tuples then discards 49,800 of them.
+**Fix needed:** Bounded max-heap (e.g., `heapq.nlargest(max_entries, ...)`) to keep only the top N entries during traversal.
+
+---
+
+## Memory Issues Summary
+
+| ID | Severity | File | Issue | Status |
+|----|----------|------|-------|--------|
+| MEM-01 | **Critical** | `treesitter.py` | Unbounded `_parse_cache` — 28GB OOM kill | ✅ Fixed vortex-isotope-0321 |
+| MEM-02 | **High** | `stats/analysis.py` | Analyzer content not freed after per-file stats | ✅ Fixed vortex-isotope-0321 |
+| MEM-03 | Low | `stats/analysis.py`, `diff/resolution.py` | Full path list before analysis | ✅ Fixed vortex-isotope-0321 |
+| MEM-04 | **High** | `ast/analysis.py` | Same as MEM-02 in `collect_structures()` | ⬜ Not yet fixed |
+| MEM-05 | Medium | `imports.py` | 100+ redundant rglob walks (one per extension) | ⬜ Not yet fixed |
+| MEM-06 | Low-Medium | `calls/index.py` | Unbounded `_INDEX_CACHE`, extra rglob on miss | ⬜ Not yet fixed |
+| MEM-07 | Low | `pack.py` | Full path list before budget scoring | ⬜ Not yet fixed |
+| MEM-08 | Low | `tree_view.py` | Full list before sort+truncate | ⬜ Not yet fixed |
 
 ---
 
