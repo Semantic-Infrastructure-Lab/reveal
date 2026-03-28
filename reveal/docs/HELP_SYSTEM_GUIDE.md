@@ -6,7 +6,7 @@ category: guide
 
 **Purpose:** Understand how reveal's help system works
 **Audience:** Users and contributors
-**Version:** 0.30.0
+**Version:** 0.67.0
 
 ---
 
@@ -230,9 +230,9 @@ register_adapter('my', MyAdapter)
 
 ### Adding a New Static Guide
 
-1. Create markdown file in `reveal/` directory:
+1. Create markdown file in `reveal/docs/` directory:
 ```bash
-touch reveal/MY_GUIDE.md
+touch reveal/docs/MY_GUIDE.md
 ```
 
 2. Add to `HelpAdapter.STATIC_HELP` mapping:
@@ -243,10 +243,13 @@ STATIC_HELP = {
 }
 ```
 
-3. Update rendering categorization in `reveal/rendering/adapters/help.py`:
+3. Update `GUIDE_CATEGORIES` in `reveal/rendering/adapters/help.py`:
 ```python
-# Add to appropriate category in _render_help_list_mode()
-feature_guides = ['python-guide', 'markdown', 'reveal-guide', 'my-guide']
+GUIDE_CATEGORIES = {
+    ...
+    'feature_guides': ['python-guide', 'markdown', 'reveal-guide', ..., 'my-guide'],
+    ...
+}
 ```
 
 4. **Done!** `help://my-guide` now works
@@ -393,7 +396,7 @@ A: Update estimates in `_render_help_list_mode()` token_estimate dictionaries
 
 - **Implementation:** `reveal/adapters/help.py` (adapter logic)
 - **Rendering:** `reveal/rendering/adapters/help.py` (display logic)
-- **Content Files:** `reveal/*.md` (static guides)
+- **Content Files:** `reveal/docs/*.md` (static guides)
 - **Agent Guide:** `reveal/docs/AGENT_HELP.md` (AI agent reference)
 
 ## See Also
@@ -405,4 +408,4 @@ A: Update estimates in `_render_help_list_mode()` token_estimate dictionaries
 
 ---
 
-**Last updated:** 2026-01-19
+**Last updated:** 2026-03-28

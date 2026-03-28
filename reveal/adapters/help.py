@@ -315,7 +315,7 @@ class HelpAdapter(ResourceAdapter):
         # Check for schemas route: help://schemas/ssl
         # Bare 'schemas/' lists available adapters
         if topic == 'schemas' or topic == 'schemas/':
-            adapters = sorted(_ADAPTER_REGISTRY.keys())
+            adapters = sorted(k for k in _ADAPTER_REGISTRY.keys() if k not in self._INTERNAL_ADAPTERS)
             return {
                 'type': 'adapter_schema',
                 'adapter': '',
@@ -512,6 +512,8 @@ class HelpAdapter(ResourceAdapter):
         """List all registered adapters with basic info."""
         adapters = []
         for scheme, adapter_class in _ADAPTER_REGISTRY.items():
+            if scheme in self._INTERNAL_ADAPTERS:
+                continue
             has_help = (
                 hasattr(adapter_class, 'get_help') and
                 callable(getattr(adapter_class, 'get_help'))
@@ -648,7 +650,7 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'cmd': 'reveal help://adapters',
-                    'description': 'List all 20+ adapters with syntax and examples',
+                    'description': 'List all 22 adapters with syntax and examples',
                 },
             ],
             'decision_tree': [
