@@ -72,10 +72,9 @@ class AnalyzerNotFoundError(RevealError):
         suggestions = []
 
         if not allow_fallback:
-            suggestions.append(f"Enable tree-sitter fallback: reveal {path} --allow-fallback")
+            suggestions.append(f"Enable tree-sitter fallback: reveal {path} (remove --no-fallback)")
 
         suggestions.extend([
-            f"Use generic text analyzer: reveal {path} --analyzer text",
             "View all supported file types: reveal --list-supported",
         ])
 

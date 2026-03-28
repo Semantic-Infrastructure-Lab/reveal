@@ -97,6 +97,35 @@ class B005(BaseRule, ASTParsingMixin):
 
         return detections
 
+    def _find_optional_import_lines(self, tree: ast.AST) -> set:
+        """Return line numbers of imports inside try/except ImportError blocks.
+
+        The try/except ImportError pattern is canonical Python for optional
+        dependencies. Imports in these blocks should not be flagged as broken.
+        """
+        optional_lines: set = set()
+
+        def _handler_catches_import_error(handler: ast.ExceptHandler) -> bool:
+            if handler.type is None:
+                return True  # bare except — assume it covers ImportError
+            if isinstance(handler.type, ast.Name):
+                return handler.type.id in ('ImportError', 'ModuleNotFoundError')
+            if isinstance(handler.type, ast.Tuple):
+                return any(
+                    isinstance(el, ast.Name) and el.id in ('ImportError', 'ModuleNotFoundError')
+                    for el in handler.type.elts
+                )
+            return False
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Try):
+                if any(_handler_catches_import_error(h) for h in node.handlers):
+                    for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
+                        if isinstance(child, (ast.Import, ast.ImportFrom)):
+                            optional_lines.add(child.lineno)
+
+        return optional_lines
+
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
@@ -116,8 +145,11 @@ class B005(BaseRule, ASTParsingMixin):
         if tree is None:
             return detections
 
+        optional_lines = self._find_optional_import_lines(tree)
         file_dir = Path(file_path).parent
         for node in self._ast_walk(tree):
+            if getattr(node, 'lineno', None) in optional_lines:
+                continue
             if isinstance(node, ast.Import):
                 detections.extend(self._check_import_statement(node, file_path, file_dir))
             elif isinstance(node, ast.ImportFrom):

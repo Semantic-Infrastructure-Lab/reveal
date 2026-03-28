@@ -387,6 +387,38 @@ git diff --name-only | grep "\.py$" | reveal --stdin --check
 git diff --name-only | reveal --stdin --check --select S
 ```
 
+**Suppressing false positives with `.reveal.yaml`:**
+
+Some rules fire on valid patterns in certain codebases. Use `.reveal.yaml` to suppress selectively rather than disabling globally:
+
+```yaml
+# Disable a rule for specific directories (preferred — narrow scope)
+overrides:
+  - files: "workers/**"
+    rules:
+      disable: [M102]        # M102: task workers look like dead code but are loaded dynamically
+  - files: "plugins/**"
+    rules:
+      disable: [M102]        # Same: plugin registry loads these at runtime
+  - files: "blueprints/**"
+    rules:
+      disable: [M102]
+
+# Disable a rule globally (use sparingly)
+rules:
+  disable: [M102]
+```
+
+**Common false positive rules and their causes:**
+
+| Rule | False positive trigger | Root cause |
+|------|------------------------|------------|
+| **M102** | Workers, plugins, blueprints, rule discovery modules | Module loaded dynamically via registry/factory — M102 sees no call sites at analysis time |
+| **B005** | `try/except ImportError: …` optional deps | Fixed in v0.65+: B005 now skips imports inside `try/except ImportError` blocks |
+| **I001** | `__init__.py` re-exports | Fixed in v0.61+: I001 now skips `__all__`-listed names |
+
+**M102 heuristic detail:** M102 (unused module members) scans call sites within the same file and across the project. It cannot follow `getattr(module, name)()` dispatch, `importlib.import_module` loading, or registration patterns like `RULES = {k: v for k, v in globals().items() if isinstance(v, BaseRule)}`. When you see M102 on a file full of small classes with no direct callers, check whether a registry or factory loads them.
+
 ---
 
 ### Task: "Extract specific code element"
@@ -2822,7 +2854,8 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
-- **v0.64.0** (unreleased) - `reveal overview` + `reveal deps` subcommands; `reveal-mcp` MCP server (5 tools); `pack --content` tiered emission; `xlsx://` Power Pivot extraction (`?powerpivot=tables/schema/measures/dax/relationships`); `calls://?uncalled` dead code candidates; `diff://` per-function complexity delta; `claude://sessions/?search=`; Output contract compliance tests; ARCHITECTURE.md; `--discover` flag
+- **v0.67.0** - B005 skip `try/except ImportError` optional-dep pattern; element-not-found lists available names; `--analyzer text` false suggestion removed; M102 suppress patterns + dynamic-load heuristics in agent-help; OR-pattern failure hints `--search`
+- **v0.64.0** - `reveal overview` + `reveal deps` subcommands; `reveal-mcp` MCP server (5 tools); `pack --content` tiered emission; `xlsx://` Power Pivot extraction (`?powerpivot=tables/schema/measures/dax/relationships`); `calls://?uncalled` dead code candidates; `diff://` per-function complexity delta; `claude://sessions/?search=`; Output contract compliance tests; ARCHITECTURE.md; `--discover` flag
 - **v0.63.0** - `calls://` complete: `?callees=`, `?rank=callers`, `?builtins=` filtering; I005 + I006 import rules; `reveal hotspots` subcommand; B006 false-positive fixes; cpanel `full-audit`, `?domain_type=`
 - **v0.61.0** - markdown cross-file link graph; claude:// cross-session file tracking + content search; json:// `?flatten` fix; domain:// task section; cpanel `--only-failures` for acl-check; I001 `__init__.py` re-export fix; B006 multi-attempt fallback fix; M102 dynamic dispatch fix
 - **v0.60.0** - `nginx://` URI adapter (21st adapter); nginx vhost inspection by domain name; nginx bug fixes (glob + nesting); N007 rule

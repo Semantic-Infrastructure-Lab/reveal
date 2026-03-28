@@ -221,6 +221,34 @@ def _try_grep_extraction(analyzer, element: str):
     return None
 
 
+def _print_available_names(analyzer):
+    """Print available element names from the analyzer's structure to stderr."""
+    try:
+        structure = analyzer.get_structure()
+        if not structure or not isinstance(structure, dict):
+            return
+
+        MAX_NAMES = 10
+        available = []
+        for category in ('functions', 'classes', 'methods'):
+            items = structure.get(category, [])
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get('name')
+                if name:
+                    available.append(name)
+
+        if available:
+            shown = available[:MAX_NAMES]
+            suffix = f" (and {len(available) - MAX_NAMES} more)" if len(available) > MAX_NAMES else ""
+            print(f"Available: {', '.join(shown)}{suffix}", file=sys.stderr)
+    except Exception:
+        return
+
+
 def _handle_extraction_error(analyzer, element: str, syntax: dict):
     """Print appropriate error message based on extraction type.
 
@@ -250,6 +278,13 @@ def _handle_extraction_error(analyzer, element: str, syntax: dict):
 
     else:
         print(f"Error: Element '{element}' not found in {analyzer.path}", file=sys.stderr)
+        if '|' in element:
+            print(
+                "Hint: '|' pattern matches headings only. "
+                f"For table or body content, use: reveal {analyzer.path} --search '{element.split('|')[0].strip()}'",
+                file=sys.stderr
+            )
+        _print_available_names(analyzer)
 
 
 def extract_element(analyzer: FileAnalyzer, element: str, output_format: str, config=None):
