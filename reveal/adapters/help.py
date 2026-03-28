@@ -703,14 +703,16 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'name': 'Infrastructure',
-                    'adapters': ['nginx', 'ssl', 'domain', 'cpanel', 'autossl'],
+                    'adapters': ['nginx', 'ssl', 'letsencrypt', 'domain', 'cpanel', 'autossl'],
                     'pairs': [
                         ('nginx', 'ssl', 'validate certs referenced in nginx configs'),
                         ('nginx', 'domain', 'DNS health for domains in nginx configs'),
                         ('ssl', 'domain', 'cert chain + DNS/WHOIS in one pass'),
+                        ('ssl', 'letsencrypt', 'on-disk cert details for Let\'s Encrypt live certs'),
                         ('cpanel', 'ssl', 'per-user cert inventory and health'),
                         ('cpanel', 'autossl', 'AutoSSL run logs for cPanel users'),
                         ('cpanel', 'nginx', 'nginx vhost config for this cPanel user'),
+                        ('letsencrypt', 'nginx', 'cross-reference certbot certs with nginx vhosts'),
                     ],
                 },
                 {

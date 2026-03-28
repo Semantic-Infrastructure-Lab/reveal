@@ -82,7 +82,7 @@ reveal_element("src/auth.py", "validate_token")
 
 ### `reveal_query(uri)`
 
-Run any reveal URI query across all 23 adapters. Same syntax as the CLI.
+Run any reveal URI query across all 22 adapters. Same syntax as the CLI.
 
 ```
 reveal_query("ast://src/?complexity>10&sort=-complexity")
