@@ -60,6 +60,7 @@ reveal help://schemas/claude --format=json     # Claude conversations
 reveal help://schemas/autossl --format=json    # cPanel AutoSSL run logs
 reveal help://schemas/nginx --format=json      # Nginx vhost inspection
 reveal help://schemas/cpanel --format=json     # cPanel user environments
+reveal help://schemas/letsencrypt --format=json # Let's Encrypt cert inventory
 
 # Meta Adapters
 reveal help://schemas/reveal --format=json     # Self-inspection
@@ -1286,6 +1287,73 @@ reveal /etc/nginx/conf.d/users/USERNAME.conf --diagnose
 - `reveal cpanel://USERNAME/acl-check` — filesystem walk (authoritative); finds denied docroots directly
 - `reveal /etc/nginx/.../USERNAME.conf --validate-nginx-acme` — parses nginx config + checks ACME paths + live SSL; also verifies routing
 - `reveal cpanel://USERNAME/full-audit` — runs both plus ssl in one pass
+
+---
+
+### Task: "Audit Let's Encrypt certificate inventory"
+
+The `letsencrypt://` adapter walks `/etc/letsencrypt/live/` and reports all certbot-managed certs with expiry, SANs, and coverage gaps.
+
+```bash
+# Full cert inventory — all certs with expiry and SANs
+reveal letsencrypt://
+
+# Find certs not referenced by any nginx ssl_certificate directive (orphans)
+reveal letsencrypt:// --check-orphans
+
+# Find certs sharing identical SANs (duplicates — usually from re-issued certs)
+reveal letsencrypt:// --check-duplicates
+
+# Machine-readable output
+reveal letsencrypt:// --format=json
+```
+
+**letsencrypt:// output includes:**
+- Common name, SANs, days remaining, expiry date
+- `--check-orphans`: certs not referenced in nginx `sites-enabled`/`conf.d`
+- `--check-duplicates`: certs with identical SAN sets
+
+**When to use vs ssl://:**
+- `letsencrypt://` — inventory of managed certs on disk (no network, server-side only)
+- `ssl://domain` — live TLS handshake from a client perspective (works remotely)
+- `ssl://file:///etc/letsencrypt/live/.../cert.pem` — details on a specific cert file
+
+---
+
+### Task: "Inspect cPanel AutoSSL run logs"
+
+The `autossl://` adapter reads `/var/cpanel/logs/autossl/` NDJSON logs — per-domain TLS renewal outcomes without WHM API access.
+
+```bash
+# List available AutoSSL run timestamps
+reveal autossl://
+
+# Parse most recent run — per-user/domain TLS summary
+reveal autossl://latest
+
+# Parse a specific run by timestamp
+reveal autossl://2026-03-03T23:26:01Z
+
+# Extract all defective domains as JSON
+reveal autossl://latest --format=json | jq '[.users[].domains[] | select(.tls_status=="defective")]'
+```
+
+**TLS outcome codes:**
+- `ok` — cert issued/renewed successfully
+- `incomplete` — DCV not completed
+- `defective` — renewal failed; defect codes: `SELF_SIGNED_CERT`, `CERT_HAS_EXPIRED`, `TOTAL_DCV_FAILURE`, `NO_UNSECURED_DOMAIN_PASSED_DCV`
+
+**Combined workflow (AutoSSL failure investigation):**
+```bash
+# 1. Check most recent run for failures
+reveal autossl://latest | grep -i defect
+
+# 2. Confirm nginx ACME paths are routable for affected user
+reveal cpanel://USERNAME/acl-check --only-failures
+
+# 3. Validate ACME challenge routing in nginx config
+reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
+```
 
 ---
 
