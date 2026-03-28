@@ -209,7 +209,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         if options.extract_links:
             result['links'] = self._extract_links(
                 link_type=options.link_type,
-                domain=options.domain
+                domain=options.domain,
+                broken_only=options.broken_only,
             )
 
         # Extract code blocks if requested
@@ -292,19 +293,21 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         return headings
 
     def _extract_links(self, link_type: Optional[str] = None,
-                      domain: Optional[str] = None) -> List[Dict[str, Any]]:
+                      domain: Optional[str] = None,
+                      broken_only: bool = False) -> List[Dict[str, Any]]:
         """Extract all links from markdown using tree-sitter inline parser.
 
         Args:
             link_type: Filter by type (internal, external, email, all)
             domain: Filter by domain (for external links)
+            broken_only: If True, return only broken internal links
 
         Returns:
             List of link dicts with line, column, text, url, type, etc.
         """
         if not self.inline_tree:
             # Fallback to regex if inline parser fails
-            return self._extract_links_regex(link_type, domain)
+            return self._extract_links_regex(link_type, domain, broken_only)
 
         links = []
         # Use inline parser which properly parses links
@@ -318,6 +321,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 link_info = self._build_link_info(node, text, url)
 
                 if self._link_matches_filters(link_info, link_type, domain):
+                    if broken_only and not link_info.get('broken'):
+                        continue
                     links.append(link_info)
 
         return links
@@ -398,7 +403,8 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         return True
 
     def _extract_links_regex(self, link_type: Optional[str] = None,
-                            domain: Optional[str] = None) -> List[Dict[str, Any]]:
+                            domain: Optional[str] = None,
+                            broken_only: bool = False) -> List[Dict[str, Any]]:
         """Fallback regex-based link extraction.
 
         Note: This doesn't provide column positions - only used if tree-sitter fails.
@@ -423,6 +429,10 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
                 # Apply domain filter (for external links only)
                 if domain and (link_info['type'] != 'external' or domain not in url):
+                    continue
+
+                # Apply broken-only filter
+                if broken_only and not link_info.get('broken'):
                     continue
 
                 links.append(link_info)
@@ -992,31 +1002,137 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         return results
 
+    @staticmethod
+    def _section_end(lines: List[str], start_line: int, heading_level: int) -> int:
+        """Return the line index (0-based) where this section ends.
+
+        Scans forward from *start_line* (1-based) and stops at the first
+        heading whose level is <= *heading_level*, which signals the start of
+        a sibling or parent section.
+        """
+        for i in range(start_line, len(lines)):
+            m = re.match(r'^(#{1,6})\s+', lines[i])
+            if m and len(m.group(1)) <= heading_level:
+                return i
+        return len(lines)
+
+    def _collect_section_spans(self, patterns: List[str]) -> List[tuple]:
+        """Return (start_line, end_line, heading_level) spans for headings that
+        match *any* of the given patterns.
+
+        Matching rules per pattern (applied in priority order):
+          1. Exact match (case-insensitive) — stops scanning immediately.
+          2. Substring match — collects all headings where the pattern appears.
+
+        Results are de-duplicated and sorted by document order.
+        """
+        seen_starts: set = set()
+        spans: List[tuple] = []
+
+        for pattern in patterns:
+            pat_lower = pattern.lower()
+            exact_start = None
+            exact_level = None
+            sub_matches = []
+
+            for i, line in enumerate(self.lines, 1):
+                m = re.match(r'^(#{1,6})\s+(.+)$', line)
+                if not m:
+                    continue
+                title = m.group(2).strip()
+                level = len(m.group(1))
+                if title.lower() == pat_lower:
+                    exact_start = i
+                    exact_level = level
+                    break
+                if pat_lower in title.lower():
+                    sub_matches.append((i, level))
+
+            if exact_start is not None and exact_level is not None:
+                candidates = [(exact_start, exact_level)]
+            else:
+                candidates = sub_matches
+
+            for sl, hl in candidates:
+                if sl not in seen_starts:
+                    seen_starts.add(sl)
+                    el = self._section_end(self.lines, sl, hl)
+                    spans.append((sl, el, hl))
+
+        # Sort by document order
+        spans.sort(key=lambda t: t[0])
+        return spans
+
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
-        """Extract a markdown section.
+        """Extract one or more markdown sections by heading name.
+
+        *name* supports ``|``-separated alternation: each ``|``-delimited
+        term is matched independently and all matching sections are returned
+        concatenated in document order.  Backslash-escaped pipes (``\\|``,
+        as produced by grep-style alternation) are normalised to bare ``|``
+        before splitting.
+
+        Within each term, matching follows priority order:
+
+        1. **Exact match** (case-insensitive) — returns that section only.
+        2. **Substring match** — returns all headings that contain the term.
+
+        When multiple sections are found (via alternation or ambiguous
+        substring), they are concatenated with a blank line separator and
+        returned as a single result.
 
         Args:
-            element_type: 'section' or 'heading'
-            name: Heading text to find
+            element_type: ``'section'`` or ``'heading'`` (both handled identically)
+            name: Heading text, substring, or ``|``-alternated pattern
 
         Returns:
-            Dict with section content
+            Dict with ``name``, ``line_start``, ``line_end``, ``source``, or
+            ``None`` if nothing matched.
+
+        Examples::
+
+            # Single section (unchanged behaviour)
+            analyzer.extract_element('section', 'Installation')
+
+            # OR-alternation: return "Open Issues" OR "Action Items"
+            analyzer.extract_element('section', 'Open Issues|Action Items')
+
+            # grep-style escaped pipes work too
+            analyzer.extract_element('section', 'Bug 11\\|social_repost_log\\|Action')
         """
-        # Find the heading
+        # Normalise grep-style \| to bare |, then split into patterns
+        normalised = name.replace('\\|', '|')
+        patterns = [p.strip() for p in normalised.split('|') if p.strip()]
+
+        if len(patterns) > 1:
+            # Multi-pattern OR path
+            spans = self._collect_section_spans(patterns)
+            if not spans:
+                return None
+            sources = ['\n'.join(self.lines[sl - 1:el]) for sl, el, _ in spans]
+            return {
+                'name': name,
+                'line_start': spans[0][0],
+                'line_end': spans[-1][1],
+                'source': '\n\n'.join(sources),
+            }
+
+        # Single-pattern path (original behaviour preserved)
+        pattern = patterns[0] if patterns else name
+        pat_lower = pattern.lower()
         start_line = None
         heading_level = None
-
         substring_matches = []
 
         for i, line in enumerate(self.lines, 1):
             match = re.match(r'^(#{1,6})\s+(.+)$', line)
             if match:
                 title = match.group(2).strip()
-                if title.lower() == name.lower():
+                if title.lower() == pat_lower:
                     start_line = i
                     heading_level = len(match.group(1))
                     break
-                if name.lower() in title.lower():
+                if pat_lower in title.lower():
                     substring_matches.append((i, len(match.group(1)), title))
 
         if not start_line or heading_level is None:
@@ -1024,14 +1140,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 start_line, heading_level, _ = substring_matches[0]
             elif len(substring_matches) > 1:
                 # Multiple partial matches — extract and concatenate all of them
-                def _section_end(sl: int, hl: int) -> int:
-                    for i in range(sl, len(self.lines)):
-                        m = re.match(r'^(#{1,6})\s+', self.lines[i])
-                        if m and len(m.group(1)) <= hl:
-                            return i
-                    return len(self.lines)
-
-                spans = [(sl, _section_end(sl, hl)) for sl, hl, _ in substring_matches]
+                spans = [(sl, self._section_end(self.lines, sl, hl)) for sl, hl, _ in substring_matches]
                 sources = ['\n'.join(self.lines[sl - 1:el]) for sl, el in spans]
                 return {
                     'name': name,
@@ -1043,15 +1152,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                 return super().extract_element(element_type, name)
 
         # Find the end of this section (next heading of same or higher level)
-        end_line = len(self.lines)
-        for i in range(start_line, len(self.lines)):
-            line = self.lines[i]
-            match = re.match(r'^(#{1,6})\s+', line)
-            if match:
-                level = len(match.group(1))
-                if level <= heading_level:
-                    end_line = i
-                    break
+        end_line = self._section_end(self.lines, start_line, heading_level)
 
         # Extract the section
         source = '\n'.join(self.lines[start_line-1:end_line])

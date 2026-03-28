@@ -30,6 +30,7 @@ class StructureOptions:
     link_type: Optional[str] = None
     domain: Optional[str] = None
     broken: bool = False
+    broken_only: bool = False  # Filter to only broken internal links
 
     # Markdown-specific options
     extract_code: bool = False

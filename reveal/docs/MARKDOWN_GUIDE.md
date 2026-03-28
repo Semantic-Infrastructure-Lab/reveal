@@ -151,6 +151,37 @@ pip install myproject
 
 **Workflow**: Use default view to see all headings, then extract specific sections by name.
 
+### OR-Pattern Section Extraction
+
+Use `|` to extract multiple sections in a single call — all matching sections are
+returned concatenated in document order:
+
+```bash
+# Two specific sections
+$ reveal CHANGELOG.md "Breaking Changes|Migration Guide"
+
+# Three sections
+$ reveal doc.md "Open Issues|Action Items|Known Gaps"
+
+# grep-style \| escaping also works (useful when calling from shell scripts)
+$ reveal doc.md "Bug 11\|social_repost_log\|Action Items"
+
+# Spaces around | are trimmed
+$ reveal doc.md "Open Issues | Action Items"
+```
+
+Each `|`-separated term follows the same matching rules as single-term extraction:
+exact match first (case-insensitive), falling back to substring match.  A term that
+matches multiple headings via substring includes all of them.
+
+```bash
+# 'Bug 11' is a substring of '# Bug 11 Analysis' AND '## Bug 11 Details' — both included
+$ reveal doc.md "Background|Bug 11"
+```
+
+**Why this matters for agents**: eliminates the need for multiple sequential `reveal`
+calls when you know which sections you want, reducing round-trips by N−1.
+
 ## Link Extraction
 
 ### Basic Link Extraction
@@ -736,12 +767,30 @@ Visit [our site](https://example.com).      ✅ Extracted
 
 ### Section Name Matching
 
-Section extraction is case-sensitive and exact match:
+Section extraction is **case-insensitive**.  Matching applies the following
+priority rules, in order:
+
+1. **Exact match** (case-insensitive) — returns that section immediately.
+2. **Substring match** — if the query appears inside exactly one heading,
+   that section is returned.  If it appears in multiple headings, all are
+   returned concatenated.
 
 ```bash
-reveal doc.md "installation"   # Won't match "Installation"
-reveal doc.md "Installation"   # ✅ Matches "## Installation"
+reveal doc.md "installation"   # ✅ Matches "## Installation" (case-insensitive)
+reveal doc.md "Install"        # ✅ Substring match → "## Installation"
+reveal doc.md "Bug"            # ✅ Substring match → all "## Bug *" sections concatenated
 ```
+
+**OR-alternation with `|`**: use pipe-separated terms to pull multiple named
+sections in one call:
+
+```bash
+reveal doc.md "Open Issues|Action Items"           # exact or substring per term
+reveal doc.md "Bug 11\|social_repost_log\|Action"  # grep-style \| also accepted
+```
+
+Each term is resolved independently; results are deduplicated and returned in
+document order.
 
 ## Output Formats
 

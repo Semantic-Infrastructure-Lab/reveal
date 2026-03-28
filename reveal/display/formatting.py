@@ -762,7 +762,8 @@ def _add_markdown_link_kwargs(kwargs: Dict[str, Any], args) -> None:
         kwargs: Dict to update with link args
         args: Command-line arguments
     """
-    if not (args.links or args.link_type or args.domain):
+    broken_only = getattr(args, 'broken_only', False)
+    if not (args.links or args.link_type or args.domain or broken_only):
         return
 
     kwargs['extract_links'] = True
@@ -770,6 +771,8 @@ def _add_markdown_link_kwargs(kwargs: Dict[str, Any], args) -> None:
         kwargs['link_type'] = args.link_type
     if args.domain:
         kwargs['domain'] = args.domain
+    if broken_only:
+        kwargs['broken_only'] = True
 
 
 def _add_markdown_code_kwargs(kwargs: Dict[str, Any], args) -> None:

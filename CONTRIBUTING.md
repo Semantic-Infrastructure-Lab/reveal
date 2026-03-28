@@ -116,18 +116,53 @@ python -c "from tree_sitter_languages import get_language; get_language('lua')"
 
 ### 2. Add URI Adapters
 
-Extend reveal to explore non-file resources:
+Extend reveal to explore non-file resources (databases, APIs, cloud resources, etc.). See [ARCHITECTURE.md](ARCHITECTURE.md) for the full adapter lifecycle.
+
+**Minimal working adapter:**
 
 ```python
-# reveal/adapters/postgres.py
-from .base import ResourceAdapter, register_adapter
+# reveal/adapters/myscheme/adapter.py
+from ..base import ResourceAdapter, register_adapter
+from .renderer import MySchemeRenderer
 
-@register_adapter('postgres')
-class PostgresAdapter(ResourceAdapter):
-    def get_structure(self, **kwargs):
-        # Return: {'tables': [...], 'schemas': [...]}
-        pass
+@register_adapter('myscheme')
+@register_renderer(MySchemeRenderer)
+class MySchemeAdapter(ResourceAdapter):
+    BUDGET_LIST_FIELD = 'items'   # field --max-items applies to; omit if not applicable
+
+    def __init__(self, resource: str):
+        self.resource = resource
+
+    def get_structure(self, **kwargs) -> dict:
+        # Required. Always include the four Output Contract fields.
+        return {
+            'contract_version': '1.0',
+            'type': 'myscheme_overview',
+            'source': f'myscheme://{self.resource}',
+            'source_type': 'service',
+            'items': [...],
+        }
+
+    @classmethod
+    def get_schema(cls) -> dict:
+        return {
+            'output_types': ['myscheme_overview'],
+            'query_params': [],
+            'cli_flags': [],
+            'example_queries': ['myscheme://hostname'],
+            'notes': 'Explores myscheme resources.',
+        }
 ```
+
+**Adapter checklist** (full details in ARCHITECTURE.md):
+1. Create `reveal/adapters/<scheme>/` with `__init__.py`, `adapter.py`, `renderer.py`
+2. Implement `get_structure()` with all four Output Contract fields
+3. Implement `get_schema()` — required for `--discover` and contract compliance tests
+4. Add `get_help()` or `reveal/adapters/help_data/<scheme>.yaml`
+5. Add tests — `pytest tests/test_output_contract_compliance.py` auto-tests all adapters
+6. Add `reveal/docs/<SCHEME>_ADAPTER_GUIDE.md` and link from `reveal/docs/INDEX.md`
+
+**Simplest examples to study**: `adapters/env/adapter.py` (no-arg init), `adapters/git/adapter.py` (resource-arg init)
 
 ### 3. Other Contributions
 
@@ -227,14 +262,41 @@ def extract_element(self, element_type, name):
 # ✅ 1-indexed lines
 {'line': 1, 'name': 'main'}
 
-# ❌ No error handling
-data = json.loads(content)
-
-# ✅ Graceful degradation
+# ❌ Silent error swallowing — makes debugging impossible
 try:
     data = json.loads(content)
-except json.JSONDecodeError:
-    return {'error': 'Invalid JSON'}
+except:
+    pass
+
+# ✅ Catch specific exceptions; log at DEBUG so --verbose surfaces them
+import logging
+logger = logging.getLogger(__name__)
+try:
+    data = json.loads(content)
+except json.JSONDecodeError as e:
+    logger.debug("JSON parse failed for %s: %s", path, e)
+    return {'error': 'Invalid JSON', 'detail': str(e)}
+
+# ❌ Parsing query strings manually
+params = {}
+if '?' in resource:
+    params = dict(p.split('=') for p in resource.split('?')[1].split('&'))
+
+# ✅ Use the unified query parser (handles all operators: =, !=, >, ~=, ..)
+from reveal.utils.query import parse_query_params
+path, params = parse_query_params(resource)
+
+# ❌ Missing Output Contract fields in adapters
+return {'tables': [...]}
+
+# ✅ Always include the four required fields
+return {
+    'contract_version': '1.0',
+    'type': 'db_overview',
+    'source': f'myscheme://{self.resource}',
+    'source_type': 'database',
+    'tables': [...],
+}
 ```
 
 ---
@@ -321,29 +383,19 @@ def test_lua_structure():
 
 > **Current roadmap**: See [ROADMAP.md](ROADMAP.md) for detailed status and priorities.
 
-**Recently shipped analyzers (v0.33-v0.35):**
-- ✅ CSV/Excel (.csv, .xlsx)
-- ✅ SQL (.sql)
-- ✅ Terraform/HCL (.tf)
-- ✅ Protocol Buffers (.proto)
-- ✅ GraphQL (.graphql)
-- ✅ Kotlin, Swift, Dart
-- ✅ sqlite:// adapter
-
-**Most wanted analyzers (still needed):**
-- Excel binary formats (.xls)
-- OpenAPI/Swagger (.yaml with detection)
-- Makefiles
-
-**Most wanted features (post-v1.0):**
-- Call graph analysis — *"who calls this function?"*
-- Dependency visualization — *beyond imports://, show data flow*
-- Intent-based commands — *`reveal hotspots`, `reveal entrypoints`*
-
 **Good first contributions:**
-- More pattern detection rules (see `reveal/rules/`)
+- More pattern detection rules (see `reveal/rules/` — 69 rules across 14 categories)
 - Language analyzer improvements (see `reveal/analyzers/`)
 - Documentation fixes and examples
+- Tests for edge cases in existing adapters
+
+**Active backlog** (see `internal-docs/BACKLOG.md` for full list):
+- `reveal file.py :N` — extract the semantic unit at a given line number (BACK-099)
+- `calls://?uncalled` — dead code detection (BACK-071)
+- `imports://?violations` — architecture layer enforcement (BACK-100)
+- nginx N008–N012 security rules
+
+**Not planned**: See [ROADMAP.md — Explicitly Not Planned](ROADMAP.md#explicitly-not-planned)
 
 ---
 

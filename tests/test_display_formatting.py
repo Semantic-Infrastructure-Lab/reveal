@@ -868,6 +868,7 @@ class TestKwargsBuilders:
         args.links = False
         args.link_type = None
         args.domain = None
+        args.broken_only = False
 
         kwargs = {}
         _add_markdown_link_kwargs(kwargs, args)

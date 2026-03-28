@@ -16,7 +16,7 @@ beth_topics:
 
 Discovered via dogfooding on real codebases (morphogen, tiacad) — session shining-wormhole-0315, 2026-03-15.
 
-> **Status**: All 9 original UX/Bug issues resolved in awakened-pegasus-0315 (v0.63.x). Memory issues MEM-01 through MEM-08 all fixed. Code quality issues BUG-03, BUG-04, CFG-01, PERF-01, TEST-01, TEST-02 all fixed in sacred-shrine-0321, 2026-03-22. All known issues resolved.
+> **Status**: All issues resolved. UX-08 and UX-09 fixed 2026-03-27 (shining-satellite-0327).
 
 ---
 
@@ -256,6 +256,59 @@ Error: path/to/file.py not found
 
 ---
 
+## UX Issues From Session Mining (rose-beam-0327, 2026-03-27)
+
+Discovered by running `reveal 'claude://sessions/?search=...'` across 100 recent sessions and extracting reveal error patterns.
+
+### UX-08: `--lines` ghost flag — unhelpful exit 2 + usage dump
+
+**Severity:** Low
+**Confirmed occurrences:** 1 (sunny-mist-0324)
+**Problem:** Agent tried `reveal async_send_socialmedia_post.php --lines 1345-1370`, received exit code 2 with the full `usage:` dump. The error `reveal: error: unrecognized arguments: --lines 1345-1370` gives no hint about the correct alternatives.
+
+The correct syntax for the two similar-sounding operations are:
+- **Line range extraction** (yields the enclosing code element at those lines): `reveal file.php :1345-1370`
+- **Structure-item range** (e.g., records 10–20 from a JSONL file): `reveal file.jsonl --range 1345-1370`
+
+These are genuinely easy to confuse. `--lines` is the natural flag name a user reaching for line-range output would try.
+
+**Fix options (pick one):**
+1. Add `--lines` as a hidden alias for `--range` (minimal, handles JSONL/record range case only)
+2. Intercept `--lines` in arg parsing before argparse sees it and emit a targeted suggestion:
+   ```
+   reveal: unknown flag --lines. Did you mean:
+     reveal file.php :1345-1370        # extract element at line range
+     reveal file.php --range 1345-1370 # show structure items in range
+   ```
+   Option 2 is preferred — it teaches the real model rather than silently accepting a confusing alias.
+
+**Source:** rose-beam-0327 session mining.
+
+---
+
+### UX-09: `markdown://` relative path — query string appended to "not found" path
+
+**Severity:** Low
+**Confirmed occurrences:** Reproduced live (2 patterns affected: `?link-graph`, `?beth_topics~=`)
+**Problem:** `reveal 'markdown://docs/?link-graph'` resolves the relative path before separating the query string, producing:
+```
+Error initializing markdown:// adapter: Directory not found: /path/to/cwd/docs/?link-graph
+```
+The `?link-graph` is attached to the resolved path in the error message, making it look like the literal filesystem path is `docs/?link-graph` rather than a query parameter issue.
+
+**Root cause:** The URI parser resolves the path component before stripping the query string, so the error message shows the raw combined string.
+
+**Fix:** Parse and separate path from query params *before* emitting the "not found" error. Show:
+```
+Error: directory not found: docs/ (resolved: /path/to/cwd/docs/)
+Hint: reveal requires absolute paths for markdown:// URIs.
+Try: reveal 'markdown:///path/to/cwd/docs/?link-graph'
+```
+
+**Source:** rose-beam-0327 session mining.
+
+---
+
 ## Summary Table
 
 | ID | Severity | Adapter | Issue | Status |
@@ -269,6 +322,8 @@ Error: path/to/file.py not found
 | UX-05 | Low | file extraction | "Not found" error doesn't mention cwd context | ✅ Fixed awakened-pegasus-0315 |
 | UX-06 | Low | `git://` | `~=` regex substring behavior undocumented | ✅ Fixed awakened-pegasus-0315 |
 | UX-07 | Low | `git://` | `--log` flag silently ignored; correct syntax not suggested | ✅ Fixed awakened-pegasus-0315 |
+| UX-08 | Low | CLI | `--lines N-M` produces unhelpful exit 2; should suggest `:N-M` or `--range` | ✅ Fixed shining-satellite-0327 |
+| UX-09 | Low | `markdown://` | Relative path error appends query string to path in "not found" message | ✅ Fixed shining-satellite-0327 |
 
 ---
 

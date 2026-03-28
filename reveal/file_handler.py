@@ -2,7 +2,7 @@
 
 This module is separate from cli.routing to avoid circular dependencies with adapters.
 
-Nginx-specific file handlers live in reveal.cli.handlers_nginx (BACK-097).
+Nginx-specific file handlers live in reveal.adapters.nginx.handlers (BACK-097).
 Re-exported here for backward compatibility with existing test imports.
 """
 
@@ -13,8 +13,8 @@ from typing import Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from argparse import Namespace
 
-# Nginx handlers — canonical location is handlers_nginx.py
-from .handlers_nginx import (  # noqa: F401 — re-exported for backward compat
+# Nginx handlers — canonical location is adapters/nginx/handlers.py
+from .adapters.nginx.handlers import (  # noqa: F401 — re-exported for backward compat
     _handle_domain_extraction,
     _handle_acme_roots_extraction,
     _handle_check_acl,

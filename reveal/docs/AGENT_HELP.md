@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.66.1
+**Version:** 0.66.2
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -1261,6 +1261,18 @@ reveal /etc/nginx/conf.d/users/USERNAME.conf --diagnose
 
 **Pattern:**
 ```bash
+# View document structure (headings)
+reveal doc.md
+
+# Extract a specific section by heading name (case-insensitive, substring OK)
+reveal doc.md "Installation"
+reveal doc.md "install"          # substring match → "## Installation"
+
+# OR-alternation: extract multiple named sections in one call
+reveal doc.md "Open Issues|Action Items"
+reveal doc.md "Bug 11\|social_repost_log\|Action Items"   # grep-style \| also works
+reveal doc.md "Breaking Changes|Migration Guide|Upgrade"  # 3-way OR
+
 # Extract all links
 reveal doc.md --links
 
@@ -1303,6 +1315,18 @@ reveal doc.md --related-all --related-flat | xargs reveal
 # Limit traversal to 50 files
 reveal doc.md --related-all --related-limit 50
 ```
+
+**Section matching rules** (single term or each OR term):
+1. Exact match (case-insensitive) — returns that section only
+2. Substring match — returns all headings containing the term, concatenated in document order
+3. OR (`|`) — resolves each term independently; deduplicates; returns all in document order
+
+**OR-pattern tips for agents:**
+- Use `|` to fetch multiple unrelated sections in one round-trip
+- Each term follows the same exact → substring priority as single-term queries
+- `\|` (grep-style escape) is normalised to `|` automatically
+- Spaces around `|` are trimmed: `"A | B"` == `"A|B"`
+- If a term matches nothing it is silently skipped; result is `None` only when *all* terms fail
 
 **Link types:**
 - `internal` - Relative links (./file.md, ../other.md, #heading)

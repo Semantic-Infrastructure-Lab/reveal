@@ -1495,5 +1495,220 @@ class TestMarkdownSectionSubstringMatch(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class TestMarkdownSectionOrPattern(unittest.TestCase):
+    """OR-alternation (``|``) in section extraction."""
+
+    CONTENT = (
+        "# Open Issues\n"
+        "issue content here\n"
+        "\n"
+        "# Background\n"
+        "background content\n"
+        "\n"
+        "# Action Items\n"
+        "action content here\n"
+        "\n"
+        "# Notes\n"
+        "notes content\n"
+        "\n"
+        "# Bug 11 Analysis\n"
+        "bug eleven content\n"
+        "\n"
+        "## Bug 11 Details\n"
+        "detailed bug content\n"
+    )
+
+    def setUp(self):
+        import tempfile
+        self.temp_dir = tempfile.mkdtemp()
+        path = os.path.join(self.temp_dir, 'doc.md')
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(self.CONTENT)
+        self.analyzer = MarkdownAnalyzer(path)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_two_term_or_returns_both_sections(self):
+        """'A|B' returns sections matching A and B, both present."""
+        result = self.analyzer.extract_element('section', 'Open Issues|Action Items')
+        self.assertIsNotNone(result)
+        self.assertIn('Open Issues', result['source'])
+        self.assertIn('Action Items', result['source'])
+
+    def test_two_term_or_excludes_non_matching(self):
+        """Sections that match neither term are excluded."""
+        result = self.analyzer.extract_element('section', 'Open Issues|Action Items')
+        self.assertNotIn('Background', result['source'])
+        self.assertNotIn('Notes', result['source'])
+
+    def test_three_term_or(self):
+        """'A|B|C' collects all three matching sections."""
+        result = self.analyzer.extract_element('section', 'Open Issues|Action Items|Notes')
+        self.assertIsNotNone(result)
+        self.assertIn('Open Issues', result['source'])
+        self.assertIn('Action Items', result['source'])
+        self.assertIn('Notes', result['source'])
+        self.assertNotIn('Background', result['source'])
+
+    def test_backslash_pipe_normalised(self):
+        r"""grep-style '\\|' escape is treated identically to bare '|'."""
+        result = self.analyzer.extract_element('section', r'Open Issues\|Action Items')
+        self.assertIsNotNone(result)
+        self.assertIn('Open Issues', result['source'])
+        self.assertIn('Action Items', result['source'])
+
+    def test_results_in_document_order(self):
+        """Sections appear in the order they occur in the document."""
+        result = self.analyzer.extract_element('section', 'Action Items|Open Issues')
+        # Open Issues comes first in the document regardless of query order
+        open_pos = result['source'].index('Open Issues')
+        action_pos = result['source'].index('Action Items')
+        self.assertLess(open_pos, action_pos)
+
+    def test_line_start_is_first_match(self):
+        """line_start reflects the earliest matched section."""
+        result = self.analyzer.extract_element('section', 'Open Issues|Notes')
+        self.assertEqual(result['line_start'], 1)  # Open Issues is on line 1
+
+    def test_line_end_is_last_match(self):
+        """line_end reflects the end of the latest matched section."""
+        result_single = self.analyzer.extract_element('section', 'Notes')
+        result_or = self.analyzer.extract_element('section', 'Background|Notes')
+        # Notes ends the same whether fetched alone or via OR
+        self.assertEqual(result_single['line_end'], result_or['line_end'])
+
+    def test_no_match_returns_none(self):
+        """If no pattern matches any heading, return None."""
+        result = self.analyzer.extract_element('section', 'Nonexistent|AlsoMissing')
+        self.assertIsNone(result)
+
+    def test_partial_match_returns_matched_only(self):
+        """If one term matches and the other does not, only matched section returned."""
+        result = self.analyzer.extract_element('section', 'Action Items|Nonexistent')
+        self.assertIsNotNone(result)
+        self.assertIn('Action Items', result['source'])
+        self.assertNotIn('Nonexistent', result['source'])
+
+    def test_exact_match_preferred_over_substring_in_or(self):
+        """Exact match wins over substring when both could apply in an OR term."""
+        # 'Bug 11 Analysis' matches exactly; '## Bug 11 Details' is a substring match too.
+        # With OR we get all of them; important thing is we don't miss the exact one.
+        result = self.analyzer.extract_element('section', 'Bug 11 Analysis|Action Items')
+        self.assertIsNotNone(result)
+        self.assertIn('Bug 11 Analysis', result['source'])
+        self.assertIn('Action Items', result['source'])
+
+    def test_deduplication_same_section_matched_by_two_terms(self):
+        """A section matched by more than one OR term appears only once."""
+        # 'Open' and 'Issues' both match 'Open Issues'
+        result = self.analyzer.extract_element('section', 'Open|Issues')
+        count = result['source'].count('Open Issues')
+        self.assertEqual(count, 1)
+
+    def test_single_term_with_pipe_char_unchanged_behaviour(self):
+        """A query with no '|' still uses original exact/substring path."""
+        result = self.analyzer.extract_element('section', 'Action Items')
+        self.assertIsNotNone(result)
+        self.assertIn('Action Items', result['source'])
+        self.assertNotIn('Open Issues', result['source'])
+
+    def test_whitespace_around_pipe_trimmed(self):
+        """Spaces around '|' separators are stripped."""
+        result = self.analyzer.extract_element('section', 'Open Issues | Action Items')
+        self.assertIsNotNone(result)
+        self.assertIn('Open Issues', result['source'])
+        self.assertIn('Action Items', result['source'])
+
+    def test_or_with_case_insensitive_matching(self):
+        """OR terms use the same case-insensitive matching as single terms."""
+        result = self.analyzer.extract_element('section', 'open issues|ACTION ITEMS')
+        self.assertIsNotNone(result)
+        self.assertIn('Open Issues', result['source'])
+        self.assertIn('Action Items', result['source'])
+
+    def test_or_substring_term_collects_multiple_headings(self):
+        """A substring OR term can match multiple headings, all included."""
+        # 'Bug 11' is a substring of both '# Bug 11 Analysis' and '## Bug 11 Details'
+        result = self.analyzer.extract_element('section', 'Background|Bug 11')
+        self.assertIsNotNone(result)
+        self.assertIn('Background', result['source'])
+        self.assertIn('Bug 11 Analysis', result['source'])
+        self.assertIn('Bug 11 Details', result['source'])
+
+
+class TestMarkdownLinkBrokenOnly(unittest.TestCase):
+    """Tests for --broken-only link filter."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def _make_md(self, content: str, filename: str = "test.md") -> str:
+        path = os.path.join(self.temp_dir, filename)
+        with open(path, 'w') as f:
+            f.write(content)
+        return path
+
+    def test_broken_only_returns_only_broken_links(self):
+        """broken_only=True returns only internal links that do not resolve."""
+        # real.md exists; missing.md does not
+        real = self._make_md("# Real", "real.md")
+        content = "[good](real.md) [bad](missing.md) [ext](https://example.com)"
+        path = self._make_md(content)
+        analyzer = MarkdownAnalyzer(path)
+        links = analyzer._extract_links(broken_only=True)
+        urls = [l['url'] for l in links]
+        self.assertIn('missing.md', urls)
+        self.assertNotIn('real.md', urls)
+        self.assertNotIn('https://example.com', urls)
+
+    def test_broken_only_false_returns_all(self):
+        """broken_only=False (default) returns all links."""
+        real = self._make_md("# Real", "real.md")
+        content = "[good](real.md) [bad](missing.md) [ext](https://example.com)"
+        path = self._make_md(content)
+        analyzer = MarkdownAnalyzer(path)
+        links = analyzer._extract_links(broken_only=False)
+        urls = [l['url'] for l in links]
+        self.assertIn('real.md', urls)
+        self.assertIn('missing.md', urls)
+        self.assertIn('https://example.com', urls)
+
+    def test_broken_only_empty_when_all_links_valid(self):
+        """broken_only=True returns empty list when all internal links resolve."""
+        real = self._make_md("# Real", "real.md")
+        content = "[good](real.md) [ext](https://example.com)"
+        path = self._make_md(content)
+        analyzer = MarkdownAnalyzer(path)
+        links = analyzer._extract_links(broken_only=True)
+        self.assertEqual(links, [])
+
+    def test_broken_only_with_link_type_internal(self):
+        """broken_only combined with link_type=internal still filters correctly."""
+        self._make_md("# Real", "real.md")
+        content = "[good](real.md) [bad](missing.md)"
+        path = self._make_md(content)
+        analyzer = MarkdownAnalyzer(path)
+        links = analyzer._extract_links(link_type='internal', broken_only=True)
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]['url'], 'missing.md')
+
+    def test_broken_only_regex_fallback(self):
+        """broken_only works in regex fallback path."""
+        self._make_md("# Real", "real.md")
+        content = "[good](real.md) [bad](missing.md)"
+        path = self._make_md(content)
+        analyzer = MarkdownAnalyzer(path)
+        links = analyzer._extract_links_regex(broken_only=True)
+        urls = [l['url'] for l in links]
+        self.assertIn('missing.md', urls)
+        self.assertNotIn('real.md', urls)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -4,8 +4,8 @@ These handlers implement the nginx-specific CLI flags that operate on
 NginxAnalyzer objects: --extract, --check-acl, --validate-nginx-acme,
 --global-audit, --check-conflicts, --diagnose, --cpanel-certs.
 
-Extracted from file_handler.py (BACK-097) to keep nginx operations
-co-located with other nginx code rather than inside the generic file handler.
+Moved from reveal/handlers_nginx.py to this package (BACK-097) to keep
+nginx operations co-located with other nginx adapter code.
 """
 
 import json

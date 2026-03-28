@@ -12,6 +12,31 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - (sessions rose-beam-0327, shining-satellite-0327, pulsing-gravity-0327)
+
+### Added
+- **OR-alternation (`|`) in markdown section extraction** (`analyzers/markdown.py`): `reveal doc.md "Open Issues|Action Items"` extracts both sections in one call, concatenated in document order. Each `|`-separated term follows exact → substring priority. Backslash-escaped pipes (`\|`, grep-style) normalised automatically. Spaces around `|` trimmed. Deduplication when a section matches multiple terms. Returns `None` only when all terms fail. Extracted `_section_end` to a static method; added `_collect_section_spans` helper. 15 new tests in `TestMarkdownSectionOrPattern` (6,932 → 6,946 +14). (rose-beam-0327)
+- **`--broken-only` flag for `reveal doc.md --links`** (`analyzers/markdown.py`, `cli/parser.py`): Filter link output to broken internal links only. `broken_only` param added to `_extract_links` and `_extract_links_regex`; wired through `StructureOptions` and `_add_markdown_link_kwargs`. Also implies `--links` when used alone. 5 new tests in `TestMarkdownLinkBrokenOnly`. (shining-satellite-0327)
+- **`--lines` ghost flag targeted error** (`main.py`): `_check_ghost_flags()` intercepts `--lines N-M` before argparse and emits a helpful suggestion: `reveal file:N-M` (line range) or `reveal file --range N-M` (structure range). Exit 2, no usage dump. (shining-satellite-0327)
+
+### Fixed
+- **`markdown://` query string in error path** (`adapters/markdown/adapter.py`): `MarkdownQueryAdapter.__init__` now strips `?...` suffix from `clean_path` before `Path.resolve()`. Error from `reveal 'markdown://docs/?link-graph'` now reads `markdown:// directory 'docs' not found: /abs/path/docs` instead of `Directory not found: /abs/path/docs/?link-graph`. (shining-satellite-0327)
+
+### Refactored
+- **Nginx handlers relocated** (`adapters/nginx/handlers.py`): All 22 nginx CLI handler functions moved from `reveal/handlers_nginx.py` → `reveal/adapters/nginx/handlers.py`. `file_handler.py` updated to import from new location. `handlers_nginx.py` deleted. Tests unaffected (import via `reveal.file_handler` which still re-exports). (shining-satellite-0327)
+- **Consolidate tree-sitter extension map** (`registry.py`, `main.py`): Promoted local `EXTENSION_MAP` dict inside `_guess_treesitter_language` to module-level `TREESITTER_EXTENSION_MAP` constant. `main.py._get_tree_sitter_fallbacks` now imports and derives `fallback_languages` from it (adding display names locally). Single source of truth for adding new tree-sitter language support. Also added 12 previously missing extensions to the probed set: `.hxx`, `.mli`, `.ocaml`, `.r`, `.zig`, `.v`, `.sv`, `.svh`, `.m`, `.mm`, `.erl`, `.hrl`, `.ex`, `.exs`. (pulsing-gravity-0327)
+- **Intra-file call graph in JSON output** (`treesitter.py`, `display/structure.py`): `TreeSitterAnalyzer._extract_relationships()` now overrides the base class no-op — flattens per-function `calls` lists into a flat edge list `{'calls': [{'from', 'from_line', 'to'}]}`. Wired into `_render_json_output()`: `reveal file.py --format json` now includes a top-level `relationships` key when call data is present, absent otherwise. Covers `functions` and `methods` categories; attribute calls (`self.validate`, `json.dumps`) preserved as-is. 15 new tests. (pulsing-gravity-0327)
+
+### Docs
+- **`MARKDOWN_GUIDE.md`**: New "OR-Pattern Section Extraction" section with examples; rewrote "Section Name Matching" to accurately reflect case-insensitive + substring + OR behavior.
+- **`AGENT_HELP.md`**: OR-pattern examples added to markdown task; matching rules + agent tips table; version bumped to 0.66.2 (was stale at 0.66.1).
+- **`UX_ISSUES.md`**: UX-08 and UX-09 marked resolved (shining-satellite-0327).
+- **`ARCHITECTURE.md`**: Constructor Conventions updated (5 strategies, not 4; two-ordering behavior; per-adapter strategy table); Budget Limits expanded with code example and adopter table; new "Known Design Decisions" section documenting `file_handler.py` re-exports, `_grep_extract()` no-op, `_extract_relationships()` reserved hook, and global parse cache. (pulsing-gravity-0327)
+- **`CONTRIBUTING.md`**: URI adapter section rewritten with complete working example; Common Pitfalls expanded with bare-except, manual query parsing, and missing output contract pitfalls; Priority Areas updated to reflect current backlog. (pulsing-gravity-0327)
+- **`internal-docs/BACKLOG.md`**: BACK-097, BACK-098, BACK-107, BACK-108, BACK-109 resolved; BACK-110 resolved; BACK-111 closed (not present); BACK-112 added. (pulsing-gravity-0327)
+
+---
+
 ## [0.66.2] - 2026-03-22 (sessions sacred-shrine-0321, noble-earth-0322)
 
 ### Fixed

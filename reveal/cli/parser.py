@@ -324,6 +324,8 @@ def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
                         help='Extract links from markdown files')
     parser.add_argument('--link-type', choices=['internal', 'external', 'email', 'all'],
                         help='Filter links by type (requires --links)')
+    parser.add_argument('--broken-only', action='store_true', dest='broken_only',
+                        help='Show only broken internal links (requires --links or implies it)')
     parser.add_argument('--domain', type=str,
                         help='Filter links by domain (requires --links); for nginx configs, filter output to the matching server block')
     parser.add_argument('--code', action='store_true',

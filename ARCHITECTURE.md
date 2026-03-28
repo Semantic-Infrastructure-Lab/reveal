@@ -28,6 +28,7 @@ This document explains how Reveal works end-to-end: URI routing, the adapter lif
 7. [Subcommand Orchestration](#subcommand-orchestration)
 8. [Renderer Layer](#renderer-layer)
 9. [Adding an Adapter (Checklist)](#adding-an-adapter-checklist)
+10. [Known Design Decisions](#known-design-decisions)
 
 ---
 
@@ -108,8 +109,8 @@ Every adapter follows this progression:
 __init__(resource)          — parse URI, set internal state
       │
       ▼
-from_uri(scheme, resource, element)   — class method; tries 4 constructor conventions
-      │                               — (no-arg, query-parsing, keyword-arg, full-URI)
+from_uri(scheme, resource, element)   — class method; tries 5 constructor conventions
+      │                               — order depends on whether resource is present
       ▼
 get_structure(**kwargs)     — overview: tables, functions, cert chains, etc.
       │
@@ -126,14 +127,32 @@ The base class `ResourceAdapter` (`reveal/adapters/base.py`) enforces:
 
 ### Constructor Conventions
 
-`from_uri()` tries four strategies in order, stopping at the first that succeeds:
+`from_uri()` tries five strategies, stopping at the first that succeeds. The order differs based on whether a resource string is present:
 
-1. **No-arg**: `Adapter()` — for adapters that take no resource (e.g., `env://`, `python://`)
-2. **Query-parsing**: `Adapter(path, query_params)` — for adapters that parse path + query (e.g., `ast://`, `json://`)
-3. **Keyword-arg**: `Adapter(resource=resource)` — generic fallback
-4. **Full URI**: `Adapter(f'{scheme}://{resource}')` — for adapters that want the raw URI (e.g., `mysql://`)
+**With resource** (e.g., `ssl://example.com`):
+1. **Query-parsing**: `Adapter(path, query_params)` — for adapters that split path and query (e.g., `ast://`, `markdown://`)
+2. **Resource-arg**: `Adapter(resource)` — positional resource string (e.g., `help://`, `reveal://`)
+3. **Keyword-arg**: `Adapter(resource=resource)` — named argument fallback
+4. **No-arg**: `Adapter()` — tried last when resource is present
+5. **Full URI**: `Adapter(f'{scheme}://{resource}')` — raw URI string (e.g., `mysql://`)
 
-Override `from_uri()` in a subclass to use a single deterministic path.
+**Without resource** (e.g., `env://`, `python://`):
+1. **No-arg**: `Adapter()` — tried first
+2–5. Same remaining strategies in order
+
+If `TypeError` originates inside the constructor body (not a call-site mismatch), it is propagated immediately — this catches real bugs rather than silently falling through to the next strategy.
+
+Override `from_uri()` in a subclass for a single deterministic initialization path — recommended for adapters with complex constructors (`mysql://`, `xlsx://`).
+
+**Which strategy each adapter uses** (reference):
+
+| Strategy | Example adapters |
+|----------|-----------------|
+| No-arg | `env://`, `python://` |
+| Query-parsing | `ast://`, `markdown://`, `json://` |
+| Resource-arg | `help://`, `reveal://`, `stats://` |
+| Full URI | `mysql://` |
+| `from_uri()` override | `sqlite://`, `xlsx://`, `claude://` |
 
 ---
 
@@ -195,7 +214,24 @@ All adapters MUST use `parse_query_params()`. Never parse `?` strings manually �
 
 ### Budget Limits
 
-`reveal/utils/query.py` → `apply_budget_limits(data, adapter)` applies `--max-items` and `--max-bytes` to the adapter's declared `BUDGET_LIST_FIELD`. Adapters opt in by setting `BUDGET_LIST_FIELD = 'results'` (or whatever field holds the list).
+`reveal/utils/query.py` → `apply_budget_limits(data, adapter)` applies `--max-items` and `--max-bytes` to the adapter's declared `BUDGET_LIST_FIELD`. Adapters opt in by setting the class attribute to the name of the top-level list field in their `get_structure()` output:
+
+```python
+class MyAdapter(ResourceAdapter):
+    BUDGET_LIST_FIELD = 'results'   # --max-items trims data['results']
+```
+
+`None` (the default) means the adapter has no budget-limitable list field and `--max-items` is a no-op.
+
+**Current adopters** (field name → adapter):
+
+| Field | Adapters |
+|-------|---------|
+| `'results'` | `ast://`, `ssl://`, `claude://`, `markdown://` |
+| `'commits'` | `git://` |
+| `'files'` | `stats://` |
+| `'checks'` | `domain://`, `mysql://` |
+| `'levels'` | `calls://` |
 
 ### Universal Params
 
@@ -309,4 +345,33 @@ For adapters without a custom renderer, the base renderer handles JSON, grep, an
 
 ---
 
-*Last updated: session serene-mist-0317*
+## Known Design Decisions
+
+Intentional choices that look like bugs but aren't.
+
+### `file_handler.py` re-exports nginx handlers
+
+`reveal/file_handler.py` re-exports ~25 symbols from `reveal/adapters/nginx/handlers.py` with a `# noqa: F401 — re-exported for backward compat` comment. This is intentional: the nginx handlers were originally defined in `file_handler.py` and moved to `adapters/nginx/` in v0.67.0. The re-exports preserve the import path for any external code that imports them from `reveal.file_handler`. New code should import directly from `reveal.adapters.nginx.handlers`.
+
+### `_grep_extract()` always returns `None`
+
+`FileAnalyzer._grep_extract()` exists as a documented intentional no-op. Substring search across source produces confidently wrong results (hits comments, strings, variable references). Analyzers that need element extraction override `extract_element()` directly with language-aware logic.
+
+### `_extract_relationships()` — file-level call graph hook
+
+`FileAnalyzer._extract_relationships(structure)` is called by `_render_json_output()` after `get_structure()`. When non-empty, its result appears as a top-level `relationships` key in `--format json` output.
+
+`TreeSitterAnalyzer` overrides it to flatten per-function `calls` lists into a flat edge list:
+```python
+{'calls': [{'from': 'caller_name', 'from_line': 10, 'to': 'callee_name'}, ...]}
+```
+
+The base `FileAnalyzer` implementation returns `{}` (no-op). Analyzers for non-code formats (markdown, CSV, nginx config, etc.) inherit the no-op and produce no `relationships` key. Future work: import edges could be added as a second key (`imports`) for languages where `imports://` cross-file analysis is overkill.
+
+### Global parse cache in `treesitter.py`
+
+`_parse_cache` is a module-level `OrderedDict` (max 128 entries) shared across all analyzers in a process. It is intentionally global to avoid redundant parses during multi-pass analysis (e.g., `reveal check` running multiple rules against the same file). It is **not thread-safe** — reveal is a single-threaded CLI tool and this is not expected to change.
+
+---
+
+*Last updated: session pulsing-gravity-0327*

@@ -105,13 +105,18 @@ class MarkdownQueryAdapter(ResourceAdapter):
         clean_path = base_path
         if '://' in base_path:
             clean_path = base_path.split('://', 1)[1]
+        # Strip query string if it ended up in the path (e.g. "docs/?link-graph" from
+        # _try_resource_arg_init which passes the full URI without pre-splitting on '?')
+        if '?' in clean_path:
+            clean_path = clean_path.split('?', 1)[0]
+        clean_path = clean_path.rstrip('/')
         resolved = Path(clean_path).resolve()
         if resolved.is_file():
             raise ValueError(
                 f"markdown:// queries a directory of markdown files, not a single file.\n"
                 f"To read a single markdown file, use: reveal {clean_path}"
             )
-        self.base_path = require_directory(resolved)
+        self.base_path = require_directory(resolved, f"markdown:// directory '{clean_path}'")
         self.query = query
 
         # Parse result control (sort, limit, offset) and get cleaned query

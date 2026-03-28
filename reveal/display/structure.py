@@ -441,6 +441,9 @@ def _render_json_output(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[s
         },
         'structure': enriched_structure
     }
+    relationships = analyzer._extract_relationships(structure)
+    if relationships:
+        result['relationships'] = relationships
     print(safe_json_dumps(result))
 
 

@@ -18,6 +18,43 @@ from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
+# Extension → tree-sitter language name for dynamic fallback analyzer creation.
+# Also imported by main.py to build the --help fallback language list.
+# When adding a new language: add it here once; main.py picks it up automatically.
+TREESITTER_EXTENSION_MAP: Dict[str, str] = {
+    '.c': 'c',
+    '.h': 'c',
+    '.cpp': 'cpp',
+    '.cc': 'cpp',
+    '.cxx': 'cpp',
+    '.hpp': 'cpp',
+    '.hxx': 'cpp',
+    '.java': 'java',
+    '.rb': 'ruby',
+    '.php': 'php',
+    '.swift': 'swift',
+    '.scala': 'scala',
+    '.cs': 'c_sharp',
+    '.lua': 'lua',
+    '.r': 'r',
+    '.elm': 'elm',
+    '.ex': 'elixir',
+    '.exs': 'elixir',
+    '.zig': 'zig',
+    '.v': 'verilog',
+    '.sv': 'verilog',
+    '.svh': 'verilog',
+    '.m': 'objc',
+    '.mm': 'objc',
+    '.sql': 'sql',
+    '.hs': 'haskell',
+    '.ml': 'ocaml',
+    '.mli': 'ocaml',
+    '.ocaml': 'ocaml',
+    '.erl': 'erlang',
+    '.hrl': 'erlang',
+}
+
 # Registry for file type analyzers
 _ANALYZER_REGISTRY: Dict[str, type] = {}
 
@@ -223,40 +260,7 @@ def _guess_treesitter_language(ext: str) -> Optional[str]:
     Returns:
         TreeSitter language name or None
     """
-    # Common extension to TreeSitter language mappings
-    EXTENSION_MAP = {
-        '.c': 'c',
-        '.h': 'c',
-        '.cpp': 'cpp',
-        '.cc': 'cpp',
-        '.cxx': 'cpp',
-        '.hpp': 'cpp',
-        '.hxx': 'cpp',
-        '.java': 'java',
-        '.rb': 'ruby',
-        '.php': 'php',
-        '.swift': 'swift',
-        '.scala': 'scala',
-        '.cs': 'c_sharp',
-        '.lua': 'lua',
-        '.r': 'r',
-        '.elm': 'elm',
-        '.ex': 'elixir',
-        '.exs': 'elixir',
-        '.zig': 'zig',
-        '.v': 'verilog',
-        '.sv': 'verilog',
-        '.svh': 'verilog',
-        '.m': 'objc',
-        '.mm': 'objc',
-        '.sql': 'sql',
-        '.hs': 'haskell',
-        '.ml': 'ocaml',
-        '.mli': 'ocaml',
-        '.erl': 'erlang',
-        '.hrl': 'erlang',
-    }
-    return EXTENSION_MAP.get(ext.lower())
+    return TREESITTER_EXTENSION_MAP.get(ext.lower())
 
 
 def _try_treesitter_fallback(ext: str) -> Optional[type]:

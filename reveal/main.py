@@ -9,7 +9,7 @@ from typing import Optional, Tuple, Any, List
 from collections.abc import Callable
 
 
-from .registry import get_all_analyzers
+from .registry import get_all_analyzers, TREESITTER_EXTENSION_MAP
 from . import __version__
 from .utils import copy_to_clipboard, check_for_updates
 from .config import disable_breadcrumbs_permanently
@@ -295,8 +295,34 @@ def _handle_at_file(file_path: str, args):
     sys.exit(0)
 
 
+def _check_ghost_flags() -> None:
+    """Intercept unsupported flags before argparse to emit targeted suggestions."""
+    import re as _re
+    lines_pattern = _re.compile(r'^--lines(?:=\S+)?$')
+    for i, arg in enumerate(sys.argv[1:], 1):
+        if lines_pattern.match(arg):
+            # Extract the range value if present (--lines=N-M or --lines N-M)
+            range_val = None
+            if '=' in arg:
+                range_val = arg.split('=', 1)[1]
+            elif i < len(sys.argv) - 1 and not sys.argv[i + 1].startswith('-'):
+                range_val = sys.argv[i + 1]
+            hint = f" {range_val}" if range_val else " N-M"
+            path_hint = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith('-') else "file.py"
+            print(
+                f"reveal: unknown flag --lines. Did you mean:\n"
+                f"  reveal {path_hint}:{hint.strip()}    (line range extraction)\n"
+                f"  reveal {path_hint} --range {hint.strip()}  (structure range)",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
+
 def _main_impl() -> None:
     """Main CLI implementation."""
+    # Intercept ghost flags before argparse to emit targeted suggestions
+    _check_ghost_flags()
+
     # Parse and validate arguments
     parser = create_argument_parser(__version__)
     args = parser.parse_args()
@@ -342,25 +368,44 @@ def _get_tree_sitter_fallbacks(registered_analyzers: dict[str, Any]) -> List[Tup
     except ImportError:
         return []
 
-    # Common languages to check (extension -> language name mapping)
+    # Human-readable display names for --help output.
+    # Extensions not listed here fall back to the lang name from TREESITTER_EXTENSION_MAP.
+    display_names = {
+        '.c': 'C',
+        '.h': 'C/C++ Header',
+        '.cpp': 'C++',
+        '.cc': 'C++',
+        '.cxx': 'C++',
+        '.hpp': 'C++ Header',
+        '.hxx': 'C++ Header',
+        '.java': 'Java',
+        '.cs': 'C#',
+        '.rb': 'Ruby',
+        '.php': 'PHP',
+        '.swift': 'Swift',
+        '.scala': 'Scala',
+        '.lua': 'Lua',
+        '.r': 'R',
+        '.elm': 'Elm',
+        '.ex': 'Elixir',
+        '.exs': 'Elixir',
+        '.zig': 'Zig',
+        '.m': 'Objective-C',
+        '.mm': 'Objective-C++',
+        '.sql': 'SQL',
+        '.hs': 'Haskell',
+        '.ml': 'OCaml',
+        '.mli': 'OCaml',
+        '.ocaml': 'OCaml',
+        '.erl': 'Erlang',
+        '.hrl': 'Erlang',
+        '.v': 'Verilog',
+        '.sv': 'SystemVerilog',
+        '.svh': 'SystemVerilog',
+    }
     fallback_languages = {
-        '.java': ('java', 'Java'),
-        '.c': ('c', 'C'),
-        '.cpp': ('cpp', 'C++'),
-        '.cc': ('cpp', 'C++'),
-        '.cxx': ('cpp', 'C++'),
-        '.h': ('c', 'C/C++ Header'),
-        '.hpp': ('cpp', 'C++ Header'),
-        '.cs': ('c_sharp', 'C#'),
-        '.rb': ('ruby', 'Ruby'),
-        '.php': ('php', 'PHP'),
-        '.swift': ('swift', 'Swift'),
-        '.scala': ('scala', 'Scala'),
-        '.lua': ('lua', 'Lua'),
-        '.hs': ('haskell', 'Haskell'),
-        '.elm': ('elm', 'Elm'),
-        '.ocaml': ('ocaml', 'OCaml'),
-        '.ml': ('ocaml', 'OCaml'),
+        ext: (lang, display_names.get(ext, lang))
+        for ext, lang in TREESITTER_EXTENSION_MAP.items()
     }
 
     available_fallbacks = []

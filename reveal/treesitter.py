@@ -264,6 +264,34 @@ class TreeSitterAnalyzer(FileAnalyzer):
         # Remove empty categories
         return {k: v for k, v in structure.items() if v}
 
+    def _extract_relationships(self, structure: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+        """Extract intra-file call graph edges from structure.
+
+        Flattens the per-function ``calls`` lists into a flat edge list suitable
+        for graph consumers.  Only edges where both endpoints are named are emitted;
+        callee names are included as-is (may include attribute access like
+        ``self.validate`` or cross-module calls like ``json.dumps``).
+
+        Returns:
+            ``{'calls': [{'from': caller_name, 'from_line': line, 'to': callee}, ...]}``
+            or ``{}`` if no call data is present.
+        """
+        edges = []
+        for category in ('functions', 'methods'):
+            for func in structure.get(category, []):
+                caller_name = func.get('name', '')
+                caller_line = func.get('line', 0)
+                if not caller_name:
+                    continue
+                for callee in func.get('calls', []):
+                    if callee:
+                        edges.append({
+                            'from': caller_name,
+                            'from_line': caller_line,
+                            'to': callee,
+                        })
+        return {'calls': edges} if edges else {}
+
     def _extract_imports(self) -> List[Dict[str, Any]]:
         """Extract import statements."""
         imports = []
