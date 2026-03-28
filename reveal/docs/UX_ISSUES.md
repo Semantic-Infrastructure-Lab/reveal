@@ -16,7 +16,7 @@ beth_topics:
 
 Discovered via dogfooding on real codebases (morphogen, tiacad) — session shining-wormhole-0315, 2026-03-15.
 
-> **Status**: 6 open issues (UX-10, UX-11, UX-12, UX-13, FP-01, FP-02). All prior issues resolved as of shining-satellite-0327.
+> **Status**: 1 open issue (UX-12). All others resolved as of hopofo-0328.
 
 ---
 
@@ -313,7 +313,7 @@ Try: reveal 'markdown:///path/to/cwd/docs/?link-graph'
 
 Discovered by parsing 80 recent `conversation.jsonl` files for Exit code 1/2 patterns, `Element not found` errors, agent retry sequences, and tool misuse. Method: Python script extracting Bash tool calls → tool results across all recent sessions; confirmed by reading surrounding context.
 
-### UX-10: `errors.py` suggests `--analyzer text` — a flag that doesn't exist ❌
+### UX-10: `errors.py` suggests `--analyzer text` — a flag that doesn't exist ✅ Fixed hopofo-0328
 
 **Severity:** High
 **File:** `reveal/errors.py:78`
@@ -347,7 +347,7 @@ There is no text analyzer. There is no `--analyzer` flag. The suggestion is dead
 
 ---
 
-### UX-11: `Element not found` for code files gives no alternatives
+### UX-11: `Element not found` for code files gives no alternatives ✅ Fixed hopofo-0328
 
 **Severity:** Medium
 **File:** `reveal/display/element.py:252`
@@ -392,7 +392,7 @@ Hint: Code extraction uses exact function/class names. Available functions: ...,
 
 ---
 
-### UX-13: OR-pattern and table-row IDs — agents expect `reveal backlog.md "BACK-107|BACK-108"` to work
+### UX-13: OR-pattern and table-row IDs — agents expect `reveal backlog.md "BACK-107|BACK-108"` to work ✅ Fixed hopofo-0328
 
 **Severity:** Low
 **File:** `reveal/analyzers/markdown.py` — OR-pattern operates on headings only
@@ -429,12 +429,12 @@ Hint: OR-pattern (|) matches section headings, not table content.
 | UX-07 | Low | `git://` | `--log` flag silently ignored; correct syntax not suggested | ✅ Fixed awakened-pegasus-0315 |
 | UX-08 | Low | CLI | `--lines N-M` produces unhelpful exit 2; should suggest `:N-M` or `--range` | ✅ Fixed shining-satellite-0327 |
 | UX-09 | Low | `markdown://` | Relative path error appends query string to path in "not found" message | ✅ Fixed shining-satellite-0327 |
-| UX-10 | **High** | CLI / errors | `errors.py` suggests `--analyzer text` — flag doesn't exist; causes 2nd failure | Open |
-| UX-11 | **Medium** | file extraction | `Element not found` for code files lists no alternatives (available names) | Open |
+| UX-10 | **High** | CLI / errors | `errors.py` suggests `--analyzer text` — flag doesn't exist; causes 2nd failure | ✅ Fixed hopofo-0328 |
+| UX-11 | **Medium** | file extraction | `Element not found` for code files lists no alternatives (available names) | ✅ Fixed hopofo-0328 |
 | UX-12 | Low | file extraction | Code extraction is exact-only; markdown is substring — asymmetry undocumented at failure | Open |
-| UX-13 | Low | `markdown` | OR-pattern failure on table IDs gives no hint about `--search` fallback | Open |
-| FP-01 | **High** | B005 | Fires on `try/except ImportError` optional-dep pattern — flags working code as broken | Open |
-| FP-02 | Medium | M102 | Fires on plugin/worker/blueprint modules loaded dynamically — no hint about suppress pattern | Open |
+| UX-13 | Low | `markdown` | OR-pattern failure on table IDs gives no hint about `--search` fallback | ✅ Fixed hopofo-0328 |
+| FP-01 | **High** | B005 | Fires on `try/except ImportError` optional-dep pattern — flags working code as broken | ✅ Fixed hopofo-0328 |
+| FP-02 | Medium | M102 | Fires on plugin/worker/blueprint modules loaded dynamically — no hint about suppress pattern | ✅ Fixed hopofo-0328 |
 
 ---
 
@@ -442,7 +442,7 @@ Hint: OR-pattern (|) matches section headings, not table content.
 
 Confirmed by reading `reveal check` output in real user-project sessions (Stickerize My Dog, Cutliner). These are rules that fire correctly by their current logic but produce wrong conclusions for legitimate code patterns.
 
-### FP-01: B005 fires on `try/except ImportError` optional-dependency pattern ❌
+### FP-01: B005 fires on `try/except ImportError` optional-dependency pattern ✅ Fixed hopofo-0328
 
 **Severity:** High
 **Rule:** B005 ("Import references non-existent module")
@@ -475,7 +475,7 @@ rules:
 
 ---
 
-### FP-02: M102 fires on plugin, worker, and dynamically-loaded modules ❌
+### FP-02: M102 fires on plugin, worker, and dynamically-loaded modules ✅ Fixed hopofo-0328
 
 **Severity:** Medium
 **Rule:** M102 ("Module is not imported anywhere in the package — may be dead code")

@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.67.0] - 2026-03-27 (sessions rose-beam-0327, shining-satellite-0327, pulsing-gravity-0327)
+## [0.67.0] - 2026-03-28 (sessions rose-beam-0327, shining-satellite-0327, pulsing-gravity-0327, hopofo-0328)
 
 ### Added
 - **OR-alternation (`|`) in markdown section extraction** (`analyzers/markdown.py`): `reveal doc.md "Open Issues|Action Items"` extracts both sections in one call, concatenated in document order. Each `|`-separated term follows exact → substring priority. Backslash-escaped pipes (`\|`, grep-style) normalised automatically. Spaces around `|` trimmed. Deduplication when a section matches multiple terms. Returns `None` only when all terms fail. Extracted `_section_end` to a static method; added `_collect_section_spans` helper. 15 new tests in `TestMarkdownSectionOrPattern` (6,932 → 6,946 +14). (rose-beam-0327)
@@ -34,6 +34,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ARCHITECTURE.md`**: Constructor Conventions updated (5 strategies, not 4; two-ordering behavior; per-adapter strategy table); Budget Limits expanded with code example and adopter table; new "Known Design Decisions" section documenting `file_handler.py` re-exports, `_grep_extract()` no-op, `_extract_relationships()` reserved hook, and global parse cache. (pulsing-gravity-0327)
 - **`CONTRIBUTING.md`**: URI adapter section rewritten with complete working example; Common Pitfalls expanded with bare-except, manual query parsing, and missing output contract pitfalls; Priority Areas updated to reflect current backlog. (pulsing-gravity-0327)
 - **`internal-docs/BACKLOG.md`**: BACK-097, BACK-098, BACK-107, BACK-108, BACK-109 resolved; BACK-110 resolved; BACK-111 closed (not present); BACK-112 added. (pulsing-gravity-0327)
+
+### Fixed (hopofo-0328)
+- **BACK-113: False `--analyzer text` suggestion removed** (`errors.py`): `AnalyzerNotFoundError` no longer suggests `--analyzer text` (a flag that doesn't exist). Agents following the old hint got a second exit 2 with the full usage dump. Adjacent `--allow-fallback` hint corrected to "remove `--no-fallback`". Confirmed false in copper-beam-0328, amber-spark-0328.
+- **BACK-114: `Element not found` now lists available names** (`display/element.py`): `_print_available_names()` added and called from `_handle_extraction_error()` on name-lookup failures. Prints `Available: foo, bar, baz (and N more)` to stderr (up to 10 names from functions/classes/methods). Structure already parsed — zero extra I/O. Eliminates the full-file roundtrip agents were forced into.
+- **BACK-115: OR-pattern failure hints `--search`** (`display/element.py`): `_handle_extraction_error()` detects `|` in element name and emits: `Hint: '|' pattern matches headings only. For table or body content, use: reveal file --search 'term'`. Confirmed issue in shining-satellite-0327, pulsing-gravity-0327.
+- **BACK-116: B005 skips `try/except ImportError` optional-dep imports** (`rules/bugs/B005.py`): `_find_optional_import_lines()` walks the AST and collects imports inside `try/except ImportError`, `try/except (ImportError, ModuleNotFoundError)`, and bare `except` blocks. These line numbers are excluded from B005 detection. Bare broken imports outside these guards still fire. Confirmed false positive in 2 user projects (pillow_heif in SMD, vtracer in Cutliner). 15 new tests; 6,967 total passing.
+
+### Docs (hopofo-0328)
+- **BACK-117: `AGENT_HELP.md` — "Suppressing false positives" section** (`reveal/docs/AGENT_HELP.md`): Added "Suppressing false positives with `.reveal.yaml`" block after "Review code quality" pipeline section. Includes `.reveal.yaml` override examples for workers/plugins/blueprints (M102), M102 heuristic detail (dynamic dispatch patterns), and a common false-positive rule table (M102, B005, I001). Updated v0.67.0 changelog line.
+- **`UX_ISSUES.md`**: UX-10, UX-11, UX-13, FP-01, FP-02 marked resolved (hopofo-0328). Status updated to 1 open issue (UX-12).
+- **`internal-docs/BACKLOG.md`**: BACK-113, BACK-114, BACK-115, BACK-116, BACK-117 moved to Resolved. All priority sections now empty. (hopofo-0328)
 
 ---
 

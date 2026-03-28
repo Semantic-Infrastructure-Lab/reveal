@@ -110,7 +110,7 @@ reveal deps .                  # dependency health: circular imports, unused, pa
 reveal dev new-adapter <name>  # scaffold new adapters/rules
 ```
 
-## Adapters (22 built-in)
+## Adapters (23 built-in)
 
 | Adapter | What it queries |
 |---------|-----------------|
@@ -122,6 +122,7 @@ reveal dev new-adapter <name>  # scaffold new adapters/rules
 | `git://` | Commits, blame, branches, tags, function-level history |
 | `ssl://` | Certificate expiry, chain validation, hostname match |
 | `autossl://` | cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures |
+| `letsencrypt://` | Let's Encrypt certbot live certificates — expiry, multi-domain, renewal status |
 | `domain://` | DNS, WHOIS, registrar, HTTP redirect chain, email DNS |
 | `nginx://` | Config parsing, ACL rules, upstream routing, ACME validation |
 | `cpanel://` | User environment, domains, SSL health, ACL audit |

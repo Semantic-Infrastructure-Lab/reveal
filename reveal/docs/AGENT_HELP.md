@@ -33,7 +33,7 @@ reveal help://schemas                               # listing: ast, ssl, git, ..
 # List all available task recipe categories
 reveal help://examples                             # listing: quality, security, ...
 
-# Discover adapter schemas (all 22 adapters support this)
+# Discover adapter schemas (all 23 adapters support this)
 reveal help://schemas/<adapter> --format=json
 
 # File & Analysis Adapters
@@ -414,7 +414,7 @@ rules:
 | Rule | False positive trigger | Root cause |
 |------|------------------------|------------|
 | **M102** | Workers, plugins, blueprints, rule discovery modules | Module loaded dynamically via registry/factory — M102 sees no call sites at analysis time |
-| **B005** | `try/except ImportError: …` optional deps | Fixed in v0.65+: B005 now skips imports inside `try/except ImportError` blocks |
+| **B005** | `try/except ImportError: …` optional deps | Fixed in v0.67.0+: B005 now skips imports inside `try/except ImportError` blocks |
 | **I001** | `__init__.py` re-exports | Fixed in v0.61+: I001 now skips `__all__`-listed names |
 
 **M102 heuristic detail:** M102 (unused module members) scans call sites within the same file and across the project. It cannot follow `getattr(module, name)()` dispatch, `importlib.import_module` loading, or registration patterns like `RULES = {k: v for k, v in globals().items() if isinstance(v, BaseRule)}`. When you see M102 on a file full of small classes with no direct callers, check whether a registry or factory loads them.
@@ -2053,12 +2053,15 @@ No structure found
 **Symptoms:**
 ```bash
 reveal app.py missing_function
-# Error: Element 'missing_function' not found
+# Error: Element 'missing_function' not found in app.py
+# Available: validate_token, refresh_token, create_session, ... (and 3 more)
 ```
+
+**v0.67.0+:** The error message itself lists available names — use one directly and skip the full-file roundtrip.
 
 **Causes & Solutions:**
 
-1. **Typo in element name**
+1. **Typo in element name** — check the `Available:` line in the error, or:
    ```bash
    # See all available elements
    reveal app.py
