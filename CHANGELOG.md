@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions rose-beam-0327, shining-satellite-0327, pulsing-gravity-0327)
+## [0.67.0] - 2026-03-27 (sessions rose-beam-0327, shining-satellite-0327, pulsing-gravity-0327)
 
 ### Added
 - **OR-alternation (`|`) in markdown section extraction** (`analyzers/markdown.py`): `reveal doc.md "Open Issues|Action Items"` extracts both sections in one call, concatenated in document order. Each `|`-separated term follows exact → substring priority. Backslash-escaped pipes (`\|`, grep-style) normalised automatically. Spaces around `|` trimmed. Deduplication when a section matches multiple terms. Returns `None` only when all terms fail. Extracted `_section_end` to a static method; added `_collect_section_spans` helper. 15 new tests in `TestMarkdownSectionOrPattern` (6,932 → 6,946 +14). (rose-beam-0327)
