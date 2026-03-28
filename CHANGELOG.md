@@ -46,6 +46,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`UX_ISSUES.md`**: UX-10, UX-11, UX-13, FP-01, FP-02 marked resolved (hopofo-0328). Status updated to 1 open issue (UX-12).
 - **`internal-docs/BACKLOG.md`**: BACK-113, BACK-114, BACK-115, BACK-116, BACK-117 moved to Resolved. All priority sections now empty. (hopofo-0328)
 
+### Fixed (jiticolo-0328)
+- **`help://` root leaked internal adapters** (`adapters/help.py`): `_list_adapters()` iterated all `_ADAPTER_REGISTRY` entries without filtering `_INTERNAL_ADAPTERS`, causing `demo://` to appear in the main index and the count to read "23 registered" instead of 22. Added `if scheme in self._INTERNAL_ADAPTERS: continue` guard.
+- **`help://schemas` listing leaked internal adapters** (`adapters/help.py`): Same omission in the `schemas` route — `demo` and `test` appeared in the available adapter list. Applied same filter.
+- **`help://quick` stale adapter count** (`adapters/help.py`): Hardcoded "20+" updated to "22".
+- **`nginx`, `letsencrypt`, `calls` classified as Experimental** (`rendering/adapters/help.py`): All three were missing from `BETA_ADAPTERS` (added after the set was defined), causing 🔴 display in the index and detail headers. Added all three; `letsencrypt` also declares `'stability': 'beta'` in its own adapter.
+
+### Docs (jiticolo-0328)
+- **`HELP_SYSTEM_GUIDE.md`**: Version updated 0.30.0 → 0.67.0; file path references corrected (`reveal/` → `reveal/docs/`); `GUIDE_CATEGORIES` code example updated (was showing a local variable that no longer exists); last-updated date corrected.
+- **`AGENT_HELP.md`**: Added `letsencrypt://` to schema discovery examples; added full task sections for `letsencrypt://` (cert inventory, orphan/duplicate detection) and `autossl://` (run log inspection, failure investigation workflow) — both adapters had no coverage in the agent guide.
+
 ---
 
 ## [0.66.2] - 2026-03-22 (sessions sacred-shrine-0321, noble-earth-0322)
