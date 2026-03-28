@@ -16,7 +16,7 @@ beth_topics:
 
 Discovered via dogfooding on real codebases (morphogen, tiacad) — session shining-wormhole-0315, 2026-03-15.
 
-> **Status**: All issues resolved. UX-08 and UX-09 fixed 2026-03-27 (shining-satellite-0327).
+> **Status**: 6 open issues (UX-10, UX-11, UX-12, UX-13, FP-01, FP-02). All prior issues resolved as of shining-satellite-0327.
 
 ---
 
@@ -309,6 +309,111 @@ Try: reveal 'markdown:///path/to/cwd/docs/?link-graph'
 
 ---
 
+## UX Issues From Session Mining (seasonal-sleet-0328, 2026-03-28)
+
+Discovered by parsing 80 recent `conversation.jsonl` files for Exit code 1/2 patterns, `Element not found` errors, agent retry sequences, and tool misuse. Method: Python script extracting Bash tool calls → tool results across all recent sessions; confirmed by reading surrounding context.
+
+### UX-10: `errors.py` suggests `--analyzer text` — a flag that doesn't exist ❌
+
+**Severity:** High
+**File:** `reveal/errors.py:78`
+**Confirmed occurrences:** 2 (copper-beam-0328, amber-spark-0328)
+
+Every time reveal can't handle a file type (`.txt`, `.yml`, `.env`, compose files, etc.) the error suggestions include:
+```
+- Use generic text analyzer: reveal /path/to/file.txt --analyzer text
+```
+`--analyzer` is not a valid CLI argument. Following this suggestion produces Exit code 2 with the full `usage:` dump — a second failure on top of the first.
+
+**Confirmed chain in copper-beam-0328:**
+```bash
+# Step 1: agent runs
+reveal docker/compose.staging.yml
+# → Error: No analyzer found ... Suggestions: ... --analyzer text
+
+# Step 2: agent follows suggestion
+reveal docker/compose.staging.yml --analyzer text
+# → Exit code 2: usage: reveal [-h] ... error: unrecognized arguments: --analyzer text
+```
+
+There is no text analyzer. There is no `--analyzer` flag. The suggestion is dead wrong.
+
+**Fix:** Remove the false suggestion from `errors.py:78`. Replace with something accurate, e.g.:
+```
+- View raw file content with: cat /path/to/file.txt
+- View all supported file types: reveal --list-supported
+- Request .txt support: https://github.com/...
+```
+
+---
+
+### UX-11: `Element not found` for code files gives no alternatives
+
+**Severity:** Medium
+**File:** `reveal/display/element.py:252`
+**Confirmed occurrences:** 3+ (amber-spark-0328, pulsing-gravity-0327, multiple others)
+
+When element extraction fails for code files, reveal emits:
+```
+Error: Element 'deploy_staging' not found in deploy.sh
+```
+No hint about what IS available. The agent in amber-spark-0328 requested `deploy_staging`; the actual function name was `deploy_code_staging` (visible in the structure output, but not echoed in the error). The agent fell back to `reveal deploy.sh` (full file) — a wasteful round trip when a one-liner hint would have resolved it.
+
+Compare to the file-not-found case, which shows a `Hint:` and a `Try:`. The element-not-found case has nothing.
+
+**Fix:** On extraction failure, print available element names from the structure:
+```
+Error: Element 'deploy_staging' not found in deploy.sh
+Available functions: red, green, yellow, bold, die, step, usage, wait_healthy, preflight_data,
+                    sync_data, run_compose, build_base, deploy_code_staging, deploy_code_prod,
+                    deploy_data_staging, deploy_data_prod
+```
+This is cheap — the structure is already parsed at this point.
+
+---
+
+### UX-12: Code element extraction is exact-match; markdown is substring — asymmetry causes silent failures
+
+**Severity:** Low
+**Confirmed occurrences:** Several (amber-spark-0328, multiple sessions)
+
+Markdown section extraction uses case-insensitive substring matching — `reveal doc.md "staging"` finds `## Staging Environment`. Code element extraction is exact-match only — `reveal deploy.sh "staging"` returns `Element 'staging' not found`.
+
+The asymmetry isn't documented at the point of failure. Agents trained on markdown behavior naturally carry it to code files and get silent not-found errors with no indication why.
+
+**Observed pattern:** Agent uses `reveal script.sh "keyword"`, fails, falls back to `reveal script.sh` (full file dump).
+
+The design rationale for exact-only is sound (`base.py:158`: substring matching on identifiers hits comments and variable references). But the *error message* should communicate the difference:
+```
+Error: Element 'staging' not found in deploy.sh
+Hint: Code extraction uses exact function/class names. Available functions: ..., deploy_code_staging, ...
+      For content search across the file, use: reveal deploy.sh --search staging
+```
+
+---
+
+### UX-13: OR-pattern and table-row IDs — agents expect `reveal backlog.md "BACK-107|BACK-108"` to work
+
+**Severity:** Low
+**File:** `reveal/analyzers/markdown.py` — OR-pattern operates on headings only
+**Confirmed occurrences:** 2 (shining-satellite-0327, pulsing-gravity-0327)
+
+The OR-pattern (`|`) added in v0.67.0 works for heading-based extraction. Agents that know about OR-pattern naturally try it for table content — e.g., `reveal BACKLOG.md "BACK-107|BACK-108"`. Backlog IDs live in table rows, not headings, so it fails with:
+```
+Error: Element 'BACK-107|BACK-108' not found in BACKLOG.md
+```
+
+This is the same error as a plain not-found — nothing indicates that OR-pattern only applies to headings, or that `--search` exists.
+
+**Fix:** When an OR-pattern extraction fails, add a hint:
+```
+Error: Element 'BACK-107|BACK-108' not found in BACKLOG.md
+Hint: OR-pattern (|) matches section headings, not table content.
+      To search file content: reveal BACKLOG.md --search BACK-107
+```
+
+---
+
 ## Summary Table
 
 | ID | Severity | Adapter | Issue | Status |
@@ -324,12 +429,90 @@ Try: reveal 'markdown:///path/to/cwd/docs/?link-graph'
 | UX-07 | Low | `git://` | `--log` flag silently ignored; correct syntax not suggested | ✅ Fixed awakened-pegasus-0315 |
 | UX-08 | Low | CLI | `--lines N-M` produces unhelpful exit 2; should suggest `:N-M` or `--range` | ✅ Fixed shining-satellite-0327 |
 | UX-09 | Low | `markdown://` | Relative path error appends query string to path in "not found" message | ✅ Fixed shining-satellite-0327 |
+| UX-10 | **High** | CLI / errors | `errors.py` suggests `--analyzer text` — flag doesn't exist; causes 2nd failure | Open |
+| UX-11 | **Medium** | file extraction | `Element not found` for code files lists no alternatives (available names) | Open |
+| UX-12 | Low | file extraction | Code extraction is exact-only; markdown is substring — asymmetry undocumented at failure | Open |
+| UX-13 | Low | `markdown` | OR-pattern failure on table IDs gives no hint about `--search` fallback | Open |
+| FP-01 | **High** | B005 | Fires on `try/except ImportError` optional-dep pattern — flags working code as broken | Open |
+| FP-02 | Medium | M102 | Fires on plugin/worker/blueprint modules loaded dynamically — no hint about suppress pattern | Open |
 
 ---
 
+## Rule False Positives (session mining, seasonal-sleet-0328, 2026-03-28)
+
+Confirmed by reading `reveal check` output in real user-project sessions (Stickerize My Dog, Cutliner). These are rules that fire correctly by their current logic but produce wrong conclusions for legitimate code patterns.
+
+### FP-01: B005 fires on `try/except ImportError` optional-dependency pattern ❌
+
+**Severity:** High
+**Rule:** B005 ("Import references non-existent module")
+**Confirmed occurrences:** 2 user projects (sevepa-0328: SMD `pillow_heif`; rose-ember-0328: Cutliner `vtracer`)
+
+**Pattern that triggers it:**
+```python
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+    _HEIF_AVAILABLE = True
+except ImportError:
+    _HEIF_AVAILABLE = False
+```
+
+B005 flags `pillow_heif` as "references non-existent module — remove unused import or install missing package." The module IS in `pyproject.toml` and IS installed in the Docker image. The import is intentional graceful degradation for an optional dependency.
+
+**What happened in practice (sevepa-0328):** The agent saw B005 and created a task to "fix broken import" and began investigating whether `pillow_heif` should be removed. After reading the code it discovered the `try/except` and correctly identified it as a false positive. But this costs a full investigation cycle, and an agent less careful about reading surrounding code could delete working code.
+
+**Root cause:** B005 checks whether the package can be imported at rule evaluation time (or is in a known package list), without considering that the import is already guarded by `try/except ImportError` — which by definition means "this might not be installed, and that's OK."
+
+**Fix:** B005 should not fire when the import statement is directly inside a `try/except ImportError` block. The `try/except ImportError` pattern is the canonical Python idiom for optional dependencies.
+
+**Suppression (workaround until fixed):** `# noqa: B005` on the import line, or add to `.reveal.yaml`:
+```yaml
+rules:
+  B005:
+    ignore_optional_imports: true
+```
+
 ---
 
-## Code Quality Issues
+### FP-02: M102 fires on plugin, worker, and dynamically-loaded modules ❌
+
+**Severity:** Medium
+**Rule:** M102 ("Module is not imported anywhere in the package — may be dead code")
+**Confirmed occurrences:** sevepa-0328 (`mailer.py`), noble-earth-0322 (reveal rule discovery modules, template scaffolding)
+
+**Pattern that triggers it:**
+Any `.py` file that is not statically imported anywhere in the package. This correctly catches some dead code, but also flags:
+
+- **Background workers/tasks** — loaded by a task queue (Celery, RQ) by module path, never imported
+- **Flask/FastAPI blueprints** — registered via `app.register_blueprint()` or similar
+- **CLI entry points** — invoked via `pyproject.toml [scripts]` or `__main__.py`
+- **Plugin/extension files** — discovered at runtime via `importlib`, `pkgutil.iter_modules`, or file-system scan
+- **Template/scaffolding files** — intentionally not imported, used as copy targets
+
+**What happened in practice (sevepa-0328):** `mailer.py` flagged as dead code. Agent noted it and moved on, but the warning is actively misleading — the module is used, just not via a static import.
+
+**What happened in reveal's own codebase (noble-earth-0322):** Rule discovery modules are loaded via `importlib` at runtime, never statically imported → M102 fires on every rule file. The fix was `.reveal.yaml` suppression with comments explaining why.
+
+**Root cause:** M102 performs pure static analysis (import graph traversal) and cannot detect runtime-dynamic loading patterns.
+
+**Fix options:**
+1. Suppress when the module is registered in `pyproject.toml [scripts]` or `[entry-points]`
+2. Suppress when the module contains `if __name__ == '__main__':`
+3. Suppress when the directory is named `tasks/`, `workers/`, `commands/`, `plugins/`, `templates/`
+4. Document the suppression patterns clearly in `--agent-help` output so agents find them before investigating
+
+**Suppression (workaround):** Add to `.reveal.yaml`:
+```yaml
+- files: "src/myapp/workers/**/*.py"
+  rules:
+    disable:
+      - M102  # Workers loaded dynamically by task queue, not statically imported
+```
+
+---
+
+## Summary Table
 
 Discovered via full codebase review (static analysis + manual audit) — session floating-wormhole-0321, 2026-03-21.
 
