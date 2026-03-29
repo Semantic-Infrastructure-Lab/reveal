@@ -2,7 +2,7 @@
 title: Reveal Release Process
 type: documentation
 category: maintainer
-date: 2025-12-14
+date: 2026-03-28
 ---
 
 # Reveal Release Process
@@ -14,17 +14,24 @@ date: 2025-12-14
 ## Quick Start
 
 ```bash
-./scripts/release.sh 0.18.0
+./scripts/release.sh X.Y.Z
 ```
 
 The script handles:
 - Pre-flight checks (clean repo, on master, etc.)
 - Version bump in `pyproject.toml`
 - CHANGELOG validation
+- Reveal self-check (V007/V011/V012/V013)
+- Test suite
 - Git commit and tag
 - Push to GitHub
 - Create GitHub release
 - Auto-publish to PyPI (via GitHub Actions + Trusted Publishing)
+- Poll PyPI to confirm publish landed
+
+**Flags:**
+- `--resume` — tag exists but no GitHub release (interrupted release); moves tag to HEAD and creates the release
+- `--dry-run` — validate everything (pre-flight, changelog, self-check, tests) without any git/push/release ops
 
 ---
 
@@ -65,14 +72,16 @@ The script handles:
 Run reveal's self-check to catch documentation drift:
 
 ```bash
-reveal reveal:// --check --select V012,V013
+reveal reveal:// --check
 ```
 
 This validates:
+- **V007**: `AGENT_HELP.md` version matches `pyproject.toml`
+- **V011**: `ROADMAP.md` mentions current version in "What We've Shipped"
 - **V012**: Language count claims match registered analyzers
 - **V013**: Adapter count claims match registered adapters
 
-Fix any errors before proceeding. These rules prevent releasing with stale documentation.
+Fix any errors before proceeding.
 
 ### Step 1: Update All 4 Required Files
 
@@ -80,7 +89,7 @@ Before running the release script, **4 files must be updated** — CI checks val
 
 | File | What to update |
 |------|---------------|
-| `CHANGELOG.md` | Move `[Unreleased]` → `[X.Y.Z] - YYYY-MM-DD` with session list |
+| `CHANGELOG.md` | Add `[X.Y.Z] - YYYY-MM-DD` section with session list |
 | `reveal/docs/AGENT_HELP.md` | Version line near the top → new version |
 | `ROADMAP.md` | Add entry to "What We've Shipped" |
 | `pyproject.toml` | **Pre-bump to new version** (same as AGENT_HELP) |
@@ -100,42 +109,45 @@ Before running the release script, **4 files must be updated** — CI checks val
 Add a new version section:
 
 ```markdown
-## [0.18.0] - 2025-12-09
+## [X.Y.Z] - YYYY-MM-DD (sessions session-name-MMDD, ...)
 
 ### Added
-- `--copy` flag to copy output to clipboard
-- `help://tricks` documentation topic
+- New feature description
 
-### Changed
-- Improved help system discoverability
+### Fixed
+- Bug fix description
 ```
 
 ### Step 2: Run Release Script
 
 ```bash
-./scripts/release.sh 0.18.0
+./scripts/release.sh X.Y.Z
 ```
 
 The script will:
 1. Verify you're on `master` branch
 2. Check for uncommitted changes
-3. Verify version doesn't already exist
+3. Verify version tag doesn't already exist
 4. Pull latest from origin
 5. Check CHANGELOG has entry for new version
-6. Update version in `pyproject.toml`
-7. Build and verify package
-8. Create git commit and tag
-9. Push to GitHub
-10. Create GitHub release
-11. GitHub Actions publishes to PyPI automatically
+6. Update version in `pyproject.toml` (or skip if pre-bumped)
+7. Run reveal self-check
+8. Run full test suite
+9. Build and verify package
+10. Create git commit and tag
+11. Push to GitHub
+12. Create GitHub release (triggers PyPI Actions workflow)
+13. Poll PyPI until publish confirmed (~1-2 min)
 
 ### Step 3: Verify
+
+The script polls PyPI automatically. If it times out, check manually:
 
 ```bash
 # Watch GitHub Actions
 gh run list --limit 5
 
-# Check PyPI (after ~1-2 minutes)
+# Check PyPI
 pip index versions reveal-cli
 
 # Test installation
@@ -151,11 +163,28 @@ reveal --version
 
 **Solution:** Fix the issue, run the script again. Nothing was pushed yet.
 
-### GitHub Release Failed After Push
+### Tag pushed, no GitHub release, new commits since
 
+The most common interrupted-release scenario: the release script tagged and pushed, but
+`gh release create` failed (or the script was killed). You then continued working and
+added more commits.
+
+**Use `--resume`:**
 ```bash
-# Create release manually
-gh release create v0.18.0 --title "v0.18.0" --notes "See CHANGELOG.md"
+./scripts/release.sh X.Y.Z --resume
+```
+
+`--resume` will:
+1. Detect the existing tag and missing GitHub release
+2. Run the full test suite (covers the new commits)
+3. Delete the old tag (local + remote) and retag at HEAD
+4. Create the GitHub release → triggers PyPI publish
+
+### GitHub Release Failed After Push (no new commits)
+
+If no new commits landed since the tag, just create the release manually:
+```bash
+gh release create vX.Y.Z --title "vX.Y.Z" --notes "See CHANGELOG.md"
 ```
 
 ### GitHub Actions Workflow Failed
@@ -173,44 +202,44 @@ gh run view <run-id> --log-failed
 
 ### Workflow File Issues (Tag Points to Wrong Commit)
 
-GitHub Actions runs from the **TAGGED commit**, not from HEAD!
+GitHub Actions runs from the **TAGGED commit**, not from HEAD! If the tag points to a
+commit before the workflow file was fixed, the old broken workflow runs.
 
 ```bash
-# Diagnose
-git show v0.18.0:.github/workflows/publish-to-pypi.yml | head -20
+# Diagnose: check which workflow file the tag sees
+git show vX.Y.Z:.github/workflows/publish-to-pypi.yml | head -20
 
-# Fix: Delete and recreate tag at correct commit
-gh release delete v0.18.0 --yes
-git tag -d v0.18.0
-git push --delete origin v0.18.0
-git tag v0.18.0
-git push origin v0.18.0
-gh release create v0.18.0 --title "v0.18.0" --notes "See CHANGELOG.md"
+# Fix: use --resume to move the tag to HEAD
+./scripts/release.sh X.Y.Z --resume
 ```
 
 ### "File Already Exists" Error
 
 Version already on PyPI. Bump version and release again:
 ```bash
-./scripts/release.sh 0.18.1
+./scripts/release.sh X.Y.(Z+1)
 ```
 
 ### Need to Undo a Release
 
 ```bash
 # Delete GitHub release
-gh release delete v0.18.0
+gh release delete vX.Y.Z
 
-# Delete tag
-git tag -d v0.18.0
-git push origin :refs/tags/v0.18.0
+# Delete tag (local + remote)
+git tag -d vX.Y.Z
+git push origin :refs/tags/vX.Y.Z
 
 # Revert commit
 git revert HEAD
 git push origin master
 ```
 
-**Note:** PyPI releases can't be deleted, only "yanked" (hidden from pip install).
+**Note:** PyPI releases can't be deleted, only "yanked" (hidden from pip install):
+```bash
+# Yank from PyPI (marks as broken, pip won't install unless pinned)
+# Do this via https://pypi.org/manage/project/reveal-cli/releases/
+```
 
 ---
 
@@ -224,15 +253,15 @@ vim pyproject.toml CHANGELOG.md
 
 # 2. Commit
 git add pyproject.toml CHANGELOG.md
-git commit -m "chore: Bump version to 0.18.0"
+git commit -m "chore: Bump version to X.Y.Z"
 
 # 3. Tag and push
-git tag v0.18.0
+git tag vX.Y.Z
 git push origin master
-git push origin v0.18.0
+git push origin vX.Y.Z
 
 # 4. Create release (triggers PyPI publish)
-gh release create v0.18.0 --title "v0.18.0" --notes "See CHANGELOG.md"
+gh release create vX.Y.Z --title "vX.Y.Z" --notes "See CHANGELOG.md"
 ```
 
 ---
@@ -271,25 +300,24 @@ Follow [Semantic Versioning](https://semver.org/):
 ## Release Checklist
 
 **Before release — 4-file prep commit:**
-- [ ] `CHANGELOG.md` — `[Unreleased]` → `[X.Y.Z] - YYYY-MM-DD` with session list
+- [ ] `CHANGELOG.md` — `[X.Y.Z] - YYYY-MM-DD` section with session list
 - [ ] `reveal/docs/AGENT_HELP.md` — version line bumped to new version
 - [ ] `ROADMAP.md` — new version added to "What We've Shipped" section
 - [ ] `pyproject.toml` — **pre-bumped to new version** (all 4 committed together)
 
 **Pre-flight:**
-- [ ] **Self-check passes**: `reveal reveal:// --check` (no errors, especially V007/V011)
-- [ ] **Version check**: `git tag | grep vX.Y.Z` returns nothing (version doesn't exist)
+- [ ] **Self-check passes**: `reveal reveal:// --check` (no errors)
+- [ ] **Version check**: `git tag | grep vX.Y.Z` returns nothing (or use `--resume` if it exists)
 - [ ] All features merged to master
 - [ ] Tests passing: `pytest`
 - [ ] Clean git status
 - [ ] On master branch, pulled latest
 
 **After creating tag (before release):**
-- [ ] Verify tag points to correct commit: `git show vX.Y.Z:.github/workflows/publish-to-pypi.yml | head -20`
+- [ ] Verify tag points to correct commit: `git show vX.Y.Z:.github/workflows/publish-to-pypi.yml | head -5`
 
 **After release:**
-- [ ] GitHub Actions completed
-- [ ] PyPI shows new version
+- [ ] Script confirms PyPI publish (or check manually with `pip index versions reveal-cli`)
 - [ ] `pip install --upgrade reveal-cli` works
 - [ ] `reveal --version` shows correct version
 
@@ -298,10 +326,16 @@ Follow [Semantic Versioning](https://semver.org/):
 ## Quick Reference
 
 ```bash
-# Automated release
+# Standard release
 ./scripts/release.sh X.Y.Z
 
-# Check versions
+# Resume interrupted release (tag exists, no GitHub release)
+./scripts/release.sh X.Y.Z --resume
+
+# Validate without releasing
+./scripts/release.sh X.Y.Z --dry-run
+
+# Check versions on PyPI
 pip index versions reveal-cli
 
 # View releases
@@ -309,9 +343,6 @@ gh release list
 
 # Monitor Actions
 gh run list --limit 5
-
-# Manual PyPI upload
-python -m build && twine upload dist/*
 ```
 
 ---
@@ -324,4 +355,4 @@ python -m build && twine upload dist/*
 
 ---
 
-**Last updated:** 2026-02-20
+**Last updated:** 2026-03-28

@@ -2,8 +2,14 @@
 #
 # Reveal Release Script
 #
-# Usage: ./scripts/release.sh <version>
+# Usage: ./scripts/release.sh <version> [--resume] [--dry-run]
 # Example: ./scripts/release.sh 0.10.0
+#
+# Flags:
+#   --resume   Tag exists but no GitHub release (interrupted release). Moves
+#              the tag to HEAD, then creates the GitHub release. Runs tests.
+#   --dry-run  Validate everything (pre-flight, changelog, self-check, tests)
+#              but skip all git/push/release operations.
 #
 # This script handles the complete release process:
 # 1. Pre-flight checks (clean repo, on master, etc.)
@@ -15,6 +21,7 @@
 # 7. Git commit and tag
 # 8. Push to GitHub
 # 9. Create GitHub release (triggers auto-publish to PyPI)
+# 10. Poll PyPI to confirm publish landed
 #
 
 set -euo pipefail
@@ -44,21 +51,45 @@ warn() {
     echo -e "${YELLOW}⚠ $1${NC}"
 }
 
-# Check if version argument provided
-if [ $# -ne 1 ]; then
-    error "Usage: $0 <version>\nExample: $0 0.10.0"
-fi
+# ============================================================================
+# ARGUMENT PARSING
+# ============================================================================
 
-NEW_VERSION="$1"
+NEW_VERSION=""
+RESUME_MODE=false
+DRY_RUN=false
+
+for arg in "$@"; do
+    case $arg in
+        --resume)  RESUME_MODE=true ;;
+        --dry-run) DRY_RUN=true ;;
+        --*)       error "Unknown flag: $arg\nUsage: $0 <version> [--resume] [--dry-run]" ;;
+        *)
+            if [ -n "$NEW_VERSION" ]; then
+                error "Unexpected argument: $arg"
+            fi
+            NEW_VERSION="$arg"
+            ;;
+    esac
+done
+
+if [ -z "$NEW_VERSION" ]; then
+    error "Usage: $0 <version> [--resume] [--dry-run]\nExample: $0 0.10.0"
+fi
 
 # Validate version format (semantic versioning)
 if ! [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     error "Invalid version format: $NEW_VERSION\nMust be semantic versioning (e.g., 0.10.0)"
 fi
 
+DRY_RUN_PREFIX=""
+$DRY_RUN && DRY_RUN_PREFIX="[DRY RUN] "
+
 echo "=========================================="
 echo "  Reveal Release Script"
 echo "  Version: $NEW_VERSION"
+$DRY_RUN && echo "  Mode: DRY RUN — no git/push/release ops"
+$RESUME_MODE && echo "  Mode: RESUME — will retag and create release"
 echo "=========================================="
 echo
 
@@ -84,9 +115,22 @@ if ! git diff-index --quiet HEAD --; then
     error "Uncommitted changes detected. Commit or stash them first.\n$(git status --short)"
 fi
 
-# Check if version already exists as a tag
+# Check if version tag already exists
+TAG_EXISTS=false
 if git rev-parse "v$NEW_VERSION" >/dev/null 2>&1; then
-    error "Version v$NEW_VERSION already exists as a git tag"
+    TAG_EXISTS=true
+    if $RESUME_MODE; then
+        # Tag exists — check if GitHub release also exists
+        if gh release view "v$NEW_VERSION" >/dev/null 2>&1; then
+            warn "Tag AND GitHub release for v$NEW_VERSION already exist."
+            warn "If publish failed, check: gh run list"
+            error "Release appears complete. Verify PyPI: pip index versions reveal-cli"
+        fi
+        warn "Tag v$NEW_VERSION exists but no GitHub release — resuming interrupted release"
+        warn "Will move tag to HEAD, then create GitHub release"
+    else
+        error "Version v$NEW_VERSION already exists as a git tag.\n\nIf the release was interrupted after tagging, use:\n  $0 $NEW_VERSION --resume"
+    fi
 fi
 
 # Check if GitHub CLI is installed
@@ -99,9 +143,11 @@ if ! gh auth status &> /dev/null; then
     error "Not authenticated with GitHub. Run: gh auth login"
 fi
 
-# Pull latest changes
-info "Pulling latest changes from origin..."
-git pull --ff-only origin master || error "Failed to pull from origin (hint: repo may have diverged — rebase manually)"
+# Pull latest changes (skip in resume mode — we intentionally have commits ahead of tag)
+if ! $RESUME_MODE; then
+    info "Pulling latest changes from origin..."
+    git pull --ff-only origin master || error "Failed to pull from origin (hint: repo may have diverged — rebase manually)"
+fi
 
 success "Pre-flight checks passed"
 echo
@@ -111,11 +157,11 @@ echo
 # ============================================================================
 
 CURRENT_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
-info "Current version: $CURRENT_VERSION"
-info "New version: $NEW_VERSION"
+info "Current version in pyproject.toml: $CURRENT_VERSION"
+info "Target release version: $NEW_VERSION"
 echo
 
-# Verify new version is greater than current version
+# Verify new version is >= current version
 if ! python3 - <<EOF
 import sys
 from packaging.version import Version
@@ -163,6 +209,8 @@ echo
 CURRENT_VERSION_IN_FILE=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
 if [ "$CURRENT_VERSION_IN_FILE" = "$NEW_VERSION" ]; then
     info "Version already at $NEW_VERSION in pyproject.toml (pre-bumped)"
+elif $DRY_RUN; then
+    info "${DRY_RUN_PREFIX}Would bump pyproject.toml: $CURRENT_VERSION_IN_FILE → $NEW_VERSION"
 else
     info "Bumping pyproject.toml: $CURRENT_VERSION_IN_FILE → $NEW_VERSION..."
     sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" pyproject.toml
@@ -213,23 +261,38 @@ echo
 # BUILD
 # ============================================================================
 
-info "Building package to verify it works..."
+if $DRY_RUN; then
+    info "${DRY_RUN_PREFIX}Would build package (skipping)"
+else
+    info "Building package to verify it works..."
 
-# Clean previous builds
-rm -rf dist/ build/ *.egg-info
+    # Clean previous builds
+    rm -rf dist/ build/ *.egg-info
 
-# Build
-python3 -m build || error "Build failed"
+    # Build
+    python3 -m build || error "Build failed"
 
-# Check the built distribution
-twine check dist/* || error "Distribution check failed"
+    # Check the built distribution
+    twine check dist/* || error "Distribution check failed"
 
-success "Package built successfully"
+    success "Package built successfully"
+fi
 echo
 
 # ============================================================================
 # GIT COMMIT AND TAG
 # ============================================================================
+
+if $DRY_RUN; then
+    info "${DRY_RUN_PREFIX}Would commit + tag v$NEW_VERSION (skipping all git ops)"
+    echo
+    echo "=========================================="
+    echo -e "${GREEN}  ✓ Dry run complete — no changes made${NC}"
+    echo "=========================================="
+    echo
+    echo "Run without --dry-run to perform the release."
+    exit 0
+fi
 
 info "Creating git commit and tag..."
 
@@ -243,12 +306,18 @@ else
     git commit -m "chore: Bump version to $NEW_VERSION" || error "Failed to create commit"
 fi
 
+if $RESUME_MODE && $TAG_EXISTS; then
+    info "Moving tag v$NEW_VERSION to HEAD (was at $(git rev-parse --short v$NEW_VERSION))..."
+    git tag -d "v$NEW_VERSION" || error "Failed to delete local tag"
+    git push --delete origin "v$NEW_VERSION" || error "Failed to delete remote tag"
+fi
+
 # Create annotated tag
 git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION
 
 See CHANGELOG.md for details." || error "Failed to create tag"
 
-success "Created commit and tag v$NEW_VERSION"
+success "Created tag v$NEW_VERSION at HEAD ($(git rev-parse --short HEAD))"
 echo
 
 # ============================================================================
@@ -257,7 +326,6 @@ echo
 
 info "Pushing to GitHub..."
 
-# Push commit and tag
 git push origin master || error "Failed to push commit"
 git push origin "v$NEW_VERSION" || error "Failed to push tag"
 
@@ -303,6 +371,24 @@ success "GitHub release created: https://github.com/Semantic-Infrastructure-Lab/
 echo
 
 # ============================================================================
+# WAIT FOR PYPI
+# ============================================================================
+
+info "Waiting for PyPI publish (usually 1-2 minutes)..."
+
+PYPI_CONFIRMED=false
+for i in {1..18}; do
+    sleep 10
+    if pip index versions reveal-cli 2>/dev/null | grep -q "Available versions:.*$NEW_VERSION"; then
+        PYPI_CONFIRMED=true
+        break
+    fi
+    info "Waiting... (${i}0s elapsed)"
+done
+
+echo
+
+# ============================================================================
 # DONE
 # ============================================================================
 
@@ -310,11 +396,17 @@ echo "=========================================="
 echo -e "${GREEN}  ✓ Release v$NEW_VERSION Complete!${NC}"
 echo "=========================================="
 echo
-echo "Next steps:"
-echo "1. Monitor GitHub Actions: https://github.com/Semantic-Infrastructure-Lab/reveal/actions"
-echo "2. Verify PyPI publish: https://pypi.org/project/reveal-cli/$NEW_VERSION/"
-echo "3. Test installation: pip install --upgrade reveal-cli"
+
+if $PYPI_CONFIRMED; then
+    success "v$NEW_VERSION is live on PyPI"
+else
+    warn "PyPI publish not confirmed after 3 minutes — check Actions:"
+    echo "  gh run list --limit 5"
+    echo "  pip index versions reveal-cli"
+fi
+
 echo
-info "The GitHub Actions workflow will automatically publish to PyPI"
-info "This usually takes 1-2 minutes"
+echo "Monitor: https://github.com/Semantic-Infrastructure-Lab/reveal/actions"
+echo "PyPI:    https://pypi.org/project/reveal-cli/$NEW_VERSION/"
+echo "Install: pip install --upgrade reveal-cli"
 echo
