@@ -1,11 +1,20 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-21 (wicked-grid-0321 — v0.66.1 released)
+> **Last updated**: 2026-03-28 (pearlescent-paint-0328 — v0.67.0 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.67.0
+- ✅ **OR-pattern extraction** — `reveal doc.md "Open Issues|Action Items"` extracts both sections in one call. Backslash-escaped pipes normalised, deduplication when multiple terms match same section.
+- ✅ **`--broken-only` links flag** — filter `reveal doc.md --links` to broken internal links only.
+- ✅ **Call graph JSON output** — `reveal file.py --format json` includes top-level `relationships` key with intra-file call edges.
+- ✅ **5 agent friction fixes (BACK-113–117)** — false `--analyzer text` hint removed, element not-found lists available names, OR-pattern failure hints `--search`, B005 skips `try/except ImportError` optional deps, code element not-found hints at `--search`.
+- ✅ **`help://` internal adapter filtering** — `demo` and `test` no longer appear in adapter listings or counts.
+- ✅ **`letsencrypt://` + `autossl://` agent guide coverage** — full task sections added to `AGENT_HELP.md`.
+- ✅ **Test count: 6,871 → 7,035+** across all sessions.
 
 ### v0.66.1
 - ✅ **Circular dep false positives fixed** — `from . import X` (empty module_name) now resolves to `X.py` instead of `__init__.py`. Eliminated all false-positive cycles in standard Python `__init__.py` re-export patterns. Also handles aliased imports (`from . import query as q`). Multi-edge emission for `from . import X, Y, Z`.
