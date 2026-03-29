@@ -482,3 +482,316 @@ class TestShowStructure:
         with patch('reveal.display.structure._render_typed_structure_output') as mock_rts:
             show_structure(analyzer, 'text', args)
         mock_rts.assert_called_once()
+
+
+# ─── _render_typed_structure_output ──────────────────────────────────────────
+
+from reveal.display.structure import (
+    _render_typed_structure_output,
+    _render_json_output,
+    _render_text_categories,
+    _handle_standard_output,
+)
+
+
+def _make_typed_mock(has_elements=True, roots=None, reveal_type_name='Python', stats=None):
+    """Build a mock TypedStructure."""
+    typed = MagicMock()
+    typed.elements = [MagicMock()] if has_elements else []
+    typed.roots = roots or []
+    typed.stats = stats or {'elements': 5}
+    if reveal_type_name:
+        rt = MagicMock()
+        rt.name = reveal_type_name
+        typed.reveal_type = rt
+    else:
+        typed.reveal_type = None
+    typed.to_tree.return_value = {'roots': []}
+    return typed
+
+
+class TestRenderTypedStructureOutput:
+    def _make_analyzer(self):
+        a = MagicMock()
+        a.path = Path('/fake/x.py')
+        a.is_fallback = False
+        a.fallback_language = None
+        return a
+
+    def test_json_output_format(self):
+        """Lines 257-266: json output path."""
+        analyzer = self._make_analyzer()
+        structure = {'functions': [{'name': 'foo'}]}
+        typed = _make_typed_mock()
+        with patch('reveal.structure.TypedStructure') as MockTS:
+            MockTS.from_analyzer_output.return_value = typed
+            with patch('reveal.display.structure.safe_json_dumps', return_value='{}') as mock_json:
+                out = _capture(_render_typed_structure_output, analyzer, structure, 'json')
+        mock_json.assert_called_once()
+
+    def test_empty_elements_prints_no_structure(self):
+        """Lines 273-275: no elements → 'No structure available'."""
+        analyzer = self._make_analyzer()
+        typed = _make_typed_mock(has_elements=False)
+        with patch('reveal.structure.TypedStructure') as MockTS:
+            MockTS.from_analyzer_output.return_value = typed
+            with patch('reveal.display.structure._print_file_header'):
+                out = _capture(_render_typed_structure_output, analyzer, {}, 'text')
+        assert 'No structure available' in out
+
+    def test_with_category_filter_no_matches(self):
+        """Lines 283-285: filter with no matches."""
+        analyzer = self._make_analyzer()
+        el = _make_base_el(category='import')
+        typed = _make_typed_mock(roots=[el])
+        with patch('reveal.structure.TypedStructure') as MockTS:
+            MockTS.from_analyzer_output.return_value = typed
+            with patch('reveal.display.structure._print_file_header'):
+                out = _capture(_render_typed_structure_output, analyzer, {}, 'text', 'function')
+        assert "No elements matching filter 'function'" in out
+
+    def test_with_category_filter_with_matches(self):
+        """Lines 278-299: filter with matches renders tree."""
+        analyzer = self._make_analyzer()
+        el = _make_base_el(category='function')
+        typed = _make_typed_mock(roots=[el])
+        with patch('reveal.structure.TypedStructure') as MockTS:
+            MockTS.from_analyzer_output.return_value = typed
+            with patch('reveal.display.structure._print_file_header'):
+                with patch('reveal.display.structure._render_typed_element') as mock_render:
+                    with patch('reveal.display.structure.get_file_type_from_analyzer', return_value='py'):
+                        with patch('reveal.display.structure.print_breadcrumbs'):
+                            _render_typed_structure_output(analyzer, {}, 'text', 'function')
+        mock_render.assert_called()
+
+    def test_without_filter(self):
+        """Lines 292-303: no filter, renders all roots."""
+        analyzer = self._make_analyzer()
+        el = _make_base_el(category='function')
+        typed = _make_typed_mock(roots=[el])
+        with patch('reveal.structure.TypedStructure') as MockTS:
+            MockTS.from_analyzer_output.return_value = typed
+            with patch('reveal.display.structure._print_file_header'):
+                with patch('reveal.display.structure._render_typed_element') as mock_render:
+                    with patch('reveal.display.structure.get_file_type_from_analyzer', return_value='py'):
+                        with patch('reveal.display.structure.print_breadcrumbs'):
+                            _render_typed_structure_output(analyzer, {}, 'text')
+        mock_render.assert_called()
+
+
+# ─── _render_json_output ─────────────────────────────────────────────────────
+
+class TestRenderJsonOutput:
+    def _make_analyzer(self, is_fallback=False, fallback_lang=None):
+        a = MagicMock()
+        a.path = Path('/fake/x.py')
+        a.is_fallback = is_fallback
+        a.fallback_language = fallback_lang
+        a.__class__.__name__ = 'PythonAnalyzer'
+        a._extract_relationships.return_value = None
+        return a
+
+    def test_list_of_dicts_enriched(self):
+        """Lines 419-425: normal list of dict items get file field added."""
+        analyzer = self._make_analyzer()
+        structure = {'functions': [{'name': 'foo', 'line': 1}]}
+        with patch('reveal.display.structure.safe_json_dumps', return_value='{}') as mock_j:
+            with patch('reveal.display.structure._build_extractable_meta', return_value={}):
+                _render_json_output(analyzer, structure)
+        call_arg = mock_j.call_args[0][0]
+        assert call_arg['structure']['functions'][0]['file'] == '/fake/x.py'
+
+    def test_frontmatter_dict_enriched(self):
+        """Lines 400-404: frontmatter (dict, not list) gets file field."""
+        analyzer = self._make_analyzer()
+        structure = {'frontmatter': {'title': 'Test', 'data': {}}}
+        with patch('reveal.display.structure.safe_json_dumps', return_value='{}') as mock_j:
+            with patch('reveal.display.structure._build_extractable_meta', return_value={}):
+                _render_json_output(analyzer, structure)
+        call_arg = mock_j.call_args[0][0]
+        assert call_arg['structure']['frontmatter']['file'] == '/fake/x.py'
+
+    def test_scalar_category_passed_through(self):
+        """Lines 410-411: non-list scalar (e.g. column_count) passed through."""
+        analyzer = self._make_analyzer()
+        structure = {'column_count': 5}
+        with patch('reveal.display.structure.safe_json_dumps', return_value='{}') as mock_j:
+            with patch('reveal.display.structure._build_extractable_meta', return_value={}):
+                _render_json_output(analyzer, structure)
+        call_arg = mock_j.call_args[0][0]
+        assert call_arg['structure']['column_count'] == 5
+
+    def test_list_of_scalars_passed_through(self):
+        """Lines 415-416: list of strings (columns) passed through unchanged."""
+        analyzer = self._make_analyzer()
+        structure = {'columns': ['id', 'name', 'value']}
+        with patch('reveal.display.structure.safe_json_dumps', return_value='{}') as mock_j:
+            with patch('reveal.display.structure._build_extractable_meta', return_value={}):
+                _render_json_output(analyzer, structure)
+        call_arg = mock_j.call_args[0][0]
+        assert call_arg['structure']['columns'] == ['id', 'name', 'value']
+
+    def test_relationships_included_when_present(self):
+        """Lines 444-446: relationships added to result when non-empty."""
+        analyzer = self._make_analyzer()
+        analyzer._extract_relationships.return_value = [{'from': 'a', 'to': 'b'}]
+        structure = {'functions': [{'name': 'foo'}]}
+        with patch('reveal.display.structure.safe_json_dumps', return_value='{}') as mock_j:
+            with patch('reveal.display.structure._build_extractable_meta', return_value={}):
+                _render_json_output(analyzer, structure)
+        call_arg = mock_j.call_args[0][0]
+        assert 'relationships' in call_arg
+
+    def test_fallback_analyzer_info(self):
+        """Lines 392-438: fallback analyzer sets type/language fields correctly."""
+        analyzer = self._make_analyzer(is_fallback=True, fallback_lang='javascript')
+        structure = {}
+        with patch('reveal.display.structure.safe_json_dumps', return_value='{}') as mock_j:
+            with patch('reveal.display.structure._build_extractable_meta', return_value={}):
+                _render_json_output(analyzer, structure)
+        call_arg = mock_j.call_args[0][0]
+        assert call_arg['analyzer']['type'] == 'fallback'
+        assert call_arg['analyzer']['language'] == 'javascript'
+
+    def test_stats_dict_not_list(self):
+        """Lines 400-407: stats category (dict, not list) handled correctly."""
+        analyzer = self._make_analyzer()
+        structure = {'stats': {'line_count': 100, 'function_count': 5}}
+        with patch('reveal.display.structure.safe_json_dumps', return_value='{}') as mock_j:
+            with patch('reveal.display.structure._build_extractable_meta', return_value={}):
+                _render_json_output(analyzer, structure)
+        call_arg = mock_j.call_args[0][0]
+        # stats dict that is NOT a list should be passed as-is (no file field added per else branch)
+        assert 'stats' in call_arg['structure']
+
+
+# ─── _render_single_category — metadata dict path and standard list ───────────
+
+class TestRenderSingleCategoryExtra:
+    def test_metadata_dict_path(self):
+        """Lines 491-494: metadata category with dict items."""
+        items = {'title': 'My Page', 'meta': {'description': 'desc'}}
+        with patch('reveal.display.structure._format_html_metadata') as mock_fmt:
+            out = _capture(_render_single_category, 'metadata', items, Path('/fake/x.html'), 'text')
+        mock_fmt.assert_called_once_with(items, Path('/fake/x.html'), 'text')
+        assert 'Metadata:' in out
+
+    def test_standard_list_items(self):
+        """Lines 514-521: standard list category (functions) uses formatter."""
+        items = [{'name': 'foo', 'line': 1, 'signature': '()', 'content': ''}]
+        out = _capture(_render_single_category, 'functions', items, Path('/fake/x.py'), 'text')
+        assert 'Functions (1):' in out
+        assert 'foo' in out
+
+
+# ─── _render_text_categories ─────────────────────────────────────────────────
+
+class TestRenderTextCategories:
+    def test_skips_empty_and_internal_renders_valid(self):
+        """Lines 527-530: iterates structure, skips internals, renders valid cats."""
+        structure = {
+            'type': 'document',       # should be skipped
+            'functions': [{'name': 'foo', 'line': 1, 'signature': '()', 'content': ''}],
+        }
+        out = _capture(_render_text_categories, structure, Path('/fake/x.py'), 'text')
+        assert 'Functions (1):' in out
+        assert 'foo' in out
+
+    def test_empty_structure_produces_no_output(self):
+        out = _capture(_render_text_categories, {}, Path('/fake/x.py'), 'text')
+        assert out == ''
+
+
+# ─── _build_outline_hierarchy — TOML with level ──────────────────────────────
+
+class TestBuildOutlineHierarchyToml:
+    def test_toml_sections_with_level_uses_heading_hierarchy(self):
+        """Line 553: TOML sections that have 'level' use build_heading_hierarchy."""
+        structure = {'sections': [{'name': 'server', 'level': 1, 'line': 1}]}
+        with patch('reveal.display.structure.build_heading_hierarchy', return_value=[]) as mock_hh:
+            _build_outline_hierarchy(structure)
+        mock_hh.assert_called_once()
+
+
+# ─── _handle_standard_output ─────────────────────────────────────────────────
+
+class TestHandleStandardOutput:
+    def _make_analyzer(self, structure=None):
+        a = MagicMock()
+        a.path = Path('/fake/x.py')
+        a.is_fallback = False
+        a.fallback_language = None
+        a.__class__.__name__ = 'PythonAnalyzer'
+        a._extract_relationships.return_value = None
+        if structure is not None:
+            a.get_structure.return_value = structure
+        return a
+
+    def test_json_output_delegates_to_render_json(self):
+        """Lines 602-604: json → _render_json_output."""
+        analyzer = self._make_analyzer()
+        structure = {'functions': [{'name': 'foo'}]}
+        with patch('reveal.display.structure._render_json_output') as mock_rj:
+            _handle_standard_output(analyzer, structure, 'json', False, None)
+        mock_rj.assert_called_once_with(analyzer, structure)
+
+    def test_typed_output_delegates_to_render_typed(self):
+        """Lines 607-609: typed → _render_typed_structure_output."""
+        analyzer = self._make_analyzer()
+        structure = {'functions': [{'name': 'foo'}]}
+        with patch('reveal.display.structure._render_typed_structure_output') as mock_rt:
+            _handle_standard_output(analyzer, structure, 'typed', False, None)
+        mock_rt.assert_called_once_with(analyzer, structure, 'json')
+
+    def test_empty_structure_prints_no_structure_message(self):
+        """Lines 612-615: empty structure → no structure message."""
+        analyzer = self._make_analyzer()
+        with patch('reveal.display.structure._print_file_header'):
+            out = _capture(_handle_standard_output, analyzer, {}, 'text', False, None)
+        assert 'No structure available' in out
+
+    def test_text_output_renders_categories(self):
+        """Lines 618-624: text output renders categories and breadcrumbs."""
+        analyzer = self._make_analyzer()
+        structure = {'functions': [{'name': 'foo', 'line': 1, 'signature': '()', 'content': ''}]}
+        with patch('reveal.display.structure._print_file_header'):
+            with patch('reveal.display.structure.get_file_type_from_analyzer', return_value='py'):
+                with patch('reveal.display.structure.print_breadcrumbs'):
+                    out = _capture(_handle_standard_output, analyzer, structure, 'text', False, None)
+        assert 'Functions (1):' in out
+
+
+# ─── show_structure — outline and standard paths ─────────────────────────────
+
+class TestShowStructureExtra:
+    def _make_analyzer(self, structure=None):
+        a = MagicMock()
+        a.path = Path('/fake/x.py')
+        a.is_fallback = False
+        a.fallback_language = None
+        a.get_structure.return_value = structure or {'functions': [{'name': 'foo'}]}
+        return a
+
+    def test_outline_path(self):
+        """Lines 669-671: outline flag → _handle_outline_mode."""
+        analyzer = self._make_analyzer()
+        args = MagicMock()
+        args.related_flat = False
+        args.typed = False
+        args.outline = True
+
+        with patch('reveal.display.structure._handle_outline_mode') as mock_om:
+            show_structure(analyzer, 'text', args)
+        mock_om.assert_called_once()
+
+    def test_standard_output_path(self):
+        """Line 674: no special flags → _handle_standard_output."""
+        analyzer = self._make_analyzer()
+        args = MagicMock()
+        args.related_flat = False
+        args.typed = False
+        args.outline = False
+
+        with patch('reveal.display.structure._handle_standard_output') as mock_so:
+            show_structure(analyzer, 'text', args)
+        mock_so.assert_called_once()

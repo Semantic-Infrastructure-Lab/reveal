@@ -1041,5 +1041,368 @@ class TestKwargsBuilders:
         assert kwargs['semantic'] == 'article'
 
 
+# ============================================================================
+# Previously uncovered lines — added to bring formatting.py to 95%+
+# ============================================================================
+
+class TestFilterFieldsNested:
+    """Cover lines 150-152 (_filter_toplevel_structure nested) and 177 (filter_fields empty)."""
+
+    def test_filter_toplevel_nested_field(self):
+        """Line 149-152: dotted field in _filter_toplevel_structure."""
+        from reveal.display.formatting import _filter_toplevel_structure
+        structure = {'name': 'test', 'meta': {'created': '2026-01-01', 'author': 'Alice'}}
+        result = _filter_toplevel_structure(structure, ['name', 'meta.created'])
+        assert result['name'] == 'test'
+        assert result['meta']['created'] == '2026-01-01'
+        assert 'author' not in result.get('meta', {})
+
+    def test_filter_toplevel_nested_field_missing_value(self):
+        """Line 150-152: nested field returns None → not set."""
+        from reveal.display.formatting import _filter_toplevel_structure
+        structure = {'name': 'test'}
+        result = _filter_toplevel_structure(structure, ['name', 'missing.nested'])
+        assert result == {'name': 'test'}
+
+    def test_filter_fields_empty_list_returns_original(self):
+        """Line 177: empty fields list returns original structure unchanged."""
+        structure = {'name': 'test', 'value': 42}
+        result = filter_fields(structure, [])
+        assert result is structure
+
+
+class TestFormatLinksSkip:
+    """Cover line 268: continue when link_type not present in grouped items."""
+
+    def test_format_links_missing_type_skipped(self, capsys):
+        """Line 268: only external links → internal/email continue."""
+        from reveal.display.formatting import _format_links
+        items = [
+            {'line': 1, 'text': 'Ext', 'url': 'https://example.com', 'type': 'external'},
+        ]
+        _format_links(items, Path('test.md'), 'text')
+        captured = capsys.readouterr()
+        assert 'External (1):' in captured.out
+        assert 'Internal' not in captured.out
+        assert 'Email' not in captured.out
+
+
+class TestFormatScriptSummary:
+    """Cover lines 498-506: _format_script_summary."""
+
+    def test_external_script(self, capsys):
+        from reveal.display.formatting import _format_script_summary
+        _format_script_summary({'type': 'external', 'src': 'app.js'})
+        assert '[external] app.js' in capsys.readouterr().out
+
+    def test_inline_script_with_preview(self, capsys):
+        from reveal.display.formatting import _format_script_summary
+        _format_script_summary({'type': 'inline', 'preview': 'console.log("hi")'})
+        out = capsys.readouterr().out
+        assert '[inline]' in out
+        assert 'console.log' in out
+
+    def test_inline_script_without_preview(self, capsys):
+        from reveal.display.formatting import _format_script_summary
+        _format_script_summary({'type': 'inline'})
+        assert '[inline]' in capsys.readouterr().out
+
+
+class TestFormatHtmlMetadata:
+    """Cover lines 514-540: _format_html_metadata."""
+
+    def test_title(self, capsys):
+        from reveal.display.formatting import _format_html_metadata
+        _format_html_metadata({'title': 'My Page'}, Path('x.html'), 'text')
+        assert 'Title: My Page' in capsys.readouterr().out
+
+    def test_meta_tags_short(self, capsys):
+        from reveal.display.formatting import _format_html_metadata
+        _format_html_metadata({'meta': {'description': 'Short desc'}}, Path('x.html'), 'text')
+        out = capsys.readouterr().out
+        assert 'Meta Tags (1):' in out
+        assert 'description: Short desc' in out
+
+    def test_meta_tags_long_truncated(self, capsys):
+        from reveal.display.formatting import _format_html_metadata
+        long_content = 'x' * 100
+        _format_html_metadata({'meta': {'og:description': long_content}}, Path('x.html'), 'text')
+        out = capsys.readouterr().out
+        assert '...' in out
+
+    def test_canonical(self, capsys):
+        from reveal.display.formatting import _format_html_metadata
+        _format_html_metadata({'canonical': 'https://example.com/'}, Path('x.html'), 'text')
+        assert 'Canonical: https://example.com/' in capsys.readouterr().out
+
+    def test_stylesheets(self, capsys):
+        from reveal.display.formatting import _format_html_metadata
+        _format_html_metadata({'stylesheets': ['style.css', 'print.css']}, Path('x.html'), 'text')
+        out = capsys.readouterr().out
+        assert 'Stylesheets (2):' in out
+        assert 'style.css' in out
+
+    def test_scripts(self, capsys):
+        from reveal.display.formatting import _format_html_metadata
+        _format_html_metadata(
+            {'scripts': [{'type': 'external', 'src': 'app.js'}]},
+            Path('x.html'), 'text'
+        )
+        out = capsys.readouterr().out
+        assert 'Scripts (1):' in out
+        assert '[external] app.js' in out
+
+
+class TestFormatScriptElement:
+    """Cover lines 553-561: _format_script_element."""
+
+    def test_external(self, capsys):
+        from reveal.display.formatting import _format_script_element
+        _format_script_element({'type': 'external', 'src': 'app.js'}, Path('x.html'), 10)
+        out = capsys.readouterr().out
+        assert '[external] app.js' in out
+        assert ':10' in out
+
+    def test_inline_with_preview(self, capsys):
+        from reveal.display.formatting import _format_script_element
+        _format_script_element({'type': 'inline', 'preview': 'var x = 1;'}, Path('x.html'), 5)
+        out = capsys.readouterr().out
+        assert '[inline]' in out
+        assert 'var x = 1;' in out
+
+    def test_inline_without_preview(self, capsys):
+        from reveal.display.formatting import _format_script_element
+        _format_script_element({'type': 'inline'}, Path('x.html'), 7)
+        out = capsys.readouterr().out
+        assert '[inline]' in out
+        assert ':7' in out
+
+
+class TestFormatStyleElement:
+    """Cover lines 574-582: _format_style_element."""
+
+    def test_external(self, capsys):
+        from reveal.display.formatting import _format_style_element
+        _format_style_element({'type': 'external', 'href': 'style.css'}, Path('x.html'), 3)
+        out = capsys.readouterr().out
+        assert '[external] style.css' in out
+        assert ':3' in out
+
+    def test_inline_with_preview(self, capsys):
+        from reveal.display.formatting import _format_style_element
+        _format_style_element({'type': 'inline', 'preview': 'body { color: red; }'}, Path('x.html'), 8)
+        out = capsys.readouterr().out
+        assert '[inline]' in out
+        assert 'body' in out
+
+    def test_inline_without_preview(self, capsys):
+        from reveal.display.formatting import _format_style_element
+        _format_style_element({'type': 'inline'}, Path('x.html'), 2)
+        out = capsys.readouterr().out
+        assert '[inline]' in out
+        assert ':2' in out
+
+
+class TestFormatSemanticElement:
+    """Cover lines 595-614: _format_semantic_element."""
+
+    def test_with_id(self, capsys):
+        from reveal.display.formatting import _format_semantic_element
+        elem = {'tag': 'section', 'attributes': {'id': 'main-content'}}
+        _format_semantic_element(elem, Path('x.html'), 20)
+        out = capsys.readouterr().out
+        assert '<section>' in out
+        assert '#main-content' in out
+
+    def test_with_class_string(self, capsys):
+        from reveal.display.formatting import _format_semantic_element
+        elem = {'tag': 'div', 'attributes': {'class': 'container fluid'}}
+        _format_semantic_element(elem, Path('x.html'), 5)
+        out = capsys.readouterr().out
+        assert '<div>' in out
+        assert '.container' in out
+
+    def test_with_class_list(self, capsys):
+        from reveal.display.formatting import _format_semantic_element
+        elem = {'tag': 'nav', 'attributes': {'class': ['navbar', 'sticky']}}
+        _format_semantic_element(elem, Path('x.html'), 15)
+        out = capsys.readouterr().out
+        assert '<nav>' in out
+        assert '.navbar' in out
+
+    def test_no_id_or_class(self, capsys):
+        from reveal.display.formatting import _format_semantic_element
+        elem = {'tag': 'article', 'attributes': {}}
+        _format_semantic_element(elem, Path('x.html'), 30)
+        out = capsys.readouterr().out
+        assert '<article>' in out
+        assert ':30' in out
+
+
+class TestFormatHtmlElements:
+    """Cover lines 624-632: _format_html_elements dispatch."""
+
+    def test_scripts_category(self, capsys):
+        from reveal.display.formatting import _format_html_elements
+        elems = [{'line': 5, 'type': 'external', 'src': 'app.js'}]
+        _format_html_elements(elems, Path('x.html'), 'text', 'scripts')
+        assert '[external] app.js' in capsys.readouterr().out
+
+    def test_styles_category(self, capsys):
+        from reveal.display.formatting import _format_html_elements
+        elems = [{'line': 3, 'type': 'external', 'href': 'style.css'}]
+        _format_html_elements(elems, Path('x.html'), 'text', 'styles')
+        assert '[external] style.css' in capsys.readouterr().out
+
+    def test_semantic_category(self, capsys):
+        from reveal.display.formatting import _format_html_elements
+        elems = [{'line': 10, 'tag': 'header', 'attributes': {}}]
+        _format_html_elements(elems, Path('x.html'), 'text', 'semantic')
+        assert '<header>' in capsys.readouterr().out
+
+    def test_uses_line_question_mark_when_missing(self, capsys):
+        from reveal.display.formatting import _format_html_elements
+        elems = [{'type': 'external', 'src': 'app.js'}]  # no 'line'
+        _format_html_elements(elems, Path('x.html'), 'text', 'scripts')
+        assert '[external] app.js' in capsys.readouterr().out
+
+
+class TestBuildItemMetrics:
+    """Cover lines 637-642: _build_item_metrics."""
+
+    def test_with_line_count_and_depth(self):
+        from reveal.display.formatting import _build_item_metrics
+        result = _build_item_metrics({'line_count': 15, 'depth': 3})
+        assert '15 lines' in result
+        assert 'depth:3' in result
+
+    def test_with_line_count_only(self):
+        from reveal.display.formatting import _build_item_metrics
+        result = _build_item_metrics({'line_count': 5})
+        assert '5 lines' in result
+        assert 'depth' not in result
+
+    def test_empty_returns_empty_string(self):
+        from reveal.display.formatting import _build_item_metrics
+        assert _build_item_metrics({}) == ''
+
+
+class TestPrintItemLine:
+    """Cover lines 648-662: _print_item_line."""
+
+    def test_signature_and_name_text(self, capsys):
+        from reveal.display.formatting import _print_item_line
+        _print_item_line(10, 'foo', '(x)', '', '', '', Path('x.py'), 'text')
+        assert 'foo(x)' in capsys.readouterr().out
+
+    def test_signature_and_name_grep(self, capsys):
+        from reveal.display.formatting import _print_item_line
+        _print_item_line(10, 'foo', '(x)', '', '', '', Path('x.py'), 'grep')
+        out = capsys.readouterr().out
+        assert 'x.py:10:foo(x)' in out
+
+    def test_name_only_text(self, capsys):
+        from reveal.display.formatting import _print_item_line
+        _print_item_line(5, 'bar', '', '', ' → target', '', Path('x.py'), 'text')
+        out = capsys.readouterr().out
+        assert 'bar' in out
+        assert '→ target' in out
+
+    def test_name_only_grep(self, capsys):
+        from reveal.display.formatting import _print_item_line
+        _print_item_line(5, 'bar', '', '', ' → target', '', Path('x.py'), 'grep')
+        out = capsys.readouterr().out
+        assert 'x.py:5:bar' in out
+
+    def test_content_only_text(self, capsys):
+        from reveal.display.formatting import _print_item_line
+        _print_item_line(3, '', '', 'some content', '', '', Path('x.py'), 'text')
+        assert 'some content' in capsys.readouterr().out
+
+    def test_content_only_grep(self, capsys):
+        from reveal.display.formatting import _print_item_line
+        _print_item_line(3, '', '', 'some content', '', '', Path('x.py'), 'grep')
+        assert 'x.py:3:some content' in capsys.readouterr().out
+
+
+class TestFormatStandardItems:
+    """Cover lines 669-670: _format_standard_items loop."""
+
+    def test_basic_items(self, capsys):
+        from reveal.display.formatting import _format_standard_items
+        items = [
+            {'line': 1, 'name': 'foo', 'signature': '()', 'content': ''},
+            {'line': 2, 'name': 'bar', 'signature': '', 'content': 'some content'},
+        ]
+        _format_standard_items(items, Path('x.py'), 'text')
+        out = capsys.readouterr().out
+        assert 'foo()' in out
+        assert 'bar' in out
+
+    def test_item_with_target(self, capsys):
+        from reveal.display.formatting import _format_standard_items
+        items = [{'line': 5, 'name': 'my_import', 'signature': '', 'content': '', 'target': 'os.path'}]
+        _format_standard_items(items, Path('x.py'), 'text')
+        out = capsys.readouterr().out
+        assert 'my_import' in out
+        assert '→ os.path' in out
+
+
+class TestBuildAnalyzerKwargsRelated:
+    """Cover lines 845-848: _build_analyzer_kwargs related branch."""
+
+    def _make_args(self, related_all=False, related=False):
+        from unittest.mock import Mock
+        args = Mock()
+        args.head = None
+        args.tail = None
+        args.range = None
+        args.links = False
+        args.link_type = None
+        args.domain = None
+        args.frontmatter = False
+        args.related_all = related_all
+        args.related = related
+        args.related_depth = 2
+        args.related_limit = 25
+        args.code = False
+        args.language = None
+        args.inline = None
+        return args
+
+    def test_related_all_flag(self):
+        """Lines 841-844: related_all=True sets depth=0."""
+        from reveal.display.formatting import _build_analyzer_kwargs
+        from unittest.mock import Mock
+
+        analyzer = Mock()
+        analyzer._extract_links = lambda: None
+
+        args = self._make_args(related_all=True)
+        args.related_limit = 50
+
+        kwargs = _build_analyzer_kwargs(analyzer, args)
+        assert kwargs.get('extract_related') is True
+        assert kwargs.get('related_depth') == 0
+        assert kwargs.get('related_limit') == 50
+
+    def test_related_flag(self):
+        """Lines 845-848: related=True sets depth from args."""
+        from reveal.display.formatting import _build_analyzer_kwargs
+        from unittest.mock import Mock
+
+        analyzer = Mock()
+        analyzer._extract_links = lambda: None
+
+        args = self._make_args(related=True)
+        args.related_depth = 2
+        args.related_limit = 25
+
+        kwargs = _build_analyzer_kwargs(analyzer, args)
+        assert kwargs.get('extract_related') is True
+        assert kwargs.get('related_depth') == 2
+        assert kwargs.get('related_limit') == 25
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
