@@ -58,8 +58,8 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
         # Find which ones have @register_adapter
         registered_in_code = set()
         for adapter_file in adapter_files:
-            # Skip test-only adapters not imported in __init__.py
-            if adapter_file.name == 'test.py':
+            # Skip test-only and scaffold adapters not counted as production
+            if adapter_file.name in ('test.py', 'demo.py'):
                 continue
             content = adapter_file.read_text(encoding='utf-8')
             # Look for @register_adapter('scheme')
