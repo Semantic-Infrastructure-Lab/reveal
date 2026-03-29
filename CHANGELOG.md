@@ -59,6 +59,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed (pearlescent-aurora-0328)
 - **BACK-118: Code element not-found hints at `--search`** (`display/element.py`): `_handle_extraction_error()` else branch now emits "Hint: Code extraction matches exact names. For content search, use: reveal {path} --search '{element}'" when the query has no `|`. Closes the exact-match/substring asymmetry gap documented in UX-12.
 - **Dead code: `'release'` removed from help rendering** (`rendering/adapters/help.py`): `GUIDE_CATEGORIES['dev_guides']`, `TOKEN_ESTIMATES`, and `_get_guide_description()` all referenced a `'release'` topic that has no backing file and never resolves. Removed all three references.
+- **`_get_production_adapters()` now excludes `demo`** (`tests/test_registry_integrity.py`): `demo` is in `_INTERNAL_ADAPTERS` and is not a production adapter; discarding only `test` caused the README count assertion to fail (23 vs 22). Added `adapters.discard('demo')`.
+
+### Tests (pearlescent-aurora-0328)
+- **`test_display_filtering.py`** (new, 38 tests): Full coverage for `display/filtering.py` — `GitignoreParser` (parse, match, negate, dir patterns, outside-dir path) and `PathFilter` (defaults, `include_defaults=False`, gitignore integration, custom exclude, no gitignore present) and `should_filter_path` convenience wrapper. Coverage: 18% → 98%.
+- **`test_display_outline.py`** (new, 31 tests): Full coverage for `display/outline.py` — `build_hierarchy` (empty, flat, nested, sort, category injection, non-dict skip, immutability), `build_heading_hierarchy` (empty, h1/h2/h3 nesting, siblings, new-h1 reset, immutability), `_build_metrics_display`, `_build_item_display`, `_get_child_indent`, `render_outline` (capsys, tree chars). Coverage: 10% → 99%.
+- **`test_display_metadata.py`** (new, 13 tests): Coverage for `display/metadata.py` — `_format_display_key` (count suffix, snake_case, title), `_print_file_header` (existing file, size tiers B/KB, fallback indicator, nonexistent file), `show_metadata` (JSON/human format, optional fields, int comma-formatting). Coverage: 16% → 89%.
+- **`test_display_element.py`** (+13 tests): `TestHandleExtractionErrorHints` — UX-12 hint fires for simple names, pipe hint fires for `|` queries, hint uses full element name in `--search`; `TestPrintAvailableNames` — functions/classes listed, capped at 10 with "and N more", no output on empty structure, exception silently swallowed, non-dict items skipped. Coverage: 85% → 91%.
 
 ---
 

@@ -31,6 +31,7 @@ class TestAdapterRegistryIntegrity(unittest.TestCase):
         """
         adapters = set(list_supported_schemes())
         adapters.discard('test')
+        adapters.discard('demo')
         return adapters
 
     def test_all_adapter_files_are_registered(self):

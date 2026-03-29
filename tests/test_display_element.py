@@ -786,5 +786,142 @@ class TestOutputFormats:
         assert '/tmp/test.py:11:' in captured.out
 
 
+# ============================================================================
+# UX-12: exact-match hint + _print_available_names (BACK-118)
+# ============================================================================
+
+class TestHandleExtractionErrorHints:
+    """Test hint messages in the else branch of _handle_extraction_error."""
+
+    def test_ux12_hint_shown_for_simple_name(self, capsys):
+        """Code extraction exact-match hint fires when no | in element name."""
+        analyzer = Mock()
+        analyzer.path = '/tmp/deploy.sh'
+        analyzer.get_structure.return_value = {}
+
+        _handle_extraction_error(analyzer, 'staging', {'type': 'name'})
+
+        captured = capsys.readouterr()
+        assert 'Code extraction matches exact names' in captured.err
+        assert "--search 'staging'" in captured.err
+        assert '/tmp/deploy.sh' in captured.err
+
+    def test_ux12_hint_not_shown_when_pipe_in_element(self, capsys):
+        """Pipe hint fires instead of exact-match hint when | is in element."""
+        analyzer = Mock()
+        analyzer.path = '/tmp/doc.md'
+        analyzer.get_structure.return_value = {}
+
+        _handle_extraction_error(analyzer, 'Open Issues|Action Items', {'type': 'name'})
+
+        captured = capsys.readouterr()
+        assert 'Code extraction' not in captured.err
+        assert "'|' pattern matches headings only" in captured.err
+
+    def test_pipe_hint_suggests_search_with_first_term(self, capsys):
+        """Pipe hint --search suggestion uses first term before |."""
+        analyzer = Mock()
+        analyzer.path = '/tmp/doc.md'
+        analyzer.get_structure.return_value = {}
+
+        _handle_extraction_error(analyzer, 'Open Issues|Closed', {'type': 'name'})
+
+        captured = capsys.readouterr()
+        assert "--search 'Open Issues'" in captured.err
+
+    def test_ux12_hint_search_uses_full_element_name(self, capsys):
+        """--search suggestion uses the full element name, not a substring."""
+        analyzer = Mock()
+        analyzer.path = '/tmp/script.py'
+        analyzer.get_structure.return_value = {}
+
+        _handle_extraction_error(analyzer, 'deploy_to_staging', {'type': 'name'})
+
+        captured = capsys.readouterr()
+        assert "--search 'deploy_to_staging'" in captured.err
+
+
+class TestPrintAvailableNames:
+    """Test _print_available_names output via _handle_extraction_error."""
+
+    def test_available_names_printed_from_functions(self, capsys):
+        """Functions in structure appear in Available: line."""
+        analyzer = Mock()
+        analyzer.path = '/tmp/test.py'
+        analyzer.get_structure.return_value = {
+            'functions': [
+                {'name': 'foo'},
+                {'name': 'bar'},
+            ]
+        }
+        _handle_extraction_error(analyzer, 'missing', {'type': 'name'})
+
+        captured = capsys.readouterr()
+        assert 'Available:' in captured.err
+        assert 'foo' in captured.err
+        assert 'bar' in captured.err
+
+    def test_available_names_printed_from_classes(self, capsys):
+        """Classes appear in Available: line."""
+        analyzer = Mock()
+        analyzer.path = '/tmp/test.py'
+        analyzer.get_structure.return_value = {
+            'classes': [{'name': 'MyClass'}],
+        }
+        _handle_extraction_error(analyzer, 'missing', {'type': 'name'})
+
+        captured = capsys.readouterr()
+        assert 'MyClass' in captured.err
+
+    def test_available_names_capped_at_10(self, capsys):
+        """More than 10 names shows truncation suffix."""
+        analyzer = Mock()
+        analyzer.path = '/tmp/test.py'
+        analyzer.get_structure.return_value = {
+            'functions': [{'name': f'func_{i}'} for i in range(15)],
+        }
+        _handle_extraction_error(analyzer, 'missing', {'type': 'name'})
+
+        captured = capsys.readouterr()
+        assert 'and 5 more' in captured.err
+
+    def test_no_available_line_when_structure_empty(self, capsys):
+        """Available: line not shown when structure has no names."""
+        analyzer = Mock()
+        analyzer.path = '/tmp/test.py'
+        analyzer.get_structure.return_value = {}
+
+        _handle_extraction_error(analyzer, 'missing', {'type': 'name'})
+
+        captured = capsys.readouterr()
+        assert 'Available:' not in captured.err
+
+    def test_no_available_line_when_get_structure_raises(self, capsys):
+        """Exception in get_structure is silently swallowed."""
+        analyzer = Mock()
+        analyzer.path = '/tmp/test.py'
+        analyzer.get_structure.side_effect = RuntimeError('broken')
+
+        # Should not raise
+        _handle_extraction_error(analyzer, 'missing', {'type': 'name'})
+
+        captured = capsys.readouterr()
+        assert 'Available:' not in captured.err
+        assert 'Error:' in captured.err  # the not-found error still prints
+
+    def test_non_dict_items_skipped(self, capsys):
+        """Non-dict items in structure lists don't crash or appear."""
+        analyzer = Mock()
+        analyzer.path = '/tmp/test.py'
+        analyzer.get_structure.return_value = {
+            'functions': ['not_a_dict', {'name': 'real_func'}],
+        }
+        _handle_extraction_error(analyzer, 'missing', {'type': 'name'})
+
+        captured = capsys.readouterr()
+        assert 'real_func' in captured.err
+        assert 'not_a_dict' not in captured.err
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
