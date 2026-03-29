@@ -12,6 +12,15 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] (pearlescent-paint-0328)
+
+### Fixed
+- **`release.sh --resume`: remote-tag-not-found is non-fatal** (`scripts/release.sh`): `git push --delete origin vX.Y.Z` now warns instead of erroring when the remote tag doesn't exist (common when tag was local-only due to a prior interrupted release). Also adds `--resume` and `--dry-run` flags, PyPI polling at the end, and improved error messages pointing to `--resume` on tag-exists failures.
+- **`RELEASING.md`**: New troubleshooting section "Tag pushed, no GitHub release, new commits since"; stale `v0.18.0` example versions replaced with `vX.Y.Z`; `--resume` and `--dry-run` flags documented.
+- **`UX_ISSUES.md`**: UX-12 marked resolved (was fixed in pearlescent-aurora-0328 via BACK-118 but status not updated).
+
+---
+
 ## [0.67.0] - 2026-03-28 (sessions rose-beam-0327, shining-satellite-0327, pulsing-gravity-0327, hopofo-0328)
 
 ### Added

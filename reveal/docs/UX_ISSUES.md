@@ -16,7 +16,7 @@ beth_topics:
 
 Discovered via dogfooding on real codebases (morphogen, tiacad) — session shining-wormhole-0315, 2026-03-15.
 
-> **Status**: 1 open issue (UX-12). All others resolved as of hopofo-0328.
+> **Status**: ✅ All issues resolved as of pearlescent-aurora-0328.
 
 ---
 
@@ -372,7 +372,7 @@ This is cheap — the structure is already parsed at this point.
 
 ---
 
-### UX-12: Code element extraction is exact-match; markdown is substring — asymmetry causes silent failures
+### UX-12: Code element extraction is exact-match; markdown is substring — asymmetry causes silent failures ✅ Fixed pearlescent-aurora-0328
 
 **Severity:** Low
 **Confirmed occurrences:** Several (amber-spark-0328, multiple sessions)
@@ -431,7 +431,7 @@ Hint: OR-pattern (|) matches section headings, not table content.
 | UX-09 | Low | `markdown://` | Relative path error appends query string to path in "not found" message | ✅ Fixed shining-satellite-0327 |
 | UX-10 | **High** | CLI / errors | `errors.py` suggests `--analyzer text` — flag doesn't exist; causes 2nd failure | ✅ Fixed hopofo-0328 |
 | UX-11 | **Medium** | file extraction | `Element not found` for code files lists no alternatives (available names) | ✅ Fixed hopofo-0328 |
-| UX-12 | Low | file extraction | Code extraction is exact-only; markdown is substring — asymmetry undocumented at failure | Open |
+| UX-12 | Low | file extraction | Code extraction is exact-only; markdown is substring — asymmetry undocumented at failure | ✅ Fixed pearlescent-aurora-0328 |
 | UX-13 | Low | `markdown` | OR-pattern failure on table IDs gives no hint about `--search` fallback | ✅ Fixed hopofo-0328 |
 | FP-01 | **High** | B005 | Fires on `try/except ImportError` optional-dep pattern — flags working code as broken | ✅ Fixed hopofo-0328 |
 | FP-02 | Medium | M102 | Fires on plugin/worker/blueprint modules loaded dynamically — no hint about suppress pattern | ✅ Fixed hopofo-0328 |
