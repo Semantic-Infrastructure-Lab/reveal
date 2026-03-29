@@ -309,7 +309,7 @@ fi
 if $RESUME_MODE && $TAG_EXISTS; then
     info "Moving tag v$NEW_VERSION to HEAD (was at $(git rev-parse --short v$NEW_VERSION))..."
     git tag -d "v$NEW_VERSION" || error "Failed to delete local tag"
-    git push --delete origin "v$NEW_VERSION" || error "Failed to delete remote tag"
+    git push --delete origin "v$NEW_VERSION" 2>/dev/null || warn "Remote tag v$NEW_VERSION not found — skipping remote delete (tag was local-only)"
 fi
 
 # Create annotated tag
