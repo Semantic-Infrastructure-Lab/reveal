@@ -56,6 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`HELP_SYSTEM_GUIDE.md`**: Version updated 0.30.0 → 0.67.0; file path references corrected (`reveal/` → `reveal/docs/`); `GUIDE_CATEGORIES` code example updated (was showing a local variable that no longer exists); last-updated date corrected.
 - **`AGENT_HELP.md`**: Added `letsencrypt://` to schema discovery examples; added full task sections for `letsencrypt://` (cert inventory, orphan/duplicate detection) and `autossl://` (run log inspection, failure investigation workflow) — both adapters had no coverage in the agent guide.
 
+### Fixed (pearlescent-aurora-0328)
+- **BACK-118: Code element not-found hints at `--search`** (`display/element.py`): `_handle_extraction_error()` else branch now emits "Hint: Code extraction matches exact names. For content search, use: reveal {path} --search '{element}'" when the query has no `|`. Closes the exact-match/substring asymmetry gap documented in UX-12.
+- **Dead code: `'release'` removed from help rendering** (`rendering/adapters/help.py`): `GUIDE_CATEGORIES['dev_guides']`, `TOKEN_ESTIMATES`, and `_get_guide_description()` all referenced a `'release'` topic that has no backing file and never resolves. Removed all three references.
+
 ---
 
 ## [0.66.2] - 2026-03-22 (sessions sacred-shrine-0321, noble-earth-0322)

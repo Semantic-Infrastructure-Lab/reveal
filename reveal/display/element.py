@@ -284,6 +284,12 @@ def _handle_extraction_error(analyzer, element: str, syntax: dict):
                 f"For table or body content, use: reveal {analyzer.path} --search '{element.split('|')[0].strip()}'",
                 file=sys.stderr
             )
+        else:
+            print(
+                f"Hint: Code extraction matches exact names. "
+                f"For content search, use: reveal {analyzer.path} --search '{element}'",
+                file=sys.stderr
+            )
         _print_available_names(analyzer)
 
 
