@@ -1,11 +1,15 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-28 (pearlescent-paint-0328 — v0.67.0 released)
+> **Last updated**: 2026-03-31 (expanding-mission-0331 — v0.70.0 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.70.0
+- ✅ **Full Claude adapter telemetry (Phases A–E)** — `?tokens` route, `toolUseResult` error detection, `filePath`/patches in `/files`, Glob/Grep tracking, `/agents` sub-route with per-agent duration/token/tool-count telemetry, `result` blocks on `?tools=` calls, `caller_type: "direct"` on all tool entries.
+- ✅ **`reveal file.md --search` crash fix** — `analyze_file()` now skips non-list/non-dict items when iterating markdown structure; heading search now works correctly.
 
 ### v0.69.1
 - ✅ **`git://` pygit2 path separator fix (Windows)** — `os.path.relpath()` returns backslashes on Windows; pygit2 requires POSIX slashes. `.replace(os.sep, '/')` fix in `adapter.py:402`. `reveal git://./file.py?type=blame` from a subdirectory was broken on Windows in 0.69.0.
