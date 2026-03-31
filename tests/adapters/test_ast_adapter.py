@@ -346,6 +346,19 @@ class TestAstAdapterEdgeCases(unittest.TestCase):
             result = adapter.get_structure()
             self.assertIn('results', result)
 
+    def test_markdown_file_does_not_crash_on_name_search(self):
+        # Markdown get_structure() returns metadata strings (contract_version, type, etc.)
+        # alongside the headings list.  analyze_file() must skip non-list values and
+        # non-dict items rather than iterating over string characters.
+        # Note: directory scans filter .md via is_code_file(); direct file path bypasses that.
+        with tempfile.TemporaryDirectory() as d:
+            p = _write(d, 'doc.md', '# Hello World\n\n## Section Two\n\nBody text.\n')
+            adapter = AstAdapter(p, 'name~=Hello')
+            result = adapter.get_structure()
+            self.assertIn('results', result)
+            names = [r['name'] for r in result['results']]
+            self.assertIn('Hello World', names)
+
 
 if __name__ == '__main__':
     unittest.main()

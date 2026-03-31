@@ -170,7 +170,11 @@ def analyze_file(file_path: str) -> Optional[Dict[str, Any]]:
             symbol_map = None
 
         for category, items in structure.items():
+            if not isinstance(items, list):
+                continue
             for item in items:
+                if not isinstance(item, dict):
+                    continue
                 element = create_element_dict(file_path, category, item, analyzer, symbol_map)
                 result['elements'].append(element)
 

@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.6] - 2026-03-31 (celestial-chimera-0331)
+
+### Fixed
+- **`reveal file.md --search "term"` crash** (`adapters/ast/analysis.py`): `analyze_file()` iterated over `structure.items()` without guarding against non-list values. Markdown's `get_structure()` returns metadata strings (`contract_version`, `type`, `source`, `source_type`) alongside the `headings` list — iterating over those strings yielded characters, causing `'str' object has no attribute 'get'` in `create_element_dict()`. Fix: skip non-list values and non-dict items in the iteration loop. Markdown headings (which carry `name` and `line`) now correctly participate in `--search` queries.
+
+---
+
 ## [0.69.5] - 2026-03-31 (celestial-chimera-0331)
 
 ### Added
