@@ -12,6 +12,27 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.70.0] - 2026-03-31 (expanding-mission-0331)
+
+### Added
+- **Full Claude adapter telemetry (Phases A–E)** — major upgrade to `claude://` URI adapter:
+  - **`?tokens` route** (`claude://session/NAME?tokens`): token usage summary with input/output/cache breakdown and percentage stats
+  - **`toolUseResult` error detection** (`get_workflow()`): Bash steps use `returnCodeInterpretation`; Agent steps use `status == "completed"`; all tools fall back to `is_tool_error()`
+  - **`filePath` and `patches` in `/files`**: Edit/Write tool calls now surface the file path and patch content
+  - **Glob/Grep call tracking**: `get_all_tools()` and `get_tool_calls()` now count and surface Glob/Grep calls with their patterns
+  - **`/agents` sub-route** (`claude://session/NAME/agents`): lists all Agent tool calls with per-agent telemetry — `agent_type`, `status`, `duration_ms`, `token_count`, `tool_count`, `usage` (input/output/cache tokens), plus session-level `total_agent_tokens` and `total_agent_duration_ms`
+  - **Agent support in `get_workflow()`, `get_all_tools()`, `get_files()`**: Agent steps gain `agent_type`, `duration_ms`, `token_count`, `tool_count` fields from TUR
+  - **`result` block on `?tools=ToolName` calls**: Bash (`stdout`, `stderr`, `return_code_interpretation`), Edit/Write (`file_path`, `user_modified`), Glob (`filenames`, `num_files`, `truncated`)
+  - **`caller_type: "direct"` on all tool entries**: consistent across `get_all_tools()` details and `get_tool_calls()` call entries
+
+### Fixed
+- **`reveal file.md --search "term"` crash** (`adapters/ast/analysis.py`): `analyze_file()` iterated over `structure.items()` without guarding against non-list values. Markdown's `get_structure()` returns metadata strings alongside the `headings` list — iterating over those strings yielded characters, causing `'str' object has no attribute 'get'`. Fix: skip non-list values and non-dict items. Markdown `--search` now correctly searches heading names.
+
+### Docs
+- `CLAUDE_ADAPTER_GUIDE.md`: documented `/agents` as element 11, added `?tokens` to Query Parameters, updated Key Capabilities
+
+---
+
 ## [0.69.6] - 2026-03-31 (celestial-chimera-0331)
 
 ### Fixed
