@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] (pearl-tone-0330, bright-nebula-0330, visible-cosmos-0330)
+## [0.69.0] - 2026-03-30 (pearl-tone-0330, bright-nebula-0330, visible-cosmos-0330)
 
 ### Added
 - **`REVEAL_CLAUDE_JSON` env var** (BACK-119): Explicit override for `~/.claude.json` path. When `REVEAL_CLAUDE_HOME` is set, `CLAUDE_JSON` now auto-derives from `CLAUDE_HOME.parent / '.claude.json'` — a single env var covers the whole user's Claude install (critical for SSH multi-user scenarios). `REVEAL_CLAUDE_JSON` provides an escape hatch for non-standard layouts. `claude://info` now reports `REVEAL_CLAUDE_JSON` in the environment override block.

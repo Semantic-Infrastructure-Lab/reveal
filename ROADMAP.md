@@ -7,6 +7,16 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.69.0
+- ✅ **`REVEAL_CLAUDE_JSON` env var** (BACK-119) — explicit override for `~/.claude.json`; auto-derives from `REVEAL_CLAUDE_HOME` when set.
+- ✅ **`CONVERSATION_BASE` derives from `REVEAL_CLAUDE_HOME`** (BACK-121) — single env var covers the whole Claude install in SSH multi-user scenarios.
+- ✅ **`--base-path` covers the full Claude install** (BACK-120) — derives `CLAUDE_HOME`, `CLAUDE_JSON`, `PLANS_DIR`, `AGENTS_DIR`, `HOOKS_DIR` from one flag.
+- ✅ **`calls://` .venv hang fix** — `collect_structures()` replaced `rglob` with `os.walk` pruning `_SKIP_DIRS`; 90s → 0.8s on virtualenv projects.
+- ✅ **`calls://` starred-callee fix** — `*foo(args)` and `*self.method(args)` callers now correctly indexed.
+- ✅ **`calls://` stale cache fix** — `_dir_cache_key` stats root + immediate subdirectories, not just root.
+- ✅ **`_extract_project_from_dir` hardcoded username removed** — `_SKIP` contains only generic path words.
+- ✅ **TIA session boilerplate + badge regex generalized** — removed TIA-specific prefixes from title extraction; badge regex matches any CLI prefix.
+
 ### v0.68.0
 - ✅ **`claude://` install introspection (8 new resources)** — `history`, `settings`, `plans`, `info`, `config`, `memory`, `agents`, `hooks`. Browse prompt history, inspect user settings, read saved plans, surface feature flags, MCP server registrations, memory files, agent definitions, and hook scripts without specifying a session name.
 - ✅ **`CLAUDE_HOME` / `CLAUDE_JSON` / `PLANS_DIR` / `AGENTS_DIR` / `HOOKS_DIR` class attrs** — centralised path resolution with `REVEAL_CLAUDE_HOME` env override and Windows `%APPDATA%\Claude` fallback.
