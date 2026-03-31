@@ -29,6 +29,7 @@ from .analysis import (
     get_context_changes,
     get_token_breakdown,
     search_sessions_for_term,
+    get_session_agents,
 )
 
 
@@ -593,6 +594,8 @@ class ClaudeAdapter(ResourceAdapter):
             return get_files_touched(messages, self.session_name, contract_base, include_patches=include_patches)
         if '/workflow' in self.resource:
             return get_workflow(messages, self.session_name, contract_base)
+        if '/agents' in self.resource:
+            return get_session_agents(messages, self.session_name, contract_base)
         if '/context' in self.resource:
             return get_context_changes(messages, self.session_name, contract_base)
         if '/user' in self.resource:

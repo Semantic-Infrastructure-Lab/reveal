@@ -12,6 +12,22 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.4] - 2026-03-31 (quantum-knight-0331)
+
+### Added
+- **`claude://session/NAME/agents`** (`analysis/tools.py`, `adapter.py`): New `get_session_agents()` function and route. Returns `claude_agents` type — lists all `Agent` tool calls with per-agent telemetry: `agent_type`, `status`, `duration_ms`, `token_count`, `tool_count`, `usage` (input/output/cache tokens). Aggregates `total_agent_tokens` and `total_agent_duration_ms`. Prompt truncated to 200 chars. `agent_type` defaults to `"unknown"` when absent from TUR.
+- **`caller_type` on tool details** (`analysis/tools.py`): `get_all_tools()` details entries now include `caller_type: "direct"` — all tool_use in a session file are from the main assistant thread.
+- **`result` block on `?tools=ToolName` calls** (`analysis/tools.py`): `get_tool_calls()` now attaches a `result` field sourced from `toolUseResult` — Bash: `{stdout, stderr, interrupted, return_code_interpretation, backgrounded}`; Edit/Write: `{file_path, user_modified}`; Glob: `{filenames, num_files, truncated}`. Omitted when TUR absent or plain string.
+- **Agent handling in `get_all_tools()`**: Agent tool calls were already included via the existing loop; no code change needed — confirmed by test.
+
+### Changed
+- **`get_workflow()` — Agent step shape** (`analysis/tools.py`): Agent steps gain `agent_type`, `duration_ms`, `token_count`, `tool_count` fields from TUR. Missing `agentType` emits `"unknown"`.
+- **`get_workflow()` — precise `outcome` derivation**: Bash steps use `returnCodeInterpretation` first; Agent steps use `status == "completed"` → `"success"` / else → `"error"`. Falls back to `is_tool_error()` for all other tools.
+- **`_extract_tool_detail()` — Agent support**: Returns `description` field (preferred) or first 200 chars of `prompt`. Previously returned `None` for Agent calls.
+
+---
+
+
 ## [0.69.3] - 2026-03-31 (komile-0331)
 
 ### Changed

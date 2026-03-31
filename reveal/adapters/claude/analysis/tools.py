@@ -133,6 +133,43 @@ def extract_all_tool_results(messages: List[Dict]) -> List[Dict]:
     return results
 
 
+def _extract_tool_result(tool_name: str, tur: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Build a result block from a toolUseResult dict for a given tool type.
+
+    Returns None when tur is not a dict or no relevant fields are present.
+    """
+    if not isinstance(tur, dict):
+        return None
+    if tool_name == 'Bash':
+        result: Dict[str, Any] = {}
+        for out_key, tur_key in [
+            ('stdout', 'stdout'), ('stderr', 'stderr'),
+            ('interrupted', 'interrupted'),
+            ('return_code_interpretation', 'returnCodeInterpretation'),
+        ]:
+            if tur.get(tur_key) is not None:
+                result[out_key] = tur[tur_key]
+        result['backgrounded'] = bool(tur.get('backgroundTaskId'))
+        return result if len(result) > 1 else None  # more than just backgrounded
+    elif tool_name in ('Edit', 'Write'):
+        result = {}
+        if tur.get('filePath') is not None:
+            result['file_path'] = tur['filePath']
+        if tur.get('userModified') is not None:
+            result['user_modified'] = tur['userModified']
+        return result or None
+    elif tool_name == 'Glob':
+        result = {}
+        if tur.get('filenames') is not None:
+            result['filenames'] = tur['filenames']
+        if tur.get('numFiles') is not None:
+            result['num_files'] = tur['numFiles']
+        if tur.get('truncated') is not None:
+            result['truncated'] = tur['truncated']
+        return result or None
+    return None
+
+
 def get_tool_calls(messages: List[Dict], tool_name: str, session_name: str,
                    contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Extract all calls to specific tool.
@@ -149,15 +186,24 @@ def get_tool_calls(messages: List[Dict], tool_name: str, session_name: str,
     base = contract_base.copy()
     base['type'] = 'claude_tool_calls'
 
+    tur_map = _build_tool_use_result_map(messages)
+
     tool_calls = []
     for i, msg, content in _iter_assistant_content(messages):
         if content.get('type') == 'tool_use' and content.get('name') == tool_name:
-            tool_calls.append({
+            tool_use_id = content.get('id')
+            call_entry: Dict[str, Any] = {
                 'message_index': i,
-                'tool_use_id': content.get('id'),
+                'tool_use_id': tool_use_id,
                 'input': content.get('input'),
-                'timestamp': msg.get('timestamp')
-            })
+                'timestamp': msg.get('timestamp'),
+            }
+            tur = tur_map.get(tool_use_id) if tool_use_id else None
+            if tur:
+                result_block = _extract_tool_result(tool_name, tur)
+                if result_block is not None:
+                    call_entry['result'] = result_block
+            tool_calls.append(call_entry)
 
     base.update({
         'session': session_name,
@@ -192,7 +238,8 @@ def get_all_tools(messages: List[Dict], session_name: str,
                 'message_index': i,
                 'tool_use_id': content.get('id'),
                 'timestamp': msg.get('timestamp'),
-                'detail': _extract_tool_detail(name, content.get('input', {}))
+                'detail': _extract_tool_detail(name, content.get('input', {})),
+                'caller_type': 'direct',
             })
 
     # Calculate success rates
@@ -456,6 +503,9 @@ def _extract_tool_detail(tool_name: str, tool_input: Dict[str, Any]) -> Optional
     elif tool_name in ('TaskCreate', 'TaskUpdate'):
         result = tool_input.get('subject') or tool_input.get('taskId')
         return str(result) if result is not None else None
+    elif tool_name == 'Agent':
+        detail = tool_input.get('description') or tool_input.get('prompt', '')
+        return str(detail)[:200] if detail else None
     return None
 
 
@@ -560,9 +610,33 @@ def get_workflow(messages: List[Dict], session_name: str,
             'detail': _extract_tool_detail(tool_name, content.get('input', {})),
             'timestamp': msg.get('timestamp'),
         }
-        if result_content is not None:
-            step['outcome'] = 'error' if is_tool_error(result_content, tur) else 'success'
-        if tur and tur.get('backgroundTaskId'):
+        # Derive outcome using tool-specific TUR signals first, fallback to is_tool_error
+        outcome = None
+        if tur and isinstance(tur, dict):
+            if tool_name == 'Bash':
+                rci = tur.get('returnCodeInterpretation')
+                if rci:
+                    outcome = 'success' if rci == 'success' else 'error'
+            elif tool_name == 'Agent':
+                status = tur.get('status')
+                if status:
+                    outcome = 'success' if status == 'completed' else 'error'
+        if outcome is None and result_content is not None:
+            outcome = 'error' if is_tool_error(result_content, tur) else 'success'
+        if outcome is not None:
+            step['outcome'] = outcome
+
+        # Agent-specific telemetry fields
+        if tool_name == 'Agent' and tur and isinstance(tur, dict):
+            step['agent_type'] = tur.get('agentType') or 'unknown'
+            if tur.get('totalDurationMs') is not None:
+                step['duration_ms'] = tur['totalDurationMs']
+            if tur.get('totalTokens') is not None:
+                step['token_count'] = tur['totalTokens']
+            if tur.get('totalToolUseCount') is not None:
+                step['tool_count'] = tur['totalToolUseCount']
+
+        if tur and isinstance(tur, dict) and tur.get('backgroundTaskId'):
             step['backgrounded'] = True
         workflow.append(step)
 
@@ -574,6 +648,78 @@ def get_workflow(messages: List[Dict], session_name: str,
         'total_steps': total_steps,
         'collapsed_steps': len(workflow),
         'workflow': workflow
+    })
+
+    return base
+
+
+def get_session_agents(messages: List[Dict], session_name: str,
+                       contract_base: Dict[str, Any]) -> Dict[str, Any]:
+    """Get all Agent tool calls with full TUR telemetry.
+
+    Route: claude://session/NAME/agents
+
+    Args:
+        messages: List of message dictionaries
+        session_name: Name of the session
+        contract_base: Base contract fields
+
+    Returns:
+        Dictionary with type 'claude_agents', agent list, and aggregate stats.
+    """
+    base = contract_base.copy()
+    base['type'] = 'claude_agents'
+
+    tur_map = _build_tool_use_result_map(messages)
+
+    agents: List[Dict[str, Any]] = []
+    total_tokens = 0
+    total_duration_ms = 0
+
+    for i, msg, content in _iter_assistant_content(messages):
+        if content.get('type') != 'tool_use' or content.get('name') != 'Agent':
+            continue
+        tool_use_id = content.get('id', '')
+        tur = tur_map.get(tool_use_id)
+        inp = content.get('input', {})
+
+        prompt = str(inp.get('prompt', ''))
+        entry: Dict[str, Any] = {
+            'step': len(agents) + 1,
+            'message_index': i,
+            'agent_id': tur.get('agentId') if isinstance(tur, dict) else None,
+            'agent_type': (tur.get('agentType') if isinstance(tur, dict) else None) or 'unknown',
+            'status': (tur.get('status') if isinstance(tur, dict) else None) or 'unknown',
+            'prompt': prompt[:200],
+            'timestamp': msg.get('timestamp'),
+        }
+
+        if isinstance(tur, dict):
+            if tur.get('totalDurationMs') is not None:
+                entry['duration_ms'] = tur['totalDurationMs']
+                total_duration_ms += tur['totalDurationMs']
+            if tur.get('totalTokens') is not None:
+                entry['token_count'] = tur['totalTokens']
+                total_tokens += tur['totalTokens']
+            if tur.get('totalToolUseCount') is not None:
+                entry['tool_count'] = tur['totalToolUseCount']
+            usage_raw = tur.get('usage') or {}
+            if usage_raw:
+                entry['usage'] = {
+                    'input_tokens': usage_raw.get('inputTokens', 0),
+                    'output_tokens': usage_raw.get('outputTokens', 0),
+                    'cache_read_tokens': usage_raw.get('cacheReadInputTokens', 0),
+                    'cache_created_tokens': usage_raw.get('cacheCreationInputTokens', 0),
+                }
+
+        agents.append(entry)
+
+    base.update({
+        'session': session_name,
+        'total_agents': len(agents),
+        'total_agent_tokens': total_tokens,
+        'total_agent_duration_ms': total_duration_ms,
+        'agents': agents,
     })
 
     return base

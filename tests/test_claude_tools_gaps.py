@@ -18,8 +18,12 @@ from reveal.adapters.claude.analysis.tools import (
     _collect_tool_use_map,
     _extract_file_operation,
     _extract_tool_detail,
+    _extract_tool_result,
     _track_tool_results,
     extract_all_tool_results,
+    get_all_tools,
+    get_session_agents,
+    get_tool_calls,
     get_workflow,
     is_tool_error,
 )
@@ -375,8 +379,20 @@ class TestExtractToolDetail:
         result = _extract_tool_detail('TaskUpdate', {})
         assert result is None
 
-    def test_unknown_tool_returns_none(self):
+    def test_agent_uses_description_field(self):
+        result = _extract_tool_detail('Agent', {'description': 'Explore codebase', 'prompt': 'do stuff'})
+        assert result == 'Explore codebase'
+
+    def test_agent_falls_back_to_prompt(self):
         result = _extract_tool_detail('Agent', {'prompt': 'do stuff'})
+        assert result == 'do stuff'
+
+    def test_agent_prompt_truncated_to_200(self):
+        result = _extract_tool_detail('Agent', {'prompt': 'x' * 300})
+        assert result == 'x' * 200
+
+    def test_unknown_tool_returns_none(self):
+        result = _extract_tool_detail('SomeTool', {'prompt': 'do stuff'})
         assert result is None
 
     def test_web_search_returns_none(self):
@@ -470,3 +486,255 @@ class TestGetWorkflow:
         result = get_workflow([msg], 's', self._BASE.copy())
         assert result['total_steps'] == 1
         assert result['workflow'][0]['tool'] == 'Bash'
+
+
+def _tur_msg(tool_id: str, tur: dict, content: str = 'ok') -> dict:
+    """Build a user message with a toolUseResult dict and matching tool_result block."""
+    return {
+        'type': 'user',
+        'timestamp': '2026-03-14T10:01:00',
+        'toolUseResult': tur,
+        'message': {'content': [
+            {'type': 'tool_result', 'tool_use_id': tool_id, 'content': content}
+        ]},
+    }
+
+
+# ─── _extract_tool_result ─────────────────────────────────────────────────────
+
+class TestExtractToolResult:
+
+    def test_bash_fields_mapped(self):
+        tur = {'stdout': 'hello', 'stderr': '', 'interrupted': False,
+               'returnCodeInterpretation': 'success'}
+        result = _extract_tool_result('Bash', tur)
+        assert result['stdout'] == 'hello'
+        assert result['return_code_interpretation'] == 'success'
+        assert result['backgrounded'] is False
+
+    def test_bash_backgrounded_true(self):
+        tur = {'stdout': 'ok', 'backgroundTaskId': 'bg-123'}
+        result = _extract_tool_result('Bash', tur)
+        assert result['backgrounded'] is True
+
+    def test_bash_no_content_returns_none(self):
+        result = _extract_tool_result('Bash', {})
+        assert result is None
+
+    def test_edit_fields_mapped(self):
+        tur = {'filePath': '/foo/bar.py', 'userModified': False}
+        result = _extract_tool_result('Edit', tur)
+        assert result == {'file_path': '/foo/bar.py', 'user_modified': False}
+
+    def test_write_fields_mapped(self):
+        tur = {'filePath': '/new.py', 'userModified': True}
+        result = _extract_tool_result('Write', tur)
+        assert result['file_path'] == '/new.py'
+
+    def test_glob_fields_mapped(self):
+        tur = {'filenames': ['a.py', 'b.py'], 'numFiles': 2, 'truncated': False}
+        result = _extract_tool_result('Glob', tur)
+        assert result == {'filenames': ['a.py', 'b.py'], 'num_files': 2, 'truncated': False}
+
+    def test_unknown_tool_returns_none(self):
+        result = _extract_tool_result('Read', {'filePath': '/foo.py'})
+        assert result is None
+
+    def test_non_dict_tur_returns_none(self):
+        result = _extract_tool_result('Bash', 'plain string tur')
+        assert result is None
+
+
+# ─── get_tool_calls result block ─────────────────────────────────────────────
+
+class TestGetToolCallsResult:
+
+    _BASE = {'contract_version': '1.0'}
+
+    def test_bash_call_gains_result_block(self):
+        tur = {'stdout': 'ok', 'returnCodeInterpretation': 'success',
+               'stderr': '', 'interrupted': False}
+        msgs = [
+            _assistant_tool_use('tu_001', 'Bash', command='ls'),
+            _tur_msg('tu_001', tur),
+        ]
+        result = get_tool_calls(msgs, 'Bash', 'session-1', self._BASE.copy())
+        call = result['calls'][0]
+        assert 'result' in call
+        assert call['result']['return_code_interpretation'] == 'success'
+
+    def test_no_tur_no_result_field(self):
+        msgs = [_assistant_tool_use('tu_001', 'Bash', command='ls')]
+        result = get_tool_calls(msgs, 'Bash', 'session-1', self._BASE.copy())
+        assert 'result' not in result['calls'][0]
+
+    def test_edit_call_gains_result_block(self):
+        tur = {'filePath': '/foo.py', 'userModified': False,
+               'structuredPatch': [], 'oldString': '', 'newString': 'x'}
+        msgs = [
+            _assistant_tool_use('tu_001', 'Edit', file_path='/foo.py',
+                                old_string='', new_string='x'),
+            _tur_msg('tu_001', tur),
+        ]
+        result = get_tool_calls(msgs, 'Edit', 'session-1', self._BASE.copy())
+        assert result['calls'][0]['result']['file_path'] == '/foo.py'
+
+
+# ─── get_all_tools caller_type ───────────────────────────────────────────────
+
+class TestGetAllToolsCallerType:
+
+    _BASE = {'contract_version': '1.0'}
+
+    def test_details_include_caller_type_direct(self):
+        msgs = [_assistant_tool_use('tu_001', 'Bash', command='ls')]
+        result = get_all_tools(msgs, 'session-1', self._BASE.copy())
+        detail = result['details']['Bash'][0]
+        assert detail['caller_type'] == 'direct'
+
+    def test_agent_tool_included_in_tools(self):
+        msgs = [_assistant_tool_use('tu_001', 'Agent', prompt='explore', description='Explore')]
+        result = get_all_tools(msgs, 'session-1', self._BASE.copy())
+        assert 'Agent' in result['tools']
+        assert result['tools']['Agent']['count'] == 1
+
+
+# ─── get_workflow Agent steps ─────────────────────────────────────────────────
+
+class TestGetWorkflowAgentSteps:
+
+    _BASE = {'contract_version': '1.0'}
+
+    def test_agent_step_included_in_workflow(self):
+        msgs = [_assistant_tool_use('tu_001', 'Agent', prompt='do something', description='Do something')]
+        result = get_workflow(msgs, 'session-1', self._BASE.copy())
+        assert result['total_steps'] == 1
+        assert result['workflow'][0]['tool'] == 'Agent'
+
+    def test_agent_step_detail_from_description(self):
+        msgs = [_assistant_tool_use('tu_001', 'Agent', description='Explore auth')]
+        result = get_workflow(msgs, 'session-1', self._BASE.copy())
+        assert result['workflow'][0]['detail'] == 'Explore auth'
+
+    def test_agent_step_gains_agent_type_and_telemetry(self):
+        tur = {'agentType': 'Explore', 'status': 'completed',
+               'totalDurationMs': 45000, 'totalTokens': 1234, 'totalToolUseCount': 10,
+               'agentId': 'agent-xyz'}
+        msgs = [
+            _assistant_tool_use('tu_001', 'Agent', description='Explore codebase'),
+            _tur_msg('tu_001', tur),
+        ]
+        result = get_workflow(msgs, 'session-1', self._BASE.copy())
+        step = result['workflow'][0]
+        assert step['agent_type'] == 'Explore'
+        assert step['outcome'] == 'success'
+        assert step['duration_ms'] == 45000
+        assert step['token_count'] == 1234
+        assert step['tool_count'] == 10
+
+    def test_agent_unknown_type_when_absent(self):
+        tur = {'status': 'completed', 'totalTokens': 100, 'agentId': 'agent-abc'}
+        msgs = [
+            _assistant_tool_use('tu_001', 'Agent', description='Run something'),
+            _tur_msg('tu_001', tur),
+        ]
+        result = get_workflow(msgs, 'session-1', self._BASE.copy())
+        assert result['workflow'][0]['agent_type'] == 'unknown'
+
+    def test_bash_outcome_from_return_code_interpretation(self):
+        tur = {'returnCodeInterpretation': 'success', 'stdout': 'ok', 'stderr': ''}
+        msgs = [
+            _assistant_tool_use('tu_001', 'Bash', command='git status'),
+            _tur_msg('tu_001', tur),
+        ]
+        result = get_workflow(msgs, 'session-1', self._BASE.copy())
+        assert result['workflow'][0]['outcome'] == 'success'
+
+    def test_bash_error_outcome_from_return_code(self):
+        tur = {'returnCodeInterpretation': 'error', 'stdout': '', 'stderr': 'fail'}
+        msgs = [
+            _assistant_tool_use('tu_001', 'Bash', command='bad-cmd'),
+            _tur_msg('tu_001', tur, content='Error: bad-cmd not found'),
+        ]
+        result = get_workflow(msgs, 'session-1', self._BASE.copy())
+        assert result['workflow'][0]['outcome'] == 'error'
+
+
+# ─── get_session_agents ───────────────────────────────────────────────────────
+
+class TestGetSessionAgents:
+
+    _BASE = {'contract_version': '1.0'}
+
+    def test_empty_messages_returns_empty_agents(self):
+        result = get_session_agents([], 'session-1', self._BASE.copy())
+        assert result['type'] == 'claude_agents'
+        assert result['total_agents'] == 0
+        assert result['agents'] == []
+        assert result['total_agent_tokens'] == 0
+
+    def test_agent_call_extracted(self):
+        tur = {'agentId': 'ag-001', 'agentType': 'Explore', 'status': 'completed',
+               'totalDurationMs': 10000, 'totalTokens': 500, 'totalToolUseCount': 5,
+               'usage': {'inputTokens': 400, 'outputTokens': 100,
+                         'cacheReadInputTokens': 0, 'cacheCreationInputTokens': 0}}
+        msgs = [
+            _assistant_tool_use('tu_001', 'Agent', prompt='Explore codebase for auth'),
+            _tur_msg('tu_001', tur),
+        ]
+        result = get_session_agents(msgs, 'session-1', self._BASE.copy())
+        assert result['total_agents'] == 1
+        agent = result['agents'][0]
+        assert agent['agent_id'] == 'ag-001'
+        assert agent['agent_type'] == 'Explore'
+        assert agent['status'] == 'completed'
+        assert agent['duration_ms'] == 10000
+        assert agent['token_count'] == 500
+        assert agent['tool_count'] == 5
+        assert agent['usage']['input_tokens'] == 400
+
+    def test_prompt_truncated_to_200(self):
+        tur = {'agentId': 'ag-001', 'status': 'completed', 'agentType': 'general-purpose',
+               'totalTokens': 0}
+        msgs = [
+            _assistant_tool_use('tu_001', 'Agent', prompt='x' * 300),
+            _tur_msg('tu_001', tur),
+        ]
+        result = get_session_agents(msgs, 'session-1', self._BASE.copy())
+        assert len(result['agents'][0]['prompt']) == 200
+
+    def test_aggregate_tokens_summed(self):
+        tur1 = {'agentId': 'a1', 'status': 'completed', 'agentType': 'Explore',
+                'totalTokens': 100, 'totalDurationMs': 1000}
+        tur2 = {'agentId': 'a2', 'status': 'completed', 'agentType': 'Plan',
+                'totalTokens': 200, 'totalDurationMs': 2000}
+        msgs = [
+            _assistant_tool_use('tu_001', 'Agent', prompt='First'),
+            _tur_msg('tu_001', tur1),
+            _assistant_tool_use('tu_002', 'Agent', prompt='Second'),
+            _tur_msg('tu_002', tur2),
+        ]
+        result = get_session_agents(msgs, 'session-1', self._BASE.copy())
+        assert result['total_agents'] == 2
+        assert result['total_agent_tokens'] == 300
+        assert result['total_agent_duration_ms'] == 3000
+
+    def test_no_tur_uses_unknown_defaults(self):
+        msgs = [_assistant_tool_use('tu_001', 'Agent', prompt='do something')]
+        result = get_session_agents(msgs, 'session-1', self._BASE.copy())
+        agent = result['agents'][0]
+        assert agent['agent_type'] == 'unknown'
+        assert agent['status'] == 'unknown'
+        assert agent['agent_id'] is None
+
+    def test_non_agent_tools_skipped(self):
+        msgs = [
+            _assistant_tool_use('tu_001', 'Bash', command='ls'),
+            _assistant_tool_use('tu_002', 'Read', file_path='foo.py'),
+        ]
+        result = get_session_agents(msgs, 'session-1', self._BASE.copy())
+        assert result['total_agents'] == 0
+
+    def test_session_name_included(self):
+        result = get_session_agents([], 'my-session', self._BASE.copy())
+        assert result['session'] == 'my-session'

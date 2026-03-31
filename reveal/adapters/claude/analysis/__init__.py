@@ -8,6 +8,7 @@ from .tools import (
     is_tool_error,
     get_files_touched,
     get_workflow,
+    get_session_agents,
 )
 from .errors import get_errors, get_error_context
 from .timeline import get_timeline
@@ -24,6 +25,7 @@ __all__ = [
     'is_tool_error',
     'get_files_touched',
     'get_workflow',
+    'get_session_agents',
     # Errors
     'get_errors',
     'get_error_context',
