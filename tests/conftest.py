@@ -5,10 +5,26 @@ and adapter registry management to prevent test pollution and reduce duplication
 """
 
 import pytest
+import sys
 import tempfile
 import shutil
 from pathlib import Path
 from typing import Generator
+
+
+def native(posix_path: str) -> str:
+    """Convert a POSIX path string to the platform-native string form.
+
+    Use this in assertions that compare path strings from production code,
+    which stores paths using ``str(Path(...))``.  On Linux the result is
+    identical to the input; on Windows forward slashes become backslashes.
+
+    Example::
+
+        assert result['file'] == native('/fake/x.py')
+        assert native('src/main.py') in structure['path']
+    """
+    return str(Path(posix_path))
 
 
 @pytest.fixture

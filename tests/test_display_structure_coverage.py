@@ -599,7 +599,7 @@ class TestRenderJsonOutput:
             with patch('reveal.display.structure._build_extractable_meta', return_value={}):
                 _render_json_output(analyzer, structure)
         call_arg = mock_j.call_args[0][0]
-        assert call_arg['structure']['functions'][0]['file'] == '/fake/x.py'
+        assert call_arg['structure']['functions'][0]['file'] == str(Path('/fake/x.py'))
 
     def test_frontmatter_dict_enriched(self):
         """Lines 400-404: frontmatter (dict, not list) gets file field."""
@@ -609,7 +609,7 @@ class TestRenderJsonOutput:
             with patch('reveal.display.structure._build_extractable_meta', return_value={}):
                 _render_json_output(analyzer, structure)
         call_arg = mock_j.call_args[0][0]
-        assert call_arg['structure']['frontmatter']['file'] == '/fake/x.py'
+        assert call_arg['structure']['frontmatter']['file'] == str(Path('/fake/x.py'))
 
     def test_scalar_category_passed_through(self):
         """Lines 410-411: non-list scalar (e.g. column_count) passed through."""

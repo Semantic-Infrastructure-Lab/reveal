@@ -122,12 +122,13 @@ def _dir_cache_key(directory: Path) -> Any:
     from ..ast.analysis import _SKIP_DIRS
     try:
         mtimes = [os.stat(directory).st_mtime_ns]
-        for child in directory.iterdir():
-            if child.is_dir() and child.name not in _SKIP_DIRS:
-                try:
-                    mtimes.append(os.stat(child).st_mtime_ns)
-                except OSError:
-                    pass
+        with os.scandir(directory) as it:
+            for entry in it:
+                if entry.is_dir(follow_symlinks=False) and entry.name not in _SKIP_DIRS:
+                    try:
+                        mtimes.append(os.stat(entry).st_mtime_ns)
+                    except OSError:
+                        pass
         return ('dir_mtimes', tuple(sorted(mtimes)))
     except OSError:
         entries = []

@@ -236,10 +236,11 @@ class TestRenderOutline:
 
     def test_single_root_item(self, capsys):
         items = [{'name': 'foo', 'line': 1, 'line_start': 1, 'children': []}]
-        render_outline(items, Path('/tmp/test.py'))
+        p = Path('/tmp/test.py')
+        render_outline(items, p)
         captured = capsys.readouterr()
         assert 'foo' in captured.out
-        assert '/tmp/test.py:1' in captured.out
+        assert f'{p}:1' in captured.out
 
     def test_nested_child_uses_tree_chars(self, capsys):
         child = {'name': 'bar', 'line': 5, 'line_start': 5, 'children': []}

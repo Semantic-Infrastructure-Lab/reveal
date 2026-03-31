@@ -2,6 +2,7 @@
 
 import pytest
 import json
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -2038,7 +2039,8 @@ class TestClaudeHooks:
             assert result['event'] == 'PostToolUse'
             assert result['kind'] == 'file'
             assert 'echo hello' in result['content']
-            assert result['executable'] is True
+            if sys.platform != 'win32':
+                assert result['executable'] is True
         finally:
             ClaudeAdapter.HOOKS_DIR = original
 

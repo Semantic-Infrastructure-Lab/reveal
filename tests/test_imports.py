@@ -362,7 +362,7 @@ class TestImportsAdapter:
         assert result['type'] == 'layer_violations'
         assert result['count'] == 1
         v = result['violations'][0]
-        assert 'api/routes.py' in v['from_file']
+        assert str(Path('api/routes.py')) in v['from_file']
         assert v['layer'] == 'presentation'
 
     def test_violations_no_violation_when_import_allowed(self, tmp_path):
