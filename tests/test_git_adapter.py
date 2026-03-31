@@ -728,7 +728,7 @@ class TestGitAdapterBugFixes:
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_file_blame'
-        assert structure['path'] == str(Path('src/main.py'))
+        assert structure['path'] == 'src/main.py'
         assert len(structure['hunks']) > 0
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
