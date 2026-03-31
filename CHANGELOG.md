@@ -12,6 +12,18 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.1] - 2026-03-31 (mighty-chimera-0330, emerald-crystal-0331)
+
+### Fixed
+- **`_dir_cache_key` stat mock bug** (`adapters/calls/index.py`): `Path.is_dir()` routes through the global `os.stat` singleton, so a test mock on `os.stat` captured every `is_dir()` check — including on `.py` files. Replaced `iterdir()+is_dir()` with `os.scandir()+entry.is_dir()`, which uses cached directory-entry type info and bypasses `os.stat`. Was failing on Linux and Windows.
+- **`git://` pygit2 path separator on Windows** (`adapters/git/adapter.py:402`): `os.path.relpath()` returns backslashes on Windows; pygit2 tree and blame APIs require POSIX forward slashes. Fixed with `.replace(os.sep, '/')` — no-op on Linux/macOS, fixes `KeyError`/`ValueError` on Windows for `reveal git://./file.py?type=blame` from a subdirectory.
+- **5 Windows path antipattern test fixes**: Hardcoded `/tmp/`, `/fake/` POSIX literals in assertions and `Path('/...')` mock attribute assignments replaced with platform-neutral equivalents. Covered: `test_display_outline`, `test_display_structure_coverage`, `test_git_adapter`, `test_imports`, `test_claude_adapter`.
+
+### Added
+- **`scripts/check_windows_compat.py`**: Grep-based antipattern checker that scans `tests/` for POSIX path literals in assertions and `Path('/...')` mock `.path` assignments. Wired into CI via `.github/workflows/test.yml` (`--warn` mode; flip flag to `--strict` to make violations blocking).
+
+---
+
 ## [0.69.0] - 2026-03-30 (pearl-tone-0330, bright-nebula-0330, visible-cosmos-0330)
 
 ### Added

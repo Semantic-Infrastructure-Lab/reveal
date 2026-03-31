@@ -7,6 +7,11 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.69.1
+- ✅ **`git://` pygit2 path separator fix (Windows)** — `os.path.relpath()` returns backslashes on Windows; pygit2 requires POSIX slashes. `.replace(os.sep, '/')` fix in `adapter.py:402`. `reveal git://./file.py?type=blame` from a subdirectory was broken on Windows in 0.69.0.
+- ✅ **`_dir_cache_key` uses `os.scandir`** — replaced `iterdir()+is_dir()` with `os.scandir()+entry.is_dir()` to avoid routing through `os.stat` singleton; fixes test reliability on Linux and Windows.
+- ✅ **Windows CI green** — 5 test antipattern fixes + `scripts/check_windows_compat.py` checker wired into CI.
+
 ### v0.69.0
 - ✅ **`REVEAL_CLAUDE_JSON` env var** (BACK-119) — explicit override for `~/.claude.json`; auto-derives from `REVEAL_CLAUDE_HOME` when set.
 - ✅ **`CONVERSATION_BASE` derives from `REVEAL_CLAUDE_HOME`** (BACK-121) — single env var covers the whole Claude install in SSH multi-user scenarios.
