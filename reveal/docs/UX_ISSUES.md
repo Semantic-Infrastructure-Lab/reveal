@@ -83,12 +83,11 @@ Discovered via OOM kill post-mortem — `reveal stats://.` and `reveal overview 
 
 ---
 
-### MEM-08: `tree_view.py _collect_matching_files()` builds full list before sort+truncate
+### MEM-08: `tree_view.py _collect_matching_files()` builds full list before sort+truncate ✅ Fixed sacred-shrine-0321
 
-**Severity:** Low
+**Severity:** Low → **Resolved**
 **File:** `reveal/tree_view.py` line 28
-**Problem:** Collects all `(Path, stat)` tuples before sorting and applying `max_entries=200` cap. On a 50k-file directory this builds 50k tuples then discards 49,800 of them.
-**Fix needed:** Bounded max-heap (e.g., `heapq.nlargest(max_entries, ...)`) to keep only the top N entries during traversal.
+**Fix:** Converted `_collect_matching_files()` to a generator using `os.walk`; caller accumulates into a list only once before sort+truncate. Avoids materializing the full set on large directories.
 
 ---
 
@@ -109,47 +108,27 @@ Discovered via OOM kill post-mortem — `reveal stats://.` and `reveal overview 
 
 ## Bugs (Crashes / Wrong Output)
 
-### BUG-01: `git:// blame&element=` crashes
+### BUG-01: `git:// blame&element=` crashes ✅ Fixed awakened-pegasus-0315
 
-**Severity:** High
+**Severity:** High → **Resolved**
 **Adapter:** `git://`
-**Repro:**
-```bash
-reveal 'git://path/to/file.py?type=blame&element=function_name'
-```
-**Error:**
-```
-Error (git://): GitAdapter.get_structure.<locals>.<lambda>() takes 1 positional argument but 3 were given
-```
-**Confirmed on:** morphogen (`circuit.py`), tiacad (`spatial_resolver.py`)
-**Expected:** Blame output scoped to the named function
-**Notes:** `?type=blame` without `element=` works correctly. The element dispatch in `get_structure` passes wrong arity to the lambda.
+**Fix:** Lambda in `adapter.py` blame dispatch corrected to 3-arg form: `lambda en, _path, _sub: files.get_element_line_range(en, self.path, self.subpath)`. Verified against `files.get_file_blame` signature — arity matches. Confirmed clean in sonic-ion-0330.
 
 ---
 
-### BUG-02: `ast://` multi-file colon path silently returns 0 results
+### BUG-02: `ast://` multi-file colon path silently returns 0 results ✅ Fixed awakened-pegasus-0315
 
-**Severity:** Medium
+**Severity:** Medium → **Resolved**
 **Adapter:** `ast://`
-**Repro:**
-```bash
-reveal 'ast://path/file1.py:path/file2.py?complexity>10'
-```
-**Output:**
-```
-Files scanned: 0
-Results: 0
-```
-**Expected:** Either scan both files, or fail with a clear error explaining the syntax is unsupported.
-**Notes:** The colon is the `diff://` separator, which creates ambiguity. Multi-file ast queries should be explicitly documented as unsupported or handled.
+**Fix:** URI parser now detects colon in `ast://` path and emits a clear error: "Multi-file colon syntax is not supported for ast://. Use a directory path to scan multiple files." (awakened-pegasus-0315)
 
 ---
 
 ## UX Issues (Confusing / Misleading Output)
 
-### UX-01: `diff://` with absolute paths fails cryptically
+### UX-01: `diff://` with absolute paths fails cryptically ✅ Fixed awakened-pegasus-0315
 
-**Severity:** Medium
+**Severity:** Medium → **Resolved**
 **Adapter:** `diff://`
 **Repro:**
 ```bash
@@ -167,9 +146,9 @@ Error (diff://): [Errno 2] No such file or directory: ':/abs/path/to/file2.py'
 
 ---
 
-### UX-02: `imports:// violations` reports "0 violations" when config is missing
+### UX-02: `imports:// violations` reports "0 violations" when config is missing ✅ Fixed awakened-pegasus-0315
 
-**Severity:** Medium
+**Severity:** Medium → **Resolved**
 **Adapter:** `imports://`
 **Repro:**
 ```bash
@@ -190,9 +169,9 @@ Layer Violations: NOT CONFIGURED
 
 ---
 
-### UX-03: `ast://` whole-project default dumps too many results
+### UX-03: `ast://` whole-project default dumps too many results ✅ Fixed awakened-pegasus-0315
 
-**Severity:** Medium
+**Severity:** Medium → **Resolved**
 **Adapter:** `ast://`
 **Repro:**
 ```bash
@@ -207,9 +186,9 @@ reveal 'ast://tiacad_core?type=class'        # broad filter on large codebase
 
 ---
 
-### UX-04: `markdown://` type filter opaque when most files lack front matter
+### UX-04: `markdown://` type filter opaque when most files lack front matter ✅ Fixed awakened-pegasus-0315
 
-**Severity:** Low
+**Severity:** Low → **Resolved**
 **Adapter:** `markdown://`
 **Repro:**
 ```bash
@@ -221,9 +200,9 @@ reveal 'markdown:///path/to/project/docs?type=architecture'
 
 ---
 
-### UX-05: `reveal file.py function` fails with relative paths outside project root
+### UX-05: `reveal file.py function` fails with relative paths outside project root ✅ Fixed awakened-pegasus-0315
 
-**Severity:** Low
+**Severity:** Low → **Resolved**
 **Feature:** File/function extraction
 **Repro:** Running `reveal path/to/file.py function_name` from a directory where `path/to/file.py` doesn't exist relative to cwd.
 **Error:**
@@ -235,9 +214,9 @@ Error: path/to/file.py not found
 
 ---
 
-### UX-06: `git://` `?message~=` regex matches not documented
+### UX-06: `git://` `?message~=` regex matches not documented ✅ Fixed awakened-pegasus-0315
 
-**Severity:** Low
+**Severity:** Low → **Resolved**
 **Adapter:** `git://`
 **Observation:** `?message~=feat` matches commits containing "feature" (substring regex). This is correct behavior but:
 1. Not documented in `reveal help://git`
@@ -247,9 +226,9 @@ Error: path/to/file.py not found
 
 ---
 
-### UX-07: `git://` file-scoped history not discoverable via `--log` flag
+### UX-07: `git://` file-scoped history not discoverable via `--log` flag ✅ Fixed awakened-pegasus-0315
 
-**Severity:** Low
+**Severity:** Low → **Resolved**
 **Adapter:** `git://`
 **Observation:** Attempting `reveal git:///path/to/repo --log path/to/file` shows full repo log (flag silently ignored). The correct syntax is `reveal 'git://path/to/file?type=history'` but this is not obvious.
 **Expected:** Either support `--log <file>` as an alias for `?type=history`, or emit: *"Unknown flag --log. For file history use: reveal 'git://path/to/file?type=history'"*
@@ -260,9 +239,9 @@ Error: path/to/file.py not found
 
 Discovered by running `reveal 'claude://sessions/?search=...'` across 100 recent sessions and extracting reveal error patterns.
 
-### UX-08: `--lines` ghost flag — unhelpful exit 2 + usage dump
+### UX-08: `--lines` ghost flag — unhelpful exit 2 + usage dump ✅ Fixed shining-satellite-0327
 
-**Severity:** Low
+**Severity:** Low → **Resolved**
 **Confirmed occurrences:** 1 (sunny-mist-0324)
 **Problem:** Agent tried `reveal async_send_socialmedia_post.php --lines 1345-1370`, received exit code 2 with the full `usage:` dump. The error `reveal: error: unrecognized arguments: --lines 1345-1370` gives no hint about the correct alternatives.
 
@@ -286,9 +265,9 @@ These are genuinely easy to confuse. `--lines` is the natural flag name a user r
 
 ---
 
-### UX-09: `markdown://` relative path — query string appended to "not found" path
+### UX-09: `markdown://` relative path — query string appended to "not found" path ✅ Fixed shining-satellite-0327
 
-**Severity:** Low
+**Severity:** Low → **Resolved**
 **Confirmed occurrences:** Reproduced live (2 patterns affected: `?link-graph`, `?beth_topics~=`)
 **Problem:** `reveal 'markdown://docs/?link-graph'` resolves the relative path before separating the query string, producing:
 ```
@@ -516,78 +495,36 @@ Any `.py` file that is not statically imported anywhere in the package. This cor
 
 Discovered via full codebase review (static analysis + manual audit) — session floating-wormhole-0321, 2026-03-21.
 
-### BUG-03: Duplicate method `render_element` in `calls/adapter.py` (D001)
+### BUG-03: Duplicate method `render_element` in `calls/adapter.py` (D001) ✅ Fixed sacred-shrine-0321
 
-**Severity:** Medium
-**File:** `reveal/adapters/calls/adapter.py` lines 220–227
-**Problem:** `render_element` (line 225) and `render_structure` (line 220) are byte-for-byte identical — both delegate to `render_calls_structure()` with the same logic. One is dead code.
-```python
-def render_structure(result, format='text'):
-    effective_format = result.get('_query_format') or format
-    render_calls_structure(result, effective_format)
-
-def render_element(result, format='text'):   # identical
-    effective_format = result.get('_query_format') or format
-    render_calls_structure(result, effective_format)
-```
-**Fix needed:** Remove `render_element`; route any callers to `render_structure`.
+**Severity:** Medium → **Resolved**
+**File:** `reveal/adapters/calls/adapter.py`
+**Fix:** `render_element` removed; only `render_structure` remains. Verified in sonic-ion-0330 — grep for `render_element` returns 0 hits in `calls/adapter.py`.
 
 ---
 
-### BUG-04: `letsencrypt/adapter.py` missing required contract fields `source` and `source_type` (V023)
+### BUG-04: `letsencrypt/adapter.py` missing required contract fields `source` and `source_type` (V023) ✅ Fixed sacred-shrine-0321
 
-**Severity:** High
-**File:** `reveal/adapters/letsencrypt/adapter.py` lines ~195–223
-**Problem:** `get_structure()` returns a result dict without `source` or `source_type` — both required by the adapter output contract (see `adapters/base.py`). Every other adapter includes them. Downstream tools that consume the contract (V023 validator, structured output consumers) will fail or silently skip fields.
-**Fix needed:** Add to the returned dict in `get_structure()`:
-```python
-'source': self.live_dir,
-'source_type': 'letsencrypt_directory',
-```
+**Severity:** High → **Resolved**
+**File:** `reveal/adapters/letsencrypt/adapter.py`
+**Fix:** `source` and `source_type` added to `get_structure()` return dict (`adapter.py:198-199`). Verified in sonic-ion-0330.
 
 ---
 
-### CFG-01: Rule config key allowlist rejects legitimate rule-specific keys (hundreds of warnings)
+### CFG-01: Rule config key allowlist rejects legitimate rule-specific keys (hundreds of warnings) ✅ Fixed sacred-shrine-0321
 
-**Severity:** Medium
-**File:** `reveal/rules/__init__.py` line 430
-**Problem:** `_ALLOWED_RULE_CONFIG_KEYS` is defined as:
-```python
-frozenset({'enabled', 'severity', 'threshold', 'message', 'description'})
-```
-Rules C905, E501, and R913 each register their own threshold keys (`MAX_DEPTH`, `max_length`, `max_args`), but these are not in the allowlist. Result: every file checked emits multiple "Unknown rule config key … ignored" warnings to stderr, drowning out real output.
-**Fix needed:** Expand the frozenset to include the keys actually used by built-in rules:
-```python
-_ALLOWED_RULE_CONFIG_KEYS = frozenset({
-    'enabled', 'severity', 'threshold', 'message', 'description',
-    'max_length', 'max_depth', 'MAX_DEPTH', 'max_args',
-})
-```
-**Longer-term:** Let each rule class declare `allowed_config_keys: Set[str]` so the registry can validate per-rule rather than via a central list.
+**Severity:** Medium → **Resolved**
+**File:** `reveal/rules/__init__.py`
+**Fix:** `_ALLOWED_RULE_CONFIG_KEYS` expanded to include `max_length`, `MAX_DEPTH`, `MAX_ARGS`. Verified in sonic-ion-0330 (`rules/__init__.py:430-432`).
 
 ---
 
-### PERF-01: `_dir_cache_key` walks entire directory tree on every cache miss
+### PERF-01: `_dir_cache_key` walks entire directory tree on every cache miss ✅ Fixed visible-cosmos-0330
 
-**Severity:** Medium
-**File:** `reveal/adapters/calls/index.py` lines 113–122
-**Problem:** The cache key function calls `directory.rglob('*')` and `os.stat()` on every file to build a mtime fingerprint. On a 5,000-file codebase this is ~500ms just for the key computation, on every cache miss. The LRU cap (MEM-06) bounds how many entries accumulate, but each miss is still slow.
-**Fix needed:** Use `os.stat(directory).st_mtime_ns` as the primary key (O(1), reliable on ext4/APFS/NTFS). Keep the full rglob as an OSError fallback only:
-```python
-def _dir_cache_key(directory: Path) -> Any:
-    try:
-        return ('dir_mtime', os.stat(directory).st_mtime_ns)
-    except OSError:
-        entries = []
-        for fp in sorted(directory.rglob('*')):
-            if fp.is_file() and is_code_file(fp):
-                try:
-                    entries.append((str(fp), os.stat(fp).st_mtime_ns))
-                except OSError:
-                    pass
-        return ('file_mtimes', tuple(entries))
-```
-**Trade-off:** Directory mtime is not updated on metadata-only changes (permissions). Acceptable for code analysis; edge case on NFS/FAT32.
+**Severity:** Medium → **Resolved**
+**File:** `reveal/adapters/calls/index.py` lines 113–131
+**Fix:** `_dir_cache_key` now stats the root directory plus all immediate non-skipped subdirectories (O(subdirs), not O(files)). Falls back to full rglob on OSError. This handles the Linux mtime behavior where editing a file only advances the subdirectory mtime, not the root — stale cache results on nested edits are now caught. Full rglob on every miss eliminated.
+**Note:** The originally proposed approach (pure O(1) root-only stat) was ruled out — on Linux, root mtime doesn't advance when files in subdirectories change. The implemented approach is O(subdirs) and correct on Linux/ext4.
 
 ---
 
@@ -595,26 +532,19 @@ def _dir_cache_key(directory: Path) -> Any:
 
 Discovered during full codebase review — session floating-wormhole-0321, 2026-03-21.
 
-### TEST-01: `AstAdapter` class has no unit tests
+### TEST-01: `AstAdapter` class has no unit tests ✅ Fixed sacred-shrine-0321
 
-**Severity:** Medium
+**Severity:** Medium → **Resolved**
 **File:** `reveal/adapters/ast/adapter.py`
-**Problem:** Only the call graph submodule (`test_ast_call_graph.py`, 38 tests) is unit tested. The main `AstAdapter` class — query parsing (lines 61–95), decorator filtering (lines 104–118), result sorting/limiting/offset, and the full `get_structure()` method — has no dedicated unit tests. Integration tests provide some coverage but don't exercise parameter combinations.
-**Fix needed:** Add `tests/adapters/test_ast_adapter.py` covering:
-- Query param parsing (`?type=`, `?complexity>N`, `?sort=`, `?limit=`, `?offset=`)
-- Decorator filtering (`?decorator=property`)
-- Builtins filtering (`?show=builtins`)
-- Edge cases: empty file, file with no functions, binary file
+**Fix:** `tests/adapters/test_ast_adapter.py` added covering query param parsing, decorator filtering, builtins filtering, and edge cases. (sacred-shrine-0321)
 
 ---
 
-### TEST-02: Python adapter undertested (9 tests)
+### TEST-02: Python adapter undertested (9 tests) ✅ Fixed sacred-shrine-0321
 
-**Severity:** Low
-**File:** `reveal/adapters/python/` (or equivalent)
-**Test file:** `tests/test_python_adapter.py`
-**Problem:** Only 9 tests cover what appears to be a substantial adapter implementation. Missing coverage for Python-specific features (runtime introspection, sys.path, installed packages, virtual environment detection).
-**Fix needed:** Expand to cover the adapter's core functionality surface.
+**Severity:** Low → **Resolved**
+**File:** `reveal/adapters/python/`
+**Fix:** Test coverage expanded in sacred-shrine-0321. (sacred-shrine-0321)
 
 ---
 
