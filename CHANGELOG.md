@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.5] - 2026-03-31 (celestial-chimera-0331)
+
+### Added
+- **`caller_type: "direct"` on `?tools=ToolName` call entries** (`analysis/tools.py`): `get_tool_calls()` call entries now include `caller_type: "direct"`, consistent with `get_all_tools()` details. Completes Phase E.
+
+---
+
 ## [0.69.4] - 2026-03-31 (quantum-knight-0331)
 
 ### Added

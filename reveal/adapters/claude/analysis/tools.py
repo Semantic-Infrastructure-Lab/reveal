@@ -195,6 +195,7 @@ def get_tool_calls(messages: List[Dict], tool_name: str, session_name: str,
             call_entry: Dict[str, Any] = {
                 'message_index': i,
                 'tool_use_id': tool_use_id,
+                'caller_type': 'direct',
                 'input': content.get('input'),
                 'timestamp': msg.get('timestamp'),
             }

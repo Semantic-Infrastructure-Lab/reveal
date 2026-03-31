@@ -579,6 +579,11 @@ class TestGetToolCallsResult:
         result = get_tool_calls(msgs, 'Edit', 'session-1', self._BASE.copy())
         assert result['calls'][0]['result']['file_path'] == '/foo.py'
 
+    def test_call_entries_include_caller_type_direct(self):
+        msgs = [_assistant_tool_use('tu_001', 'Bash', command='ls')]
+        result = get_tool_calls(msgs, 'Bash', 'session-1', self._BASE.copy())
+        assert result['calls'][0]['caller_type'] == 'direct'
+
 
 # ─── get_all_tools caller_type ───────────────────────────────────────────────
 
