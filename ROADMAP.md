@@ -7,6 +7,12 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.68.0
+- ✅ **`claude://` install introspection (8 new resources)** — `history`, `settings`, `plans`, `info`, `config`, `memory`, `agents`, `hooks`. Browse prompt history, inspect user settings, read saved plans, surface feature flags, MCP server registrations, memory files, agent definitions, and hook scripts without specifying a session name.
+- ✅ **`CLAUDE_HOME` / `CLAUDE_JSON` / `PLANS_DIR` / `AGENTS_DIR` / `HOOKS_DIR` class attrs** — centralised path resolution with `REVEAL_CLAUDE_HOME` env override and Windows `%APPDATA%\Claude` fallback.
+- ✅ **`CLAUDE_ADAPTER_GUIDE.md` — Install Introspection section** (BACK-101) — new section documents all 8 resources with query param tables, sub-resource paths, and return value descriptions.
+- ✅ **Test count: 7,035 → 7,169** — 42 new tests across `TestClaudeHistory`, `TestClaudeInfo`, `TestClaudeSettings`, `TestClasuePlans`, `TestClaudeConfig`, `TestClaudeMemory`, `TestClaudeAgents`, `TestClaudeHooks`.
+
 ### v0.67.0
 - ✅ **OR-pattern extraction** — `reveal doc.md "Open Issues|Action Items"` extracts both sections in one call. Backslash-escaped pipes normalised, deduplication when multiple terms match same section.
 - ✅ **`--broken-only` links flag** — filter `reveal doc.md --links` to broken internal links only.
@@ -14,7 +20,7 @@ This document outlines reveal's development priorities and future direction. For
 - ✅ **5 agent friction fixes (BACK-113–117)** — false `--analyzer text` hint removed, element not-found lists available names, OR-pattern failure hints `--search`, B005 skips `try/except ImportError` optional deps, code element not-found hints at `--search`.
 - ✅ **`help://` internal adapter filtering** — `demo` and `test` no longer appear in adapter listings or counts.
 - ✅ **`letsencrypt://` + `autossl://` agent guide coverage** — full task sections added to `AGENT_HELP.md`.
-- ✅ **Test count: 6,871 → 7,035+** across all sessions.
+- ✅ **Test count: 6,871 → 7,035**
 
 ### v0.66.1
 - ✅ **Circular dep false positives fixed** — `from . import X` (empty module_name) now resolves to `X.py` instead of `__init__.py`. Eliminated all false-positive cycles in standard Python `__init__.py` re-export patterns. Also handles aliased imports (`from . import query as q`). Multi-edge emission for `from . import X, Y, Z`.

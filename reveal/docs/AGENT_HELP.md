@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.67.0
+**Version:** 0.68.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -1468,9 +1468,9 @@ reveal doc.md --links --link-type internal
 
 ### Task: "Analyze Claude Code sessions (claude://)"
 
-The `claude://` adapter provides session-level analysis of Claude Code conversations — tool usage analytics, file operation tracking, workflow visualization, and error detection. Designed for post-session review, debugging, and token optimization.
+The `claude://` adapter provides session-level analysis of Claude Code conversations AND introspection of your Claude Code install (agents, hooks, memory, config, plans). Designed for post-session review, debugging, token optimization, and auditing your Claude setup.
 
-**Pattern:**
+**Session analysis:**
 ```bash
 # List recent sessions (most recent first)
 reveal claude://
@@ -1497,20 +1497,56 @@ reveal claude://session/my-session-0302/thinking
 # Filter to specific tool
 reveal 'claude://session/my-session-0302?tools=Bash'
 
-# Directory and branch changes
-reveal claude://session/my-session-0302/context
-
 # User messages (prompts only)
 reveal claude://session/my-session-0302/user
 
 # Assistant text responses (no thinking/tools)
 reveal claude://session/my-session-0302/assistant
 
-# Specific message by number
-reveal claude://session/my-session-0302/message/5
+# Fast session recovery — last assistant turn
+reveal 'claude://session/my-session-0302?last'
+
+# Cross-session content search
+reveal 'claude://sessions/?search=validate_token'
+
+# Prompt history across all projects
+reveal claude://history
+reveal 'claude://history?search=validate_token'
 ```
 
-**claude:// views:**
+**Claude install introspection:**
+```bash
+# Diagnostic: all data paths and env overrides
+reveal claude://info
+
+# Settings (~/.claude/settings.json)
+reveal claude://settings
+reveal 'claude://settings?key=model'
+
+# Per-install config (~/.claude.json): MCP servers, flags
+reveal claude://config
+reveal 'claude://config?key=installMethod'
+
+# Saved plans (~/.claude/plans/)
+reveal claude://plans
+reveal 'claude://plans?search=token'
+reveal claude://plans/my-plan-name
+
+# Memory files across all projects
+reveal claude://memory
+reveal 'claude://memory?search=feedback'
+reveal claude://memory/my-project
+
+# Agent definitions (~/.claude/agents/)
+reveal claude://agents
+reveal claude://agents/reveal-codereview
+
+# Hooks (~/.claude/hooks/)
+reveal claude://hooks
+reveal claude://hooks/PostToolUse
+```
+
+**claude:// session views:**
 - `claude://` / `claude://sessions` — listing of all sessions (sorted by recency)
 - `claude://session/<name>` — overview: message counts, tools used, duration, title
 - `claude://session/<name>/workflow` — numbered chronological tool sequence with descriptions
@@ -1521,6 +1557,17 @@ reveal claude://session/my-session-0302/message/5
 - `claude://session/<name>/context` — directory and branch changes during session
 - `claude://session/<name>/user` — user turns (initial prompt + tool result messages)
 - `claude://session/<name>/assistant` — assistant text responses only
+- `claude://session/<name>/chain` — session continuation chain (continuing_from: links)
+
+**claude:// install views:**
+- `claude://info` — diagnostic path dump (all resolved dirs, env vars)
+- `claude://settings` — `~/.claude/settings.json` with `?key=` extraction
+- `claude://config` — `~/.claude.json` (MCP servers, feature flags) with `?key=` extraction
+- `claude://history` — prompt history; `?search=`, `?project=`, `?since=` filters
+- `claude://plans[/<name>]` — list or read `~/.claude/plans/`; `?search=`
+- `claude://memory[/<project>]` — memory files from `~/.claude/projects/*/memory/`; `?search=`
+- `claude://agents[/<name>]` — list or read `~/.claude/agents/`
+- `claude://hooks[/<event>]` — list hook events or read a specific script
 
 **When to use which view:**
 
@@ -1533,6 +1580,10 @@ reveal claude://session/my-session-0302/message/5
 | "How many tokens did thinking use?" | `.../thinking` |
 | "What was the original prompt?" | `.../user` |
 | "What did Claude output?" | `.../assistant` |
+| "Where did the session stop?" | `?last` |
+| "Find sessions about X" | `claude://sessions/?search=X` |
+| "What MCP servers are configured?" | `claude://config` |
+| "What memory does this project have?" | `claude://memory/<project>` |
 
 **Progressive analysis workflow:**
 ```bash
@@ -1548,8 +1599,6 @@ reveal claude://session/my-session-0302/workflow
 # 4. Drill into files if you need to know what was touched
 reveal claude://session/my-session-0302/files
 ```
-
-**Note:** `claude://search` is not yet implemented. To search across sessions, use `tia search sessions "<term>"`.
 
 ---
 

@@ -1397,6 +1397,596 @@ class TestHelpCrossPlatform:
         assert len(reveal_cmds) >= 3, "Expected at least 3 reveal commands in try_now"
 
 
+class TestClaudeInfo:
+    """Tests for claude://info diagnostic path dump."""
+
+    def test_get_info_returns_correct_type(self):
+        adapter = ClaudeAdapter('info')
+        result = adapter.get_structure()
+        assert result['type'] == 'claude_info'
+        assert result['contract_version'] == '1.0'
+
+    def test_get_info_has_all_path_keys(self):
+        adapter = ClaudeAdapter('info')
+        result = adapter.get_structure()
+        paths = result['paths']
+        for key in ('claude_home', 'projects', 'history', 'plans', 'settings', 'config', 'agents', 'hooks'):
+            assert key in paths, f"Missing path key: {key}"
+
+    def test_get_info_paths_have_exists_field(self):
+        adapter = ClaudeAdapter('info')
+        result = adapter.get_structure()
+        for key, info in result['paths'].items():
+            assert 'exists' in info, f"Path {key} missing 'exists' field"
+            assert 'path' in info, f"Path {key} missing 'path' field"
+
+    def test_get_info_has_env_overrides(self):
+        adapter = ClaudeAdapter('info')
+        result = adapter.get_structure()
+        env = result['env']
+        assert 'REVEAL_CLAUDE_HOME' in env
+        assert 'REVEAL_CLAUDE_DIR' in env
+        assert 'REVEAL_SESSIONS_DIR' in env
+
+
+class TestClaudeSettings:
+    """Tests for claude://settings."""
+
+    def test_returns_correct_type(self):
+        adapter = ClaudeAdapter('settings')
+        result = adapter.get_structure()
+        assert result['type'] == 'claude_settings'
+        assert result['contract_version'] == '1.0'
+
+    def test_settings_is_dict(self):
+        adapter = ClaudeAdapter('settings')
+        result = adapter.get_structure()
+        assert isinstance(result.get('settings'), dict)
+
+    def test_key_extraction_simple(self, tmp_path):
+        settings_file = tmp_path / 'settings.json'
+        settings_file.write_text('{"model": "sonnet", "timeout": 300}')
+        original = ClaudeAdapter.CLAUDE_HOME
+        ClaudeAdapter.CLAUDE_HOME = tmp_path
+        try:
+            adapter = ClaudeAdapter('settings')
+            adapter.query_params = {'key': 'model'}
+            result = adapter._get_settings()
+            assert result['key'] == 'model'
+            assert result['value'] == 'sonnet'
+        finally:
+            ClaudeAdapter.CLAUDE_HOME = original
+
+    def test_key_extraction_nested(self, tmp_path):
+        settings_file = tmp_path / 'settings.json'
+        settings_file.write_text('{"permissions": {"additionalDirectories": ["/tmp"]}}')
+        original = ClaudeAdapter.CLAUDE_HOME
+        ClaudeAdapter.CLAUDE_HOME = tmp_path
+        try:
+            adapter = ClaudeAdapter('settings')
+            adapter.query_params = {'key': 'permissions.additionalDirectories'}
+            result = adapter._get_settings()
+            assert result['key'] == 'permissions.additionalDirectories'
+            assert result['value'] == ['/tmp']
+        finally:
+            ClaudeAdapter.CLAUDE_HOME = original
+
+    def test_key_extraction_missing_key(self, tmp_path):
+        settings_file = tmp_path / 'settings.json'
+        settings_file.write_text('{"model": "sonnet"}')
+        original = ClaudeAdapter.CLAUDE_HOME
+        ClaudeAdapter.CLAUDE_HOME = tmp_path
+        try:
+            adapter = ClaudeAdapter('settings')
+            adapter.query_params = {'key': 'nonexistent'}
+            result = adapter._get_settings()
+            assert 'error' in result
+            assert result['value'] is None
+        finally:
+            ClaudeAdapter.CLAUDE_HOME = original
+
+    def test_missing_settings_file(self, tmp_path):
+        original = ClaudeAdapter.CLAUDE_HOME
+        ClaudeAdapter.CLAUDE_HOME = tmp_path
+        try:
+            adapter = ClaudeAdapter('settings')
+            result = adapter._get_settings()
+            assert 'error' in result
+            assert result['settings'] == {}
+        finally:
+            ClaudeAdapter.CLAUDE_HOME = original
+
+
+class TestClaudePlans:
+    """Tests for claude://plans list and claude://plans/<name>."""
+
+    def _make_plans_dir(self, tmp_path):
+        plans_dir = tmp_path / 'plans'
+        plans_dir.mkdir()
+        (plans_dir / 'alpha-plan.md').write_text('# Alpha Plan\n\nContent for alpha.')
+        (plans_dir / 'beta-plan.md').write_text('# Beta Plan\n\nContent about tokens.')
+        (plans_dir / 'gamma-plan.md').write_text('# Gamma Plan\n\nSomething else.')
+        return plans_dir
+
+    def test_list_plans_returns_correct_type(self, tmp_path):
+        self._make_plans_dir(tmp_path)
+        original = ClaudeAdapter.PLANS_DIR
+        ClaudeAdapter.PLANS_DIR = tmp_path / 'plans'
+        try:
+            adapter = ClaudeAdapter('plans')
+            result = adapter._get_plans()
+            assert result['type'] == 'claude_plans'
+            assert result['total'] == 3
+            assert len(result['plans']) == 3
+        finally:
+            ClaudeAdapter.PLANS_DIR = original
+
+    def test_list_plans_entries_have_required_fields(self, tmp_path):
+        self._make_plans_dir(tmp_path)
+        original = ClaudeAdapter.PLANS_DIR
+        ClaudeAdapter.PLANS_DIR = tmp_path / 'plans'
+        try:
+            adapter = ClaudeAdapter('plans')
+            result = adapter._get_plans()
+            for plan in result['plans']:
+                assert 'name' in plan
+                assert 'modified' in plan
+                assert 'size_kb' in plan
+                assert 'title' in plan
+        finally:
+            ClaudeAdapter.PLANS_DIR = original
+
+    def test_list_plans_search_filter(self, tmp_path):
+        self._make_plans_dir(tmp_path)
+        original = ClaudeAdapter.PLANS_DIR
+        ClaudeAdapter.PLANS_DIR = tmp_path / 'plans'
+        try:
+            adapter = ClaudeAdapter('plans')
+            adapter.query_params = {'search': 'tokens'}
+            result = adapter._get_plans()
+            assert result['displayed'] == 1
+            assert result['plans'][0]['name'] == 'beta-plan'
+        finally:
+            ClaudeAdapter.PLANS_DIR = original
+
+    def test_read_specific_plan(self, tmp_path):
+        self._make_plans_dir(tmp_path)
+        original = ClaudeAdapter.PLANS_DIR
+        ClaudeAdapter.PLANS_DIR = tmp_path / 'plans'
+        try:
+            adapter = ClaudeAdapter('plans/alpha-plan')
+            result = adapter._get_plans()
+            assert result['type'] == 'claude_plan'
+            assert result['name'] == 'alpha-plan'
+            assert '# Alpha Plan' in result['content']
+        finally:
+            ClaudeAdapter.PLANS_DIR = original
+
+    def test_read_plan_not_found(self, tmp_path):
+        self._make_plans_dir(tmp_path)
+        original = ClaudeAdapter.PLANS_DIR
+        ClaudeAdapter.PLANS_DIR = tmp_path / 'plans'
+        try:
+            adapter = ClaudeAdapter('plans/nonexistent')
+            result = adapter._get_plans()
+            assert 'error' in result
+        finally:
+            ClaudeAdapter.PLANS_DIR = original
+
+    def test_missing_plans_dir(self, tmp_path):
+        original = ClaudeAdapter.PLANS_DIR
+        ClaudeAdapter.PLANS_DIR = tmp_path / 'plans'  # doesn't exist
+        try:
+            adapter = ClaudeAdapter('plans')
+            result = adapter._get_plans()
+            assert 'error' in result
+            assert result['plans'] == []
+        finally:
+            ClaudeAdapter.PLANS_DIR = original
+
+
+class TestClaudeConfig:
+    """Tests for claude://config."""
+
+    def _make_claude_json(self, tmp_path, data: dict):
+        p = tmp_path / '.claude.json'
+        import json
+        p.write_text(json.dumps(data))
+        return p
+
+    def test_config_returns_correct_type(self, tmp_path):
+        p = self._make_claude_json(tmp_path, {
+            'installMethod': 'native',
+            'autoUpdates': False,
+            'projects': {},
+        })
+        original = ClaudeAdapter.CLAUDE_JSON
+        ClaudeAdapter.CLAUDE_JSON = p
+        try:
+            adapter = ClaudeAdapter('config')
+            result = adapter._get_config()
+            assert result['type'] == 'claude_config'
+            assert result['projects_count'] == 0
+            assert result['flags']['installMethod'] == 'native'
+        finally:
+            ClaudeAdapter.CLAUDE_JSON = original
+
+    def test_config_extracts_mcp_servers(self, tmp_path):
+        p = self._make_claude_json(tmp_path, {
+            'projects': {
+                '/home/user/proj': {
+                    'mcpServers': {'reveal-mcp': {'command': 'reveal'}},
+                    'allowedTools': ['Bash'],
+                }
+            }
+        })
+        original = ClaudeAdapter.CLAUDE_JSON
+        ClaudeAdapter.CLAUDE_JSON = p
+        try:
+            adapter = ClaudeAdapter('config')
+            result = adapter._get_config()
+            assert result['projects_count'] == 1
+            assert result['projects'][0]['mcp_servers'] == ['reveal-mcp']
+            assert result['projects'][0]['allowed_tools'] == ['Bash']
+        finally:
+            ClaudeAdapter.CLAUDE_JSON = original
+
+    def test_config_key_extraction(self, tmp_path):
+        p = self._make_claude_json(tmp_path, {'installMethod': 'native', 'verbose': True})
+        original = ClaudeAdapter.CLAUDE_JSON
+        ClaudeAdapter.CLAUDE_JSON = p
+        try:
+            adapter = ClaudeAdapter('config')
+            adapter.query_params = {'key': 'installMethod'}
+            result = adapter._get_config()
+            assert result['key'] == 'installMethod'
+            assert result['value'] == 'native'
+        finally:
+            ClaudeAdapter.CLAUDE_JSON = original
+
+    def test_config_key_missing(self, tmp_path):
+        p = self._make_claude_json(tmp_path, {'installMethod': 'native'})
+        original = ClaudeAdapter.CLAUDE_JSON
+        ClaudeAdapter.CLAUDE_JSON = p
+        try:
+            adapter = ClaudeAdapter('config')
+            adapter.query_params = {'key': 'nonexistent'}
+            result = adapter._get_config()
+            assert result['value'] is None
+        finally:
+            ClaudeAdapter.CLAUDE_JSON = original
+
+    def test_config_missing_file(self, tmp_path):
+        original = ClaudeAdapter.CLAUDE_JSON
+        ClaudeAdapter.CLAUDE_JSON = tmp_path / '.claude.json'
+        try:
+            adapter = ClaudeAdapter('config')
+            result = adapter._get_config()
+            assert 'error' in result
+            assert result['projects'] == []
+        finally:
+            ClaudeAdapter.CLAUDE_JSON = original
+
+    def test_config_masks_secrets(self, tmp_path):
+        p = self._make_claude_json(tmp_path, {
+            'api_key': 'sk-ant-very-secret-key-here',
+            'installMethod': 'native',
+        })
+        original = ClaudeAdapter.CLAUDE_JSON
+        ClaudeAdapter.CLAUDE_JSON = p
+        try:
+            adapter = ClaudeAdapter('config')
+            result = adapter._mask_secrets({'api_key': 'sk-ant-very-secret-key-here'})
+            assert result['api_key'].endswith('***')
+            assert not result['api_key'].startswith('sk-ant-very')
+        finally:
+            ClaudeAdapter.CLAUDE_JSON = original
+
+
+class TestClaudeMemory:
+    """Tests for claude://memory."""
+
+    def _make_memory_tree(self, tmp_path):
+        proj_dir = tmp_path / '-home-user-proj1'
+        (proj_dir / 'memory').mkdir(parents=True)
+        (proj_dir / 'memory' / 'feedback_test.md').write_text(
+            '---\nname: test feedback\ndescription: A test feedback\ntype: feedback\n---\nBody text here.')
+        (proj_dir / 'memory' / 'user_profile.md').write_text(
+            '---\nname: user\ndescription: User profile\ntype: user\n---\nScott is a dev.')
+        other_proj = tmp_path / '-home-user-proj2'
+        (other_proj / 'memory').mkdir(parents=True)
+        (other_proj / 'memory' / 'project_context.md').write_text(
+            '---\nname: context\ndescription: Project context\ntype: project\n---\nContent.')
+        return tmp_path
+
+    def test_memory_returns_correct_type(self, tmp_path):
+        self._make_memory_tree(tmp_path)
+        original = ClaudeAdapter.CONVERSATION_BASE
+        ClaudeAdapter.CONVERSATION_BASE = tmp_path
+        try:
+            adapter = ClaudeAdapter('memory')
+            result = adapter._get_memory()
+            assert result['type'] == 'claude_memory'
+            assert result['total'] == 3
+        finally:
+            ClaudeAdapter.CONVERSATION_BASE = original
+
+    def test_memory_entries_have_required_fields(self, tmp_path):
+        self._make_memory_tree(tmp_path)
+        original = ClaudeAdapter.CONVERSATION_BASE
+        ClaudeAdapter.CONVERSATION_BASE = tmp_path
+        try:
+            adapter = ClaudeAdapter('memory')
+            result = adapter._get_memory()
+            for m in result['memories']:
+                assert 'project' in m
+                assert 'name' in m
+                assert 'type' in m
+                assert 'description' in m
+                assert 'modified' in m
+                assert 'path' in m
+        finally:
+            ClaudeAdapter.CONVERSATION_BASE = original
+
+    def test_memory_project_filter(self, tmp_path):
+        self._make_memory_tree(tmp_path)
+        original = ClaudeAdapter.CONVERSATION_BASE
+        ClaudeAdapter.CONVERSATION_BASE = tmp_path
+        try:
+            adapter = ClaudeAdapter('memory/proj1')
+            result = adapter._get_memory()
+            assert result['total'] == 2
+            assert all('proj1' in m['project'] for m in result['memories'])
+        finally:
+            ClaudeAdapter.CONVERSATION_BASE = original
+
+    def test_memory_search_filter(self, tmp_path):
+        self._make_memory_tree(tmp_path)
+        original = ClaudeAdapter.CONVERSATION_BASE
+        ClaudeAdapter.CONVERSATION_BASE = tmp_path
+        try:
+            adapter = ClaudeAdapter('memory')
+            adapter.query_params = {'search': 'scott'}
+            result = adapter._get_memory()
+            assert result['total'] == 1
+            assert result['memories'][0]['name'] == 'user_profile'
+        finally:
+            ClaudeAdapter.CONVERSATION_BASE = original
+
+    def test_memory_missing_projects_dir(self, tmp_path):
+        original = ClaudeAdapter.CONVERSATION_BASE
+        ClaudeAdapter.CONVERSATION_BASE = tmp_path / 'nonexistent'
+        try:
+            adapter = ClaudeAdapter('memory')
+            result = adapter._get_memory()
+            assert 'error' in result
+            assert result['memories'] == []
+        finally:
+            ClaudeAdapter.CONVERSATION_BASE = original
+
+    def test_memory_parses_frontmatter_type(self, tmp_path):
+        self._make_memory_tree(tmp_path)
+        original = ClaudeAdapter.CONVERSATION_BASE
+        ClaudeAdapter.CONVERSATION_BASE = tmp_path
+        try:
+            adapter = ClaudeAdapter('memory')
+            result = adapter._get_memory()
+            types = {m['name']: m['type'] for m in result['memories']}
+            assert types.get('feedback_test') == 'feedback'
+            assert types.get('user_profile') == 'user'
+        finally:
+            ClaudeAdapter.CONVERSATION_BASE = original
+
+
+class TestClaudeAgents:
+    """Tests for claude://agents list and claude://agents/<name>."""
+
+    def _make_agents_dir(self, tmp_path):
+        agents_dir = tmp_path / 'agents'
+        agents_dir.mkdir()
+        (agents_dir / 'review-bot.md').write_text(
+            '---\nname: review-bot\ndescription: Code review agent\ntools: Bash, Read\nmodel: sonnet\n---\nDo reviews.')
+        (agents_dir / 'test-runner.md').write_text(
+            '---\nname: test-runner\ndescription: Runs tests\ntools: Bash\nmodel: haiku\n---\nRun tests.')
+        return agents_dir
+
+    def test_agents_list_returns_correct_type(self, tmp_path):
+        self._make_agents_dir(tmp_path)
+        original = ClaudeAdapter.AGENTS_DIR
+        ClaudeAdapter.AGENTS_DIR = tmp_path / 'agents'
+        try:
+            adapter = ClaudeAdapter('agents')
+            result = adapter._get_agents()
+            assert result['type'] == 'claude_agents'
+            assert result['total'] == 2
+        finally:
+            ClaudeAdapter.AGENTS_DIR = original
+
+    def test_agents_list_entries_have_required_fields(self, tmp_path):
+        self._make_agents_dir(tmp_path)
+        original = ClaudeAdapter.AGENTS_DIR
+        ClaudeAdapter.AGENTS_DIR = tmp_path / 'agents'
+        try:
+            adapter = ClaudeAdapter('agents')
+            result = adapter._get_agents()
+            for a in result['agents']:
+                assert 'name' in a
+                assert 'modified' in a
+                assert 'description' in a
+                assert 'tools' in a
+                assert 'model' in a
+        finally:
+            ClaudeAdapter.AGENTS_DIR = original
+
+    def test_agents_read_specific(self, tmp_path):
+        self._make_agents_dir(tmp_path)
+        original = ClaudeAdapter.AGENTS_DIR
+        ClaudeAdapter.AGENTS_DIR = tmp_path / 'agents'
+        try:
+            adapter = ClaudeAdapter('agents/review-bot')
+            result = adapter._get_agents()
+            assert result['type'] == 'claude_agent'
+            assert result['name'] == 'review-bot'
+            assert 'Do reviews.' in result['content']
+            assert result['model'] == 'sonnet'
+        finally:
+            ClaudeAdapter.AGENTS_DIR = original
+
+    def test_agents_not_found(self, tmp_path):
+        self._make_agents_dir(tmp_path)
+        original = ClaudeAdapter.AGENTS_DIR
+        ClaudeAdapter.AGENTS_DIR = tmp_path / 'agents'
+        try:
+            adapter = ClaudeAdapter('agents/nonexistent')
+            result = adapter._get_agents()
+            assert 'error' in result
+        finally:
+            ClaudeAdapter.AGENTS_DIR = original
+
+    def test_agents_missing_dir(self, tmp_path):
+        original = ClaudeAdapter.AGENTS_DIR
+        ClaudeAdapter.AGENTS_DIR = tmp_path / 'agents'
+        try:
+            adapter = ClaudeAdapter('agents')
+            result = adapter._get_agents()
+            assert 'error' in result
+            assert result['agents'] == []
+        finally:
+            ClaudeAdapter.AGENTS_DIR = original
+
+    def test_agents_search_filter(self, tmp_path):
+        self._make_agents_dir(tmp_path)
+        original = ClaudeAdapter.AGENTS_DIR
+        ClaudeAdapter.AGENTS_DIR = tmp_path / 'agents'
+        try:
+            adapter = ClaudeAdapter('agents')
+            adapter.query_params = {'search': 'review'}
+            result = adapter._get_agents()
+            assert result['displayed'] == 1
+            assert result['agents'][0]['name'] == 'review-bot'
+        finally:
+            ClaudeAdapter.AGENTS_DIR = original
+
+    def test_agents_parses_tools_list(self, tmp_path):
+        self._make_agents_dir(tmp_path)
+        original = ClaudeAdapter.AGENTS_DIR
+        ClaudeAdapter.AGENTS_DIR = tmp_path / 'agents'
+        try:
+            adapter = ClaudeAdapter('agents')
+            result = adapter._get_agents()
+            by_name = {a['name']: a for a in result['agents']}
+            assert by_name['review-bot']['tools'] == ['Bash', 'Read']
+            assert by_name['test-runner']['tools'] == ['Bash']
+        finally:
+            ClaudeAdapter.AGENTS_DIR = original
+
+
+class TestClaudeHooks:
+    """Tests for claude://hooks list and claude://hooks/<event>."""
+
+    def _make_hooks_dir(self, tmp_path):
+        hooks_dir = tmp_path / 'hooks'
+        hooks_dir.mkdir()
+        script = hooks_dir / 'PostToolUse'
+        script.write_text('#!/bin/bash\necho hello')
+        script.chmod(0o755)
+        # Also a directory-style event
+        pre_dir = hooks_dir / 'PreToolUse'
+        pre_dir.mkdir()
+        (pre_dir / 'validate.sh').write_text('#!/bin/bash\necho validate')
+        (pre_dir / 'validate.sh').chmod(0o755)
+        return hooks_dir
+
+    def test_hooks_list_returns_correct_type(self, tmp_path):
+        self._make_hooks_dir(tmp_path)
+        original = ClaudeAdapter.HOOKS_DIR
+        ClaudeAdapter.HOOKS_DIR = tmp_path / 'hooks'
+        try:
+            adapter = ClaudeAdapter('hooks')
+            result = adapter._get_hooks()
+            assert result['type'] == 'claude_hooks'
+            assert result['total'] == 2
+        finally:
+            ClaudeAdapter.HOOKS_DIR = original
+
+    def test_hooks_list_entries_have_required_fields(self, tmp_path):
+        self._make_hooks_dir(tmp_path)
+        original = ClaudeAdapter.HOOKS_DIR
+        ClaudeAdapter.HOOKS_DIR = tmp_path / 'hooks'
+        try:
+            adapter = ClaudeAdapter('hooks')
+            result = adapter._get_hooks()
+            for h in result['hooks']:
+                assert 'event' in h
+                assert 'kind' in h
+                assert 'modified' in h
+        finally:
+            ClaudeAdapter.HOOKS_DIR = original
+
+    def test_hooks_file_event_kind(self, tmp_path):
+        self._make_hooks_dir(tmp_path)
+        original = ClaudeAdapter.HOOKS_DIR
+        ClaudeAdapter.HOOKS_DIR = tmp_path / 'hooks'
+        try:
+            adapter = ClaudeAdapter('hooks')
+            result = adapter._get_hooks()
+            by_event = {h['event']: h for h in result['hooks']}
+            assert by_event['PostToolUse']['kind'] == 'file'
+            assert by_event['PreToolUse']['kind'] == 'directory'
+        finally:
+            ClaudeAdapter.HOOKS_DIR = original
+
+    def test_hooks_read_file_event(self, tmp_path):
+        self._make_hooks_dir(tmp_path)
+        original = ClaudeAdapter.HOOKS_DIR
+        ClaudeAdapter.HOOKS_DIR = tmp_path / 'hooks'
+        try:
+            adapter = ClaudeAdapter('hooks/PostToolUse')
+            result = adapter._get_hooks()
+            assert result['event'] == 'PostToolUse'
+            assert result['kind'] == 'file'
+            assert 'echo hello' in result['content']
+            assert result['executable'] is True
+        finally:
+            ClaudeAdapter.HOOKS_DIR = original
+
+    def test_hooks_read_dir_event(self, tmp_path):
+        self._make_hooks_dir(tmp_path)
+        original = ClaudeAdapter.HOOKS_DIR
+        ClaudeAdapter.HOOKS_DIR = tmp_path / 'hooks'
+        try:
+            adapter = ClaudeAdapter('hooks/PreToolUse')
+            result = adapter._get_hooks()
+            assert result['event'] == 'PreToolUse'
+            assert result['kind'] == 'directory'
+            assert len(result['scripts']) == 1
+            assert result['scripts'][0]['name'] == 'validate.sh'
+        finally:
+            ClaudeAdapter.HOOKS_DIR = original
+
+    def test_hooks_missing_dir(self, tmp_path):
+        original = ClaudeAdapter.HOOKS_DIR
+        ClaudeAdapter.HOOKS_DIR = tmp_path / 'hooks'
+        try:
+            adapter = ClaudeAdapter('hooks')
+            result = adapter._get_hooks()
+            assert 'error' in result
+            assert result['hooks'] == []
+        finally:
+            ClaudeAdapter.HOOKS_DIR = original
+
+    def test_hooks_event_not_found(self, tmp_path):
+        self._make_hooks_dir(tmp_path)
+        original = ClaudeAdapter.HOOKS_DIR
+        ClaudeAdapter.HOOKS_DIR = tmp_path / 'hooks'
+        try:
+            adapter = ClaudeAdapter('hooks/NonExistentEvent')
+            result = adapter._get_hooks()
+            assert 'error' in result
+        finally:
+            ClaudeAdapter.HOOKS_DIR = original
+
+
 # Run tests with pytest
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

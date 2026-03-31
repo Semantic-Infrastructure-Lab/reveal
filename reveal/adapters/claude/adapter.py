@@ -137,6 +137,38 @@ _SCHEMA_OUTPUT_TYPES = [
         'chain_length': {'type': 'integer'},
         'sessions_dir': {'type': 'string'},
     }),
+    _make_output_type('claude_history', 'Prompt history from ~/.claude/history.jsonl', {
+        'total_entries': {'type': 'integer'},
+        'match_count': {'type': 'integer'},
+        'entries': {'type': 'array'},
+    }),
+    _make_output_type('claude_info', 'Diagnostic dump of all resolved Claude Code data paths', {
+        'paths': {'type': 'object'}, 'env': {'type': 'object'},
+    }),
+    _make_output_type('claude_settings', 'Claude Code settings from ~/.claude/settings.json', {
+        'settings': {'type': 'object'},
+    }),
+    _make_output_type('claude_plans', 'List of plans from ~/.claude/plans/', {
+        'plans': {'type': 'array'}, 'total': {'type': 'integer'},
+    }),
+    _make_output_type('claude_plan', 'Single plan content from ~/.claude/plans/', {
+        'name': {'type': 'string'}, 'content': {'type': 'string'},
+    }),
+    _make_output_type('claude_config', 'Per-install config from ~/.claude.json (projects, MCP servers, flags)', {
+        'projects_count': {'type': 'integer'}, 'projects': {'type': 'array'}, 'flags': {'type': 'object'},
+    }),
+    _make_output_type('claude_memory', 'Memory files from ~/.claude/projects/*/memory/', {
+        'memories': {'type': 'array'}, 'total': {'type': 'integer'},
+    }),
+    _make_output_type('claude_agents', 'List of agent definitions from ~/.claude/agents/', {
+        'agents': {'type': 'array'}, 'total': {'type': 'integer'},
+    }),
+    _make_output_type('claude_agent', 'Single agent definition from ~/.claude/agents/', {
+        'name': {'type': 'string'}, 'content': {'type': 'string'},
+    }),
+    _make_output_type('claude_hooks', 'Hook scripts from ~/.claude/hooks/', {
+        'hooks': {'type': 'array'}, 'total': {'type': 'integer'},
+    }),
 ]
 
 _SCHEMA_EXAMPLE_QUERIES = [
@@ -166,6 +198,25 @@ _SCHEMA_EXAMPLE_QUERIES = [
     {'uri': "claude://sessions/?search=validate_token", 'description': 'Cross-session content search — sessions mentioning a term (20 results by default)', 'query_param': '?search=<term>', 'output_type': 'claude_cross_session_search'},
     {'uri': "claude://sessions/?search=auth&since=2026-03-01", 'description': 'Cross-session search scoped to recent sessions', 'query_param': '?search=<term>&since=<date>', 'output_type': 'claude_cross_session_search'},
     {'uri': "claude://search/validate_token", 'description': 'Path-based alias for cross-session search', 'output_type': 'claude_cross_session_search'},
+    {'uri': 'claude://history', 'description': 'Recent prompt history — last 50 prompts across all projects', 'output_type': 'claude_history'},
+    {'uri': "claude://history?search=validate_token", 'description': 'Find prompts mentioning a term', 'query_param': '?search=<term>', 'output_type': 'claude_history'},
+    {'uri': "claude://history?project=frono&since=2026-03-28", 'description': 'Prompts in a specific project since a date', 'query_param': '?project=<path>&since=<date>', 'output_type': 'claude_history'},
+    {'uri': 'claude://info', 'description': 'Diagnostic dump of all resolved data paths', 'output_type': 'claude_info'},
+    {'uri': 'claude://settings', 'description': 'Claude Code settings (model, permissions, hooks)', 'output_type': 'claude_settings'},
+    {'uri': "claude://settings?key=model", 'description': 'Extract a specific settings value (dot-notation)', 'query_param': '?key=<dotpath>', 'output_type': 'claude_settings'},
+    {'uri': "claude://settings?key=permissions.additionalDirectories", 'description': 'Extract nested settings value', 'query_param': '?key=<dotpath>', 'output_type': 'claude_settings'},
+    {'uri': 'claude://plans', 'description': 'List all saved implementation plans', 'output_type': 'claude_plans'},
+    {'uri': 'claude://plans/gentle-foraging-candy', 'description': 'Read a specific plan by name', 'output_type': 'claude_plan'},
+    {'uri': "claude://plans?search=token", 'description': 'Search across plan content', 'query_param': '?search=<term>', 'output_type': 'claude_plans'},
+    {'uri': 'claude://config', 'description': 'Per-install config: project count, MCP servers, feature flags', 'output_type': 'claude_config'},
+    {'uri': "claude://config?key=projects./path/to/proj.mcpServers", 'description': 'Extract a specific config value (dot-notation)', 'query_param': '?key=<dotpath>', 'output_type': 'claude_config'},
+    {'uri': 'claude://memory', 'description': 'All memory files across all projects', 'output_type': 'claude_memory'},
+    {'uri': 'claude://memory/my-project', 'description': 'Memory files for a specific project', 'output_type': 'claude_memory'},
+    {'uri': "claude://memory?search=feedback", 'description': 'Search memory file content', 'query_param': '?search=<term>', 'output_type': 'claude_memory'},
+    {'uri': 'claude://agents', 'description': 'List all agent definitions', 'output_type': 'claude_agents'},
+    {'uri': 'claude://agents/reveal-codereview', 'description': 'Read a specific agent definition', 'output_type': 'claude_agent'},
+    {'uri': 'claude://hooks', 'description': 'List all hook event types and scripts', 'output_type': 'claude_hooks'},
+    {'uri': 'claude://hooks/PostToolUse', 'description': 'Read a specific hook event script or list scripts', 'output_type': 'claude_hooks'},
 ]
 
 _SCHEMA_NOTES = [
@@ -178,6 +229,28 @@ _SCHEMA_NOTES = [
 ]
 
 
+def _resolve_claude_home_dir() -> Path:
+    """Return the ~/.claude config directory, checking platform-specific locations.
+
+    Search order:
+    1. ``~/.claude`` (standard on Linux, macOS, and Windows)
+    2. ``%APPDATA%\\Claude`` (Windows fallback for non-standard installs)
+
+    Returns the primary path even when it doesn't exist so callers get a
+    consistent, actionable path in error messages.
+    """
+    primary = Path.home() / '.claude'
+    if primary.exists():
+        return primary
+    if sys.platform == 'win32':
+        appdata = os.environ.get('APPDATA', '')
+        if appdata:
+            alt = Path(appdata) / 'Claude'
+            if alt.exists():
+                return alt
+    return primary
+
+
 def _resolve_claude_projects_dir() -> Path:
     """Return the Claude sessions directory, checking platform-specific locations.
 
@@ -188,7 +261,7 @@ def _resolve_claude_projects_dir() -> Path:
     Returns the primary path even when it doesn't exist so callers get a
     consistent, actionable path in error messages.
     """
-    primary = Path.home() / '.claude' / 'projects'
+    primary = _resolve_claude_home_dir() / 'projects'
     if primary.exists():
         return primary
     if sys.platform == 'win32':
@@ -215,8 +288,30 @@ class ClaudeAdapter(ResourceAdapter):
 
     BUDGET_LIST_FIELD = 'results'
 
-    CONVERSATION_BASE = Path(os.environ.get('REVEAL_CLAUDE_DIR', '')) or _resolve_claude_projects_dir()
-    SESSIONS_DIR = Path(os.environ.get('REVEAL_SESSIONS_DIR', '')) if os.environ.get('REVEAL_SESSIONS_DIR') else None
+    # ~/.claude/ config directory — all non-session resources (settings, plans, history, etc.)
+    # Override with REVEAL_CLAUDE_HOME env var.
+    CLAUDE_HOME: Path = Path(os.environ['REVEAL_CLAUDE_HOME']) if os.environ.get('REVEAL_CLAUDE_HOME') else _resolve_claude_home_dir()
+
+    # ~/.claude.json — per-install config file (MCP servers, feature flags).
+    # Separate from CLAUDE_HOME; lives directly in the home directory on all platforms.
+    CLAUDE_JSON: Path = Path.home() / '.claude.json'
+
+    # ~/.claude/projects/ — session JSONL files, one subdirectory per project.
+    # Override with REVEAL_CLAUDE_DIR env var.
+    CONVERSATION_BASE: Path = Path(os.environ['REVEAL_CLAUDE_DIR']) if os.environ.get('REVEAL_CLAUDE_DIR') else _resolve_claude_projects_dir()
+
+    # ~/.claude/plans/ — saved implementation plans (markdown files).
+    PLANS_DIR: Path = CLAUDE_HOME / 'plans'
+
+    # ~/.claude/agents/ — custom agent definitions (markdown files).
+    AGENTS_DIR: Path = CLAUDE_HOME / 'agents'
+
+    # ~/.claude/hooks/ — hook scripts keyed by event type.
+    HOOKS_DIR: Path = CLAUDE_HOME / 'hooks'
+
+    # TIA-style named session directories (README frontmatter, chain traversal).
+    # Set REVEAL_SESSIONS_DIR env var to enable; not required for standard usage.
+    SESSIONS_DIR: Optional[Path] = Path(os.environ.get('REVEAL_SESSIONS_DIR', '')) if os.environ.get('REVEAL_SESSIONS_DIR') else None
 
     def __init__(self, resource: str, query: Optional[str] = None):
         """Initialize Claude adapter.
@@ -244,6 +339,9 @@ class ClaudeAdapter(ResourceAdapter):
 
         Called when --base-path is provided after initial construction, so the
         adapter can locate conversations under the overridden directory.
+
+        Only CONVERSATION_BASE is updated — CLAUDE_HOME and CLAUDE_JSON are
+        independent of the sessions path and are not affected.
         """
         self.CONVERSATION_BASE = path
         self.conversation_path = self._find_conversation()
@@ -533,6 +631,38 @@ class ClaudeAdapter(ResourceAdapter):
         # claude://files/<path> — cross-session file tracking.
         if self.resource == 'files' or self.resource.startswith('files/'):
             return self._track_file_sessions()
+
+        # claude://history — prompt history from ~/.claude/history.jsonl.
+        if self.resource == 'history' or self.resource.startswith('history'):
+            return self._get_history()
+
+        # claude://info — diagnostic path dump.
+        if self.resource == 'info':
+            return self._get_info()
+
+        # claude://settings — ~/.claude/settings.json.
+        if self.resource == 'settings':
+            return self._get_settings()
+
+        # claude://plans[/<name>] — list or read ~/.claude/plans/.
+        if self.resource == 'plans' or self.resource.startswith('plans/'):
+            return self._get_plans()
+
+        # claude://config — ~/.claude.json per-install config.
+        if self.resource == 'config':
+            return self._get_config()
+
+        # claude://memory[/<project>] — memory files from ~/.claude/projects/*/memory/.
+        if self.resource == 'memory' or self.resource.startswith('memory/'):
+            return self._get_memory()
+
+        # claude://agents[/<name>] — list or read ~/.claude/agents/.
+        if self.resource == 'agents' or self.resource.startswith('agents/'):
+            return self._get_agents()
+
+        # claude://hooks[/<event>] — list or read ~/.claude/hooks/.
+        if self.resource == 'hooks' or self.resource.startswith('hooks/'):
+            return self._get_hooks()
 
         # claude://session/<id>/chain — session continuation chain traversal.
         if '/chain' in self.resource:
@@ -931,6 +1061,568 @@ class ClaudeAdapter(ResourceAdapter):
             'sessions': results,
         }
 
+    def _get_history(self) -> Dict[str, Any]:
+        """Read and filter ~/.claude/history.jsonl prompt history.
+
+        Streams the file line-by-line to handle large files without loading
+        everything into memory.
+
+        Supports query params:
+            ?search=term    - substring match against prompt text (case-insensitive)
+            ?project=path   - substring match against project path (case-insensitive)
+            ?since=DATE     - ISO date (e.g. 2026-03-01) or 'today'
+
+        CLI flags (applied by post_process):
+            --search TERM   - additional prompt filter
+            --since DATE    - additional date filter
+            --head N        - show N most recent (default: 50)
+            --all           - show all matches
+
+        Returns:
+            Dict of type ``claude_history`` with ``entries`` list.
+            Entries are newest-first.
+        """
+        from datetime import datetime as _dt
+
+        history_path = self.CLAUDE_HOME / 'history.jsonl'
+        search = self.query_params.get('search', '').lower()
+        project_filter = self.query_params.get('project', '').lower()
+        since = self.query_params.get('since', '')
+
+        if since == 'today':
+            since = _date.today().isoformat()
+
+        base: Dict[str, Any] = {
+            'contract_version': '1.0',
+            'type': 'claude_history',
+            'source': str(history_path),
+            'source_type': 'file',
+            'search': search or None,
+            'project': project_filter or None,
+            'since': since or None,
+        }
+
+        if not history_path.exists():
+            return {**base, 'total_entries': 0, 'match_count': 0, 'entries': [],
+                    'error': f'History file not found: {history_path}'}
+
+        entries = []
+        total = 0
+
+        try:
+            with open(history_path, 'r', encoding='utf-8', errors='replace') as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    total += 1
+
+                    prompt = obj.get('display', '')
+                    project = obj.get('project', '')
+                    ts_ms = obj.get('timestamp', 0)
+                    session_id = obj.get('sessionId')
+
+                    ts_iso = (
+                        _dt.fromtimestamp(ts_ms / 1000).isoformat(timespec='seconds')
+                        if ts_ms else ''
+                    )
+
+                    if since and ts_iso[:10] < since:
+                        continue
+                    if search and search not in prompt.lower():
+                        continue
+                    if project_filter and project_filter not in project.lower():
+                        continue
+
+                    entries.append({
+                        'prompt': prompt,
+                        'project': project,
+                        'timestamp': ts_iso,
+                        'session_id': session_id,
+                    })
+        except Exception as e:
+            return {**base, 'total_entries': total, 'match_count': 0, 'entries': [],
+                    'error': str(e)}
+
+        entries.reverse()  # file is oldest-first; return newest-first
+
+        return {
+            **base,
+            'total_entries': total,
+            'match_count': len(entries),
+            'entries': entries,
+        }
+
+    def _get_info(self) -> Dict[str, Any]:
+        """Diagnostic dump of all resolved Claude Code data paths and env overrides."""
+        def _path_info(p: Path) -> Dict[str, Any]:
+            if not p.exists():
+                return {'path': str(p), 'exists': False}
+            if p.is_dir():
+                try:
+                    count = sum(1 for _ in p.iterdir())
+                except Exception:
+                    count = 0
+                return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': count}
+            stat = p.stat()
+            return {'path': str(p), 'exists': True, 'kind': 'file', 'size_bytes': stat.st_size}
+
+        return {
+            'contract_version': '1.0',
+            'type': 'claude_info',
+            'source': str(self.CLAUDE_HOME),
+            'source_type': 'directory',
+            'paths': {
+                'claude_home': _path_info(self.CLAUDE_HOME),
+                'projects': _path_info(self.CONVERSATION_BASE),
+                'history': _path_info(self.CLAUDE_HOME / 'history.jsonl'),
+                'plans': _path_info(self.PLANS_DIR),
+                'settings': _path_info(self.CLAUDE_HOME / 'settings.json'),
+                'config': _path_info(self.CLAUDE_JSON),
+                'agents': _path_info(self.CLAUDE_HOME / 'agents'),
+                'hooks': _path_info(self.CLAUDE_HOME / 'hooks'),
+            },
+            'env': {
+                'REVEAL_CLAUDE_HOME': os.environ.get('REVEAL_CLAUDE_HOME', ''),
+                'REVEAL_CLAUDE_DIR': os.environ.get('REVEAL_CLAUDE_DIR', ''),
+                'REVEAL_SESSIONS_DIR': os.environ.get('REVEAL_SESSIONS_DIR', ''),
+            },
+            'sessions_dir': str(self.SESSIONS_DIR) if self.SESSIONS_DIR else None,
+        }
+
+    def _get_settings(self) -> Dict[str, Any]:
+        """Read and return ~/.claude/settings.json, with optional ?key= extraction."""
+        settings_path = self.CLAUDE_HOME / 'settings.json'
+        base: Dict[str, Any] = {
+            'contract_version': '1.0',
+            'type': 'claude_settings',
+            'source': str(settings_path),
+            'source_type': 'file',
+        }
+        if not settings_path.exists():
+            return {**base, 'error': f'Not found: {settings_path}', 'settings': {}}
+        try:
+            with open(settings_path, 'r', encoding='utf-8') as fh:
+                data = json.load(fh)
+        except Exception as e:
+            return {**base, 'error': str(e), 'settings': {}}
+
+        key = self.query_params.get('key', '')
+        if key:
+            parts = key.split('.')
+            val: Any = data
+            try:
+                for part in parts:
+                    val = val[part]
+                return {**base, 'key': key, 'value': val}
+            except (KeyError, TypeError):
+                return {**base, 'key': key, 'error': f'Key not found: {key}', 'value': None}
+
+        return {**base, 'settings': data}
+
+    def _get_plans(self) -> Dict[str, Any]:
+        """List or read plans from ~/.claude/plans/."""
+        plans_dir = self.PLANS_DIR
+        base: Dict[str, Any] = {
+            'contract_version': '1.0',
+            'type': 'claude_plans',
+            'source': str(plans_dir),
+            'source_type': 'directory',
+        }
+
+        # claude://plans/<name> — read specific plan
+        parts = self.resource.split('/', 1)
+        plan_name = parts[1].strip() if len(parts) > 1 else ''
+        if plan_name:
+            plan_path = plans_dir / plan_name
+            if not plan_path.suffix:
+                plan_path = plans_dir / (plan_name + '.md')
+            if not plan_path.exists():
+                matches = sorted(plans_dir.glob(f'{plan_name}*.md')) if plans_dir.exists() else []
+                if len(matches) == 1:
+                    plan_path = matches[0]
+                elif len(matches) > 1:
+                    return {**base, 'type': 'claude_plans', 'ambiguous': True,
+                            'matches': [p.stem for p in matches], 'query': plan_name}
+                else:
+                    return {**base, 'type': 'claude_plan', 'error': f'Plan not found: {plan_name}', 'name': plan_name}
+            try:
+                content = plan_path.read_text(encoding='utf-8', errors='replace')
+            except Exception as e:
+                return {**base, 'type': 'claude_plan', 'error': str(e), 'name': plan_name}
+            stat = plan_path.stat()
+            return {
+                **base,
+                'type': 'claude_plan',
+                'source': str(plan_path),
+                'name': plan_path.stem,
+                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
+                'content': content,
+            }
+
+        # claude://plans — list all plans
+        if not plans_dir.exists():
+            return {**base, 'plans': [], 'total': 0, 'error': f'Plans directory not found: {plans_dir}'}
+
+        search = self.query_params.get('search', '').lower()
+        all_files = sorted(plans_dir.glob('*.md'), key=lambda p: p.stat().st_mtime, reverse=True)
+        plans = []
+        for plan_file in all_files:
+            try:
+                stat = plan_file.stat()
+                modified = datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds')
+                title = ''
+                with open(plan_file, 'r', encoding='utf-8', errors='replace') as fh:
+                    for line in fh:
+                        stripped = line.strip()
+                        if stripped.startswith('#'):
+                            title = stripped.lstrip('#').strip()
+                            break
+                        elif stripped:
+                            title = stripped
+                            break
+                if search:
+                    content = plan_file.read_text(encoding='utf-8', errors='replace')
+                    if search not in content.lower():
+                        continue
+                plans.append({
+                    'name': plan_file.stem,
+                    'modified': modified,
+                    'size_kb': round(stat.st_size / 1024, 1),
+                    'title': title,
+                })
+            except Exception:
+                continue
+
+        return {
+            **base,
+            'plans': plans,
+            'total': len(all_files),
+            'displayed': len(plans),
+            'search': search or None,
+        }
+
+    _SECRET_PATTERNS = ('api_key', 'apikey', 'api-key', 'secret', 'token', 'password', 'credential', 'auth')
+
+    def _mask_secrets(self, obj: Any, depth: int = 0) -> Any:
+        """Recursively mask secret-looking string values in a config dict."""
+        if depth > 6:
+            return obj
+        if isinstance(obj, dict):
+            result = {}
+            for k, v in obj.items():
+                k_lower = k.lower()
+                if any(p in k_lower for p in self._SECRET_PATTERNS) and isinstance(v, str) and len(v) > 8:
+                    result[k] = v[:4] + '***'
+                else:
+                    result[k] = self._mask_secrets(v, depth + 1)
+            return result
+        if isinstance(obj, list):
+            return [self._mask_secrets(i, depth + 1) for i in obj]
+        return obj
+
+    def _get_config(self) -> Dict[str, Any]:
+        """Read ~/.claude.json — per-install config (projects, MCP servers, feature flags)."""
+        config_path = self.CLAUDE_JSON
+        base: Dict[str, Any] = {
+            'contract_version': '1.0',
+            'type': 'claude_config',
+            'source': str(config_path),
+            'source_type': 'file',
+        }
+
+        if not config_path.exists():
+            return {**base, 'error': f'Config not found: {config_path}', 'projects': [], 'flags': {}}
+
+        try:
+            data = json.loads(config_path.read_text(encoding='utf-8', errors='replace'))
+        except Exception as e:
+            return {**base, 'error': str(e), 'projects': [], 'flags': {}}
+
+        # ?key=dotpath — drill into a specific value
+        key = self.query_params.get('key', '').strip()
+        if key:
+            val: Any = data
+            for part in key.split('.'):
+                val = val.get(part) if isinstance(val, dict) else None
+            return {**base, 'key': key, 'value': val}
+
+        # Build per-project MCP server summary
+        projects_raw = data.get('projects', {})
+        project_list = []
+        for path, proj in projects_raw.items():
+            if not isinstance(proj, dict):
+                continue
+            mcp = proj.get('mcpServers', {})
+            project_list.append({
+                'path': path,
+                'mcp_servers': list(mcp.keys()) if isinstance(mcp, dict) else [],
+                'allowed_tools': proj.get('allowedTools', []),
+            })
+
+        # Key operational flags (skip noise like tipsHistory, cachedStatsig*)
+        flag_keys = [
+            'autoUpdates', 'autoCompactEnabled', 'verbose', 'installMethod',
+            'numStartups', 'autoConnectIde', 'showSpinnerTree',
+        ]
+        flags = {k: data[k] for k in flag_keys if k in data}
+
+        return {
+            **base,
+            'projects_count': len(projects_raw),
+            'projects': project_list,
+            'flags': flags,
+        }
+
+    def _parse_agent_frontmatter(self, content: str) -> Dict[str, Any]:
+        """Extract YAML-ish frontmatter from an agent markdown file."""
+        fm: Dict[str, Any] = {}
+        if not content.startswith('---'):
+            return fm
+        end = content.find('\n---', 3)
+        if end < 0:
+            return fm
+        for line in content[3:end].splitlines():
+            if ':' in line:
+                k, _, v = line.partition(':')
+                k = k.strip()
+                v = v.strip()
+                if k == 'tools':
+                    fm[k] = [t.strip() for t in v.split(',') if t.strip()]
+                else:
+                    fm[k] = v
+        return fm
+
+    def _get_memory(self) -> Dict[str, Any]:
+        """Walk ~/.claude/projects/ for memory/ subdirs and list memory files."""
+        base: Dict[str, Any] = {
+            'contract_version': '1.0',
+            'type': 'claude_memory',
+            'source': str(self.CONVERSATION_BASE),
+            'source_type': 'directory',
+        }
+
+        # claude://memory/<project-fragment> — filter to matching projects
+        parts = self.resource.split('/', 1)
+        filter_project = parts[1].strip() if len(parts) > 1 else ''
+
+        search = self.query_params.get('search', '').lower()
+
+        projects_dir = self.CONVERSATION_BASE
+        if not projects_dir.exists():
+            return {**base, 'memories': [], 'total': 0,
+                    'error': f'Projects dir not found: {projects_dir}'}
+
+        memories = []
+        for project_dir in sorted(projects_dir.iterdir()):
+            if not project_dir.is_dir():
+                continue
+            project_name = project_dir.name
+            if filter_project and filter_project not in project_name:
+                continue
+            memory_dir = project_dir / 'memory'
+            if not memory_dir.is_dir():
+                continue
+            for mem_file in sorted(memory_dir.glob('*.md'),
+                                   key=lambda p: p.stat().st_mtime, reverse=True):
+                try:
+                    content = mem_file.read_text(encoding='utf-8', errors='replace')
+                    if search and search not in content.lower():
+                        continue
+                    stat = mem_file.stat()
+                    fm = self._parse_agent_frontmatter(content)
+                    memories.append({
+                        'project': project_name,
+                        'name': mem_file.stem,
+                        'type': fm.get('type', ''),
+                        'description': fm.get('description', ''),
+                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
+                        'size_bytes': stat.st_size,
+                        'path': str(mem_file),
+                    })
+                except Exception:
+                    continue
+
+        return {
+            **base,
+            'memories': memories,
+            'total': len(memories),
+            'filter_project': filter_project or None,
+            'search': search or None,
+        }
+
+    def _get_agents(self) -> Dict[str, Any]:
+        """List or read agent definitions from ~/.claude/agents/."""
+        agents_dir = self.AGENTS_DIR
+        base: Dict[str, Any] = {
+            'contract_version': '1.0',
+            'type': 'claude_agents',
+            'source': str(agents_dir),
+            'source_type': 'directory',
+        }
+
+        # claude://agents/<name> — read specific agent
+        parts = self.resource.split('/', 1)
+        agent_name = parts[1].strip() if len(parts) > 1 else ''
+        if agent_name:
+            agent_path = agents_dir / agent_name
+            if not agent_path.suffix:
+                agent_path = agents_dir / (agent_name + '.md')
+            if not agent_path.exists():
+                matches = sorted(agents_dir.glob(f'{agent_name}*.md')) if agents_dir.exists() else []
+                if len(matches) == 1:
+                    agent_path = matches[0]
+                elif len(matches) > 1:
+                    return {**base, 'type': 'claude_agents', 'ambiguous': True,
+                            'matches': [p.stem for p in matches], 'query': agent_name}
+                else:
+                    return {**base, 'type': 'claude_agent',
+                            'error': f'Agent not found: {agent_name}', 'name': agent_name}
+            try:
+                content = agent_path.read_text(encoding='utf-8', errors='replace')
+            except Exception as e:
+                return {**base, 'type': 'claude_agent', 'error': str(e), 'name': agent_name}
+            stat = agent_path.stat()
+            fm = self._parse_agent_frontmatter(content)
+            return {
+                **base,
+                'type': 'claude_agent',
+                'source': str(agent_path),
+                'name': agent_path.stem,
+                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
+                'description': fm.get('description', ''),
+                'tools': fm.get('tools', []),
+                'model': fm.get('model', ''),
+                'content': content,
+            }
+
+        # claude://agents — list all agents
+        if not agents_dir.exists():
+            return {**base, 'agents': [], 'total': 0,
+                    'error': f'Agents directory not found: {agents_dir}'}
+
+        search = self.query_params.get('search', '').lower()
+        all_files = sorted(agents_dir.glob('*.md'), key=lambda p: p.stat().st_mtime, reverse=True)
+        agents = []
+        for agent_file in all_files:
+            try:
+                content = agent_file.read_text(encoding='utf-8', errors='replace')
+                if search and search not in content.lower():
+                    continue
+                stat = agent_file.stat()
+                fm = self._parse_agent_frontmatter(content)
+                agents.append({
+                    'name': agent_file.stem,
+                    'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
+                    'size_kb': round(stat.st_size / 1024, 1),
+                    'description': fm.get('description', ''),
+                    'tools': fm.get('tools', []),
+                    'model': fm.get('model', ''),
+                })
+            except Exception:
+                continue
+
+        return {
+            **base,
+            'agents': agents,
+            'total': len(all_files),
+            'displayed': len(agents),
+            'search': search or None,
+        }
+
+    def _get_hooks(self) -> Dict[str, Any]:
+        """List or read hook scripts from ~/.claude/hooks/."""
+        hooks_dir = self.HOOKS_DIR
+        base: Dict[str, Any] = {
+            'contract_version': '1.0',
+            'type': 'claude_hooks',
+            'source': str(hooks_dir),
+            'source_type': 'directory',
+        }
+
+        if not hooks_dir.exists():
+            return {**base, 'hooks': [], 'total': 0,
+                    'error': f'Hooks directory not found: {hooks_dir}'}
+
+        # claude://hooks/<event> — read or list scripts for a specific event
+        parts = self.resource.split('/', 1)
+        event_name = parts[1].strip() if len(parts) > 1 else ''
+        if event_name:
+            event_path = hooks_dir / event_name
+            if not event_path.exists():
+                return {**base, 'error': f'Hook event not found: {event_name}', 'event': event_name}
+            if event_path.is_file():
+                # Single script file directly under hooks/
+                try:
+                    content = event_path.read_text(encoding='utf-8', errors='replace')
+                except Exception as e:
+                    return {**base, 'type': 'claude_hooks', 'error': str(e), 'event': event_name}
+                stat = event_path.stat()
+                is_exec = bool(stat.st_mode & 0o111)
+                return {
+                    **base,
+                    'event': event_name,
+                    'kind': 'file',
+                    'path': str(event_path),
+                    'size_bytes': stat.st_size,
+                    'executable': is_exec,
+                    'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
+                    'content': content,
+                }
+            # Directory: list scripts within it
+            scripts = []
+            for script in sorted(event_path.iterdir()):
+                try:
+                    stat = script.stat()
+                    is_exec = bool(stat.st_mode & 0o111)
+                    scripts.append({
+                        'name': script.name,
+                        'path': str(script),
+                        'size_bytes': stat.st_size,
+                        'executable': is_exec,
+                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
+                    })
+                except Exception:
+                    continue
+            return {**base, 'event': event_name, 'kind': 'directory', 'scripts': scripts}
+
+        # claude://hooks — list all event types
+        hooks = []
+        for entry in sorted(hooks_dir.iterdir(), key=lambda p: p.name):
+            try:
+                stat = entry.stat()
+                if entry.is_file():
+                    is_exec = bool(stat.st_mode & 0o111)
+                    hooks.append({
+                        'event': entry.name,
+                        'kind': 'file',
+                        'path': str(entry),
+                        'size_bytes': stat.st_size,
+                        'executable': is_exec,
+                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
+                    })
+                elif entry.is_dir():
+                    script_count = sum(1 for _ in entry.iterdir())
+                    hooks.append({
+                        'event': entry.name,
+                        'kind': 'directory',
+                        'path': str(entry),
+                        'script_count': script_count,
+                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
+                    })
+            except Exception:
+                continue
+
+        return {
+            **base,
+            'hooks': hooks,
+            'total': len(hooks),
+        }
+
     # Wrapper methods for backward compatibility with tests
     def _get_overview(self, messages: List[Dict]) -> Dict[str, Any]:
         """Wrapper for backward compatibility."""
@@ -1038,6 +1730,66 @@ class ClaudeAdapter(ResourceAdapter):
                 'uri': "claude://sessions/?search=auth&since=2026-03-01",
                 'description': 'Cross-session search scoped to recent sessions (?since= reduces scan time)'
             },
+            {
+                'uri': 'claude://info',
+                'description': 'Diagnostic: where are all my Claude Code data files?'
+            },
+            {
+                'uri': 'claude://settings',
+                'description': 'Claude Code settings: model, permissions, timeout, hooks'
+            },
+            {
+                'uri': "claude://settings?key=permissions.additionalDirectories",
+                'description': 'Extract a specific nested settings value'
+            },
+            {
+                'uri': 'claude://history',
+                'description': 'Recent prompt history — last 50 prompts across all projects'
+            },
+            {
+                'uri': "claude://history?search=validate_token",
+                'description': 'Find prompts mentioning a term'
+            },
+            {
+                'uri': 'claude://plans',
+                'description': 'List all saved implementation plans (~/.claude/plans/)'
+            },
+            {
+                'uri': 'claude://plans/gentle-foraging-candy',
+                'description': 'Read a specific plan by name'
+            },
+            {
+                'uri': "claude://plans?search=token",
+                'description': 'Search across all plan content for a term'
+            },
+            {
+                'uri': 'claude://config',
+                'description': 'Per-install config: project count, MCP servers, feature flags'
+            },
+            {
+                'uri': "claude://config?key=installMethod",
+                'description': 'Extract a specific config value (dot-notation path)'
+            },
+            {
+                'uri': 'claude://memory',
+                'description': 'All memory files across projects (~/.claude/projects/*/memory/)'
+            },
+            {
+                'uri': "claude://memory?search=feedback",
+                'description': 'Search memory file content across all projects'
+            },
+            {
+                'uri': 'claude://agents',
+                'description': 'List all agent definitions (~/.claude/agents/)'
+            },
+            {
+                'uri': 'claude://agents/reveal-codereview',
+                'description': 'Read a specific agent definition'
+            },
+            {
+                'uri': 'claude://hooks',
+                'description': 'List all hook event types and scripts (~/.claude/hooks/)'
+            },
         ]
 
     @staticmethod
@@ -1089,6 +1841,17 @@ class ClaudeAdapter(ResourceAdapter):
                     'reveal claude://session/session-a?search=<finding>',
                     'reveal claude://session/session-b?search=<finding>',
                 ]
+            },
+            {
+                'name': 'Browse Claude Setup',
+                'scenario': 'Audit your Claude Code install: MCP servers, agents, hooks, memory',
+                'steps': [
+                    'reveal claude://info',
+                    'reveal claude://config',
+                    'reveal claude://agents',
+                    'reveal claude://hooks',
+                    'reveal claude://memory',
+                ]
             }
         ]
 
@@ -1121,6 +1884,8 @@ class ClaudeAdapter(ResourceAdapter):
             self._post_process_messages(result, args)
         elif result_type == 'claude_cross_session_search':
             self._post_process_search_results(result, args)
+        elif result_type == 'claude_history':
+            self._post_process_history(result, args)
 
         return result
 
@@ -1177,6 +1942,32 @@ class ClaudeAdapter(ResourceAdapter):
             matches = matches[:head if head else 20]
         result['matches'] = matches
         result['displayed_count'] = len(matches)
+
+    @staticmethod
+    def _post_process_history(result: Dict[str, Any], args: Any) -> None:
+        """Apply --search, --since, --head/--all filters to claude_history results."""
+        entries = result.get('entries')
+        if entries is None:
+            return
+
+        search_term = getattr(args, 'search', None)
+        if search_term:
+            lower = search_term.lower()
+            entries = [e for e in entries if lower in e.get('prompt', '').lower()]
+
+        since = getattr(args, 'since', None)
+        if since:
+            if since == 'today':
+                from datetime import date
+                since = date.today().isoformat()
+            entries = [e for e in entries if e.get('timestamp', '') >= since]
+
+        if not getattr(args, 'all', False):
+            head = getattr(args, 'head', None)
+            entries = entries[:head if head else 50]
+
+        result['entries'] = entries
+        result['displayed_count'] = len(entries)
 
     @staticmethod
     def _post_process_session_list(result: Dict[str, Any], args: Any) -> None:

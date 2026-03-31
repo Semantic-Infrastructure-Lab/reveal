@@ -4,9 +4,9 @@ category: guide
 ---
 # Claude Adapter Guide (claude://)
 
-**Last Updated**: 2026-03-02
-**Version**: 1.0
-**Adapter Version**: reveal 0.54.7+
+**Last Updated**: 2026-03-30
+**Version**: 1.1
+**Adapter Version**: reveal 0.68.0+
 
 ---
 
@@ -29,16 +29,17 @@ category: guide
 15. [Error Messages](#error-messages)
 16. [Tips & Best Practices](#tips-best-practices)
 17. [Integration Examples](#integration-examples)
-18. [Related Documentation](#related-documentation)
-19. [FAQ](#faq)
+18. [Install Introspection Resources](#install-introspection-resources)
+19. [Related Documentation](#related-documentation)
+20. [FAQ](#faq)
 
 ---
 
 ## Overview
 
-The **claude://** adapter provides comprehensive analysis of Claude Code conversations, including tool usage analytics, file operation tracking, workflow visualization, and error detection. It's designed for debugging sessions, understanding agent behavior, optimizing token usage, and analyzing conversation patterns.
+The **claude://** adapter provides two families of resources: **session analysis** for inspecting individual Claude Code conversations, and **install introspection** for exploring your Claude Code installation (history, settings, plans, config, memory, agents, hooks).
 
-**Primary Use Cases**:
+**Session Analysis** (`claude://<session-name>[/element][?params]`):
 - Post-session review and analysis
 - Debugging failed or problematic sessions
 - Understanding tool usage patterns and success rates
@@ -47,6 +48,16 @@ The **claude://** adapter provides comprehensive analysis of Claude Code convers
 - Optimizing token usage
 - Analyzing agent workflows
 - Extracting thinking blocks for analysis
+
+**Install Introspection** (`claude://<resource>`):
+- `claude://info` — diagnostic map of all Claude Code data locations
+- `claude://history` — searchable prompt history across all sessions
+- `claude://settings` — current user settings (`~/.claude/settings.json`)
+- `claude://plans` — list and read saved plans
+- `claude://config` — per-install config flags and MCP server registrations
+- `claude://memory` — memory files across all projects
+- `claude://agents` — registered agent definitions
+- `claude://hooks` — hook scripts by event type
 
 **Key Capabilities**:
 - Session overview with message counts, tool usage, duration
@@ -179,6 +190,38 @@ reveal claude://session/infernal-earth-0118?search=path traversal
 ```
 
 **Returns**: Matches with message index, role, block type, and excerpt
+
+### 12. Prompt History
+
+Browse recent prompts across all sessions:
+
+```bash
+reveal claude://history
+reveal claude://history?search=deploy&since=2026-03-01
+```
+
+**Returns**: Prompts grouped by session, newest-first (50 by default)
+
+### 13. Saved Plans
+
+List or read saved plans from `~/.claude/plans/`:
+
+```bash
+reveal claude://plans
+reveal claude://plans/my-plan-name
+```
+
+**Returns**: Plan list with title/modified/size, or full plan content
+
+### 14. Install Diagnostics
+
+Check all Claude Code data locations in one shot:
+
+```bash
+reveal claude://info
+```
+
+**Returns**: Paths, item counts, and active environment overrides
 
 ---
 
@@ -2085,6 +2128,307 @@ if (( $(echo "$SUCCESS_RATE < 70" | bc -l) )) || [ "$ERROR_COUNT" -gt 10 ]; then
   curl -X POST -H 'Content-type: application/json' --data "$MESSAGE" $WEBHOOK_URL
 fi
 ```
+
+---
+
+## Install Introspection Resources
+
+These resources inspect your **Claude Code installation** — they are independent of any session and do not require `--base-path`. Each maps to a data directory or file under `~/.claude/`.
+
+| Resource | What It Shows | File / Dir |
+|----------|--------------|------------|
+| `claude://info` | All data locations + env overrides | `~/.claude/` |
+| `claude://history` | Prompt history (all sessions) | `~/.claude/history.jsonl` |
+| `claude://settings` | User preferences | `~/.claude/settings.json` |
+| `claude://plans` | Saved Claude Code plans | `~/.claude/plans/` |
+| `claude://config` | Per-install flags + MCP registrations | `~/.claude.json` |
+| `claude://memory` | Memory files across all projects | `~/.claude/projects/*/memory/` |
+| `claude://agents` | Custom agent definitions | `~/.claude/agents/` |
+| `claude://hooks` | Hook scripts by event type | `~/.claude/hooks/` |
+
+> **Environment overrides**: Set `REVEAL_CLAUDE_HOME` to point to a non-standard Claude install. Check active overrides with `claude://info`.
+
+---
+
+### `claude://info` — Path Diagnostics
+
+Diagnostic dump of all resolved Claude Code data paths and active environment overrides. Use this first when troubleshooting missing history, wrong sessions dir, or MCP issues.
+
+```bash
+reveal claude://info
+```
+
+**Output**:
+```
+Claude Code data locations:
+
+  home                       /home/user/.claude  [32 items]
+  projects (sessions)        /home/user/.claude/projects  [3366 items]
+  history                    /home/user/.claude/history.jsonl  [51MB]
+  plans                      /home/user/.claude/plans  [39 items]
+  settings                   /home/user/.claude/settings.json  [1KB]
+  config (~/.claude.json)    /home/user/.claude.json  [41KB]
+  agents                     /home/user/.claude/agents  [1 items]
+  hooks                      /home/user/.claude/hooks  [1 items]
+
+Environment overrides:
+  REVEAL_CLAUDE_HOME         (not set)
+  REVEAL_CLAUDE_DIR          (not set)
+  REVEAL_SESSIONS_DIR        (not set)
+```
+
+**Returns**: Paths with existence, kind (`file`/`dir`), size/count. No query parameters.
+
+---
+
+### `claude://history` — Prompt History
+
+Browse your full prompt history from `~/.claude/history.jsonl`. Streams line-by-line — safe for large files (50MB+). Results are grouped by session, newest-first.
+
+```bash
+# Recent 50 prompts (default)
+reveal claude://history
+
+# Show all matching entries
+reveal claude://history --all
+
+# Show N most recent
+reveal claude://history --head 20
+
+# Filter by prompt content
+reveal claude://history?search=deploy
+
+# Filter by project path
+reveal claude://history?project=sociamonials
+
+# Filter by date
+reveal claude://history?since=2026-03-01
+reveal claude://history?since=today
+
+# Combine filters
+reveal claude://history?search=migration&since=2026-02-01&project=sdms
+```
+
+**Query Parameters**:
+
+| Parameter | Description |
+|-----------|-------------|
+| `?search=term` | Case-insensitive substring match on prompt text |
+| `?project=path` | Case-insensitive substring match on project path |
+| `?since=DATE` | ISO date (`2026-03-01`) or `today`; excludes older entries |
+
+**CLI Flags**:
+
+| Flag | Description |
+|------|-------------|
+| `--all` | Show all matching entries (default: 50) |
+| `--head N` | Show N most recent matching entries |
+
+**Returns**: Entries with `prompt`, `project`, `timestamp`, `session_id`. Header shows total entry count and match count.
+
+---
+
+### `claude://settings` — User Settings
+
+Read `~/.claude/settings.json` — the user preferences file edited via Claude Code settings UI or directly.
+
+```bash
+# Full settings
+reveal claude://settings
+
+# Extract a specific key (dot-path)
+reveal claude://settings?key=permissions.additionalDirectories
+reveal claude://settings?key=cleanupPeriodDays
+```
+
+**Query Parameters**:
+
+| Parameter | Description |
+|-----------|-------------|
+| `?key=dotpath` | Extract a nested value using dot notation (e.g. `permissions.additionalDirectories`) |
+
+**Returns**: Full settings JSON, or a single extracted value when `?key=` is used.
+
+**Common keys**: `cleanupPeriodDays`, `includeCoAuthoredBy`, `permissions.additionalDirectories`, `statusLine`, `alwaysThinkingEnabled`, `autoCompactEnabled`.
+
+---
+
+### `claude://plans` — Saved Plans
+
+List or read saved plans from `~/.claude/plans/`. Plans are Markdown files created by Claude Code's built-in plan mode, named after session IDs.
+
+```bash
+# List all plans (sorted by most recent)
+reveal claude://plans
+
+# Read a specific plan (exact or prefix match)
+reveal claude://plans/my-session-name
+
+# Search plan content
+reveal claude://plans?search=deployment
+```
+
+**Query Parameters**:
+
+| Parameter | Description |
+|-----------|-------------|
+| `?search=term` | Case-insensitive content filter — only plans containing `term` are listed |
+
+**Sub-resource**:
+
+```bash
+reveal claude://plans/<name>      # Exact name or unambiguous prefix
+```
+
+Name matching: `.md` extension is optional. If the name is a unique prefix, it resolves automatically. If ambiguous, returns a list of matches.
+
+**Returns (list)**: Name, modified timestamp, size, first-line title — sorted by most recent.
+
+**Returns (single plan)**: Full Markdown content with name and modified timestamp.
+
+---
+
+### `claude://config` — Install Config
+
+Read `~/.claude.json` — the per-install config file storing feature flags, project registrations, and MCP server assignments. Secrets are masked automatically.
+
+```bash
+# Summary view (flags + project count)
+reveal claude://config
+
+# Extract a specific value (dot-path)
+reveal claude://config?key=numStartups
+reveal claude://config?key=autoUpdates
+```
+
+**Query Parameters**:
+
+| Parameter | Description |
+|-----------|-------------|
+| `?key=dotpath` | Extract a nested value using dot notation |
+
+**Returns (summary)**:
+- **Flags**: `autoUpdates`, `autoCompactEnabled`, `verbose`, `installMethod`, `numStartups`, `autoConnectIde`, `showSpinnerTree`
+- **Projects**: Count + per-project MCP server names and allowed tools
+- Secrets (API keys, tokens) are masked
+
+**Returns (`?key=`)**: Scalar or object at the specified path.
+
+**Common keys**: `numStartups`, `autoUpdates`, `verbose`, `installMethod`, `autoCompactEnabled`.
+
+---
+
+### `claude://memory` — Memory Files
+
+Walk `~/.claude/projects/*/memory/` and list all memory files across projects. Memory files use YAML frontmatter (`type`, `description`, `name`) parsed and surfaced in the listing.
+
+```bash
+# All memory files across all projects
+reveal claude://memory
+
+# Filter to one project (substring match on project dir name)
+reveal claude://memory/-home-user-src-myproject
+
+# Search memory file content
+reveal claude://memory?search=deployment
+
+# Combine: filter project + search content
+reveal claude://memory/-home-user-src-myproject?search=feedback
+```
+
+**Sub-resource**:
+
+```bash
+reveal claude://memory/<project-fragment>    # Substring match on project directory name
+```
+
+**Query Parameters**:
+
+| Parameter | Description |
+|-----------|-------------|
+| `?search=term` | Case-insensitive content filter across all memory files |
+
+**Returns**: Files grouped by project, sorted by most recently modified. Each entry shows: `name`, `type` (from frontmatter), `description` (from frontmatter), `modified`, `size_bytes`, `path`.
+
+**Memory types**: `user`, `feedback`, `project`, `reference` — shown in brackets in the listing.
+
+---
+
+### `claude://agents` — Agent Definitions
+
+List or read custom agent definitions from `~/.claude/agents/`. Agents are Markdown files with YAML frontmatter declaring `description`, `tools`, and `model`.
+
+```bash
+# List all agents
+reveal claude://agents
+
+# Read a specific agent
+reveal claude://agents/my-agent-name
+
+# Search agent content
+reveal claude://agents?search=codereview
+```
+
+**Query Parameters**:
+
+| Parameter | Description |
+|-----------|-------------|
+| `?search=term` | Case-insensitive content filter — only agents containing `term` are listed |
+
+**Sub-resource**:
+
+```bash
+reveal claude://agents/<name>    # Exact name or unambiguous prefix; .md extension optional
+```
+
+**Returns (list)**: Name, modified, size, model, description — sorted by most recently modified.
+
+**Returns (single agent)**: Full Markdown content + parsed frontmatter (`description`, `tools`, `model`).
+
+**Agent frontmatter**:
+```yaml
+---
+description: "What this agent does"
+model: sonnet
+tools:
+  - Bash
+  - Read
+  - Grep
+---
+```
+
+---
+
+### `claude://hooks` — Hook Scripts
+
+List or read hook scripts from `~/.claude/hooks/`. Hooks are shell scripts (or directories of scripts) organized by Claude Code event name. Executability is shown for each entry.
+
+```bash
+# List all hook events
+reveal claude://hooks
+
+# Read or list scripts for a specific event
+reveal claude://hooks/PostToolUse
+reveal claude://hooks/PreToolUse
+```
+
+**Sub-resource**:
+
+```bash
+reveal claude://hooks/<EventName>
+```
+
+Hook storage can be either:
+- **File-style**: A single script directly at `~/.claude/hooks/<EventName>` (e.g. `PostToolUse`)
+- **Directory-style**: A directory at `~/.claude/hooks/<EventName>/` containing multiple scripts
+
+**Returns (list)**: Event name, kind (`file` or `directory`), modified, size/script count, executability.
+
+**Returns (file event)**: Full script content, path, size, executable flag, modified timestamp.
+
+**Returns (directory event)**: List of scripts within the event directory, each with path, size, executable flag, modified.
+
+**Common event names**: `PreToolUse`, `PostToolUse`, `Stop`, `SubagentStop`, `NotificationCreated`.
 
 ---
 

@@ -12,9 +12,28 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] (pearlescent-paint-0328)
+## [0.68.0] - 2026-03-30 (pearlescent-paint-0328, icy-spear-0330, serene-storm-0330, expanding-planet-0330, pouring-snow-0330)
+
+### Added
+- **`claude://config`**: Reads `~/.claude.json` (per-install config). Shows project count, per-project MCP server names, and key feature flags (`autoUpdates`, `verbose`, etc.). `?key=<dotpath>` extracts a specific value. Secrets masked automatically. (`session: expanding-planet-0330`)
+- **`claude://memory`**: Walks `~/.claude/projects/*/memory/` to list all memory files across projects. Shows type, description, and modified date (parsed from YAML frontmatter). `claude://memory/<project>` filters to one project. `?search=term` filters by content. (`session: expanding-planet-0330`)
+- **`claude://agents`** / **`claude://agents/<name>`**: Lists or reads agent definitions from `~/.claude/agents/`. Parses frontmatter for name, description, tools, and model. (`session: expanding-planet-0330`)
+- **`claude://hooks`** / **`claude://hooks/<event>`**: Lists hook event types from `~/.claude/hooks/`. Handles both file-style events (single script) and directory-style events (multiple scripts). Reads content of specific event scripts. (`session: expanding-planet-0330`)
+- **`AGENTS_DIR` / `HOOKS_DIR` class attrs**: `ClaudeAdapter.AGENTS_DIR` = `CLAUDE_HOME / 'agents'`, `ClaudeAdapter.HOOKS_DIR` = `CLAUDE_HOME / 'hooks'`. (`session: expanding-planet-0330`)
+- **`_parse_agent_frontmatter()` / `_mask_secrets()` helpers**: Shared by config, memory, and agents resources. (`session: expanding-planet-0330`)
+- **21 new tests** across `TestClaudeConfig`, `TestClaudeMemory`, `TestClaudeAgents`, `TestClaudeHooks`. (`session: expanding-planet-0330`)
+- **`claude://info`**: Diagnostic resource showing all resolved data paths (`~/.claude/`, projects, history, plans, settings, agents, hooks) plus active env var overrides. (`session: serene-storm-0330`)
+- **`claude://settings`**: Reads `~/.claude/settings.json` with structured output. `?key=<dotpath>` extracts a nested value (e.g. `?key=permissions.additionalDirectories`, `?key=model`). (`session: serene-storm-0330`)
+- **`claude://plans`** / **`claude://plans/<name>`**: List or read plans from `~/.claude/plans/`. Sorted by recency, shows title from first heading. `?search=term` filters by content. Individual plan reads return full markdown. (`session: serene-storm-0330`)
+- **`PLANS_DIR` class attr**: `ClaudeAdapter.PLANS_DIR` = `CLAUDE_HOME / 'plans'`. (`session: serene-storm-0330`)
+- **`claude://history`**: New resource exposing `~/.claude/history.jsonl` prompt history. Supports `?search=term`, `?project=path`, `?since=date` filters. Default shows 50 most recent prompts; `--all` for full scan. Output grouped by session for readability. (`session: icy-spear-0330`)
+- **`CLAUDE_HOME` class attr**: `ClaudeAdapter.CLAUDE_HOME` resolves `~/.claude/` (with `%APPDATA%\Claude` Windows fallback). Override via `REVEAL_CLAUDE_HOME` env var. (`session: icy-spear-0330`)
+- **`CLAUDE_JSON` class attr**: `ClaudeAdapter.CLAUDE_JSON` = `~/.claude.json` (per-install MCP config, separate from `CLAUDE_HOME`). (`session: icy-spear-0330`)
+- **`_resolve_claude_home_dir()`**: New resolver function; `_resolve_claude_projects_dir()` now delegates to it for consistent Windows fallback logic. (`session: icy-spear-0330`)
+- **`CLAUDE_ADAPTER_GUIDE.md` — Install Introspection section** (BACK-101): New "Install Introspection Resources" section documents all 8 non-session resources (`info`, `history`, `settings`, `plans`, `config`, `memory`, `agents`, `hooks`) with query parameter tables, sub-resource paths, and return value descriptions. Overview updated to introduce both resource families. Quick Start entries added. (`session: pouring-snow-0330`)
 
 ### Fixed
+- **`CONVERSATION_BASE` env var pattern**: `Path(os.environ.get('REVEAL_CLAUDE_DIR', '')) or ...` was silently broken (`Path('')` is truthy as `PosixPath('.')`). Fixed to use the same conditional pattern as `CLAUDE_HOME`. (`session: serene-storm-0330`)
 - **`release.sh --resume`: remote-tag-not-found is non-fatal** (`scripts/release.sh`): `git push --delete origin vX.Y.Z` now warns instead of erroring when the remote tag doesn't exist (common when tag was local-only due to a prior interrupted release). Also adds `--resume` and `--dry-run` flags, PyPI polling at the end, and improved error messages pointing to `--resume` on tag-exists failures.
 - **`RELEASING.md`**: New troubleshooting section "Tag pushed, no GitHub release, new commits since"; stale `v0.18.0` example versions replaced with `vX.Y.Z`; `--resume` and `--dry-run` flags documented.
 - **`UX_ISSUES.md`**: UX-12 marked resolved (was fixed in pearlescent-aurora-0328 via BACK-118 but status not updated).
