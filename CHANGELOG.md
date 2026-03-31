@@ -12,6 +12,22 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] (pearl-tone-0330, bright-nebula-0330)
+
+### Added
+- **`REVEAL_CLAUDE_JSON` env var** (BACK-119): Explicit override for `~/.claude.json` path. When `REVEAL_CLAUDE_HOME` is set, `CLAUDE_JSON` now auto-derives from `CLAUDE_HOME.parent / '.claude.json'` — a single env var covers the whole user's Claude install (critical for SSH multi-user scenarios). `REVEAL_CLAUDE_JSON` provides an escape hatch for non-standard layouts. `claude://info` now reports `REVEAL_CLAUDE_JSON` in the environment override block.
+- **`CONVERSATION_BASE` derives from `REVEAL_CLAUDE_HOME`** (BACK-121): When `REVEAL_CLAUDE_HOME` is set without `REVEAL_CLAUDE_DIR`, `CONVERSATION_BASE` now resolves to `CLAUDE_HOME / 'projects'` automatically. Previously it fell back to `_resolve_claude_projects_dir()` which ignored the override — in SSH scenarios, sessions were read from the wrong user's directory. `REVEAL_CLAUDE_DIR` still takes explicit precedence.
+- **`--base-path` covers the full Claude install** (BACK-120): `reconfigure_base_path` now derives `CLAUDE_HOME`, `CLAUDE_JSON`, `PLANS_DIR`, `AGENTS_DIR`, and `HOOKS_DIR` from `path.parent` — a single `--base-path /path/to/.claude/projects` flag is sufficient to point all `claude://` resources at a different install. Previously only `CONVERSATION_BASE` was updated, leaving history, config, and plans reading from the local machine.
+
+### Fixed
+- **`_extract_project_from_dir` hardcoded username**: `'scottsen'` was in the `_SKIP` set used to filter non-meaningful path components from encoded Claude project directory names. Removed — `_SKIP` now contains only generic path segment words (`home`, `src`, `projects`, `external`, `internal`, `git`).
+- **TIA-specific boilerplate in session title extraction**: `'# TIA System Instructions'` removed from `_BOILERPLATE_PREFIXES` (both `adapter.py` and `analysis/overview.py`) — only the generic `'# Session Continuation Context'` prefix is now treated as auto-injected boilerplate.
+- **`tia session badge` regex generalized**: `_extract_badge_from_messages` now matches `session badge "text"` (any CLI prefix), not just the `tia`-prefixed form.
+- **`boot.` removed from session title skip list**: Only bare `boot` is skipped; `boot.` and other forms are returned as-is. `boot` skip applies in both `_extract_session_title` (overview.py) and `_parse_jsonl_line_for_title` (adapter.py).
+- **TIA references cleaned from code/docs**: Removed `TIA-style` from `_find_conversation` docstring and `SESSIONS_DIR` class comment; removed `TIA session domain` from `get_help` `see_also`; updated `_extract_project_from_dir` docstring to use generic example paths.
+
+---
+
 ## [0.68.0] - 2026-03-30 (pearlescent-paint-0328, icy-spear-0330, serene-storm-0330, expanding-planet-0330, pouring-snow-0330)
 
 ### Added

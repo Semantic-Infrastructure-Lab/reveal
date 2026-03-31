@@ -8,7 +8,7 @@ from datetime import datetime
 from .tools import calculate_tool_success_rate
 
 
-_BOILERPLATE_PREFIXES = ('# Session Continuation Context', '# TIA System Instructions')
+_BOILERPLATE_PREFIXES = ('# Session Continuation Context',)
 
 
 def _extract_text_from_content(content: Any) -> str:
@@ -23,14 +23,14 @@ def _extract_text_from_content(content: Any) -> str:
 
 
 def _extract_badge_from_messages(messages: List[Dict]) -> Optional[str]:
-    """Extract tia session badge text from Bash tool calls."""
+    """Extract session badge text from Bash tool calls (pattern: session badge "text")."""
     for msg in messages:
         if msg.get('type') != 'assistant':
             continue
         for block in msg.get('message', {}).get('content', []):
             if block.get('type') == 'tool_use' and block.get('name') == 'Bash':
                 cmd = block.get('input', {}).get('command', '')
-                m = re.search(r'tia session badge\s+"([^"]+)"', cmd)
+                m = re.search(r'session badge\s+"([^"]+)"', cmd)
                 if m:
                     return m.group(1)
     return None
@@ -40,7 +40,7 @@ def _extract_session_title(messages: List[Dict]) -> Optional[str]:
     """Extract a display title from session messages.
 
     Priority:
-      1. ``tia session badge "text"`` Bash call (most authoritative)
+      1. ``session badge "text"`` Bash call (most authoritative)
       2. First non-boilerplate user message first line
       3. None
     """
@@ -65,7 +65,7 @@ def _extract_session_title(messages: List[Dict]) -> Optional[str]:
             else:
                 continue
         # Skip bare boot commands
-        if candidate.lower() in ('boot.', 'boot'):
+        if candidate.lower() == 'boot':
             continue
         if candidate:
             return candidate[:100]

@@ -319,10 +319,11 @@ class TestParseJsonlLineForTitle:
         result = ClaudeAdapter._parse_jsonl_line_for_title(line)
         assert result is None
 
-    def test_returns_none_for_boot_command(self):
+    def test_returns_boot_dot_as_title(self):
+        # 'boot.' is not a reserved skip word — only bare 'boot' is skipped
         line = self._line({'type': 'user', 'message': {'content': 'boot.'}})
         result = ClaudeAdapter._parse_jsonl_line_for_title(line)
-        assert result is None
+        assert result == 'boot.'
 
     def test_returns_none_for_bare_boot(self):
         line = self._line({'type': 'user', 'message': {'content': 'boot'}})
@@ -346,11 +347,12 @@ class TestParseJsonlLineForTitle:
         result = ClaudeAdapter._parse_jsonl_line_for_title(line)
         assert result is None
 
-    def test_tia_system_instructions_boilerplate(self):
-        text = '# TIA System Instructions\n\nsome preamble without separator'
+    def test_unknown_heading_returned_as_title(self):
+        # Only '# Session Continuation Context' is a boilerplate prefix; other headings become titles
+        text = '# Some Unknown Heading\n\nsome content'
         line = self._line({'type': 'user', 'message': {'content': text}})
         result = ClaudeAdapter._parse_jsonl_line_for_title(line)
-        assert result is None
+        assert result == '# Some Unknown Heading'
 
     def test_truncates_to_80_chars(self):
         long_text = 'A' * 100

@@ -2133,7 +2133,7 @@ fi
 
 ## Install Introspection Resources
 
-These resources inspect your **Claude Code installation** — they are independent of any session and do not require `--base-path`. Each maps to a data directory or file under `~/.claude/`.
+These resources inspect your **Claude Code installation** — they are independent of any session. Each maps to a data directory or file under `~/.claude/`.
 
 | Resource | What It Shows | File / Dir |
 |----------|--------------|------------|
@@ -2146,7 +2146,7 @@ These resources inspect your **Claude Code installation** — they are independe
 | `claude://agents` | Custom agent definitions | `~/.claude/agents/` |
 | `claude://hooks` | Hook scripts by event type | `~/.claude/hooks/` |
 
-> **Environment overrides**: Set `REVEAL_CLAUDE_HOME` to point to a non-standard Claude install. Check active overrides with `claude://info`.
+> **Pointing at a different install** (SSH, WSL, multi-user): Pass `--base-path /path/to/.claude/projects` and all paths — history, config, plans, hooks, sessions — derive from it automatically. For persistent overrides, set `REVEAL_CLAUDE_HOME` (all paths derive from it) or `REVEAL_CLAUDE_JSON` for non-standard `.claude.json` locations. Check resolved paths with `claude://info`.
 
 ---
 
@@ -2173,6 +2173,7 @@ Claude Code data locations:
 
 Environment overrides:
   REVEAL_CLAUDE_HOME         (not set)
+  REVEAL_CLAUDE_JSON         (not set)
   REVEAL_CLAUDE_DIR          (not set)
   REVEAL_SESSIONS_DIR        (not set)
 ```

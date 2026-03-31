@@ -293,12 +293,25 @@ class ClaudeAdapter(ResourceAdapter):
     CLAUDE_HOME: Path = Path(os.environ['REVEAL_CLAUDE_HOME']) if os.environ.get('REVEAL_CLAUDE_HOME') else _resolve_claude_home_dir()
 
     # ~/.claude.json — per-install config file (MCP servers, feature flags).
-    # Separate from CLAUDE_HOME; lives directly in the home directory on all platforms.
-    CLAUDE_JSON: Path = Path.home() / '.claude.json'
+    # Separate from CLAUDE_HOME; lives in the user's home directory on all platforms.
+    # When REVEAL_CLAUDE_HOME is set, derives from its parent directory automatically
+    # so a single override covers the whole user's Claude install (common for SSH).
+    # Override explicitly with REVEAL_CLAUDE_JSON for non-standard layouts.
+    CLAUDE_JSON: Path = (
+        Path(os.environ['REVEAL_CLAUDE_JSON']) if os.environ.get('REVEAL_CLAUDE_JSON')
+        else CLAUDE_HOME.parent / '.claude.json' if os.environ.get('REVEAL_CLAUDE_HOME')
+        else Path.home() / '.claude.json'
+    )
 
     # ~/.claude/projects/ — session JSONL files, one subdirectory per project.
-    # Override with REVEAL_CLAUDE_DIR env var.
-    CONVERSATION_BASE: Path = Path(os.environ['REVEAL_CLAUDE_DIR']) if os.environ.get('REVEAL_CLAUDE_DIR') else _resolve_claude_projects_dir()
+    # When REVEAL_CLAUDE_HOME is set, derives from it automatically (CLAUDE_HOME / 'projects')
+    # so a single override covers the whole install (common for SSH).
+    # Override explicitly with REVEAL_CLAUDE_DIR for non-standard layouts.
+    CONVERSATION_BASE: Path = (
+        Path(os.environ['REVEAL_CLAUDE_DIR']) if os.environ.get('REVEAL_CLAUDE_DIR')
+        else CLAUDE_HOME / 'projects' if os.environ.get('REVEAL_CLAUDE_HOME')
+        else _resolve_claude_projects_dir()
+    )
 
     # ~/.claude/plans/ — saved implementation plans (markdown files).
     PLANS_DIR: Path = CLAUDE_HOME / 'plans'
@@ -309,7 +322,7 @@ class ClaudeAdapter(ResourceAdapter):
     # ~/.claude/hooks/ — hook scripts keyed by event type.
     HOOKS_DIR: Path = CLAUDE_HOME / 'hooks'
 
-    # TIA-style named session directories (README frontmatter, chain traversal).
+    # Named session directories with README frontmatter (chain traversal via ?chain).
     # Set REVEAL_SESSIONS_DIR env var to enable; not required for standard usage.
     SESSIONS_DIR: Optional[Path] = Path(os.environ.get('REVEAL_SESSIONS_DIR', '')) if os.environ.get('REVEAL_SESSIONS_DIR') else None
 
@@ -335,15 +348,26 @@ class ClaudeAdapter(ResourceAdapter):
         self.messages: Optional[List[Dict]] = None  # Lazy load
 
     def reconfigure_base_path(self, path: Path) -> None:
-        """Update the conversation base directory and re-resolve the conversation path.
+        """Update all Claude install paths derived from the given projects directory.
 
-        Called when --base-path is provided after initial construction, so the
-        adapter can locate conversations under the overridden directory.
+        Called when --base-path is provided after initial construction. Derives
+        CLAUDE_HOME and CLAUDE_JSON from path.parent so that a single flag covers
+        the entire Claude install (history, config, plans, hooks, sessions).
 
-        Only CONVERSATION_BASE is updated — CLAUDE_HOME and CLAUDE_JSON are
-        independent of the sessions path and are not affected.
+        Derivation:
+            CONVERSATION_BASE = path                     (~/.claude/projects/)
+            CLAUDE_HOME       = path.parent              (~/.claude/)
+            CLAUDE_JSON       = path.parent.parent / '.claude.json'  (~/.claude.json)
+            PLANS_DIR         = path.parent / 'plans'
+            AGENTS_DIR        = path.parent / 'agents'
+            HOOKS_DIR         = path.parent / 'hooks'
         """
         self.CONVERSATION_BASE = path
+        self.CLAUDE_HOME = path.parent
+        self.CLAUDE_JSON = path.parent.parent / '.claude.json'
+        self.PLANS_DIR = path.parent / 'plans'
+        self.AGENTS_DIR = path.parent / 'agents'
+        self.HOOKS_DIR = path.parent / 'hooks'
         self.conversation_path = self._find_conversation()
 
     def _get_contract_base(self) -> Dict[str, Any]:
@@ -381,7 +405,7 @@ class ClaudeAdapter(ResourceAdapter):
         """Find conversation JSONL file for session.
 
         Uses two strategies:
-        1. Session name matches project directory suffix (named sessions, e.g. TIA-style)
+        1. Session name matches project directory suffix (named sessions)
         2. Session name is a UUID matching a JSONL filename inside any project directory
 
         Returns:
@@ -746,7 +770,7 @@ class ClaudeAdapter(ResourceAdapter):
                     return item.get('text', '').strip()
         return ''
 
-    _BOILERPLATE_PREFIXES = ('# Session Continuation Context', '# TIA System Instructions')
+    _BOILERPLATE_PREFIXES = ('# Session Continuation Context',)
 
     @staticmethod
     def _parse_jsonl_line_for_title(line: str) -> Optional[str]:
@@ -775,7 +799,7 @@ class ClaudeAdapter(ResourceAdapter):
             else:
                 return None
         # Skip bare boot commands — the real task will be in a later message
-        if candidate.lower() in ('boot.', 'boot'):
+        if candidate.lower() == 'boot':
             return None
         return candidate[:80] or None
 
@@ -806,10 +830,10 @@ class ClaudeAdapter(ResourceAdapter):
     def _extract_project_from_dir(dir_name: str) -> str:
         """Derive a short project label from an encoded Claude project directory name.
 
-        E.g. '-home-scottsen-src-tia-sessions-hosefobe-0314' → 'tia'
-             '-home-scottsen-src-projects-reveal-external-git' → 'reveal'
+        E.g. '-home-user-src-tia-sessions-hosefobe-0314' → 'tia'
+             '-home-user-src-projects-reveal-external-git' → 'reveal'
         """
-        _SKIP = {'home', 'scottsen', 'src', 'projects', 'external', 'internal', 'git'}
+        _SKIP = {'home', 'src', 'projects', 'external', 'internal', 'git'}
         prefix = dir_name.split('-sessions-')[0] if '-sessions-' in dir_name else dir_name
         parts = [p for p in prefix.lstrip('-').split('-') if p and p not in _SKIP]
         return parts[-1] if parts else ''
@@ -1188,6 +1212,7 @@ class ClaudeAdapter(ResourceAdapter):
             },
             'env': {
                 'REVEAL_CLAUDE_HOME': os.environ.get('REVEAL_CLAUDE_HOME', ''),
+                'REVEAL_CLAUDE_JSON': os.environ.get('REVEAL_CLAUDE_JSON', ''),
                 'REVEAL_CLAUDE_DIR': os.environ.get('REVEAL_CLAUDE_DIR', ''),
                 'REVEAL_SESSIONS_DIR': os.environ.get('REVEAL_SESSIONS_DIR', ''),
             },
@@ -2045,11 +2070,11 @@ class ClaudeAdapter(ResourceAdapter):
                 'Use --format=json for programmatic analysis with jq',
                 'Current session name — bash/zsh: basename $PWD | PowerShell: Split-Path -Leaf $PWD',
                 'On Windows, UUID session names are shown in the listing (reveal claude://)',
+                'SSH / multi-user: --base-path /path/to/.claude/projects points all resources at that install',
             ],
             'output_formats': ['text', 'json', 'grep'],
             'see_also': [
                 'reveal json:// - Navigate JSONL structure directly',
                 'reveal help://adapters - All available adapters',
-                'TIA session domain - High-level session operations'
             ]
         }

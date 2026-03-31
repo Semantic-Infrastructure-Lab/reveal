@@ -53,7 +53,7 @@ class TestExtractProjectFromDir:
         assert result == ''
 
     def test_all_skip_words(self):
-        result = ClaudeAdapter._extract_project_from_dir('-home-scottsen-src-projects')
+        result = ClaudeAdapter._extract_project_from_dir('-home-src-projects-external')
         assert result == ''
 
 

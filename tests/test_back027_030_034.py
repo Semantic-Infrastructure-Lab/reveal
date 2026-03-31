@@ -88,25 +88,20 @@ class TestTitleExtraction:
 
     def test_skips_session_continuation_boilerplate(self):
         msgs = [
-            _make_user_msg('# Session Continuation Context\n\nHere is the README...\n---\n\nboot.'),
-            _make_user_msg('work on Reveal, diligently'),
+            _make_user_msg('# Session Continuation Context\n\nHere is the README...\n---\n\nwork on Reveal, diligently'),
         ]
         assert _extract_session_title(msgs) == 'work on Reveal, diligently'
 
     def test_extracts_inline_topic_after_separator(self):
         msgs = [
-            _make_user_msg('# Session Continuation Context\n\nLong readme...\n---\n\nboot.\n\nafter boot, fix the auth bug'),
+            _make_user_msg('# Session Continuation Context\n\nLong readme...\n---\n\nfix the auth bug'),
         ]
-        # First line after --- is 'boot.' → skipped, next user message would be used
-        # Actually, this is one message — the candidate after --- is 'boot.' → None → scan continues
-        # (no more messages) → returns None
         result = _extract_session_title(msgs)
-        # The extraction after --- gives 'boot.' which is skipped; no more messages
-        assert result is None
+        assert result == 'fix the auth bug'
 
     def test_skips_bare_boot(self):
         msgs = [
-            _make_user_msg('boot.'),
+            _make_user_msg('boot'),
             _make_user_msg('fix the login page'),
         ]
         assert _extract_session_title(msgs) == 'fix the login page'
@@ -125,7 +120,7 @@ class TestTitleExtraction:
     def test_returns_none_when_all_boilerplate(self):
         msgs = [
             _make_user_msg('# Session Continuation Context\n\nREADME text'),
-            _make_user_msg('boot.'),
+            _make_user_msg('boot'),
         ]
         assert _extract_session_title(msgs) is None
 
