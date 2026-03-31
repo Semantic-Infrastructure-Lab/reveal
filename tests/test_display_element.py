@@ -326,7 +326,7 @@ class TestErrorHandling:
 
         captured = capsys.readouterr()
         assert 'No function #5 found' in captured.err
-        assert '/tmp/test.py' in captured.err
+        assert '/tmp/test.py' in captured.err # noqa: win-path — analyzer.path is str, not Path; output is unchanged
 
     def test_handle_ordinal_error_without_type(self, capsys):
         """Test error message for plain ordinal extraction failure."""
@@ -338,7 +338,7 @@ class TestErrorHandling:
 
         captured = capsys.readouterr()
         assert 'No element #3 found' in captured.err
-        assert '/tmp/test.py' in captured.err
+        assert '/tmp/test.py' in captured.err # noqa: win-path — analyzer.path is str, not Path; output is unchanged
 
     def test_handle_line_error(self, capsys):
         """Test error message for line extraction failure."""
@@ -350,7 +350,7 @@ class TestErrorHandling:
 
         captured = capsys.readouterr()
         assert 'No element found at line 42' in captured.err
-        assert '/tmp/test.py' in captured.err
+        assert '/tmp/test.py' in captured.err # noqa: win-path — analyzer.path is str, not Path; output is unchanged
 
     def test_handle_hierarchical_error(self, capsys):
         """Test error message for hierarchical extraction failure."""
@@ -374,7 +374,7 @@ class TestErrorHandling:
 
         captured = capsys.readouterr()
         assert "Element 'my_func' not found" in captured.err
-        assert '/tmp/test.py' in captured.err
+        assert '/tmp/test.py' in captured.err # noqa: win-path — analyzer.path is str, not Path; output is unchanged
 
     def test_extract_element_exits_on_failure(self):
         """Test extract_element exits with code 1 when element not found."""
@@ -782,8 +782,8 @@ class TestOutputFormats:
 
         captured = capsys.readouterr()
         # Grep format: path:line_num:content
-        assert '/tmp/test.py:10:' in captured.out
-        assert '/tmp/test.py:11:' in captured.out
+        assert '/tmp/test.py:10:' in captured.out # noqa: win-path — analyzer.path is str, not Path; output is unchanged
+        assert '/tmp/test.py:11:' in captured.out # noqa: win-path — analyzer.path is str, not Path; output is unchanged
 
 
 # ============================================================================
@@ -804,7 +804,7 @@ class TestHandleExtractionErrorHints:
         captured = capsys.readouterr()
         assert 'Code extraction matches exact names' in captured.err
         assert "--search 'staging'" in captured.err
-        assert '/tmp/deploy.sh' in captured.err
+        assert '/tmp/deploy.sh' in captured.err # noqa: win-path — analyzer.path is str, not Path; output is unchanged
 
     def test_ux12_hint_not_shown_when_pipe_in_element(self, capsys):
         """Pipe hint fires instead of exact-match hint when | is in element."""

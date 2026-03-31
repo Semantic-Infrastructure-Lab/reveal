@@ -292,7 +292,7 @@ class TestRenderPythonEnvConfig(unittest.TestCase):
         self.assertIn('Path: /home/user/venv', output)
         self.assertIn('Type: venv', output)
         self.assertIn('sys.path (3 entries):', output)
-        self.assertIn('/home/user/venv/lib/python3.10/site-packages', output)
+        self.assertIn('/home/user/venv/lib/python3.10/site-packages', output) # noqa: win-path — Python sys.path data, always POSIX in output
         self.assertIn('Flags:', output)
         self.assertIn('debug: False', output)
 

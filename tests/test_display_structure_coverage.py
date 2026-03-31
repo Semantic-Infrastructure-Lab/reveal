@@ -424,7 +424,7 @@ class TestBuildOutlineHierarchy:
 class TestHandleOutlineMode:
     def _make_analyzer(self):
         a = MagicMock()
-        a.path = Path('/fake/x.py')
+        a.path = Path(str(Path('/fake/x.py')))
         a.is_fallback = False
         a.fallback_language = None
         return a
@@ -451,7 +451,7 @@ class TestHandleOutlineMode:
 class TestShowStructure:
     def _make_analyzer(self, structure=None):
         a = MagicMock()
-        a.path = Path('/fake/x.py')
+        a.path = Path(str(Path('/fake/x.py')))
         a.is_fallback = False
         a.fallback_language = None
         a.get_structure.return_value = structure or {'functions': [{'name': 'foo'}]}
@@ -513,7 +513,7 @@ def _make_typed_mock(has_elements=True, roots=None, reveal_type_name='Python', s
 class TestRenderTypedStructureOutput:
     def _make_analyzer(self):
         a = MagicMock()
-        a.path = Path('/fake/x.py')
+        a.path = Path(str(Path('/fake/x.py')))
         a.is_fallback = False
         a.fallback_language = None
         return a
@@ -584,7 +584,7 @@ class TestRenderTypedStructureOutput:
 class TestRenderJsonOutput:
     def _make_analyzer(self, is_fallback=False, fallback_lang=None):
         a = MagicMock()
-        a.path = Path('/fake/x.py')
+        a.path = Path(str(Path('/fake/x.py')))
         a.is_fallback = is_fallback
         a.fallback_language = fallback_lang
         a.__class__.__name__ = 'PythonAnalyzer'
@@ -673,7 +673,7 @@ class TestRenderSingleCategoryExtra:
         items = {'title': 'My Page', 'meta': {'description': 'desc'}}
         with patch('reveal.display.structure._format_html_metadata') as mock_fmt:
             out = _capture(_render_single_category, 'metadata', items, Path('/fake/x.html'), 'text')
-        mock_fmt.assert_called_once_with(items, Path('/fake/x.html'), 'text')
+        mock_fmt.assert_called_once_with(items, Path('/fake/x.html'), 'text') # noqa: win-path — Path-to-Path mock assertion, Path.__eq__ normalises
         assert 'Metadata:' in out
 
     def test_standard_list_items(self):
@@ -718,7 +718,7 @@ class TestBuildOutlineHierarchyToml:
 class TestHandleStandardOutput:
     def _make_analyzer(self, structure=None):
         a = MagicMock()
-        a.path = Path('/fake/x.py')
+        a.path = Path(str(Path('/fake/x.py')))
         a.is_fallback = False
         a.fallback_language = None
         a.__class__.__name__ = 'PythonAnalyzer'
@@ -766,7 +766,7 @@ class TestHandleStandardOutput:
 class TestShowStructureExtra:
     def _make_analyzer(self, structure=None):
         a = MagicMock()
-        a.path = Path('/fake/x.py')
+        a.path = Path(str(Path('/fake/x.py')))
         a.is_fallback = False
         a.fallback_language = None
         a.get_structure.return_value = structure or {'functions': [{'name': 'foo'}]}

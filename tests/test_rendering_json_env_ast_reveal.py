@@ -426,7 +426,7 @@ class TestRenderEnvStructure(unittest.TestCase):
         self.assertIn('Environment Variables (3)', output)
         self.assertIn('PATH (1):', output)
         self.assertIn('PATH', output)
-        self.assertIn('/usr/bin:/bin', output)
+        self.assertIn('/usr/bin:/bin', output) # noqa: win-path — env var string data (PATH), always POSIX
         self.assertIn('USER (2):', output)
         self.assertIn('USER', output)
         self.assertIn('john', output)

@@ -639,8 +639,8 @@ server {
         detections = self.rule.check('test.conf', None, content)
         self.assertEqual(len(detections), 1)
         msg = detections[0].message
-        self.assertIn('/home/user1/public_html', msg)
-        self.assertIn('/home/user2/public_html', msg)
+        self.assertIn('/home/user1/public_html', msg) # noqa: win-path — nginx config string data, always POSIX
+        self.assertIn('/home/user2/public_html', msg) # noqa: win-path — nginx config string data, always POSIX
         self.assertNotIn('"/home/', msg, "raw double-quotes should be stripped from message")
 
     def test_quoted_and_unquoted_same_path_no_detection(self):

@@ -67,7 +67,7 @@ class TestSQLiteAdapterInit(unittest.TestCase):
     def test_init_with_absolute_path(self):
         """Should parse absolute path correctly."""
         adapter = SQLiteAdapter("sqlite:///tmp/test.db")
-        self.assertEqual(adapter.db_path, "/tmp/test.db")
+        self.assertEqual(adapter.db_path, "/tmp/test.db") # noqa: win-path — db_path built with '/'.join(), always POSIX
         self.assertIsNone(adapter.table)
 
     def test_init_with_relative_path(self):
@@ -79,13 +79,13 @@ class TestSQLiteAdapterInit(unittest.TestCase):
     def test_init_with_table(self):
         """Should parse path with table name."""
         adapter = SQLiteAdapter("sqlite:///tmp/test.db/users")
-        self.assertEqual(adapter.db_path, "/tmp/test.db")
+        self.assertEqual(adapter.db_path, "/tmp/test.db") # noqa: win-path — db_path built with '/'.join(), always POSIX
         self.assertEqual(adapter.table, "users")
 
     def test_init_with_nested_path(self):
         """Should parse nested path correctly."""
         adapter = SQLiteAdapter("sqlite:///var/data/app.db/accounts")
-        self.assertEqual(adapter.db_path, "/var/data/app.db")
+        self.assertEqual(adapter.db_path, "/var/data/app.db") # noqa: win-path — db_path built with '/'.join(), always POSIX
         self.assertEqual(adapter.table, "accounts")
 
 

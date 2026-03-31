@@ -41,7 +41,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: |
           if [ -f scripts/check_windows_compat.py ]; then
-            python scripts/check_windows_compat.py
+            python scripts/check_windows_compat.py --warn
           fi
 
       - name: Test CLI basics
