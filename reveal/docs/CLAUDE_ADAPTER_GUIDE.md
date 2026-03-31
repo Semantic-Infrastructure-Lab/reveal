@@ -61,11 +61,13 @@ The **claude://** adapter provides two families of resources: **session analysis
 
 **Key Capabilities**:
 - Session overview with message counts, tool usage, duration
-- Tool usage analytics with success rates
-- File operation tracking (Read/Write/Edit operations)
+- Tool usage analytics with success rates (including Agent tool telemetry)
+- File operation tracking (Read/Write/Edit/Glob/Grep operations)
 - Chronological workflow visualization
 - Error detection with full context
 - Thinking block extraction and token estimates
+- Token breakdown by turn (`?tokens`)
+- Agent tool call tracking (`/agents` sub-route)
 - Context change tracking (directory, branch changes)
 - Composite query support (filter by tools, errors, text, role)
 
@@ -550,7 +552,7 @@ reveal claude://session/my-session?summary&errors
 
 ## Elements Reference
 
-The claude:// adapter supports ten elements for progressive disclosure:
+The claude:// adapter supports eleven elements for progressive disclosure:
 
 ### 1. workflow
 
@@ -754,6 +756,26 @@ reveal claude://session/infernal-earth-0118/message/334
 
 ---
 
+### 11. agents
+
+**Description**: Agent tool calls made during the session with per-agent telemetry
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>/agents
+```
+
+**Example**:
+```bash
+reveal claude://session/infernal-earth-0118/agents
+```
+
+**Output**: Per-agent breakdown with `agent_type`, `status`, `duration_ms`, `token_count`, `tool_count`, and `usage` (input/output/cache tokens). Session-level aggregates: `total_agent_tokens`, `total_agent_duration_ms`.
+
+**Use when**: Understand subagent cost, identify slow or expensive agent invocations, audit agent behavior within a session
+
+---
+
 ## Query Parameters
 
 ### ?summary
@@ -773,6 +795,26 @@ reveal claude://session/infernal-earth-0118?summary
 **Output**: Overview + timeline + critical events + recommendations
 
 **Use when**: Quick session understanding, post-session review
+
+---
+
+### ?tokens
+
+**Description**: Token usage breakdown by turn — input, output, cache read/write tokens per assistant message
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>?tokens
+```
+
+**Example**:
+```bash
+reveal claude://session/infernal-earth-0118?tokens
+```
+
+**Output**: Per-turn token counts (input, output, cache_read, cache_creation) plus session totals
+
+**Use when**: Audit token cost, identify expensive turns, compare sessions by cost
 
 ---
 
