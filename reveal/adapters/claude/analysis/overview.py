@@ -161,6 +161,58 @@ def _get_last_assistant_snippet(messages: List[Dict]) -> Optional[str]:
     return None
 
 
+def _collect_token_usage(messages: List[Dict]) -> Dict[str, Any]:
+    """Sum token usage across all complete assistant messages.
+
+    Only counts messages with stop_reason set (not None) to avoid double-counting
+    streaming intermediates. Returns zeroed dict when no usage data is found.
+    """
+    totals = {
+        'input_tokens': 0,
+        'output_tokens': 0,
+        'cache_read_tokens': 0,
+        'cache_created_tokens': 0,
+        'messages_with_usage': 0,
+    }
+    for msg in messages:
+        if msg.get('type') != 'assistant':
+            continue
+        m = msg.get('message', {})
+        if m.get('stop_reason') is None:
+            continue  # streaming intermediate — skip to avoid double-counting
+        usage = m.get('usage')
+        if not isinstance(usage, dict):
+            continue
+        totals['input_tokens'] += usage.get('input_tokens', 0)
+        totals['output_tokens'] += usage.get('output_tokens', 0)
+        totals['cache_read_tokens'] += usage.get('cache_read_input_tokens', 0)
+        totals['cache_created_tokens'] += usage.get('cache_creation_input_tokens', 0)
+        totals['messages_with_usage'] += 1
+    total_input = totals['input_tokens'] + totals['cache_read_tokens'] + totals['cache_created_tokens']
+    if total_input > 0:
+        hit_pct = round(totals['cache_read_tokens'] / total_input * 100)
+        totals['cache_hit_rate'] = f"{hit_pct}%"
+    else:
+        totals['cache_hit_rate'] = '0%'
+    return totals
+
+
+def _collect_context(messages: List[Dict]) -> Optional[Dict[str, Any]]:
+    """Extract cwd, git_branch, and version from the first assistant message."""
+    for msg in messages:
+        if msg.get('type') != 'assistant':
+            continue
+        ctx: Dict[str, Any] = {}
+        if msg.get('cwd'):
+            ctx['cwd'] = msg['cwd']
+        if msg.get('gitBranch'):
+            ctx['git_branch'] = msg['gitBranch']
+        if msg.get('version'):
+            ctx['version'] = msg['version']
+        return ctx if ctx else None
+    return None
+
+
 def _check_readme_present(conversation_path: str) -> bool:
     """Check if README*.md exists in the session directory (parent of conversation file)."""
     try:
@@ -244,6 +296,8 @@ def get_overview(messages: List[Dict], session_name: str, conversation_path: str
     files_touched = _collect_files_touched(messages)
     last_snippet = _get_last_assistant_snippet(messages)
     readme_present = _check_readme_present(conversation_path)
+    token_summary = _collect_token_usage(messages)
+    context = _collect_context(messages)
 
     base.update({
         'session': session_name,
@@ -260,8 +314,11 @@ def get_overview(messages: List[Dict], session_name: str, conversation_path: str
         'files_touched_count': len(files_touched),
         'readme_present': readme_present,
         'last_assistant_snippet': last_snippet,
-        'conversation_file': conversation_path
+        'conversation_file': conversation_path,
+        'token_summary': token_summary,
     })
+    if context:
+        base['context'] = context
 
     return base
 
@@ -347,4 +404,76 @@ def get_context_changes(messages: List[Dict], session_name: str,
         'changes': changes
     })
 
+    return base
+
+
+def get_token_breakdown(messages: List[Dict], session_name: str,
+                        contract_base: Dict[str, Any]) -> Dict[str, Any]:
+    """Per-message token breakdown showing context growth over the session.
+
+    Route: claude://session/NAME?tokens
+
+    Each entry covers one complete assistant turn (stop_reason != None).
+    cumulative_input tracks total input context growth across turns.
+
+    Args:
+        messages: List of message dictionaries
+        session_name: Name of the session
+        contract_base: Base contract fields
+
+    Returns:
+        claude_token_breakdown dict with per-message entries and session totals
+    """
+    base = contract_base.copy()
+    base['type'] = 'claude_token_breakdown'
+
+    entries = []
+    totals = {
+        'input_tokens': 0,
+        'output_tokens': 0,
+        'cache_read_tokens': 0,
+        'cache_created_tokens': 0,
+    }
+    cumulative_input = 0
+
+    for i, msg in enumerate(messages):
+        if msg.get('type') != 'assistant':
+            continue
+        m = msg.get('message', {})
+        if m.get('stop_reason') is None:
+            continue
+        usage = m.get('usage')
+        if not isinstance(usage, dict):
+            continue
+
+        inp = usage.get('input_tokens', 0)
+        out = usage.get('output_tokens', 0)
+        cache_read = usage.get('cache_read_input_tokens', 0)
+        cache_created = usage.get('cache_creation_input_tokens', 0)
+        cumulative_input += inp + cache_read + cache_created
+
+        entries.append({
+            'message_index': i,
+            'timestamp': msg.get('timestamp'),
+            'input_tokens': inp,
+            'output_tokens': out,
+            'cache_read_tokens': cache_read,
+            'cache_created_tokens': cache_created,
+            'cumulative_input': cumulative_input,
+        })
+
+        totals['input_tokens'] += inp
+        totals['output_tokens'] += out
+        totals['cache_read_tokens'] += cache_read
+        totals['cache_created_tokens'] += cache_created
+
+    total_input = totals['input_tokens'] + totals['cache_read_tokens'] + totals['cache_created_tokens']
+    hit_pct = round(totals['cache_read_tokens'] / total_input * 100) if total_input > 0 else 0
+    totals['cache_hit_rate'] = f"{hit_pct}%"
+
+    base.update({
+        'session': session_name,
+        'messages': entries,
+        'totals': totals,
+    })
     return base

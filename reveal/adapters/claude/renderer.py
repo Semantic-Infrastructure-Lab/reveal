@@ -84,6 +84,30 @@ class ClaudeRenderer(TypeDispatchRenderer):
                 print(f"  {tool}: {count}")
             print()
 
+        # Token summary
+        ts = result.get('token_summary')
+        if ts and ts.get('messages_with_usage', 0) > 0:
+            hit = ts.get('cache_hit_rate', '0%')
+            inp = ts.get('input_tokens', 0)
+            out = ts.get('output_tokens', 0)
+            cache_read = ts.get('cache_read_tokens', 0)
+            print(f"Tokens: {inp:,} in / {out:,} out  |  cache hit {hit}  ({cache_read:,} read)")
+            print()
+
+        # Session context (cwd, branch, version)
+        ctx = result.get('context')
+        if ctx:
+            parts = []
+            if ctx.get('cwd'):
+                parts.append(ctx['cwd'])
+            if ctx.get('git_branch'):
+                parts.append(f"branch={ctx['git_branch']}")
+            if ctx.get('version'):
+                parts.append(f"v{ctx['version']}")
+            if parts:
+                print(f"Context: {' | '.join(parts)}")
+                print()
+
         # Last assistant snippet
         snippet = result.get('last_assistant_snippet')
         if snippet:
@@ -252,7 +276,7 @@ class ClaudeRenderer(TypeDispatchRenderer):
         print()
 
         by_operation = result.get('by_operation', {})
-        for op in ['Read', 'Write', 'Edit']:
+        for op in ['Read', 'Write', 'Edit', 'Glob', 'Grep']:
             files = by_operation.get(op, {})
             if files:
                 print(f"{op}:")
@@ -302,6 +326,8 @@ class ClaudeRenderer(TypeDispatchRenderer):
             detail = step.get('detail', '') or ''
             run_count = step.get('run_count', 1)
             thinking_hint = step.get('thinking_hint')
+            outcome = step.get('outcome')
+            backgrounded = step.get('backgrounded', False)
 
             if truncate_at is not None and len(detail) > truncate_at:
                 detail = detail[:truncate_at - 3] + '...'
@@ -309,9 +335,44 @@ class ClaudeRenderer(TypeDispatchRenderer):
             if run_count > 1:
                 detail = f"{detail} (×{run_count})"
 
-            print(f"[{step_num:3}] {tool:12} {detail}")
+            suffix = ''
+            if outcome == 'error':
+                suffix += ' ✗'
+            if backgrounded:
+                suffix += ' [bg]'
+
+            print(f"[{step_num:3}] {tool:12} {detail}{suffix}")
             if thinking_hint:
                 print(f"           → {thinking_hint}")
+
+    @staticmethod
+    def _render_claude_token_breakdown(result: dict) -> None:
+        """Render per-message token breakdown (claude://session/NAME?tokens)."""
+        session = result.get('session', 'unknown')
+        entries = result.get('messages', [])
+        totals = result.get('totals', {})
+
+        print(f"Token Breakdown: {session}")
+        print(f"Turns: {len(entries)}")
+        print()
+
+        if entries:
+            print(f"{'#':>4}  {'timestamp':<22}  {'input':>8}  {'output':>8}  {'cache_read':>12}  {'cache_crt':>10}  {'cumul_in':>10}")
+            print(f"{'─'*4}  {'─'*22}  {'─'*8}  {'─'*8}  {'─'*12}  {'─'*10}  {'─'*10}")
+            for i, entry in enumerate(entries, 1):
+                ts = (entry.get('timestamp') or '')[:19].replace('T', ' ')
+                inp = entry.get('input_tokens', 0)
+                out = entry.get('output_tokens', 0)
+                cread = entry.get('cache_read_tokens', 0)
+                ccrt = entry.get('cache_created_tokens', 0)
+                cumul = entry.get('cumulative_input', 0)
+                print(f"{i:>4}  {ts:<22}  {inp:>8,}  {out:>8,}  {cread:>12,}  {ccrt:>10,}  {cumul:>10,}")
+            print()
+
+        if totals:
+            hit = totals.get('cache_hit_rate', '0%')
+            print(f"Totals: {totals.get('input_tokens', 0):,} in / {totals.get('output_tokens', 0):,} out")
+            print(f"Cache:  {totals.get('cache_read_tokens', 0):,} read / {totals.get('cache_created_tokens', 0):,} created  (hit rate {hit})")
 
     @staticmethod
     def _render_claude_context(result: dict) -> None:

@@ -27,6 +27,7 @@ from .analysis import (
     get_files_touched,
     get_workflow,
     get_context_changes,
+    get_token_breakdown,
     search_sessions_for_term,
 )
 
@@ -560,6 +561,8 @@ class ClaudeAdapter(ResourceAdapter):
             return get_timeline(messages, self.session_name, contract_base)
         if self.query == 'errors':
             return get_errors(messages, self.session_name, contract_base)
+        if self.query == 'tokens':
+            return get_token_breakdown(messages, self.session_name, contract_base)
         if self.query and self.query.startswith('tools='):
             return get_tool_calls(messages, self.query.split('=')[1], self.session_name, contract_base)
         if self.query and self.query.startswith('search='):
@@ -586,7 +589,8 @@ class ClaudeAdapter(ResourceAdapter):
         if '/tools' in self.resource:
             return get_all_tools(messages, self.session_name, contract_base)
         if '/files' in self.resource:
-            return get_files_touched(messages, self.session_name, contract_base)
+            include_patches = self.query_params.get('patches') == 'true'
+            return get_files_touched(messages, self.session_name, contract_base, include_patches=include_patches)
         if '/workflow' in self.resource:
             return get_workflow(messages, self.session_name, contract_base)
         if '/context' in self.resource:

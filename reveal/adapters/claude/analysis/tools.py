@@ -25,21 +25,57 @@ def _iter_user_content(messages: List[Dict]) -> Generator[Tuple[int, Dict, Dict]
                 yield i, msg, content
 
 
-def is_tool_error(content: Dict) -> bool:
+def _build_tool_use_result_map(messages: List[Dict]) -> Dict[str, Dict]:
+    """Build tool_use_id → toolUseResult map from user messages.
+
+    toolUseResult is a top-level key on user messages containing structured
+    per-tool data (stdout/stderr split, returnCodeInterpretation, backgroundTaskId, etc.).
+    It is mapped only when the user message has exactly one tool_result block,
+    so the pairing is unambiguous.
+    """
+    result: Dict[str, Dict] = {}
+    for msg in messages:
+        if msg.get('type') != 'user':
+            continue
+        tur = msg.get('toolUseResult')
+        if not isinstance(tur, dict):
+            continue
+        tool_results = [
+            c for c in msg.get('message', {}).get('content', [])
+            if isinstance(c, dict) and c.get('type') == 'tool_result'
+        ]
+        if len(tool_results) == 1:
+            tool_use_id = tool_results[0].get('tool_use_id', '')
+            if tool_use_id:
+                result[tool_use_id] = tur
+    return result
+
+
+def is_tool_error(content: Dict, tool_use_result: Optional[Dict] = None) -> bool:
     """Check if a tool result indicates an error.
 
-    Uses multiple signals:
+    Uses multiple signals in priority order:
+    - returnCodeInterpretation from toolUseResult (most reliable for Bash)
     - is_error flag (definitive)
-    - Exit code > 0 (definitive for Bash)
+    - Exit code > 0 in content (definitive for Bash)
     - Error patterns at line start (strong signal)
 
     Args:
         content: Tool result content dictionary
+        tool_use_result: Optional structured toolUseResult dict from the outer message
 
     Returns:
         True if the result indicates an error
     """
-    # Check explicit is_error flag first (definitive)
+    # Check returnCodeInterpretation first — pre-computed by the client, most reliable
+    if tool_use_result is not None:
+        rci = tool_use_result.get('returnCodeInterpretation')
+        if rci == 'error':
+            return True
+        if rci == 'success':
+            return False
+
+    # Check explicit is_error flag (definitive)
     if content.get('is_error', False):
         return True
 
@@ -79,8 +115,8 @@ def extract_all_tool_results(messages: List[Dict]) -> List[Dict]:
         List of tool result dictionaries with:
         - message_index, tool_use_id, tool_name, content, is_error, timestamp
     """
-    # First pass: collect tool_use_id -> tool_name mapping from assistant messages
     tool_use_map = _collect_tool_use_map(messages)
+    tur_map = _build_tool_use_result_map(messages)
 
     results = []
     for i, msg, content in _iter_user_content(messages):
@@ -91,7 +127,7 @@ def extract_all_tool_results(messages: List[Dict]) -> List[Dict]:
                 'tool_use_id': tool_id,
                 'tool_name': tool_use_map.get(tool_id, 'unknown'),
                 'content': str(content.get('content', ''))[:500],
-                'is_error': is_tool_error(content),
+                'is_error': is_tool_error(content, tur_map.get(tool_id)),
                 'timestamp': msg.get('timestamp')
             })
     return results
@@ -195,13 +231,15 @@ def _collect_tool_use_ids(messages: List[Dict]) -> Dict[str, str]:
 
 
 def _track_tool_results(messages: List[Dict], tool_use_map: Dict[str, str],
-                        tool_stats: Dict[str, Dict[str, int]]) -> None:
+                        tool_stats: Dict[str, Dict[str, int]],
+                        tur_map: Optional[Dict[str, Dict]] = None) -> None:
     """Track success/failure for each tool based on results.
 
     Args:
         messages: List of message dictionaries
         tool_use_map: Mapping of tool_use_id to tool name
         tool_stats: Dictionary to update with success/failure counts
+        tur_map: Optional tool_use_id → toolUseResult map for richer error detection
     """
     for _i, _msg, content in _iter_user_content(messages):
         if content.get('type') != 'tool_result':
@@ -211,7 +249,8 @@ def _track_tool_results(messages: List[Dict], tool_use_map: Dict[str, str],
             continue
         tool_name = tool_use_map[tool_id]
         tool_stats[tool_name]['total'] += 1
-        if is_tool_error(content):
+        tur = tur_map.get(tool_id) if tur_map else None
+        if is_tool_error(content, tur):
             tool_stats[tool_name]['failure'] += 1
         else:
             tool_stats[tool_name]['success'] += 1
@@ -250,23 +289,31 @@ def calculate_tool_success_rate(messages: List[Dict]) -> Dict[str, Dict[str, Any
     """
     # Build mapping of tool_use_id to tool name
     tool_use_map = _collect_tool_use_ids(messages)
+    tur_map = _build_tool_use_result_map(messages)
 
     # Track success/failure per tool
     tool_stats: Dict[str, Dict[str, int]] = defaultdict(lambda: {'success': 0, 'failure': 0, 'total': 0})
-    _track_tool_results(messages, tool_use_map, tool_stats)
+    _track_tool_results(messages, tool_use_map, tool_stats, tur_map)
 
     # Calculate final success rates
     return _build_success_rate_report(tool_stats)
 
 
-def _extract_file_operation(content: Dict[str, Any], msg_index: int,
-                           timestamp: Optional[str]) -> Optional[Dict[str, Any]]:
+def _extract_file_operation(
+    content: Dict[str, Any],
+    msg_index: int,
+    timestamp: Optional[str],
+    tool_use_result: Optional[Dict] = None,
+    include_patches: bool = False,
+) -> Optional[Dict[str, Any]]:
     """Extract file operation from tool use content.
 
     Args:
         content: Content dictionary from message
         msg_index: Message index in conversation
         timestamp: Message timestamp
+        tool_use_result: Structured result from toolUseResult (preferred source for filePath)
+        include_patches: When True, add 'patch' field (structuredPatch or null)
 
     Returns:
         Operation dict or None if not a file operation
@@ -278,26 +325,45 @@ def _extract_file_operation(content: Dict[str, Any], msg_index: int,
     if tool_name not in ('Read', 'Write', 'Edit'):
         return None
 
-    file_path = content.get('input', {}).get('file_path')
+    # Prefer filePath from toolUseResult; fallback to input
+    file_path = None
+    if tool_use_result:
+        if tool_name == 'Read':
+            file_path = tool_use_result.get('file', {}).get('filePath')
+        else:
+            file_path = tool_use_result.get('filePath')
+    if not file_path:
+        file_path = content.get('input', {}).get('file_path')
     if not file_path:
         return None
 
-    return {
+    op: Dict[str, Any] = {
         'message_index': msg_index,
         'operation': tool_name,
         'file_path': file_path,
-        'timestamp': timestamp
+        'timestamp': timestamp,
     }
+
+    if include_patches:
+        patch = None
+        if tool_use_result and tool_name in ('Edit', 'Write'):
+            raw = tool_use_result.get('structuredPatch')
+            patch = raw if raw else None
+        op['patch'] = patch
+
+    return op
 
 
 def get_files_touched(messages: List[Dict], session_name: str,
-                      contract_base: Dict[str, Any]) -> Dict[str, Any]:
-    """Get all files that were Read, Written, or Edited.
+                      contract_base: Dict[str, Any],
+                      include_patches: bool = False) -> Dict[str, Any]:
+    """Get all files that were Read, Written, Edited, or matched by Glob/Grep.
 
     Args:
         messages: List of message dictionaries
         session_name: Name of the session
         contract_base: Base contract fields
+        include_patches: When True, each operation gains a 'patch' field
 
     Returns:
         Dictionary with file operation statistics
@@ -308,23 +374,46 @@ def get_files_touched(messages: List[Dict], session_name: str,
     files_by_op: Dict[str, Any] = {
         'Read': defaultdict(int),
         'Write': defaultdict(int),
-        'Edit': defaultdict(int)
+        'Edit': defaultdict(int),
+        'Glob': defaultdict(int),
+        'Grep': defaultdict(int),
     }
-    operations = []
+    operations: List[Dict[str, Any]] = []
+
+    tur_map = _build_tool_use_result_map(messages)
 
     for i, msg in enumerate(messages):
         # Skip non-assistant messages
         if msg.get('type') != 'assistant':
             continue
 
-        # Process each content block in assistant message
+        timestamp = msg.get('timestamp')
         for content in msg.get('message', {}).get('content', []):
-            operation = _extract_file_operation(content, i, msg.get('timestamp'))
-            if operation:
-                tool_name = operation['operation']
-                file_path = operation['file_path']
-                files_by_op[tool_name][file_path] += 1
-                operations.append(operation)
+            if content.get('type') != 'tool_use':
+                continue
+
+            tool_name = content.get('name')
+            tool_id = content.get('id', '')
+            tur = tur_map.get(tool_id)
+
+            if tool_name in ('Read', 'Write', 'Edit'):
+                operation = _extract_file_operation(content, i, timestamp, tur, include_patches)
+                if operation:
+                    files_by_op[tool_name][operation['file_path']] += 1
+                    operations.append(operation)
+
+            elif tool_name in ('Glob', 'Grep') and tur:
+                for fp in tur.get('filenames', []) or []:
+                    files_by_op[tool_name][fp] += 1
+                    op: Dict[str, Any] = {
+                        'message_index': i,
+                        'operation': tool_name,
+                        'file_path': fp,
+                        'timestamp': timestamp,
+                    }
+                    if include_patches:
+                        op['patch'] = None
+                    operations.append(op)
 
     # Calculate unique files
     all_files: set[str] = set()
@@ -421,6 +510,20 @@ def _collapse_workflow_runs(
     return collapsed
 
 
+def _build_tool_result_content_map(messages: List[Dict]) -> Dict[str, Dict]:
+    """Build tool_use_id → tool_result content block map from user messages."""
+    result: Dict[str, Dict] = {}
+    for msg in messages:
+        if msg.get('type') != 'user':
+            continue
+        for c in msg.get('message', {}).get('content', []):
+            if isinstance(c, dict) and c.get('type') == 'tool_result':
+                tool_use_id = c.get('tool_use_id', '')
+                if tool_use_id:
+                    result[tool_use_id] = c
+    return result
+
+
 def get_workflow(messages: List[Dict], session_name: str,
                  contract_base: Dict[str, Any]) -> Dict[str, Any]:
     """Get chronological sequence of tool operations.
@@ -431,23 +534,37 @@ def get_workflow(messages: List[Dict], session_name: str,
         contract_base: Base contract fields
 
     Returns:
-        Dictionary with workflow sequence
+        Dictionary with workflow sequence. Each step includes:
+        - outcome: 'success' | 'error' | 'pending' (if result not yet seen)
+        - backgrounded: True when the tool was run in background (omitted otherwise)
     """
     base = contract_base.copy()
     base['type'] = 'claude_workflow'
+
+    tur_map = _build_tool_use_result_map(messages)
+    result_content_map = _build_tool_result_content_map(messages)
 
     workflow: List[Dict[str, Any]] = []
     for i, msg, content in _iter_assistant_content(messages):
         if content.get('type') != 'tool_use':
             continue
         tool_name = content.get('name')
-        workflow.append({
+        tool_use_id = content.get('id', '')
+        tur = tur_map.get(tool_use_id)
+        result_content = result_content_map.get(tool_use_id)
+
+        step: Dict[str, Any] = {
             'step': len(workflow) + 1,
             'message_index': i,
             'tool': tool_name,
             'detail': _extract_tool_detail(tool_name, content.get('input', {})),
-            'timestamp': msg.get('timestamp')
-        })
+            'timestamp': msg.get('timestamp'),
+        }
+        if result_content is not None:
+            step['outcome'] = 'error' if is_tool_error(result_content, tur) else 'success'
+        if tur and tur.get('backgroundTaskId'):
+            step['backgrounded'] = True
+        workflow.append(step)
 
     total_steps = len(workflow)
     workflow = _collapse_workflow_runs(workflow, messages)

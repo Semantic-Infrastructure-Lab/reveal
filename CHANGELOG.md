@@ -12,6 +12,25 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.3] - 2026-03-31 (komile-0331)
+
+### Changed
+- **`/files` — `filePath` from `toolUseResult`** (`analysis/tools.py`): `_extract_file_operation()` now accepts an optional `tool_use_result` dict and uses `filePath` (Edit/Write) or `file.filePath` (Read) from the structured result when available, falling back to `input.file_path`.
+- **`/files` — Glob/Grep matched files** (`analysis/tools.py`): `get_files_touched()` now also tracks files matched by Glob and Grep calls — each matched filename from `toolUseResult.filenames` is added as an operation with `operation: 'Glob'` or `'Grep'`. Renderer updated to display these sections.
+- **`/files?patches=true`** (`analysis/tools.py`, `adapter.py`): New query param. When set, each operation entry gains a `patch` field — `structuredPatch` list (hunk objects) for Edit/Write, `null` for Read/Glob/Grep.
+
+---
+
+## [0.69.2] - 2026-03-31 (bayuzeso-0331)
+
+### Added
+- **`claude://` adapter — token visibility**: `get_overview()` now includes `token_summary` (input/output/cache tokens + hit rate) and `context` (cwd, git_branch, version) blocks. Overview renderer surfaces these as `Tokens:` and `Context:` lines.
+- **`claude://session/NAME?tokens` route** (`analysis/overview.py`): New `get_token_breakdown()` function returns `claude_token_breakdown` — per-turn table of input/output/cache tokens with `cumulative_input` tracking context growth. Renderer formats as aligned table with totals.
+- **`toolUseResult` integration** (`analysis/tools.py`): `_build_tool_use_result_map()` extracts the structured `toolUseResult` top-level field from user messages (paired 1:1 when a message has exactly one tool_result). `is_tool_error()` now accepts optional `tool_use_result` dict and checks `returnCodeInterpretation` first (`error`/`success`), falling back to `is_error` flag + regex. All callers (`extract_all_tool_results`, `_track_tool_results`, `calculate_tool_success_rate`) updated.
+- **`outcome` and `backgrounded` on workflow steps** (`analysis/tools.py`): Each step in `get_workflow()` now has `outcome: 'success'|'error'` (from tool result lookup) and `backgrounded: True` when `backgroundTaskId` present. Workflow renderer shows `✗` suffix on errors and `[bg]` on backgrounded steps.
+
+---
+
 ## [0.69.1] - 2026-03-31 (mighty-chimera-0330, emerald-crystal-0331)
 
 ### Fixed
