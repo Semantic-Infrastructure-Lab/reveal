@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] (pearl-tone-0330, bright-nebula-0330)
+## [Unreleased] (pearl-tone-0330, bright-nebula-0330, visible-cosmos-0330)
 
 ### Added
 - **`REVEAL_CLAUDE_JSON` env var** (BACK-119): Explicit override for `~/.claude.json` path. When `REVEAL_CLAUDE_HOME` is set, `CLAUDE_JSON` now auto-derives from `CLAUDE_HOME.parent / '.claude.json'` — a single env var covers the whole user's Claude install (critical for SSH multi-user scenarios). `REVEAL_CLAUDE_JSON` provides an escape hatch for non-standard layouts. `claude://info` now reports `REVEAL_CLAUDE_JSON` in the environment override block.
@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`--base-path` covers the full Claude install** (BACK-120): `reconfigure_base_path` now derives `CLAUDE_HOME`, `CLAUDE_JSON`, `PLANS_DIR`, `AGENTS_DIR`, and `HOOKS_DIR` from `path.parent` — a single `--base-path /path/to/.claude/projects` flag is sufficient to point all `claude://` resources at a different install. Previously only `CONVERSATION_BASE` was updated, leaving history, config, and plans reading from the local machine.
 
 ### Fixed
+- **`calls://` hangs on projects with `.venv`** (visible-cosmos-0330): `collect_structures()` used `rglob('*')` with no directory exclusions, crawling `.venv/site-packages` and other non-project directories. For a project with a virtualenv this meant 11,500+ Python files analyzed instead of ~60, causing 90+ second hangs. Fixed by replacing `rglob` with `os.walk` that prunes `_SKIP_DIRS` (`.venv`, `venv`, `node_modules`, `site-packages`, `__pycache__`, etc.) at directory-entry time. Result: 0.8s vs 90s on the affected project.
+- **`calls://` misses callers using `*foo(args)` starred-unpack syntax** (visible-cosmos-0330): tree-sitter Python parses `*foo(bar)` as `call(list_splat(*foo), bar)` — the list_splat node becomes the callee. `_get_callee_name` fell through to the text fallback and returned `'*foo'`, which never matched a lookup for `'foo'`. Fixed in `_get_callee_name` to unwrap `list_splat` and return the inner identifier. Also handles `*self.method(args)` where tree-sitter embeds `*` inside the attribute node text (fixed with `.lstrip('*')` on attribute callee text). Both cases now correctly tracked by the callers index.
+- **`_dir_cache_key` only statted the root directory** (visible-cosmos-0330): On Linux, editing a file in a subdirectory only advances that subdirectory's mtime — not the root's — so the callers index cache served stale results after any nested file edit. Fixed to stat the root plus all immediate non-skipped subdirectories (O(subdirs), not O(files)).
 - **`_extract_project_from_dir` hardcoded username**: `'scottsen'` was in the `_SKIP` set used to filter non-meaningful path components from encoded Claude project directory names. Removed — `_SKIP` now contains only generic path segment words (`home`, `src`, `projects`, `external`, `internal`, `git`).
 - **TIA-specific boilerplate in session title extraction**: `'# TIA System Instructions'` removed from `_BOILERPLATE_PREFIXES` (both `adapter.py` and `analysis/overview.py`) — only the generic `'# Session Continuation Context'` prefix is now treated as auto-injected boilerplate.
 - **`tia session badge` regex generalized**: `_extract_badge_from_messages` now matches `session badge "text"` (any CLI prefix), not just the `tia`-prefixed form.

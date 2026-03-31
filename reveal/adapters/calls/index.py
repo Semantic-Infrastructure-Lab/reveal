@@ -113,15 +113,22 @@ def _bfs_level(
 def _dir_cache_key(directory: Path) -> Any:
     """Compute a hashable cache key for *directory*.
 
-    Fast path: a single os.stat() on the directory itself.  On Linux/macOS/NTFS
-    the directory mtime advances whenever any direct child is added, removed, or
-    renamed — sufficient to detect any change that would invalidate the index.
+    Stats every immediate child directory in addition to the directory itself.
+    A single top-level stat is insufficient on Linux because editing a nested
+    file only updates the *containing subdirectory's* mtime, not the root.
 
-    Fallback: if the directory stat fails (permissions, race), fall back to
-    the original per-file mtime fingerprint so correctness is preserved.
+    Fallback: if all stats fail, walk code-file mtimes (slow but correct).
     """
+    from ..ast.analysis import _SKIP_DIRS
     try:
-        return ('dir_mtime', os.stat(directory).st_mtime_ns)
+        mtimes = [os.stat(directory).st_mtime_ns]
+        for child in directory.iterdir():
+            if child.is_dir() and child.name not in _SKIP_DIRS:
+                try:
+                    mtimes.append(os.stat(child).st_mtime_ns)
+                except OSError:
+                    pass
+        return ('dir_mtimes', tuple(sorted(mtimes)))
     except OSError:
         entries = []
         for fp in sorted(directory.rglob('*')):

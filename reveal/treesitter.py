@@ -827,10 +827,16 @@ class TreeSitterAnalyzer(FileAnalyzer):
     def _get_callee_name(self, call_node) -> Optional[str]:
         """Extract the callee name from a call expression node.
 
-        Handles three forms:
-          - Simple:    foo()       → "foo"
+        Handles four forms:
+          - Simple:    foo()        → "foo"
           - Attribute: self.bar()  → "self.bar"
           - Chained:   a.b.c()    → "a.b.c"
+          - Starred:   *foo(bar)  → "foo"  (tree-sitter parses splat as callee)
+            Also: *self.bar(x)   → "self.bar"
+
+        For starred forms tree-sitter embeds `*` inside the callee node text.
+        We strip any leading `*` from the final name so callers-index lookups
+        match the bare function name.
         """
         if not call_node.children:
             return None
@@ -838,9 +844,17 @@ class TreeSitterAnalyzer(FileAnalyzer):
         if callee_node.type == 'identifier':
             return self._get_node_text(callee_node)
         if callee_node.type in CALLEE_ATTRIBUTE_TYPES:
-            return self._get_node_text(callee_node)
-        # Fallback: try to get any text from the callee node
-        text = self._get_node_text(callee_node).strip()
+            return self._get_node_text(callee_node).lstrip('*')
+        # tree-sitter parses `*foo(args)` as call(list_splat(*foo), args).
+        # Unwrap the list_splat to get the real function name.
+        if callee_node.type == 'list_splat':
+            for child in callee_node.children:
+                if child.type == 'identifier':
+                    return self._get_node_text(child)
+                if child.type in CALLEE_ATTRIBUTE_TYPES:
+                    return self._get_node_text(child).lstrip('*')
+        # Fallback: try to get any text from the callee node, stripping splat prefix
+        text = self._get_node_text(callee_node).strip().lstrip('*')
         return text if text else None
 
     def _extract_calls_in_function(self, func_node) -> List[str]:

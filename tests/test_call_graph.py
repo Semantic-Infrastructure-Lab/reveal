@@ -188,6 +188,45 @@ def foo():
         self.assertIn('calls', fns['foo'])
         self.assertIn('called_by', fns['foo'])
 
+    def test_starred_callee_in_return_tuple(self):
+        """*foo(args) in a return/tuple context must extract 'foo', not '*foo'.
+
+        tree-sitter Python parses `*foo(bar)` as call(list_splat(*foo), bar).
+        _get_callee_name must unwrap the list_splat to get the real name.
+        """
+        code = """
+def _job_oob(job):
+    return Div(), summary(job)
+
+def sticker_rerun(job_id):
+    return card, *_job_oob(get_job(job_id))
+"""
+        fns = self._funcs_by_name(code)
+        calls = fns['sticker_rerun']['calls']
+        self.assertIn('_job_oob', calls, f"Expected '_job_oob' in calls, got: {calls}")
+        self.assertNotIn('*_job_oob', calls, f"'*_job_oob' should not appear (star is not part of the name)")
+
+    def test_starred_callee_attribute(self):
+        """*self.foo(args) must extract 'self.foo', not '*self.foo'."""
+        code = """
+class Widget:
+    def _parts(self, data):
+        return x(), y()
+
+    def render(self, data):
+        return header(), *self._parts(data)
+"""
+        path = _make_temp(code)
+        try:
+            from reveal.analyzers.python import PythonAnalyzer
+            analyzer = PythonAnalyzer(path)
+            methods = {f['name']: f for f in analyzer.get_structure().get('functions', [])}
+        finally:
+            os.unlink(path)
+        calls = methods['render']['calls']
+        self.assertIn('self._parts', calls, f"Expected 'self._parts' in calls, got: {calls}")
+        self.assertNotIn('*self._parts', calls)
+
 
 class TestCallExtractionJavaScript(unittest.TestCase):
     """Test call graph extraction on JavaScript (call_expression nodes)."""

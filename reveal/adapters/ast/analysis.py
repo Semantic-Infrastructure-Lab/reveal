@@ -1,11 +1,24 @@
 """File analysis and structure extraction for AST adapter."""
 
 
+import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from .call_graph import build_symbol_map, resolve_callees
+
+# Directories to skip when recursively collecting code files.
+# These are virtual-env, package, and VCS directories that are never
+# part of a project's own source and can contain thousands of files.
+_SKIP_DIRS = {
+    '.venv', 'venv', '.env', 'env',
+    'node_modules', '.git',
+    'site-packages', 'dist-packages',
+    '.tox', '.nox', '.pytest_cache', '.mypy_cache',
+    '__pycache__', '.eggs',
+    'dist', 'build',
+}
 
 
 def try_add_file_structure(file_path: str, structures: List[Dict[str, Any]]) -> None:
@@ -35,10 +48,13 @@ def collect_structures(path: str) -> List[Dict[str, Any]]:
     if path_obj.is_file():
         try_add_file_structure(str(path_obj), structures)
     elif path_obj.is_dir():
-        # Recursively find all code files
-        for file_path in path_obj.rglob('*'):
-            if file_path.is_file() and is_code_file(file_path):
-                try_add_file_structure(str(file_path), structures)
+        # Recursively find all code files, pruning well-known non-project dirs.
+        for root, dirs, files in os.walk(str(path_obj)):
+            dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.endswith('.egg-info')]
+            for name in files:
+                fp = Path(root) / name
+                if is_code_file(fp):
+                    try_add_file_structure(str(fp), structures)
 
     return structures
 

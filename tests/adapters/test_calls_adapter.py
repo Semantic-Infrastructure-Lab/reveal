@@ -309,6 +309,36 @@ def run_job(x):
         result = find_callers(self.tmpdir, 'validate_item', depth=1)
         self.assertEqual(result['total_callers'], len(result['levels'][0]['callers']))
 
+    def test_starred_callee_found_by_find_callers(self):
+        """find_callers must find callers that use *foo(args) starred-unpack syntax.
+
+        tree-sitter parses `*foo(bar)` as call(list_splat(*foo), bar).
+        Previously this was indexed as '*foo' and never matched a lookup for 'foo'.
+        Regression test for the list_splat unwrap fix in _get_callee_name.
+        """
+        import shutil
+        tmpdir = tempfile.mkdtemp()
+        try:
+            _write(tmpdir, 'app.py', '''
+def _job_oob(job):
+    return job.status, job.progress
+
+def sticker_rerun(job_id):
+    job = get_job(job_id)
+    return card, *_job_oob(job)
+
+def sticker_update(job_id):
+    return header(), *_job_oob(get_job(job_id))
+''')
+            result = find_callers(tmpdir, '_job_oob', depth=1)
+            caller_names = {r['caller'] for r in result['levels'][0]['callers']} if result['levels'] else set()
+            self.assertIn('sticker_rerun', caller_names,
+                          f"sticker_rerun uses *_job_oob() but was not found. Got: {caller_names}")
+            self.assertIn('sticker_update', caller_names,
+                          f"sticker_update uses *_job_oob() but was not found. Got: {caller_names}")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
 
 # ---------------------------------------------------------------------------
 # Unit: import alias resolution in build_callers_index / find_callers /
@@ -1528,13 +1558,13 @@ class TestDirCacheKey(unittest.TestCase):
     """PERF-01: _dir_cache_key must return a cheap O(1) key, not walk the tree."""
 
     def test_returns_dir_mtime_tuple(self):
-        """Normal case: returns ('dir_mtime', int) without walking files."""
+        """Normal case: returns ('dir_mtimes', tuple-of-ints) without walking files."""
         from reveal.adapters.calls.index import _dir_cache_key
         with tempfile.TemporaryDirectory() as d:
             key = _dir_cache_key(Path(d))
         self.assertIsInstance(key, tuple)
-        self.assertEqual(key[0], 'dir_mtime')
-        self.assertIsInstance(key[1], int)
+        self.assertEqual(key[0], 'dir_mtimes')
+        self.assertIsInstance(key[1], tuple)
 
     def test_same_dir_same_key(self):
         """Two calls on an unchanged directory must return equal keys."""
@@ -1552,22 +1582,27 @@ class TestDirCacheKey(unittest.TestCase):
         _ = {key: 'value'}  # must not raise
 
     def test_no_rglob_on_normal_directory(self):
-        """Fast path must not call rglob — verify by counting os.stat calls."""
+        """Fast path must stat the dir + immediate subdirs only, not recurse into files."""
         from reveal.adapters.calls.index import _dir_cache_key
         import unittest.mock as mock
         with tempfile.TemporaryDirectory() as d:
             open(os.path.join(d, 'a.py'), 'w').close()
             open(os.path.join(d, 'b.py'), 'w').close()
+            subdir = os.path.join(d, 'app')
+            os.makedirs(subdir)
             real_stat = os.stat
             stat_calls = []
             def counting_stat(path, *args, **kwargs):
-                stat_calls.append(path)
+                stat_calls.append(str(path))
                 return real_stat(path, *args, **kwargs)
             with mock.patch('reveal.adapters.calls.index.os.stat', side_effect=counting_stat):
                 _dir_cache_key(Path(d))
-        # Fast path: exactly 1 stat call (the directory itself), not one per file
-        self.assertEqual(len(stat_calls), 1, (
-            f"Expected 1 os.stat call (directory only), got {len(stat_calls)}: {stat_calls}"
+        # Fast path: 1 stat for the root + 1 per non-skipped immediate subdir.
+        # Must NOT stat individual .py files (that would be rglob behavior).
+        py_stats = [p for p in stat_calls if p.endswith('.py')]
+        self.assertEqual(py_stats, [], f"Must not stat .py files, got: {py_stats}")
+        self.assertLessEqual(len(stat_calls), 3, (
+            f"Expected at most 3 os.stat calls (root + subdirs), got {len(stat_calls)}: {stat_calls}"
         ))
 
 
