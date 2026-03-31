@@ -399,7 +399,7 @@ class GitAdapter(ResourceAdapter):
             if repo.workdir:
                 abs_file = os.path.abspath(os.path.join(self.path, self.subpath))
                 repo_root = os.path.abspath(repo.workdir.rstrip('/\\'))
-                git_subpath = os.path.relpath(abs_file, repo_root)
+                git_subpath = os.path.relpath(abs_file, repo_root).replace(os.sep, '/')
 
             if query_type == 'history':
                 return files.get_file_history(
