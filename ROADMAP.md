@@ -1,11 +1,14 @@
 # Reveal Roadmap
-> **Last updated**: 2026-03-31 (expanding-mission-0331 — v0.70.0 released)
+> **Last updated**: 2026-04-03 (sleeping-goddess-0403 — v0.70.1 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.70.1
+- ✅ **`--base-path` quote stripping on Windows** — `cmd.exe` passes single quotes literally; `'C:/Users/...'` resolved to a nonexistent path, causing `claude://` to return 0 sessions. Added `_strip_path_quotes()` as the `type=` converter for `--base-path` (and `--log-path`) in argparse. UUID-named sessions returning 0 results was purely downstream of this bug.
 
 ### v0.70.0
 - ✅ **Full Claude adapter telemetry (Phases A–E)** — `?tokens` route, `toolUseResult` error detection, `filePath`/patches in `/files`, Glob/Grep tracking, `/agents` sub-route with per-agent duration/token/tool-count telemetry, `result` blocks on `?tools=` calls, `caller_type: "direct"` on all tool entries.

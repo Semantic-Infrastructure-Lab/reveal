@@ -1263,6 +1263,39 @@ class TestAdapterParameters(unittest.TestCase):
                        "code_only parameter should be True when --code-only flag is set")
 
 
+class TestBasePathQuoteStripping(unittest.TestCase):
+    """Tests for --base-path quote stripping (Windows cmd.exe compat)."""
+
+    def test_strip_path_quotes_single_quotes(self):
+        """Single quotes around path are stripped."""
+        from reveal.cli.parser import _strip_path_quotes
+        assert _strip_path_quotes("'C:/Users/markf/.claude/projects'") == 'C:/Users/markf/.claude/projects'
+
+    def test_strip_path_quotes_double_quotes(self):
+        """Double quotes around path are stripped."""
+        from reveal.cli.parser import _strip_path_quotes
+        assert _strip_path_quotes('"C:/Users/markf/.claude/projects"') == 'C:/Users/markf/.claude/projects'
+
+    def test_strip_path_quotes_unquoted_path_unchanged(self):
+        """Unquoted paths pass through unchanged."""
+        from reveal.cli.parser import _strip_path_quotes
+        assert _strip_path_quotes('/home/user/.claude/projects') == '/home/user/.claude/projects'
+
+    def test_base_path_arg_strips_quotes_via_parser(self):
+        """Parser strips surrounding quotes from --base-path value."""
+        from reveal.cli.parser import create_argument_parser
+        parser = create_argument_parser('0.0.0')
+        args = parser.parse_args(['claude://', '--base-path', "'C:/Users/markf/.claude/projects'"])
+        assert args.base_path == 'C:/Users/markf/.claude/projects'
+
+    def test_base_path_arg_unquoted_via_parser(self):
+        """Parser leaves unquoted --base-path value unchanged."""
+        from reveal.cli.parser import create_argument_parser
+        parser = create_argument_parser('0.0.0')
+        args = parser.parse_args(['claude://', '--base-path', '/home/user/.claude/projects'])
+        assert args.base_path == '/home/user/.claude/projects'
+
+
 class TestRoutingEdgeCases(unittest.TestCase):
     """Test edge cases and error handling."""
 

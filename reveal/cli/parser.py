@@ -289,6 +289,17 @@ def _add_pattern_detection_options(parser: argparse.ArgumentParser) -> None:
                         help='Minimum severity level to report: low, medium, high, critical. Default: show all')
 
 
+def _strip_path_quotes(value: str) -> str:
+    """Strip surrounding shell quotes from a path argument.
+
+    On Windows cmd.exe, single quotes are not shell metacharacters — they pass
+    through literally.  A user who types --base-path 'C:/foo' gets the string
+    "'C:/foo'" (with quotes), making Path() resolve to a nonexistent location.
+    Strip them here at the input boundary so every consumer gets a clean value.
+    """
+    return value.strip("'\"")
+
+
 def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     """Add semantic navigation options."""
     parser.add_argument('--head', type=int, metavar='N',
@@ -314,8 +325,8 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                         help='Show all results (no limit, e.g., reveal claude:// --all)')
     parser.add_argument('--since', type=str, metavar='DATE',
                         help='Filter results since date (YYYY-MM-DD, e.g., reveal claude:// --since 2026-02-27)')
-    parser.add_argument('--base-path', dest='base_path', type=str, metavar='DIR',
-                        help='Point claude:// at a different Claude install — pass the projects dir and all paths (history, config, plans) derive from it (e.g., --base-path /mnt/wsl/.claude/projects)')
+    parser.add_argument('--base-path', dest='base_path', type=_strip_path_quotes, metavar='DIR',
+                        help='Point claude:// at a different Claude install — pass the projects dir and all paths (history, config, plans) derive from it (e.g., --base-path /mnt/wsl/.claude/projects). Windows: do not wrap in quotes (use --base-path C:/Users/... not \'C:/Users/...\')')
 
 
 def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
@@ -457,7 +468,7 @@ def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
                         help='Compare cPanel on-disk certs (/var/cpanel/ssl/apache_tls/DOMAIN/combined) against live certs; flags domains where nginx has not reloaded after AutoSSL renewal (nginx only)')
     parser.add_argument('--diagnose', action='store_true',
                         help='Scan the nginx error log for ACME/SSL failure patterns (Permission Denied, ENOENT on /.well-known/, SSL cert errors) grouped by SSL domain; identifies the root cause of AutoSSL failures (nginx only)')
-    parser.add_argument('--log-path', type=str, dest='log_path', metavar='PATH',
+    parser.add_argument('--log-path', type=_strip_path_quotes, dest='log_path', metavar='PATH',
                         help='Path to nginx error log for --diagnose (overrides auto-detection from config and default paths)')
     parser.add_argument('--dns-verified', action='store_true', dest='dns_verified',
                         help='cpanel://USERNAME/ssl: resolve each domain in DNS before reporting; NXDOMAIN domains are shown but excluded from critical/expiring summary counts (eliminates false alarms from domains that have moved away)')

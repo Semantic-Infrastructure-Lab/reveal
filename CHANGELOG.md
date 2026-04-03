@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.70.1] - 2026-04-03 (sleeping-goddess-0403)
+
+### Fixed
+- **`--base-path` with surrounding quotes on Windows** (`cli/parser.py`): On Windows `cmd.exe`, single quotes are not shell metacharacters — they pass through literally, making `--base-path 'C:/Users/...'` resolve to a nonexistent path and `claude://` return 0 sessions. Fixed by adding `_strip_path_quotes()` as the `type=` converter for `--base-path` in argparse, stripping surrounding `'` or `"` at the input boundary. Also updated the help string to warn Windows users not to quote the path. UUID-named sessions returning 0 results was purely downstream of this bug — once the path resolves, UUID sessions list correctly (already handled by `_collect_sessions_from_dir` and `_find_conversation`).
+
+---
+
 ## [0.70.0] - 2026-03-31 (expanding-mission-0331)
 
 ### Added
