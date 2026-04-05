@@ -12,6 +12,16 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.70.2] - 2026-04-05 (hologram-harbinger-0405)
+
+### Fixed
+- **`--section` misclassified headings containing `.` as `Class.method` hierarchical extraction** (`display/element.py`): `_parse_element_syntax` used an unanchored regex `^[A-Za-z_]\w*\.[A-Za-z_]` that matched any text starting with `identifier.letter` — including markdown headings like `"rr.php sentinel locking"`. The trailing ` sentinel locking` was silently ignored, causing the extraction to split on the last dot and look for `php sentinel locking` within `rr`, always returning an error. Fixed by anchoring the regex end (`\w*$`), requiring both sides to be complete bare identifiers with no spaces. `Class.method_name` still works; headings with dots followed by spaces now correctly fall through to name-based heading extraction.
+
+### Tests
+- Added `test_heading_with_dot_and_spaces_not_hierarchical` and `test_heading_with_dot_and_dash_words_not_hierarchical` to `tests/test_display_element.py`.
+
+---
+
 ## [0.70.1] - 2026-04-03 (sleeping-goddess-0403)
 
 ### Fixed

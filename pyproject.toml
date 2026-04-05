@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reveal-cli"
-version = "0.70.1"
+version = "0.70.2"
 description = "How AI agents understand codebases without wasting tokens — local-first, adapter-driven, progressive disclosure enforced by design"
 readme = "README.md"
 requires-python = ">=3.10"

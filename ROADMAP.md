@@ -7,6 +7,9 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.70.2
+- ✅ **`--section` hierarchical misparse on headings with dots** — `reveal doc.md --section "rr.php sentinel locking"` returned `Element not found` / `Hint: Looking for 'php sentinel locking' within 'rr'`. Regex in `_parse_element_syntax` lacked end anchor; fixed with `\w*$`. 2 new tests.
+
 ### v0.70.1
 - ✅ **`--base-path` quote stripping on Windows** — `cmd.exe` passes single quotes literally; `'C:/Users/...'` resolved to a nonexistent path, causing `claude://` to return 0 sessions. Added `_strip_path_quotes()` as the `type=` converter for `--base-path` (and `--log-path`) in argparse. UUID-named sessions returning 0 results was purely downstream of this bug.
 

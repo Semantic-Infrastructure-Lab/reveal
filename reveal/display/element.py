@@ -102,9 +102,9 @@ def _parse_element_syntax(element: str):
         }
 
     # Check for hierarchical extraction (Class.method syntax)
-    # Require identifier.identifier: both parts must start with letter/underscore,
-    # not version strings like [0.50.0] or v1.2.3
-    if '.' in element and re.match(r'^[A-Za-z_]\w*\.[A-Za-z_]', element):
+    # Require identifier.identifier: both parts must be bare identifiers (no spaces),
+    # not version strings like [0.50.0] or v1.2.3, and not headings like "rr.php sentinel locking"
+    if '.' in element and re.match(r'^[A-Za-z_]\w*\.[A-Za-z_]\w*$', element):
         return {'type': 'hierarchical'}
 
     # Default: name-based extraction

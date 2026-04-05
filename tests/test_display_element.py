@@ -95,6 +95,21 @@ class TestParseSyntax:
         result = _parse_element_syntax('1.2.3.4')
         assert result == {'type': 'name'}
 
+    def test_heading_with_dot_and_spaces_not_hierarchical(self):
+        """Test markdown headings with dots followed by spaces are NOT hierarchical.
+
+        Regression: 'rr.php sentinel locking' was misclassified as hierarchical
+        (parent='rr', child='php sentinel locking') because the regex didn't anchor
+        the end of the string.
+        """
+        result = _parse_element_syntax('rr.php sentinel locking')
+        assert result == {'type': 'name'}
+
+    def test_heading_with_dot_and_dash_words_not_hierarchical(self):
+        """Test headings like 'rr.php how it works' are NOT hierarchical."""
+        result = _parse_element_syntax('rr.php how it works and why locks get stuck')
+        assert result == {'type': 'name'}
+
     def test_bare_integer_is_line_ref(self):
         """Test bare integer is treated as line reference (editor convention)."""
         result = _parse_element_syntax('200')
