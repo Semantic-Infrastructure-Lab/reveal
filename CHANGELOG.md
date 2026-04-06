@@ -12,6 +12,14 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.71.4] - 2026-04-05 (bright-mech-0405)
+
+### Changed
+- **`_walk_var` decomposed into inner functions** (`nav.py`) — complexity 35 / 113 lines reduced by extracting each node-type handler into a named closure: `_walk_assignment`, `_walk_named_expression`, `_walk_for`, `_walk_with`, `_walk_if_while`. The outer function becomes a readable dispatch; each handler is independently comprehensible. Public signature unchanged.
+- **`handle_file` special-flag guards extracted** (`file_handler.py`) — 9 early-exit routing guards (`--extract`, `--check-acl`, `--validate-nginx-acme`, `--global-audit`, `--check-conflicts`, `--cpanel-certs`, `--diagnose`, `--validate-schema`, `--check`) moved into `_dispatch_special_flags(analyzer, path, output_format, args, config) → bool`. `handle_file` is now setup + one dispatch call + element/structure routing.
+
+---
+
 ## [0.71.3] - 2026-04-05 (bright-mech-0405)
 
 ### Fixed

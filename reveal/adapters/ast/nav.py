@@ -355,110 +355,122 @@ def _walk_var(
     events: List[Dict[str, Any]],
     ctx: str,
 ) -> None:
-    """Recursive var-flow walker with write/condition context propagation."""
-    ntype = node.type
-    line = node.start_point[0] + 1
+    """Recursive var-flow walker with write/condition context propagation.
 
-    # Prune nodes entirely outside range (perf: skip large out-of-range subtrees)
-    if node.end_point[0] + 1 < from_line or line > to_line:
-        return
+    Uses a closure so helpers share (var_name, from_line, to_line, get_text,
+    events) without threading them through every call.
+    """
 
-    # --- Identifier: record if it matches ---
-    if ntype == 'identifier' and get_text(node) == var_name:
-        if from_line <= line <= to_line:
-            events.append({'kind': ctx, 'line': line, 'node': node})
-        return
+    def walk(n: Any, c: str) -> None:
+        """Dispatch one node, inheriting or overriding context c."""
+        ntype = n.type
+        line = n.start_point[0] + 1
 
-    # --- Assignment (Python: x = ..., x += ...) ---
-    if ntype in ('assignment', 'augmented_assignment'):
-        left = node.child_by_field_name('left')
-        right = node.child_by_field_name('right')
+        # Prune nodes entirely outside range (perf: skip large out-of-range subtrees)
+        if n.end_point[0] + 1 < from_line or line > to_line:
+            return
+
+        if ntype == 'identifier' and get_text(n) == var_name:
+            if from_line <= line <= to_line:
+                events.append({'kind': c, 'line': line, 'node': n})
+            return
+
+        if ntype in ('assignment', 'augmented_assignment'):
+            _walk_assignment(n, ntype, c)
+        elif ntype == 'named_expression':
+            _walk_named_expression(n)
+        elif ntype == 'for_statement':
+            _walk_for(n, c)
+        elif ntype == 'with_statement':
+            _walk_with(n, c)
+        elif ntype in ('if_statement', 'elif_clause', 'while_statement'):
+            _walk_if_while(n, c)
+        else:
+            for child in n.children:
+                walk(child, c)
+
+    def _walk_assignment(n: Any, ntype: str, c: str) -> None:
+        """x = expr  or  x += expr — LHS is WRITE (augmented also READs first)."""
+        left = n.child_by_field_name('left')
+        right = n.child_by_field_name('right')
         if left:
-            # Augmented assign (x += 1) reads the current value before writing
             if ntype == 'augmented_assignment':
-                _walk_var(left, var_name, from_line, to_line, get_text, events, 'READ')
-            _walk_var(left, var_name, from_line, to_line, get_text, events, 'WRITE')
+                walk(left, 'READ')   # x += 1 consumes the current value
+            walk(left, 'WRITE')
         if right:
-            _walk_var(right, var_name, from_line, to_line, get_text, events, 'READ')
-        # Also walk any other children (e.g., type annotation)
+            walk(right, 'READ')
+        # Walk remaining children (e.g. type annotation) without double-visiting.
         # Use byte span as node identity — tree-sitter creates new wrappers on each access.
         processed = {
             (left.start_byte, left.end_byte) if left else None,
             (right.start_byte, right.end_byte) if right else None,
         }
-        for child in node.children:
+        for child in n.children:
             if (child.start_byte, child.end_byte) not in processed:
-                _walk_var(child, var_name, from_line, to_line, get_text, events, ctx)
-        return
+                walk(child, c)
 
-    # --- Named expression / walrus (:=) ---
-    if ntype == 'named_expression':
-        if node.children:
-            _walk_var(node.children[0], var_name, from_line, to_line, get_text, events, 'WRITE')
-            for child in node.children[1:]:
-                _walk_var(child, var_name, from_line, to_line, get_text, events, 'READ')
-        return
+    def _walk_named_expression(n: Any) -> None:
+        """x := expr — first child is the name (WRITE), rest is value (READ)."""
+        if n.children:
+            walk(n.children[0], 'WRITE')
+            for child in n.children[1:]:
+                walk(child, 'READ')
 
-    # --- For statement: loop variable is a write ---
-    if ntype == 'for_statement':
-        left = node.child_by_field_name('left')
-        right = node.child_by_field_name('right')
-        body = node.child_by_field_name('body')
-        processed = set()
+    def _walk_for(n: Any, c: str) -> None:
+        """for left in right: body — loop variable is a WRITE."""
+        left = n.child_by_field_name('left')
+        right = n.child_by_field_name('right')
+        body = n.child_by_field_name('body')
+        processed: set = set()
         if left:
             processed.add((left.start_byte, left.end_byte))
-            _walk_var(left, var_name, from_line, to_line, get_text, events, 'WRITE')
+            walk(left, 'WRITE')
         if right:
             processed.add((right.start_byte, right.end_byte))
-            _walk_var(right, var_name, from_line, to_line, get_text, events, 'READ')
+            walk(right, 'READ')
         if body:
             processed.add((body.start_byte, body.end_byte))
-            _walk_var(body, var_name, from_line, to_line, get_text, events, 'READ')
-        for child in node.children:
+            walk(body, 'READ')
+        for child in n.children:
             if (child.start_byte, child.end_byte) not in processed:
-                _walk_var(child, var_name, from_line, to_line, get_text, events, ctx)
-        return
+                walk(child, c)
 
-    # --- With statement: 'as' target is a write ---
-    if ntype == 'with_statement':
-        for child in node.children:
+    def _walk_with(n: Any, c: str) -> None:
+        """with expr as alias — alias target is a WRITE."""
+        for child in n.children:
             if child.type == 'with_clause':
                 for item in child.children:
                     if item.type == 'with_item':
                         value = item.child_by_field_name('value')
                         alias = item.child_by_field_name('alias')
                         if value:
-                            _walk_var(value, var_name, from_line, to_line, get_text, events, 'READ')
+                            walk(value, 'READ')
                         if alias:
-                            _walk_var(alias, var_name, from_line, to_line, get_text, events, 'WRITE')
+                            walk(alias, 'WRITE')
                     else:
-                        _walk_var(item, var_name, from_line, to_line, get_text, events, ctx)
+                        walk(item, c)
             elif child.type == 'as_pattern':
-                # 'with expr as name'
+                # 'with expr as name' — children: [expr, 'as', name]
                 children = child.children
                 if children:
-                    _walk_var(children[0], var_name, from_line, to_line, get_text, events, 'READ')
-                    if len(children) > 2:  # 'expr', 'as', 'name'
-                        _walk_var(children[-1], var_name, from_line, to_line, get_text, events, 'WRITE')
+                    walk(children[0], 'READ')
+                    if len(children) > 2:
+                        walk(children[-1], 'WRITE')
             else:
-                _walk_var(child, var_name, from_line, to_line, get_text, events, ctx)
-        return
+                walk(child, c)
 
-    # --- If / elif / while: condition is READ/COND ---
-    if ntype in ('if_statement', 'elif_clause', 'while_statement'):
-        cond = node.child_by_field_name('condition')
-        processed = set()
+    def _walk_if_while(n: Any, c: str) -> None:
+        """if/elif/while — condition is READ/COND; body inherits context."""
+        cond = n.child_by_field_name('condition')
+        processed: set = set()
         if cond:
             processed.add((cond.start_byte, cond.end_byte))
-            _walk_var(cond, var_name, from_line, to_line, get_text, events, 'READ/COND')
-        for child in node.children:
+            walk(cond, 'READ/COND')
+        for child in n.children:
             if (child.start_byte, child.end_byte) not in processed:
-                _walk_var(child, var_name, from_line, to_line, get_text, events, ctx)
-        return
+                walk(child, c)
 
-    # --- Default: recurse with inherited context ---
-    for child in node.children:
-        _walk_var(child, var_name, from_line, to_line, get_text, events, ctx)
+    walk(node, ctx)
 
 
 # ---------------------------------------------------------------------------

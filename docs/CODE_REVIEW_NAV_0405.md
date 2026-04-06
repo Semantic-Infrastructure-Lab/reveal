@@ -146,7 +146,7 @@ Missing test coverage for:
 
 ## Future / Low Priority
 
-### [ ] 10. Decompose `_walk_var` (complexity 35, `nav.py:361–466`)
+### [x] 10. Decompose `_walk_var` (complexity 35, `nav.py:361–466`)
 
 106 lines, complexity 35. Not wrong, but a maintenance burden. Each handler block is a candidate:
 `_walk_for`, `_walk_with`, `_walk_assignment`, etc., dispatched via dict.
@@ -162,7 +162,7 @@ Fix: either parse dot-syntax and filter on parent class name, or document the li
 
 ---
 
-### [ ] 12. `handle_file` complexity 29 — growing dispatch chain
+### [x] 12. `handle_file` complexity 29 — growing dispatch chain
 
 Nav is the 11th branch. No guard against conflicting flags. Not introduced by this PR, but each addition raises risk. Low urgency.
 

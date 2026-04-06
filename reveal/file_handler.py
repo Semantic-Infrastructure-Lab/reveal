@@ -236,6 +236,54 @@ def _parse_line_range(range_str: str, default_start: int, default_end: int):
     return default_start, default_end
 
 
+def _dispatch_special_flags(analyzer, path: str, output_format: str, args, config) -> bool:
+    """Handle flags that short-circuit normal file analysis.
+
+    Returns True if a flag was matched and handled (caller should return
+    immediately).  Returns False if none matched and normal routing should
+    continue.
+    """
+    if getattr(args, 'extract', None):
+        _handle_extract_option(analyzer, args.extract.lower(), args=args)
+        return True
+
+    if getattr(args, 'check_acl', False):
+        _handle_check_acl(analyzer)
+        return True
+
+    if getattr(args, 'validate_nginx_acme', False):
+        _handle_validate_nginx_acme(analyzer, args)
+        return True
+
+    if getattr(args, 'global_audit', False):
+        _handle_global_audit(analyzer, args)
+        return True
+
+    if getattr(args, 'check_conflicts', False):
+        _handle_check_conflicts(analyzer)
+        return True
+
+    if getattr(args, 'cpanel_certs', False):
+        _handle_cpanel_certs(analyzer)
+        return True
+
+    if getattr(args, 'diagnose', False):
+        _handle_diagnose(analyzer, log_path=getattr(args, 'log_path', None))
+        return True
+
+    if getattr(args, 'validate_schema', None):
+        from .checks import run_schema_validation  # noqa: I006 — circular avoidance
+        run_schema_validation(analyzer, path, args.validate_schema, output_format, args)
+        return True
+
+    if getattr(args, 'check', False):
+        from .checks import run_pattern_detection  # noqa: I006 — circular avoidance
+        run_pattern_detection(analyzer, path, output_format, args, config=config)
+        return True
+
+    return False
+
+
 def handle_file(path: str, element: Optional[str], show_meta: bool,
                 output_format: str, args: Optional['Namespace'] = None) -> None:
     """Handle file analysis.
@@ -250,58 +298,20 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
     from .display import show_structure, show_metadata, extract_element  # noqa: I006 — circular avoidance
     from .config import RevealConfig  # noqa: I006 — circular avoidance
 
-    # Get analyzer
     allow_fallback = not getattr(args, 'no_fallback', False) if args else True
     analyzer = _get_analyzer_or_exit(path, allow_fallback)
 
-    # Load config with CLI overrides
     cli_overrides = _build_file_cli_overrides(args)
     config = RevealConfig.get(
         start_path=Path(path).parent if Path(path).is_file() else Path(path),
         cli_overrides=cli_overrides if cli_overrides else None
     )
 
-    # Route to appropriate handler based on flags
     if show_meta:
         show_metadata(analyzer, output_format, config=config)
         return
 
-    if args and getattr(args, 'extract', None):
-        _handle_extract_option(analyzer, args.extract.lower(), args=args)
-        return
-
-    if args and getattr(args, 'check_acl', False):
-        _handle_check_acl(analyzer)
-        return
-
-    if args and getattr(args, 'validate_nginx_acme', False):
-        _handle_validate_nginx_acme(analyzer, args)
-        return
-
-    if args and getattr(args, 'global_audit', False):
-        _handle_global_audit(analyzer, args)
-        return
-
-    if args and getattr(args, 'check_conflicts', False):
-        _handle_check_conflicts(analyzer)
-        return
-
-    if args and getattr(args, 'cpanel_certs', False):
-        _handle_cpanel_certs(analyzer)
-        return
-
-    if args and getattr(args, 'diagnose', False):
-        _handle_diagnose(analyzer, log_path=getattr(args, 'log_path', None))
-        return
-
-    if args and getattr(args, 'validate_schema', None):
-        from .checks import run_schema_validation  # noqa: I006 — circular avoidance
-        run_schema_validation(analyzer, path, args.validate_schema, output_format, args)
-        return
-
-    if args and getattr(args, 'check', False):
-        from .checks import run_pattern_detection  # noqa: I006 — circular avoidance
-        run_pattern_detection(analyzer, path, output_format, args, config=config)
+    if args and _dispatch_special_flags(analyzer, path, output_format, args, config):
         return
 
     if args and not element:
