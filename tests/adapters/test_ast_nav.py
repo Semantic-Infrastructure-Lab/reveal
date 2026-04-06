@@ -127,7 +127,7 @@ class TestElementOutline(unittest.TestCase):
         for_item = next(i for i in items if i['keyword'] == 'FOR')
         self.assertIn('item', for_item['label'])
 
-    def test_nested_function_skipped(self):
+    def test_nested_function_shown_as_def(self):
         code = """
         def outer():
             x = 1
@@ -140,9 +140,29 @@ class TestElementOutline(unittest.TestCase):
         from reveal.adapters.ast.nav import element_outline
         items = element_outline(func, get_text, max_depth=5)
         keywords = [i['keyword'] for i in items]
-        # inner function definition should NOT appear in the outline
+        # inner function definition should appear as DEF, not the raw node type
+        self.assertIn('DEF', keywords)
         self.assertNotIn('FUNCTION_DEFINITION', keywords)
-        self.assertNotIn('DEF', keywords)
+
+    def test_closure_only_function_not_empty(self):
+        code = """
+        def outer(items):
+            def helper(x):
+                return x + 1
+            def transform(x):
+                if x > 0:
+                    return helper(x)
+                return 0
+            return [transform(i) for i in items]
+        """
+        _, root, get_text, _ = _parse_python(code)
+        func = _find_func_with_text(root, get_text, 'outer')
+        from reveal.adapters.ast.nav import element_outline
+        items = element_outline(func, get_text, max_depth=3)
+        keywords = [i['keyword'] for i in items]
+        # A function composed entirely of closures should NOT produce an empty outline
+        self.assertTrue(len(items) > 0)
+        self.assertIn('DEF', keywords)
 
 
 # ---------------------------------------------------------------------------
@@ -176,8 +196,9 @@ class TestScopeChain(unittest.TestCase):
         self.assertIn('IF', keywords)
 
     def test_outermost_ancestor_first(self):
+        # With def-inclusion, the enclosing function is the outermost ancestor
         chain = self._chain(4)
-        self.assertEqual(chain[0]['keyword'], 'FOR')
+        self.assertEqual(chain[0]['keyword'], 'DEF')
 
     def test_innermost_ancestor_last(self):
         chain = self._chain(4)
@@ -201,6 +222,32 @@ class TestScopeChain(unittest.TestCase):
         for item in chain:
             self.assertLessEqual(item['line_start'], 4)
             self.assertGreaterEqual(item['line_end'], 4)
+
+    def test_scope_includes_enclosing_def(self):
+        # Line inside a control-flow block should include the enclosing function
+        chain = self._chain(4)
+        keywords = [item['keyword'] for item in chain]
+        self.assertIn('DEF', keywords)
+
+    def test_scope_closure_chain(self):
+        code = """
+        def outer():
+            def inner():
+                if True:
+                    x = 1
+        """
+        _, root, get_text, _ = _parse_python(code)
+        from reveal.adapters.ast.nav import scope_chain
+        # Line 4 is "x = 1" inside if inside inner() inside outer()
+        chain = scope_chain(root, 4, get_text)
+        keywords = [item['keyword'] for item in chain]
+        # Should see both enclosing defs AND the if block
+        self.assertIn('DEF', keywords)
+        self.assertIn('IF', keywords)
+        # DEF should appear before IF (outer scopes first)
+        first_def = next(i for i, k in enumerate(keywords) if k == 'DEF')
+        first_if = next(i for i, k in enumerate(keywords) if k == 'IF')
+        self.assertLess(first_def, first_if)
 
 
 # ---------------------------------------------------------------------------
@@ -434,6 +481,13 @@ class TestRenderers(unittest.TestCase):
         self.assertIn('L42', result)
         self.assertIn('top level', result)
 
+    def test_render_scope_chain_empty_with_line_text(self):
+        from reveal.adapters.ast.nav import render_scope_chain
+        result = render_scope_chain(42, [], line_text='x = compute()')
+        self.assertIn('L42', result)
+        self.assertIn('x = compute()', result)
+        self.assertNotIn('top level', result)
+
     def test_render_scope_chain_with_chain(self):
         from reveal.adapters.ast.nav import render_scope_chain
         chain = [
@@ -444,6 +498,15 @@ class TestRenderers(unittest.TestCase):
         self.assertIn('FOR', result)
         self.assertIn('IF', result)
         self.assertIn('L7 is here', result)
+
+    def test_render_scope_chain_with_line_text(self):
+        from reveal.adapters.ast.nav import render_scope_chain
+        chain = [
+            {'keyword': 'FOR', 'label': 'FOR  x in xs', 'line_start': 2, 'line_end': 20, 'depth': 0},
+        ]
+        result = render_scope_chain(5, chain, line_text='result.append(x)')
+        self.assertIn('▶ L5: result.append(x)', result)
+        self.assertNotIn('is here', result)
 
     def test_render_var_flow_empty(self):
         from reveal.adapters.ast.nav import render_var_flow

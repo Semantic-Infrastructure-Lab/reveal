@@ -1,11 +1,16 @@
 # Reveal Roadmap
-> **Last updated**: 2026-04-06 (flux-goliath-0406 — v0.72.1 released)
+> **Last updated**: 2026-04-06 (infinite-satellite-0406 — v0.72.2 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.72.2
+- ✅ **`--outline` fixed for closure-heavy functions** — `_collect_outline` previously skipped `FUNCTION_TYPES` entirely, producing a blank skeleton for functions whose body is all inner closures. Nested `def`/`class` nodes now emit a labeled `DEF`/`CLASS` entry and recurse into the body at the next depth.
+- ✅ **`--scope` now includes enclosing `def`/`class`** — `_find_ancestors` excluded `FUNCTION_TYPES`, so lines inside closures showed no enclosing function context. Fixed: `DEF` and `CLASS` nodes now appear in the scope chain outermost-first.
+- ✅ **`--scope` marker shows actual source line** — `▶ L{N} is here` → `▶ L{N}: <stripped source text>`, eliminating the need to cross-reference the file.
 
 ### v0.72.1
 - ✅ **M501 TODO/FIXME/HACK/XXX rule** (BACK-103) — detects unresolved comment markers in any file type. LOW severity, one detection per line. Skips scaffold paths (`reveal/templates/`, `demo.py`). Supports `ignore_patterns` config.

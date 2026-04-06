@@ -81,6 +81,13 @@ KEYWORD_LABEL: Dict[str, str] = {
     'catch_clause': 'CATCH', 'catch': 'CATCH',
     'switch_case': 'CASE',
     'switch_default': 'DEFAULT', 'default': 'DEFAULT',
+    # Function/class definition nodes
+    'function_definition': 'DEF', 'function_declaration': 'DEF',
+    'function_item': 'DEF', 'function': 'DEF',
+    'method_definition': 'DEF', 'method_declaration': 'DEF',
+    'arrow_function': 'DEF',
+    'lambda': 'LAMBDA',
+    'class_definition': 'CLASS', 'class_declaration': 'CLASS', 'class': 'CLASS',
     # Exit nodes
     'return_statement': 'RETURN', 'return': 'RETURN',
     'raise_statement': 'RAISE', 'raise': 'RAISE',
@@ -166,7 +173,12 @@ def _collect_outline(
         if not child.is_named:
             continue
         if ctype in FUNCTION_TYPES:
-            continue  # skip nested function/class definitions
+            # Nested def/class: emit a labeled entry so closure-heavy functions
+            # aren't silently blank; recurse into the body at the next depth level.
+            items.append(_make_item(child, depth, get_text))
+            if depth < max_depth:
+                _collect_scope_interior(child, depth, items, get_text, max_depth)
+            continue
         if ctype in ALTERNATIVE_NODES:
             # else/elif/except/finally: add at SAME depth as the parent scope
             items.append(_make_item(child, depth, get_text))
@@ -205,6 +217,9 @@ def _collect_scope_interior(
         if not child.is_named:
             continue  # skip anonymous keyword tokens
         if ctype in FUNCTION_TYPES:
+            items.append(_make_item(child, scope_depth + 1, get_text))
+            if scope_depth + 1 < max_depth:
+                _collect_scope_interior(child, scope_depth + 1, items, get_text, max_depth)
             continue
         if ctype in ALTERNATIVE_NODES:
             # Alternative at same level as the if/try
@@ -286,7 +301,7 @@ def _find_ancestors(
     if not (start <= line_no <= end):
         return  # prune: this node doesn't contain the target line
 
-    if node.is_named and node.type in SCOPE_NODES and node.type not in FUNCTION_TYPES:
+    if node.is_named and (node.type in SCOPE_NODES or node.type in FUNCTION_TYPES):
         chain.append({
             'type': node.type,
             'keyword': KEYWORD_LABEL.get(node.type, node.type.upper()),
@@ -586,10 +601,11 @@ def render_outline(
     return '\n'.join(lines)
 
 
-def render_scope_chain(line_no: int, chain: List[Dict[str, Any]]) -> str:
+def render_scope_chain(line_no: int, chain: List[Dict[str, Any]], line_text: str = '') -> str:
     """Render a scope_chain result as text."""
     if not chain:
-        return f'L{line_no} is at module/function top level (no enclosing scope blocks)'
+        suffix = f': {line_text}' if line_text else ' is at module/function top level (no enclosing scope blocks)'
+        return f'▶ L{line_no}{suffix}'
 
     MAX_CHAIN = 8
     lines = []
@@ -617,8 +633,12 @@ def render_scope_chain(line_no: int, chain: List[Dict[str, Any]]) -> str:
             lines.append(f'{indent}{item["keyword"]:<8}{lrange:<16}{item["label"]}')
 
     innermost_depth = chain[-1]['depth'] + 1
+    indent = '  ' * innermost_depth
     lines.append('')
-    lines.append(f'{"  " * innermost_depth}▶ L{line_no} is here')
+    if line_text:
+        lines.append(f'{indent}▶ L{line_no}: {line_text}')
+    else:
+        lines.append(f'{indent}▶ L{line_no} is here')
     return '\n'.join(lines)
 
 

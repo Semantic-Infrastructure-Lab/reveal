@@ -141,7 +141,9 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
             sys.exit(1)
         line_no = syntax['start_line']
         chain = scope_chain(analyzer.tree.root_node, line_no, get_text)
-        print(render_scope_chain(line_no, chain))
+        content_lines = analyzer.content.splitlines()
+        line_text = content_lines[line_no - 1].strip() if 0 < line_no <= len(content_lines) else ''
+        print(render_scope_chain(line_no, chain, line_text))
         return
 
     # ---- Find the function node (needed for outline/varflow/calls) ---------

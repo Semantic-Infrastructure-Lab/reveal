@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.72.2] - 2026-04-06 (infinite-satellite-0406)
+
+### Fixed
+- **`--outline` empty for closure-heavy functions** (`adapters/ast/nav.py`): `_collect_outline` and `_collect_scope_interior` previously skipped `FUNCTION_TYPES` entirely via `continue`, producing a blank outline for functions whose body consists entirely of inner closures (e.g. `_walk_var` in nav.py itself). Fixed by emitting a `DEF`/`CLASS` labeled item at the current depth and recursing into the body at the next depth level — same treatment as any other scope node.
+- **`--scope` excluded enclosing `def`/`class` nodes** (`adapters/ast/nav.py`): `_find_ancestors` had `node.type not in FUNCTION_TYPES` in its inclusion guard, so calling `reveal file.py :LINE --scope` on a line inside a closure produced a chain with no enclosing function context. Fixed by removing the exclusion — function and class definitions now appear as `DEF`/`CLASS` entries in the scope chain, outermost first.
+- **`--scope` marker shows actual source line** (`adapters/ast/nav.py`, `file_handler.py`): The `▶ L{N} is here` marker now shows the stripped source text of the target line (`▶ L{N}: <line text>`), eliminating the need to cross-reference the file. Falls back to `is here` / `top level` when line text is unavailable.
+
+### Documentation
+- **`KEYWORD_LABEL` extended with function/class node types** — `function_definition`, `method_definition`, `class_definition`, and related cross-language variants now map to `DEF` / `CLASS` / `LAMBDA`, enabling readable labels in both `--outline` and `--scope` output.
+
+### Tests
+- `test_nested_function_skipped` renamed `test_nested_function_shown_as_def` — assertion inverted: `DEF` must appear in outline keywords.
+- `test_closure_only_function_not_empty` added — verifies a function composed entirely of closures produces a non-empty outline with `DEF` entries.
+- `test_scope_includes_enclosing_def` and `test_scope_closure_chain` added — verify `DEF` appears in scope chains and that nested closure chains surface both outer and inner `def` nodes before control-flow nodes.
+- `test_render_scope_chain_empty_with_line_text` and `test_render_scope_chain_with_line_text` added — verify line text rendering in both empty-chain and chained cases.
+- `test_outermost_ancestor_first` updated — outermost ancestor is now `DEF` (enclosing function), not `FOR`.
+
 ## [0.72.1] - 2026-04-06 (flux-goliath-0406, nadela-0406, slate-gem-0405)
 
 ### Added
