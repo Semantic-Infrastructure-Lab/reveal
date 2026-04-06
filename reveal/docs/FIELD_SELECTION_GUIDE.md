@@ -19,8 +19,8 @@ reveal ssl://example.com --fields=host,days_until_expiry,health_status --format=
 # Stop after N results (budget mode)
 reveal 'ast://src?type=function' --max-items=10 --format=json
 
-# Stay under byte budget (approximate tokens)
-reveal 'ast://src?type=function' --max-bytes=4096 --format=json
+# Truncate long string values
+reveal 'json://logs.json?level=error' --max-snippet-chars=200 --format=json
 
 # Combine field selection + budget
 reveal 'ast://src?type=function' --fields=name,line,complexity --max-items=20 --format=json
@@ -81,9 +81,7 @@ Budget-aware flags enable explicit token budget control for AI agent loops. When
 | Flag | Description | Use Case |
 |------|-------------|----------|
 | `--max-items=N` | Stop after N results | List result limiting |
-| `--max-bytes=N` | Stop after N bytes (≈ N tokens) | Token budget mode |
-| `--max-depth=N` | Limit nested structure depth | Deep hierarchy limiting |
-| `--max-snippet-chars=N` | Truncate long strings | String value limiting |
+| `--max-snippet-chars=N` | Truncate long string values | Log lines, large content fields |
 
 ### Truncation Metadata
 
@@ -104,7 +102,7 @@ When budget is exceeded, output includes metadata:
 ### Metadata Fields
 
 - `truncated`: Boolean indicating truncation
-- `reason`: Why truncation occurred (`max_items_exceeded`, `max_bytes_exceeded`)
+- `reason`: Why truncation occurred (`max_items_exceeded`)
 - `total_available`: Total results available
 - `returned`: Number of results returned
 - `next_cursor`: Pagination hint for next request
@@ -158,11 +156,6 @@ Output:
 **Budget-limited query** (stop after 10 results):
 ```bash
 reveal 'ast://src?type=function' --max-items=10 --format=json
-```
-
-**Byte-budget mode** (stay under 2KB):
-```bash
-reveal 'ast://src?type=function' --max-bytes=2048 --format=json
 ```
 
 **Field selection + budget**:
@@ -247,11 +240,11 @@ reveal 'json://users.json?role=admin' --fields=id,name,email --format=json
 
 **Problem**: AI agent needs to query repeatedly without hitting token limits.
 
-**Solution**: Use `--max-bytes` to enforce strict token budget:
+**Solution**: Use `--max-items` with `--fields` to control output size:
 
 ```bash
-# Stay under 4KB per query
-reveal 'ast://src?type=function&lines>50' --max-bytes=4096 --format=json
+# Limit to 20 results with only needed fields
+reveal 'ast://src?type=function&lines>50' --max-items=20 --fields=name,line,complexity --format=json
 
 # Check truncation in response
 if data['meta']['truncated']:
@@ -341,16 +334,13 @@ reveal ssl://example.com --fields=host,days_until_expiry --format=text
 
 ---
 
-### 2. **Use --max-items for list results, --max-bytes for token budgets**
+### 2. **Combine --max-items with --fields for tight token budgets**
 
-Choose the right budget constraint for your use case:
+Both flags together give precise control:
 
 ```bash
-# When you know you want N items
-reveal 'ast://src?type=function' --max-items=10 --format=json
-
-# When you have a strict token budget
-reveal 'ast://src?type=function' --max-bytes=4096 --format=json
+# Limit results AND select only needed fields
+reveal 'ast://src?type=function' --max-items=10 --fields=name,line,complexity --format=json
 ```
 
 ---
@@ -438,13 +428,13 @@ done | jq -s '.'
 
 ### Pattern 3: Budget-Aware Search
 
-**Scenario**: Search large codebase with token budget per query.
+**Scenario**: Search large codebase, limiting results per file.
 
 ```bash
-# Search for functions matching pattern, budget per file
+# Search for functions matching pattern, limit per file
 for file in $(find src -name "*.py"); do
     reveal "ast://$file?type=function&name~=.*handler.*" \
-        --max-bytes=2048 \
+        --max-items=20 \
         --fields=name,line,complexity \
         --format=json
 done
@@ -537,33 +527,22 @@ Fields depend on your data structure. Use `jq 'keys'` to explore.
 
 ## Token Budget Guidelines
 
-### Approximate Token Counts
-
-| Bytes | Approx Tokens | Example Use Case |
-|-------|---------------|------------------|
-| 1024 | ~250 tokens | Quick status check |
-| 2048 | ~500 tokens | Small result set |
-| 4096 | ~1000 tokens | Medium query result |
-| 8192 | ~2000 tokens | Large query result |
-| 16384 | ~4000 tokens | Very large result |
-
 ### Budget Recommendations by Use Case
 
-**Monitoring/Status Checks**: 1-2KB
+**Monitoring/Status Checks** (minimal output):
 - Use `--fields` to select only status fields
-- Use `--max-bytes=2048`
+- Use `--max-items=1` for single-object checks
 
-**Interactive Exploration**: 4-8KB
-- Allow medium result sets
-- Use `--max-items=50-100`
+**Interactive Exploration** (moderate output):
+- Allow medium result sets with `--max-items=50-100`
+- Add `--fields` to drop verbose columns
 
-**Batch Processing**: 8-16KB
-- Process larger chunks per iteration
-- Use `--max-bytes=16384`
+**Batch Processing** (larger chunks):
+- Use `--max-items=200-500` per iteration
+- Use `--max-snippet-chars=500` if fields contain long text
 
-**One-Time Analysis**: No limit
-- Don't use budget flags
-- Get full results
+**One-Time Analysis** (no limit):
+- Omit budget flags — get full results
 
 ---
 
@@ -584,7 +563,7 @@ reveal 'stats://src?quality_score<60&sort=-hotspot_score&limit=20'
 
 **Purpose**: Reduce output size and enforce token budgets
 
-**Flags**: `--fields`, `--max-items`, `--max-bytes`, `--max-depth`, `--max-snippet-chars`
+**Flags**: `--fields`, `--max-items`, `--max-snippet-chars`
 
 **Example**:
 ```bash

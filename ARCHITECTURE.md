@@ -214,7 +214,7 @@ All adapters MUST use `parse_query_params()`. Never parse `?` strings manually �
 
 ### Budget Limits
 
-`reveal/utils/query.py` → `apply_budget_limits(data, adapter)` applies `--max-items` and `--max-bytes` to the adapter's declared `BUDGET_LIST_FIELD`. Adapters opt in by setting the class attribute to the name of the top-level list field in their `get_structure()` output:
+`reveal/utils/query.py` → `apply_budget_limits(data, adapter)` applies `--max-items` to the adapter's declared `BUDGET_LIST_FIELD`. Adapters opt in by setting the class attribute to the name of the top-level list field in their `get_structure()` output:
 
 ```python
 class MyAdapter(ResourceAdapter):
@@ -257,7 +257,7 @@ Three help tiers serve different consumers:
 
 `reveal help://schemas/<adapter>` → calls `get_schema()` → returns JSON schema for programmatic consumers.
 
-`reveal --discover` → dumps all 23 adapters' schemas in one JSON document (output_types, query_params, cli_flags, examples, notes). Designed for agent capability detection.
+`reveal --discover` → dumps all 22 adapters' schemas in one JSON document (output_types, query_params, cli_flags, examples, notes). Designed for agent capability detection.
 
 ### Help Data Sources
 

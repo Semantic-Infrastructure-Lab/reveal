@@ -82,7 +82,7 @@ Not all flags in `reveal --help` are universal. There are three distinct categor
 --batch              # Batch mode (process multiple URIs from stdin)
 --fields FIELDS      # Select specific output fields (token efficiency)
 --max-items N        # Budget: stop after N results
---max-bytes N        # Budget: stop after N bytes
+--max-snippet-chars N # Budget: truncate long text snippets
 --head N / --tail N  # Semantic slicing
 --sort FIELD         # Sort results
 ```

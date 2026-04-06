@@ -2680,6 +2680,117 @@ def _lazy_import_heavy():
 
 ---
 
+### Links (L)
+
+*Applies to `.md` / `.markdown` files only.*
+
+**L001: Broken internal link**
+- A `[text](path)` link points to a file or anchor that doesn't exist on disk
+- Absolute paths checked relative to repo root; relative paths resolved from the source file
+- Suppressed on lines matching `<!-- noqa -->` or inside fenced code blocks
+
+**L002: Broken external link** *(opt-in — disabled by default)*
+- An `http://` or `https://` URL returns a non-2xx response
+- **Disabled by default** — network I/O is slow and flaky in CI. Enable via `.reveal.yaml`:
+  ```yaml
+  rules:
+    select: [L002]
+  ```
+- Timeout: 5 seconds per request
+
+**L003: Framework routing mismatch**
+- A Markdown link uses a path that exists on disk but doesn't match the web framework's routing rules (e.g., a Next.js `pages/` route vs. a `/app/` link)
+- Requires framework configuration in `.reveal.yaml` to be meaningful
+
+**L004: Documentation directory missing index**
+- A `docs/` subdirectory has no `index.md` or `README.md`
+- Severity: LOW — useful for large doc trees
+
+**L005: Low cross-reference density**
+- A Markdown file has fewer than 2 outgoing links to other docs
+- Signals isolated documentation that hasn't been linked into the broader knowledge graph
+- Threshold configurable via `.reveal.yaml` `rules.L005.min_cross_refs`
+
+---
+
+### Maintainability (M)
+
+**M101: File is too large**
+- MEDIUM: >500 lines (getting large)
+- HIGH: >1000 lines (should be split)
+- Applies to all file types
+- Suggestion includes estimated LLM token cost to load the file
+
+**M102: Orphaned module** *(Python only)*
+- A `.py` file is never imported anywhere in the package
+- Skips entry points (`main.py`, `__init__.py`, `cli.py`), test files, and scripts
+
+**M103: Version mismatch** *(Python projects)*
+- `pyproject.toml` version doesn't match `__version__` in the package's `__init__.py`
+- Catches the common mistake of bumping one but not the other during release prep
+
+**M104: Hardcoded list** *(Python only)*
+- A module-level list assignment contains 5+ string/number literals
+- Flags lists that are likely to become stale (e.g., `SUPPORTED_FORMATS = ["png", "jpg", ...]`)
+- Suggestion: derive from a registry, config file, or enum
+
+**M105: CLI handler not wired** *(Python only)*
+- A `handle_*` function exists in a handler module but isn't referenced in `main.py`
+- Catches handler functions that were written but never connected to the CLI dispatcher
+
+**M501: Unresolved comment marker**
+- Detects `# TODO`, `# FIXME`, `# HACK`, `# XXX` in any file type (case-insensitive)
+- Severity: LOW — one detection per matching line
+- Skips `reveal/templates/` and `reveal/adapters/demo.py` (intentional scaffolds)
+- Suppression via `.reveal.yaml`:
+  ```yaml
+  rules:
+    M501:
+      ignore_patterns: ["remove in v", "intentional"]
+  ```
+
+---
+
+### Frontmatter (F)
+
+*Applies to `.md` / `.markdown` files only.*
+
+**F001: Missing front matter**
+- File has no YAML front matter block (`---` … `---`)
+- Only fires when a front matter schema is configured in `.reveal.yaml`
+
+**F002: Empty front matter**
+- File has a front matter block (`---\n---`) with no fields inside
+
+**F003: Required field missing**
+- A field listed in `.reveal.yaml` `frontmatter.required_fields` is absent from the document's front matter
+
+**F004: Field type mismatch**
+- A front matter field is present but has the wrong type (e.g., `date:` is a string instead of a date)
+
+**F005: Custom validation failed**
+- A custom validator defined in `.reveal.yaml` rejected the field value
+
+---
+
+### Type Annotations (T)
+
+*Python only.*
+
+**T004: Implicit Optional (PEP 484 violation)**
+```python
+# ❌ Bad — parameter has a None default but no Optional[] in the type hint
+def process(data: str = None): ...
+
+# ✅ Good — explicit Optional makes the intent clear
+from typing import Optional
+def process(data: Optional[str] = None): ...
+```
+- PEP 484 requires `Optional[X]` when a parameter can be `None`
+- Modern alternative: `str | None` (Python 3.10+)
+
+---
+
 ### Nginx Configuration (N)
 
 **N001: Duplicate upstream servers**
