@@ -825,7 +825,7 @@ But `introspection.py` has no imports pointing back to `handlers/__init__.py`. T
 
 ### BACK-103: M5xx rules — TODO/FIXME/HACK comment detection
 
-**Status**: 🔲 Backlog
+**Status**: ✅ Shipped — flux-goliath-0406
 **Value**: Medium | **Lift**: Low
 **Surfaced**: nadela-0406 (TODO audit)
 

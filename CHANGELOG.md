@@ -12,7 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (nadela-0406, slate-gem-0405)
+## [Unreleased] - (flux-goliath-0406, nadela-0406, slate-gem-0405)
+
+### Added
+- **M501: TODO/FIXME/HACK/XXX comment marker detection** (`reveal/rules/maintainability/M501.py`, BACK-103): New rule in the M5xx reserved range. Scans all file types, emits one LOW-severity detection per marker line. Excludes `reveal/templates/` and `reveal/adapters/demo.py` (intentional scaffolds). Supports `ignore_patterns` config key in `.reveal.yaml` to suppress specific marker lines (e.g. `# TODO: remove in v2.0`). 16 new tests. (session flux-goliath-0406)
+
+### Fixed
+- **Adapter count corrected to 22** (README, ARCHITECTURE, AGENT_HELP, QUICK_START, ADAPTER_CONSISTENCY, MCP_SETUP): `demo://` is an internal adapter excluded from production counts; the correct number is 22, not 23. The 22→23 bump in nadela-0406 was wrong.
 
 ### Removed
 - **`test.py` adapter and `test_test_adapter.py` deleted** — unregistered scaffold (full of TODO placeholders), never wired to registry, redundant with `demo.py`. Net -377 lines.
