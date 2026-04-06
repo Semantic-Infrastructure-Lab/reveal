@@ -240,23 +240,6 @@ class TestBudgetLimits:
         assert result['meta']['reason'] is None
         assert len(result['items']) == 3
 
-    def test_max_bytes_truncation(self):
-        """max_bytes should truncate based on size."""
-        items = [{'data': 'x' * 100} for _ in range(10)]
-        result = apply_budget_limits(items, max_bytes=500)
-
-        assert result['meta']['truncated'] is True
-        assert result['meta']['reason'] == 'max_bytes_exceeded'
-        assert len(result['items']) < 10
-
-    def test_max_bytes_within_limit(self):
-        """max_bytes should not truncate if within limit."""
-        items = [{'id': i} for i in range(3)]
-        result = apply_budget_limits(items, max_bytes=10000)
-
-        assert result['meta']['truncated'] is False
-        assert len(result['items']) == 3
-
     def test_truncate_strings(self):
         """truncate_strings should truncate long string values."""
         items = [

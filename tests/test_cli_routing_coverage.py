@@ -42,8 +42,6 @@ def _args(**kwargs):
         'format': 'text',
         'fields': None,
         'max_items': None,
-        'max_bytes': None,
-        'max_depth': None,
         'max_snippet_chars': None,
         'check': False,
         'hotspots': False,
@@ -594,8 +592,7 @@ class TestGenericAdapterHandlerFromUri:
                 pass
 
         args = _args(check=False, element=None, base_path=None, sort=None,
-                     fields=None, max_items=None, max_bytes=None,
-                     max_depth=None, max_snippet_chars=None)
+                     fields=None, max_items=None, max_snippet_chars=None)
 
         with patch('reveal.cli.routing.uri._build_adapter_kwargs', return_value={}):
             with patch('reveal.cli.routing.uri._handle_rendering'):

@@ -44,7 +44,7 @@ class FileAnalyzer(ABC):
         if stat.st_size > self.MAX_INPUT_SIZE:
             raise ValueError(
                 f"File too large ({stat.st_size:,} bytes); "
-                f"limit is {self.MAX_INPUT_SIZE:,} bytes. Use --max-bytes to truncate output."
+                f"limit is {self.MAX_INPUT_SIZE:,} bytes."
             )
 
         encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252']

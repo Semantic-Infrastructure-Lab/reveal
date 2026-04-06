@@ -650,8 +650,6 @@ def apply_result_control(items: List[Dict[str, Any]], control: ResultControl) ->
 def apply_budget_limits(
     items: List[Dict[str, Any]],
     max_items: Optional[int] = None,
-    max_bytes: Optional[int] = None,
-    max_depth: Optional[int] = None,
     truncate_strings: Optional[int] = None
 ) -> Dict[str, Any]:
     """Apply budget constraints to results and track truncation.
@@ -659,8 +657,6 @@ def apply_budget_limits(
     Args:
         items: List of result items
         max_items: Stop after N items
-        max_bytes: Stop after N bytes (approximate token budget)
-        max_depth: Limit nested dict/list depth (not implemented yet)
         truncate_strings: Truncate long string values to N characters
 
     Returns:
@@ -674,8 +670,6 @@ def apply_budget_limits(
         >>> len(result['items'])
         2
     """
-    import json
-
     truncated = False
     truncation_reason = None
     total_available = len(items)
@@ -686,25 +680,6 @@ def apply_budget_limits(
         result_items = result_items[:max_items]
         truncated = True
         truncation_reason = 'max_items_exceeded'
-
-    # Apply max_bytes constraint (approximate)
-    if max_bytes is not None and not truncated:
-        accumulated_bytes = 0
-        truncated_at = len(result_items)
-
-        for i, item in enumerate(result_items):
-            # Approximate size by JSON serialization
-            item_json = json.dumps(item, default=str)
-            accumulated_bytes += len(item_json.encode('utf-8'))
-
-            if accumulated_bytes > max_bytes:
-                truncated_at = max(i, 1)
-                truncated = True
-                truncation_reason = 'max_bytes_exceeded'
-                break
-
-        if truncated:
-            result_items = result_items[:truncated_at]
 
     # Apply string truncation (to each item's string values)
     if truncate_strings is not None:

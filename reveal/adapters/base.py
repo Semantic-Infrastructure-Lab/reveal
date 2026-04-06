@@ -151,7 +151,7 @@ class ResourceAdapter(ABC):
     """Base class for all resource adapters."""
 
     # Override in subclasses to name the top-level list field that budget
-    # constraints (--max-items, --max-bytes, etc.) should apply to.
+    # constraints (--max-items, --max-snippet-chars) should apply to.
     # None = this adapter has no budget-limitable list field.
     BUDGET_LIST_FIELD: Optional[str] = None
 

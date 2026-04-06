@@ -338,8 +338,6 @@ def _apply_budget_constraints(result: dict, args: 'Namespace', adapter=None) -> 
     budget_result = apply_budget_limits(
         result[list_field],
         max_items=getattr(args, 'max_items', None),
-        max_bytes=getattr(args, 'max_bytes', None),
-        max_depth=getattr(args, 'max_depth', None),
         truncate_strings=getattr(args, 'max_snippet_chars', None)
     )
 

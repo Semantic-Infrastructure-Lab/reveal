@@ -423,10 +423,6 @@ def _add_universal_filter_flags(parser: argparse.ArgumentParser) -> None:
     # Budget constraints
     parser.add_argument('--max-items', type=int, metavar='N',
                         help='Stop after N results (budget mode)')
-    parser.add_argument('--max-bytes', type=int, metavar='N',
-                        help='Stop after N bytes/tokens (budget mode)')
-    parser.add_argument('--max-depth', type=int, metavar='N',
-                        help='Limit nested structure depth to N levels')
     parser.add_argument('--max-snippet-chars', type=int, metavar='N',
                         help='Truncate long string values to N characters')
 

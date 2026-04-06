@@ -154,8 +154,6 @@ def _default_args(**overrides) -> Namespace:
         batch=False,
         fields=None,
         max_items=None,
-        max_bytes=None,
-        max_depth=None,
         max_snippet_chars=None,
         links=False,
         link_type=None,

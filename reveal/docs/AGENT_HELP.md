@@ -1724,9 +1724,6 @@ reveal file.py -q                    # -q / --no-breadcrumbs / --quiet
 # Stop after N results (text and JSON both respect this)
 reveal 'ast://./src?complexity>5' --max-items 20
 
-# Stop after N bytes of list content
-reveal 'ast://./src?complexity>5' --max-bytes 8192
-
 # Truncate long string values to N chars (useful for calls:// call lists, git messages, etc.)
 reveal 'calls://./src' --max-snippet-chars 80
 
@@ -2993,7 +2990,6 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Check file type | `reveal file.py --meta` |
 | Suppress breadcrumbs | `reveal file.py -q` |
 | Budget: first N items | `reveal uri:// --max-items 50` |
-| Budget: byte cap | `reveal uri:// --max-bytes 4096` |
 
 ---
 
