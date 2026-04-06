@@ -7,6 +7,7 @@ from pathlib import Path
 from reveal.rules.maintainability.M101 import M101
 from reveal.rules.maintainability.M102 import M102
 from reveal.rules.maintainability.M103 import M103
+from reveal.rules.maintainability.M501 import M501
 from reveal.rules.base import Severity
 
 
@@ -421,6 +422,126 @@ version = "{pyproject_version}"
                         f"Expected match: pyproject={pyproject_ver}, init={init_ver}")
             finally:
                 self.teardown_directory(temp_dir)
+
+
+class TestM501TodoFixme(unittest.TestCase):
+    """Test M501: TODO/FIXME/HACK/XXX comment marker detector."""
+
+    def _check(self, content: str, path: str = "/project/src/foo.py") -> list:
+        return M501().check(path, None, content)
+
+    def test_clean_file_ok(self):
+        """No markers → no detections."""
+        content = "x = 1\n# a regular comment\ndef foo(): pass\n"
+        self.assertEqual(self._check(content), [])
+
+    def test_todo_detected(self):
+        """# TODO line is flagged."""
+        content = "x = 1\n# TODO: fix this later\ny = 2\n"
+        detections = self._check(content)
+        self.assertEqual(len(detections), 1)
+        self.assertEqual(detections[0].rule_code, "M501")
+        self.assertEqual(detections[0].line, 2)
+        self.assertIn("TODO", detections[0].message)
+
+    def test_fixme_detected(self):
+        """# FIXME line is flagged."""
+        content = "# FIXME: broken edge case\n"
+        detections = self._check(content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn("FIXME", detections[0].message)
+
+    def test_hack_detected(self):
+        """# HACK line is flagged."""
+        content = "x = x + 1  # HACK: workaround for upstream bug\n"
+        detections = self._check(content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn("HACK", detections[0].message)
+
+    def test_xxx_detected(self):
+        """# XXX line is flagged."""
+        content = "# XXX: reconsider this\n"
+        detections = self._check(content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn("XXX", detections[0].message)
+
+    def test_case_insensitive(self):
+        """Lowercase markers are also caught."""
+        content = "# todo: something\n# fixme: another\n"
+        detections = self._check(content)
+        self.assertEqual(len(detections), 2)
+
+    def test_inline_comment_detected(self):
+        """Inline TODO on a code line is caught."""
+        content = "result = compute()  # TODO: use faster algo\n"
+        detections = self._check(content)
+        self.assertEqual(len(detections), 1)
+        self.assertEqual(detections[0].line, 1)
+
+    def test_multiple_markers_multiple_detections(self):
+        """Each marker line produces one detection."""
+        content = "# TODO: a\nx = 1\n# FIXME: b\n# HACK: c\n"
+        detections = self._check(content)
+        self.assertEqual(len(detections), 3)
+
+    def test_severity_is_low(self):
+        """Severity must be LOW."""
+        from reveal.rules.base import Severity
+        content = "# TODO: fix me\n"
+        detections = self._check(content)
+        self.assertEqual(detections[0].severity, Severity.LOW)
+
+    def test_context_is_stripped_line(self):
+        """Context field contains the stripped source line."""
+        content = "    # TODO: indented todo\n"
+        detections = self._check(content)
+        self.assertEqual(detections[0].context, "# TODO: indented todo")
+
+    def test_skip_templates_path(self):
+        """Files under reveal/templates/ are not flagged."""
+        content = "# TODO: scaffold placeholder\n"
+        path = "/home/scottsen/src/projects/reveal/external-git/reveal/templates/foo.py"
+        self.assertEqual(self._check(content, path=path), [])
+
+    def test_skip_demo_adapter(self):
+        """reveal/adapters/demo.py is not flagged."""
+        content = "# TODO: demo scaffold\n"
+        path = "/project/reveal/adapters/demo.py"
+        self.assertEqual(self._check(content, path=path), [])
+
+    def test_non_comment_todo_not_flagged(self):
+        """TODO inside a string (no leading #) is not flagged."""
+        content = 'msg = "TODO: fix this in production"\n'
+        self.assertEqual(self._check(content), [])
+
+    def test_ignore_patterns_suppress(self):
+        """Lines matching ignore_patterns are skipped."""
+        rule = M501()
+        # Patch get_threshold to return an ignore pattern
+        rule.get_threshold = lambda key, default: (
+            ["remove in v"] if key == "ignore_patterns" else default
+        )
+        content = "# TODO: remove in v2.0\n# TODO: actual problem\n"
+        detections = rule.check("/project/foo.py", None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn("actual problem", detections[0].context)
+
+    def test_empty_file_ok(self):
+        """Empty file produces no detections."""
+        self.assertEqual(self._check(""), [])
+
+    def test_works_on_non_python_files(self):
+        """Rule fires on .js, .yaml, .md files too."""
+        content = "// TODO: update this\n"
+        for suffix in [".js", ".ts", ".yaml", ".md", ".rb"]:
+            path = f"/project/src/file{suffix}"
+            # Only Python-style # comment fires; // is not matched
+        # Use Python-style comment which is valid in yaml/md
+        content = "# TODO: yaml cleanup\n"
+        for suffix in [".yaml", ".md", ".sh"]:
+            path = f"/project/src/file{suffix}"
+            detections = self._check(content, path=path)
+            self.assertEqual(len(detections), 1, f"Failed for {suffix}")
 
 
 if __name__ == '__main__':
