@@ -1,5 +1,5 @@
 # Reveal Roadmap
-> **Last updated**: 2026-04-05 (bright-mech-0405 — v0.71.4 released)
+> **Last updated**: 2026-04-05 (bright-mech-0405 — v0.72.0 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -7,7 +7,7 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
-### v0.71.0–v0.71.4
+### v0.71.0–v0.72.0
 - ✅ **Sub-function progressive disclosure** — four new CLI flags close the gap between "here's the function signature" and "here are all 200 lines": `--outline element` (control-flow skeleton), `--scope :LINE` (ancestor scope chain), `--varflow element VAR` (variable read/write trace), `--calls element START-END` (call sites in a line range). All support `--depth N` and `--range START-END` narrowing.
 - ✅ **`Class.method` syntax** — `reveal file.py MyClass.my_method --outline` now resolves correctly.
 - ✅ **`_walk_var` correctness fix** — `id()`-based deduplication never matched (tree-sitter creates new wrapper objects per access); fixed to `(start_byte, end_byte)` identity. Augmented assignment (`x += 1`) now correctly emits READ + WRITE.
