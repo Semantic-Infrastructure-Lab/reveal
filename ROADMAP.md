@@ -1,11 +1,18 @@
 # Reveal Roadmap
-> **Last updated**: 2026-04-05 (bright-mech-0405 — v0.72.0 released)
+> **Last updated**: 2026-04-06 (flux-goliath-0406 — v0.72.1 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.72.1
+- ✅ **M501 TODO/FIXME/HACK/XXX rule** (BACK-103) — detects unresolved comment markers in any file type. LOW severity, one detection per line. Skips scaffold paths (`reveal/templates/`, `demo.py`). Supports `ignore_patterns` config.
+- ✅ **`--max-bytes` and `--max-depth` removed** — `--max-bytes` measured JSON bytes (not tokens), misleading for agents; `--max-depth` was never implemented. Removed from parser, routing, MCP server, and all docs.
+- ✅ **AGENT_HELP rules coverage complete** — L (links), M (maintainability), F (frontmatter), T (types) sections added. 18 rules were previously undocumented.
+- ✅ **Stale flag refs scrubbed** from `FIELD_SELECTION_GUIDE.md`, `ADAPTER_CONSISTENCY.md`, `ARCHITECTURE.md`
+- ✅ **`test.py` scaffold deleted** — unregistered, never wired to registry (-377 lines)
 
 ### v0.71.0–v0.72.0
 - ✅ **Sub-function progressive disclosure** — four new CLI flags close the gap between "here's the function signature" and "here are all 200 lines": `--outline element` (control-flow skeleton), `--scope :LINE` (ancestor scope chain), `--varflow element VAR` (variable read/write trace), `--calls element START-END` (call sites in a line range). All support `--depth N` and `--range START-END` narrowing.

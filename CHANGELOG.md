@@ -12,29 +12,30 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (flux-goliath-0406, nadela-0406, slate-gem-0405)
+## [Unreleased]
+
+## [0.72.1] - 2026-04-06 (flux-goliath-0406, nadela-0406, slate-gem-0405)
 
 ### Added
 - **M501: TODO/FIXME/HACK/XXX comment marker detection** (`reveal/rules/maintainability/M501.py`, BACK-103): New rule in the M5xx reserved range. Scans all file types, emits one LOW-severity detection per marker line. Excludes `reveal/templates/` and `reveal/adapters/demo.py` (intentional scaffolds). Supports `ignore_patterns` config key in `.reveal.yaml` to suppress specific marker lines (e.g. `# TODO: remove in v2.0`). 16 new tests. (session flux-goliath-0406)
 
 ### Fixed
-- **Adapter count corrected to 22** (README, ARCHITECTURE, AGENT_HELP, QUICK_START, ADAPTER_CONSISTENCY, MCP_SETUP): `demo://` is an internal adapter excluded from production counts; the correct number is 22, not 23. The 22→23 bump in nadela-0406 was wrong.
+- **Adapter count corrected to 22** (README, ARCHITECTURE, AGENT_HELP, QUICK_START, ADAPTER_CONSISTENCY, MCP_SETUP): `demo://` is an internal adapter excluded from production counts; the correct number is 22, not 23.
+- **`domain/adapter.py` docstring: stale `TODO:` removed** — `whois` element docstring said `TODO: requires python-whois`; updated to `optional: pip install reveal[whois]`
+- **`L001.py` stale TODO comment replaced** — `# TODO: Handle in L003 with framework routing` → factual comment. L003 already handles absolute paths.
+- **`--pattern` typo removed from AGENT_HELP.md** — `reveal src/ --pattern --severity high` is wrong (`--pattern` doesn't exist); corrected to `--check --severity high`
+- **Removed `--max-bytes` and `--max-depth` budget flags** — `--max-bytes` measured JSON bytes (not tokens) and was unpredictable; `--max-depth` was never implemented. Removed from parser, `apply_budget_limits`, URI routing, MCP server, tests, and all docs. `--max-items` and `--max-snippet-chars` remain.
+- **Stale `--max-bytes`/`--max-depth` references scrubbed from docs** — `FIELD_SELECTION_GUIDE.md`, `ADAPTER_CONSISTENCY.md`, `ARCHITECTURE.md`
 
 ### Removed
-- **`test.py` adapter and `test_test_adapter.py` deleted** — unregistered scaffold (full of TODO placeholders), never wired to registry, redundant with `demo.py`. Net -377 lines.
-
-### Fixed
-- **`domain/adapter.py` docstring: stale `TODO:` removed** — `whois` element docstring said `TODO: requires python-whois`; implementation is complete and handles missing dep gracefully. Updated to `optional: pip install reveal[whois]`
-- **`L001.py` stale TODO comment replaced** — `# TODO: Handle in L003 with framework routing` → `# Absolute paths are handled by L003 (framework routing)`. L003 already handles this; the comment was aspirational, not accurate.
-- **`--pattern` typo removed from AGENT_HELP.md** — `reveal src/ --pattern --severity high` is wrong (`--pattern` doesn't exist); corrected to `--check --severity high`
-- **Removed `--max-bytes` and `--max-depth` budget flags** — `--max-bytes` measured JSON bytes (not tokens) and was unpredictable without knowing item sizes; `--max-depth` was never implemented (docstring said "not implemented yet"). Removed from parser, `apply_budget_limits`, URI routing, MCP server, tests, and docs. `--max-items` and `--max-snippet-chars` remain.
+- **`test.py` adapter and `test_test_adapter.py` deleted** — unregistered scaffold, never wired to registry, redundant with `demo.py`. Net -377 lines.
 
 ### Documentation
-- **AGENT_HELP.md: nav flags added to Quick Reference Card** — `--outline` (element/skeleton mode), `--scope`, `--varflow`, `--calls` were missing from the table
-- **AGENT_HELP.md: undocumented markdown flags documented** — `--broken-only` (filter links to broken-only), `--inline` (include inline code spans with `--code`), `--section NAME` (flag alternative to positional element arg)
-- **AGENT_HELP.md: budget flags section added** — `--max-items` and `--max-snippet-chars` with correct behavior notes (header count may be pre-budget stale)
+- **AGENT_HELP.md: L/M/F/T rule sections added** — Complete Rules Reference was missing all Link (L001–L005), Maintainability (M101–M105, M501), Frontmatter (F001–F005), and Type (T004) rules — 18 rules undocumented for agents.
+- **AGENT_HELP.md: nav flags added to Quick Reference Card** — `--outline`, `--scope`, `--varflow`, `--calls` were missing from the table
+- **AGENT_HELP.md: undocumented markdown flags documented** — `--broken-only`, `--inline`, `--section NAME`
+- **AGENT_HELP.md: budget flags section added** — `--max-items` and `--max-snippet-chars` with correct behavior notes
 - **AGENT_HELP.md: `-q`/`--no-breadcrumbs` noted** for scripting/agent use
-- **AGENT_HELP.md: v0.72.0 entry added** to "What Changed" section
 - **AGENT_HELP.md/RECIPES.md: nav version tag corrected** from `v0.71.0+` to `v0.72.0+`
 
 ## [0.72.0] - 2026-04-05 (bright-mech-0405)
