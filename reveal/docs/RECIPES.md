@@ -307,6 +307,33 @@ reveal 'ast://./src?complexity>30&lines>150'
 reveal 'ast://./src?complexity<5&lines>50'
 ```
 
+### Combined AST filters
+
+```bash
+# Name glob + complexity — find complex handlers specifically
+reveal 'ast://src/?name=*handle*&complexity>10'
+
+# Name glob + type — find all test functions
+reveal 'ast://tests/?name=test_*&type=function'
+
+# Decorator + complexity — complex cached functions (may be hiding cost)
+reveal 'ast://src/?decorator=*cache*&complexity>5'
+
+# Name + lines — large parse/render functions
+reveal 'ast://src/?name=*parse*&lines>50&sort=-complexity'
+```
+
+### Extract a raw line range
+
+```bash
+# Get exact source lines by range — useful after diff:// or grep finds a location
+reveal src/auth.py :45-70
+
+# Combined with Class.method syntax
+reveal src/auth.py :45-70  # raw lines
+reveal src/auth.py MyClass.validate :45-70  # not valid — use range on file directly
+```
+
 ### Decorator intelligence
 
 ```bash
@@ -370,6 +397,20 @@ reveal src/processor.py process_batch --range 7-12
 
 # Class.method syntax works everywhere
 reveal src/processor.py MyClass.process_batch --outline
+```
+
+### Semantic diff — what actually changed
+
+```bash
+# Structural diff between branches (functions added/removed/changed + complexity delta)
+reveal diff://git://main/.:git://HEAD/.
+
+# Per-file commit diff — see exactly which functions changed and how
+reveal diff://git://HEAD~1/src/auth.py:src/auth.py
+
+# CI gate: fail if any function's complexity increased by more than 5
+reveal diff://git://main/.:git://HEAD/. --format json | \
+  jq '.diff.functions[] | select(.complexity_delta > 5)'
 ```
 
 ### Before/after refactoring
@@ -980,8 +1021,8 @@ fd -e py | reveal --stdin --format=json > structure.json
 # Check multiple SSL certificates
 echo -e "ssl://example.com\nssl://api.example.com\nssl://staging.example.com" | reveal --stdin
 
-# Mix files and URIs in same batch
-echo -e "config.yaml\nssl://prod.example.com\nenv://PATH" | reveal --stdin
+# Mix file paths, URIs, and env vars in the same batch — all processed in one pass
+echo -e "src/auth.py\nssl://prod.example.com\nenv://DATABASE_URL" | reveal --stdin
 
 # Scan all domains from nginx config
 grep -h "server_name" /etc/nginx/sites-enabled/* | awk '{print $2}' | \
@@ -1014,8 +1055,8 @@ reveal cpanel://USERNAME/ssl --format=json | \
   jq -r '.certs[] | select(.status != "ok") | .domain' | \
   sed 's/^/ssl:\/\//' | reveal --stdin --check-live
 
-# Pattern detection with severity filter (only high+)
-reveal src/ --pattern --severity high
+# Quality check with severity filter (only high+)
+reveal src/ --check --severity high
 
 # Full pipeline: extract domains → batch SSL → JSON → filter failures
 reveal nginx.conf --extract domains | sed 's/^/ssl:\/\//' | \
