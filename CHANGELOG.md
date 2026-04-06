@@ -12,6 +12,20 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - (slate-gem-0405)
+
+### Fixed
+- **`--pattern` typo removed from AGENT_HELP.md** — `reveal src/ --pattern --severity high` is wrong (`--pattern` doesn't exist); corrected to `--check --severity high`
+- **Removed `--max-bytes` and `--max-depth` budget flags** — `--max-bytes` measured JSON bytes (not tokens) and was unpredictable without knowing item sizes; `--max-depth` was never implemented (docstring said "not implemented yet"). Removed from parser, `apply_budget_limits`, URI routing, MCP server, tests, and docs. `--max-items` and `--max-snippet-chars` remain.
+
+### Documentation
+- **AGENT_HELP.md: nav flags added to Quick Reference Card** — `--outline` (element/skeleton mode), `--scope`, `--varflow`, `--calls` were missing from the table
+- **AGENT_HELP.md: undocumented markdown flags documented** — `--broken-only` (filter links to broken-only), `--inline` (include inline code spans with `--code`), `--section NAME` (flag alternative to positional element arg)
+- **AGENT_HELP.md: budget flags section added** — `--max-items` and `--max-snippet-chars` with correct behavior notes (header count may be pre-budget stale)
+- **AGENT_HELP.md: `-q`/`--no-breadcrumbs` noted** for scripting/agent use
+- **AGENT_HELP.md: v0.72.0 entry added** to "What Changed" section
+- **AGENT_HELP.md/RECIPES.md: nav version tag corrected** from `v0.71.0+` to `v0.72.0+`
+
 ## [0.72.0] - 2026-04-05 (bright-mech-0405)
 
 ### Changed
