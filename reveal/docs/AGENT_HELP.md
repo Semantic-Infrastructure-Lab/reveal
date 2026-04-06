@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.70.2
+**Version:** 0.71.4
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -176,8 +176,11 @@ Functions (8):
 
 **Advanced variations:**
 ```bash
-# Hierarchical view (classes with methods)
+# Hierarchical view — file-level (classes with methods)
 reveal src/main.py --outline
+
+# Control-flow skeleton — function-level (branches, loops, returns)
+reveal src/main.py process_request --outline
 
 # Just function names (fast scan)
 reveal src/main.py --format=json | jq '.structure.functions[].name'
@@ -185,6 +188,8 @@ reveal src/main.py --format=json | jq '.structure.functions[].name'
 # Find complex functions first
 reveal src/main.py --format=json | jq '.structure.functions[] | select(.depth > 3)'
 ```
+
+**Note:** `--outline` has two modes — without an element it shows the file-level class/method tree; with an element it shows the control-flow skeleton of that function. See the "Navigate inside a function" task below for `--scope`, `--varflow`, and `--calls`.
 
 **Token impact:**
 - Traditional approach (read all files): ~5,000 tokens
@@ -483,6 +488,86 @@ reveal models.py --outline
 #   update_profile [8 lines] (line 29)
 # class Admin(User):
 #   delete_user [6 lines] (line 40)
+```
+
+---
+
+### Task: "Navigate inside a function — outline, scope, variable flow, calls" (v0.71.0+)
+
+Four flags for sub-function progressive disclosure. Use when a function is too large to read in full but you need to understand its structure, trace a variable, or find calls in a range.
+
+**`--outline` on an element → control-flow skeleton**
+```bash
+reveal app.py process_batch --outline
+
+# Output:
+# DEF process_batch  L1→L13
+#   FOR  item in items  L3→L12
+#     IF  item.active  L4→L12
+#     ELIF  item.pending  L7→L12
+#       TRY  L8→L12
+#   RETURN  results  L13
+```
+Shows the shape of the function without reading every line. Default depth 3; use `--depth N` to go deeper.
+
+**`--scope :LINE` → ancestor context for a line**
+```bash
+reveal app.py :5 --scope
+
+# Output:
+# FOR     L3→L12          FOR  item in items
+#   IF      L4→L12          IF  item.active
+#
+#     ▶ L5 is here
+```
+Useful when a stack trace or grep result gives you a line number and you need to know what scope it's inside.
+
+**`--varflow FUNC VAR` → read/write trace for a variable**
+```bash
+reveal app.py process_batch --varflow results
+
+# Output:
+# WRITE     L2:  results = []
+# READ      L6:  results.append(value)
+# READ      L10:  results.append(value)
+# READ      L13:  return results
+```
+Shows every place the variable is assigned (WRITE), read (READ), or tested in a condition (READ/COND). Augmented assignment (`+=`) emits READ then WRITE.
+
+**`--calls FUNC START-END` → call sites in a line range**
+```bash
+reveal app.py process_batch --calls 7-12
+
+# Output:
+# L9:  retry(item)
+# L10:  results.append(value)
+# L12:  log_error(e)
+```
+Useful for auditing what a specific branch calls without reading the whole function.
+
+**Combining with `--range` to narrow scope:**
+```bash
+reveal app.py process_batch --outline --range 7-12   # outline of just lines 7-12
+reveal app.py process_batch --varflow value --range 7-12  # trace 'value' in lines 7-12
+```
+
+**Class.method syntax works with all nav flags:**
+```bash
+reveal app.py MyClass.process --outline
+reveal app.py MyClass.process --varflow result
+```
+
+**Workflow — large function investigation:**
+```bash
+# 1. Get the skeleton
+reveal app.py process_batch --outline
+
+# 2. Identify the suspicious branch (say lines 7-12)
+reveal app.py process_batch --calls 7-12      # what does it call?
+reveal app.py process_batch --varflow value   # how does 'value' flow through?
+
+# 3. Read only what you need
+reveal app.py process_batch --range 7-12      # full source of that branch only
 ```
 
 ---

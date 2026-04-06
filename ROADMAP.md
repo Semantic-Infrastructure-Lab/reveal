@@ -1,11 +1,20 @@
 # Reveal Roadmap
-> **Last updated**: 2026-04-03 (sleeping-goddess-0403 — v0.70.1 released)
+> **Last updated**: 2026-04-05 (bright-mech-0405 — v0.71.4 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.71.0–v0.71.4
+- ✅ **Sub-function progressive disclosure** — four new CLI flags close the gap between "here's the function signature" and "here are all 200 lines": `--outline element` (control-flow skeleton), `--scope :LINE` (ancestor scope chain), `--varflow element VAR` (variable read/write trace), `--calls element START-END` (call sites in a line range). All support `--depth N` and `--range START-END` narrowing.
+- ✅ **`Class.method` syntax** — `reveal file.py MyClass.my_method --outline` now resolves correctly.
+- ✅ **`_walk_var` correctness fix** — `id()`-based deduplication never matched (tree-sitter creates new wrapper objects per access); fixed to `(start_byte, end_byte)` identity. Augmented assignment (`x += 1`) now correctly emits READ + WRITE.
+- ✅ **Nav UX errors** — `--scope`/`--varflow`/`--calls` without element now exit 1 with a clear message instead of silently falling through.
+- ✅ **`--outline` help text documents both modes** — file-level hierarchical vs. function control-flow skeleton.
+- ✅ **`_walk_var` decomposed** — extracted 5 inner node-type handlers; complexity 35 → readable dispatcher.
+- ✅ **`handle_file` special-flag dispatch extracted** — 9 early-exit guards moved to `_dispatch_special_flags()`.
 
 ### v0.70.2
 - ✅ **`--section` hierarchical misparse on headings with dots** — `reveal doc.md --section "rr.php sentinel locking"` returned `Element not found` / `Hint: Looking for 'php sentinel locking' within 'rr'`. Regex in `_parse_element_syntax` lacked end anchor; fixed with `\w*$`. 2 new tests.

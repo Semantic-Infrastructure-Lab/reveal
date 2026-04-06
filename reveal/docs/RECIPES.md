@@ -329,6 +329,49 @@ reveal 'ast://.?decorator=dataclass&type=class'
 reveal src/ --decorator-stats
 ```
 
+### Navigate inside a large function (v0.71.0+)
+
+When a function is too large to read in full, use sub-function nav flags to
+understand it without reading every line.
+
+```bash
+# Control-flow skeleton — what branches and loops exist?
+reveal src/processor.py process_batch --outline
+# DEF process_batch  L1→L13
+#   FOR  item in items  L3→L12
+#     IF  item.active  L4→L12
+#     ELIF  item.pending  L7→L12
+#       TRY  L8→L12
+#   RETURN  results  L13
+
+# Ancestor scope for a line from a stack trace or grep result
+reveal src/processor.py :5 --scope
+
+# Trace a variable — where is it written and read?
+reveal src/processor.py process_batch --varflow results
+
+# What does a specific branch call?
+reveal src/processor.py process_batch --calls 7-12
+```
+
+Workflow for a complex function:
+```bash
+# 1. Skeleton — find the suspicious branch
+reveal src/processor.py process_batch --outline
+
+# 2. Zoom in — what calls happen in lines 7-12?
+reveal src/processor.py process_batch --calls 7-12
+
+# 3. Trace a variable through the whole function
+reveal src/processor.py process_batch --varflow result
+
+# 4. Read only the branch you care about
+reveal src/processor.py process_batch --range 7-12
+
+# Class.method syntax works everywhere
+reveal src/processor.py MyClass.process_batch --outline
+```
+
 ### Before/after refactoring
 
 ```bash
@@ -1180,8 +1223,12 @@ reveal 'markdown://docs/?aggregate=type' # Frontmatter field frequency table
 
 ```bash
 reveal file.py                           # File structure
-reveal file.py --outline                 # Hierarchical view
+reveal file.py --outline                 # Hierarchical view (file-level)
 reveal file.py function_name             # Extract specific code
+reveal file.py function_name --outline   # Control-flow skeleton (function-level)
+reveal file.py function_name --varflow x # Trace variable x reads/writes
+reveal file.py :42 --scope              # Ancestor scope for line 42
+reveal file.py function_name --calls 1-50  # Calls in a line range
 reveal file.py --format=json             # Structured output
 ```
 
