@@ -12,9 +12,14 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (slate-gem-0405)
+## [Unreleased] - (nadela-0406, slate-gem-0405)
+
+### Removed
+- **`test.py` adapter and `test_test_adapter.py` deleted** — unregistered scaffold (full of TODO placeholders), never wired to registry, redundant with `demo.py`. Net -377 lines.
 
 ### Fixed
+- **`domain/adapter.py` docstring: stale `TODO:` removed** — `whois` element docstring said `TODO: requires python-whois`; implementation is complete and handles missing dep gracefully. Updated to `optional: pip install reveal[whois]`
+- **`L001.py` stale TODO comment replaced** — `# TODO: Handle in L003 with framework routing` → `# Absolute paths are handled by L003 (framework routing)`. L003 already handles this; the comment was aspirational, not accurate.
 - **`--pattern` typo removed from AGENT_HELP.md** — `reveal src/ --pattern --severity high` is wrong (`--pattern` doesn't exist); corrected to `--check --severity high`
 - **Removed `--max-bytes` and `--max-depth` budget flags** — `--max-bytes` measured JSON bytes (not tokens) and was unpredictable without knowing item sizes; `--max-depth` was never implemented (docstring said "not implemented yet"). Removed from parser, `apply_budget_limits`, URI routing, MCP server, tests, and docs. `--max-items` and `--max-snippet-chars` remain.
 
