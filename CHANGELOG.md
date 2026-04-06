@@ -12,6 +12,48 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.71.3] - 2026-04-05 (bright-mech-0405)
+
+### Fixed
+- **`--outline` behavioral fork documented in help text** (`parser.py`) — `--outline` silently produces completely different output with vs. without an element argument. The help string now explicitly states both modes: file-level hierarchical outline (no element) vs. control-flow skeleton of the named function (with element).
+
+### Tests
+- **Integration tests for `handle_file` nav dispatch path** (`test_cli_commands_integration.py`) — 3 new integration tests exercising the full `_has_nav_flag → _dispatch_nav → printed output` chain: `:LINE --scope` success path, `--scope` without element exits-1 error path, and element `--outline` produces control-flow keywords.
+- **`_parse_line_range` edge cases** (`test_cli_commands_integration.py`) — 7 new unit tests documenting: valid range, single number, negative number falls back to defaults, `START > END` returned as-is, out-of-bounds returned without clamping, invalid string falls back, empty string falls back.
+
+---
+
+## [0.71.2] - 2026-04-05 (coastal-hurricane-0405)
+
+### Fixed
+- **`--varflow`: augmented assignment now emits READ + WRITE** (`nav.py`) — `x += 1` previously only emitted WRITE; it now correctly emits READ (current value consumed) then WRITE (new value stored). Deduplication updated to key on `(line, col, kind)` to allow both events at the same position.
+- **Pre-existing bug: `id()`-based `processed` sets in `_walk_var`** — tree-sitter returns new Python wrapper objects on each node access, so `id()` comparisons never matched. All three `processed` sets (`assignment`, `for_statement`, `if_statement`) now use `(start_byte, end_byte)` for correct identity.
+- **Depth guard inconsistency in outline** (`nav.py`) — `ALTERNATIVE_NODES` used `depth <= max_depth` (off-by-one: recurses into `depth+1 == max_depth+1`); `SCOPE_NODES` correctly used `depth < max_depth`. Unified to `<` throughout.
+- **UX: `--scope`/`--varflow`/`--calls` without element now exit with a clear error** (`file_handler.py`) — previously silently fell through to normal file output with no indication the flag was ignored.
+
+### Removed
+- Dead `_condition_text` function (`nav.py`) — never called; `_node_label` already inlines the same truncation logic.
+- Dead `_find_func` test helper (`test_ast_nav.py`) — never called (all callers used `_find_func_with_text`); body was also broken.
+
+### Changed
+- `SCOPE_NODES` frozenset deduplicated (`nav.py`) — `if_statement`/`for_statement`/`while_statement`/`finally_clause` were listed twice; overlap with `ALTERNATIVE_NODES` documented with an explanatory comment.
+- **`_find_element_node` now supports `Class.method` syntax** (`file_handler.py`) — `reveal file.py MyClass.my_method --outline` previously failed silently with "could not find function"; now correctly resolves the method within the class using existing `PARENT_NODE_TYPES` + `_find_child_in_subtree` infrastructure. "Not found" error now includes a `Class.method` hint.
+
+---
+
+## [0.71.0] - 2026-04-05 (warming-tempest-0405)
+
+### Added
+- **Sub-function progressive disclosure** (`adapters/ast/nav.py`): four new CLI flags that close the gap between "here's the function signature" and "here are all 200 lines":
+  - `--outline` on an element — control-flow skeleton of a function (`DEF → FOR → IF → TRY → EXCEPT/ELSE`) at configurable depth (default 3, `--depth N` to go deeper). Alternative branches (else/elif/except/finally) render at the same visual depth as their parent scope node.
+  - `--scope` on a line reference — ancestor scope chain for a specific line (`reveal file.py :123 --scope`), outermost first, with `▶ L123 is here` marker.
+  - `--varflow VAR` on an element — all reads and writes of a named variable scoped to a function, classified as `WRITE`, `READ/COND`, or `READ` in document order.
+  - `--calls START-END` on an element — all call sites within a line range, with callee name and first argument.
+- **CLI flags** (`cli/parser.py`): `--scope`, `--varflow VAR`, `--calls RANGE` added to navigation options group. Existing `--outline` reused (unchanged behavior when no element; new skeleton behavior when element is present).
+- **45 new tests** (`tests/adapters/test_ast_nav.py`) covering all four nav functions and renderers.
+
+---
+
 ## [0.70.2] - 2026-04-05 (hologram-harbinger-0405)
 
 ### Fixed

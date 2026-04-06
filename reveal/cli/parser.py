@@ -258,7 +258,11 @@ def _add_display_options(parser: argparse.ArgumentParser) -> None:
                         help='Flat file list with timestamps sorted by mtime — replaces find|sort. '
                              'Combine with --ext to filter by type, --sort name/size/mtime, --desc.')
     parser.add_argument('--outline', action='store_true',
-                        help='Show hierarchical outline (classes with methods, nested structures)')
+                        help='Two modes: without element → file-level hierarchical outline '
+                             '(classes with methods, nested structures); '
+                             'with element → control-flow skeleton of that function '
+                             '(branches, loops, returns). '
+                             'Example: `reveal file.py --outline` vs `reveal file.py myfunc --outline`')
     parser.add_argument('--hotspots', action='store_true',
                         help='Identify quality hotspots (requires stats:// adapter, shows worst 10 files by quality)')
     parser.add_argument('--code-only', action='store_true',
@@ -327,6 +331,14 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                         help='Filter results since date (YYYY-MM-DD, e.g., reveal claude:// --since 2026-02-27)')
     parser.add_argument('--base-path', dest='base_path', type=_strip_path_quotes, metavar='DIR',
                         help='Point claude:// at a different Claude install — pass the projects dir and all paths (history, config, plans) derive from it (e.g., --base-path /mnt/wsl/.claude/projects). Windows: do not wrap in quotes (use --base-path C:/Users/... not \'C:/Users/...\')')
+
+    # Sub-function progressive disclosure (nav.py)
+    parser.add_argument('--scope', action='store_true',
+                        help='Show ancestor scope chain for a line (use with :LINE syntax, e.g., reveal file.py :123 --scope)')
+    parser.add_argument('--varflow', type=str, metavar='VAR',
+                        help='Trace reads/writes of a variable within a function (e.g., reveal file.py process_items --varflow result)')
+    parser.add_argument('--calls', type=str, metavar='START-END',
+                        help='Show calls within a line range inside a function (e.g., reveal file.py process_items --calls 89-120)')
 
 
 def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
