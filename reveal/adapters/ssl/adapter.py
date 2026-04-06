@@ -889,8 +889,7 @@ class SSLAdapter(ResourceAdapter):
                 }],
             }
 
-        # TODO: Parse nginx config to get cert path and validate
-        # For now, just validate that the cert is accessible
+        # Validates via live SSL connection only
         if cert_result['status'] in ('failure', 'warning'):
             for check in cert_result.get('checks', []):
                 if check['status'] in ('failure', 'warning'):

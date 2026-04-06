@@ -823,22 +823,6 @@ But `introspection.py` has no imports pointing back to `handlers/__init__.py`. T
 
 ---
 
-### BACK-102: SSL adapter — nginx cert-path validation in `_validate_single_domain`
-
-**Status**: 🔲 Backlog
-**Value**: Low | **Lift**: Medium
-**Surfaced**: nadela-0406 (TODO audit)
-
-`_validate_single_domain` (`ssl/adapter.py:892`) validates SSL reachability via live network check only. The TODO aspires to also parse the nginx config, find the cert file path for the domain, and validate it on disk — confirming the correct cert is deployed without requiring a live connection.
-
-Current behavior is complete for network validation. Disk validation would be additive: useful for `reveal ssl:// --validate-nginx` scenarios where the network isn't reachable (e.g. pre-deploy, behind firewall).
-
-**Implementation sketch:** In `_validate_single_domain`, after the live check, attempt to parse the nginx config (via the existing nginx adapter) to locate the `ssl_certificate` directive for the domain. Validate the file exists, is readable, and the cert's CN/SAN matches the domain.
-
-**Prerequisite:** BACK-077 (`--validate-nginx` KeyError crash) should be stable first.
-
----
-
 ### BACK-103: M5xx rules — TODO/FIXME/HACK comment detection
 
 **Status**: 🔲 Backlog
