@@ -33,7 +33,7 @@ reveal help://schemas                               # listing: ast, ssl, git, ..
 # List all available task recipe categories
 reveal help://examples                             # listing: quality, security, ...
 
-# Discover adapter schemas (all 22 adapters support this)
+# Discover adapter schemas (all 23 adapters support this)
 reveal help://schemas/<adapter> --format=json
 
 # File & Analysis Adapters
@@ -3090,7 +3090,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
-- **v0.72.0** - nav flags released: `--outline` (element mode → control-flow skeleton), `--scope` (ancestor scope at a line), `--varflow` (read/write trace), `--calls` (call sites in a range); `--broken-only` and `--inline` documented; `--section NAME` flag; budget flags (`--max-items`, `--max-bytes`, `--max-snippet-chars`) for token management
+- **v0.72.0** - nav flags released: `--outline` (element mode → control-flow skeleton), `--scope` (ancestor scope at a line), `--varflow` (read/write trace), `--calls` (call sites in a range); `--broken-only` and `--inline` documented; `--section NAME` flag; budget flags (`--max-items`, `--max-snippet-chars`) for token management
 - **v0.67.0** - B005 skip `try/except ImportError` optional-dep pattern; element-not-found lists available names; `--analyzer text` false suggestion removed; M102 suppress patterns + dynamic-load heuristics in agent-help; OR-pattern failure hints `--search`
 - **v0.64.0** - `reveal overview` + `reveal deps` subcommands; `reveal-mcp` MCP server (5 tools); `pack --content` tiered emission; `xlsx://` Power Pivot extraction (`?powerpivot=tables/schema/measures/dax/relationships`); `calls://?uncalled` dead code candidates; `diff://` per-function complexity delta; `claude://sessions/?search=`; Output contract compliance tests; ARCHITECTURE.md; `--discover` flag
 - **v0.63.0** - `calls://` complete: `?callees=`, `?rank=callers`, `?builtins=` filtering; I005 + I006 import rules; `reveal hotspots` subcommand; B006 false-positive fixes; cpanel `full-audit`, `?domain_type=`

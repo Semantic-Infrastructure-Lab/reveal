@@ -257,7 +257,7 @@ Three help tiers serve different consumers:
 
 `reveal help://schemas/<adapter>` → calls `get_schema()` → returns JSON schema for programmatic consumers.
 
-`reveal --discover` → dumps all 22 adapters' schemas in one JSON document (output_types, query_params, cli_flags, examples, notes). Designed for agent capability detection.
+`reveal --discover` → dumps all 23 adapters' schemas in one JSON document (output_types, query_params, cli_flags, examples, notes). Designed for agent capability detection.
 
 ### Help Data Sources
 
