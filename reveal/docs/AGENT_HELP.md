@@ -1719,21 +1719,21 @@ reveal file.py process_request --copy
 reveal file.py -q                    # -q / --no-breadcrumbs / --quiet
 ```
 
-**Token budget flags (URI adapters — applies to list fields like items/results/checks):**
+**Token budget flags (URI adapters — limits list fields like items/results/checks/commits):**
 ```bash
-# Stop after N results
-reveal 'ssl://example.com' --check --max-items 20
+# Stop after N results (text and JSON both respect this)
+reveal 'ast://./src?complexity>5' --max-items 20
 
-# Stop after N bytes of output
+# Stop after N bytes of list content
 reveal 'ast://./src?complexity>5' --max-bytes 8192
 
-# Truncate long string values to N chars
-reveal 'git://.' --max-snippet-chars 120
+# Truncate long string values to N chars (useful for calls:// call lists, git messages, etc.)
+reveal 'calls://./src' --max-snippet-chars 80
 
-# Combine: first 50 items, each string max 80 chars
+# Combine: first 50 items, strings max 80 chars
 reveal 'calls://./src' --max-items 50 --max-snippet-chars 80
 ```
-When truncated, reveal adds a `meta.budget` field to the JSON output with truncation details.
+When truncated, reveal adds a `meta.budget` field to the JSON output with cursor for pagination. Note: the header/count line in text output may show the pre-budget total; the actual listed results are limited.
 
 ### JSON Format Details
 
