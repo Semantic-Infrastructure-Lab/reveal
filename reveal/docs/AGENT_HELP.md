@@ -492,7 +492,7 @@ reveal models.py --outline
 
 ---
 
-### Task: "Navigate inside a function — outline, scope, variable flow, calls" (v0.71.0+)
+### Task: "Navigate inside a function — outline, scope, variable flow, calls" (v0.72.0+)
 
 Four flags for sub-function progressive disclosure. Use when a function is too large to read in full but you need to understand its structure, trace a variable, or find calls in a range.
 
@@ -1452,6 +1452,7 @@ reveal doc.md
 # Extract a specific section by heading name (case-insensitive, substring OK)
 reveal doc.md "Installation"
 reveal doc.md "install"          # substring match → "## Installation"
+reveal doc.md --section "Installation"   # flag form (same behavior, useful in scripts)
 
 # OR-alternation: extract multiple named sections in one call
 reveal doc.md "Open Issues|Action Items"
@@ -1467,11 +1468,17 @@ reveal doc.md --links --link-type external
 # Only internal links (broken link detection)
 reveal doc.md --links --link-type internal
 
+# Only show broken links (✗ entries — skip the passing ones)
+reveal doc.md --broken-only
+
 # Extract code blocks
 reveal doc.md --code
 
 # Only Python code blocks
 reveal doc.md --code --language python
+
+# Include inline code spans (backtick snippets in text, not just fenced blocks)
+reveal doc.md --code --inline
 
 # Get YAML frontmatter
 reveal doc.md --frontmatter
@@ -1707,7 +1714,26 @@ reveal file.py --format=typed
 # Copy to clipboard
 reveal file.py --copy
 reveal file.py process_request --copy
+
+# Suppress breadcrumb hints (clean output for scripts / agents)
+reveal file.py -q                    # -q / --no-breadcrumbs / --quiet
 ```
+
+**Token budget flags (URI adapters — applies to list fields like items/results/checks):**
+```bash
+# Stop after N results
+reveal 'ssl://example.com' --check --max-items 20
+
+# Stop after N bytes of output
+reveal 'ast://./src?complexity>5' --max-bytes 8192
+
+# Truncate long string values to N chars
+reveal 'git://.' --max-snippet-chars 120
+
+# Combine: first 50 items, each string max 80 chars
+reveal 'calls://./src' --max-items 50 --max-snippet-chars 80
+```
+When truncated, reveal adds a `meta.budget` field to the JSON output with truncation details.
 
 ### JSON Format Details
 
@@ -1848,7 +1874,7 @@ reveal /etc/nginx/sites-enabled/ --extract domains | \
 reveal cpanel://USERNAME/ssl --only-failures --check-live
 
 # Pattern detection with minimum severity filter
-reveal src/ --pattern --severity high
+reveal src/ --check --severity high
 ```
 
 ### Pattern 1: Finding All High-Complexity Functions
@@ -2915,6 +2941,10 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | See directory structure | `reveal src/` |
 | See file structure | `reveal file.py` |
 | Hierarchical view | `reveal file.py --outline` |
+| Function skeleton | `reveal file.py func_name --outline` |
+| Scope at a line | `reveal file.py :123 --scope` |
+| Trace a variable | `reveal file.py func_name --varflow result` |
+| Calls in a range | `reveal file.py func_name --calls 89-120` |
 | Extract by name | `reveal file.py func_name` |
 | Extract class method | `reveal file.py Class.method` |
 | Extract at line | `reveal file.py 73` or `reveal file.py :73` |
@@ -2954,11 +2984,16 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Get JSON output | `reveal file.py --format=json` |
 | Copy to clipboard | `reveal file.py --copy` |
 | Extract links | `reveal doc.md --links` |
+| Broken links only | `reveal doc.md --broken-only` |
 | Extract code blocks | `reveal doc.md --code` |
+| Include inline snippets | `reveal doc.md --code --inline` |
 | First/last N functions | `reveal file.py --head 5` / `--tail 5` |
 | List all rules | `reveal --rules` |
 | Explain rule | `reveal --explain B001` |
 | Check file type | `reveal file.py --meta` |
+| Suppress breadcrumbs | `reveal file.py -q` |
+| Budget: first N items | `reveal uri:// --max-items 50` |
+| Budget: byte cap | `reveal uri:// --max-bytes 4096` |
 
 ---
 
@@ -3059,6 +3094,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
+- **v0.72.0** - nav flags released: `--outline` (element mode → control-flow skeleton), `--scope` (ancestor scope at a line), `--varflow` (read/write trace), `--calls` (call sites in a range); `--broken-only` and `--inline` documented; `--section NAME` flag; budget flags (`--max-items`, `--max-bytes`, `--max-snippet-chars`) for token management
 - **v0.67.0** - B005 skip `try/except ImportError` optional-dep pattern; element-not-found lists available names; `--analyzer text` false suggestion removed; M102 suppress patterns + dynamic-load heuristics in agent-help; OR-pattern failure hints `--search`
 - **v0.64.0** - `reveal overview` + `reveal deps` subcommands; `reveal-mcp` MCP server (5 tools); `pack --content` tiered emission; `xlsx://` Power Pivot extraction (`?powerpivot=tables/schema/measures/dax/relationships`); `calls://?uncalled` dead code candidates; `diff://` per-function complexity delta; `claude://sessions/?search=`; Output contract compliance tests; ARCHITECTURE.md; `--discover` flag
 - **v0.63.0** - `calls://` complete: `?callees=`, `?rank=callers`, `?builtins=` filtering; I005 + I006 import rules; `reveal hotspots` subcommand; B006 false-positive fixes; cpanel `full-audit`, `?domain_type=`

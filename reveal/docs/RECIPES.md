@@ -329,7 +329,7 @@ reveal 'ast://.?decorator=dataclass&type=class'
 reveal src/ --decorator-stats
 ```
 
-### Navigate inside a large function (v0.71.0+)
+### Navigate inside a large function (v0.72.0+)
 
 When a function is too large to read in full, use sub-function nav flags to
 understand it without reading every line.
