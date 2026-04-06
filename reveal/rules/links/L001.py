@@ -234,7 +234,7 @@ class L001(BaseRule):
 
         # Skip absolute paths starting with / (web paths)
         if file_part.startswith('/'):
-            # TODO: Handle in L003 with framework routing
+            # Absolute paths are handled by L003 (framework routing)
             return (False, "")
 
         # Resolve relative path and validate
