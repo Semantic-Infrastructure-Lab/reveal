@@ -75,7 +75,7 @@ _SCHEMA_OUTPUT_TYPES = [
             }},
             'quality': {'type': 'object', 'properties': {
                 'score': {'type': 'number'}, 'long_functions': {'type': 'integer'},
-                'deep_nesting': {'type': 'integer'},
+                'deep_nesting': {'type': 'integer'}, 'check_issues': {'type': 'integer'},
             }},
         }},
     },

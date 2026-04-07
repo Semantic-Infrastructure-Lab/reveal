@@ -22,6 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `depends://` registered in `help.py` STATIC_HELP
 - Commit: `aa4e6f7` — 28 files, +707/-2075 lines; all 7,325 tests pass
 
+### Schema Fixes (fubunu-0407)
+- **7 adapter schema gaps closed** (Tier 3 from DOC_REVIEW_2026-04-06): `get_schema()` now matches implemented behavior for agents consuming machine-readable schemas
+  - `claude://`: added `?tokens` param (token usage breakdown)
+  - `xlsx://`: added `powerquery`, `names`, `connections` params
+  - `ssl://`: added `--summary` to `_SCHEMA_CLI_FLAGS`
+  - `mysql://`: added 5 missing elements (`errors`, `databases`, `indexes`, `slow-queries`, `health`)
+  - `letsencrypt://`: added `common_name`, `issuer` fields to cert items in output type schema
+  - `stats://`: added `check_issues` field to `stats_file` quality output schema
+  - `json://`: added `sort`, `limit`, `offset` result control params (already documented in notes)
+  - `markdown://`: `aggregate=field` confirmed present (pre-existing, DOC_REVIEW false positive)
+
 ## [0.73.0] - 2026-04-06 (liquid-carnage-0406)
 
 ### Added

@@ -9,6 +9,9 @@ _SCHEMA_QUERY_PARAMS = {
     'type': {'type': 'flag', 'description': 'Show type at current path'},
     'keys': {'type': 'flag', 'description': 'List keys (objects) or indices (arrays)'},
     'length': {'type': 'flag', 'description': 'Get array/string length or object key count'},
+    'sort': {'type': 'string', 'description': 'Sort filtered array results by field (prefix - for descending)', 'examples': ['sort=name', 'sort=-date']},
+    'limit': {'type': 'integer', 'description': 'Limit number of results from a filtered array', 'examples': ['limit=10', 'limit=50']},
+    'offset': {'type': 'integer', 'description': 'Skip first N results from a filtered array', 'examples': ['offset=20', 'offset=100']},
 }
 
 def _json_output_type(type_name: str, description: str, extra_props: dict) -> dict:

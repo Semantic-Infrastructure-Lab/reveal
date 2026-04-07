@@ -435,6 +435,9 @@ _SCHEMA_QUERY_PARAMS = {
     'limit': {'type': 'integer', 'description': 'Maximum number of rows to return', 'examples': ['limit=100', 'limit=50']},
     'formulas': {'type': 'boolean', 'description': 'Show formulas instead of values', 'examples': ['formulas=true']},
     'powerpivot': {'type': 'string', 'description': 'Extract Power Pivot model (tables|schema|measures|dax)', 'examples': ['powerpivot=schema', 'powerpivot=dax', 'powerpivot=tables', 'powerpivot=measures']},
+    'powerquery': {'type': 'string', 'description': 'Extract Power Query M code (list|show|<name>)', 'examples': ['powerquery=list', 'powerquery=show', 'powerquery=SalesData']},
+    'names': {'type': 'flag', 'description': 'List named ranges defined in the workbook', 'examples': ['names']},
+    'connections': {'type': 'string', 'description': 'List external data connections (list or omit value)', 'examples': ['connections=list', 'connections']},
 }
 
 _SCHEMA_OUTPUT_TYPES = [

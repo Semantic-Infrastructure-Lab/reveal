@@ -54,6 +54,11 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'Show last assistant turn (shorthand for ?tail=1)',
         'examples': ['?last']
     },
+    'tokens': {
+        'type': 'flag',
+        'description': 'Token usage breakdown by message role (input/output/cache)',
+        'examples': ['?tokens']
+    },
 }
 
 _SCHEMA_ELEMENTS = {

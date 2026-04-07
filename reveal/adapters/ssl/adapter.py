@@ -23,7 +23,8 @@ _SCHEMA_CLI_FLAGS = [
     '--check',
     '--advanced',
     '--only-failures',
-    '--expiring-within=<days>'
+    '--expiring-within=<days>',
+    '--summary',
 ]
 
 def _ssl_output_type(type_name: str, description: str, props: dict) -> dict:

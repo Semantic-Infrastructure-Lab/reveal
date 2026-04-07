@@ -176,7 +176,12 @@ class MySQLAdapter(ResourceAdapter):
                 'replication': 'Replication status and lag',
                 'storage': 'Database and table sizes',
                 'performance': 'Query performance metrics',
-                'variables': 'Server configuration variables'
+                'variables': 'Server configuration variables',
+                'errors': 'Recent server errors from error log',
+                'databases': 'List of databases with sizes',
+                'indexes': 'Index usage and fragmentation stats',
+                'slow-queries': 'Slow query log entries and stats',
+                'health': 'Overall server health summary',
             },
             'cli_flags': [
                 '--check',      # Run health checks

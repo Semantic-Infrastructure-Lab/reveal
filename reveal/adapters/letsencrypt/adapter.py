@@ -250,6 +250,8 @@ class LetsEncryptAdapter(ResourceAdapter):
                                     'properties': {
                                         'name': {'type': 'string'},
                                         'cert_path': {'type': 'string'},
+                                        'common_name': {'type': 'string'},
+                                        'issuer': {'type': 'string'},
                                         'san': {'type': 'array', 'items': {'type': 'string'}},
                                         'days_until_expiry': {'type': 'integer'},
                                         'not_after': {'type': 'string'},
