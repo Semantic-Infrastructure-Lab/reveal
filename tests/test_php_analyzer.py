@@ -741,5 +741,112 @@ function classify($n) {
             os.unlink(path)
 
 
+class TestStatsQualityCheckPenalty(unittest.TestCase):
+    """Tests for Issue 4: check rule detections wired into quality score."""
+
+    def _make_quality_config(self):
+        from reveal.adapters.stats.queries import QUALITY_DEFAULTS
+        import copy
+        return copy.deepcopy(QUALITY_DEFAULTS)
+
+    def test_no_check_issues_score_unchanged(self):
+        """Score is unaffected when no check issues are present."""
+        from reveal.adapters.stats.metrics import calculate_quality_score
+        config = self._make_quality_config()
+        score_without = calculate_quality_score(3.0, 20.0, 0, 0, 5, config)
+        score_with_empty = calculate_quality_score(3.0, 20.0, 0, 0, 5, config, {})
+        score_with_zeros = calculate_quality_score(3.0, 20.0, 0, 0, 5, config,
+                                                   {'critical': 0, 'high': 0, 'medium': 0, 'low': 0})
+        self.assertEqual(score_without, score_with_empty)
+        self.assertEqual(score_without, score_with_zeros)
+
+    def test_high_issues_reduce_score(self):
+        """HIGH detections reduce the quality score."""
+        from reveal.adapters.stats.metrics import calculate_quality_score
+        config = self._make_quality_config()
+        score_clean = calculate_quality_score(3.0, 20.0, 0, 0, 5, config)
+        score_issues = calculate_quality_score(3.0, 20.0, 0, 0, 5, config,
+                                               {'critical': 0, 'high': 4, 'medium': 0, 'low': 0})
+        # 4 HIGH × 5 pts = 20 pts penalty
+        self.assertAlmostEqual(score_clean - score_issues, 20.0, places=1)
+
+    def test_medium_issues_reduce_score(self):
+        """MEDIUM detections reduce the quality score."""
+        from reveal.adapters.stats.metrics import calculate_quality_score
+        config = self._make_quality_config()
+        score_clean = calculate_quality_score(3.0, 20.0, 0, 0, 5, config)
+        score_issues = calculate_quality_score(3.0, 20.0, 0, 0, 5, config,
+                                               {'critical': 0, 'high': 0, 'medium': 10, 'low': 0})
+        # 10 MEDIUM × 2 pts = 20 pts penalty
+        self.assertAlmostEqual(score_clean - score_issues, 20.0, places=1)
+
+    def test_check_penalty_capped_at_max(self):
+        """Total check penalty is capped at 40 points."""
+        from reveal.adapters.stats.metrics import calculate_quality_score
+        config = self._make_quality_config()
+        score_clean = calculate_quality_score(3.0, 20.0, 0, 0, 5, config)
+        # 100 HIGH × 5 pts = 500 pts → capped at 40
+        score_many = calculate_quality_score(3.0, 20.0, 0, 0, 5, config,
+                                             {'critical': 0, 'high': 100, 'medium': 0, 'low': 0})
+        self.assertAlmostEqual(score_clean - score_many, 40.0, places=1)
+
+    def test_score_never_below_zero(self):
+        """Score stays at 0 even with massive check penalties."""
+        from reveal.adapters.stats.metrics import calculate_quality_score
+        config = self._make_quality_config()
+        # Already bad metrics + big check penalty
+        score = calculate_quality_score(50.0, 200.0, 20, 20, 20, config,
+                                        {'critical': 100, 'high': 100, 'medium': 100, 'low': 100})
+        self.assertGreaterEqual(score, 0.0)
+
+    def test_check_issues_exposed_in_file_stats(self):
+        """calculate_file_stats exposes check_issues count in quality dict."""
+        import tempfile
+        code = '''<?php
+function foo($x) {
+    if ($x > 0) {
+        return true;
+    }
+}
+
+function bar($x) {
+    $y = 1; $z = 2;
+    return $x;
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.php', delete=False) as f:
+            f.write(code)
+            path = f.name
+        try:
+            from reveal.adapters.stats.metrics import calculate_file_stats
+            from reveal.adapters.stats.queries import get_quality_config
+            from pathlib import Path
+            analyzer = PhpAnalyzer(path)
+            structure = analyzer.get_structure()
+            content = analyzer.content
+            stats = calculate_file_stats(
+                Path(path), structure, content,
+                get_quality_config(Path(path)),
+                lambda p: str(p)
+            )
+            self.assertIn('check_issues', stats['quality'])
+            self.assertIsInstance(stats['quality']['check_issues'], int)
+        finally:
+            os.unlink(path)
+
+    def test_php_file_with_issues_scores_below_100(self):
+        """A PHP file with 30+ check issues should score below 100."""
+        probe = '/home/scottsen/src/projects/sociamonials-ops/tools/php-ast/php-ast-probe.php'
+        import os.path
+        if not os.path.exists(probe):
+            self.skipTest('php-ast-probe.php not available')
+        from reveal.adapters.stats.adapter import StatsAdapter
+        a = StatsAdapter(probe)
+        result = a.get_structure()
+        quality = result['files'][0]['quality']
+        self.assertLess(quality['score'], 100.0, 'File with 30+ issues should score below 100')
+        self.assertGreater(quality['check_issues'], 0, 'Should report check issue count')
+
+
 if __name__ == '__main__':
     unittest.main()

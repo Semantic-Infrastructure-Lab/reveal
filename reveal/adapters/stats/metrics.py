@@ -1,7 +1,7 @@
 """Metrics calculation functions for stats adapter."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 def count_line_types(lines: list) -> tuple:
@@ -121,7 +121,8 @@ def calculate_quality_score(
     long_func_count: int,
     deep_nesting_count: int,
     total_functions: int,
-    quality_config: Dict[str, Any]
+    quality_config: Dict[str, Any],
+    check_issue_counts: Optional[Dict[str, int]] = None,
 ) -> float:
     """Calculate quality score (0-100, higher is better).
 
@@ -134,6 +135,8 @@ def calculate_quality_score(
         deep_nesting_count: Number of functions with depth >4
         total_functions: Total number of functions
         quality_config: Quality configuration dict
+        check_issue_counts: Counts of check detections by severity
+            (keys: 'critical', 'high', 'medium', 'low')
 
     Returns:
         Quality score 0-100
@@ -177,7 +180,43 @@ def calculate_quality_score(
         max_penalty = ratio_pen.get('max', 25)
         score -= min(max_penalty, deep_nesting_ratio * multiplier)
 
+    # Penalize check rule detections by severity
+    if check_issue_counts:
+        check_pen = penalties.get('check_issues', {})
+        penalty = (
+            check_issue_counts.get('critical', 0) * check_pen.get('critical', 10) +
+            check_issue_counts.get('high', 0) * check_pen.get('high', 5) +
+            check_issue_counts.get('medium', 0) * check_pen.get('medium', 2) +
+            check_issue_counts.get('low', 0) * check_pen.get('low', 0.5)
+        )
+        score -= min(check_pen.get('max', 40), penalty)
+
     return max(0, score)
+
+
+def _count_check_issues(
+    file_path: Path,
+    structure: Dict[str, Any],
+    content: str,
+) -> Dict[str, int]:
+    """Run check rules and count detections by severity.
+
+    Reuses already-computed structure and content — no re-parsing.
+
+    Returns:
+        Dict with counts for 'critical', 'high', 'medium', 'low'
+    """
+    try:
+        from ...rules import RuleRegistry
+        detections = RuleRegistry.check_file(str(file_path), structure, content)
+        counts: Dict[str, int] = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+        for d in detections:
+            sev = d.severity.value if d.severity else 'medium'
+            if sev in counts:
+                counts[sev] += 1
+        return counts
+    except Exception:
+        return {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
 
 
 def calculate_file_stats(
@@ -213,6 +252,9 @@ def calculate_file_stats(
     # Extract complexity metrics
     metrics = extract_complexity_metrics(functions, content)
 
+    # Run check rules using already-computed structure + content (no re-parsing)
+    check_issue_counts = _count_check_issues(file_path, structure, content)
+
     # Calculate quality score
     quality_score = calculate_quality_score(
         metrics['avg_complexity'],
@@ -220,7 +262,8 @@ def calculate_file_stats(
         len(metrics['long_functions']),
         len(metrics['deep_nesting']),
         len(functions),
-        quality_config
+        quality_config,
+        check_issue_counts,
     )
 
     # Get display path
@@ -249,6 +292,7 @@ def calculate_file_stats(
             'long_functions': len(metrics['long_functions']),
             'deep_nesting': len(metrics['deep_nesting']),
             'avg_function_length': round(metrics['avg_func_length'], 1),
+            'check_issues': sum(check_issue_counts.values()),
         },
         'issues': {
             'long_functions': metrics['long_functions'],

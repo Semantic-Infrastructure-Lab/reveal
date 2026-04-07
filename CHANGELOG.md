@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.72.4] - 2026-04-06 (yaponuxo-0406)
+
+### Fixed
+- **`stats://` quality score now reflects check rule detections** (`reveal/adapters/stats/metrics.py`, `reveal/adapters/stats/queries.py`): Previously `calculate_quality_score` used only code metrics (complexity, function length, nesting), so a file with 30+ check issues would still score 100/100. Now `_count_check_issues` runs `RuleRegistry.check_file` with the already-computed `structure` and `content` (no re-parsing), counts detections by severity, and passes them to `calculate_quality_score` as `check_issue_counts`. Penalty formula: CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, capped at 40 total. The PHP probe file (30 issues) now scores 79 instead of 100.
+- **`quality.check_issues` exposed in per-file stats output**: `calculate_file_stats` now includes `check_issues: int` in the `quality` dict, making the issue count visible in `stats://` output alongside the score.
+- **`check_penalties` section added to `QUALITY_DEFAULTS`** and thus configurable via `.reveal/stats-quality.yaml` or `~/.config/reveal/stats-quality.yaml`.
+
+### Tests
+- **7 new tests** (`tests/test_php_analyzer.py`, `TestStatsQualityCheckPenalty`): no-issues score unchanged; HIGH detections apply correct penalty; MEDIUM detections apply correct penalty; penalty capped at 40; score never below 0; `check_issues` exposed in file stats dict; PHP file with 30+ issues scores below 100. **Test count: 7,314 → 7,321**.
+
 ## [0.72.3] - 2026-04-06 (magical-shrine-0406)
 
 ### Fixed

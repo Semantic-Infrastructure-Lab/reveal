@@ -27,6 +27,13 @@ QUALITY_DEFAULTS = {
             'multiplier': 50,          # For long_func_ratio, deep_nesting_ratio
             'max': 25,
         },
+        'check_issues': {
+            'critical': 10,            # Points lost per CRITICAL detection
+            'high': 5,                 # Points lost per HIGH detection
+            'medium': 2,               # Points lost per MEDIUM detection
+            'low': 0.5,                # Points lost per LOW detection
+            'max': 40,                 # Maximum total penalty from check issues
+        },
     }
 }
 
