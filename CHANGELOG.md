@@ -12,7 +12,26 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.74.0] - 2026-04-07
+
+### Test Coverage + Doc Quality (revealed-sphinx-0407)
+- **BACK-127 test coverage** (`tests/test_claude_adapter_gaps.py`, `tests/test_claude_renderer.py`): 22 new tests covering `get_message_range()` (type, metadata filtering, 1-indexed turns, raw message_index, total count, empty input), `_post_process_message_range` (no-slice, range slice, open-ended range, filtered_from, None guard), and `_render_claude_message_range` (header with/without range, open-ended header, user/assistant text, tool-only turns, truncation, `?full`/`--verbose` equivalence, filtered_from, tool_result count).
+- **CLAUDE_ADAPTER_GUIDE.md doc fixes**: duplicate element numbering corrected (`agents` was mislabeled §11, now §12); new `### 13. chain` element added to Elements Reference documenting `/chain` route (syntax, example, output fields, notes on cycle detection and README frontmatter traversal, `--base-path` hint); header updated from "eleven" to "thirteen elements".
+
+### claude:// UX Fixes (hologram-solar-0407)
+- **N1 — Word-boundary search** (`?word`): cross-session `?search=ICT` no longer returns 2706 false positives from "picture", "critical", etc. Add `?word` to any `claude://sessions/?search=` query for `\bTERM\b` semantics. Phase 1 grep stays substring (speed); word-boundary filter applied in phase 2. (`analysis/search.py`, `analysis/messages.py`)
+- **N2 — `?full` on `/assistant`**: `reveal claude://session/NAME/assistant?full` disables the 600-char per-message truncation. (`adapter.py`, `renderer.py`)
+- **N3 — Tool-only turn display**: `/assistant` no longer shows dead-end `(tool calls only, no text)`. Tool-only turns now render one-line summaries: `Agent → research strategies`, `Write → STRATEGIES.md`. (`renderer.py`)
+- **N4 — `message/N` tool_use params**: `message/N` now shows key input params for common tools — `file_path` + content size for Write, `file_path` + old→new char counts for Edit, `command` for Bash, `prompt` for Agent, `pattern` for Glob/Grep. (`renderer.py`)
+- **N5 — `tool_result` content visible**: `message/N` now renders `tool_result` blocks (content preview, 500 chars). Per-session `?search=` now searches inside tool_result content. (`renderer.py`, `analysis/messages.py`)
+- All 477 claude adapter tests pass; full suite 7,325 passed.
+
+### BACK-127 + full/verbose UX consistency (intergalactic-moon-0407)
+- **`/message --range` route**: `reveal claude://session/NAME/message --range 10-20` returns interleaved user+assistant turns. Open-ended `--range 300-` also supported. (`adapter.py`, `analysis/messages.py`, `renderer.py`)
+- **`?full` and `--verbose` now equivalent** across `/assistant`, `/messages`, and `/message`: previously `/assistant` only respected `?full` and `/messages` only respected `--verbose`. Both flags now check both mechanisms. (`renderer.py`)
+- **Parser: open-ended `--range N-`**: `--range 300-` stores `(300, None)`; `_slice_list` naturally handles it via `items[n-1:None]`. (`cli/parser.py`)
+- **`test_check_flag` updated**: test was using `handle_file` + `args.check=True` (removed in ethereal-witch-0407 refactor); updated to call `run_check` directly. (`tests/test_routing.py`)
+- **`CLAUDE_ADAPTER_GUIDE.md` updated**: §11 documents `/message --range` syntax, examples, range indexing rules, `?full`/`--verbose` equivalence note.
 
 ### Documentation (oceanic-sea-0407)
 - **9 critical doc errors fixed**: CI_RECIPES exit codes unswapped, SSL pipeline double-prefix removed, NGINX N008–N012 descriptions added, SQLITE "planned feature" label stripped, OUTPUT_CONTRACT ghost commands removed, HELP_SYSTEM_GUIDE decorator API fixed, ANALYZER_PATTERNS import fixed (2 locations), AGENT_HELP token cost corrected (~12K→~26.5K)
@@ -33,6 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `json://`: added `sort`, `limit`, `offset` result control params (already documented in notes)
   - `markdown://`: `aggregate=field` confirmed present (pre-existing, DOC_REVIEW false positive)
 - **QUERY_PARAMETER_REFERENCE.md expanded**: added `depends://`, `xlsx://`, `cpanel://` sections with full param docs; expanded `claude://` from 3 to 9 params; added `autossl://`, `letsencrypt://`, `nginx://` to no-params section; updated Quick Reference table from 14 to 21 adapters
+
+### Check Exit Code Fix (ethereal-witch-0407)
+- **`reveal check file.py` now exits 1 on violations** (`reveal/cli/commands/check.py`, `reveal/checks.py`): Single-file mode was silently bridging through `handle_file` → `_dispatch_special_flags` and ignoring the violation count. Fixed by routing single files directly through `run_pattern_detection` in `run_check`, matching directory-mode behavior. `run_pattern_detection` now returns `len(detections)`.
+- **`--stdin --check` and `@file --check` now exit 1 on violations** (`reveal/cli/handlers/batch.py`): `handle_stdin_mode` accumulated no violation count from file paths — `_process_stdin_file` returned `None` and the function always ended with `sys.exit(0)`. Fixed: `_process_stdin_file` takes `is_check_mode` param, calls `run_pattern_detection` directly when set, returns violation count; `handle_stdin_mode` accumulates total and exits `1 if total_violations else 0`. Enables `git diff --name-only | reveal --stdin --check` as a CI gate.
+- **Dead code removed**: `args.check` branch in `_dispatch_special_flags` (`file_handler.py`) — unreachable from all normal paths after above fixes. Removed.
+- **Docs updated**: `SUBCOMMANDS_GUIDE.md` exit code table corrected (removed single-file always-exits-0 caveat); `CI_RECIPES.md` added "Changed-Files Quality Gate" recipe using `git diff --name-only | reveal --stdin --check`.
+- **9 new tests**: `test_check_subcommand_exits_1_with_violations`, `test_check_subcommand_exits_0_no_violations`, `test_stdin_check_exits_1_with_violations`, `test_stdin_check_exits_0_no_violations`, `test_at_file_check_exits_1_with_violations`, `test_at_file_check_exits_0_no_violations` (+ 3 prior from toxic-force). Exit code 1 now consistent across all `reveal check` invocation forms.
+- **Note**: The toxic-force-0407 CHANGELOG entry for `SUBCOMMANDS_GUIDE.md` ("exit code 1 is directory-mode only; single-file always exits 0") documented the behavior accurately at the time — it was a documentation-of-a-bug pass. This entry is the code fix.
 
 ### Documentation + Code (toxic-force-0407)
 - **Doc audit Tier 2 complete**: all remaining 10 open items from DOC_REVIEW_2026-04-06 resolved
