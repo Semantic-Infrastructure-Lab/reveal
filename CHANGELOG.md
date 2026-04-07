@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation (oceanic-sea-0407)
+- **9 critical doc errors fixed**: CI_RECIPES exit codes unswapped, SSL pipeline double-prefix removed, NGINX N008–N012 descriptions added, SQLITE "planned feature" label stripped, OUTPUT_CONTRACT ghost commands removed, HELP_SYSTEM_GUIDE decorator API fixed, ANALYZER_PATTERNS import fixed (2 locations), AGENT_HELP token cost corrected (~12K→~26.5K)
+- **Batch count/version sweep**: adapter count 22→23, language count "190+"→"80", N rules 7→12 in AGENT_HELP, line counts updated across INDEX/README, deprecated `--check` flag replaced with `reveal check` subcommand in RECIPES/CONFIGURATION_GUIDE, phase/session footers stripped from 3 guides
+- **New doc**: `DEPENDS_ADAPTER_GUIDE.md` — first complete guide for `depends://` (Quick Start, URI syntax, 5 workflows, limitations, FAQ, Graphviz output)
+- **Archived**: `CODEBASE_REVIEW.md` and `XLSX_POWERBI_EXPANSION.md` moved to `internal-docs/archived/guides/`; unique sections from CODEBASE_REVIEW extracted into RECIPES.md (multi-adapter patterns, token strategies, real-world scenarios)
+- `depends://` registered in `help.py` STATIC_HELP
+- Commit: `aa4e6f7` — 28 files, +707/-2075 lines; all 7,325 tests pass
+
 ## [0.73.0] - 2026-04-06 (liquid-carnage-0406)
 
 ### Added
