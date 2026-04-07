@@ -4,7 +4,6 @@ category: guide
 ---
 # AST Adapter Guide
 
-**Version**: 1.0 (reveal 0.49.2+, current: 0.63.0)
 **Status**: 🟢 Stable - Production Ready
 **Adapter**: `ast://`
 
@@ -876,7 +875,7 @@ AST can't understand code meaning:
 
 ### Current Implementation Limitations
 
-**Complexity calculation**: Currently heuristic-based (line count proxy). Tree-sitter-based McCabe calculation coming soon.
+**Complexity calculation**: Tree-sitter-based McCabe cyclomatic complexity for supported languages; heuristic (line count proxy) for others. Check `reveal --languages` to see what your target language supports.
 
 **Language support**: Tree-sitter parsers available for 50+ languages, but complexity/decorator extraction may be Python-specific. Check language support:
 
@@ -1245,7 +1244,7 @@ sqlite3 code.db "SELECT file, symbol, complexity
 
 **Workflow guides:**
 - [RECIPES.md](../guides/RECIPES.md) - Reveal recipes and patterns
-- [CODEBASE_REVIEW.md](../guides/CODEBASE_REVIEW.md) - Code review workflows
+- [RECIPES.md](../guides/RECIPES.md) - Recipes and code review workflows
 
 **Language support:**
 - Run `reveal --languages` for complete list of supported languages
@@ -1293,7 +1292,7 @@ A: Yes! reveal supports 50+ languages. However, some features (decorator filteri
 
 **Q: How accurate is complexity measurement?**
 
-A: Currently heuristic-based. Tree-sitter-based McCabe calculation is planned for improved accuracy.
+A: Tree-sitter-based McCabe complexity for supported languages; heuristic (line count proxy) fallback for others. Run `reveal --languages` to see language-specific capabilities.
 
 **Q: Can I find all callers of a function?**
 

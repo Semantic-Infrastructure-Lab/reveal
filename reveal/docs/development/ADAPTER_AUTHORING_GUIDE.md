@@ -43,6 +43,19 @@ class MyAdapter(ResourceAdapter):
         return None
 
     @staticmethod
+    def get_schema():
+        """Describe query params and output fields for introspection (reveal help://myscheme)."""
+        return {
+            'query_params': {
+                'filter': {'type': 'string', 'description': 'Filter by name'}
+            },
+            'output_fields': {
+                'type': {'type': 'string', 'description': 'Resource type'},
+                'items': {'type': 'array', 'description': 'List of items'}
+            }
+        }
+
+    @staticmethod
     def get_help():
         """Get help documentation for this adapter."""
         return {
@@ -400,11 +413,13 @@ reveal help://myscheme-guide
 ## Checklist for Good Help
 
 - [ ] Implemented `get_help()` staticmethod
+- [ ] Implemented `get_schema()` staticmethod (query params + output fields)
 - [ ] Included name and description (required)
 - [ ] Added syntax string showing URI pattern
 - [ ] Provided 3-7 examples (simple → complex)
 - [ ] Added notes for gotchas/limitations
 - [ ] Included see_also breadcrumbs
+- [ ] If custom text rendering needed: `@register_renderer()` decorator on a renderer class
 - [ ] If complex: Created comprehensive guide
 - [ ] If has guide: Linked in help.py STATIC_HELP
 - [ ] If has guide: Referenced in get_help() see_also
@@ -421,7 +436,7 @@ reveal help://myscheme-guide
   - How to create non-file adapters
   - How to write validation rules
   - How to integrate with --check flag
-  - **Guide**: `reveal/REVEAL_ADAPTER_GUIDE.md` or `reveal help://reveal`
+  - **Guide**: `reveal/docs/adapters/REVEAL_ADAPTER_GUIDE.md` or `reveal help://reveal`
 
 ### Other Examples
 
@@ -434,7 +449,7 @@ reveal help://myscheme-guide
 - **Comprehensive guide example**: `reveal/docs/PYTHON_ADAPTER_GUIDE.md`
 - **Help system**: `reveal/adapters/help.py`
 - **Base adapter**: `reveal/adapters/base.py`
-- **Anti-patterns guide**: `reveal/AGENT_HELP.md`
+- **Anti-patterns guide**: `reveal/docs/AGENT_HELP.md`
 
 ---
 

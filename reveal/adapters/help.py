@@ -157,7 +157,8 @@ class HelpAdapter(ResourceAdapter):
         'recipes': 'guides/RECIPES.md',
         'configuration': 'guides/CONFIGURATION_GUIDE.md',
         'config': 'guides/CONFIGURATION_GUIDE.md',
-        'codebase-review': 'guides/CODEBASE_REVIEW.md',
+        'codebase-review': 'guides/RECIPES.md',  # CODEBASE_REVIEW.md archived; content merged into RECIPES.md
+        'depends': 'adapters/DEPENDS_ADAPTER_GUIDE.md',
         'schemas': 'guides/SCHEMA_VALIDATION_HELP.md',
         'duplicates': 'guides/DUPLICATE_DETECTION_GUIDE.md',
         'duplicate-detection': 'guides/DUPLICATE_DETECTION_GUIDE.md',

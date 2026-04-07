@@ -63,12 +63,9 @@ def get_structure(self):
     return structure
 ```
 
-## Next Steps
+## Status
 
-1. Add sample Elixir files for testing
-2. Verify tree-sitter-elixir works correctly
-3. Add language-specific features if needed
-4. Update this documentation with real examples
+The Elixir analyzer uses tree-sitter-elixir for structure extraction. Function and module detection are implemented. Language-specific features (macro expansion, OTP pattern detection) are not currently extracted. Run `reveal file.ex` to see what is available for a given file.
 
 ## See Also
 

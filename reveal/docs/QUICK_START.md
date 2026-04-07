@@ -286,7 +286,7 @@ reveal 'ast://./src?complexity>10'
 
 ## Advanced: URI Adapters
 
-Reveal has **22 URI adapters** for specialized queries:
+Reveal has **23 URI adapters** for specialized queries:
 
 ```bash
 # Query code structure
@@ -352,7 +352,7 @@ reveal help://anti-patterns      # What NOT to do
 2. **Progressive disclosure** - Directory → File → Element
 3. **Token efficiency** - 10-150x fewer tokens than cat/grep
 4. **Line numbers** - All output is `file:line` format (vim compatible)
-5. **Zero config** - Works out of the box on 190+ languages
+5. **Zero config** - Works out of the box on 80 languages (64 built-in + 16 tree-sitter)
 
 ---
 
@@ -374,7 +374,7 @@ reveal help://anti-patterns      # What NOT to do
 
 **Got 5 more minutes?** Read [RECIPES.md](guides/RECIPES.md) for practical workflows.
 
-**Ready to go deep?** Read [CODEBASE_REVIEW.md](guides/CODEBASE_REVIEW.md) for complete review patterns.
+**Ready to go deep?** Read [RECIPES.md](guides/RECIPES.md) for complete workflows and patterns.
 
 ---
 

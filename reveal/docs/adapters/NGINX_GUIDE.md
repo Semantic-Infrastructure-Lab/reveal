@@ -298,7 +298,7 @@ Matches on `server_name` and all aliases. Essential for targeting a specific dom
 reveal /etc/nginx/conf.d/users/myuser.conf --check
 ```
 
-Runs the N001–N007 nginx rules against the config. Results are grouped when a rule fires many times in one file (configurable with `--no-group`).
+Runs the N001–N012 nginx rules against the config. Results are grouped when a rule fires many times in one file (configurable with `--no-group`).
 
 #### N001 — Duplicate backends
 
@@ -363,6 +363,65 @@ N007  INFO  ssl_stapling on but /etc/nginx/ssl/domain.com.crt has no OCSP respon
 ```
 
 This typically affects self-signed or internal CA certificates. For production Let's Encrypt certs this rule rarely fires.
+
+#### N008 — HTTPS site missing Strict-Transport-Security (HIGH)
+
+Detects server blocks listening on port 443 that lack a `Strict-Transport-Security` (HSTS) header — either on the server block itself or in the global `http{}` block. Without HSTS, browsers never learn to pin the site to HTTPS, leaving the first HTTP request vulnerable to SSL stripping.
+
+If HSTS is set globally in `nginx.conf http{}`, it covers all vhosts and no per-server findings are emitted.
+
+```
+N008  HIGH  Server block 'example.com' missing Strict-Transport-Security header
+```
+
+Fix: `add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;`
+
+Suppress per-server: `# reveal:allow-no-hsts`
+
+#### N009 — server_tokens not disabled (MEDIUM)
+
+Detects nginx configs where `server_tokens` is not set to `off`. By default nginx advertises its version in `Server` response headers and error pages (e.g. `Server: nginx/1.18.0`), giving attackers a free vulnerability shortlist. Fires once per file — it's a config gap, not a per-server issue.
+
+```
+N009  MEDIUM  server_tokens not disabled — nginx version exposed in response headers
+```
+
+Fix: add `server_tokens off;` to the `http{}` block in `nginx.conf`.
+
+Suppress: `# reveal:allow-server-tokens`
+
+#### N010 — Deprecated X-XSS-Protection header (LOW)
+
+Detects `add_header X-XSS-Protection` in server blocks. This header was removed from the W3C spec and is ignored by Chrome (since 2019) and Firefox (since 2023). Its presence signals an outdated config and can introduce vulnerabilities in older IE/Edge versions. When the header comes from a shared snippet, the snippet path is surfaced so one edit fixes all affected sites.
+
+```
+N010  LOW  Deprecated X-XSS-Protection header in server block at line 45
+```
+
+Modern replacement: `Content-Security-Policy`. Suppress: `# reveal:allow-xss-protection`
+
+#### N011 — SSL listener missing http2 (LOW)
+
+Detects `listen 443 ssl` without `http2` on the same line. Certbot's `--nginx` plugin consistently strips `http2` when it rewrites listen directives, making this a repeat pattern after Let's Encrypt renewals. Note: nginx 1.25.1+ uses a separate `http2 on;` directive — this rule only fires on the inline form; a standalone `http2 on;` suppresses the finding.
+
+```
+N011  LOW  listen 443 ssl at line 12 missing http2 — HTTP/2 disabled for this site
+```
+
+Fix: change `listen 443 ssl;` → `listen 443 ssl http2;` (or add `http2 on;` for nginx ≥ 1.25.1).
+
+Suppress per-server: `# reveal:allow-no-http2`
+
+#### N012 — No rate limiting on server block (LOW/MEDIUM)
+
+Two-level detection: **MEDIUM** if no `limit_req_zone` is defined anywhere in the file (rate limiting completely absent); **LOW** if a zone is defined but this server block uses no `limit_req` directive.
+
+```
+N012  MEDIUM  No limit_req_zone defined — server block has no rate limiting at all
+N012  LOW     limit_req_zone defined but not applied to this server block (line 8)
+```
+
+Suppress per-server: `# reveal:allow-no-rate-limit`
 
 #### `--only-failures` with `--check`
 

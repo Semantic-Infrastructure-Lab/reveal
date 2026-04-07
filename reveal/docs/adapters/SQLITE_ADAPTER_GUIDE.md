@@ -56,7 +56,7 @@ reveal sqlite:///app.db/comments
 reveal sqlite:///app.db --format=json
 reveal sqlite:///app.db/users --format=json
 
-# 6. Health check (planned feature)
+# 6. Health check
 reveal sqlite:///app.db --check
 ```
 

@@ -249,4 +249,4 @@ grep -r ssl_certificate /etc/nginx/ | grep -v ssl_certificate_key
 
 ---
 
-**Navigation**: [Index](../README.md) | [Adapter Guides](../INDEX.md#adapter-guides-18-files)
+**Navigation**: [Index](../README.md) | [Adapter Guides](../INDEX.md#adapter-guides-19-files)

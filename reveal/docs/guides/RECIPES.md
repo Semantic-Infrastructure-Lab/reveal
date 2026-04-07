@@ -1272,6 +1272,198 @@ reveal analysis.ipynb --format=json
 
 ---
 
+## Advanced Multi-Adapter Patterns
+
+### Pattern 1: The Complexity Drill-Down
+**Combine**: `stats://` → `ast://` → `diff://` → `git://`
+
+```bash
+# 1. Find hotspots
+reveal hotspots ./src
+
+# 2. Identify complex functions in hotspot
+reveal 'ast://src/hotspot.py?complexity>10'
+
+# 3. Compare to previous version (did we make it worse?)
+reveal diff://git://HEAD~10/src/hotspot.py:src/hotspot.py
+
+# 4. Who wrote the complex function?
+reveal git://src/hotspot.py?type=blame&element=complex_function
+```
+
+### Pattern 2: The Import Archaeology
+**Combine**: `imports://` → `ast://` → `git://`
+
+```bash
+# 1. Find circular dependencies
+reveal 'imports://src?circular'
+
+# 2. Identify functions involved in cycle
+reveal 'ast://src/module_a.py?type=function'
+reveal 'ast://src/module_b.py?type=function'
+
+# 3. When was the cycle introduced?
+reveal git://src/module_a.py?type=history
+reveal git://src/module_b.py?type=history
+```
+
+### Pattern 3: The Config Drift Detector
+**Combine**: `json://` → `diff://` → `env://`
+
+```bash
+# 1. Understand config structure
+reveal json://config.json?schema
+
+# 2. Compare environments
+reveal diff://json://config.dev.json:json://config.prod.json
+
+# 3. Check environment variables
+reveal env://
+```
+
+### Pattern 4: The Security Sweep
+**Combine**: `ast://` → `git://` → `env://`
+
+```bash
+# 1. Check for code-level security issues (B001-B006, S701)
+reveal check src/ --select B,S
+
+# 2. Who wrote insecure code?
+reveal git://src/insecure.py?type=blame&element=bad_function
+
+# 3. Check for secrets in env
+reveal env:// --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'
+```
+
+### Pattern 5: The Documentation Validator
+**Combine**: `markdown://` → `ast://` → `diff://`
+
+```bash
+# 1. Check for broken links across all docs
+reveal check docs/ --select L
+
+# 2. Check frontmatter completeness
+reveal check docs/ --select F
+
+# 3. Verify docs updated with code changes
+reveal diff://git://HEAD~1/docs:docs
+```
+
+---
+
+## Token-Efficient AI Review Strategies
+
+### Strategy 1: Progressive Disclosure
+
+```bash
+# Layer 1: Structure (~100 tokens)
+reveal src/
+
+# Layer 2: Stats (~200 tokens)
+reveal stats://./src
+
+# Layer 3: Hotspots (~500 tokens)
+reveal hotspots ./src
+
+# Layer 4: Specific file outline (~150 tokens)
+reveal src/hotspot.py --outline
+
+# Layer 5: Specific function (~50 tokens)
+reveal src/hotspot.py complex_function
+```
+
+~1,000 tokens total vs ~500,000 for full file reads. **500x improvement.**
+
+### Strategy 2: Query-Driven Exploration
+
+```bash
+# "What are the most complex functions?"
+reveal 'ast://./src?complexity>15' --format=json
+
+# "Are there circular dependencies?"
+reveal 'imports://src?circular'
+
+# "Who wrote this function?"
+reveal git://src/app.py?type=blame&element=process
+
+# "What changed between these versions?"
+reveal diff://v1.py:v2.py
+```
+
+### Strategy 3: Semantic Slicing
+
+```bash
+# First 10 functions (entry points)
+reveal app.py --head 10
+
+# Last 5 functions (utilities)
+reveal app.py --tail 5
+```
+
+### Strategy 4: Format + Filter Pipeline
+
+```bash
+# Extract only function names
+reveal app.py --format=json | jq -r '.structure.functions[].name'
+
+# Functions over 50 lines
+reveal app.py --format=json | \
+  jq -r '.structure.functions[] | select(.line_count > 50) | .name'
+```
+
+### Strategy 5: Multi-Pass Budget
+
+- **Pass 1** (~500 tokens): Stats + hotspots
+- **Pass 2** (~1,000 tokens): AST queries + imports
+- **Pass 3** (~2,000 tokens): Specific files + functions
+- **Pass 4** (~500 tokens): Git blame + diffs
+
+---
+
+## Real-World Scenarios
+
+### Scenario: Technical Due Diligence
+
+```bash
+reveal stats://./src > due_diligence/stats.txt
+reveal hotspots ./src > due_diligence/hotspots.txt
+reveal 'ast://./src?complexity>20' > due_diligence/complex_functions.txt
+reveal 'imports://src?circular' > due_diligence/circular_deps.txt
+find src/ -name "*.py" | reveal --stdin --check --select=B,S > due_diligence/security.txt
+reveal mysql://prod > due_diligence/db_health.txt
+reveal git://.
+```
+
+**Risk score**: hotspots × 10 + circular deps × 20 + security issues × 50 + (100 − quality_score) × 2
+
+### Scenario: Performance Optimization
+
+```bash
+# Find complexity hotspots
+reveal 'ast://./src?complexity>20'
+
+# Find long functions
+reveal 'ast://./src?lines>100'
+
+# Track improvement
+reveal stats://./src --format=json > perf_before.json
+# ... optimize ...
+reveal stats://./src --format=json > perf_after.json
+```
+
+### Scenario: Security Audit
+
+```bash
+find src/ -name "*.py" | reveal --stdin --check --select=B,S
+reveal env:// --format=json | jq '[.categories[] | .[] | select(.sensitive==true)]'
+reveal 'imports://src' | grep -v "^from \."   # external deps
+reveal git://.                                  # maintainer activity
+```
+
+**Red flags**: B001 (bare except), B005 (broken imports), hardcoded secrets, high average complexity (>10).
+
+---
+
 ## Quick Reference
 
 ### Discovery commands
@@ -1309,8 +1501,8 @@ reveal file.py --format=json             # Structured output
 ### Validation commands
 
 ```bash
-reveal file.py --check                   # All rules
-reveal file.py --check --select B,S      # Specific categories
+reveal check file.py                     # All rules
+reveal check file.py --select B,S       # Specific categories
 reveal --rules                           # List all rules
 reveal --explain B001                    # Explain specific rule
 ```
@@ -1397,4 +1589,3 @@ reveal --agent-help
 **See also:**
 - [AGENT_HELP.md](../AGENT_HELP.md) - AI agent reference
 - [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Configuration options
-- [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) - Complete review workflows

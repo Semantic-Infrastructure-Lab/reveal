@@ -14,14 +14,14 @@ category: reference
 ## Quick Navigation
 
 - **New users** → [QUICK_START.md](QUICK_START.md) → [RECIPES.md](guides/RECIPES.md)
-- **Adapters** → See [Adapter Guides](#adapter-guides-18-files) below
+- **Adapters** → See [Adapter Guides](#adapter-guides-19-files) below
 - **nginx / cPanel operator** → [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) | [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md)
-- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (2824 lines)
+- **AI Agents** → [AGENT_HELP.md](AGENT_HELP.md) (3,265 lines)
 - **Developers** → [Development Guides](#development-guides-4-files)
 
 ---
 
-## User Guides (8 files)
+## User Guides (7 files)
 
 | File | Lines | Description |
 |------|-------|-------------|
@@ -31,17 +31,13 @@ category: reference
 | [BENCHMARKS.md](BENCHMARKS.md) | — | Measured 3.9–33x token reduction — 5 real scenarios with exact numbers |
 | [MCP_SETUP.md](guides/MCP_SETUP.md) | — | MCP server setup for Claude Code, Cursor, Windsurf — 5 tools, stdio/SSE transports |
 | [CI_RECIPES.md](guides/CI_RECIPES.md) | — | GitHub Actions and GitLab CI ready-to-paste YAML: PR review, complexity gate, hotspot tracking, SSL checks |
-| [RECIPES.md](guides/RECIPES.md) | 1255 | Task-based workflows and common patterns |
-| [CODEBASE_REVIEW.md](guides/CODEBASE_REVIEW.md) | 1386 | Complete codebase review workflows |
-
-**Total**: ~4,100 lines
+| [RECIPES.md](guides/RECIPES.md) | — | Task-based workflows, multi-adapter patterns, and real-world scenarios |
 
 ---
 
-## Adapter Guides (18 files)
+## Adapter Guides (19 files)
 
-Complete guides for all URI protocol adapters (~23,300 lines).
-`XLSX_POWERBI_EXPANSION.md` is also listed here as a roadmap reference (not a usage guide).
+Complete guides for all URI protocol adapters.
 
 | File | Lines | Purpose |
 |------|-------|---------|
@@ -49,6 +45,7 @@ Complete guides for all URI protocol adapters (~23,300 lines).
 | [CALLS_ADAPTER_GUIDE.md](adapters/CALLS_ADAPTER_GUIDE.md) | 622 | Cross-file call graph queries (calls://) |
 | [CLAUDE_ADAPTER_GUIDE.md](adapters/CLAUDE_ADAPTER_GUIDE.md) | 2321 | Claude CLI session analysis and tool usage tracking |
 | [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md) | 328 | cPanel user environment: domains, SSL, ACL health |
+| [DEPENDS_ADAPTER_GUIDE.md](adapters/DEPENDS_ADAPTER_GUIDE.md) | — | Reverse module dependency graph — who imports this module? |
 | [DIFF_ADAPTER_GUIDE.md](adapters/DIFF_ADAPTER_GUIDE.md) | 1948 | Git diff analysis and structure comparison |
 | [DOMAIN_ADAPTER_GUIDE.md](adapters/DOMAIN_ADAPTER_GUIDE.md) | 2297 | Domain/DNS/WHOIS information analysis |
 | [ENV_ADAPTER_GUIDE.md](adapters/ENV_ADAPTER_GUIDE.md) | 1351 | Environment variable analysis and validation |
@@ -63,9 +60,6 @@ Complete guides for all URI protocol adapters (~23,300 lines).
 | [SSL_ADAPTER_GUIDE.md](adapters/SSL_ADAPTER_GUIDE.md) | 1488 | SSL/TLS certificate analysis and validation |
 | [STATS_ADAPTER_GUIDE.md](adapters/STATS_ADAPTER_GUIDE.md) | 1874 | Codebase statistics and metrics collection |
 | [XLSX_ADAPTER_GUIDE.md](adapters/XLSX_ADAPTER_GUIDE.md) | 651 | Excel/XLSX file analysis and data extraction |
-| [XLSX_POWERBI_EXPANSION.md](adapters/XLSX_POWERBI_EXPANSION.md) | — | Gap analysis and roadmap: Power Query, named ranges, pivot tables, connections, VBA, pbix/pbit/bim |
-
-**Total**: ~23,300 lines
 
 **Adapters without dedicated guides** (covered elsewhere or minimal):
 - `autossl://` — see [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) (cPanel AutoSSL logs)
@@ -86,7 +80,7 @@ Language and infrastructure analyzer guides:
 | [ELIXIR_ANALYZER_GUIDE.md](development/ELIXIR_ANALYZER_GUIDE.md) | 76 | Elixir language analyzer guide |
 | [HTML_GUIDE.md](adapters/HTML_GUIDE.md) | 401 | HTML analysis and template extraction |
 | [MARKDOWN_GUIDE.md](adapters/MARKDOWN_GUIDE.md) | 852 | Markdown analysis, headings, and frontmatter |
-| [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) | — | nginx:// adapter + config file analyzer (N001–N007 rules, ACME/SSL audits) |
+| [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) | — | nginx:// adapter + config file analyzer (N001–N012 rules, ACME/SSL audits) |
 
 **Total**: ~2,555 lines
 
@@ -144,9 +138,9 @@ Complete reference for AI agent integration:
 
 | File | Lines | Description |
 |------|-------|-------------|
-| [AGENT_HELP.md](AGENT_HELP.md) | 2824 | Complete AI agent reference (~68KB) |
+| [AGENT_HELP.md](AGENT_HELP.md) | 3265 | Complete AI agent reference (~104KB) |
 
-**Total**: 2,824 lines
+**Total**: 3,265 lines
 
 ---
 
@@ -156,7 +150,7 @@ Complete reference for AI agent integration:
 - Adapter Guides: 17 guides + 1 roadmap (XLSX_POWERBI_EXPANSION), ~23,300 lines (57%)
 - Reference: 10 files, ~5,800 lines (14%)
 - User Guides: 8 files, ~4,100 lines (10%)
-- AI Agent: 1 file, ~2,824 lines (7%)
+- AI Agent: 1 file, ~3,265 lines (7%)
 - Analyzer Guides: 5 files, ~2,800 lines (7%)
 - Development: 4 files, ~1,600 lines (4%)
 - Subcommand Guides: 1 file, ~500 lines (1%)
@@ -174,14 +168,14 @@ Complete reference for AI agent integration:
 - "How do I start?" → [QUICK_START.md](QUICK_START.md)
 - "What makes Reveal different?" → [WHY_REVEAL.md](WHY_REVEAL.md)
 - "What can Reveal do?" → [RECIPES.md](guides/RECIPES.md)
-- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-18-files)
+- "How do I use X adapter?" → [Adapter Guides](#adapter-guides-19-files)
 - "How do queries work?" → [QUERY_SYNTAX_GUIDE.md](guides/QUERY_SYNTAX_GUIDE.md)
 - "For AI agents?" → [AGENT_HELP.md](AGENT_HELP.md)
 - "How does Reveal work internally?" → [ARCHITECTURE.md](../../ARCHITECTURE.md)
 - "Create custom adapter?" → [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md)
 
 **By Adapter**:
-Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-18-files) above.
+Use `reveal help://` to list all adapters, or see [Adapter Guides](#adapter-guides-19-files) above.
 
 ---
 

@@ -22,7 +22,7 @@ Comprehensive guides for users, developers, and AI agents.
 
 ### AI Agents
 
-1. [AGENT_HELP.md](AGENT_HELP.md) - Complete reference (~45KB)
+1. [AGENT_HELP.md](AGENT_HELP.md) - Complete reference (~104KB)
 
 **For CLI:** `reveal --agent-help` loads the quick reference directly.
 
@@ -41,7 +41,7 @@ Comprehensive guides for users, developers, and AI agents.
 | [ELEMENT_DISCOVERY_GUIDE.md](guides/ELEMENT_DISCOVERY_GUIDE.md) | Progressive disclosure with available_elements |
 | [QUERY_PARAMETER_REFERENCE.md](guides/QUERY_PARAMETER_REFERENCE.md) | Query parameters for all adapters |
 | [CONFIGURATION_GUIDE.md](guides/CONFIGURATION_GUIDE.md) | Configuration options |
-| [CODEBASE_REVIEW.md](guides/CODEBASE_REVIEW.md) | Complete codebase review workflows |
+| [RECIPES.md](guides/RECIPES.md) | Task-based workflows, multi-adapter patterns, and real-world scenarios |
 
 ### Adapter Guides
 
@@ -116,7 +116,7 @@ Complete guides for all URI adapters:
 → `reveal file.md --validate-schema hugo` - see [SCHEMA_VALIDATION_HELP.md](guides/SCHEMA_VALIDATION_HELP.md)
 
 **Review a codebase?**
-→ See [CODEBASE_REVIEW.md](guides/CODEBASE_REVIEW.md) for complete workflows
+→ See [RECIPES.md](guides/RECIPES.md) for complete workflows
 
 **Create custom adapter?**
 → See [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md)

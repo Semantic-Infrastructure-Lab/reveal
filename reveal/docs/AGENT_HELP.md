@@ -12,7 +12,7 @@ category: guide
 
 ## About This Guide
 
-This is the complete offline reference for reveal (~12,000 tokens). Both `--agent-help` and `--agent-help-full` serve this file.
+This is the complete offline reference for reveal (~26,500 tokens). Both `--agent-help` and `--agent-help-full` serve this file.
 
 **For interactive usage:** Use `reveal help://topic` for progressive, low-token discovery.
 - `reveal help://ast` - AST adapter details
@@ -338,7 +338,7 @@ reveal file.py --check --select B,S    # Bugs & security only
 reveal file.py --check --select C,E    # Complexity & errors only
 
 # Specific file types
-reveal check nginx.conf                # Nginx validation (N001-N007)
+reveal check nginx.conf                # Nginx validation (N001-N012)
 reveal check Dockerfile                # Docker best practices (S701)
 ```
 
@@ -351,7 +351,7 @@ reveal check Dockerfile                # Docker best practices (S701)
 - **I** (imports) - Import analysis and dependencies (I001-I006)
 - **L** (links) - Link validation and documentation (L001-L005)
 - **M** (maintainability) - Code maintainability checks (M101-M105)
-- **N** (nginx) - Nginx configuration validation (N001-N007)
+- **N** (nginx) - Nginx configuration validation (N001-N012)
 - **R** (refactoring) - Refactoring opportunities (R913)
 - **S** (security) - Security vulnerabilities (S701)
 - **T** (types) - Type annotation issues (T004)
@@ -3261,5 +3261,5 @@ The old version organized by "Use Cases" and "Workflows" - this version organize
 
 - [RECIPES.md](guides/RECIPES.md) - Task-based workflows and patterns
 - [CONFIGURATION_GUIDE.md](guides/CONFIGURATION_GUIDE.md) - Configuration options
-- [CODEBASE_REVIEW.md](guides/CODEBASE_REVIEW.md) - Complete review workflows
+- [RECIPES.md](guides/RECIPES.md) - Complete review workflows and patterns
 - [README.md](README.md) - Documentation hub

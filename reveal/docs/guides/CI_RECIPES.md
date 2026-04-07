@@ -199,7 +199,6 @@ jobs:
         run: |
           # Extract domains from nginx config and batch check them
           reveal nginx.conf --extract domains --canonical-only | \
-            sed 's|^|ssl://|' | \
             reveal --stdin --batch --check --expiring-within 30
         # Exits 1 if any cert is expired or expiring within 30 days
 ```
@@ -280,8 +279,8 @@ pack:
 | Code | Meaning |
 |------|---------|
 | 0 | Clean — no issues found |
-| 1 | Issues found (quality violations, complexity regressions, expired certs) |
-| 2 | Warning-only (certs expiring soon, advisory issues) |
+| 1 | Violations found (quality issues, complexity regressions, certs expiring soon) |
+| 2 | Critical violations (expired certs, critical-severity rule failures) |
 
 All reveal subcommands (`review`, `check`, `health`, `pack`) use these exit codes,
 making them directly usable as CI gates with `|| exit 1`.

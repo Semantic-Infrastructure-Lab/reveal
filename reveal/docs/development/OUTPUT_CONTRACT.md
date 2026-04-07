@@ -504,19 +504,16 @@ def test_output_contract_compliance(self):
 
 ---
 
-## Schema Command
+## Checking Contract Compliance
 
-Check contract compliance:
+Use the V016 rule to check adapter output compliance:
 
 ```bash
-# Show contract schema
-reveal schema
-
-# Validate adapter output
-reveal ast://src/main.py --validate-contract
-
-# Check adapter implementation
+# Check a specific adapter implementation for contract compliance
 reveal --check reveal/adapters/myadapter.py --select V016
+
+# Check all adapters at once
+reveal --check reveal/adapters/ --select V016
 ```
 
 ---
@@ -579,35 +576,7 @@ reveal --check reveal/adapters/myadapter.py --select V016
 
 ## Implementation Status
 
-### Adapters
-
-| Adapter | Status | Notes |
-|---------|--------|-------|
-| help:// | ✅ Compliant | v1.0 ready |
-| env:// | ⚠️ In Progress | Missing `source_type` |
-| ast:// | ⚠️ In Progress | Uses `ast-query` (should be `ast_query`) |
-| python:// | ⚠️ In Progress | Missing `contract_version` |
-| reveal:// | ⚠️ In Progress | Missing `contract_version` |
-| diff:// | ⚠️ In Progress | Missing `contract_version` |
-| imports:// | ⚠️ In Progress | Missing `contract_version` |
-| sqlite:// | ⚠️ In Progress | Missing `contract_version` |
-| ssl:// | ⚠️ In Progress | Missing `contract_version` |
-| mysql:// | ⚠️ In Progress | Missing `contract_version` |
-| stats:// | ❌ Non-Compliant | Missing `type` field entirely |
-| json:// | ⚠️ In Progress | Uses `json-value` (should be `json_value`) |
-| markdown:// | ⚠️ In Progress | Missing `contract_version` |
-| git:// | ⚠️ In Progress | Missing `contract_version` |
-
-### Analyzers
-
-| Analyzer | Status | Notes |
-|----------|--------|-------|
-| TreeSitter | ⚠️ In Progress | Uses `line` (should be `line_start`) |
-| Python | ⚠️ In Progress | Implicit type |
-| HTML | ⚠️ In Progress | Uses `line` (should be `line_start`) |
-| YAML | ❌ Non-Compliant | Missing `type` field |
-| Markdown | ⚠️ In Progress | Partial compliance |
-| GraphQL | ⚠️ In Progress | Partial compliance |
+Run `reveal --check reveal/adapters/ --select V016` for a live compliance report. The static table that used to live here became stale faster than it could be maintained and was removed.
 
 ---
 

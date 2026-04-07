@@ -55,7 +55,7 @@ Adapters aren't limited to file types. They can inspect ANY resource:
 
 ### 2. **Validation Rules**
 
-The V-series rules (V001-V006) check reveal's internal state:
+The V-series rules (V001–V023) check reveal's internal state:
 
 ```python
 # reveal/rules/validation/V001.py
@@ -76,7 +76,7 @@ class V001(BaseRule):
 
 ### 3. **Complete Working Example**
 
-Look at `reveal/adapters/reveal.py` (310 lines) to see:
+Look at `reveal/adapters/reveal/` (package) to see:
 - How to create an adapter
 - How to implement `get_structure()`
 - How to format output (text/JSON)

@@ -631,7 +631,3 @@ reveal <uri> --fields=<existing-field> --format=json
 - [Agent Help](../AGENT_HELP.md) - AI agent integration guide
 
 ---
-
-**Phase 4 Complete**: Field selection and budget constraints enable token-efficient queries across all adapters.
-
-**Next**: Phase 5 - Element Discovery (auto-show available elements)

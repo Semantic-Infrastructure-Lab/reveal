@@ -55,11 +55,11 @@ ignore:
 
 ```bash
 # Check what config is loaded
-reveal --check file.py --verbose
+reveal check file.py --verbose
 
 # Test with environment variable
 export REVEAL_RULES_DISABLE="C901,E501"
-reveal --check file.py
+reveal check file.py
 ```
 
 ---

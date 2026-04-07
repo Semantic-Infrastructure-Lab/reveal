@@ -70,9 +70,7 @@ Output shows:
 - ⚠️  **CONFLICT DETECTED**: CWD shadowing installed package
 - 💡 **RECOMMENDATION**: Run from different directory
 
-## New Features (v0.17.0)
-
-### 1. Module Conflict Detection (`python://module/<name>`)
+## Module Conflict Detection (`python://module/<name>`)
 
 **Problem Solved**: "Why is Python importing the wrong version of my package?"
 

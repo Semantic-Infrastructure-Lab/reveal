@@ -309,7 +309,7 @@ class L001(BaseRule):
             links = structure['links']
         else:
             # Fallback: extract links if not in structure
-            from ...base import get_analyzer
+            from reveal.registry import get_analyzer
             analyzer_class = get_analyzer(file_path)
             if analyzer_class:
                 analyzer = analyzer_class(file_path)
@@ -690,7 +690,7 @@ if re.match(r'https?://', url):         # Use url.startswith(('http://', 'https:
 **Step 1:** Verify parser exists
 ```python
 # Check if tree-sitter grammar available
-from reveal.base import get_analyzer
+from reveal.registry import get_analyzer
 analyzer = get_analyzer('file.md')
 print(analyzer.language)  # Should show language name
 ```

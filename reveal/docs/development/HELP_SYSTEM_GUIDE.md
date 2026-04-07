@@ -147,13 +147,27 @@ reveal help://examples/security  # Recipes for security analysis
 ### Directory Structure
 ```
 reveal/docs/
-├── AGENT_HELP.md                    # --agent-help content (complete reference)
-├── RECIPES.md                       # help://recipes (task-based workflows)
-├── MARKDOWN_GUIDE.md                # help://markdown
-├── REVEAL_ADAPTER_GUIDE.md          # help://reveal-guide
-├── PYTHON_ADAPTER_GUIDE.md          # help://python-guide
-├── ADAPTER_AUTHORING_GUIDE.md       # help://adapter-authoring
-└── ...
+├── AGENT_HELP.md                          # --agent-help content (complete reference)
+├── QUICK_START.md
+├── WHY_REVEAL.md
+├── INDEX.md
+├── adapters/                              # Per-adapter guides (help://ast, help://markdown, …)
+│   ├── AST_ADAPTER_GUIDE.md
+│   ├── CALLS_ADAPTER_GUIDE.md
+│   ├── DEPENDS_ADAPTER_GUIDE.md
+│   ├── NGINX_GUIDE.md
+│   └── ...  (22 adapter guides total)
+├── guides/                                # Feature and workflow guides
+│   ├── RECIPES.md                         # help://recipes
+│   ├── CONFIGURATION_GUIDE.md
+│   ├── MCP_SETUP.md
+│   ├── QUERY_SYNTAX_GUIDE.md
+│   └── ...  (12 guides total)
+└── development/                           # Contributor/maintainer docs
+    ├── ADAPTER_AUTHORING_GUIDE.md         # help://adapter-authoring
+    ├── HELP_SYSTEM_GUIDE.md               # (this file)
+    ├── OUTPUT_CONTRACT.md
+    └── ...  (8 development docs total)
 ```
 
 ### Content Sources
@@ -221,9 +235,11 @@ class MyAdapter(ResourceAdapter):
         }
 ```
 
-2. Register adapter:
+2. Register adapter with the decorator:
 ```python
-register_adapter('my', MyAdapter)
+@register_adapter('my')
+class MyAdapter(ResourceAdapter):
+    ...
 ```
 
 3. **That's it!** `help://my` now works automatically
@@ -355,7 +371,7 @@ reveal 'ast://./src?name=*authenticate*'
 **Q: My new adapter doesn't appear in `help://`**
 
 A: Check:
-1. Adapter registered with `register_adapter()`?
+1. Adapter decorated with `@register_adapter('scheme')`?
 2. Adapter has `get_help()` static method?
 3. `get_help()` returns dict with 'name' and 'description'?
 

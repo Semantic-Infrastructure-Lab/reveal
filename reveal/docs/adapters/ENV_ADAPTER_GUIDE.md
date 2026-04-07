@@ -1248,16 +1248,17 @@ reveal env://MY_VAR  # Verify
 
 ### Q2: Why is my sensitive variable not redacted?
 
-**A**: Variable name must contain sensitive keywords (PASSWORD, SECRET, TOKEN, KEY, etc.):
+**A**: The variable name must contain a sensitive keyword as a whole word (delimited by `_` or string boundaries). Keywords: `PASSWORD, SECRET, TOKEN, KEY, CREDENTIAL, API_KEY, AUTH, PRIVATE, PASSPHRASE`.
 ```bash
-# ❌ Not detected (no keyword)
+# ❌ Not detected (no keyword match)
 DB_CONN="postgres://user:pass@host"
+DATABASE_URL="postgres://user:pass@host"   # "URL" is not a sensitive keyword
 
-# ✅ Detected (contains "PASSWORD")
+# ✅ Detected (contains "PASSWORD" as whole word)
 DB_PASSWORD="postgres://user:pass@host"
 
-# ✅ Detected (contains "URL" after "DATABASE")
-DATABASE_URL="postgres://user:pass@host"
+# ✅ Detected (contains "KEY" as whole word)
+DATABASE_KEY="some-secret-key"
 ```
 
 ### Q3: Can I customize categories or sensitive patterns?
