@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.72.3] - 2026-04-06 (magical-shrine-0406)
+
+### Fixed
+- **PHP anonymous class detection** (`reveal/treesitter.py`): Added `anonymous_class` to `CLASS_NODE_TYPES`. PHP 8's `new class extends Foo { ... }` syntax was invisible to `_extract_classes` — `stats://` reported `Classes: 0`, `--outline` showed methods without parent context, and class extraction by name failed. Now surfaces as `anonymous(Foo)@L{line}` (or `anonymous@L{line}` when no base class). Also added `anonymous_class` to `PARENT_NODE_TYPES` and `ALL_ELEMENT_NODE_TYPES` for `Class.method` extraction and line-based navigation.
+- **PHP anonymous class naming** (`reveal/treesitter.py`): Added `_get_anonymous_class_name` helper that reads the `base_clause` child to generate descriptive names like `anonymous(NodeVisitorAbstract)@L144`. Modified `_extract_undecorated_classes` to invoke this fallback when `_get_node_name` returns `None` for `anonymous_class` nodes instead of silently skipping them.
+- **D001 false positives on same-named PHP class methods** (`reveal/treesitter.py`): Consequence of the anonymous class fix. D001's `class_for` lookup now finds the enclosing anonymous class, so identically-named methods in *different* anonymous classes (e.g., `isScope`, `leaveNode`) are correctly scoped and not flagged as duplicates.
+- **PHP function call detection** (`reveal/treesitter.py`): Added `function_call_expression` to `CALL_NODE_TYPES`. PHP uses this node type for bare function calls — previously `_extract_calls_in_function` found 0 PHP calls and `calls://` returned empty results for all PHP targets. The existing `_get_callee_name` fallback correctly resolves PHP `name` nodes, so no further change was needed there.
+- **`stats://` complexity always 1.00 for tree-sitter languages** (`reveal/adapters/stats/metrics.py`): `estimate_complexity` was ignoring the pre-computed `func['complexity']` from `_build_function_dict` and re-computing from keyword counting using the wrong key (`end_line` instead of `line_end`), so `start_line == end_line`, yielding a single-line body and complexity = 1. Fix: use `func['complexity']` when present (all tree-sitter languages). Fallback keyword path corrected to use `line_end`.
+
+### Tests
+- **15 new tests for PHP fixes** (`tests/test_php_analyzer.py`): `TestPhpAnonymousClasses` (7 tests — anonymous class with/without extends detected, multiple classes, correct line bounds, D001 false-positive suppression, D001 still fires for real dups, named+anonymous coexist); `TestPhpCallDetection` (3 tests — function_call_expression captured, multiple calls, `name` node callee resolved); `TestStatsComplexityFix` (5 tests — pre-computed complexity used, zero complexity returned, fallback uses `line_end`, wrong key gives minimal, PHP complexity non-zero end-to-end). **Test count: 7,299 → 7,314**.
+
 ## [0.72.2] - 2026-04-06 (infinite-satellite-0406)
 
 ### Fixed

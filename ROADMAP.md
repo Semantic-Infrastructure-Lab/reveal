@@ -7,6 +7,12 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.72.3
+- ✅ **PHP anonymous class detection** — `anonymous_class` added to `CLASS_NODE_TYPES` and `PARENT_NODE_TYPES`. PHP 8's `new class extends Foo { ... }` now surfaces as `anonymous(Foo)@L{line}` in structure/outline/extraction. `stats://` correctly reports class count; `Class.method` extraction works on anonymous parents.
+- ✅ **D001 false positives on PHP class methods eliminated** — same-named methods in *different* anonymous classes (`isScope`, `leaveNode`, etc.) are now scoped correctly and no longer flagged as duplicates.
+- ✅ **PHP function calls detected** — `function_call_expression` added to `CALL_NODE_TYPES`. `calls://` was returning 0 for all PHP targets; now captures all PHP bare-function call sites within functions.
+- ✅ **`stats://` complexity fixed for tree-sitter languages** — `estimate_complexity` now uses the pre-computed `func['complexity']` from `_build_function_dict`. The old keyword-counting fallback was using key `end_line` instead of `line_end`, causing every function to yield complexity 1.
+
 ### v0.72.2
 - ✅ **`--outline` fixed for closure-heavy functions** — `_collect_outline` previously skipped `FUNCTION_TYPES` entirely, producing a blank skeleton for functions whose body is all inner closures. Nested `def`/`class` nodes now emit a labeled `DEF`/`CLASS` entry and recurse into the body at the next depth.
 - ✅ **`--scope` now includes enclosing `def`/`class`** — `_find_ancestors` excluded `FUNCTION_TYPES`, so lines inside closures showed no enclosing function context. Fixed: `DEF` and `CLASS` nodes now appear in the scope chain outermost-first.

@@ -23,6 +23,10 @@ def count_line_types(lines: list) -> tuple:
 def estimate_complexity(func: Dict[str, Any], content: str) -> Optional[int]:
     """Estimate cyclomatic complexity for a function.
 
+    Uses pre-computed complexity from the tree-sitter analyzer when available
+    (all tree-sitter languages populate func['complexity'] in _build_function_dict).
+    Falls back to keyword counting for analyzers that don't supply it.
+
     Args:
         func: Function metadata
         content: File content
@@ -30,8 +34,14 @@ def estimate_complexity(func: Dict[str, Any], content: str) -> Optional[int]:
     Returns:
         Complexity score or None
     """
+    # Prefer the tree-sitter computed value — it's accurate and language-aware.
+    if 'complexity' in func:
+        return func['complexity']
+
+    # Fallback: keyword-count heuristic for non-tree-sitter analyzers.
+    # Note: key is 'line_end' (not 'end_line') — matches _build_function_dict.
     start_line = func.get('line', 0)
-    end_line = func.get('end_line', start_line)
+    end_line = func.get('line_end', start_line)
 
     if start_line == 0 or end_line == 0:
         return None

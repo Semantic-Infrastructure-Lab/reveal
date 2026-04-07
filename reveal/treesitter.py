@@ -52,10 +52,11 @@ FUNCTION_NODE_TYPES = (
 # Node types for class extraction
 CLASS_NODE_TYPES = (
     'class_definition',      # Python
-    'class_declaration',     # Java, C#, JavaScript
+    'class_declaration',     # Java, C#, JavaScript, PHP
     'class_specifier',       # C++
     'struct_item',           # Rust (treated as class)
     'class',                 # Ruby
+    'anonymous_class',       # PHP: new class(...) extends Foo { ... }
 )
 
 # Node types for struct extraction
@@ -84,13 +85,14 @@ ELEMENT_TYPE_MAP = {
 
 # Node types for call expression extraction (call graph)
 CALL_NODE_TYPES = {
-    'call',                  # Python
-    'call_expression',       # JS, TS, Go, Rust, C, C++, Kotlin
-    'method_call',           # Ruby, Rust (method syntax)
-    'method_call_expression', # Rust
-    'invocation',            # C#
-    'function_call',         # Lua, Bash
-    'method_invocation',     # Java
+    'call',                    # Python
+    'call_expression',         # JS, TS, Go, Rust, C, C++, Kotlin
+    'function_call_expression', # PHP
+    'method_call',             # Ruby, Rust (method syntax)
+    'method_call_expression',  # Rust
+    'invocation',              # C#
+    'function_call',           # Lua, Bash
+    'method_invocation',       # Java
 }
 
 # Callee node types for attribute/member access (self.foo, obj.method, pkg.Func)
@@ -108,6 +110,7 @@ PARENT_NODE_TYPES = (
     'impl_item',              # Rust impl blocks
     'interface_declaration',
     'module',                 # Ruby module
+    'anonymous_class',        # PHP anonymous class
 )
 
 # Child node types for hierarchical extraction (methods within classes)
@@ -123,6 +126,7 @@ ALL_ELEMENT_NODE_TYPES = (
     'method_declaration', 'method_definition',
     'class_definition', 'class_declaration',
     'struct_item', 'struct_specifier', 'struct_declaration',
+    'anonymous_class',        # PHP anonymous class
 )
 
 
@@ -482,6 +486,24 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         return classes, tracking_lines
 
+    def _get_anonymous_class_name(self, node) -> str:
+        """Generate a synthetic name for a PHP anonymous class node.
+
+        Reads the extends/implements clause to produce a descriptive label:
+            new class extends NodeVisitorAbstract { ... }
+            → 'anonymous(NodeVisitorAbstract)@L144'
+
+        Falls back to 'anonymous@L{line}' when no base class is present.
+        """
+        line = node.start_point[0] + 1
+        for child in node.children:
+            if child.type == 'base_clause':
+                for base_child in child.children:
+                    if base_child.type == 'name':
+                        base_name = self._get_node_text(base_child)
+                        return f'anonymous({base_name})@L{line}'
+        return f'anonymous@L{line}'
+
     def _extract_undecorated_classes(self, class_types: List[str],
                                     processed_classes: set) -> List[Dict[str, Any]]:
         """Extract undecorated classes across all supported languages."""
@@ -492,7 +514,12 @@ class TreeSitterAnalyzer(FileAnalyzer):
             for node in nodes:
                 name = self._get_node_name(node)
                 if not name:
-                    continue
+                    # PHP anonymous classes have no identifier child — generate a
+                    # synthetic name from the extends clause and line number.
+                    if node.type == 'anonymous_class':
+                        name = self._get_anonymous_class_name(node)
+                    else:
+                        continue
 
                 line_start = node.start_point[0] + 1
                 if (line_start, name) in processed_classes:

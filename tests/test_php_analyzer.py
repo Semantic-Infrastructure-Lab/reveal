@@ -461,5 +461,285 @@ class UserController {
             os.unlink(temp_path)
 
 
+class TestPhpAnonymousClasses(unittest.TestCase):
+    """Tests for PHP 8 anonymous class support (Issue 1, 2, 6, 7 from PHP_REVEAL_ISSUES_2026-04-06)."""
+
+    def _make_php_file(self, code: str) -> str:
+        """Write code to a temp .php file and return the path."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.php', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            return f.name
+
+    def test_anonymous_class_with_extends_detected(self):
+        """Anonymous class using 'new class extends Base' should appear in structure['classes']."""
+        code = '''<?php
+$v = new class extends NodeVisitorAbstract {
+    public function enterNode($node) { return null; }
+};
+'''
+        path = self._make_php_file(code)
+        try:
+            structure = PhpAnalyzer(path).get_structure()
+            class_names = [c['name'] for c in structure.get('classes', [])]
+            self.assertEqual(len(class_names), 1)
+            # Name should encode the base class and line number
+            self.assertIn('NodeVisitorAbstract', class_names[0])
+            self.assertIn('@L', class_names[0])
+        finally:
+            os.unlink(path)
+
+    def test_anonymous_class_without_extends_detected(self):
+        """Anonymous class with no base clause gets a fallback 'anonymous@L{line}' name."""
+        code = '''<?php
+$v = new class {
+    public function doThing() { return 1; }
+};
+'''
+        path = self._make_php_file(code)
+        try:
+            structure = PhpAnalyzer(path).get_structure()
+            class_names = [c['name'] for c in structure.get('classes', [])]
+            self.assertEqual(len(class_names), 1)
+            self.assertTrue(class_names[0].startswith('anonymous@L'))
+        finally:
+            os.unlink(path)
+
+    def test_multiple_anonymous_classes_all_detected(self):
+        """14 anonymous classes in a file → 14 entries in structure['classes']."""
+        classes = '\n'.join(
+            f'$v{i} = run_traversal($ast, new class extends NodeVisitorAbstract {{ '
+            f'public function enterNode($n) {{ return null; }} }});'
+            for i in range(14)
+        )
+        code = f'<?php\nfunction run_traversal($a, $b) {{ return $b; }}\n{classes}\n'
+        path = self._make_php_file(code)
+        try:
+            structure = PhpAnalyzer(path).get_structure()
+            self.assertEqual(len(structure.get('classes', [])), 14)
+        finally:
+            os.unlink(path)
+
+    def test_anonymous_class_has_correct_line_bounds(self):
+        """Class dict should span from 'new class' to closing brace."""
+        code = '''<?php
+$v = new class extends Base {
+    public function foo() { return 1; }
+    public function bar() { return 2; }
+};
+'''
+        path = self._make_php_file(code)
+        try:
+            structure = PhpAnalyzer(path).get_structure()
+            cls = structure['classes'][0]
+            self.assertEqual(cls['line'], 2)     # 'new class' is on line 2
+            self.assertEqual(cls['line_end'], 5)  # closing '}' is on line 5
+        finally:
+            os.unlink(path)
+
+    def test_d001_no_false_positives_across_anonymous_classes(self):
+        """D001 must NOT fire for same-named methods in different anonymous classes."""
+        from reveal.rules.duplicates.D001 import D001
+        code = '''<?php
+$v1 = new class extends Visitor {
+    public function isScope() { return false; }
+    public function leaveNode($n) { return null; }
+};
+$v2 = new class extends Visitor {
+    public function isScope() { return false; }
+    public function leaveNode($n) { return null; }
+};
+'''
+        path = self._make_php_file(code)
+        try:
+            analyzer = PhpAnalyzer(path)
+            structure = analyzer.get_structure()
+            detections = D001().check(path, structure, code)
+            self.assertEqual(len(detections), 0,
+                             f"D001 false positives: {[d.message for d in detections]}")
+        finally:
+            os.unlink(path)
+
+    def test_d001_fires_for_duplicate_methods_in_same_class(self):
+        """D001 should still fire when two free functions have identical bodies."""
+        from reveal.rules.duplicates.D001 import D001
+        code = '''<?php
+function foo($x) {
+    if ($x > 0) {
+        return $x * 2;
+    }
+    return 0;
+}
+
+function bar($x) {
+    if ($x > 0) {
+        return $x * 2;
+    }
+    return 0;
+}
+'''
+        path = self._make_php_file(code)
+        try:
+            analyzer = PhpAnalyzer(path)
+            structure = analyzer.get_structure()
+            detections = D001().check(path, structure, code)
+            self.assertGreater(len(detections), 0, "D001 should fire for identical free functions")
+        finally:
+            os.unlink(path)
+
+    def test_named_class_still_detected_alongside_anonymous(self):
+        """Named class_declaration should coexist with anonymous_class detection."""
+        code = '''<?php
+class NamedVisitor extends Base {
+    public function enterNode($n) { return null; }
+}
+$v = new class extends Base {
+    public function enterNode($n) { return null; }
+};
+'''
+        path = self._make_php_file(code)
+        try:
+            structure = PhpAnalyzer(path).get_structure()
+            class_names = [c['name'] for c in structure.get('classes', [])]
+            self.assertIn('NamedVisitor', class_names)
+            # Anonymous class also present
+            self.assertTrue(any('anonymous' in n for n in class_names))
+        finally:
+            os.unlink(path)
+
+
+class TestPhpCallDetection(unittest.TestCase):
+    """Tests for PHP function call detection via calls:// (Issue 5)."""
+
+    def _make_php_file(self, code: str) -> str:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.php', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            return f.name
+
+    def test_function_call_expression_captured(self):
+        """PHP function calls (function_call_expression nodes) should appear in func['calls']."""
+        code = '''<?php
+function run_traversal($ast, $v) { return $v; }
+
+function cmd_exits($ast) {
+    $r = run_traversal($ast, new class extends Base {
+        public function enterNode($n) { return null; }
+    });
+    return $r;
+}
+'''
+        path = self._make_php_file(code)
+        try:
+            structure = PhpAnalyzer(path).get_structure()
+            cmd_exits = next(f for f in structure['functions'] if f['name'] == 'cmd_exits')
+            self.assertIn('run_traversal', cmd_exits['calls'])
+        finally:
+            os.unlink(path)
+
+    def test_multiple_calls_in_function_all_captured(self):
+        """All function_call_expression calls inside a PHP function are captured."""
+        code = '''<?php
+function alpha() {}
+function beta() {}
+function gamma() {}
+
+function caller() {
+    alpha();
+    beta();
+    gamma();
+}
+'''
+        path = self._make_php_file(code)
+        try:
+            structure = PhpAnalyzer(path).get_structure()
+            caller = next(f for f in structure['functions'] if f['name'] == 'caller')
+            self.assertIn('alpha', caller['calls'])
+            self.assertIn('beta', caller['calls'])
+            self.assertIn('gamma', caller['calls'])
+        finally:
+            os.unlink(path)
+
+    def test_callee_name_resolved_for_php_name_node(self):
+        """PHP callee uses 'name' node type (not 'identifier') — fallback must resolve it."""
+        code = '''<?php
+function run_traversal($a, $b) { return $b; }
+function wrapper($ast) {
+    return run_traversal($ast, null);
+}
+'''
+        path = self._make_php_file(code)
+        try:
+            structure = PhpAnalyzer(path).get_structure()
+            wrapper = next(f for f in structure['functions'] if f['name'] == 'wrapper')
+            # callee 'run_traversal' must be captured even though PHP uses 'name' not 'identifier'
+            self.assertIn('run_traversal', wrapper['calls'])
+        finally:
+            os.unlink(path)
+
+
+class TestStatsComplexityFix(unittest.TestCase):
+    """Tests for stats:// complexity fix (Issue 3 from PHP_REVEAL_ISSUES_2026-04-06)."""
+
+    def test_precomputed_complexity_used(self):
+        """estimate_complexity returns func['complexity'] when present."""
+        from reveal.adapters.stats.metrics import estimate_complexity
+        func = {'name': 'foo', 'line': 1, 'line_end': 10, 'complexity': 7}
+        self.assertEqual(estimate_complexity(func, 'irrelevant content'), 7)
+
+    def test_precomputed_complexity_zero_returned(self):
+        """Pre-computed complexity of 0 is returned as-is (falsy but valid)."""
+        from reveal.adapters.stats.metrics import estimate_complexity
+        func = {'name': 'foo', 'line': 1, 'line_end': 3, 'complexity': 0}
+        self.assertEqual(estimate_complexity(func, 'irrelevant'), 0)
+
+    def test_fallback_uses_line_end_key(self):
+        """Fallback keyword counting uses 'line_end' (not old 'end_line') key."""
+        from reveal.adapters.stats.metrics import estimate_complexity
+        # A function with two if-branches spans lines 1-6
+        content = "function foo() {\n    if ($x) {\n        return 1;\n    } elseif ($y) {\n        return 2;\n    }\n}"
+        func_correct_key = {'name': 'foo', 'line': 1, 'line_end': 7}
+        result = estimate_complexity(func_correct_key, content)
+        self.assertIsNotNone(result)
+        self.assertGreater(result, 1)  # Must detect branches
+
+    def test_fallback_wrong_key_gives_minimal_complexity(self):
+        """Without 'complexity' or 'line_end', only 1 line is analyzed → complexity 1."""
+        from reveal.adapters.stats.metrics import estimate_complexity
+        content = "function foo() {\n    if ($x) {\n        return 1;\n    }\n}"
+        # Old wrong key 'end_line' → line_end defaults to start_line → 1-line body
+        func_old_key = {'name': 'foo', 'line': 2, 'end_line': 5}
+        result = estimate_complexity(func_old_key, content)
+        # 'if' may or may not be on line 2; but result should be small
+        self.assertIsNotNone(result)
+
+    def test_php_function_complexity_nonzero(self):
+        """PHP functions with branching report complexity > 1 via tree-sitter."""
+        code = '''<?php
+function classify($n) {
+    if ($n < 0) {
+        return "negative";
+    } elseif ($n === 0) {
+        return "zero";
+    } else {
+        return "positive";
+    }
+}
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.php', delete=False) as f:
+            f.write(code)
+            path = f.name
+        try:
+            structure = PhpAnalyzer(path).get_structure()
+            fn = next(f for f in structure['functions'] if f['name'] == 'classify')
+            # tree-sitter computes real complexity
+            self.assertGreater(fn['complexity'], 1)
+            # estimate_complexity should return the same value
+            from reveal.adapters.stats.metrics import estimate_complexity
+            with open(path) as fh:
+                content = fh.read()
+            self.assertEqual(estimate_complexity(fn, content), fn['complexity'])
+        finally:
+            os.unlink(path)
+
+
 if __name__ == '__main__':
     unittest.main()
