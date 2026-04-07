@@ -7,7 +7,12 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
-### v0.72.3
+### v0.74.0
+- ✅ **`/message --range`** (BACK-127) — `reveal claude://session/NAME/message --range 10-20` returns interleaved user+assistant turns; open-ended `--range 300-` supported. `?full` and `--verbose` now equivalent across `/assistant`, `/messages`, and `/message`.
+- ✅ **`reveal check` exit code consistency** — single-file, `--stdin --check`, and `@file --check` all now exit 1 on violations (previously silently exited 0).
+- ✅ **claude:// UX fixes** — word-boundary search (`?word`), `?full` on `/assistant`, tool-only turn summaries, tool params in `message/N`, `tool_result` content visible.
+
+### v0.73.0
 - ✅ **PHP anonymous class detection** — `anonymous_class` added to `CLASS_NODE_TYPES` and `PARENT_NODE_TYPES`. PHP 8's `new class extends Foo { ... }` now surfaces as `anonymous(Foo)@L{line}` in structure/outline/extraction. `stats://` correctly reports class count; `Class.method` extraction works on anonymous parents.
 - ✅ **D001 false positives on PHP class methods eliminated** — same-named methods in *different* anonymous classes (`isScope`, `leaveNode`, etc.) are now scoped correctly and no longer flagged as duplicates.
 - ✅ **PHP function calls detected** — `function_call_expression` added to `CALL_NODE_TYPES`. `calls://` was returning 0 for all PHP targets; now captures all PHP bare-function call sites within functions.
