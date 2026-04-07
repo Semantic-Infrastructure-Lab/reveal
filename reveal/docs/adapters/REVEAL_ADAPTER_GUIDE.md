@@ -55,7 +55,7 @@ Adapters aren't limited to file types. They can inspect ANY resource:
 
 ### 2. **Validation Rules**
 
-The V-series rules (V001–V023) check reveal's internal state:
+The V-series rules (V001–V023+) check reveal's internal state:
 
 ```python
 # reveal/rules/validation/V001.py
@@ -124,7 +124,7 @@ User runs: reveal reveal:// --check
            ↓
 4. --check flag triggers validation rules
            ↓
-5. V001-V006 run checks, return Detection objects
+5. V001-V023+ run checks, return Detection objects
            ↓
 6. Output formatted and displayed
 ```
@@ -470,8 +470,8 @@ Running `reveal reveal:// --check` in CI ensures reveal stays well-maintained.
 
 ## Learning Path
 
-1. **Study reveal://** - Read `reveal/adapters/reveal.py` (310 lines)
-2. **Study V-series rules** - Read `reveal/rules/validation/V001.py` through `V006.py`
+1. **Study reveal://** - Read the `reveal/adapters/reveal/` package (adapter.py, renderer.py, operations.py, etc.)
+2. **Study V-series rules** - Read `reveal/rules/validation/V001.py` through `V023.py` (and beyond)
 3. **Run it yourself** - `reveal reveal:// --check`
 4. **Adapt the pattern** - Create your own `project://` or `api://` adapter
 5. **Share it** - Contribute back if useful to others!

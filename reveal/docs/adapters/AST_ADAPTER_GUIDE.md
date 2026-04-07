@@ -1253,7 +1253,7 @@ sqlite3 code.db "SELECT file, symbol, complexity
 
 ## Version History
 
-### v1.0 (reveal 0.49.0+)
+### v1.1 (reveal 0.49.0+)
 
 **Features:**
 - ✅ Query by complexity, lines, type, name, decorators
@@ -1263,6 +1263,7 @@ sqlite3 code.db "SELECT file, symbol, complexity
 - ✅ 50+ language support via tree-sitter
 - ✅ Combined filters with AND logic
 - ✅ OR logic for type parameter
+- ✅ Tree-sitter-based McCabe complexity for supported languages
 
 **Operators added:**
 - `!=` - Not equal to (negation)
@@ -1270,7 +1271,6 @@ sqlite3 code.db "SELECT file, symbol, complexity
 - `..` - Range operator
 
 **Known limitations:**
-- Complexity calculation is heuristic-based (tree-sitter implementation planned)
 - Decorator filtering is Python-specific
 - No cross-file analysis (use imports:// adapter)
 

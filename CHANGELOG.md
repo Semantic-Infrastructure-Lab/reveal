@@ -34,6 +34,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `markdown://`: `aggregate=field` confirmed present (pre-existing, DOC_REVIEW false positive)
 - **QUERY_PARAMETER_REFERENCE.md expanded**: added `depends://`, `xlsx://`, `cpanel://` sections with full param docs; expanded `claude://` from 3 to 9 params; added `autossl://`, `letsencrypt://`, `nginx://` to no-params section; updated Quick Reference table from 14 to 21 adapters
 
+### Documentation + Code (toxic-force-0407)
+- **Doc audit Tier 2 complete**: all remaining 10 open items from DOC_REVIEW_2026-04-06 resolved
+  - `AST_ADAPTER_GUIDE.md`: version heading v1.0→v1.1; stale "McCabe coming soon" limitation removed (tree-sitter implementation shipped)
+  - `STATS_ADAPTER_GUIDE.md`: example quality score calculation now includes Penalty 5 (check_issues row)
+  - `MARKDOWN_GUIDE.md`: removed `broken` from `--link-type` valid values (never a valid type)
+  - `REVEAL_ADAPTER_GUIDE.md`: `reveal.py (310 lines)` → package reference; V001–V006 → V001–V023+
+  - `IMPORTS_ADAPTER_GUIDE.md`: removed hardcoded `"version": "0.30.0"` from all doc examples
+  - `SUBCOMMANDS_GUIDE.md`: exit code section now correctly states that code 1 is directory-mode only; single-file always exits 0
+  - `ADAPTER_AUTHORING_GUIDE.md`, `ENV_ADAPTER_GUIDE.md`, `PYTHON_ADAPTER_GUIDE.md`, `ELIXIR_ANALYZER_GUIDE.md`: confirmed already correct (pre-existing fixes or false positives)
+- **Code bug fix**: `reveals/adapters/imports.py` — removed hardcoded `'version': '0.30.0'` from metadata dict (was emitting stale release version in structured output)
+
 ## [0.73.0] - 2026-04-06 (liquid-carnage-0406)
 
 ### Added

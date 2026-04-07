@@ -894,7 +894,7 @@ These flags apply specifically to markdown files:
 | Flag | Description |
 |------|-------------|
 | `--links` | Extract all hyperlinks |
-| `--link-type internal\|external\|broken` | Filter links by type |
+| `--link-type internal\|external\|email` | Filter links by type |
 | `--domain DOMAIN` | Filter links by domain (e.g., `--domain github.com`) |
 | `--code` | Extract code blocks |
 | `--language LANG` | Filter code blocks by language (requires `--code`) |

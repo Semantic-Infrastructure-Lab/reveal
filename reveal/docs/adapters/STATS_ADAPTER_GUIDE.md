@@ -559,8 +559,9 @@ Start: 100
 - Length penalty: (80-50)/2 = -15
 - Long function penalty: 0.4×50 = -20
 - Deep nesting penalty: 0.2×50 = -10
+- Check issues penalty: 0 check issues assumed → 0
 ────────────────────────────────────
-Final score: 100-15-15-20-10 = 40
+Final score: 100-15-15-20-10-0 = 40
 ```
 
 **Result**: Quality score = **40/100** (Critical - urgent refactoring needed)

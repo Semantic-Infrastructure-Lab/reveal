@@ -223,8 +223,7 @@ reveal 'imports://src?unused' --format=json
     "total_imports": 238,
     "total_files": 45,
     "has_cycles": true,
-    "analyzer": "imports",
-    "version": "0.30.0"
+    "analyzer": "imports"
   }
 }
 ```
@@ -320,8 +319,7 @@ reveal 'imports://src?circular' --format=json
     "total_imports": 238,
     "total_files": 45,
     "has_cycles": true,
-    "analyzer": "imports",
-    "version": "0.30.0"
+    "analyzer": "imports"
   }
 }
 ```
@@ -586,8 +584,7 @@ reveal 'imports://src?unused' --format=grep | grep "api/"
     "total_files": 45,
     "total_imports": 238,
     "has_cycles": true,
-    "analyzer": "imports",
-    "version": "0.30.0"
+    "analyzer": "imports"
   }
 }
 ```
