@@ -140,34 +140,38 @@ class HelpAdapter(ResourceAdapter):
 
     # Static help files (markdown documentation in reveal/docs/)
     STATIC_HELP = {
-        'quick-start': 'QUICK_START.md',  # 5-minute quick start guide
+        # Top-level docs (reveal/docs/)
+        'quick-start': 'QUICK_START.md',
         'agent': 'AGENT_HELP.md',
-        'agent-full': 'AGENT_HELP.md',  # Alias (full version merged into AGENT_HELP.md)
-        'python': 'PYTHON_ADAPTER_GUIDE.md',  # Alias for python-guide
-        'python-guide': 'PYTHON_ADAPTER_GUIDE.md',
-        'reveal-guide': 'REVEAL_ADAPTER_GUIDE.md',  # Reference implementation
-        'markdown': 'MARKDOWN_GUIDE.md',
-        'html': 'HTML_GUIDE.md',  # HTML features guide
+        'agent-full': 'AGENT_HELP.md',   # Alias (full version merged into AGENT_HELP.md)
         'anti-patterns': 'AGENT_HELP.md',  # Merged into AGENT_HELP.md
-        'adapter-authoring': 'ADAPTER_AUTHORING_GUIDE.md',
-        'tricks': 'RECIPES.md',  # Merged into RECIPES.md (task-based workflows)
-        'recipes': 'RECIPES.md',  # Primary name for workflow recipes
-        'help': 'HELP_SYSTEM_GUIDE.md',  # Meta-documentation about help system
-        'configuration': 'CONFIGURATION_GUIDE.md',  # Configuration system guide
-        'config': 'CONFIGURATION_GUIDE.md',  # Alias for configuration
-        'codebase-review': 'CODEBASE_REVIEW.md',  # Codebase review workflows
-        'output': 'OUTPUT_CONTRACT.md',  # Output format contract
-        'schemas': 'SCHEMA_VALIDATION_HELP.md',  # Schema validation guide (v0.29.0+)
-        'duplicates': 'DUPLICATE_DETECTION_GUIDE.md',  # Duplicate code detection guide
-        'duplicate-detection': 'DUPLICATE_DETECTION_GUIDE.md',  # Alias for duplicates
-        'scaffolding': 'SCAFFOLDING_GUIDE.md',  # Component scaffolding system
-        'dev': 'SUBCOMMANDS_GUIDE.md',     # reveal dev subcommand
-        'review': 'SUBCOMMANDS_GUIDE.md',  # reveal review subcommand
-        'health': 'SUBCOMMANDS_GUIDE.md',  # reveal health subcommand
-        'pack': 'SUBCOMMANDS_GUIDE.md',    # reveal pack subcommand
-        'schema': 'SCHEMA_VALIDATION_HELP.md',  # schema validation (alias)
-        'mcp': 'MCP_SETUP.md',             # MCP server setup and tools
-        'mcp-setup': 'MCP_SETUP.md',       # Alias for mcp
+        # Adapter guides (reveal/docs/adapters/)
+        'python': 'adapters/PYTHON_ADAPTER_GUIDE.md',
+        'python-guide': 'adapters/PYTHON_ADAPTER_GUIDE.md',
+        'reveal-guide': 'adapters/REVEAL_ADAPTER_GUIDE.md',
+        'markdown': 'adapters/MARKDOWN_GUIDE.md',
+        'html': 'adapters/HTML_GUIDE.md',
+        # User guides (reveal/docs/guides/)
+        'adapter-authoring': 'development/ADAPTER_AUTHORING_GUIDE.md',
+        'tricks': 'guides/RECIPES.md',   # Merged into RECIPES.md (task-based workflows)
+        'recipes': 'guides/RECIPES.md',
+        'configuration': 'guides/CONFIGURATION_GUIDE.md',
+        'config': 'guides/CONFIGURATION_GUIDE.md',
+        'codebase-review': 'guides/CODEBASE_REVIEW.md',
+        'schemas': 'guides/SCHEMA_VALIDATION_HELP.md',
+        'duplicates': 'guides/DUPLICATE_DETECTION_GUIDE.md',
+        'duplicate-detection': 'guides/DUPLICATE_DETECTION_GUIDE.md',
+        'dev': 'guides/SUBCOMMANDS_GUIDE.md',
+        'review': 'guides/SUBCOMMANDS_GUIDE.md',
+        'health': 'guides/SUBCOMMANDS_GUIDE.md',
+        'pack': 'guides/SUBCOMMANDS_GUIDE.md',
+        'schema': 'guides/SCHEMA_VALIDATION_HELP.md',
+        'mcp': 'guides/MCP_SETUP.md',
+        'mcp-setup': 'guides/MCP_SETUP.md',
+        # Development docs (reveal/docs/development/)
+        'help': 'development/HELP_SYSTEM_GUIDE.md',
+        'output': 'development/OUTPUT_CONTRACT.md',
+        'scaffolding': 'development/SCAFFOLDING_GUIDE.md',
     }
 
     @staticmethod
@@ -263,22 +267,24 @@ class HelpAdapter(ResourceAdapter):
         docs_dir = Path(__file__).parent.parent / 'docs'
 
         if docs_dir.exists():
-            # Auto-discover *_GUIDE.md files (e.g., AST_ADAPTER_GUIDE.md)
-            for guide in docs_dir.glob('*_GUIDE.md'):
+            # Auto-discover *_GUIDE.md files recursively (e.g., adapters/AST_ADAPTER_GUIDE.md)
+            for guide in docs_dir.rglob('*_GUIDE.md'):
                 # Convert filename to topic name
                 # AST_ADAPTER_GUIDE.md -> ast-adapter
                 # QUERY_SYNTAX_GUIDE.md -> query-syntax
                 topic = guide.stem.lower().replace('_guide', '').replace('_', '-')
-                discovered[topic] = guide.name
+                # Store relative path from docs_dir (e.g., 'adapters/AST_ADAPTER_GUIDE.md')
+                discovered[topic] = str(guide.relative_to(docs_dir))
 
             # Also check for *GUIDE.md pattern (without underscore before GUIDE)
-            for guide in docs_dir.glob('*GUIDE.md'):
-                if guide.name in discovered.values():
+            for guide in docs_dir.rglob('*GUIDE.md'):
+                relative = str(guide.relative_to(docs_dir))
+                if relative in discovered.values():
                     continue
                 # HTMLGUIDE.md -> html (unlikely but handle it)
                 topic = guide.stem.lower().replace('guide', '').replace('_', '-').strip('-')
                 if topic:
-                    discovered[topic] = guide.name
+                    discovered[topic] = relative
 
         # Merge: discovered guides + STATIC_HELP (STATIC_HELP takes precedence)
         # This allows STATIC_HELP to:

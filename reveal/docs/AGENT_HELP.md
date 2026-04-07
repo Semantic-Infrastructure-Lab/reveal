@@ -3259,7 +3259,7 @@ The old version organized by "Use Cases" and "Workflows" - this version organize
 
 ## See Also
 
-- [RECIPES.md](RECIPES.md) - Task-based workflows and patterns
-- [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Configuration options
-- [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) - Complete review workflows
+- [RECIPES.md](guides/RECIPES.md) - Task-based workflows and patterns
+- [CONFIGURATION_GUIDE.md](guides/CONFIGURATION_GUIDE.md) - Configuration options
+- [CODEBASE_REVIEW.md](guides/CODEBASE_REVIEW.md) - Complete review workflows
 - [README.md](README.md) - Documentation hub

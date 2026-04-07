@@ -359,23 +359,23 @@ reveal help://anti-patterns      # What NOT to do
 ## Next Steps
 
 **New users:**
-1. [RECIPES.md](RECIPES.md) - Task-based workflows
-2. [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) - Markdown file analysis guide
-3. [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Customize behavior
+1. [RECIPES.md](guides/RECIPES.md) - Task-based workflows
+2. [MARKDOWN_GUIDE.md](adapters/MARKDOWN_GUIDE.md) - Markdown file analysis guide
+3. [CONFIGURATION_GUIDE.md](guides/CONFIGURATION_GUIDE.md) - Customize behavior
 
 **AI agents:**
 → [AGENT_HELP.md](AGENT_HELP.md) - Complete AI reference
 
 **Developers:**
-1. [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Extend reveal
-2. [ANALYZER_PATTERNS.md](ANALYZER_PATTERNS.md) - Code analysis patterns
+1. [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md) - Extend reveal
+2. [ANALYZER_PATTERNS.md](development/ANALYZER_PATTERNS.md) - Code analysis patterns
 
 ---
 
-**Got 5 more minutes?** Read [RECIPES.md](RECIPES.md) for practical workflows.
+**Got 5 more minutes?** Read [RECIPES.md](guides/RECIPES.md) for practical workflows.
 
-**Ready to go deep?** Read [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) for complete review patterns.
+**Ready to go deep?** Read [CODEBASE_REVIEW.md](guides/CODEBASE_REVIEW.md) for complete review patterns.
 
 ---
 
-**Navigation:** [← Documentation Index](README.md) | [Recipes →](RECIPES.md) | [Markdown Guide →](MARKDOWN_GUIDE.md)
+**Navigation:** [← Documentation Index](README.md) | [Recipes →](guides/RECIPES.md) | [Markdown Guide →](adapters/MARKDOWN_GUIDE.md)

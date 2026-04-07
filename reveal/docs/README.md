@@ -11,14 +11,14 @@ Comprehensive guides for users, developers, and AI agents.
 ### New Users
 
 1. [QUICK_START.md](QUICK_START.md) - 5-minute introduction
-2. [RECIPES.md](RECIPES.md) - Task-based workflows
-3. [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) - Customize behavior
+2. [RECIPES.md](guides/RECIPES.md) - Task-based workflows
+3. [CONFIGURATION_GUIDE.md](guides/CONFIGURATION_GUIDE.md) - Customize behavior
 
 ### Developers & Contributors
 
-1. [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) - Create custom adapters
-2. [ANALYZER_PATTERNS.md](ANALYZER_PATTERNS.md) - Code analysis patterns
-3. [REVEAL_ADAPTER_GUIDE.md](REVEAL_ADAPTER_GUIDE.md) - Reference implementation
+1. [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md) - Create custom adapters
+2. [ANALYZER_PATTERNS.md](development/ANALYZER_PATTERNS.md) - Code analysis patterns
+3. [REVEAL_ADAPTER_GUIDE.md](adapters/REVEAL_ADAPTER_GUIDE.md) - Reference implementation
 
 ### AI Agents
 
@@ -35,13 +35,13 @@ Comprehensive guides for users, developers, and AI agents.
 | Guide | Purpose |
 |-------|---------|
 | [QUICK_START.md](QUICK_START.md) | 5-minute introduction |
-| [RECIPES.md](RECIPES.md) | Task-based workflows and patterns |
-| [QUERY_SYNTAX_GUIDE.md](QUERY_SYNTAX_GUIDE.md) | Universal query operators and result control |
-| [FIELD_SELECTION_GUIDE.md](FIELD_SELECTION_GUIDE.md) | Token reduction with --fields and budget constraints |
-| [ELEMENT_DISCOVERY_GUIDE.md](ELEMENT_DISCOVERY_GUIDE.md) | Progressive disclosure with available_elements |
-| [QUERY_PARAMETER_REFERENCE.md](QUERY_PARAMETER_REFERENCE.md) | Query parameters for all adapters |
-| [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) | Configuration options |
-| [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) | Complete codebase review workflows |
+| [RECIPES.md](guides/RECIPES.md) | Task-based workflows and patterns |
+| [QUERY_SYNTAX_GUIDE.md](guides/QUERY_SYNTAX_GUIDE.md) | Universal query operators and result control |
+| [FIELD_SELECTION_GUIDE.md](guides/FIELD_SELECTION_GUIDE.md) | Token reduction with --fields and budget constraints |
+| [ELEMENT_DISCOVERY_GUIDE.md](guides/ELEMENT_DISCOVERY_GUIDE.md) | Progressive disclosure with available_elements |
+| [QUERY_PARAMETER_REFERENCE.md](guides/QUERY_PARAMETER_REFERENCE.md) | Query parameters for all adapters |
+| [CONFIGURATION_GUIDE.md](guides/CONFIGURATION_GUIDE.md) | Configuration options |
+| [CODEBASE_REVIEW.md](guides/CODEBASE_REVIEW.md) | Complete codebase review workflows |
 
 ### Adapter Guides
 
@@ -49,52 +49,52 @@ Complete guides for all URI adapters:
 
 | Adapter | Purpose | Lines |
 |---------|---------|-------|
-| [AST_ADAPTER_GUIDE.md](AST_ADAPTER_GUIDE.md) | AST-based code analysis with complexity/size filtering | 1188 |
-| [CLAUDE_ADAPTER_GUIDE.md](CLAUDE_ADAPTER_GUIDE.md) | Claude CLI session analysis and tool usage | 2316 |
-| [CPANEL_ADAPTER_GUIDE.md](CPANEL_ADAPTER_GUIDE.md) | cPanel user environment: domains, SSL, ACL health | 328 |
-| [DIFF_ADAPTER_GUIDE.md](DIFF_ADAPTER_GUIDE.md) | Git diff analysis and structure comparison | 1928 |
-| [DOMAIN_ADAPTER_GUIDE.md](DOMAIN_ADAPTER_GUIDE.md) | Domain/DNS/WHOIS analysis | 2293 |
-| [ENV_ADAPTER_GUIDE.md](ENV_ADAPTER_GUIDE.md) | Environment variable analysis | 1347 |
-| [GIT_ADAPTER_GUIDE.md](GIT_ADAPTER_GUIDE.md) | Git repository analysis (commits, branches, tags) | 1870 |
-| [IMPORTS_ADAPTER_GUIDE.md](IMPORTS_ADAPTER_GUIDE.md) | Import dependency analysis | 1630 |
-| [JSON_ADAPTER_GUIDE.md](JSON_ADAPTER_GUIDE.md) | JSON/JSONL data analysis with JMESPath | 1323 |
-| [MYSQL_ADAPTER_GUIDE.md](MYSQL_ADAPTER_GUIDE.md) | MySQL database introspection | 2107 |
-| [PYTHON_ADAPTER_GUIDE.md](PYTHON_ADAPTER_GUIDE.md) | Python runtime introspection | 460 |
-| [REVEAL_ADAPTER_GUIDE.md](REVEAL_ADAPTER_GUIDE.md) | Reveal introspection (analyzers, adapters) | 532 |
-| [SQLITE_ADAPTER_GUIDE.md](SQLITE_ADAPTER_GUIDE.md) | SQLite database introspection | 1157 |
-| [SSL_ADAPTER_GUIDE.md](SSL_ADAPTER_GUIDE.md) | SSL/TLS certificate analysis and on-disk cert inspection | 1449 |
-| [STATS_ADAPTER_GUIDE.md](STATS_ADAPTER_GUIDE.md) | Codebase statistics and metrics | 1864 |
-| [XLSX_ADAPTER_GUIDE.md](XLSX_ADAPTER_GUIDE.md) | Excel/XLSX file analysis | 564 |
+| [AST_ADAPTER_GUIDE.md](adapters/AST_ADAPTER_GUIDE.md) | AST-based code analysis with complexity/size filtering | 1188 |
+| [CLAUDE_ADAPTER_GUIDE.md](adapters/CLAUDE_ADAPTER_GUIDE.md) | Claude CLI session analysis and tool usage | 2316 |
+| [CPANEL_ADAPTER_GUIDE.md](adapters/CPANEL_ADAPTER_GUIDE.md) | cPanel user environment: domains, SSL, ACL health | 328 |
+| [DIFF_ADAPTER_GUIDE.md](adapters/DIFF_ADAPTER_GUIDE.md) | Git diff analysis and structure comparison | 1928 |
+| [DOMAIN_ADAPTER_GUIDE.md](adapters/DOMAIN_ADAPTER_GUIDE.md) | Domain/DNS/WHOIS analysis | 2293 |
+| [ENV_ADAPTER_GUIDE.md](adapters/ENV_ADAPTER_GUIDE.md) | Environment variable analysis | 1347 |
+| [GIT_ADAPTER_GUIDE.md](adapters/GIT_ADAPTER_GUIDE.md) | Git repository analysis (commits, branches, tags) | 1870 |
+| [IMPORTS_ADAPTER_GUIDE.md](adapters/IMPORTS_ADAPTER_GUIDE.md) | Import dependency analysis | 1630 |
+| [JSON_ADAPTER_GUIDE.md](adapters/JSON_ADAPTER_GUIDE.md) | JSON/JSONL data analysis with JMESPath | 1323 |
+| [MYSQL_ADAPTER_GUIDE.md](adapters/MYSQL_ADAPTER_GUIDE.md) | MySQL database introspection | 2107 |
+| [PYTHON_ADAPTER_GUIDE.md](adapters/PYTHON_ADAPTER_GUIDE.md) | Python runtime introspection | 460 |
+| [REVEAL_ADAPTER_GUIDE.md](adapters/REVEAL_ADAPTER_GUIDE.md) | Reveal introspection (analyzers, adapters) | 532 |
+| [SQLITE_ADAPTER_GUIDE.md](adapters/SQLITE_ADAPTER_GUIDE.md) | SQLite database introspection | 1157 |
+| [SSL_ADAPTER_GUIDE.md](adapters/SSL_ADAPTER_GUIDE.md) | SSL/TLS certificate analysis and on-disk cert inspection | 1449 |
+| [STATS_ADAPTER_GUIDE.md](adapters/STATS_ADAPTER_GUIDE.md) | Codebase statistics and metrics | 1864 |
+| [XLSX_ADAPTER_GUIDE.md](adapters/XLSX_ADAPTER_GUIDE.md) | Excel/XLSX file analysis | 564 |
 
 ### Analyzer Guides
 
 | Guide | Purpose |
 |-------|---------|
-| [ANALYZER_PATTERNS.md](ANALYZER_PATTERNS.md) | Code analysis patterns and best practices |
-| [ELIXIR_ANALYZER_GUIDE.md](ELIXIR_ANALYZER_GUIDE.md) | Elixir language analyzer |
-| [HTML_GUIDE.md](HTML_GUIDE.md) | HTML analysis and templates |
-| [MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md) | Markdown analysis and extraction |
-| [NGINX_GUIDE.md](NGINX_GUIDE.md) | nginx:// adapter + config file analysis (N001–N007 rules, ACME/SSL audits) |
+| [ANALYZER_PATTERNS.md](development/ANALYZER_PATTERNS.md) | Code analysis patterns and best practices |
+| [ELIXIR_ANALYZER_GUIDE.md](development/ELIXIR_ANALYZER_GUIDE.md) | Elixir language analyzer |
+| [HTML_GUIDE.md](adapters/HTML_GUIDE.md) | HTML analysis and templates |
+| [MARKDOWN_GUIDE.md](adapters/MARKDOWN_GUIDE.md) | Markdown analysis and extraction |
+| [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) | nginx:// adapter + config file analysis (N001–N007 rules, ACME/SSL audits) |
 
 ### Format & Validation
 
 | Guide | Purpose |
 |-------|---------|
-| [SCHEMA_VALIDATION_HELP.md](SCHEMA_VALIDATION_HELP.md) | Frontmatter schema validation |
-| [OUTPUT_CONTRACT.md](OUTPUT_CONTRACT.md) | JSON output specification |
-| [DUPLICATE_DETECTION_GUIDE.md](DUPLICATE_DETECTION_GUIDE.md) | Duplicate detection algorithms |
+| [SCHEMA_VALIDATION_HELP.md](guides/SCHEMA_VALIDATION_HELP.md) | Frontmatter schema validation |
+| [OUTPUT_CONTRACT.md](development/OUTPUT_CONTRACT.md) | JSON output specification |
+| [DUPLICATE_DETECTION_GUIDE.md](guides/DUPLICATE_DETECTION_GUIDE.md) | Duplicate detection algorithms |
 
 ### Development Guides
 
 | Guide | Purpose |
 |-------|---------|
-| [ADAPTER_CONSISTENCY.md](ADAPTER_CONSISTENCY.md) | Adapter UX patterns and consistency |
-| [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md) | Create custom adapters |
-| [ANALYZER_PATTERNS.md](ANALYZER_PATTERNS.md) | Analyzer development patterns |
-| [REVEAL_ADAPTER_GUIDE.md](REVEAL_ADAPTER_GUIDE.md) | Reference implementation |
-| [PYTHON_ADAPTER_GUIDE.md](PYTHON_ADAPTER_GUIDE.md) | python:// adapter guide |
-| [HELP_SYSTEM_GUIDE.md](HELP_SYSTEM_GUIDE.md) | Help system internals |
-| [DUPLICATE_DETECTION_GUIDE.md](DUPLICATE_DETECTION_GUIDE.md) | Duplicate detection |
+| [ADAPTER_CONSISTENCY.md](development/ADAPTER_CONSISTENCY.md) | Adapter UX patterns and consistency |
+| [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md) | Create custom adapters |
+| [ANALYZER_PATTERNS.md](development/ANALYZER_PATTERNS.md) | Analyzer development patterns |
+| [REVEAL_ADAPTER_GUIDE.md](adapters/REVEAL_ADAPTER_GUIDE.md) | Reference implementation |
+| [PYTHON_ADAPTER_GUIDE.md](adapters/PYTHON_ADAPTER_GUIDE.md) | python:// adapter guide |
+| [HELP_SYSTEM_GUIDE.md](development/HELP_SYSTEM_GUIDE.md) | Help system internals |
+| [DUPLICATE_DETECTION_GUIDE.md](guides/DUPLICATE_DETECTION_GUIDE.md) | Duplicate detection |
 
 ### AI Agent Reference
 
@@ -110,16 +110,16 @@ Complete guides for all URI adapters:
 → `reveal file.py` for structure, `reveal file.py func` for extraction
 
 **Find complex code?**
-→ `reveal 'ast://./src?complexity>10'` - see [RECIPES.md](RECIPES.md)
+→ `reveal 'ast://./src?complexity>10'` - see [RECIPES.md](guides/RECIPES.md)
 
 **Validate frontmatter?**
-→ `reveal file.md --validate-schema hugo` - see [SCHEMA_VALIDATION_HELP.md](SCHEMA_VALIDATION_HELP.md)
+→ `reveal file.md --validate-schema hugo` - see [SCHEMA_VALIDATION_HELP.md](guides/SCHEMA_VALIDATION_HELP.md)
 
 **Review a codebase?**
-→ See [CODEBASE_REVIEW.md](CODEBASE_REVIEW.md) for complete workflows
+→ See [CODEBASE_REVIEW.md](guides/CODEBASE_REVIEW.md) for complete workflows
 
 **Create custom adapter?**
-→ See [ADAPTER_AUTHORING_GUIDE.md](ADAPTER_AUTHORING_GUIDE.md)
+→ See [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md)
 
 ---
 

@@ -260,12 +260,12 @@ class TestDocumentationCompleteness:
         if not docs_dir.exists():
             pytest.skip(f"Docs directory not found: {docs_dir}")
 
-        # Major adapters that should have guides
+        # Major adapters that should have guides (paths relative to docs_dir)
         expected_guides = {
-            'markdown': ['MARKDOWN_GUIDE.md'],
-            'python': ['PYTHON_ADAPTER_GUIDE.md'],
-            'html': ['HTML_GUIDE.md'],
-            'reveal': ['REVEAL_ADAPTER_GUIDE.md'],
+            'markdown': ['adapters/MARKDOWN_GUIDE.md'],
+            'python': ['adapters/PYTHON_ADAPTER_GUIDE.md'],
+            'html': ['adapters/HTML_GUIDE.md'],
+            'reveal': ['adapters/REVEAL_ADAPTER_GUIDE.md'],
         }
 
         missing_guides = []

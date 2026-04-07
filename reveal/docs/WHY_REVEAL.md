@@ -330,4 +330,4 @@ reveal 'git://src/auth.py?type=blame&element=validate_token'
 
 ---
 
-**Navigation**: [INDEX.md](INDEX.md) | [QUICK_START.md](QUICK_START.md) | [RECIPES.md](RECIPES.md) | [AGENT_HELP.md](AGENT_HELP.md)
+**Navigation**: [INDEX.md](INDEX.md) | [QUICK_START.md](QUICK_START.md) | [RECIPES.md](guides/RECIPES.md) | [AGENT_HELP.md](AGENT_HELP.md)

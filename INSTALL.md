@@ -236,7 +236,7 @@ After installation:
 1. **Try it:** `reveal --help`
 2. **Explore a file:** `reveal README.md`
 3. **Extract an element:** `reveal app.py function_name`
-4. **Read docs:** See [README](README.md) for examples
+4. **Read docs:** See [README](reveal/docs/README.md) for examples
 5. **Contribute:** [Contributing Guide](CONTRIBUTING.md)
 
 ## Getting Help
