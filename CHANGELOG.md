@@ -14,23 +14,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.72.5] - 2026-04-06 (yaponuxo-0406)
+## [0.73.0] - 2026-04-06 (liquid-carnage-0406)
 
 ### Added
-- **`depends://` adapter — inverse module dependency graph** (`reveal/adapters/depends.py`): New adapter answering "what imports this module?" by inverting the same graph built by `imports://`. `depends://file.py` lists all files that import it with file/line/names/type. `depends://dir/` produces a ranked summary of most-imported modules in that directory. `?top=N` limits results. `?format=dot` emits GraphViz DOT for visualization. Scans from project root (via `find_project_root`) so cross-directory importers are visible. Reuses `ImportGraph.reverse_deps` which is already computed as a side effect of forward graph construction — no additional graph-walk cost. Registered as scheme `depends`, adapter count: 22 → 23. Added task section to AGENT_HELP.md.
-
-### Tests
-- **27 new tests** (`tests/test_depends_adapter.py`): File target (7 tests — importer count, no-importers case, names in dependents, field presence, error on missing path); Directory target (6 tests — summary type, modules found, top-N limiting, sorted order, dependents list, leaf exclusion); Star import captured (1 test); DOT format (2 tests — format flag, renderer output); Metadata (2 tests); Schema/registration (4 tests); Renderer (4 tests — text/json/no-dependents/summary). **Test count: 7,321 → 7,348**.
-
-## [0.72.4] - 2026-04-06 (yaponuxo-0406)
+- **`depends://` adapter — inverse module dependency graph** (`reveal/adapters/depends.py`): New 23rd adapter answering "what imports this module?" by inverting the same graph built by `imports://`. `depends://file.py` lists all files that import it with file/line/names/type. `depends://dir/` produces a ranked summary of most-imported modules in that directory. `?top=N` limits results. `?format=dot` emits GraphViz DOT for visualization. Scans from project root (via `find_project_root`) so cross-directory importers are visible. Reuses `ImportGraph.reverse_deps` which is already computed as a side effect of forward graph construction — no additional graph-walk cost. Added task section to AGENT_HELP.md and recipe to RECIPES.md.
 
 ### Fixed
 - **`stats://` quality score now reflects check rule detections** (`reveal/adapters/stats/metrics.py`, `reveal/adapters/stats/queries.py`): Previously `calculate_quality_score` used only code metrics (complexity, function length, nesting), so a file with 30+ check issues would still score 100/100. Now `_count_check_issues` runs `RuleRegistry.check_file` with the already-computed `structure` and `content` (no re-parsing), counts detections by severity, and passes them to `calculate_quality_score` as `check_issue_counts`. Penalty formula: CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, capped at 40 total. The PHP probe file (30 issues) now scores 79 instead of 100.
 - **`quality.check_issues` exposed in per-file stats output**: `calculate_file_stats` now includes `check_issues: int` in the `quality` dict, making the issue count visible in `stats://` output alongside the score.
-- **`check_penalties` section added to `QUALITY_DEFAULTS`** and thus configurable via `.reveal/stats-quality.yaml` or `~/.config/reveal/stats-quality.yaml`.
+- **`check_penalties` configurable** via `check_issues` section in `.reveal/stats-quality.yaml` or `~/.config/reveal/stats-quality.yaml`.
+- **PHP anonymous class detection** (`reveal/treesitter.py`): Added `anonymous_class` to `CLASS_NODE_TYPES`. PHP 8's `new class extends Foo { ... }` syntax was invisible to `_extract_classes` — `stats://` reported `Classes: 0`, `--outline` showed methods without parent context, and class extraction by name failed. Now surfaces as `anonymous(Foo)@L{line}` (or `anonymous@L{line}` when no base class). Also added to `PARENT_NODE_TYPES` and `ALL_ELEMENT_NODE_TYPES`.
+- **D001 false positives on same-named PHP class methods** (`reveal/treesitter.py`): Consequence of the anonymous class fix. D001's `class_for` lookup now finds the enclosing anonymous class, so identically-named methods in different anonymous classes are correctly scoped and not flagged as duplicates.
+- **PHP function call detection** (`reveal/treesitter.py`): Added `function_call_expression` to `CALL_NODE_TYPES`. PHP uses this node type for bare function calls — previously `calls://` returned empty results for all PHP targets.
+- **`stats://` complexity always 1.00 for tree-sitter languages** (`reveal/adapters/stats/metrics.py`): `estimate_complexity` was ignoring the pre-computed `func['complexity']` and re-computing from keyword counting using the wrong key (`end_line` instead of `line_end`). Fix: use `func['complexity']` when present. Fallback corrected to use `line_end`.
+- **`--outline` empty for closure-heavy functions** (`adapters/ast/nav.py`): Functions whose body consists entirely of inner closures now emit a `DEF`/`CLASS` item and recurse into the body.
+- **`--scope` excluded enclosing `def`/`class` nodes** (`adapters/ast/nav.py`): Function and class definitions now appear as `DEF`/`CLASS` entries in the scope chain, outermost first.
+- **`--scope` marker shows actual source line** (`adapters/ast/nav.py`): `▶ L{N}: <line text>` instead of a bare `is here` marker.
 
 ### Tests
-- **7 new tests** (`tests/test_php_analyzer.py`, `TestStatsQualityCheckPenalty`): no-issues score unchanged; HIGH detections apply correct penalty; MEDIUM detections apply correct penalty; penalty capped at 40; score never below 0; `check_issues` exposed in file stats dict; PHP file with 30+ issues scores below 100. **Test count: 7,314 → 7,321**.
+- **49 new tests total**: 27 for `depends://` adapter (`tests/test_depends_adapter.py`); 7 for stats quality check penalties (`TestStatsQualityCheckPenalty`); 15 for PHP fixes (`TestPhpAnonymousClasses`, `TestPhpCallDetection`, `TestStatsComplexityFix`). **Test count: 7,299 → 7,348**.
 
 ## [0.72.3] - 2026-04-06 (magical-shrine-0406)
 

@@ -866,7 +866,7 @@ reveal audit                 # Security/compliance focus (S, B, N rules)
 
 ### Relationship Queries (Call Graphs)
 - ✅ **`calls://` shipped v0.62.0** — `?target=fn`, `?callees=fn`, `?depth=N`, `?rank=callers`, `?format=dot`. See [CALLS_ADAPTER_GUIDE.md](reveal/docs/CALLS_ADAPTER_GUIDE.md).
-- 🔲 **`depends://src/module/`** — inverse module dependency graph (what depends *on* this module, not just what this module imports). Different from `imports://` which is forward-only.
+- ✅ **`depends://src/module/`** — inverse module dependency graph (what depends *on* this module, not just what this module imports). Different from `imports://` which is forward-only. **Shipped v0.73.0 (yaponuxo-0406)**.
 
 ### Git-Aware Defaults
 ```bash
@@ -956,7 +956,6 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 ### Planned
 | Adapter | Notes |
 |---------|-------|
-| `depends://` | Inverse module dependency graph — what depends on this module (post-v1.0) |
 
 ---
 

@@ -492,6 +492,39 @@ reveal 'ast://src/auth.py?show=calls'             # full call graph diagram
 
 ---
 
+### Trace module-level dependencies (reverse import graph)
+
+`depends://` answers "what imports *this*?" — the complement of `imports://`.
+
+```bash
+# Who imports this module?
+reveal depends://src/utils.py
+
+# Who imports anything in models/?
+reveal depends://src/models/
+
+# Most-imported (high-coupling) modules — change these carefully
+reveal 'depends://src?top=10'
+
+# Full reverse dependency graph (pipe to Graphviz)
+reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
+```
+
+**Key use cases:**
+- **Impact analysis before refactoring** — run `depends://src/utils.py` to see every importer before touching a module
+- **Safe deletion** — verify `count: 0` before removing a module
+- **Coupling audit** — `?top=N` ranks modules by fan-in; high fan-in = high blast radius if changed
+
+| Adapter | Question | Direction |
+|---------|----------|-----------|
+| `imports://src` | What does this code import? | Forward |
+| `depends://src/module.py` | What imports this module? | Reverse |
+| `calls://src/?target=fn` | Who calls this function? | Reverse (function level) |
+
+**Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked.
+
+---
+
 ## Documentation Maintenance
 
 ### Validate markdown frontmatter

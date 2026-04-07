@@ -221,12 +221,14 @@ Quality score (0-100, higher is better) based on:
 - **Function length** - Long functions (>100 lines) are harder to understand
 - **Deep nesting** - Functions with >4 nesting levels
 - **Ratios** - Proportion of problematic functions in file
+- **Check rule detections** - `reveal check` issues by severity (v0.73.0+)
 
 Default penalties:
 - High complexity (>10): -3 points per unit (max -30)
 - Long functions (>50 avg): -0.5 points per line (max -20)
 - Many long functions: -50 points per ratio (max -25)
 - Deep nesting: -50 points per ratio (max -25)
+- Check issues: CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts (cap -40)
 
 **Configurable** via `.reveal/stats-quality.yaml` (see [Configuration](#configuration)).
 
@@ -520,6 +522,14 @@ Starting score: **100 points**
   - Ratio: `deep_nesting_count / total_functions`
   - Penalty: `ratio × 50` (max -25 points)
   - Example: 2/10 functions deeply nested → `0.2×50 = -10 points`
+
+**Penalty 5: Check Rule Detections** (v0.73.0+)
+- Runs `reveal check` rules against the file (reusing already-parsed structure — no re-parsing cost)
+- Penalty per issue: CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts
+- Combined penalty capped at 40 points
+- Example: 2 HIGH + 5 MEDIUM issues → `2×5 + 5×2 = 20 points`
+- Issue count exposed as `quality.check_issues` in file output
+- Configurable via `check_issues` section in `.reveal/stats-quality.yaml`
 
 **Final score**: `max(0, 100 - total_penalties)`
 
