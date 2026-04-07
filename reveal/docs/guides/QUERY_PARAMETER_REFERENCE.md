@@ -14,17 +14,23 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 |---------|--------------|---------|
 | **imports://** | `unused`, `circular`, `violations` | `imports://.?unused` |
 | **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash`, `ref` | `git://file.py?type=history` |
-| **json://** | `schema`, field filters | `json://data.json?type=object` |
-| **markdown://** | field filters (frontmatter) | `markdown://docs/?status=draft` |
-| **stats://** | `hotspots`, `code_only` | `stats://.?hotspots` |
+| **json://** | `schema`, `flatten`, `gron`, `type`, `keys`, `length`, field filters, `sort`, `limit`, `offset` | `json://data.json?type=object` |
+| **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
+| **stats://** | `hotspots`, `code_only`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions` | `stats://.?hotspots` |
 | **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `calls`, `callee_of`, `show`, `rank` | `ast://src?complexity>10` |
 | **calls://** | `target`, `callees`, `rank`, `top`, `depth`, `format`, `builtins` | `calls://src?target=fn` |
-| **claude://** | `summary`, `tools`, `errors` | `claude://conv.json?summary` |
+| **claude://** | `summary`, `errors`, `tools`, `contains`, `role`, `search`, `tail`, `last`, `tokens` | `claude://session?summary` |
+| **depends://** | `top`, `format` | `depends://src?top=10` |
+| **xlsx://** | `sheet`, `range`, `search`, `format`, `limit`, `formulas`, `powerpivot`, `powerquery`, `names`, `connections` | `xlsx://model.xlsx?sheet=Sales` |
+| **cpanel://** | `domain_type` (on ssl element) | `cpanel://USER/ssl?domain_type=addon` |
 | **diff://** | none | N/A |
 | **env://** | none | N/A |
 | **sqlite://** | none | N/A |
 | **mysql://** | none | N/A |
-| **ssl://** | none | N/A |
+| **ssl://** | none (uses CLI flags) | N/A |
+| **autossl://** | none | N/A |
+| **letsencrypt://** | none | N/A |
+| **nginx://** | none (uses CLI flags) | N/A |
 | **python://** | none | N/A |
 | **domain://** | none | N/A |
 | **reveal://** | none | N/A |
@@ -330,29 +336,150 @@ reveal 'stats://.?hotspots&code_only'
 
 ### claude:// - Claude Conversation Analysis
 
-**Purpose**: Analyze Claude API conversation logs
+**Purpose**: Analyze Claude Code session logs (JSONL conversation files)
 
 **Query Parameters**:
 
-- **`summary`** (flag) - Show conversation summary instead of full details
+- **`summary`** (flag) - Session summary (overview + key events)
   ```bash
-  reveal 'claude://conversation.json?summary'
+  reveal 'claude://my-session?summary'
   ```
 
-- **`tools`** (flag) - Show tool usage statistics
+- **`errors`** (flag) - Filter for messages containing errors
   ```bash
-  reveal 'claude://conversation.json?tools'
+  reveal 'claude://my-session?errors'
   ```
 
-- **`errors`** (flag) - Show only error messages
+- **`tools=<name>`** (string) - Filter for specific tool usage
   ```bash
-  reveal 'claude://conversation.json?errors'
+  reveal 'claude://my-session?tools=Bash'
+  reveal 'claude://my-session?tools=Edit'
   ```
 
-**Combining Parameters**:
-```bash
-reveal 'claude://conversation.json?summary&tools'
-```
+- **`contains=<text>`** (string) - Filter messages containing text
+  ```bash
+  reveal 'claude://my-session?contains=reveal'
+  ```
+
+- **`role=<role>`** (string) - Filter by message role (`user` or `assistant`)
+  ```bash
+  reveal 'claude://my-session?role=user'
+  ```
+
+- **`search=<term>`** (string) - Search all message content (text, thinking, tool inputs), case-insensitive
+  ```bash
+  reveal 'claude://my-session?search=FileNotFoundError'
+  ```
+
+- **`tail=N`** (integer) - Show last N assistant turns — fast session recovery
+  ```bash
+  reveal 'claude://my-session?tail=3'
+  reveal 'claude://my-session?tail=1'
+  ```
+
+- **`last`** (flag) - Show last assistant turn (shorthand for `?tail=1`)
+  ```bash
+  reveal 'claude://my-session?last'
+  ```
+
+- **`tokens`** (flag) - Token usage breakdown by message role (input/output/cache)
+  ```bash
+  reveal 'claude://my-session?tokens'
+  ```
+
+---
+
+### depends:// - Inverse Dependency Graph
+
+**Purpose**: Find all files that import a given module ("what depends on this?")
+
+**Query Parameters**:
+
+- **`top=N`** (integer) - Limit to the N most-imported files (directory mode)
+  ```bash
+  reveal 'depends://src?top=10'
+  ```
+
+- **`format=dot`** (string) - Output GraphViz DOT format for visualization
+  ```bash
+  reveal 'depends://src/core.py?format=dot'
+  ```
+
+---
+
+### xlsx:// - Excel/XLSX Workbook
+
+**Purpose**: Extract data, structure, and embedded models from Excel files
+
+**Query Parameters**:
+
+- **`sheet=<name|index>`** (string|integer) - Sheet to extract (name or 0-based index)
+  ```bash
+  reveal 'xlsx://model.xlsx?sheet=Sales'
+  reveal 'xlsx://model.xlsx?sheet=0'
+  ```
+
+- **`range=<A1:C10>`** (string) - Cell range in A1 notation
+  ```bash
+  reveal 'xlsx://model.xlsx?sheet=Sales&range=A1:C10'
+  ```
+
+- **`search=<text>`** (string) - Search for text across all sheets
+  ```bash
+  reveal 'xlsx://model.xlsx?search=revenue'
+  ```
+
+- **`format=<format>`** (string) - Output format (`text`, `json`, `csv`)
+  ```bash
+  reveal 'xlsx://model.xlsx?sheet=Sales&format=csv'
+  ```
+
+- **`limit=N`** (integer) - Maximum number of rows to return
+  ```bash
+  reveal 'xlsx://model.xlsx?sheet=Sales&limit=100'
+  ```
+
+- **`formulas=true`** (boolean) - Show formulas instead of computed values
+  ```bash
+  reveal 'xlsx://model.xlsx?sheet=Budget&formulas=true'
+  ```
+
+- **`powerpivot=<mode>`** (string) - Extract Power Pivot data model (`tables`, `schema`, `measures`, `dax`)
+  ```bash
+  reveal 'xlsx://model.xlsx?powerpivot=schema'
+  reveal 'xlsx://model.xlsx?powerpivot=dax'
+  ```
+
+- **`powerquery=<mode>`** (string) - Extract Power Query M code (`list`, `show`, or query name)
+  ```bash
+  reveal 'xlsx://model.xlsx?powerquery=list'
+  reveal 'xlsx://model.xlsx?powerquery=SalesData'
+  ```
+
+- **`names`** (flag) - List named ranges defined in the workbook
+  ```bash
+  reveal 'xlsx://model.xlsx?names'
+  ```
+
+- **`connections`** (string/flag) - List external data connections
+  ```bash
+  reveal 'xlsx://model.xlsx?connections=list'
+  ```
+
+---
+
+### cpanel:// - cPanel User Environment
+
+**Purpose**: Inspect cPanel user environments — domains, SSL certs, ACL health
+
+**Query Parameters** (on `ssl` element only):
+
+- **`domain_type=<type>`** (string) - Filter SSL certs by domain type
+  - Values: `main_domain`, `addon`, `subdomain`, `parked`
+  ```bash
+  reveal 'cpanel://USERNAME/ssl?domain_type=addon'
+  reveal 'cpanel://USERNAME/ssl?domain_type=main_domain'
+  ```
 
 ---
 
@@ -362,17 +489,20 @@ The following adapters use **element paths** for navigation — query params are
 
 - **env://** - `env://VAR_NAME` (element = variable name)
 - **sqlite://** - `sqlite://db.sqlite/table_name` (element = table)
-- **mysql://** - `mysql://host/database/table` (element = table)
+- **mysql://** - `mysql://host/element` (element = connections, innodb, errors, databases, etc.)
 - **python://** - `python://packages` (element = topic)
 - **reveal://** - `reveal://adapters` (element = topic)
 - **diff://** - Element path selects comparison side
+- **autossl://** - `autossl://TIMESTAMP` (element = run timestamp)
+- **letsencrypt://** - Inventory of all certs; no sub-selection needed
 
 The following adapters have **adapter-specific options expressed as CLI flags** rather than query params. This is a known design tension — the direction is to migrate these to URI query params so options travel with the resource:
 
 | Adapter | Current (CLI flag) | Target (query param) |
 |---------|-------------------|----------------------|
-| `cpanel://` | `reveal cpanel://USER/ssl --dns-verified` | `reveal 'cpanel://USER/ssl?dns-verified'` |
 | `ssl://` | `reveal ssl://host --expiring-within 30` | `reveal 'ssl://host?expiring-within=30'` |
+| `ssl://` | `reveal ssl://nginx:///etc/nginx/*.conf --summary` | `reveal 'ssl://nginx:///etc/nginx/*.conf?summary'` |
+| `nginx://` | `reveal nginx://host --check` | `reveal 'nginx://host?check'` |
 | `claude://` | `reveal claude:// --base-path /path` | `reveal 'claude://?base-path=/path'` |
 
 The `ast://` adapter is the **reference implementation** — all filtering options are query parameters. New URI adapters should follow this pattern. See [ADAPTER_CONSISTENCY.md](../development/ADAPTER_CONSISTENCY.md#adapter-specific-flags-vs-query-parameters) for the full rationale.

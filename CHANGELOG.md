@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `stats://`: added `check_issues` field to `stats_file` quality output schema
   - `json://`: added `sort`, `limit`, `offset` result control params (already documented in notes)
   - `markdown://`: `aggregate=field` confirmed present (pre-existing, DOC_REVIEW false positive)
+- **QUERY_PARAMETER_REFERENCE.md expanded**: added `depends://`, `xlsx://`, `cpanel://` sections with full param docs; expanded `claude://` from 3 to 9 params; added `autossl://`, `letsencrypt://`, `nginx://` to no-params section; updated Quick Reference table from 14 to 21 adapters
 
 ## [0.73.0] - 2026-04-06 (liquid-carnage-0406)
 
