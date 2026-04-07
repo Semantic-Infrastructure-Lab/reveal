@@ -1024,9 +1024,9 @@ class TestHandleFile(unittest.TestCase):
             os.unlink(temp_path)
 
     def test_check_flag(self):
-        """Verify --check flag calls run_pattern_detection."""
+        """Verify reveal check <file> calls run_pattern_detection."""
         import tempfile
-        from reveal.file_handler import handle_file
+        from reveal.cli.commands.check import run_check
         from reveal import checks
 
         with tempfile.NamedTemporaryFile(delete=False, suffix='.py', mode='w') as f:
@@ -1035,17 +1035,18 @@ class TestHandleFile(unittest.TestCase):
 
         try:
             mock_args = Namespace(
-                check=True,
-                validate_schema=None,
-                no_breadcrumbs=False,
+                path=temp_path,
+                rules=False,
+                explain=None,
                 no_fallback=False,
-                extract=None,
                 select=None,
-                ignore=None
+                ignore=None,
+                format='text',
             )
 
-            with patch.object(checks, 'run_pattern_detection') as mock_check:
-                handle_file(temp_path, None, False, 'text', mock_args)
+            with patch.object(checks, 'run_pattern_detection', return_value=[]) as mock_check:
+                with patch('sys.exit'):
+                    run_check(mock_args)
                 mock_check.assert_called_once()
         finally:
             os.unlink(temp_path)

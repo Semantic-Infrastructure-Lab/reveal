@@ -552,7 +552,7 @@ reveal claude://session/my-session?summary&errors
 
 ## Elements Reference
 
-The claude:// adapter supports eleven elements for progressive disclosure:
+The claude:// adapter supports thirteen elements for progressive disclosure:
 
 ### 1. workflow
 
@@ -723,14 +723,16 @@ reveal claude://session/infernal-earth-0118/user
 **Syntax**:
 ```bash
 reveal claude://session/<session-name>/assistant
+reveal claude://session/<session-name>/assistant?full   # disable per-message truncation
 ```
 
 **Example**:
 ```bash
 reveal claude://session/infernal-earth-0118/assistant
+reveal claude://session/infernal-earth-0118/assistant?full
 ```
 
-**Output**: Each assistant turn's text content (first 600 chars), with `[thinking]` / `[tools: Bash, Read]` metadata. Use `/message/<n>` for full text of a specific message.
+**Output**: Each assistant turn's text content (first 600 chars by default), with `[thinking]` / `[tools: Bash, Read]` metadata. Tool-only turns show one-line summaries (`Agent → research strategies`, `Write → STRATEGIES.md`). Add `?full` to remove the 600-char truncation.
 
 **Use when**: Read the actual findings or report, compare outputs between sessions, understand what the agent concluded
 
@@ -738,25 +740,55 @@ reveal claude://session/infernal-earth-0118/assistant
 
 ### 10. message/\<n\>
 
-**Description**: Read a single message by index with full text content
+**Description**: Read a single message by index with full content — text, tool_use params, and tool_result output all shown
 
 **Syntax**:
 ```bash
 reveal claude://session/<session-name>/message/<index>
+reveal claude://session/<session-name>/message/-1      # last message
 ```
 
 **Example**:
 ```bash
 reveal claude://session/infernal-earth-0118/message/334
+reveal claude://session/infernal-earth-0118/message/-1
 ```
 
-**Output**: Full message content including all text blocks, role, timestamp
+**Output**: Full message content. For `tool_use` blocks: shows name + key params (`file_path`, `command`, `content` size). For `tool_result` blocks: shows content preview (first 500 chars).
 
-**Use when**: Read a long assistant response in full (e.g. final report), inspect a specific tool call result
+**Use when**: Read a long assistant response in full, inspect what a Write/Edit tool call actually wrote, read agent tool_result output
 
 ---
 
-### 11. agents
+### 11. message (range)
+
+**Description**: Read a range of messages (both user and assistant, interleaved) using the standard `--range` flag
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>/message --range 10-20
+reveal 'claude://session/<session-name>/message?full' --range 10-20
+reveal claude://session/<session-name>/message --range 300-    # open-ended: 300 to end
+```
+
+**Example**:
+```bash
+reveal claude://session/infernal-earth-0118/message --range 5-15
+```
+
+**Output**: Interleaved user + assistant turns with role, timestamp, and content. Default truncation at 600 chars; add `?full` or `--verbose` to disable. Each turn shows its raw `message_index` so you can drill in with `/message/N`. Tool-only assistant turns show one-line summaries (`Read → file.py`, `Bash → git status`).
+
+**Notes**:
+- Range is 1-indexed over conversation messages (user + assistant only; metadata records excluded)
+- Raw `message_index` shown per turn for cross-reference with `/message/N` (which is 0-indexed over all raw records)
+- Open-ended `--range 300-` supported: returns all messages from turn 300 to end
+- `?full` and `--verbose` are equivalent — both disable the 600-char truncation
+
+**Use when**: Navigate a specific region of a long conversation, review a troubleshooting exchange, inspect what happened between two known points
+
+---
+
+### 12. agents
 
 **Description**: Agent tool calls made during the session with per-agent telemetry
 
@@ -773,6 +805,32 @@ reveal claude://session/infernal-earth-0118/agents
 **Output**: Per-agent breakdown with `agent_type`, `status`, `duration_ms`, `token_count`, `tool_count`, and `usage` (input/output/cache tokens). Session-level aggregates: `total_agent_tokens`, `total_agent_duration_ms`.
 
 **Use when**: Understand subagent cost, identify slow or expensive agent invocations, audit agent behavior within a session
+
+---
+
+### 13. chain
+
+**Description**: Session continuation chain traversal — follows `continuing_from:` links in README frontmatter back through the session history
+
+**Syntax**:
+```bash
+reveal claude://session/<session-name>/chain
+```
+
+**Example**:
+```bash
+reveal claude://session/revealed-sphinx-0407/chain --base-path ~/src/tia/sessions
+```
+
+**Output**: Ordered list of sessions from HEAD back to the root, each showing `session`, `date`, `badge`, `continuing_from`, `tests_start`, `tests_end`, and `commits`. Chain length capped at 50 to prevent cycles.
+
+**Notes**:
+- Follows `continuing_from:` frontmatter in `README*.md` files (most recent README wins if multiple exist)
+- Cycle detection prevents infinite loops
+- Missing README → entry still included with `null` fields; `readme: null` shown in output
+- Set `REVEAL_SESSIONS_DIR` or pass `--base-path` so the adapter can locate sibling sessions
+
+**Use when**: Understand a session's development lineage, audit what changed across a multi-session feature, verify test count progression over time
 
 ---
 

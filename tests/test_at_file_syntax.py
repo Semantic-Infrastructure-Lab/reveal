@@ -195,6 +195,49 @@ class TestAtFileWithFlags(unittest.TestCase):
         )
         return result
 
+    def test_at_file_check_exits_1_with_violations(self):
+        """@file --check must exit 1 when any listed file has violations."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write('import os\nimport os\n\ndef add(a, b):\n    return a + b\n')
+            dirty_file = f.name
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write(f'{dirty_file}\n')
+            list_file = f.name
+
+        try:
+            result = self.run_reveal(f'@{list_file}', '--check')
+            self.assertEqual(
+                result.returncode, 1,
+                f"Expected exit 1 (violations found), got {result.returncode}:\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+            self.assertNotIn('Traceback', result.stderr)
+        finally:
+            os.unlink(dirty_file)
+            os.unlink(list_file)
+
+    def test_at_file_check_exits_0_no_violations(self):
+        """@file --check must exit 0 when no listed file has violations."""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write('def add(a, b):\n    return a + b\n')
+            clean_file = f.name
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+            f.write(f'{clean_file}\n')
+            list_file = f.name
+
+        try:
+            result = self.run_reveal(f'@{list_file}', '--check')
+            self.assertEqual(
+                result.returncode, 0,
+                f"Expected exit 0 (no violations), got {result.returncode}:\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+        finally:
+            os.unlink(clean_file)
+            os.unlink(list_file)
+
     def test_at_file_with_json_format(self):
         """@file should work with --format=json."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:

@@ -278,11 +278,6 @@ def _dispatch_special_flags(analyzer, path: str, output_format: str, args, confi
         run_schema_validation(analyzer, path, args.validate_schema, output_format, args)
         return True
 
-    if getattr(args, 'check', False):
-        from .checks import run_pattern_detection  # noqa: I006 — circular avoidance
-        run_pattern_detection(analyzer, path, output_format, args, config=config)
-        return True
-
     return False
 
 

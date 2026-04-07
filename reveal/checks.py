@@ -164,6 +164,8 @@ def run_pattern_detection(
         print_breadcrumbs('quality-check', path, file_type=file_type, config=config,
                          detections=detections)
 
+    return len(detections)
+
 
 def run_schema_validation(
     analyzer: FileAnalyzer,

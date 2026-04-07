@@ -1002,3 +1002,107 @@ class TestSchemaIncludesCrossSessionSearch:
         help_data = ClaudeAdapter.get_help()
         example_uris = [e.get('uri', '') for e in help_data.get('examples', [])]
         assert any('sessions' in u and 'search' in u for u in example_uris)
+
+
+# ─── get_message_range ────────────────────────────────────────────────────────
+
+class TestGetMessageRange:
+    """Tests for analysis/messages.py:get_message_range()."""
+
+    def _make_messages(self):
+        return [
+            {'type': 'user', 'message': {'content': [{'type': 'text', 'text': 'hello'}]},
+             'timestamp': '2026-01-01T10:00:00.000Z'},
+            {'type': 'assistant', 'message': {'content': [{'type': 'text', 'text': 'hi there'}]},
+             'timestamp': '2026-01-01T10:01:00.000Z'},
+            {'type': 'file-history-snapshot', 'message': {}},  # metadata — should be excluded
+            {'type': 'user', 'message': {'content': [{'type': 'text', 'text': 'follow up'}]},
+             'timestamp': '2026-01-01T10:02:00.000Z'},
+        ]
+
+    def test_returns_correct_type(self):
+        from reveal.adapters.claude.analysis.messages import get_message_range
+        result = get_message_range(self._make_messages(), 'my-session', {})
+        assert result['type'] == 'claude_message_range'
+
+    def test_filters_out_metadata_records(self):
+        from reveal.adapters.claude.analysis.messages import get_message_range
+        result = get_message_range(self._make_messages(), 'my-session', {})
+        roles = [m['role'] for m in result['messages']]
+        assert roles == ['user', 'assistant', 'user']
+
+    def test_turn_numbering_is_1indexed(self):
+        from reveal.adapters.claude.analysis.messages import get_message_range
+        result = get_message_range(self._make_messages(), 'my-session', {})
+        turns = [m['turn'] for m in result['messages']]
+        assert turns == [1, 2, 3]
+
+    def test_message_index_is_raw_position(self):
+        from reveal.adapters.claude.analysis.messages import get_message_range
+        result = get_message_range(self._make_messages(), 'my-session', {})
+        # file-history-snapshot is at raw index 2, so user at index 3 is turn 3
+        assert result['messages'][2]['message_index'] == 3
+
+    def test_total_messages_excludes_metadata(self):
+        from reveal.adapters.claude.analysis.messages import get_message_range
+        result = get_message_range(self._make_messages(), 'my-session', {})
+        assert result['total_messages'] == 3
+
+    def test_empty_messages_returns_empty_list(self):
+        from reveal.adapters.claude.analysis.messages import get_message_range
+        result = get_message_range([], 'empty-session', {})
+        assert result['messages'] == []
+        assert result['total_messages'] == 0
+
+    def test_session_name_stored(self):
+        from reveal.adapters.claude.analysis.messages import get_message_range
+        result = get_message_range([], 'test-session-xyz', {})
+        assert result['session'] == 'test-session-xyz'
+
+
+# ─── _post_process_message_range ──────────────────────────────────────────────
+
+class TestPostProcessMessageRange:
+    """Tests for ClaudeAdapter._post_process_message_range()."""
+
+    def _args(self, **kwargs):
+        defaults = dict(head=None, tail=None, range=None)
+        defaults.update(kwargs)
+        return Namespace(**defaults)
+
+    def _result(self, n=5):
+        return {
+            'type': 'claude_message_range',
+            'messages': [{'turn': i + 1, 'role': 'user'} for i in range(n)],
+            'total_messages': n,
+        }
+
+    def test_no_slice_returns_all(self):
+        result = self._result(4)
+        ClaudeAdapter._post_process_message_range(result, self._args())
+        assert len(result['messages']) == 4
+        assert result['displayed'] == 4
+
+    def test_range_slices_messages(self):
+        result = self._result(10)
+        ClaudeAdapter._post_process_message_range(result, self._args(range=(2, 4)))
+        assert len(result['messages']) == 3
+        assert result['messages'][0]['turn'] == 2
+        assert result['messages'][-1]['turn'] == 4
+
+    def test_open_ended_range_returns_to_end(self):
+        result = self._result(10)
+        ClaudeAdapter._post_process_message_range(result, self._args(range=(8, None)))
+        assert len(result['messages']) == 3  # turns 8, 9, 10
+        assert result['messages'][0]['turn'] == 8
+
+    def test_filtered_from_set_when_sliced(self):
+        result = self._result(10)
+        ClaudeAdapter._post_process_message_range(result, self._args(head=3))
+        assert result['filtered_from'] == 10
+        assert result['displayed'] == 3
+
+    def test_none_messages_returns_early(self):
+        result = {'type': 'claude_message_range', 'messages': None}
+        ClaudeAdapter._post_process_message_range(result, self._args())
+        assert result['messages'] is None  # unchanged

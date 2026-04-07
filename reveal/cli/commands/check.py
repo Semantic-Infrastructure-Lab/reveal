@@ -136,7 +136,14 @@ def run_check(args: Namespace) -> None:
         args.recursive = True
         handle_recursive_check(path, args)
     else:
-        # Single-file check: bridge into handle_file() which routes on args.check
-        args.check = True
-        from reveal.file_handler import handle_file
-        handle_file(str(path), None, False, getattr(args, 'format', 'text'), args)
+        from reveal.file_handler import _get_analyzer_or_exit, _build_file_cli_overrides
+        from reveal.checks import run_pattern_detection
+        from reveal.config import RevealConfig
+        allow_fallback = not getattr(args, 'no_fallback', False)
+        analyzer = _get_analyzer_or_exit(str(path), allow_fallback)
+        cli_overrides = _build_file_cli_overrides(args)
+        config = RevealConfig.get(start_path=path.parent, cli_overrides=cli_overrides or None)
+        violations = run_pattern_detection(
+            analyzer, str(path), getattr(args, 'format', 'text'), args, config=config
+        )
+        sys.exit(1 if violations else 0)

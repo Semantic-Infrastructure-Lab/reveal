@@ -57,29 +57,46 @@ def _process_stdin_uri(target: str, args: 'Namespace', is_batch_mode: bool,
             print(f"Warning: {target} failed, skipping", file=sys.stderr)
 
 
-def _process_stdin_file(target: str, args: 'Namespace', handle_file_func) -> None:
+def _process_stdin_file(target: str, args: 'Namespace', handle_file_func, is_check_mode: bool = False) -> int:
     """Process a file path from stdin.
 
     Args:
         target: File path to process
         args: Parsed arguments
         handle_file_func: Function to handle individual files
+        is_check_mode: When True, run quality check and return violation count
+
+    Returns:
+        Violation count when is_check_mode is True, else 0.
     """
     path = Path(target)
 
     # Skip if path doesn't exist (graceful degradation)
     if not path.exists():
         print(f"Warning: {target} not found, skipping", file=sys.stderr)
-        return
+        return 0
 
     # Skip directories (only process files)
     if path.is_dir():
         print(f"Warning: {target} is a directory, skipping (use reveal {target}/ directly)", file=sys.stderr)
-        return
+        return 0
 
     # Process the file
-    if path.is_file():
-        handle_file_func(str(path), None, args.meta, args.format, args)
+    if not path.is_file():
+        return 0
+
+    if is_check_mode:
+        from reveal.file_handler import _get_analyzer_or_exit, _build_file_cli_overrides
+        from reveal.checks import run_pattern_detection
+        from reveal.config import RevealConfig
+        allow_fallback = not getattr(args, 'no_fallback', False)
+        analyzer = _get_analyzer_or_exit(str(path), allow_fallback)
+        cli_overrides = _build_file_cli_overrides(args)
+        config = RevealConfig.get(start_path=path.parent, cli_overrides=cli_overrides or None)
+        return run_pattern_detection(analyzer, str(path), getattr(args, 'format', 'text'), args, config=config)
+
+    handle_file_func(str(path), None, args.meta, args.format, args)
+    return 0
 
 
 def handle_stdin_mode(args: 'Namespace', handle_file_func):
@@ -102,11 +119,13 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
 
     # Check if we're in batch mode (explicit --batch or SSL batch checks)
     is_batch_mode = getattr(args, 'batch', False)
-    is_ssl_batch_check = getattr(args, 'check', False) and not is_batch_mode
+    is_check_mode = getattr(args, 'check', False)
+    is_ssl_batch_check = is_check_mode and not is_batch_mode
 
     # Collect results for batch aggregation
     ssl_check_results: List[Dict[str, Any]] = []
     batch_results: List[dict] = []
+    total_file_violations = 0
 
     # Read paths/URIs from stdin (one per line)
     first_line_checked = False
@@ -134,7 +153,9 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
         else:
             # Apply --ext filter for file paths
             if _passes_ext_filter(target, getattr(args, 'ext', None)):
-                _process_stdin_file(target, args, handle_file_func)
+                total_file_violations += _process_stdin_file(
+                    target, args, handle_file_func, is_check_mode=is_check_mode
+                )
 
     # Render aggregated batch results
     if batch_results:
@@ -146,7 +167,7 @@ def handle_stdin_mode(args: 'Namespace', handle_file_func):
     if ssl_check_results:
         _render_ssl_batch_results(ssl_check_results, args)
 
-    sys.exit(0)
+    sys.exit(1 if total_file_violations > 0 else 0)
 
 
 def _collect_ssl_check_result(uri: str, args: 'Namespace') -> Optional[Dict[str, Any]]:

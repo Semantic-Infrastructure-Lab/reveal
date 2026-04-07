@@ -30,6 +30,7 @@ from .analysis import (
     get_token_breakdown,
     search_sessions_for_term,
     get_session_agents,
+    get_message_range,
 )
 
 
@@ -606,12 +607,18 @@ class ClaudeAdapter(ResourceAdapter):
         if '/user' in self.resource:
             return filter_by_role(messages, 'user', self.session_name, contract_base)
         if '/assistant' in self.resource:
-            return filter_by_role(messages, 'assistant', self.session_name, contract_base)
+            result = filter_by_role(messages, 'assistant', self.session_name, contract_base)
+            result['full'] = 'full' in self.query_params
+            return result
         if '/message/' in self.resource:
             msg_id = int(self.resource.split('/message/')[1])
             if msg_id < 0:
                 msg_id = len(messages) + msg_id
             return get_message(messages, msg_id, self.session_name, contract_base)
+        if self.resource.endswith('/message'):
+            result = get_message_range(messages, self.session_name, contract_base)
+            result['full'] = 'full' in self.query_params
+            return result
         if '/messages' in self.resource:
             search = self.query_params.get('search') or self.query_params.get('contains')
             return get_messages(messages, self.session_name, contract_base, search=search)
@@ -982,7 +989,8 @@ class ClaudeAdapter(ResourceAdapter):
         if since:
             all_sessions = [s for s in all_sessions if s.get('modified', '') >= since]
 
-        matches = search_sessions_for_term(all_sessions, term)
+        whole_word = 'word' in self.query_params
+        matches = search_sessions_for_term(all_sessions, term, whole_word=whole_word)
 
         return {
             'contract_version': '1.0',
@@ -991,6 +999,7 @@ class ClaudeAdapter(ResourceAdapter):
             'source_type': 'directory',
             'term': term,
             'since': since or None,
+            'whole_word': whole_word,
             'sessions_scanned': len(all_sessions),
             'match_count': len(matches),
             'matches': matches,
@@ -1919,6 +1928,8 @@ class ClaudeAdapter(ResourceAdapter):
             self._post_process_session_list(result, args)
         elif result_type == 'claude_messages':
             self._post_process_messages(result, args)
+        elif result_type == 'claude_message_range':
+            self._post_process_message_range(result, args)
         elif result_type == 'claude_cross_session_search':
             self._post_process_search_results(result, args)
         elif result_type == 'claude_history':
@@ -2045,6 +2056,19 @@ class ClaudeAdapter(ResourceAdapter):
         msgs = ClaudeAdapter._slice_list(msgs, args)
         result['messages'] = msgs
         result['total_turns'] = len(msgs)
+
+    @staticmethod
+    def _post_process_message_range(result: Dict[str, Any], args: Any) -> None:
+        """Apply --head/--tail/--range slicing to claude_message_range results."""
+        msgs = result.get('messages')
+        if msgs is None:
+            return
+        total_before = len(msgs)
+        msgs = ClaudeAdapter._slice_list(msgs, args)
+        result['messages'] = msgs
+        result['displayed'] = len(msgs)
+        if len(msgs) < total_before:
+            result['filtered_from'] = total_before
 
     @staticmethod
     def get_help() -> Dict[str, Any]:

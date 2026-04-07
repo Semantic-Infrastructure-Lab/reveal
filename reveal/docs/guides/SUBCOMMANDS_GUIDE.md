@@ -402,7 +402,7 @@ reveal deps . --format json          # Machine-readable for CI
 
 ## reveal check — Quality Rule Engine
 
-Run 69 built-in quality rules against a file or directory. Covers bugs, complexity, imports, maintainability, security, types, and more. Exit code 1 = issues found (directory mode only; single-file always exits 0).
+Run 69 built-in quality rules against a file or directory. Covers bugs, complexity, imports, maintainability, security, types, and more. Exit code 1 = issues found.
 
 ### Usage
 
@@ -454,16 +454,17 @@ reveal check src/ --format json           # machine-readable
 reveal check src/ --severity high         # high/critical issues only
 reveal check --rules                      # list all 69 rules
 reveal check --explain C901              # explain the complexity rule
+git diff --name-only | reveal --stdin --check  # check only changed files
 ```
 
 ### Exit Codes
 
 | Code | Meaning |
 |------|---------|
-| `0` | No violations found (directory mode); always 0 for single-file mode |
-| `1` | One or more violations found (directory mode only) |
+| `0` | No violations found |
+| `1` | One or more violations found |
 
-> **Note**: Single-file mode (`reveal check file.py`) always exits 0 regardless of violations. Use directory mode (`reveal check src/`) for exit-code-based CI gating.
+Exit code 1 is set consistently across all invocation forms: single file, directory, and `--stdin --check` piped file lists.
 
 ### See Also
 

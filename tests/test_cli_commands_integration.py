@@ -161,6 +161,87 @@ class TestCLIWithFilesIntegration(unittest.TestCase):
         self.assertNotIn('TypeError', result.stderr)
         self.assertNotIn('Traceback', result.stderr)
 
+    def test_check_subcommand_exits_1_with_violations(self):
+        """reveal check <file> must exit 1 when violations are found."""
+        # This test file has known violations (duplicate imports inside test methods)
+        test_file = Path(__file__)
+
+        result = subprocess.run(
+            [sys.executable, "-m", "reveal.main", "check", str(test_file)],
+            capture_output=True, text=True, encoding='utf-8', timeout=30
+        )
+
+        self.assertEqual(
+            result.returncode, 1,
+            f"Expected exit 1 (violations found), got {result.returncode}:\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        self.assertNotIn('Traceback', result.stderr)
+
+    def test_check_subcommand_exits_0_no_violations(self):
+        """reveal check <file> must exit 0 when no violations are found."""
+        import tempfile
+        # Write a minimal clean Python file with no quality issues
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write('def add(a, b):\n    return a + b\n')
+            clean_file = f.name
+
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "reveal.main", "check", clean_file],
+                capture_output=True, text=True, encoding='utf-8', timeout=30
+            )
+            self.assertEqual(
+                result.returncode, 0,
+                f"Expected exit 0 (no violations), got {result.returncode}:\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+        finally:
+            import os
+            os.unlink(clean_file)
+
+    def test_stdin_check_exits_1_with_violations(self):
+        """git diff --name-only | reveal --stdin --check must exit 1 when violations found."""
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            # Write a file with a known violation (duplicate import)
+            f.write('import os\nimport os\n\ndef add(a, b):\n    return a + b\n')
+            dirty_file = f.name
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "reveal.main", "--stdin", "--check"],
+                input=dirty_file + '\n',
+                capture_output=True, text=True, encoding='utf-8', timeout=30
+            )
+            self.assertEqual(
+                result.returncode, 1,
+                f"Expected exit 1 (violations found via stdin), got {result.returncode}:\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+            self.assertNotIn('Traceback', result.stderr)
+        finally:
+            os.unlink(dirty_file)
+
+    def test_stdin_check_exits_0_no_violations(self):
+        """reveal --stdin --check must exit 0 when no violations found in any file."""
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write('def add(a, b):\n    return a + b\n')
+            clean_file = f.name
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "reveal.main", "--stdin", "--check"],
+                input=clean_file + '\n',
+                capture_output=True, text=True, encoding='utf-8', timeout=30
+            )
+            self.assertEqual(
+                result.returncode, 0,
+                f"Expected exit 0 (no violations via stdin), got {result.returncode}:\n"
+                f"stdout: {result.stdout}\nstderr: {result.stderr}"
+            )
+        finally:
+            os.unlink(clean_file)
+
     def test_outline_on_test_file_works(self):
         """Test `reveal <file> --outline` works."""
         # Use this test file itself

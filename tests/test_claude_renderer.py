@@ -1000,7 +1000,7 @@ class TestClaudeAssistantMessagesRenderer:
         # Empty message should be silently skipped
         assert 'msg 1' not in out
 
-    def test_tool_only_message_shows_hint(self, capsys):
+    def test_tool_only_message_shows_summary(self, capsys):
         from reveal.adapters.claude.renderer import ClaudeRenderer
 
         result = {
@@ -1010,14 +1010,17 @@ class TestClaudeAssistantMessagesRenderer:
                 'message_index': 1,
                 'timestamp': None,
                 'content': [
-                    {'type': 'tool_use', 'name': 'Read', 'id': 't1', 'input': {}},
+                    {'type': 'tool_use', 'name': 'Read', 'id': 't1',
+                     'input': {'file_path': '/some/file.py'}},
                 ],
             }],
         }
         ClaudeRenderer._render_claude_assistant_messages(result)
         out = capsys.readouterr().out
 
-        assert 'tool calls only' in out
+        # Tool-only turns now show a one-line summary instead of the dead-end hint
+        assert 'Read' in out
+        assert 'file.py' in out
 
 
 class TestClaudeMessageRenderer:
@@ -1443,6 +1446,128 @@ class TestFindConversationSuffixMatch:
 
         result = adapter._find_conversation()
         assert result is None
+
+
+class TestClaudeMessageRangeRenderer:
+    """Tests for _render_claude_message_range."""
+
+    def _result(self, messages=None, rng=None, full=False, session='my-session'):
+        result = {
+            'type': 'claude_message_range',
+            'session': session,
+            'messages': messages or [],
+            'total_messages': len(messages or []),
+            'displayed': len(messages or []),
+            'full': full,
+            '_display': {},
+        }
+        if rng:
+            result['_display']['range'] = rng
+        return result
+
+    def test_header_with_range(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        result = self._result(rng=(5, 10))
+        ClaudeRenderer._render_claude_message_range(result)
+        out = capsys.readouterr().out
+        assert 'Messages 5' in out
+        assert '10' in out
+        assert 'my-session' in out
+
+    def test_header_without_range(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        result = self._result()
+        ClaudeRenderer._render_claude_message_range(result)
+        out = capsys.readouterr().out
+        assert 'Messages:' in out
+        assert 'my-session' in out
+
+    def test_header_open_ended_range(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        result = self._result(rng=(300, None))
+        ClaudeRenderer._render_claude_message_range(result)
+        out = capsys.readouterr().out
+        assert '300' in out
+        assert 'end' in out
+
+    def test_renders_user_message_text(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        messages = [{'turn': 1, 'message_index': 0, 'role': 'user', 'timestamp': '2026-01-01 10:00',
+                     'content': [{'type': 'text', 'text': 'hello world'}]}]
+        result = self._result(messages=messages)
+        ClaudeRenderer._render_claude_message_range(result)
+        out = capsys.readouterr().out
+        assert 'hello world' in out
+        assert 'user' in out
+
+    def test_renders_assistant_text(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        messages = [{'turn': 1, 'message_index': 1, 'role': 'assistant', 'timestamp': '2026-01-01 10:01',
+                     'content': [{'type': 'text', 'text': 'response text'}]}]
+        result = self._result(messages=messages)
+        ClaudeRenderer._render_claude_message_range(result)
+        out = capsys.readouterr().out
+        assert 'response text' in out
+        assert 'assistant' in out
+
+    def test_assistant_tool_only_shows_summary(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        messages = [{'turn': 1, 'message_index': 2, 'role': 'assistant', 'timestamp': '',
+                     'content': [{'type': 'tool_use', 'name': 'Bash',
+                                  'input': {'command': 'git status'}}]}]
+        result = self._result(messages=messages)
+        ClaudeRenderer._render_claude_message_range(result)
+        out = capsys.readouterr().out
+        assert 'Bash' in out
+
+    def test_truncates_long_text_by_default(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        long_text = 'x' * 700
+        messages = [{'turn': 1, 'message_index': 0, 'role': 'user', 'timestamp': '',
+                     'content': [{'type': 'text', 'text': long_text}]}]
+        result = self._result(messages=messages)
+        ClaudeRenderer._render_claude_message_range(result)
+        out = capsys.readouterr().out
+        assert '100 more chars' in out
+
+    def test_full_flag_disables_truncation(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        long_text = 'x' * 700
+        messages = [{'turn': 1, 'message_index': 0, 'role': 'user', 'timestamp': '',
+                     'content': [{'type': 'text', 'text': long_text}]}]
+        result = self._result(messages=messages, full=True)
+        ClaudeRenderer._render_claude_message_range(result)
+        out = capsys.readouterr().out
+        assert 'more chars' not in out
+        assert 'x' * 700 in out
+
+    def test_verbose_flag_disables_truncation(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        long_text = 'y' * 700
+        messages = [{'turn': 1, 'message_index': 0, 'role': 'user', 'timestamp': '',
+                     'content': [{'type': 'text', 'text': long_text}]}]
+        result = self._result(messages=messages)
+        result['_display']['verbose'] = True
+        ClaudeRenderer._render_claude_message_range(result)
+        out = capsys.readouterr().out
+        assert 'more chars' not in out
+
+    def test_filtered_from_shown_in_header(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        result = self._result()
+        result['filtered_from'] = 50
+        ClaudeRenderer._render_claude_message_range(result)
+        out = capsys.readouterr().out
+        assert 'of 50 total' in out
+
+    def test_tool_result_count_shown(self, capsys):
+        from reveal.adapters.claude.renderer import ClaudeRenderer
+        messages = [{'turn': 1, 'message_index': 0, 'role': 'user', 'timestamp': '',
+                     'content': [{'type': 'tool_result', 'content': 'ok'}]}]
+        result = self._result(messages=messages)
+        ClaudeRenderer._render_claude_message_range(result)
+        out = capsys.readouterr().out
+        assert 'tool result' in out
 
 
 if __name__ == '__main__':

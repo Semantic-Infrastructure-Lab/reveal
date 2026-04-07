@@ -516,10 +516,28 @@ class ClaudeRenderer(TypeDispatchRenderer):
             print()
 
     @staticmethod
+    def _tool_summary(name: str, inp: dict) -> str:
+        """One-line summary of a tool call: ToolName → key param."""
+        if name in ('Write', 'Edit', 'Read', 'NotebookEdit'):
+            fp = inp.get('file_path') or inp.get('notebook_path', '')
+            return f"{name} → {fp.split('/')[-1] or fp}" if fp else name
+        if name == 'Bash':
+            cmd = inp.get('command', '')
+            return f"Bash → {cmd[:60]}" if cmd else 'Bash'
+        if name == 'Agent':
+            prompt = inp.get('prompt') or inp.get('description', '')
+            return f"Agent → {prompt[:60]}" if prompt else 'Agent'
+        if name in ('Glob', 'Grep'):
+            pat = inp.get('pattern', '')
+            return f"{name} → {pat[:40]}" if pat else name
+        return name
+
+    @staticmethod
     def _parse_assistant_blocks(blocks: list):
-        """Parse content blocks into (text, tool_use_names, has_thinking)."""
+        """Parse content blocks into (text, tool_names, tool_summaries, has_thinking)."""
         text_parts = []
-        tool_use_names = []
+        tool_names = []
+        tool_summaries = []
         has_thinking = False
         for block in blocks:
             if not isinstance(block, dict):
@@ -528,16 +546,20 @@ class ClaudeRenderer(TypeDispatchRenderer):
             if btype == 'text':
                 text_parts.append(block.get('text', ''))
             elif btype == 'tool_use':
-                tool_use_names.append(block.get('name', '?'))
+                name = block.get('name', '?')
+                inp = block.get('input', {})
+                tool_names.append(name)
+                tool_summaries.append(ClaudeRenderer._tool_summary(name, inp))
             elif btype == 'thinking':
                 has_thinking = True
-        return '\n'.join(text_parts).strip(), tool_use_names, has_thinking
+        return '\n'.join(text_parts).strip(), tool_names, tool_summaries, has_thinking
 
     @staticmethod
     def _render_claude_assistant_messages(result: dict) -> None:
         """Render assistant messages: text blocks only (skip thinking/tool_use)."""
         session = result.get('session', 'unknown')
         count = result.get('message_count', 0)
+        full = result.get('full', False) or result.get('_display', {}).get('verbose', False)
 
         print(f"Assistant Messages: {session} ({count} total)")
         print()
@@ -545,32 +567,69 @@ class ClaudeRenderer(TypeDispatchRenderer):
         for msg in result.get('messages', []):
             msg_idx = msg.get('message_index', '?')
             ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
-            text, tool_use_names, has_thinking = ClaudeRenderer._parse_assistant_blocks(
+            text, tool_names, tool_summaries, has_thinking = ClaudeRenderer._parse_assistant_blocks(
                 msg.get('content', [])
             )
 
-            if not text and not tool_use_names and not has_thinking:
+            if not text and not tool_names and not has_thinking:
                 continue
 
             meta_parts = []
             if has_thinking:
                 meta_parts.append('thinking')
-            if tool_use_names:
-                meta_parts.append(f"tools: {', '.join(tool_use_names)}")
+            if tool_names:
+                meta_parts.append(f"tools: {', '.join(tool_names)}")
             meta = f"  [{', '.join(meta_parts)}]" if meta_parts else ''
 
             print(f"[msg {msg_idx}] {ts}{meta}")
 
             if text:
-                if len(text) > 600:
+                if not full and len(text) > 600:
                     print(text[:600])
-                    print(f"  ... ({len(text) - 600} more chars, use /message/{msg_idx} for full text)")
+                    print(f"  ... ({len(text) - 600} more chars, use /message/{msg_idx} for full text or add ?full)")
                 else:
                     print(text)
-            elif tool_use_names:
-                print("  (tool calls only, no text)")
+            elif tool_summaries:
+                for summary in tool_summaries:
+                    print(f"  {summary}")
 
             print()
+
+    @staticmethod
+    def _format_tool_params(name: str, inp: dict) -> list:
+        """Return a list of key=value strings for the most useful tool params."""
+        lines = []
+        if name in ('Write', 'Edit', 'Read', 'NotebookEdit'):
+            fp = inp.get('file_path') or inp.get('notebook_path', '')
+            if fp:
+                lines.append(f"  file_path: {fp}")
+            if name == 'Write':
+                content = inp.get('content', '')
+                if content:
+                    lines.append(f"  content: ({len(content):,} chars)")
+            elif name == 'Edit':
+                old = inp.get('old_string', '')
+                new = inp.get('new_string', '')
+                if old or new:
+                    lines.append(f"  old→new: ({len(old):,} → {len(new):,} chars)")
+        elif name == 'Bash':
+            cmd = inp.get('command', '')
+            if cmd:
+                suffix = '...' if len(cmd) > 120 else ''
+                lines.append(f"  command: {cmd[:120]}{suffix}")
+        elif name == 'Agent':
+            prompt = inp.get('prompt') or inp.get('description', '')
+            if prompt:
+                suffix = '...' if len(prompt) > 100 else ''
+                lines.append(f"  prompt: {prompt[:100]}{suffix}")
+        elif name in ('Glob', 'Grep'):
+            pat = inp.get('pattern', '')
+            if pat:
+                lines.append(f"  pattern: {pat}")
+            path = inp.get('path', '')
+            if path:
+                lines.append(f"  path: {path}")
+        return lines
 
     @staticmethod
     def _render_raw_block(block: dict) -> None:
@@ -579,7 +638,24 @@ class ClaudeRenderer(TypeDispatchRenderer):
         if btype == 'text':
             print(block.get('text', ''))
         elif btype == 'tool_use':
-            print(f"[tool_use: {block.get('name', '?')}]")
+            name = block.get('name', '?')
+            inp = block.get('input', {})
+            print(f"[tool_use: {name}]")
+            for line in ClaudeRenderer._format_tool_params(name, inp):
+                print(line)
+        elif btype == 'tool_result':
+            content = block.get('content', '')
+            if isinstance(content, list):
+                text = '\n'.join(b.get('text', '') for b in content
+                                 if isinstance(b, dict) and b.get('type') == 'text')
+            else:
+                text = str(content) if content else ''
+            if text:
+                preview = text[:500]
+                suffix = f"\n  ... ({len(text) - 500:,} more chars)" if len(text) > 500 else ""
+                print(f"[tool_result]\n{preview}{suffix}")
+            else:
+                print("[tool_result: (empty)]")
         elif btype == 'thinking':
             preview = block.get('thinking', '')[:200]
             print(f"[thinking: {preview}...]")
@@ -617,6 +693,81 @@ class ClaudeRenderer(TypeDispatchRenderer):
 
         if 'hint' in result:
             print(f"\nNote: {result['hint']}")
+
+    @staticmethod
+    def _render_claude_message_range(result: dict) -> None:
+        """Render interleaved user+assistant messages (range slice)."""
+        session = result.get('session', 'unknown')
+        displayed = result.get('displayed', len(result.get('messages', [])))
+        total = result.get('total_messages', displayed)
+        filtered_from = result.get('filtered_from')
+        full = result.get('full', False) or result.get('_display', {}).get('verbose', False)
+
+        rng = result.get('_display', {}).get('range')
+        if rng:
+            start, end = rng
+            end_str = str(end) if end is not None else 'end'
+            header = f"Messages {start}–{end_str}: {session} ({displayed} shown"
+        else:
+            header = f"Messages: {session} ({displayed} shown"
+        if filtered_from:
+            header += f" of {filtered_from} total"
+        header += ")"
+        print(header)
+        print()
+
+        for msg in result.get('messages', []):
+            turn = msg.get('turn', '?')
+            msg_idx = msg.get('message_index', '?')
+            role = msg.get('role', '?')
+            ts = msg.get('timestamp', '')
+            content = msg.get('content', [])
+
+            print(f"[turn {turn} / msg {msg_idx} | {role} | {ts}]")
+
+            if role == 'assistant':
+                text, tool_names, tool_summaries, has_thinking = ClaudeRenderer._parse_assistant_blocks(content)
+                meta_parts = []
+                if has_thinking:
+                    meta_parts.append('thinking')
+                if tool_names:
+                    meta_parts.append(f"tools: {', '.join(tool_names)}")
+                if meta_parts:
+                    print(f"  [{', '.join(meta_parts)}]")
+                if text:
+                    if not full and len(text) > 600:
+                        print(text[:600])
+                        print(f"  ... ({len(text) - 600} more chars — use ?full or /message/{msg_idx} for full text)")
+                    else:
+                        print(text)
+                elif tool_summaries:
+                    for summary in tool_summaries:
+                        print(f"  {summary}")
+            else:
+                # user message
+                text_parts = []
+                tool_result_count = 0
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    btype = block.get('type', '')
+                    if btype == 'text':
+                        text_parts.append(block.get('text', ''))
+                    elif btype == 'tool_result':
+                        tool_result_count += 1
+                text = '\n'.join(text_parts).strip()
+                if text:
+                    if not full and len(text) > 600:
+                        print(text[:600])
+                        print(f"  ... ({len(text) - 600} more chars — use ?full or /message/{msg_idx} for full text)")
+                    else:
+                        print(text)
+                if tool_result_count:
+                    print(f"  [{tool_result_count} tool result(s)]")
+                if not text and not tool_result_count:
+                    print("  [no text content]")
+
+            print()
 
     @staticmethod
     def _render_claude_cross_session_search(result: dict) -> None:
@@ -1209,9 +1360,9 @@ class ClaudeRenderer(TypeDispatchRenderer):
         search = result.get('search')
 
         display = result.get('_display', {})
-        verbose = display.get('verbose', False)
+        verbose = display.get('verbose', False) or result.get('full', False)
         max_chars = display.get('max_snippet_chars', None)
-        # Default: 600 chars per turn unless verbose or explicit max_snippet_chars
+        # Default: 600 chars per turn unless verbose/full or explicit max_snippet_chars
         if verbose:
             truncate_at = None
         elif max_chars is not None:

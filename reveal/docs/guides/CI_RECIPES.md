@@ -47,6 +47,33 @@ jobs:
         # Exits 1 if quality issues or complexity regressions found
 ```
 
+### Changed-Files Quality Gate
+
+Checks only the files changed in the PR. Faster than a full-repo scan; still exits 1 if any violations are found.
+
+```yaml
+# .github/workflows/changed-files-check.yml
+name: Changed Files Check
+
+on:
+  pull_request:
+
+jobs:
+  check-changed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install reveal
+        run: pip install reveal-cli
+
+      - name: Check changed files
+        run: git diff --name-only origin/${{ github.base_ref }}...HEAD | reveal --stdin --check
+        # Exits 1 if any changed file has violations
+```
+
 ### Complexity Gate
 
 Fails the build if any function in the PR got more than 5 complexity points harder.

@@ -1,5 +1,6 @@
 """Message filtering and extraction for Claude sessions."""
 
+import re
 from typing import Dict, List, Any, Optional
 
 
@@ -176,28 +177,46 @@ def get_thinking_blocks(messages: List[Dict], session_name: str,
     return base
 
 
-def _search_block(block: Dict, lower_term: str, term: str, i: int, role: str, ts: str):
+def _matches_term(text: str, lower_term: str, whole_word: bool) -> bool:
+    """Return True if text contains lower_term, respecting whole_word flag."""
+    if whole_word:
+        return bool(re.search(r'\b' + re.escape(lower_term) + r'\b', text, re.IGNORECASE))
+    return lower_term in text.lower()
+
+
+def _search_block(block: Dict, lower_term: str, term: str, i: int, role: str, ts: str,
+                  whole_word: bool = False):
     """Search a single content block for the term. Returns a match dict or None."""
     if not isinstance(block, dict):
         return None
     btype = block.get('type', '')
     if btype == 'text':
         text = block.get('text', '')
-        if lower_term in text.lower():
+        if _matches_term(text, lower_term, whole_word):
             return {'message_index': i, 'role': role, 'block_type': 'text',
                     'timestamp': ts, 'excerpt': _find_excerpt(text, term)}
     elif btype == 'thinking':
         text = block.get('thinking', '')
-        if lower_term in text.lower():
+        if _matches_term(text, lower_term, whole_word):
             return {'message_index': i, 'role': role, 'block_type': 'thinking',
                     'timestamp': ts, 'excerpt': _find_excerpt(text, term)}
     elif btype == 'tool_use':
         inp = block.get('input', {})
         searchable = ' '.join(str(v) for v in inp.values() if isinstance(v, str))
         name = block.get('name', '')
-        if lower_term in searchable.lower() or lower_term in name.lower():
+        if _matches_term(searchable, lower_term, whole_word) or _matches_term(name, lower_term, whole_word):
             return {'message_index': i, 'role': role, 'block_type': f'tool_use:{name}',
                     'timestamp': ts, 'excerpt': _find_excerpt(searchable or name, term, window=80)}
+    elif btype == 'tool_result':
+        content = block.get('content', '')
+        if isinstance(content, list):
+            text = ' '.join(b.get('text', '') for b in content
+                            if isinstance(b, dict) and b.get('type') == 'text')
+        else:
+            text = str(content) if content else ''
+        if text and _matches_term(text, lower_term, whole_word):
+            return {'message_index': i, 'role': role, 'block_type': 'tool_result',
+                    'timestamp': ts, 'excerpt': _find_excerpt(text, term)}
     return None
 
 
@@ -213,13 +232,14 @@ def _extract_text_parts(content: list) -> List[str]:
 
 
 def _collect_block_matches(
-    blocks: list, lower_term: str, term: str, msg_index: int, role: str, ts: str
+    blocks: list, lower_term: str, term: str, msg_index: int, role: str, ts: str,
+    whole_word: bool = False,
 ) -> list:
     """Search all blocks for term and return list of match dicts."""
     matches = []
     for block in blocks:
         try:
-            match = _search_block(block, lower_term, term, msg_index, role, ts)
+            match = _search_block(block, lower_term, term, msg_index, role, ts, whole_word=whole_word)
             if match:
                 matches.append(match)
         except Exception:
@@ -328,6 +348,43 @@ def get_messages(messages: List[Dict], session_name: str,
     if search:
         base['search'] = search
 
+    return base
+
+
+def get_message_range(messages: List[Dict], session_name: str,
+                      contract_base: Dict[str, Any]) -> Dict[str, Any]:
+    """Return interleaved user+assistant messages for range slicing.
+
+    Filters out metadata records (file-history-snapshot, etc.) and returns
+    only conversation messages. Range slicing is applied by
+    _post_process_message_range via _slice_list after this returns.
+
+    Each entry includes raw message_index so callers can drill in with
+    /message/N after finding a message of interest.
+    """
+    base = contract_base.copy()
+    base['type'] = 'claude_message_range'
+
+    items: List[Dict[str, Any]] = []
+    for i, msg in enumerate(messages):
+        role = msg.get('type', '')
+        if role not in ('user', 'assistant'):
+            continue
+        raw_content = msg.get('message', {}).get('content', [])
+        ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
+        items.append({
+            'turn': len(items) + 1,
+            'message_index': i,
+            'role': role,
+            'timestamp': ts,
+            'content': raw_content if isinstance(raw_content, list) else [],
+        })
+
+    base.update({
+        'session': session_name,
+        'total_messages': len(items),
+        'messages': items,
+    })
     return base
 
 

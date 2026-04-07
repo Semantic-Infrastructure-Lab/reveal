@@ -10,7 +10,7 @@ from ....utils.parallel import grep_files
 from .messages import _content_to_blocks, _collect_block_matches
 
 
-def _extract_first_snippet(jsonl_path: Path, term: str) -> Dict[str, str]:
+def _extract_first_snippet(jsonl_path: Path, term: str, *, whole_word: bool = False) -> Dict[str, str]:
     """Scan a JSONL file line-by-line and return the first matching excerpt.
 
     Parses only lines that contain the term bytes — skips all others.  Returns
@@ -20,6 +20,7 @@ def _extract_first_snippet(jsonl_path: Path, term: str) -> Dict[str, str]:
     Args:
         jsonl_path: Path to the session ``.jsonl`` file.
         term: Search term (case-insensitive).
+        whole_word: If True, only match whole words (word-boundary semantics).
 
     Returns:
         Dict with keys ``excerpt``, ``role``, ``timestamp``.
@@ -41,7 +42,7 @@ def _extract_first_snippet(jsonl_path: Path, term: str) -> Dict[str, str]:
                 content = msg.get('message', {}).get('content', [])
                 blocks = _content_to_blocks(content)
                 ts = (msg.get('timestamp') or '')[:16].replace('T', ' ')
-                matches = _collect_block_matches(blocks, lower, term, 0, role, ts)
+                matches = _collect_block_matches(blocks, lower, term, 0, role, ts, whole_word=whole_word)
                 if matches:
                     return {
                         'excerpt': matches[0].get('excerpt', ''),
@@ -58,6 +59,7 @@ def search_sessions_for_term(
     term: str,
     *,
     workers: int = 8,
+    whole_word: bool = False,
 ) -> List[Dict[str, Any]]:
     """Search across multiple sessions for a term and return one snippet per match.
 
@@ -76,6 +78,9 @@ def search_sessions_for_term(
             ``_collect_sessions_from_dir``.
         term: Search term (case-insensitive substring match).
         workers: Parallel workers for phase 1.  Defaults to 8.
+        whole_word: If True, only return sessions where the term appears as a
+            whole word (word-boundary semantics).  Phase 1 grep is still
+            substring for speed; whole-word filtering happens in phase 2.
 
     Returns:
         List of match dicts, sorted most-recent-first, each containing:
@@ -91,14 +96,18 @@ def search_sessions_for_term(
     }
     all_paths = list(path_to_session)
 
-    # Phase 1: parallel byte-level pre-filter.
+    # Phase 1: parallel byte-level pre-filter (always substring — fast).
     matching_paths = grep_files(all_paths, term, workers=workers)
 
     # Phase 2: extract one snippet per matching session.
+    # With whole_word=True, sessions that only contain the term as a substring
+    # (e.g. "ict" inside "picture") are filtered out here.
     results = []
     for path in matching_paths:
         session = path_to_session[path]
-        snippet = _extract_first_snippet(path, term)
+        snippet = _extract_first_snippet(path, term, whole_word=whole_word)
+        if whole_word and not snippet['excerpt']:
+            continue  # no word-boundary match found in this session
         results.append({
             'session':       session['session'],
             'modified':      session['modified'],

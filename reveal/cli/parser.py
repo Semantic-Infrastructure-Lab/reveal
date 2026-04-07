@@ -581,16 +581,19 @@ def validate_navigation_args(args):
     if args.range:
         try:
             start, end = args.range.split('-')
-            start, end = int(start), int(end)
-            if start < 1 or end < 1:
+            start = int(start)
+            end = int(end) if end else None  # '300-' → open-ended (end=None)
+            if start < 1:
                 raise ValueError("Range must be 1-indexed (start from 1)")
-            if start > end:
+            if end is not None and end < 1:
+                raise ValueError("Range must be 1-indexed (start from 1)")
+            if end is not None and start > end:
                 raise ValueError("Range start must be <= end")
             # Store parsed range as tuple for easy access
             args.range = (start, end)
         except ValueError as e:
             print(f"Error: Invalid range format '{args.range}': {e}", file=sys.stderr)
-            print("Expected format: START-END (e.g., 10-20, 1-indexed)", file=sys.stderr)
+            print("Expected format: START-END or START- for open-ended (e.g., 10-20, 300-, 1-indexed)", file=sys.stderr)
             sys.exit(1)
 
 
