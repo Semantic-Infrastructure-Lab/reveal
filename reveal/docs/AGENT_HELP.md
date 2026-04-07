@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.72.4
+**Version:** 0.72.5
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -33,7 +33,7 @@ reveal help://schemas                               # listing: ast, ssl, git, ..
 # List all available task recipe categories
 reveal help://examples                             # listing: quality, security, ...
 
-# Discover adapter schemas (all 22 adapters support this)
+# Discover adapter schemas (all 23 adapters support this)
 reveal help://schemas/<adapter> --format=json
 
 # File & Analysis Adapters
@@ -816,6 +816,40 @@ Fields:
 - `resolved_calls` — cross-file resolved entries (file + name, Python only)
 
 **See also:** `CALLS_ADAPTER_GUIDE.md` for full `calls://` documentation.
+
+---
+
+### Task: "Find what depends on a module (reverse import graph)"
+
+**Pattern:**
+```bash
+# Who imports this file?
+reveal depends://src/utils.py
+
+# Who imports anything in models/?
+reveal depends://src/models/
+
+# Most-imported (high-coupling) modules — change these carefully
+reveal 'depends://src?top=10'
+
+# Full reverse graph in GraphViz DOT format
+reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
+```
+
+**Key use cases:**
+- **Impact analysis before refactoring** — before changing `utils.py`, run `depends://src/utils.py` to see every caller
+- **Coupling metrics** — `?top=N` ranks modules by fan-in (number of files that depend on them)
+- **Safe deletion** — verify `count: 0` before removing a module
+
+**How it relates to `imports://`:**
+
+| Adapter | Question | Direction |
+|---------|----------|-----------|
+| `imports://src` | "What does this code import?" | Forward |
+| `depends://src/module.py` | "What imports this module?" | Reverse |
+| `calls://src/?target=fn` | "Who calls this function?" | Reverse (function level) |
+
+**Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked (same as `imports://`). Results are conservative — false negatives possible, never false positives.
 
 ---
 
@@ -3201,6 +3235,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Example-heavy** - Concrete commands that actually work
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
+- **v0.72.5** - `depends://` adapter — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility
 - **v0.72.4** - `stats://` quality score now incorporates check rule detections by severity (HIGH/MEDIUM/LOW/CRITICAL → weighted penalty, capped at 40 pts); `quality.check_issues` count exposed in per-file output
 - **v0.72.3** - PHP anonymous class detection (`anonymous_class` node type); PHP function call tracking (`function_call_expression`); `stats://` complexity fixed (was always 1.00)
 - **v0.72.1** - M501 rule (TODO/FIXME/HACK/XXX marker detection, LOW severity, all file types); `--max-bytes` and `--max-depth` removed (were misleading/unimplemented); Complete Rules Reference now covers L, M, F, T categories (18 previously undocumented rules); adapter count corrected to 22

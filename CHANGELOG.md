@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.72.5] - 2026-04-06 (yaponuxo-0406)
+
+### Added
+- **`depends://` adapter — inverse module dependency graph** (`reveal/adapters/depends.py`): New adapter answering "what imports this module?" by inverting the same graph built by `imports://`. `depends://file.py` lists all files that import it with file/line/names/type. `depends://dir/` produces a ranked summary of most-imported modules in that directory. `?top=N` limits results. `?format=dot` emits GraphViz DOT for visualization. Scans from project root (via `find_project_root`) so cross-directory importers are visible. Reuses `ImportGraph.reverse_deps` which is already computed as a side effect of forward graph construction — no additional graph-walk cost. Registered as scheme `depends`, adapter count: 22 → 23. Added task section to AGENT_HELP.md.
+
+### Tests
+- **27 new tests** (`tests/test_depends_adapter.py`): File target (7 tests — importer count, no-importers case, names in dependents, field presence, error on missing path); Directory target (6 tests — summary type, modules found, top-N limiting, sorted order, dependents list, leaf exclusion); Star import captured (1 test); DOT format (2 tests — format flag, renderer output); Metadata (2 tests); Schema/registration (4 tests); Renderer (4 tests — text/json/no-dependents/summary). **Test count: 7,321 → 7,348**.
+
 ## [0.72.4] - 2026-04-06 (yaponuxo-0406)
 
 ### Fixed
