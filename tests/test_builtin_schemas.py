@@ -6,32 +6,63 @@ Tests schema validation with real-world examples and edge cases.
 import pytest
 import tempfile
 import subprocess
+import os
 from pathlib import Path
+from conftest import _run_reveal_direct
 
 
 def run_reveal(args, check=True):
-    """Helper to run reveal CLI and capture output.
+    """Run reveal in-process (no subprocess overhead).
 
     Args:
         args: List of command-line arguments
         check: If True, raise CalledProcessError on non-zero exit
 
     Returns:
-        subprocess.CompletedProcess result
+        Object with .stdout, .stderr, .returncode attributes
     """
-    cmd = ['reveal'] + args
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        check=False
-    )
+    result = _run_reveal_direct(*args)
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
-            result.returncode, cmd, result.stdout, result.stderr
+            result.returncode, ['reveal'] + args, result.stdout, result.stderr
         )
     return result
+
+
+def _validate_schema_api(content: str, schema_name: str) -> list:
+    """Validate markdown content against a schema using the Python API.
+
+    Avoids subprocess overhead for tests that only need to check whether
+    a given piece of front matter passes or fails schema validation.
+
+    Returns:
+        List of Detection objects — empty means valid.
+    """
+    from reveal.registry import get_analyzer
+    from reveal.schemas.frontmatter import load_schema
+    from reveal.rules.frontmatter import set_validation_context, clear_validation_context
+    from reveal.rules import RuleRegistry
+
+    schema = load_schema(schema_name)
+    assert schema is not None, f"Schema '{schema_name}' not found"
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
+        f.write(content)
+        path = f.name
+
+    try:
+        analyzer_class = get_analyzer(path)
+        analyzer = analyzer_class(path)
+        structure = analyzer.get_structure(extract_frontmatter=True)
+        file_content = analyzer.content
+
+        set_validation_context(schema)
+        try:
+            return RuleRegistry.check_file(path, structure, file_content, select=['F'], ignore=None)
+        finally:
+            clear_validation_context()
+    finally:
+        os.unlink(path)
 
 
 @pytest.mark.slow
@@ -490,26 +521,12 @@ date: 2026-01-03
         finally:
             Path(temp_path).unlink()
 
-    def test_jekyll_valid_common_layouts(self):
+    @pytest.mark.parametrize('layout_name', ['default', 'post', 'page', 'home'])
+    def test_jekyll_valid_common_layouts(self, layout_name):
         """Test validation passes for common Jekyll layouts."""
-        layouts = ['default', 'post', 'page', 'home']
-
-        for layout_name in layouts:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
-                f.write(f'''---
-layout: {layout_name}
-title: "Test Page"
----
-
-# Content
-''')
-                temp_path = f.name
-
-            try:
-                result = run_reveal([temp_path, '--validate-schema', 'jekyll'])
-                assert result.returncode == 0, f"Failed for layout: {layout_name}"
-            finally:
-                Path(temp_path).unlink()
+        content = f'---\nlayout: {layout_name}\ntitle: "Test Page"\n---\n\n# Content\n'
+        detections = _validate_schema_api(content, 'jekyll')
+        assert detections == [], f"Unexpected violations for layout '{layout_name}': {detections}"
 
     def test_jekyll_invalid_date_format(self):
         """Test validation fails for invalid date format."""
@@ -764,26 +781,12 @@ date: 01/03/2026
         finally:
             Path(temp_path).unlink()
 
-    def test_mkdocs_status_values(self):
+    @pytest.mark.parametrize('status_value', ['new', 'deprecated', 'beta', 'experimental'])
+    def test_mkdocs_status_values(self, status_value):
         """Test common status values are accepted."""
-        statuses = ['new', 'deprecated', 'beta', 'experimental']
-
-        for status_value in statuses:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
-                f.write(f'''---
-title: "Test Page"
-status: {status_value}
----
-
-# Content
-''')
-                temp_path = f.name
-
-            try:
-                result = run_reveal([temp_path, '--validate-schema', 'mkdocs'])
-                assert result.returncode == 0, f"Failed for status: {status_value}"
-            finally:
-                Path(temp_path).unlink()
+        content = f'---\ntitle: "Test Page"\nstatus: {status_value}\n---\n\n# Content\n'
+        detections = _validate_schema_api(content, 'mkdocs')
+        assert detections == [], f"Unexpected violations for status '{status_value}': {detections}"
 
     def test_mkdocs_real_world_example(self):
         """Test real-world MkDocs example (FastAPI-style docs)."""
@@ -854,32 +857,26 @@ class TestCrossSchemaComparison:
 
     def test_same_file_different_schemas(self):
         """Test same file validates differently with different schemas."""
-        # A file with just title and date
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
-            f.write('''---
-title: "Test Document"
-date: 2026-01-02
----
+        content = '---\ntitle: "Test Document"\ndate: 2026-01-02\n---\n\n# Test\n'
 
-# Test
-''')
-            temp_path = f.name
+        # Should fail Session validation (missing session_id, topics)
+        session_detections = _validate_schema_api(content, 'session')
+        assert session_detections, "Expected session validation to find violations"
+        codes_or_messages = ' '.join(
+            str(getattr(d, 'code', '')) + ' ' + str(getattr(d, 'message', ''))
+            for d in session_detections
+        )
+        assert 'session_id' in codes_or_messages or 'topics' in codes_or_messages, (
+            f"Expected session_id or topics violation, got: {codes_or_messages}"
+        )
 
-        try:
-            # Should fail Session validation (missing session_id, topics)
-            session_result = run_reveal([temp_path, '--validate-schema', 'session'], check=False)
-            assert session_result.returncode != 0
-            assert 'session_id' in session_result.stdout or 'topics' in session_result.stdout
+        # Should pass Hugo validation (has required title and date)
+        hugo_detections = _validate_schema_api(content, 'hugo')
+        assert hugo_detections == [], f"Hugo should pass, got: {hugo_detections}"
 
-            # Should pass Hugo validation (has required title and date)
-            hugo_result = run_reveal([temp_path, '--validate-schema', 'hugo'])
-            assert hugo_result.returncode == 0
-
-            # Should pass Obsidian validation (no required fields)
-            obsidian_result = run_reveal([temp_path, '--validate-schema', 'obsidian'])
-            assert obsidian_result.returncode == 0
-        finally:
-            Path(temp_path).unlink()
+        # Should pass Obsidian validation (no required fields)
+        obsidian_detections = _validate_schema_api(content, 'obsidian')
+        assert obsidian_detections == [], f"Obsidian should pass, got: {obsidian_detections}"
 
 
 @pytest.mark.slow

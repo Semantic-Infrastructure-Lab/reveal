@@ -72,7 +72,6 @@ def get_package_details(package_name: str) -> Dict[str, Any]:
         Dict with package details or error
     """
     try:
-        # Prefer importlib.metadata (modern, Python 3.8+)
         import importlib.metadata
 
         dist = importlib.metadata.distribution(package_name)
@@ -89,34 +88,5 @@ def get_package_details(package_name: str) -> Dict[str, Any]:
             "homepage": metadata.get("Home-page"),  # type: ignore[attr-defined]
             "dependencies": dist.requires or [],
         }
-    except Exception:
-        # Fallback to pkg_resources (deprecated but still works)
-        try:
-            import pkg_resources
-
-            dist = pkg_resources.get_distribution(package_name)  # type: ignore[assignment]
-
-            details = {
-                "name": dist.project_name,  # type: ignore[attr-defined]
-                "version": dist.version,
-                "location": dist.location,  # type: ignore[attr-defined]
-                "requires_python": None,
-                "dependencies": [],
-            }
-
-            # Get requirements
-            try:
-                details["dependencies"] = [str(req) for req in dist.requires()]  # type: ignore[operator,misc]
-            except Exception:
-                pass  # malformed package metadata; leave dependencies as []
-
-            # Check if editable install
-            try:
-                details["editable"] = dist.has_metadata("direct_url.json")  # type: ignore[attr-defined]
-            except Exception:
-                details["editable"] = False
-
-            return details
-
-        except Exception as e:
-            return {"error": f"Package not found: {package_name}", "details": str(e)}
+    except Exception as e:
+        return {"error": f"Package not found: {package_name}", "details": str(e)}

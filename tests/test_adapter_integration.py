@@ -10,6 +10,7 @@ import sys
 import tempfile
 import os
 from pathlib import Path
+from conftest import _run_reveal_direct
 import pytest
 
 # Check if pygit2 is available for git:// adapter tests
@@ -609,6 +610,22 @@ class TestPythonAdapterIntegration(unittest.TestCase):
 class TestStatsAdapterIntegration(unittest.TestCase):
     """Integration tests for stats:// adapter."""
 
+    @classmethod
+    def setUpClass(cls):
+        """Create a small fixture directory instead of scanning the full project."""
+        cls._td = tempfile.mkdtemp()
+        for name, body in [
+            ('alpha.py', 'def foo():\n    return 1\n\ndef bar(x):\n    return x * 2\n'),
+            ('beta.py', 'import os\n\nclass Thing:\n    def run(self):\n        pass\n'),
+        ]:
+            with open(os.path.join(cls._td, name), 'w') as f:
+                f.write(body)
+
+    @classmethod
+    def tearDownClass(cls):
+        import shutil
+        shutil.rmtree(cls._td, ignore_errors=True)
+
     def run_reveal_command(self, *args):
         """Run reveal command and return result."""
         cmd = [sys.executable, "-m", "reveal.main"] + list(args)
@@ -625,12 +642,11 @@ class TestStatsAdapterIntegration(unittest.TestCase):
 
     def test_stats_adapter_shows_codebase_metrics(self):
         """Test stats:// adapter shows codebase statistics."""
-        # Use reveal's own codebase for testing
-        result = self.run_reveal_command("stats://reveal")
+        result = self.run_reveal_command(f"stats://{self._td}")
 
         self.assertEqual(
             result.returncode, 0,
-            f"stats://reveal failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+            f"stats://<fixture> failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
 
         # Should show statistics
@@ -655,22 +671,14 @@ class TestStatsAdapterIntegration(unittest.TestCase):
 class TestImportsAdapterIntegration(unittest.TestCase):
     """Integration tests for imports:// adapter."""
 
-    def run_reveal_command(self, *args):
-        """Run reveal command and return result."""
-        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            timeout=30
-        )
-        return result
+    @classmethod
+    def setUpClass(cls):
+        # Both tests run the same command — run it once in-process and cache.
+        cls._imports_result = _run_reveal_direct("imports://reveal")
 
     def test_imports_adapter_shows_import_graph(self):
         """Test imports:// adapter shows import analysis."""
-        # Use reveal's own codebase for testing
-        result = self.run_reveal_command("imports://reveal")
+        result = self._imports_result
 
         self.assertEqual(
             result.returncode, 0,
@@ -686,8 +694,7 @@ class TestImportsAdapterIntegration(unittest.TestCase):
 
     def test_imports_adapter_detects_issues(self):
         """Test imports:// adapter can detect import issues."""
-        # Use reveal's own codebase - it should have clean imports
-        result = self.run_reveal_command("imports://reveal")
+        result = self._imports_result
 
         # Should complete successfully (exit 0 means no critical issues)
         self.assertEqual(
@@ -701,7 +708,7 @@ class TestImportsAdapterIntegration(unittest.TestCase):
         Note: The imports adapter falls back to current directory for invalid paths.
         This is acceptable behavior - the adapter doesn't crash.
         """
-        result = self.run_reveal_command("imports://nonexistent_path_xyz_abc")
+        result = _run_reveal_direct("imports://nonexistent_path_xyz_abc")
 
         # Should either fail gracefully or fall back to current directory
         # The key is it shouldn't crash

@@ -1363,30 +1363,33 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures" / "xlsx"
 class TestXlsxRealWorldFixtures:
     """Tests using real-world xlsx fixtures in tests/fixtures/xlsx/."""
 
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def adventure_dw(self):
         path = FIXTURES_DIR / "AdventureWorksDW.xlsx"
         if not path.exists():
             pytest.skip("AdventureWorksDW.xlsx fixture not present")
         return path
 
-    @pytest.fixture
+    @pytest.fixture(scope="class")
+    def adventure_dw_parsed(self, adventure_dw):
+        """Parse AdventureWorksDW.xlsx once; both large-sheet tests share the result."""
+        return XlsxAdapter(f"xlsx://{adventure_dw}").get_structure()
+
+    @pytest.fixture(scope="class")
     def dynamic_arrays(self):
         path = FIXTURES_DIR / "dynamic_arrays.xlsx"
         if not path.exists():
             pytest.skip("dynamic_arrays.xlsx fixture not present")
         return path
 
-    def test_too_large_sheet_shows_message_not_zeros(self, adventure_dw):
+    def test_too_large_sheet_shows_message_not_zeros(self, adventure_dw_parsed):
         """Sheet XML > 50 MB should surface a human-readable message, not silent 0 rows/0 cols."""
         import io, sys
-        adapter = XlsxAdapter(f"xlsx://{adventure_dw}")
-        result = adapter.get_structure()
         buf = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = buf
         try:
-            XlsxRenderer.render_structure(result)
+            XlsxRenderer.render_structure(adventure_dw_parsed)
         finally:
             sys.stdout = old_stdout
         output = buf.getvalue()
@@ -1396,11 +1399,9 @@ class TestXlsxRealWorldFixtures:
         assert lines, "FactInternetSales sheet not found in output"
         assert "0 rows" not in lines[0]
 
-    def test_too_large_sheet_other_sheets_still_parsed(self, adventure_dw):
+    def test_too_large_sheet_other_sheets_still_parsed(self, adventure_dw_parsed):
         """Other sheets in the same workbook should parse normally despite one being too large."""
-        adapter = XlsxAdapter(f"xlsx://{adventure_dw}")
-        result = adapter.get_structure()
-        sheets = result.get('sheets', [])
+        sheets = adventure_dw_parsed.get('sheets', [])
         dim_product = next((s for s in sheets if 'DimProduct' in s.get('name', '')), None)
         assert dim_product is not None
         assert dim_product.get('rows', 0) == 607
@@ -1702,50 +1703,40 @@ class TestConnectionsIntegration:
 class TestWorkbookOverviewExtras:
     """Banner extras (Power Query, connections, named ranges) in workbook overview."""
 
+    @classmethod
+    def setup_class(cls):
+        # Parse both fixtures once; reuse across all tests in this class.
+        cls._adv_result = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}").get_structure()
+        cls._adv_rendered = _capture(XlsxRenderer.render_structure, cls._adv_result)
+        cls._fin_result = XlsxAdapter(f"xlsx://{FIXTURE_FINANCIAL}").get_structure()
+
     def test_banner_has_powerquery_flag(self):
-        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}")
-        result = adapter.get_structure()
-        banner = result.get('powerpivot_banner', {})
+        banner = self._adv_result.get('powerpivot_banner', {})
         assert banner.get('has_powerquery') is True
 
     def test_banner_has_connection_count(self):
-        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}")
-        result = adapter.get_structure()
-        banner = result.get('powerpivot_banner', {})
+        banner = self._adv_result.get('powerpivot_banner', {})
         assert banner.get('connection_count') == 7
 
     def test_banner_has_named_range_count(self):
-        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}")
-        result = adapter.get_structure()
-        banner = result.get('powerpivot_banner', {})
+        banner = self._adv_result.get('powerpivot_banner', {})
         assert banner.get('named_range_count') == 7
 
     def test_render_overview_shows_powerquery_line(self):
-        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}")
-        result = adapter.get_structure()
-        out = _capture(XlsxRenderer.render_structure, result)
-        assert 'Power Query' in out
-        assert '?powerquery=list' in out
+        assert 'Power Query' in self._adv_rendered
+        assert '?powerquery=list' in self._adv_rendered
 
     def test_render_overview_shows_connections_line(self):
-        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}")
-        result = adapter.get_structure()
-        out = _capture(XlsxRenderer.render_structure, result)
-        assert 'connection' in out.lower()
-        assert '?connections=list' in out
+        assert 'connection' in self._adv_rendered.lower()
+        assert '?connections=list' in self._adv_rendered
 
     def test_render_overview_shows_named_ranges_line(self):
-        adapter = XlsxAdapter(f"xlsx://{FIXTURE_ADV_SALES}")
-        result = adapter.get_structure()
-        out = _capture(XlsxRenderer.render_structure, result)
-        assert 'named range' in out.lower()
-        assert '?names=list' in out
+        assert 'named range' in self._adv_rendered.lower()
+        assert '?names=list' in self._adv_rendered
 
     def test_plain_file_has_none_banner_or_no_extras(self):
         """A file with no model/PQ/connections/names may have no banner or empty banner."""
-        adapter = XlsxAdapter(f"xlsx://{FIXTURE_FINANCIAL}")
-        result = adapter.get_structure()
-        banner = result.get('powerpivot_banner')
+        banner = self._fin_result.get('powerpivot_banner')
         # Either banner is None, or all extra counts are absent
         if banner is not None:
             assert not banner.get('has_powerquery')

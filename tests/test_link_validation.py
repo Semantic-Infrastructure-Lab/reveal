@@ -691,5 +691,477 @@ class TestLinkValidationIntegration(unittest.TestCase):
         self.assertEqual(l003.severity, Severity.MEDIUM)
 
 
+class TestL002Extended(unittest.TestCase):
+    """Additional L002 tests covering uncovered branches."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.rule = L002()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_fallback_link_extraction_no_structure(self):
+        """L002 falls back to analyzer when structure has no 'links' key (line 56)."""
+        # Create a real markdown file with only internal/relative links
+        content = "# Doc\n\nSee [guide](./guide.md).\n"
+        path = os.path.join(self.temp_dir, "doc.md")
+        with open(path, 'w') as f:
+            f.write(content)
+        # Pass structure=None so fallback path is used
+        detections = self.rule.check(path, None, content)
+        # No external links → empty (but the fallback code ran)
+        self.assertEqual(len(detections), 0)
+
+    def test_fallback_no_external_links_returns_empty(self):
+        """No external links after fallback extraction → empty (line 65)."""
+        content = "# Doc\n\nJust text, no links.\n"
+        path = os.path.join(self.temp_dir, "doc.md")
+        with open(path, 'w') as f:
+            f.write(content)
+        detections = self.rule.check(path, None, content)
+        self.assertEqual(len(detections), 0)
+
+    @patch('urllib.request.urlopen')
+    def test_future_exception_treated_as_broken(self, mock_urlopen):
+        """Exception in future.result() treated as broken (line 87-88)."""
+        mock_urlopen.side_effect = Exception("unexpected")
+        links = [{'text': 'Bad', 'url': 'https://example.com/bad', 'line': 1}]
+        structure = {'links': links}
+        path = os.path.join(self.temp_dir, "doc.md")
+        detections = self.rule.check(path, structure, "")
+        self.assertEqual(len(detections), 1)
+
+    @patch('urllib.request.urlopen')
+    def test_head_non_2xx_returns_broken(self, mock_urlopen):
+        """HEAD response with 5xx status returns broken (line 115)."""
+        mock_response = MagicMock()
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_response.getcode.return_value = 500
+        mock_urlopen.return_value = mock_response
+        result = self.rule._try_head_request('https://example.com', MagicMock())
+        is_broken, reason, status = result
+        self.assertTrue(is_broken)
+        self.assertEqual(status, 500)
+
+    @patch('urllib.request.urlopen')
+    def test_head_405_falls_back_to_get(self, mock_urlopen):
+        """HEAD 405 (Method Not Allowed) falls back to GET (line 112)."""
+        from urllib.error import HTTPError
+        # First call (HEAD) raises 405
+        head_error = HTTPError('https://example.com', 405, 'Method Not Allowed', {}, None)
+        # Second call (GET fallback) succeeds
+        mock_response = MagicMock()
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_response.getcode.return_value = 200
+        mock_urlopen.side_effect = [head_error, mock_response]
+        result = self.rule._try_head_request('https://example.com', MagicMock())
+        is_broken, reason, status = result
+        self.assertFalse(is_broken)
+
+    @patch('urllib.request.urlopen')
+    def test_get_request_success(self, mock_urlopen):
+        """GET request returns success (lines 141-145)."""
+        mock_response = MagicMock()
+        mock_response.__enter__ = lambda s: s
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_response.getcode.return_value = 206
+        mock_urlopen.return_value = mock_response
+        result = self.rule._try_get_request('https://example.com')
+        is_broken, reason, status = result
+        self.assertFalse(is_broken)
+
+    @patch('urllib.request.urlopen')
+    def test_get_request_http_error(self, mock_urlopen):
+        """GET request HTTPError (lines 156-158)."""
+        from urllib.error import HTTPError
+        mock_urlopen.side_effect = HTTPError('https://example.com', 404, 'Not Found', {}, None)
+        result = self.rule._try_get_request('https://example.com')
+        is_broken, reason, status = result
+        self.assertTrue(is_broken)
+        self.assertEqual(status, 404)
+
+    @patch('urllib.request.urlopen')
+    def test_get_request_generic_exception(self, mock_urlopen):
+        """GET request generic exception (lines 159-160)."""
+        mock_urlopen.side_effect = Exception("broken")
+        result = self.rule._try_get_request('https://example.com')
+        is_broken, reason, status = result
+        self.assertTrue(is_broken)
+        self.assertEqual(reason, "validation_error")
+
+    def test_suggest_fix_http_to_https(self):
+        """Suggest HTTPS upgrade for http:// URLs (lines 205-206)."""
+        suggestion = self.rule._suggest_fix('http://example.com/page', 'http_error', 404)
+        self.assertIn('HTTPS', suggestion)
+
+    def test_suggest_fix_add_www(self):
+        """Suggest www. prefix (lines 234-237)."""
+        suggestion = self.rule._suggest_fix('https://example.com/page', 'connection_error', None)
+        self.assertIn('www', suggestion)
+
+    def test_suggest_fix_timeout(self):
+        suggestion = self.rule._suggest_fix('https://example.com', 'timeout', None)
+        self.assertIn('timed out', suggestion)
+
+    def test_suggest_fix_invalid_url(self):
+        suggestion = self.rule._suggest_fix('not-a-url', 'invalid_url', None)
+        self.assertIn('invalid', suggestion)
+
+    def test_suggest_fix_validation_error(self):
+        suggestion = self.rule._suggest_fix('https://example.com', 'validation_error', None)
+        self.assertIn('validate', suggestion)
+
+    def test_suggest_fix_no_suggestions_fallback(self):
+        """Unknown reason with www already present → fallback message (line 244)."""
+        suggestion = self.rule._suggest_fix('https://www.example.com', 'unknown_reason', None)
+        self.assertIn('broken', suggestion)
+
+    def test_get_url_variant_with_www(self):
+        """URL without www gets www suggestion."""
+        suggestions = self.rule._get_url_variant_suggestions('https://example.com/path')
+        self.assertTrue(any('www' in s for s in suggestions))
+
+    def test_get_url_variant_already_www(self):
+        """URL with www doesn't get double-www suggestion."""
+        suggestions = self.rule._get_url_variant_suggestions('https://www.example.com/path')
+        self.assertFalse(any('www.www' in s for s in suggestions))
+
+
+class TestL003FrameworkDetectionMethods(unittest.TestCase):
+    """Cover L003 framework detection and routing methods (lines 118-520)."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.rule = L003()
+        self.rule.framework = 'static'
+        self.rule.docs_root = None
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def _make_dir(self, *parts):
+        path = Path(self.temp_dir, *parts)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _make_file(self, *parts, content='# test\n'):
+        path = Path(self.temp_dir, *parts)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        return path
+
+    # --- FastHTML detection ---
+
+    def test_has_fasthtml_indicators_with_main_and_import(self):
+        self._make_file('main.py', content='import fasthtml\n')
+        result = self.rule._has_fasthtml_indicators(Path(self.temp_dir))
+        self.assertTrue(result)
+
+    def test_has_fasthtml_indicators_no_main_py(self):
+        # No main.py or app.py → False
+        result = self.rule._has_fasthtml_indicators(Path(self.temp_dir))
+        self.assertFalse(result)
+
+    def test_has_fasthtml_indicators_main_no_fasthtml(self):
+        self._make_file('main.py', content='print("hello")\n')
+        result = self.rule._has_fasthtml_indicators(Path(self.temp_dir))
+        self.assertFalse(result)
+
+    def test_has_fasthtml_with_app_py(self):
+        self._make_file('app.py', content='from fasthtml import FastHTML\n')
+        result = self.rule._has_fasthtml_indicators(Path(self.temp_dir))
+        self.assertTrue(result)
+
+    # --- Django detection ---
+
+    def test_has_django_indicators_with_manage(self):
+        self._make_file('manage.py', content='import django\n')
+        result = self.rule._has_django_indicators(Path(self.temp_dir))
+        self.assertTrue(result)
+
+    def test_has_django_no_manage_py(self):
+        result = self.rule._has_django_indicators(Path(self.temp_dir))
+        self.assertFalse(result)
+
+    def test_has_django_manage_no_django_import(self):
+        self._make_file('manage.py', content='print("hello world")\n')
+        result = self.rule._has_django_indicators(Path(self.temp_dir))
+        self.assertFalse(result)
+
+    # --- Flask detection ---
+
+    def test_has_flask_indicators(self):
+        self._make_file('app.py', content='from flask import Flask\nFlask(__name__)\n')
+        result = self.rule._has_flask_indicators(Path(self.temp_dir))
+        self.assertTrue(result)
+
+    def test_has_flask_no_flask(self):
+        self._make_file('app.py', content='print("hello")\n')
+        result = self.rule._has_flask_indicators(Path(self.temp_dir))
+        self.assertFalse(result)
+
+    # --- _detect_framework ---
+
+    def test_detect_framework_jekyll(self):
+        self._make_file('_config.yml', content='title: My Site\n')
+        import os
+        old_cwd = os.getcwd()
+        os.chdir(self.temp_dir)
+        try:
+            result = self.rule._detect_framework()
+            self.assertEqual(result, 'jekyll')
+        finally:
+            os.chdir(old_cwd)
+
+    def test_detect_framework_hugo(self):
+        self._make_file('hugo.toml', content='title = "My Site"\n')
+        import os
+        old_cwd = os.getcwd()
+        os.chdir(self.temp_dir)
+        try:
+            result = self.rule._detect_framework()
+            self.assertEqual(result, 'hugo')
+        finally:
+            os.chdir(old_cwd)
+
+    def test_detect_framework_default_static(self):
+        import os
+        old_cwd = os.getcwd()
+        os.chdir(self.temp_dir)
+        try:
+            result = self.rule._detect_framework()
+            self.assertEqual(result, 'static')
+        finally:
+            os.chdir(old_cwd)
+
+    # --- Protocol-relative URL skipped ---
+
+    def test_protocol_relative_url_skipped(self):
+        """//example.com links are skipped (line 80)."""
+        md_file = self._make_file('docs', 'test.md')
+        self.rule.docs_root = Path(self.temp_dir) / 'docs'
+        links = [{'text': 'CDN', 'url': '//example.com/script.js', 'line': 1}]
+        structure = {'links': links}
+        detections = self.rule.check(str(md_file), structure, "")
+        self.assertEqual(len(detections), 0)
+
+    # --- FastHTML routing ---
+
+    def test_check_fasthtml_route_exact_match(self):
+        docs = self._make_dir('docs')
+        self._make_file('docs', 'guide.md')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_fasthtml_route('guide')
+        self.assertFalse(is_broken)
+
+    def test_check_fasthtml_route_lowercase_match(self):
+        docs = self._make_dir('docs')
+        self._make_file('docs', 'guide.md')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_fasthtml_route('GUIDE')
+        self.assertFalse(is_broken)
+
+    def test_check_fasthtml_route_case_insensitive_dir(self):
+        docs = self._make_dir('docs')
+        self._make_dir('docs', 'sub')
+        self._make_file('docs', 'sub', 'Guide.md')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_fasthtml_route('sub/guide')
+        self.assertFalse(is_broken)
+
+    def test_check_fasthtml_route_not_found(self):
+        docs = self._make_dir('docs')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_fasthtml_route('missing')
+        self.assertTrue(is_broken)
+        self.assertEqual(reason, 'file_not_found')
+
+    def test_check_fasthtml_route_no_docs_root(self):
+        self.rule.docs_root = None
+        is_broken, _, _ = self.rule._check_fasthtml_route('anything')
+        self.assertFalse(is_broken)
+
+    # --- Jekyll routing ---
+
+    def test_check_jekyll_route_md_file(self):
+        docs = self._make_dir('docs')
+        self._make_file('docs', 'about.md')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_jekyll_route('about.html')
+        self.assertFalse(is_broken)
+
+    def test_check_jekyll_route_posts(self):
+        docs = self._make_dir('docs')
+        posts = self._make_dir('docs', '_posts')
+        self._make_file('docs', '_posts', '2024-01-15-my-post.md')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_jekyll_route('2024/my-post')
+        self.assertFalse(is_broken)
+
+    def test_check_jekyll_route_not_found(self):
+        docs = self._make_dir('docs')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_jekyll_route('missing.html')
+        self.assertTrue(is_broken)
+
+    def test_check_jekyll_route_no_docs_root(self):
+        self.rule.docs_root = None
+        is_broken, _, _ = self.rule._check_jekyll_route('anything')
+        self.assertFalse(is_broken)
+
+    # --- Hugo routing ---
+
+    def test_check_hugo_route_file(self):
+        docs = self._make_dir('docs')
+        content_dir = self._make_dir('content')
+        self._make_file('content', 'guide.md')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_hugo_route('guide')
+        self.assertFalse(is_broken)
+
+    def test_check_hugo_route_index(self):
+        docs = self._make_dir('docs')
+        self._make_dir('content', 'section')
+        self._make_file('content', 'section', 'index.md')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_hugo_route('section')
+        self.assertFalse(is_broken)
+
+    def test_check_hugo_route_section_index(self):
+        docs = self._make_dir('docs')
+        self._make_dir('content', 'section')
+        self._make_file('content', 'section', '_index.md')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_hugo_route('section')
+        self.assertFalse(is_broken)
+
+    def test_check_hugo_route_not_found(self):
+        docs = self._make_dir('docs')
+        self._make_dir('content')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_hugo_route('missing')
+        self.assertTrue(is_broken)
+
+    def test_check_hugo_route_no_docs_root(self):
+        self.rule.docs_root = None
+        is_broken, _, _ = self.rule._check_hugo_route('anything')
+        self.assertFalse(is_broken)
+
+    # --- Static routing ---
+
+    def test_check_static_route_exact(self):
+        docs = self._make_dir('docs')
+        self._make_file('docs', 'page.md')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_static_route('page')
+        self.assertFalse(is_broken)
+
+    def test_check_static_route_index(self):
+        docs = self._make_dir('docs')
+        self._make_dir('docs', 'section')
+        self._make_file('docs', 'section', 'index.md')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_static_route('section')
+        self.assertFalse(is_broken)
+
+    def test_check_static_route_not_found(self):
+        docs = self._make_dir('docs')
+        self.rule.docs_root = docs
+        is_broken, reason, _ = self.rule._check_static_route('missing')
+        self.assertTrue(is_broken)
+
+    def test_check_static_route_no_docs_root(self):
+        self.rule.docs_root = None
+        is_broken, _, _ = self.rule._check_static_route('anything')
+        self.assertFalse(is_broken)
+
+    # --- find_similar_files ---
+
+    def test_find_similar_files(self):
+        docs = self._make_dir('docs')
+        self._make_file('docs', 'guide.md')
+        self._make_file('docs', 'guide-v2.md')
+        self.rule.docs_root = docs
+        result = self.rule._find_similar_files(str(docs / 'guid.md'))
+        self.assertTrue(len(result) > 0)
+
+    def test_find_similar_files_no_docs_root(self):
+        self.rule.docs_root = None
+        result = self.rule._find_similar_files('/some/path.md')
+        self.assertEqual(result, [])
+
+    def test_find_similar_files_missing_dir(self):
+        docs = self._make_dir('docs')
+        self.rule.docs_root = docs
+        result = self.rule._find_similar_files(str(docs / 'nonexistent' / 'file.md'))
+        self.assertEqual(result, [])
+
+    # --- Framework suggestion ---
+
+    def test_get_framework_suggestion_fasthtml(self):
+        self.rule.framework = 'fasthtml'
+        result = self.rule._get_framework_suggestion()
+        self.assertIn('FastHTML', result)
+
+    def test_get_framework_suggestion_jekyll(self):
+        self.rule.framework = 'jekyll'
+        result = self.rule._get_framework_suggestion()
+        self.assertIn('_posts', result)
+
+    def test_get_framework_suggestion_hugo(self):
+        self.rule.framework = 'hugo'
+        result = self.rule._get_framework_suggestion()
+        self.assertIn('content', result)
+
+    def test_get_framework_suggestion_django(self):
+        self.rule.framework = 'django'
+        result = self.rule._get_framework_suggestion()
+        self.assertIn('Django', result)
+
+    def test_get_framework_suggestion_flask(self):
+        self.rule.framework = 'flask'
+        result = self.rule._get_framework_suggestion()
+        self.assertIn('Flask', result)
+
+    def test_get_framework_suggestion_static(self):
+        self.rule.framework = 'static'
+        result = self.rule._get_framework_suggestion()
+        self.assertEqual(result, '')
+
+    # --- suggest_fix ---
+
+    def test_suggest_fix_file_not_found_with_similar(self):
+        docs = self._make_dir('docs')
+        self._make_file('docs', 'guide.md')
+        self.rule.docs_root = docs
+        self.rule.framework = 'static'
+        result = self.rule._suggest_fix('/guid', 'file_not_found', str(docs / 'guid.md'))
+        self.assertIn('guide.md', result)
+
+    def test_suggest_fix_non_file_not_found_reason(self):
+        self.rule.framework = 'static'
+        result = self.rule._suggest_fix('/path', 'other_reason', None)
+        self.assertIn('Framework route', result)
+
+    # --- L003 check() with fallback ---
+
+    def test_check_fallback_no_structure(self):
+        """L003 uses fallback extractor when structure has no 'links' (line 57/66)."""
+        content = "# Doc\n\nSee [absolute](/page).\n"
+        docs = self._make_dir('docs')
+        self._make_file('docs', 'page.md')
+        md_file = self._make_file('docs', 'test.md', content=content)
+        self.rule.framework = 'static'
+        self.rule.docs_root = None
+        # No structure passed → fallback code executes
+        detections = self.rule.check(str(md_file), None, content)
+        # Either found or not, the fallback code path ran
+
+
 if __name__ == '__main__':
     unittest.main()

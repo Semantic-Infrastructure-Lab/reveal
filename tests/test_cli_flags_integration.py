@@ -11,6 +11,7 @@ import subprocess
 import sys
 import os
 from pathlib import Path
+from conftest import _run_reveal_direct
 
 
 class TestCLIFlagsIntegration(unittest.TestCase):
@@ -169,15 +170,8 @@ class TestHTMLCLIFlags(unittest.TestCase):
     """Test HTML-specific CLI flags."""
 
     def run_reveal(self, file_path, *args):
-        """Run reveal command and return result."""
-        cmd = [sys.executable, "-m", "reveal.main", str(file_path)] + list(args)
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
-        return result
+        """Run reveal in-process (no subprocess overhead)."""
+        return _run_reveal_direct(str(file_path), *args)
 
     def test_html_default_display(self):
         """Test HTML file displays without error (default view)."""

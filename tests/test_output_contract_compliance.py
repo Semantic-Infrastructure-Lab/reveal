@@ -73,298 +73,331 @@ def _check_schema_alignment(test_case, adapter_name, result, schema):
 class TestOutputContractEnv(unittest.TestCase):
     """env:// adapter — no external resources needed."""
 
-    def test_get_structure_contract(self):
+    @classmethod
+    def setUpClass(cls):
         from reveal.adapters import env
-        result = env.EnvAdapter().get_structure()
-        _check_contract(self, 'env', result)
+        cls.result = env.EnvAdapter().get_structure()
+        cls.schema = env.EnvAdapter.get_schema()
+
+    def test_get_structure_contract(self):
+        _check_contract(self, 'env', self.result)
 
     def test_schema_alignment(self):
-        from reveal.adapters import env
-        result = env.EnvAdapter().get_structure()
-        _check_schema_alignment(self, 'env', result, env.EnvAdapter.get_schema())
+        _check_schema_alignment(self, 'env', self.result, self.schema)
 
 
 class TestOutputContractPython(unittest.TestCase):
     """python:// adapter — no external resources needed."""
 
-    def test_get_structure_contract(self):
+    @classmethod
+    def setUpClass(cls):
         from reveal.adapters import python as pya
-        result = pya.PythonAdapter().get_structure()
-        _check_contract(self, 'python', result)
+        cls.result = pya.PythonAdapter().get_structure()
+        cls.schema = pya.PythonAdapter.get_schema()
+
+    def test_get_structure_contract(self):
+        _check_contract(self, 'python', self.result)
 
     def test_schema_alignment(self):
-        from reveal.adapters import python as pya
-        result = pya.PythonAdapter().get_structure()
-        _check_schema_alignment(self, 'python', result, pya.PythonAdapter.get_schema())
+        _check_schema_alignment(self, 'python', self.result, self.schema)
 
 
 class TestOutputContractAst(unittest.TestCase):
     """ast:// adapter — needs a temp Python file."""
 
-    def setUp(self):
-        self._td = tempfile.mkdtemp()
-        self._py = os.path.join(self._td, 'foo.py')
-        with open(self._py, 'w') as f:
-            f.write('def foo():\n    pass\n\ndef bar():\n    return foo()\n')
-
-    def tearDown(self):
+    @classmethod
+    def setUpClass(cls):
         import shutil
-        shutil.rmtree(self._td, ignore_errors=True)
+        from reveal.adapters import ast as astmod
+        cls._td = tempfile.mkdtemp()
+        py = os.path.join(cls._td, 'foo.py')
+        with open(py, 'w') as f:
+            f.write('def foo():\n    pass\n\ndef bar():\n    return foo()\n')
+        cls.result = astmod.AstAdapter(py).get_structure()
+        cls.schema = astmod.AstAdapter.get_schema()
+
+    @classmethod
+    def tearDownClass(cls):
+        import shutil
+        shutil.rmtree(cls._td, ignore_errors=True)
 
     def test_get_structure_contract(self):
-        from reveal.adapters import ast as astmod
-        result = astmod.AstAdapter(self._py).get_structure()
-        _check_contract(self, 'ast', result)
+        _check_contract(self, 'ast', self.result)
 
     def test_schema_alignment(self):
-        from reveal.adapters import ast as astmod
-        result = astmod.AstAdapter(self._py).get_structure()
-        _check_schema_alignment(self, 'ast', result, astmod.AstAdapter.get_schema())
+        _check_schema_alignment(self, 'ast', self.result, self.schema)
 
 
 class TestOutputContractJson(unittest.TestCase):
     """json:// adapter — needs a temp JSON file."""
 
-    def setUp(self):
-        self._td = tempfile.mkdtemp()
-        self._jf = os.path.join(self._td, 'data.json')
-        with open(self._jf, 'w') as f:
+    @classmethod
+    def setUpClass(cls):
+        from reveal.adapters import json as jadapter
+        cls._td = tempfile.mkdtemp()
+        jf = os.path.join(cls._td, 'data.json')
+        with open(jf, 'w') as f:
             f.write('{"key": "value", "count": 42}')
+        cls.result = jadapter.JsonAdapter(jf).get_structure()
+        cls.schema = jadapter.JsonAdapter.get_schema()
 
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(cls):
         import shutil
-        shutil.rmtree(self._td, ignore_errors=True)
+        shutil.rmtree(cls._td, ignore_errors=True)
 
     def test_get_structure_contract(self):
-        from reveal.adapters import json as jadapter
-        result = jadapter.JsonAdapter(self._jf).get_structure()
-        _check_contract(self, 'json', result)
+        _check_contract(self, 'json', self.result)
 
     def test_schema_alignment(self):
-        from reveal.adapters import json as jadapter
-        result = jadapter.JsonAdapter(self._jf).get_structure()
-        _check_schema_alignment(self, 'json', result, jadapter.JsonAdapter.get_schema())
+        _check_schema_alignment(self, 'json', self.result, self.schema)
 
 
 class TestOutputContractStats(unittest.TestCase):
     """stats:// adapter — needs a temp directory with Python files."""
 
-    def setUp(self):
-        self._td = tempfile.mkdtemp()
-        with open(os.path.join(self._td, 'foo.py'), 'w') as f:
+    @classmethod
+    def setUpClass(cls):
+        from reveal.adapters import stats
+        cls._td = tempfile.mkdtemp()
+        with open(os.path.join(cls._td, 'foo.py'), 'w') as f:
             f.write('def foo(): pass\ndef bar(): return 1\n')
+        cls.result = stats.StatsAdapter(cls._td).get_structure()
+        cls.schema = stats.StatsAdapter.get_schema()
 
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(cls):
         import shutil
-        shutil.rmtree(self._td, ignore_errors=True)
+        shutil.rmtree(cls._td, ignore_errors=True)
 
     def test_get_structure_contract(self):
-        from reveal.adapters import stats
-        result = stats.StatsAdapter(self._td).get_structure()
-        _check_contract(self, 'stats', result)
+        _check_contract(self, 'stats', self.result)
 
     def test_schema_alignment(self):
-        from reveal.adapters import stats
-        result = stats.StatsAdapter(self._td).get_structure()
-        _check_schema_alignment(self, 'stats', result, stats.StatsAdapter.get_schema())
+        _check_schema_alignment(self, 'stats', self.result, self.schema)
 
 
 class TestOutputContractSqlite(unittest.TestCase):
     """sqlite:// adapter — needs a temp SQLite database."""
 
-    def setUp(self):
-        self._td = tempfile.mkdtemp()
-        self._db = os.path.join(self._td, 'test.db')
-        conn = sqlite3.connect(self._db)
+    @classmethod
+    def setUpClass(cls):
+        from reveal.adapters import sqlite
+        cls._td = tempfile.mkdtemp()
+        db = os.path.join(cls._td, 'test.db')
+        conn = sqlite3.connect(db)
         conn.execute('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)')
         conn.commit()
         conn.close()
+        cls.result = sqlite.SQLiteAdapter(f'sqlite://{db}').get_structure()
+        cls.schema = sqlite.SQLiteAdapter.get_schema()
 
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(cls):
         import shutil
-        shutil.rmtree(self._td, ignore_errors=True)
+        shutil.rmtree(cls._td, ignore_errors=True)
 
     def test_get_structure_contract(self):
-        from reveal.adapters import sqlite
-        result = sqlite.SQLiteAdapter(f'sqlite://{self._db}').get_structure()
-        _check_contract(self, 'sqlite', result)
+        _check_contract(self, 'sqlite', self.result)
 
     def test_schema_alignment(self):
-        from reveal.adapters import sqlite
-        result = sqlite.SQLiteAdapter(f'sqlite://{self._db}').get_structure()
-        _check_schema_alignment(self, 'sqlite', result, sqlite.SQLiteAdapter.get_schema())
+        _check_schema_alignment(self, 'sqlite', self.result, self.schema)
 
 
 class TestOutputContractImports(unittest.TestCase):
-    """imports:// adapter — uses current working directory."""
+    """imports:// adapter — uses a small fixture directory (not the full CWD)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import shutil
+        from reveal.adapters import imports as impadapter
+        cls._td = tempfile.mkdtemp()
+        with open(os.path.join(cls._td, 'main.py'), 'w') as f:
+            f.write('import os\nimport sys\n\ndef main():\n    pass\n')
+        cls.result = impadapter.ImportsAdapter(cls._td).get_structure()
+        cls.schema = impadapter.ImportsAdapter.get_schema()
+
+    @classmethod
+    def tearDownClass(cls):
+        import shutil
+        shutil.rmtree(cls._td, ignore_errors=True)
 
     def test_get_structure_contract(self):
-        from reveal.adapters import imports as impadapter
-        result = impadapter.ImportsAdapter().get_structure()
-        _check_contract(self, 'imports', result)
+        _check_contract(self, 'imports', self.result)
 
     def test_schema_alignment(self):
-        from reveal.adapters import imports as impadapter
-        result = impadapter.ImportsAdapter().get_structure()
-        _check_schema_alignment(self, 'imports', result, impadapter.ImportsAdapter.get_schema())
+        _check_schema_alignment(self, 'imports', self.result, self.schema)
 
 
 class TestOutputContractCalls(unittest.TestCase):
     """calls:// adapter — needs a temp directory with Python files."""
 
-    def setUp(self):
-        self._td = tempfile.mkdtemp()
-        with open(os.path.join(self._td, 'app.py'), 'w') as f:
+    @classmethod
+    def setUpClass(cls):
+        from reveal.adapters.calls.adapter import CallsAdapter
+        cls._td = tempfile.mkdtemp()
+        with open(os.path.join(cls._td, 'app.py'), 'w') as f:
             f.write('def main():\n    helper()\n\ndef helper():\n    pass\n')
+        cls.result = CallsAdapter(cls._td).get_structure()
+        cls.schema = CallsAdapter.get_schema()
 
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(cls):
         import shutil
-        shutil.rmtree(self._td, ignore_errors=True)
+        shutil.rmtree(cls._td, ignore_errors=True)
 
     def test_get_structure_contract(self):
-        from reveal.adapters.calls.adapter import CallsAdapter
-        result = CallsAdapter(self._td).get_structure()
-        _check_contract(self, 'calls', result)
+        _check_contract(self, 'calls', self.result)
 
     def test_schema_alignment(self):
-        from reveal.adapters.calls.adapter import CallsAdapter
-        result = CallsAdapter(self._td).get_structure()
-        _check_schema_alignment(self, 'calls', result, CallsAdapter.get_schema())
+        _check_schema_alignment(self, 'calls', self.result, self.schema)
 
 
 class TestOutputContractDiff(unittest.TestCase):
-    """diff:// adapter — uses git:// URIs against the current repo."""
+    """diff:// adapter — diffs a single small file against itself (HEAD vs HEAD)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from reveal.adapters.diff.adapter import DiffAdapter
+        # Target a single small file to avoid traversing the full project tree.
+        cls.result = DiffAdapter('git://HEAD/reveal/version.py', 'git://HEAD/reveal/version.py').get_structure()
+        cls.schema = DiffAdapter.get_schema()
 
     def test_get_structure_contract(self):
-        from reveal.adapters.diff.adapter import DiffAdapter
-        result = DiffAdapter('git://HEAD/.', 'git://HEAD/.').get_structure()
-        _check_contract(self, 'diff', result)
+        _check_contract(self, 'diff', self.result)
 
     def test_schema_alignment(self):
-        from reveal.adapters.diff.adapter import DiffAdapter
-        result = DiffAdapter('git://HEAD/.', 'git://HEAD/.').get_structure()
-        _check_schema_alignment(self, 'diff', result, DiffAdapter.get_schema())
+        _check_schema_alignment(self, 'diff', self.result, self.schema)
 
 
 class TestOutputContractGit(unittest.TestCase):
     """git:// adapter — uses the current git repository."""
 
-    def test_get_structure_contract(self):
+    @classmethod
+    def setUpClass(cls):
         from reveal.adapters.git.adapter import GitAdapter
-        result = GitAdapter('.').get_structure()
-        _check_contract(self, 'git', result)
+        cls.result = GitAdapter('.').get_structure()
+        cls.schema = GitAdapter.get_schema()
+
+    def test_get_structure_contract(self):
+        _check_contract(self, 'git', self.result)
 
     def test_schema_alignment(self):
-        from reveal.adapters.git.adapter import GitAdapter
-        result = GitAdapter('.').get_structure()
-        _check_schema_alignment(self, 'git', result, GitAdapter.get_schema())
+        _check_schema_alignment(self, 'git', self.result, self.schema)
 
 
 class TestOutputContractMarkdown(unittest.TestCase):
     """markdown:// adapter — needs a temp directory with .md files."""
 
-    def setUp(self):
-        self._td = tempfile.mkdtemp()
-        with open(os.path.join(self._td, 'README.md'), 'w') as f:
+    @classmethod
+    def setUpClass(cls):
+        from reveal.adapters.markdown.adapter import MarkdownQueryAdapter
+        cls._td = tempfile.mkdtemp()
+        with open(os.path.join(cls._td, 'README.md'), 'w') as f:
             f.write('# Test\n\nHello world.\n')
+        cls.result = MarkdownQueryAdapter(base_path=cls._td, query=None).get_structure()
+        cls.schema = MarkdownQueryAdapter.get_schema()
 
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(cls):
         import shutil
-        shutil.rmtree(self._td, ignore_errors=True)
+        shutil.rmtree(cls._td, ignore_errors=True)
 
     def test_get_structure_contract(self):
-        from reveal.adapters.markdown.adapter import MarkdownQueryAdapter
-        result = MarkdownQueryAdapter(base_path=self._td, query=None).get_structure()
-        _check_contract(self, 'markdown', result)
+        _check_contract(self, 'markdown', self.result)
 
     def test_schema_alignment(self):
-        from reveal.adapters.markdown.adapter import MarkdownQueryAdapter
-        result = MarkdownQueryAdapter(base_path=self._td, query=None).get_structure()
-        _check_schema_alignment(self, 'markdown', result, MarkdownQueryAdapter.get_schema())
+        _check_schema_alignment(self, 'markdown', self.result, self.schema)
 
 
 class TestOutputContractNginx(unittest.TestCase):
     """nginx:// adapter — overview mode searches system nginx dirs."""
 
-    def test_get_structure_contract(self):
+    @classmethod
+    def setUpClass(cls):
         from reveal.adapters.nginx.adapter import NginxUriAdapter
-        result = NginxUriAdapter('nginx://').get_structure()
-        _check_contract(self, 'nginx', result)
+        cls.result = NginxUriAdapter('nginx://').get_structure()
+        cls.schema = NginxUriAdapter.get_schema()
+
+    def test_get_structure_contract(self):
+        _check_contract(self, 'nginx', self.result)
 
     def test_schema_alignment(self):
-        from reveal.adapters.nginx.adapter import NginxUriAdapter
-        result = NginxUriAdapter('nginx://').get_structure()
-        _check_schema_alignment(self, 'nginx', result, NginxUriAdapter.get_schema())
+        _check_schema_alignment(self, 'nginx', self.result, self.schema)
 
 
 class TestOutputContractReveal(unittest.TestCase):
     """reveal:// adapter — no external resources needed."""
 
+    @classmethod
+    def setUpClass(cls):
+        adapter_cls = get_adapter_class('reveal')
+        cls.result = adapter_cls().get_structure()
+        cls.schema = adapter_cls.get_schema()
+
     def test_get_structure_contract(self):
-        cls = get_adapter_class('reveal')
-        result = cls().get_structure()
-        _check_contract(self, 'reveal', result)
+        _check_contract(self, 'reveal', self.result)
 
     def test_schema_alignment(self):
-        cls = get_adapter_class('reveal')
-        result = cls().get_structure()
-        _check_schema_alignment(self, 'reveal', result, cls.get_schema())
+        _check_schema_alignment(self, 'reveal', self.result, self.schema)
 
 
 class TestOutputContractClaude(unittest.TestCase):
     """claude:// adapter — sessions listing requires ~/.claude/projects."""
 
+    @classmethod
+    def setUpClass(cls):
+        adapter_cls = get_adapter_class('claude')
+        cls.result = adapter_cls('sessions').get_structure()
+        cls.schema = adapter_cls.get_schema()
+
     def test_get_structure_contract(self):
-        cls = get_adapter_class('claude')
-        result = cls('sessions').get_structure()
-        _check_contract(self, 'claude', result)
+        _check_contract(self, 'claude', self.result)
 
     def test_schema_alignment(self):
-        cls = get_adapter_class('claude')
-        result = cls('sessions').get_structure()
-        _check_schema_alignment(self, 'claude', result, cls.get_schema())
+        _check_schema_alignment(self, 'claude', self.result, self.schema)
 
 
 class TestOutputContractXlsx(unittest.TestCase):
     """xlsx:// adapter — needs a temp Excel file."""
 
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         try:
             import openpyxl
-            self._has_openpyxl = True
+            cls._has_openpyxl = True
         except ImportError:
-            self._has_openpyxl = False
-        self._td = tempfile.mkdtemp()
-        self._xlsx = os.path.join(self._td, 'data.xlsx')
-
-    def tearDown(self):
-        import shutil
-        shutil.rmtree(self._td, ignore_errors=True)
-
-    def _create_xlsx(self):
-        import openpyxl
+            cls._has_openpyxl = False
+            cls.result = None
+            cls.schema = None
+            return
+        from reveal.adapters.xlsx import XlsxAdapter
+        cls._td = tempfile.mkdtemp()
+        xlsx = os.path.join(cls._td, 'data.xlsx')
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = 'Sheet1'
         ws.append(['Name', 'Value'])
         ws.append(['foo', 42])
-        wb.save(self._xlsx)
+        wb.save(xlsx)
+        cls.result = XlsxAdapter(xlsx).get_structure()
+        cls.schema = XlsxAdapter.get_schema()
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls._has_openpyxl:
+            import shutil
+            shutil.rmtree(cls._td, ignore_errors=True)
 
     def test_get_structure_contract(self):
         if not self._has_openpyxl:
             self.skipTest('openpyxl not installed')
-        self._create_xlsx()
-        from reveal.adapters.xlsx import XlsxAdapter
-        result = XlsxAdapter(self._xlsx).get_structure()
-        _check_contract(self, 'xlsx', result)
+        _check_contract(self, 'xlsx', self.result)
 
     def test_schema_alignment(self):
         if not self._has_openpyxl:
             self.skipTest('openpyxl not installed')
-        self._create_xlsx()
-        from reveal.adapters.xlsx import XlsxAdapter
-        result = XlsxAdapter(self._xlsx).get_structure()
-        _check_schema_alignment(self, 'xlsx', result, XlsxAdapter.get_schema())
+        _check_schema_alignment(self, 'xlsx', self.result, self.schema)
 
 
 class TestNetworkAdaptersSkipped(unittest.TestCase):

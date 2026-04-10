@@ -82,9 +82,17 @@ class TestEnvAdapter(unittest.TestCase):
 class TestAstAdapter(unittest.TestCase):
     """Test AST query adapter."""
 
+    @classmethod
+    def setUpClass(cls):
+        cls.test_file = Path(__file__).parent / 'test_adapters.py'
+        # Cache results for dir-scan tests — narrowed to single file so they
+        # don't re-scan the entire tests/ directory (~100 files) each time.
+        cls._struct_all = AstAdapter(str(cls.test_file), None).get_structure()
+        cls._struct_class_or_func = AstAdapter(str(cls.test_file), 'type=class|function').get_structure()
+        cls._struct_class = AstAdapter(str(cls.test_file), 'type=class').get_structure()
+
     def setUp(self):
-        """Create test file for AST analysis."""
-        self.test_file = Path(__file__).parent / 'test_adapters.py'  # This file!
+        pass  # test_file and cached results provided by setUpClass
 
     def test_parse_query(self):
         """Should parse query string into filters."""
@@ -123,8 +131,7 @@ class TestAstAdapter(unittest.TestCase):
 
     def test_get_structure(self):
         """Should return AST query results."""
-        adapter = AstAdapter(str(self.test_file.parent), None)
-        result = adapter.get_structure()
+        result = self._struct_all
 
         self.assertEqual(result['type'], 'ast_query')
         self.assertIn('total_files', result)
@@ -189,8 +196,7 @@ class TestAstAdapter(unittest.TestCase):
 
     def test_type_filter_or_logic_results(self):
         """Should return both classes and functions with OR filter."""
-        adapter = AstAdapter(str(self.test_file.parent), 'type=class|function')
-        result = adapter.get_structure()
+        result = self._struct_class_or_func
 
         # Should find both classes and functions
         categories = {elem.get('category') for elem in result['results']}
@@ -199,8 +205,7 @@ class TestAstAdapter(unittest.TestCase):
 
     def test_class_line_count(self):
         """Should correctly calculate line count for classes."""
-        adapter = AstAdapter(str(self.test_file.parent), 'type=class')
-        result = adapter.get_structure()
+        result = self._struct_class
 
         # All classes should have non-zero line counts
         for elem in result['results']:

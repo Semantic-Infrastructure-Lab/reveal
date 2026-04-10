@@ -10,6 +10,40 @@ import tempfile
 import shutil
 from pathlib import Path
 from typing import Generator
+from io import StringIO
+from contextlib import redirect_stdout, redirect_stderr
+
+
+def _run_reveal_direct(*args):
+    """Run reveal in-process to avoid subprocess startup overhead.
+
+    Equivalent to subprocess.run([sys.executable, '-m', 'reveal.main'] + list(args))
+    but 10-20x faster: no interpreter startup, warm tree-sitter cache across calls.
+
+    Returns an object with .returncode, .stdout, .stderr attributes.
+    Safe for use within a single xdist worker (tests in a worker run serially).
+    """
+    from reveal.main import main
+
+    sys.argv = ['reveal'] + [str(a) for a in args]
+    buf_out = StringIO()
+    buf_err = StringIO()
+    rc = 0
+    with redirect_stdout(buf_out), redirect_stderr(buf_err):
+        try:
+            main()
+        except SystemExit as e:
+            rc = e.code if isinstance(e.code, int) else 0
+
+    class _Result:
+        __slots__ = ('returncode', 'stdout', 'stderr')
+
+        def __init__(self, returncode, stdout, stderr):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    return _Result(rc, buf_out.getvalue(), buf_err.getvalue())
 
 
 def native(posix_path: str) -> str:

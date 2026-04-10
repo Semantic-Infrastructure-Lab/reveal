@@ -306,19 +306,27 @@ class TestDocumentationAccuracy(unittest.TestCase):
         )
 
     def test_language_count_in_readme_is_accurate(self):
-        """README language count claim should match registered analyzers.
+        """README language count claim should reflect total languages reveal supports.
 
+        Total = tree-sitter languages + built-in-only languages (not covered by tree-sitter).
         This is what V012 validation rule checks, but as a test it runs in CI.
         """
-        analyzers = get_all_analyzers()
+        import typing
+        try:
+            import tree_sitter_language_pack as lp
+            ts_langs = set(typing.get_args(lp.SupportedLanguage))
+        except ImportError:
+            ts_langs = set()
 
-        # Count unique language names
-        unique_languages = set()
+        analyzers = get_all_analyzers()
+        builtin_names = set()
         for analyzer_info in analyzers.values():
             if 'name' in analyzer_info:
-                unique_languages.add(analyzer_info['name'])
+                builtin_names.add(analyzer_info['name'].lower().replace(' ', '').replace('+', 'plus').replace('#', 'sharp'))
 
-        actual_count = len(unique_languages)
+        # Total unique languages = tree-sitter + built-in-only (not in tree-sitter)
+        unique_to_builtin = builtin_names - ts_langs
+        actual_count = len(ts_langs) + len(unique_to_builtin)
 
         # Read README
         readme_file = Path(__file__).parent.parent / 'README.md'
@@ -327,20 +335,21 @@ class TestDocumentationAccuracy(unittest.TestCase):
 
         readme_content = readme_file.read_text(encoding='utf-8')
 
-        # Look for "N languages" or "N+ languages" claim
-        match = re.search(r'(\d+)(\+)?\s+languages?\s+built-in', readme_content, re.IGNORECASE)
+        # Look for "N+ languages" claim (e.g. "185+ languages")
+        match = re.search(r'(\d+)(\+)?\s+languages?\b', readme_content, re.IGNORECASE)
         if not match:
             self.skipTest("README doesn't claim language count")
 
         claimed_count = int(match.group(1))
-        is_minimum = match.group(2) == '+'  # "40+" means "at least 40"
+        is_minimum = match.group(2) == '+'  # "185+" means "at least 185"
 
         if is_minimum:
             self.assertGreaterEqual(
                 actual_count, claimed_count,
                 f"README language count is wrong!\n"
                 f"  README claims: {claimed_count}+ languages\n"
-                f"  Actually registered: {actual_count} languages\n"
+                f"  Actually supported: {actual_count} languages "
+                f"({len(ts_langs)} tree-sitter + {len(unique_to_builtin)} built-in-only)\n"
                 f"  Please update README.md"
             )
         else:
@@ -348,7 +357,7 @@ class TestDocumentationAccuracy(unittest.TestCase):
                 actual_count, claimed_count,
                 f"README language count is wrong!\n"
                 f"  README claims: {claimed_count} languages\n"
-                f"  Actually registered: {actual_count} languages\n"
+                f"  Actually supported: {actual_count} languages\n"
                 f"  Please update README.md"
             )
 

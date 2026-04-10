@@ -10,6 +10,7 @@ import subprocess
 import sys
 import os
 from pathlib import Path
+from conftest import _run_reveal_direct
 
 
 class TestAtFileSyntax(unittest.TestCase):
@@ -185,15 +186,8 @@ class TestAtFileWithFlags(unittest.TestCase):
     """Test @file syntax combined with CLI flags."""
 
     def run_reveal(self, *args):
-        """Run reveal command and return result."""
-        cmd = [sys.executable, "-m", "reveal.main"] + list(args)
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
-        return result
+        """Run reveal in-process (no subprocess overhead)."""
+        return _run_reveal_direct(*args)
 
     def test_at_file_check_exits_1_with_violations(self):
         """@file --check must exit 1 when any listed file has violations."""

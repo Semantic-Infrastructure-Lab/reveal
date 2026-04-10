@@ -9,6 +9,7 @@ import tempfile
 import subprocess
 import json
 from pathlib import Path
+from conftest import _run_reveal_direct
 
 
 # ============================================================================
@@ -148,27 +149,20 @@ Content here.
 # ============================================================================
 
 def run_reveal(args, check=True):
-    """Run reveal command with given arguments.
+    """Run reveal in-process (no subprocess overhead).
 
     Args:
         args: List of command arguments
         check: Whether to raise on non-zero exit (default True)
 
     Returns:
-        CompletedProcess with stdout, stderr, returncode
+        Object with .stdout, .stderr, .returncode attributes
     """
-    cmd = ['reveal'] + args
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        check=False  # We'll check manually
-    )
+    result = _run_reveal_direct(*args)
 
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
-            result.returncode, cmd, result.stdout, result.stderr
+            result.returncode, ['reveal'] + args, result.stdout, result.stderr
         )
 
     return result

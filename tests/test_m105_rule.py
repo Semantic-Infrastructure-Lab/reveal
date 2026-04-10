@@ -1,6 +1,7 @@
 """Tests for M105 rule: CLI handler not wired to main.py."""
 
 import pytest
+import tempfile
 from pathlib import Path
 from reveal.rules.maintainability.M105 import M105
 
@@ -207,3 +208,118 @@ def handle_command(
         rule = M105()
         handlers = rule.HANDLER_PATTERN.findall(content)
         assert 'handle_command' in handlers
+
+
+class TestM105CheckIntegration:
+    """Integration tests that exercise the full check() path (lines 68-108)."""
+
+    def _make_handlers_file(self, tmpdir: Path, content: str) -> Path:
+        """Create reveal/cli/handlers_test.py in tmpdir."""
+        handlers_dir = tmpdir / 'reveal' / 'cli'
+        handlers_dir.mkdir(parents=True)
+        handlers_file = handlers_dir / 'handlers_test.py'
+        handlers_file.write_text(content)
+        return handlers_file
+
+    def _make_main_py(self, tmpdir: Path, content: str) -> Path:
+        reveal_dir = tmpdir / 'reveal'
+        reveal_dir.mkdir(parents=True, exist_ok=True)
+        main_file = reveal_dir / 'main.py'
+        main_file.write_text(content)
+        return main_file
+
+    def test_handler_not_imported_detected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            handler_content = 'def handle_test():\n    pass\n'
+            handlers_file = self._make_handlers_file(tmpdir, handler_content)
+            self._make_main_py(tmpdir, '# empty main\n')
+            rule = M105()
+            detections = rule.check(str(handlers_file), None, handler_content)
+            assert len(detections) == 1
+            assert 'not imported' in detections[0].message
+            assert 'handle_test' in detections[0].message
+
+    def test_handler_imported_not_called_detected(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            handler_content = 'def handle_test():\n    pass\n'
+            handlers_file = self._make_handlers_file(tmpdir, handler_content)
+            self._make_main_py(tmpdir, 'from .cli import handle_test\n')
+            rule = M105()
+            detections = rule.check(str(handlers_file), None, handler_content)
+            assert len(detections) == 1
+            assert 'imported but never called' in detections[0].message
+
+    def test_handler_properly_wired_no_detection(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            handler_content = 'def handle_test():\n    pass\n'
+            handlers_file = self._make_handlers_file(tmpdir, handler_content)
+            main_content = 'from .cli import handle_test\nhandle_test()\n'
+            self._make_main_py(tmpdir, main_content)
+            rule = M105()
+            detections = rule.check(str(handlers_file), None, handler_content)
+            assert len(detections) == 0
+
+    def test_no_handlers_returns_empty(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            handler_content = '# no handlers here\ndef helper(): pass\n'
+            handlers_file = self._make_handlers_file(tmpdir, handler_content)
+            self._make_main_py(tmpdir, '# main\n')
+            rule = M105()
+            detections = rule.check(str(handlers_file), None, handler_content)
+            assert len(detections) == 0
+
+    def test_main_py_missing_skips_check(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            handler_content = 'def handle_test():\n    pass\n'
+            handlers_file = self._make_handlers_file(tmpdir, handler_content)
+            # Don't create main.py
+            rule = M105()
+            detections = rule.check(str(handlers_file), None, handler_content)
+            assert len(detections) == 0
+
+    def test_file_path_without_reveal_dir(self):
+        # _find_main_py returns None when 'reveal' not in path parts
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            handlers_dir = tmpdir / 'myapp' / 'cli'
+            handlers_dir.mkdir(parents=True)
+            handlers_file = handlers_dir / 'handlers_test.py'
+            handler_content = 'def handle_test():\n    pass\n'
+            handlers_file.write_text(handler_content)
+            rule = M105()
+            detections = rule.check(str(handlers_file), None, handler_content)
+            assert len(detections) == 0
+
+
+class TestM105IsImportedExtended:
+    """Cover remaining _is_imported branches."""
+
+    def test_direct_import_statement(self):
+        # Line 121: `import handle_foo` form
+        main_content = 'import handle_foo\nimport something_else\n'
+        rule = M105()
+        assert rule._is_imported('handle_foo', main_content)
+
+    def test_direct_import_not_found(self):
+        main_content = 'import handle_bar\n'
+        rule = M105()
+        assert not rule._is_imported('handle_missing', main_content)
+
+
+class TestM105FindHandlerLineDefault:
+    """Cover the return 1 default in _find_handler_line (line 188)."""
+
+    def test_handler_not_in_content_returns_line_1(self):
+        rule = M105()
+        line = rule._find_handler_line('handle_missing', 'def handle_other():\n    pass\n')
+        assert line == 1
+
+    def test_handler_at_start_returns_line_1(self):
+        rule = M105()
+        line = rule._find_handler_line('handle_cmd', 'def handle_cmd(): pass\n')
+        assert line == 1

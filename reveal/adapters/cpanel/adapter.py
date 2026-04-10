@@ -120,7 +120,8 @@ def _parse_cpanel_userdata(path: str) -> Dict[str, str]:
         Dict of directive name → value.
     """
     try:
-        text = open(path, 'r', encoding='utf-8', errors='replace').read()
+        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+            text = f.read()
     except OSError:
         return {}
     result: Dict[str, str] = {}
@@ -153,7 +154,8 @@ def _parse_main_domain_types(userdata_dir: str) -> Dict[str, str]:
     """
     main_path = os.path.join(userdata_dir, 'main')
     try:
-        text = open(main_path, 'r', encoding='utf-8', errors='replace').read()
+        with open(main_path, 'r', encoding='utf-8', errors='replace') as f:
+            text = f.read()
     except OSError:
         return {}
 

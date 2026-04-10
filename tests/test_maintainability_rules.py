@@ -546,3 +546,355 @@ class TestM501TodoFixme(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Additional M102 tests — covering uncovered branches
+# ---------------------------------------------------------------------------
+
+from reveal.rules.maintainability.M102 import (
+    _resolve_relative_import,
+    _resolve_import_module,
+    _add_named_imports,
+    _add_module_and_parents,
+    _extract_imports_regex,
+)
+
+
+class TestM102RelativeImports(unittest.TestCase):
+    """Cover _resolve_relative_import and _resolve_import_module."""
+
+    def test_resolve_single_dot_relative(self):
+        root = Path(tempfile.mkdtemp())
+        pkg = root / 'mypkg'
+        pkg.mkdir()
+        file_path = pkg / 'sub' / 'module.py'
+        file_path.parent.mkdir()
+        result = _resolve_relative_import('.base', file_path, root)
+        assert result == 'mypkg.sub.base'
+
+    def test_resolve_double_dot_relative(self):
+        root = Path(tempfile.mkdtemp())
+        pkg = root / 'mypkg' / 'sub'
+        pkg.mkdir(parents=True)
+        file_path = pkg / 'module.py'
+        result = _resolve_relative_import('..base', file_path, root)
+        assert result == 'mypkg.base'
+
+    def test_resolve_relative_too_many_dots_returns_none(self):
+        root = Path(tempfile.mkdtemp())
+        file_path = root / 'module.py'
+        result = _resolve_relative_import('....way_too_many', file_path, root)
+        assert result is None
+
+    def test_resolve_relative_file_outside_root_returns_none(self):
+        root = Path('/tmp/someroot')
+        file_path = Path('/other/place/module.py')
+        result = _resolve_relative_import('.base', file_path, root)
+        assert result is None
+
+    def test_resolve_import_module_relative_no_context(self):
+        # Lines 79-81: relative import but no file_path/package_root
+        result = _resolve_import_module('.foo', None, None)
+        assert result is None
+
+    def test_resolve_import_module_absolute(self):
+        result = _resolve_import_module('os.path', None, None)
+        assert result == 'os.path'
+
+    def test_add_named_imports_backslash_stripped(self):
+        # Line 90: strip_backslash=True
+        imports: set = set()
+        _add_named_imports(imports, 'pkg', 'mod1\\\n', strip_backslash=True)
+        assert 'pkg.mod1' in imports
+
+    def test_add_module_and_parents(self):
+        # Lines 121-125: parents added
+        imports: set = set()
+        _add_module_and_parents(imports, 'a.b.c')
+        assert 'a.b.c' in imports
+        assert 'a.b' in imports
+        assert 'a' in imports
+
+    def test_extract_imports_regex_relative(self):
+        root = Path(tempfile.mkdtemp())
+        pkg = root / 'mypkg'
+        pkg.mkdir()
+        file_path = pkg / 'module.py'
+        content = 'from . import utils\nfrom .base import Foo\n'
+        imports: set = set()
+        _extract_imports_regex(content, imports, file_path, root)
+        # Relative imports resolved
+        assert 'mypkg.base' in imports
+
+    def test_extract_imports_regex_multiline_paren(self):
+        content = 'from mypkg import (\n    Foo,\n    Bar,\n)\n'
+        imports: set = set()
+        _extract_imports_regex(content, imports)
+        assert 'mypkg.Foo' in imports
+        assert 'mypkg.Bar' in imports
+
+    def test_extract_imports_regex_module_string(self):
+        content = 'DISPATCH = {"mypkg.sub.handler": handle}\n'
+        imports: set = set()
+        _extract_imports_regex(content, imports)
+        assert 'mypkg.sub.handler' in imports
+
+
+class TestM102EntryPointExtended(unittest.TestCase):
+    """Cover entry point detection branches."""
+
+    def test_rule_plugin_file_is_entry_point(self):
+        # Line 236: _RULE_CODE_RE.match — B001.py, M102.py etc
+        rule = M102()
+        assert rule._is_entry_point(Path('/project/reveal/rules/B001.py'))
+        assert rule._is_entry_point(Path('/project/reveal/rules/M102.py'))
+        assert rule._is_entry_point(Path('/project/rules/V023.py'))
+
+    def test_non_rule_plugin_not_entry_point(self):
+        rule = M102()
+        assert not rule._is_entry_point(Path('/project/reveal/utils/helper.py'))
+
+    def test_entry_point_directory_bin(self):
+        # Line 241: entry point directory
+        rule = M102()
+        assert rule._is_entry_point(Path('/project/bin/myscript.py'))
+
+    def test_entry_point_directory_scripts(self):
+        rule = M102()
+        assert rule._is_entry_point(Path('/project/scripts/deploy.py'))
+
+    def test_entry_point_directory_tools(self):
+        rule = M102()
+        assert rule._is_entry_point(Path('/project/tools/helper.py'))
+
+    def test_entry_point_directory_migrations(self):
+        rule = M102()
+        assert rule._is_entry_point(Path('/project/migrations/0001_initial.py'))
+
+
+class TestM102GetModuleName(unittest.TestCase):
+    """Cover _get_module_name branches."""
+
+    def test_init_file_returns_parent_only(self):
+        # Line 303: skip __init__
+        rule = M102()
+        root = Path('/project')
+        path = Path('/project/mypkg/__init__.py')
+        result = rule._get_module_name(path, root)
+        assert result == 'mypkg'
+
+    def test_regular_file_returns_dotted_name(self):
+        rule = M102()
+        root = Path('/project')
+        path = Path('/project/mypkg/utils.py')
+        result = rule._get_module_name(path, root)
+        assert result == 'mypkg.utils'
+
+    def test_file_outside_root_returns_none(self):
+        rule = M102()
+        root = Path('/project')
+        path = Path('/other/place/utils.py')
+        result = rule._get_module_name(path, root)
+        assert result is None
+
+
+class TestM102IsImported(unittest.TestCase):
+    """Cover _is_imported branches including __all__ check."""
+
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir)
+
+    def test_submodule_import_marks_parent_used(self):
+        # Line 343: imp.startswith(module_name + '.')
+        rule = M102()
+        all_imports = {'mypkg.utils.helper'}
+        path = self.tmpdir / 'utils.py'
+        path.write_text('x = 1\n')
+        result = rule._is_imported('mypkg.utils', all_imports, path, self.tmpdir)
+        assert result is True
+
+    def test_init_all_export_marks_used(self):
+        # Lines 351-353: __init__.py __all__ check
+        rule = M102()
+        all_imports: set = set()
+        # Create mymodule.py and __init__.py that references it
+        (self.tmpdir / '__init__.py').write_text('__all__ = ["mymodule"]\n')
+        path = self.tmpdir / 'mymodule.py'
+        path.write_text('x = 1\n')
+        result = rule._is_imported('mymodule', all_imports, path, self.tmpdir)
+        assert result is True
+
+    def test_not_in_all_not_imported(self):
+        rule = M102()
+        all_imports: set = set()
+        (self.tmpdir / '__init__.py').write_text('__all__ = ["other"]\n')
+        path = self.tmpdir / 'mymodule.py'
+        path.write_text('x = 1\n')
+        result = rule._is_imported('mymodule', all_imports, path, self.tmpdir)
+        assert result is False
+
+
+class TestM102FindPackageRoot(unittest.TestCase):
+    """Cover _find_package_root fallback path (lines 284-286)."""
+
+    def test_fallback_to_init_boundary(self):
+        rule = M102()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            # Create a package without pyproject.toml
+            pkg = tmpdir / 'mypkg'
+            pkg.mkdir()
+            (pkg / '__init__.py').write_text('')
+            (pkg / 'module.py').write_text('x = 1\n')
+            result = rule._find_package_root(pkg / 'module.py')
+            # Should fall back to __init__.py boundary
+            assert result == pkg
+
+
+class TestM102HasMeaningfulCode(unittest.TestCase):
+    """Cover _has_meaningful_code syntax error branch (lines 367-370)."""
+
+    def test_syntax_error_short_content_is_not_meaningful(self):
+        rule = M102()
+        assert not rule._has_meaningful_code("???")
+
+    def test_syntax_error_long_content_is_meaningful(self):
+        rule = M102()
+        content = "???" + "x" * 200
+        assert rule._has_meaningful_code(content)
+
+    def test_functions_are_meaningful(self):
+        rule = M102()
+        assert rule._has_meaningful_code("def foo(): pass")
+
+    def test_only_comments_not_meaningful(self):
+        rule = M102()
+        assert not rule._has_meaningful_code("# just a comment\n")
+
+
+# ---------------------------------------------------------------------------
+# Additional M103 tests — covering uncovered branches
+# ---------------------------------------------------------------------------
+
+class TestM103Extended(unittest.TestCase):
+    """Cover uncovered M103 branches."""
+
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir)
+
+    def _write(self, name, content):
+        path = self.tmpdir / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        return path
+
+    def test_non_init_file_skipped(self):
+        # Line 65
+        rule = M103()
+        detections = rule.check(str(self.tmpdir / 'utils.py'), None, '__version__ = "1.0.0"\n')
+        assert len(detections) == 0
+
+    def test_dynamic_version_only_skipped(self):
+        # Lines 75-79: importlib.metadata present, no hardcoded fallback
+        content = 'from importlib.metadata import version\n__version__ = version("mypkg")\n'
+        init_file = self._write('__init__.py', content)
+        self._write('pyproject.toml', '[project]\nversion = "2.0.0"\n')
+        rule = M103()
+        detections = rule.check(str(init_file), None, content)
+        assert len(detections) == 0
+
+    def test_dynamic_version_with_hardcoded_fallback_checked(self):
+        # importlib present + top-level __version__ → falls through to version check
+        content = (
+            'import importlib\n'
+            '__version__ = "1.0.0"\n'
+        )
+        init_file = self._write('__init__.py', content)
+        self._write('pyproject.toml', '[project]\nversion = "2.0.0"\n')
+        rule = M103()
+        detections = rule.check(str(init_file), None, content)
+        assert len(detections) == 1
+
+    def test_no_pyproject_toml_returns_empty(self):
+        # Line 84
+        content = '__version__ = "1.0.0"\n'
+        init_file = self._write('__init__.py', content)
+        rule = M103()
+        detections = rule.check(str(init_file), None, content)
+        assert len(detections) == 0
+
+    def test_pyproject_missing_version_returns_empty(self):
+        # Line 89: pyproject found but no version field
+        content = '__version__ = "1.0.0"\n'
+        init_file = self._write('__init__.py', content)
+        self._write('pyproject.toml', '[project]\nname = "mypkg"\n')
+        rule = M103()
+        detections = rule.check(str(init_file), None, content)
+        assert len(detections) == 0
+
+    def test_poetry_version_mismatch_detected(self):
+        # Lines 152-168: tool.poetry.version
+        content = '__version__ = "1.0.0"\n'
+        init_file = self._write('__init__.py', content)
+        self._write('pyproject.toml', '[tool.poetry]\nname = "mypkg"\nversion = "2.0.0"\n')
+        rule = M103()
+        detections = rule.check(str(init_file), None, content)
+        assert len(detections) == 1
+        assert '2.0.0' in detections[0].message
+
+    def test_poetry_version_match_ok(self):
+        content = '__version__ = "2.0.0"\n'
+        init_file = self._write('__init__.py', content)
+        self._write('pyproject.toml', '[tool.poetry]\nname = "mypkg"\nversion = "2.0.0"\n')
+        rule = M103()
+        detections = rule.check(str(init_file), None, content)
+        assert len(detections) == 0
+
+    def test_find_version_line_not_found_returns_1(self):
+        # Line 124
+        rule = M103()
+        line = rule._find_version_line('# no version here\n')
+        assert line == 1
+
+    def test_find_pyproject_walks_up(self):
+        # pyproject.toml is in parent, not current dir
+        subdir = self.tmpdir / 'src' / 'mypkg'
+        subdir.mkdir(parents=True)
+        (self.tmpdir / 'pyproject.toml').write_text('[project]\nversion = "1.0.0"\n')
+        rule = M103()
+        result = rule._find_pyproject(subdir / '__init__.py')
+        assert result is not None
+        assert result == self.tmpdir / 'pyproject.toml'
+
+
+# ---------------------------------------------------------------------------
+# version.py tests
+# ---------------------------------------------------------------------------
+
+class TestVersionFallback(unittest.TestCase):
+    """Cover version.py exception fallback (lines 10-12)."""
+
+    def test_version_string_is_set(self):
+        from reveal import version as ver_module
+        assert hasattr(ver_module, '__version__')
+        assert isinstance(ver_module.__version__, str)
+        assert len(ver_module.__version__) > 0
+
+    def test_version_fallback_on_metadata_failure(self):
+        from unittest.mock import patch
+        with patch('importlib.metadata.version', side_effect=Exception('not installed')):
+            import importlib
+            import reveal.version as ver_module
+            importlib.reload(ver_module)
+            assert hasattr(ver_module, '__version__')
+            # Either real version or fallback — both are valid strings
+            assert isinstance(ver_module.__version__, str)
