@@ -1083,6 +1083,34 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         spans.sort(key=lambda t: t[0])
         return spans
 
+    def _find_heading_match(self, pattern: str):
+        """Search headings for an exact or substring match of *pattern*.
+
+        Returns:
+            ``(start_line, heading_level, substring_matches)`` where
+            *start_line* and *heading_level* are set on exact match (both
+            ``None`` otherwise) and *substring_matches* is a list of
+            ``(line, level, title)`` tuples for partial matches.
+        """
+        pat_normalized = self._strip_inline_formatting(pattern.lower())
+        start_line = None
+        heading_level = None
+        substring_matches = []
+
+        for i, line in enumerate(self.lines, 1):
+            m = re.match(r'^(#{1,6})\s+(.+)$', line)
+            if m:
+                title = m.group(2).strip()
+                title_normalized = self._strip_inline_formatting(title.lower())
+                if title_normalized == pat_normalized:
+                    start_line = i
+                    heading_level = len(m.group(1))
+                    break
+                if pat_normalized in title_normalized:
+                    substring_matches.append((i, len(m.group(1)), title))
+
+        return start_line, heading_level, substring_matches
+
     def extract_element(self, element_type: str, name: str) -> Optional[Dict[str, Any]]:
         """Extract one or more markdown sections by heading name.
 
@@ -1139,23 +1167,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         # Single-pattern path (original behaviour preserved)
         pattern = patterns[0] if patterns else name
-        pat_lower = pattern.lower()
-        pat_normalized = self._strip_inline_formatting(pat_lower)
-        start_line = None
-        heading_level = None
-        substring_matches = []
-
-        for i, line in enumerate(self.lines, 1):
-            match = re.match(r'^(#{1,6})\s+(.+)$', line)
-            if match:
-                title = match.group(2).strip()
-                title_normalized = self._strip_inline_formatting(title.lower())
-                if title_normalized == pat_normalized:
-                    start_line = i
-                    heading_level = len(match.group(1))
-                    break
-                if pat_normalized in title_normalized:
-                    substring_matches.append((i, len(match.group(1)), title))
+        start_line, heading_level, substring_matches = self._find_heading_match(pattern)
 
         if not start_line or heading_level is None:
             if len(substring_matches) == 1:

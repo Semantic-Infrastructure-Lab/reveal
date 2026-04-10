@@ -1878,5 +1878,86 @@ class TestSectionEndCodeFence(TestMarkdownAnalyzer):
             self.teardown_file(path)
 
 
+class TestFindHeadingMatch(TestMarkdownAnalyzer):
+    """Direct unit tests for _find_heading_match helper."""
+
+    def test_exact_match_returns_line_and_level(self):
+        """Exact match sets start_line and heading_level."""
+        content = "# Title\n\n## Target\n\nBody.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            start, level, subs = analyzer._find_heading_match('Target')
+            self.assertEqual(start, 3)
+            self.assertEqual(level, 2)
+            self.assertEqual(subs, [])
+        finally:
+            self.teardown_file(path)
+
+    def test_exact_match_case_insensitive(self):
+        """Exact match is case-insensitive."""
+        content = "## My Section\n\nText.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            start, level, _ = analyzer._find_heading_match('my section')
+            self.assertEqual(start, 1)
+            self.assertEqual(level, 2)
+        finally:
+            self.teardown_file(path)
+
+    def test_no_match_returns_none(self):
+        """No match returns None for start_line and heading_level."""
+        content = "## Something\n\nText.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            start, level, subs = analyzer._find_heading_match('Nonexistent')
+            self.assertIsNone(start)
+            self.assertIsNone(level)
+            self.assertEqual(subs, [])
+        finally:
+            self.teardown_file(path)
+
+    def test_substring_matches_collected(self):
+        """Substring matches are collected when no exact match."""
+        content = "## Install Guide\n\nText.\n\n## Install Notes\n\nMore.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            start, level, subs = analyzer._find_heading_match('Install')
+            self.assertIsNone(start)
+            self.assertEqual(len(subs), 2)
+            self.assertEqual(subs[0][0], 1)  # line of first match
+            self.assertEqual(subs[1][0], 5)  # line of second match
+        finally:
+            self.teardown_file(path)
+
+    def test_backtick_heading_exact_match(self):
+        """Backtick formatting in heading matches plain text."""
+        content = "## The `config` file\n\nText.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            start, level, _ = analyzer._find_heading_match('The config file')
+            self.assertEqual(start, 1)
+            self.assertEqual(level, 2)
+        finally:
+            self.teardown_file(path)
+
+    def test_exact_match_preferred_over_substring(self):
+        """Exact match is returned even when substring matches exist later."""
+        content = "## Setup\n\nB.\n\n## Setup Guide\n\nA.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            start, level, subs = analyzer._find_heading_match('Setup')
+            self.assertEqual(start, 1)
+            self.assertEqual(level, 2)
+            self.assertEqual(subs, [])  # exact match found first, no substrings
+        finally:
+            self.teardown_file(path)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -134,12 +134,69 @@ def _parse_cpanel_userdata(path: str) -> Dict[str, str]:
     return result
 
 
+def _parse_main_domain_types(userdata_dir: str) -> Dict[str, str]:
+    """Parse the ``main`` file in a cPanel userdata dir to build a domain→type map.
+
+    The ``main`` file contains authoritative lists::
+
+        main_domain: example.com
+        addon_domains:
+          - addon.io
+        sub_domains:
+          - sub.example.com
+        parked_domains:
+          - alias.io
+
+    Returns:
+        ``{domain: type}`` mapping (e.g. ``{'example.com': 'main_domain', ...}``).
+        Empty dict if the file is missing or unreadable.
+    """
+    main_path = os.path.join(userdata_dir, 'main')
+    try:
+        text = open(main_path, 'r', encoding='utf-8', errors='replace').read()
+    except OSError:
+        return {}
+
+    type_map: Dict[str, str] = {}
+    # Map list-key names to the domain type we assign
+    _list_keys = {
+        'addon_domains': 'addon',
+        'sub_domains': 'subdomain',
+        'parked_domains': 'parked',
+    }
+
+    for line in text.split('\n'):
+        stripped = line.rstrip()
+        # main_domain is a scalar key: value
+        m = re.match(r'^main_domain:\s+(.+)', stripped)
+        if m:
+            type_map[m.group(1).strip()] = 'main_domain'
+            continue
+
+    # Second pass: collect YAML list items under known keys
+    current_key = None
+    for line in text.split('\n'):
+        stripped = line.rstrip()
+        # Detect a top-level key (no leading whitespace)
+        key_m = re.match(r'^(\w+):', stripped)
+        if key_m:
+            current_key = key_m.group(1)
+            continue
+        # Detect a list item under a known key
+        if current_key in _list_keys:
+            item_m = re.match(r'^\s+-\s+(.+)', stripped)
+            if item_m:
+                type_map[item_m.group(1).strip()] = _list_keys[current_key]
+
+    return type_map
+
+
 def _list_user_domains(username: str) -> List[Dict[str, str]]:
     """Read /var/cpanel/userdata/USERNAME/ and return domain entries.
 
     Each file in this directory represents one domain (or subdomain).
     Files ending in `_SSL` are the SSL vhost duplicates — we skip them.
-    The `main` file describes the account itself (not a domain); skipped.
+    The `main`` file is parsed separately for authoritative domain types.
 
     Returns:
         List of dicts with keys: domain, docroot, serveralias, type
@@ -148,6 +205,9 @@ def _list_user_domains(username: str) -> List[Dict[str, str]]:
     userdata_dir = os.path.join(CPANEL_USERDATA_DIR, username)
     if not os.path.isdir(userdata_dir):
         return []
+
+    # Authoritative type map from the main file (BACK-128)
+    type_map = _parse_main_domain_types(userdata_dir)
 
     entries = []
     for fname in sorted(os.listdir(userdata_dir)):
@@ -165,8 +225,11 @@ def _list_user_domains(username: str) -> List[Dict[str, str]]:
         domain = data.get('domain', fname)
         docroot = data.get('documentroot', '')
         serveralias = data.get('serveralias', '')
-        # heuristic type detection
-        dom_type = data.get('type', '')
+
+        # Prefer authoritative type from main file, fall back to heuristic
+        dom_type = type_map.get(domain, '')
+        if not dom_type:
+            dom_type = data.get('type', '')
         if not dom_type:
             if fname == username or '.' not in fname:
                 dom_type = 'main_domain'

@@ -8,6 +8,7 @@ from datetime import datetime, timezone, timedelta
 from reveal.adapters.cpanel.adapter import (
     CpanelAdapter,
     _parse_cpanel_userdata,
+    _parse_main_domain_types,
     _list_user_domains,
     _get_disk_cert_status,
     CPANEL_USERDATA_DIR,
@@ -66,6 +67,99 @@ class TestParseCpanelUserdata:
         assert result['domain'] == 'site.com'
         assert result['type'] == 'addon'
         assert '-' not in result
+
+
+# ---------------------------------------------------------------------------
+# _parse_main_domain_types (BACK-128)
+# ---------------------------------------------------------------------------
+
+class TestParseMainDomainTypes:
+
+    def test_returns_empty_when_no_main_file(self, tmp_path):
+        """Missing main file returns empty dict."""
+        assert _parse_main_domain_types(str(tmp_path)) == {}
+
+    def test_parses_main_domain(self, tmp_path):
+        """main_domain scalar is detected."""
+        (tmp_path / "main").write_text("main_domain: example.com\n")
+        result = _parse_main_domain_types(str(tmp_path))
+        assert result['example.com'] == 'main_domain'
+
+    def test_parses_addon_domains(self, tmp_path):
+        """addon_domains list items are detected."""
+        (tmp_path / "main").write_text(
+            "main_domain: example.com\n"
+            "addon_domains:\n"
+            "  - addon.io\n"
+            "  - extra.net\n"
+        )
+        result = _parse_main_domain_types(str(tmp_path))
+        assert result['addon.io'] == 'addon'
+        assert result['extra.net'] == 'addon'
+
+    def test_parses_parked_domains(self, tmp_path):
+        """parked_domains list items are detected."""
+        (tmp_path / "main").write_text(
+            "main_domain: example.com\n"
+            "parked_domains:\n"
+            "  - alias.io\n"
+        )
+        result = _parse_main_domain_types(str(tmp_path))
+        assert result['alias.io'] == 'parked'
+
+    def test_parses_sub_domains(self, tmp_path):
+        """sub_domains list items are detected."""
+        (tmp_path / "main").write_text(
+            "main_domain: example.com\n"
+            "sub_domains:\n"
+            "  - blog.example.com\n"
+            "  - shop.example.com\n"
+        )
+        result = _parse_main_domain_types(str(tmp_path))
+        assert result['blog.example.com'] == 'subdomain'
+        assert result['shop.example.com'] == 'subdomain'
+
+    def test_full_main_file(self, tmp_path):
+        """A realistic main file with all domain types."""
+        (tmp_path / "main").write_text(
+            "main_domain: example.com\n"
+            "addon_domains:\n"
+            "  - addon.io\n"
+            "sub_domains:\n"
+            "  - blog.example.com\n"
+            "  - shop.addon.io\n"
+            "parked_domains:\n"
+            "  - alias.com\n"
+        )
+        result = _parse_main_domain_types(str(tmp_path))
+        assert result == {
+            'example.com': 'main_domain',
+            'addon.io': 'addon',
+            'blog.example.com': 'subdomain',
+            'shop.addon.io': 'subdomain',
+            'alias.com': 'parked',
+        }
+
+    def test_empty_lists_handled(self, tmp_path):
+        """main file with empty domain lists returns only main_domain."""
+        (tmp_path / "main").write_text(
+            "main_domain: example.com\n"
+            "addon_domains:\n"
+            "sub_domains:\n"
+            "parked_domains:\n"
+        )
+        result = _parse_main_domain_types(str(tmp_path))
+        assert result == {'example.com': 'main_domain'}
+
+    def test_unknown_keys_ignored(self, tmp_path):
+        """List items under unknown keys are not included."""
+        (tmp_path / "main").write_text(
+            "main_domain: example.com\n"
+            "random_stuff:\n"
+            "  - junk.io\n"
+        )
+        result = _parse_main_domain_types(str(tmp_path))
+        assert 'junk.io' not in result
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +239,76 @@ class TestListUserDomains:
 
         assert len(result) == 1
         assert result[0]['domain'] == 'example.com'
+
+    def test_parked_domain_from_main_file(self, tmp_path):
+        """BACK-128: parked domains get authoritative type from main file."""
+        userdata = tmp_path / "myuser"
+        userdata.mkdir()
+        (userdata / "main").write_text(
+            "main_domain: example.com\n"
+            "parked_domains:\n"
+            "  - alias.io\n"
+        )
+        (userdata / "example.com").write_text("domain: example.com\ndocumentroot: /home/myuser/public_html\n")
+        (userdata / "alias.io").write_text("domain: alias.io\ndocumentroot: /home/myuser/public_html\n")
+
+        with patch('reveal.adapters.cpanel.adapter.CPANEL_USERDATA_DIR', str(tmp_path)):
+            result = _list_user_domains('myuser')
+
+        types = {d['domain']: d['type'] for d in result}
+        assert types['example.com'] == 'main_domain'
+        assert types['alias.io'] == 'parked'
+
+    def test_addon_domain_from_main_file(self, tmp_path):
+        """BACK-128: addon domains get authoritative type from main file."""
+        userdata = tmp_path / "myuser"
+        userdata.mkdir()
+        (userdata / "main").write_text(
+            "main_domain: example.com\n"
+            "addon_domains:\n"
+            "  - extra.net\n"
+        )
+        (userdata / "example.com").write_text("domain: example.com\ndocumentroot: /home/myuser/public_html\n")
+        (userdata / "extra.net").write_text("domain: extra.net\ndocumentroot: /home/myuser/extra.net\n")
+
+        with patch('reveal.adapters.cpanel.adapter.CPANEL_USERDATA_DIR', str(tmp_path)):
+            result = _list_user_domains('myuser')
+
+        types = {d['domain']: d['type'] for d in result}
+        assert types['extra.net'] == 'addon'
+
+    def test_heuristic_fallback_when_no_main_file(self, tmp_path):
+        """Without a main file, heuristic still works."""
+        userdata = tmp_path / "myuser"
+        userdata.mkdir()
+        # No main file
+        (userdata / "sub.example.com").write_text("domain: sub.example.com\n")
+
+        with patch('reveal.adapters.cpanel.adapter.CPANEL_USERDATA_DIR', str(tmp_path)):
+            result = _list_user_domains('myuser')
+
+        assert result[0]['type'] == 'subdomain'
+
+    def test_mixed_authoritative_and_heuristic(self, tmp_path):
+        """BACK-128: domains in main file get authoritative type, others get heuristic."""
+        userdata = tmp_path / "myuser"
+        userdata.mkdir()
+        (userdata / "main").write_text(
+            "main_domain: example.com\n"
+            "addon_domains:\n"
+            "  - addon.io\n"
+        )
+        (userdata / "example.com").write_text("domain: example.com\ndocumentroot: /home/myuser/public_html\n")
+        (userdata / "addon.io").write_text("domain: addon.io\ndocumentroot: /home/myuser/addon.io\n")
+        (userdata / "sub.example.com").write_text("domain: sub.example.com\ndocumentroot: /home/myuser/sub\n")
+
+        with patch('reveal.adapters.cpanel.adapter.CPANEL_USERDATA_DIR', str(tmp_path)):
+            result = _list_user_domains('myuser')
+
+        types = {d['domain']: d['type'] for d in result}
+        assert types['example.com'] == 'main_domain'  # authoritative
+        assert types['addon.io'] == 'addon'            # authoritative
+        assert types['sub.example.com'] == 'subdomain' # heuristic fallback
 
 
 # ---------------------------------------------------------------------------
@@ -1362,6 +1526,63 @@ class TestCpanelHelpApi:
         adapter = CpanelAdapter('cpanel://help/unknown')
         with pytest.raises(ValueError, match="Unknown cpanel://help topic"):
             adapter.get_structure()
+
+
+class TestCpanelSchema:
+    """Tests for CpanelAdapter.get_schema() and get_help()."""
+
+    def test_schema_has_required_fields(self):
+        """get_schema returns adapter, description, elements, output_types."""
+        adapter = CpanelAdapter('cpanel://testuser')
+        schema = adapter.get_schema()
+        assert schema['adapter'] == 'cpanel'
+        assert 'description' in schema
+        assert 'elements' in schema
+        assert 'output_types' in schema
+
+    def test_schema_elements_include_help_api(self):
+        """Schema elements include help/api (BACK-131)."""
+        adapter = CpanelAdapter('cpanel://testuser')
+        schema = adapter.get_schema()
+        assert 'help/api' in schema['elements']
+
+    def test_schema_elements_include_core_elements(self):
+        """Schema lists domains, ssl, acl-check, full-audit."""
+        adapter = CpanelAdapter('cpanel://testuser')
+        schema = adapter.get_schema()
+        for elem in ('domains', 'ssl', 'acl-check', 'full-audit'):
+            assert elem in schema['elements'], f"Missing element: {elem}"
+
+    def test_schema_output_types_present(self):
+        """Output types list is non-empty."""
+        adapter = CpanelAdapter('cpanel://testuser')
+        schema = adapter.get_schema()
+        assert len(schema['output_types']) > 0
+
+    def test_help_has_required_fields(self):
+        """get_help returns description, examples, elements, workflows."""
+        adapter = CpanelAdapter('cpanel://testuser')
+        help_info = adapter.get_help()
+        assert 'description' in help_info
+        assert 'examples' in help_info
+        assert 'elements' in help_info
+
+    def test_help_examples_are_list(self):
+        """Help examples is a non-empty list with uri and description."""
+        adapter = CpanelAdapter('cpanel://testuser')
+        help_info = adapter.get_help()
+        assert isinstance(help_info['examples'], list)
+        assert len(help_info['examples']) > 0
+        for ex in help_info['examples']:
+            assert 'uri' in ex
+            assert 'description' in ex
+
+    def test_help_includes_help_api_example(self):
+        """Help examples include cpanel://help/api."""
+        adapter = CpanelAdapter('cpanel://testuser')
+        help_info = adapter.get_help()
+        uris = [ex['uri'] for ex in help_info['examples']]
+        assert 'cpanel://help/api' in uris
 
 
 if __name__ == '__main__':
