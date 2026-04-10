@@ -12,6 +12,27 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.75.0] - 2026-04-09
+
+### cPanel Domain Types + SSL Mismatch UX + Security Fix (heroic-minotaur-0409, pavako-0409)
+
+#### Added
+- **BACK-128: Authoritative domain type detection** — `_parse_main_domain_types()` reads cPanel `main` file (`/var/cpanel/userdata/USER/main`) for `main_domain`, `addon_domains`, `sub_domains`, `parked_domains` lists. Parked domains now correctly detected instead of being invisible. Falls back to filename heuristic when main file absent. 12 new tests.
+- **BACK-133: Cert store path + wildcard hint on hostname mismatch** — `_check_hostname_match` results now include `cert_store_path` (`/var/cpanel/ssl/apache_tls/DOMAIN/`), `wildcard_candidate` (`*.parent.tld`), and `wildcard_note` (explains coverage). Renderer shows hints inline. 6 new tests.
+
+#### Fixed
+- **RFC 6125 wildcard SAN matching** — `_hostname_matches_san` used `host.endswith(san[1:])` which let `*.example.com` incorrectly match `deep.sub.example.com`. Fixed to enforce single-level matching per RFC 6125 §6.4.3. 7 new tests.
+- **BACK-129: Backtick heading match** — `_find_heading_match()` now matches headings containing inline code (backticks).
+- **BACK-130: Code fence section truncation** — `_section_end()` tracks fence state; `#` inside code blocks no longer treated as headings.
+- **BACK-131: `--domain` not-found message** — clear error when domain filter matches nothing.
+- **BACK-132: `cpanel://help/api` reference** — help topic now documented and accessible.
+
+#### Refactored
+- Extracted `_find_heading_match()` from `extract_element()` (102→86 lines). Moved inline `import sys` to module top.
+
+#### Tests
+- 61 new tests across 4 commits (540 tests in cpanel/ssl/markdown test files; 7480 full suite).
+
 ## [0.74.0] - 2026-04-07
 
 ### Test Coverage + Doc Quality (revealed-sphinx-0407)

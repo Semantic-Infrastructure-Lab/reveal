@@ -7,6 +7,13 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.75.0
+- ✅ **BACK-128: Authoritative domain type detection** — `_parse_main_domain_types()` reads cPanel `main` file for parked/addon/subdomain classification. Parked domains now visible. 12 tests.
+- ✅ **BACK-133: Cert store path + wildcard hint on hostname mismatch** — mismatch results enriched with `cert_store_path`, `wildcard_candidate`, `wildcard_note`. 6 tests.
+- ✅ **RFC 6125 wildcard fix** — `*.example.com` no longer matches `deep.sub.example.com`. 7 tests.
+- ✅ **BACK-129–132** — backtick heading match, code fence section truncation, `--domain` not-found message, `cpanel://help/api` reference. 20 tests.
+- ✅ **BACK-135 killed** — cross-adapter combined view not worth the architectural cost; `cpanel://USER/ssl --check-live --dns-verified` covers 80% of use case.
+
 ### v0.74.0
 - ✅ **`/message --range`** (BACK-127) — `reveal claude://session/NAME/message --range 10-20` returns interleaved user+assistant turns; open-ended `--range 300-` supported. `?full` and `--verbose` now equivalent across `/assistant`, `/messages`, and `/message`.
 - ✅ **`reveal check` exit code consistency** — single-file, `--stdin --check`, and `@file --check` all now exit 1 on violations (previously silently exited 0).
