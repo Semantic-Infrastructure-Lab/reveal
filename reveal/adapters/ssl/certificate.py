@@ -454,8 +454,8 @@ def _check_hostname_match(
             'severity': 'high',
         }
 
-    # Hostname mismatch
-    return {
+    # Hostname mismatch — enrich with wildcard hint and cert store path (BACK-133)
+    result = {
         'name': 'hostname_match',
         'status': 'failure',
         'value': 'Mismatch',
@@ -463,6 +463,29 @@ def _check_hostname_match(
         'message': f'Certificate not valid for {host}',
         'severity': 'high',
     }
+
+    # Wildcard coverage hint: could *.parent.tld cover this host?
+    parts = host.split('.')
+    if len(parts) >= 2:
+        wildcard = '*.' + '.'.join(parts[1:])
+        # Check if cert already has the wildcard but it still didn't match
+        # (e.g. *.example.com won't cover sub.sub.example.com)
+        has_wildcard = wildcard in leaf.san
+        result['wildcard_candidate'] = wildcard
+        if has_wildcard:
+            result['wildcard_note'] = (
+                f'Cert has {wildcard} but it does not cover {host} '
+                f'(wildcards match one level only)'
+            )
+        else:
+            result['wildcard_note'] = (
+                f'A wildcard cert for {wildcard} would cover this domain'
+            )
+
+    # cPanel cert store path hint
+    result['cert_store_path'] = f'/var/cpanel/ssl/apache_tls/{host}/'
+
+    return result
 
 
 def _determine_overall_ssl_status(checks: List[Dict[str, Any]]) -> str:

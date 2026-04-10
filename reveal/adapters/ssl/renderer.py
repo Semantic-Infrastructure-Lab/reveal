@@ -264,6 +264,11 @@ class SSLRenderer(TypeDispatchRenderer):
         print("\u274c Failures:")
         for check in failures:
             print(f"  \u2022 {check['name']}: {check['message']}")
+            # BACK-133: show cert store path and wildcard hint for hostname mismatch
+            if check.get('cert_store_path'):
+                print(f"    cert store: {check['cert_store_path']}")
+            if check.get('wildcard_note'):
+                print(f"    hint: {check['wildcard_note']}")
         print()
 
     @staticmethod
