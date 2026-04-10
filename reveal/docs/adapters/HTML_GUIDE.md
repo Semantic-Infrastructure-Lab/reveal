@@ -411,8 +411,8 @@ Both are included in reveal's default dependencies.
 ## See Also
 
 - [MARKDOWN_GUIDE.md](./MARKDOWN_GUIDE.md) - Similar progressive disclosure for Markdown
-- [AGENT_HELP.md](./AGENT_HELP.md) - Full reveal agent guide
-- [RECIPES.md](./RECIPES.md) - Advanced reveal patterns
+- [AGENT_HELP.md](../AGENT_HELP.md) - Full reveal agent guide
+- [RECIPES.md](../guides/RECIPES.md) - Advanced reveal patterns
 
 ---
 

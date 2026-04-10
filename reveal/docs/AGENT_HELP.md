@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.75.0
+**Version:** 0.75.1
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -1030,7 +1030,7 @@ reveal /etc/nginx/conf.d/users/USERNAME.conf --domain example.com
 
 **cPanel nginx audit commands:**
 ```bash
-# The single command that would have caught the Feb 2026 Sociamonials incident:
+# The single command that would have caught a Feb 2026 production SSL incident:
 reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
 # Per-domain table: ACME root path | nobody ACL status | live SSL cert status
 # Exit 2 on any ACL failure or SSL expiry
@@ -2906,7 +2906,7 @@ http {
     send_timeout 30s;          # N006 – too short for 200m body size
     client_max_body_size 200m;
 }
-# Real-world incident: Sociamonials Feb 2026 - media uploads silently dropped
+# Real-world incident: Feb 2026 - media uploads silently dropped due to timeout mismatch
 
 # ✅ Good
 http {

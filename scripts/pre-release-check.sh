@@ -37,7 +37,7 @@ check_step() {
 }
 
 # 1. V-Series Validation
-check_step "V-Series Validation (Reveal's Metadata)" 1 8
+check_step "V-Series Validation (Reveal's Metadata)" 1 9
 
 if reveal reveal:// --check --select V; then
     echo -e "${GREEN}✓ V-series validation passed${NC}"
@@ -47,7 +47,7 @@ else
 fi
 
 # 2. Self-Validation Quality
-check_step "Self-Validation Code Quality (V007, V009, V011)" 2 8
+check_step "Self-Validation Code Quality (V007, V009, V011)" 2 9
 
 for file in V007 V009 V011; do
     echo "Checking reveal/rules/validation/${file}.py..."
@@ -60,7 +60,7 @@ for file in V007 V009 V011; do
 done
 
 # 3. Test Suite
-check_step "Test Suite (All Tests)" 3 8
+check_step "Test Suite (All Tests)" 3 9
 
 if pytest tests/ -v; then
     echo -e "${GREEN}✓ All tests passed${NC}"
@@ -70,7 +70,7 @@ else
 fi
 
 # 4. Test Coverage
-check_step "Test Coverage (≥70%)" 4 8
+check_step "Test Coverage (≥70%)" 4 9
 
 if pytest tests/ --cov=reveal --cov-report=term-missing --cov-fail-under=70; then
     echo -e "${GREEN}✓ Coverage requirement met${NC}"
@@ -80,7 +80,7 @@ else
 fi
 
 # 5. Documentation Validation
-check_step "Documentation Links (No Broken Links)" 5 8
+check_step "Documentation Links (No Broken Links)" 5 9
 
 for doc in README.md CHANGELOG.md ROADMAP.md; do
     if [ -f "$doc" ]; then
@@ -94,8 +94,18 @@ for doc in README.md CHANGELOG.md ROADMAP.md; do
     fi
 done
 
-# 6. Version Consistency
-check_step "Version Consistency (All Files Synchronized)" 6 8
+# 6. Doc Hygiene (broken links, internal-docs refs, TIA leaks)
+check_step "Doc Hygiene (Links + Leak Detection)" 6 9
+
+if python3 "$SCRIPT_DIR/check_doc_hygiene.py"; then
+    echo -e "${GREEN}✓ Doc hygiene passed${NC}"
+else
+    echo -e "${RED}✗ Doc hygiene issues found${NC}"
+    FAILURES=$((FAILURES + 1))
+fi
+
+# 7. Version Consistency
+check_step "Version Consistency (All Files Synchronized)" 7 9
 
 if reveal reveal:// --check --select V007; then
     echo -e "${GREEN}✓ Version consistent across all files${NC}"
@@ -104,8 +114,8 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
-# 7. Release Readiness
-check_step "Release Readiness (CHANGELOG + ROADMAP)" 7 8
+# 8. Release Readiness
+check_step "Release Readiness (CHANGELOG + ROADMAP)" 8 9
 
 if reveal reveal:// --check --select V011; then
     echo -e "${GREEN}✓ Release documentation ready${NC}"
@@ -114,8 +124,8 @@ else
     FAILURES=$((FAILURES + 1))
 fi
 
-# 8. Build Test
-check_step "Build Test (Package Creation)" 8 8
+# 9. Build Test
+check_step "Build Test (Package Creation)" 9 9
 
 if python -m build --sdist --wheel; then
     echo -e "${GREEN}✓ Package builds successfully${NC}"

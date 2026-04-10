@@ -619,4 +619,3 @@ A: No — `calls://` is a fast static analysis tool built on the same parse tree
 - [`AST_ADAPTER_GUIDE.md`](AST_ADAPTER_GUIDE.md) — `ast://` adapter, including within-file call graph features (`calls=`, `callee_of=`, `show=calls`)
 - [`IMPORTS_ADAPTER_GUIDE.md`](IMPORTS_ADAPTER_GUIDE.md) — import graph analysis (`imports://`)
 - [`AGENT_HELP.md`](../AGENT_HELP.md) — complete agent workflow reference including call graph task patterns
-- `internal-docs/design/CALL_GRAPH_DESIGN.md` — implementation design document (maintainer reference, not in published docs)

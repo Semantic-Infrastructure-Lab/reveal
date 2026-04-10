@@ -819,7 +819,7 @@ reveal claude://session/<session-name>/chain
 
 **Example**:
 ```bash
-reveal claude://session/revealed-sphinx-0407/chain --base-path ~/src/tia/sessions
+reveal claude://session/revealed-sphinx-0407/chain --base-path ~/projects/my-sessions
 ```
 
 **Output**: Ordered list of sessions from HEAD back to the root, each showing `session`, `date`, `badge`, `continuing_from`, `tests_start`, `tests_end`, and `commits`. Chain length capped at 50 to prevent cycles.
@@ -2300,7 +2300,7 @@ reveal claude://history --head 20
 reveal claude://history?search=deploy
 
 # Filter by project path
-reveal claude://history?project=sociamonials
+reveal claude://history?project=my-webapp
 
 # Filter by date
 reveal claude://history?since=2026-03-01

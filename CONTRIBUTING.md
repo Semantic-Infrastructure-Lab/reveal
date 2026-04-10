@@ -72,7 +72,7 @@ reveal/                    # This repository (public)
 └── README.md            # Public documentation
 ```
 
-**For maintainers:** Internal planning, research, and development artifacts live in `../internal-docs/` (outside this repository). This keeps the public repo clean and focused on the OSS project.
+**For maintainers:** Internal planning and research artifacts are kept outside this repository. This keeps the public repo clean and focused on the OSS project.
 
 ---
 
@@ -389,7 +389,7 @@ def test_lua_structure():
 - Documentation fixes and examples
 - Tests for edge cases in existing adapters
 
-**Active backlog** (see `internal-docs/BACKLOG.md` for full list):
+**Active backlog**:
 - `reveal file.py :N` — extract the semantic unit at a given line number (BACK-099)
 - `calls://?uncalled` — dead code detection (BACK-071)
 - `imports://?violations` — architecture layer enforcement (BACK-100)

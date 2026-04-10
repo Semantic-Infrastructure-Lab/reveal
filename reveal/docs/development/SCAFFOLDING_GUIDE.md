@@ -325,7 +325,7 @@ After scaffolding and implementing your component:
 3. **Update docs**: Complete the generated documentation
 4. **Submit PR**: Include tests, docs, and examples
 
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) for full guidelines.
+See [CONTRIBUTING.md](../../../CONTRIBUTING.md) for full guidelines.
 
 ## Architecture
 

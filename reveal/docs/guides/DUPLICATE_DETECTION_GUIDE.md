@@ -91,7 +91,7 @@ app.py:430:1 ℹ️  D002 Potential duplicate candidate: 'extract_markdown_secti
 ### Cross-File Detection
 
 **Status:** 🚧 Planned, not implemented
-**Architecture:** Fully designed (see `internal-docs/planning/DUPLICATE_DETECTION_DESIGN.md`)
+**Architecture:** Fully designed (see base framework in `reveal/rules/duplicates/`)
 
 **Current limitation:**
 ```bash
@@ -364,11 +364,7 @@ reveal file.py --check --select D001
 
 ### Architecture Exists, Implementation Missing
 
-The good news: **Complete architecture designed** in `internal-docs/planning/`:
-- ✅ `DUPLICATE_DETECTION_DESIGN.md` - Full system architecture
-- ✅ `DUPLICATE_DETECTION_ARCHITECTURE.md` - Complete architectural guide
-- ✅ `DUPLICATE_DETECTION_OPTIMIZATION.md` - D002 fixes
-- ✅ `DUPLICATE_DETECTION_OVERVIEW.md` - Complete vision
+The good news: **Complete architecture designed** (see base framework in `reveal/rules/duplicates/`).
 
 **What needs implementation:**
 1. Cross-file detection (caching layer)
@@ -454,12 +450,6 @@ A: Architecture is complete, implementation is planned. It's the highest-priorit
 - `reveal help://agent` - AI agent quick reference (includes duplicate detection patterns)
 - `reveal --agent-help-full` - Complete AI agent guide
 
-**Planning Documents (Internal):**
-- `internal-docs/planning/DUPLICATE_DETECTION_DESIGN.md` - Full architecture
-- `internal-docs/planning/DUPLICATE_DETECTION_ARCHITECTURE.md` - Complete architectural guide
-- `internal-docs/planning/DUPLICATE_DETECTION_OPTIMIZATION.md` - D002 improvements
-- `internal-docs/planning/DUPLICATE_DETECTION_OVERVIEW.md` - System overview
-
 **Implementation:**
 - `reveal/rules/duplicates/D001.py` - Exact duplicate detection (186 lines)
 - `reveal/rules/duplicates/D002.py` - Similar code detection (239 lines)
@@ -470,9 +460,8 @@ A: Architecture is complete, implementation is planned. It's the highest-priorit
 ## Contributing
 
 Want to help implement these features? See:
-1. `internal-docs/planning/DUPLICATE_DETECTION_DESIGN.md` for architecture
-2. `reveal/rules/duplicates/_base_detector.py` for base classes
-3. GitHub Issues for "duplicate detection" label
+1. `reveal/rules/duplicates/_base_detector.py` for base classes
+2. GitHub Issues for "duplicate detection" label
 
 **High-impact contributions:**
 - Implement cross-file caching layer

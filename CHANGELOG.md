@@ -12,6 +12,20 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.75.1] - 2026-04-10
+
+### Doc Hygiene + Pre-Release Tooling (gladiator-overlord-0409)
+
+#### Fixed
+- **15 broken links** — wrong subdirectory paths from doc reorg (README, ROADMAP, CHANGELOG, HTML_GUIDE, XLSX_ADAPTER_GUIDE, SCAFFOLDING_GUIDE)
+- **13 internal-docs references removed** — CONTRIBUTING, ROADMAP, CALLS_ADAPTER_GUIDE, OUTPUT_CONTRACT, DUPLICATE_DETECTION_GUIDE
+- **10 TIA/personal leaks anonymized** — company names, CLI commands, hardcoded paths in ROADMAP, AGENT_HELP, CLAUDE_ADAPTER_GUIDE, NGINX_GUIDE
+- **INDEX.md stale adapter count** — updated from "17 guides + 1 roadmap" to "22 files"
+
+#### Added
+- **`scripts/check_doc_hygiene.py`** — pre-release checker: broken links (via `reveal --links`), internal-docs references, TIA/personal leak patterns. Cross-file anchor validation to avoid false positives. Exits non-zero on issues.
+- **Pre-release step 6/9** — `check_doc_hygiene.py` wired into `pre-release-check.sh`
+
 ## [0.75.0] - 2026-04-09
 
 ### cPanel Domain Types + SSL Mismatch UX + Security Fix (heroic-minotaur-0409, pavako-0409)
@@ -2766,7 +2780,7 @@ For developers extending Reveal: if you use tree-sitter directly, update imports
   - **Usage**: `reveal README.md --validate-schema session`
   - **Implementation**: 5 phases complete across 4 sessions (garnet-ember-0102, amber-rainbow-0102, dark-constellation-0102, pearl-spark-0102)
   - **Test coverage**: 103 comprehensive tests (27 loader + 44 rules + 33 CLI + 43 schemas), 100% passing, 75% coverage overall
-  - **Documentation**: 800+ line [Schema Validation Guide](reveal/docs/SCHEMA_VALIDATION_HELP.md)
+  - **Documentation**: 800+ line [Schema Validation Guide](reveal/docs/guides/SCHEMA_VALIDATION_HELP.md)
 
 - **Session Schema (`session.yaml`)** - Workflow/session README validation (renamed from `beth` in v0.32.0)
   - Required fields: `session_id`, `topics` (min 1 topic)

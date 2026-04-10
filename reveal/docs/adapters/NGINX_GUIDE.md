@@ -332,7 +332,7 @@ Detects server blocks with different `root` paths for `/.well-known/acme-challen
 N004  MEDIUM  ACME challenge root '/home/olduser/public_html' differs from common path '/home/myuser/public_html'
 ```
 
-**Context**: This is the direct cause of the Feb 2026 Sociamonials SSL incident. `--validate-nginx-acme` is the recommended command for diagnosing this class of failure.
+**Context**: This pattern was the direct cause of a Feb 2026 production SSL incident. `--validate-nginx-acme` is the recommended command for diagnosing this class of failure.
 
 #### N005 — Timeout/buffer values outside safe range
 
@@ -352,7 +352,7 @@ N006  HIGH  send_timeout 30s with client_max_body_size 200m: uploads over ~110MB
             Minimum send_timeout for 200m at typical speeds: ~300s
 ```
 
-**Real-world incident**: Exact config that caused silent media upload failures on Sociamonials (Feb 2026). Fix: raise `send_timeout` to 300s.
+**Real-world incident**: Exact config that caused silent media upload failures in production (Feb 2026). Fix: raise `send_timeout` to 300s.
 
 #### N007 — ssl_stapling enabled but no OCSP URL
 

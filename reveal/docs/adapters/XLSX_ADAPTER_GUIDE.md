@@ -682,7 +682,7 @@ reveal file.xlsx?sheet=Sales&format=csv | tail -11
 7. **Password-protected files** - Not supported
 8. **Binary XLS files** - Only .xlsx/.xlsm (XML-based) supported; legacy `.xls` (BIFF format) is not
 9. **Write operations** - Read-only (no editing)
-10. **`.xlsb`, `.pbix`, `.pbit`, `.bim`** - Not supported as input formats (see [XLSX_POWERBI_EXPANSION.md](XLSX_POWERBI_EXPANSION.md) for roadmap)
+10. **`.xlsb`, `.pbix`, `.pbit`, `.bim`** - Not supported as input formats
 
 ### Known Edge Cases
 
@@ -861,7 +861,6 @@ sqlite3 data.db ".import --csv transactions.csv transactions"
 - [QUERY_SYNTAX_GUIDE.md](../guides/QUERY_SYNTAX_GUIDE.md) - Query parameters
 - [FIELD_SELECTION_GUIDE.md](../guides/FIELD_SELECTION_GUIDE.md) - Token optimization with `--fields`
 - [OUTPUT_CONTRACT.md](../development/OUTPUT_CONTRACT.md) - JSON output structure
-- [XLSX_POWERBI_EXPANSION.md](XLSX_POWERBI_EXPANSION.md) - Gap analysis and roadmap: Power Query M, named ranges, pivot tables, external connections, VBA extraction, .pbix/.pbit/.bim formats
 
 ---
 
@@ -873,4 +872,4 @@ sqlite3 data.db ".import --csv transactions.csv transactions"
 
 ---
 
-**Questions or issues?** See [CONTRIBUTING.md](../../CONTRIBUTING.md) for how to report bugs or request features.
+**Questions or issues?** See [CONTRIBUTING.md](../../../CONTRIBUTING.md) for how to report bugs or request features.

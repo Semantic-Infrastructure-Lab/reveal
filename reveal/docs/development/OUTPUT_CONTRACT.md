@@ -625,7 +625,6 @@ reveal --check reveal/adapters/myadapter.py --select V016
 
 ## References
 
-- **Analysis**: `internal-docs/research/OUTPUT_CONTRACT_ANALYSIS.md` - Research findings
 - **Validation**: `reveal/rules/validation/V016.py` - Contract enforcement
 - **Adapter Guide**: `docs/ADAPTER_AUTHORING.md` - Creating adapters
 - **Stability**: `STABILITY.md` - Feature stability taxonomy

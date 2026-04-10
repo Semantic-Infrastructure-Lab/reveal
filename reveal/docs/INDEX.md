@@ -147,7 +147,7 @@ Complete reference for AI agent integration:
 ## Documentation Statistics
 
 **By Category**:
-- Adapter Guides: 17 guides + 1 roadmap (XLSX_POWERBI_EXPANSION), ~23,300 lines (57%)
+- Adapter Guides: 22 files, ~23,300 lines (57%)
 - Reference: 10 files, ~5,800 lines (14%)
 - User Guides: 8 files, ~4,100 lines (10%)
 - AI Agent: 1 file, ~3,265 lines (7%)
