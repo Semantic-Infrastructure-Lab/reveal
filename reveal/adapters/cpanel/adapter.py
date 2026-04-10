@@ -47,6 +47,69 @@ NGINX_USER_CONF_DIR = "/etc/nginx/conf.d/users"
 _USERDATA_ARTIFACT_EXTENSIONS = ('.cache', '.yaml', '.json', '.lock', '.tmp', '.db', '.bak', '.log')
 
 
+def _get_api_reference() -> Dict[str, Any]:
+    """Return WHM/cPanel API quick-reference (cpanel://help/api)."""
+    return {
+        'type': 'cpanel_api_reference',
+        'title': 'WHM & cPanel API Quick Reference',
+        'sections': [
+            {
+                'name': 'Account Management',
+                'commands': [
+                    {'command': 'whmapi1 listaccts', 'description': 'List all cPanel accounts on the server'},
+                    {'command': 'whmapi1 accountsummary user=NAME', 'description': 'Account details (plan, domain, IP, shell, suspended)'},
+                    {'command': 'whmapi1 domainuserdata domain=DOMAIN', 'description': 'Full userdata for a domain (docroot, IP, type, SSL paths)'},
+                ],
+            },
+            {
+                'name': 'Domain Management',
+                'commands': [
+                    {'command': 'whmapi1 get_domain_info domain=DOMAIN', 'description': 'Domain type, docroot, user — works for all domain types'},
+                    {'command': 'whmapi1 listparkeddomains user=NAME', 'description': 'List parked (aliased) domains for a user'},
+                    {'command': 'whmapi1 listaddondomains user=NAME', 'description': 'List addon domains for a user'},
+                    {'command': 'uapi --user=NAME DomainInfo domains_data', 'description': 'All domains with types via UAPI (addon, sub, parked, main)'},
+                ],
+            },
+            {
+                'name': 'SSL / AutoSSL',
+                'commands': [
+                    {'command': 'whmapi1 installedssl domain=DOMAIN', 'description': 'Installed SSL cert details for a domain'},
+                    {'command': 'whmapi1 fetchssldomainsbyuser user=NAME', 'description': 'All SSL-enabled domains for a user'},
+                    {'command': '/usr/local/cpanel/bin/autossl_check --user=NAME', 'description': 'Trigger AutoSSL check for a specific user'},
+                    {'command': 'whmapi1 get_autossl_log_for_domain domain=DOMAIN', 'description': 'AutoSSL log entries for a domain'},
+                ],
+            },
+            {
+                'name': 'Nginx (EA-Nginx / cPanel)',
+                'commands': [
+                    {'command': '/usr/local/cpanel/scripts/ea-nginx config USER', 'description': 'Regenerate nginx config for a cPanel user'},
+                    {'command': '/usr/local/cpanel/scripts/ea-nginx reload', 'description': 'Reload nginx after config changes'},
+                    {'command': 'nginx -t', 'description': 'Test nginx config syntax before reload'},
+                ],
+            },
+        ],
+        'filesystem_paths': [
+            {'path': '/var/cpanel/userdata/USER/', 'description': 'Userdata files (domain configs, docroots, IPs)'},
+            {'path': '/var/cpanel/ssl/apache_tls/DOMAIN/', 'description': 'Active SSL certs installed by cPanel/AutoSSL'},
+            {'path': '/etc/nginx/conf.d/users/USER.conf', 'description': 'EA-Nginx per-user config (server blocks)'},
+            {'path': '/var/log/letsencrypt/letsencrypt.log', 'description': "Let's Encrypt / AutoSSL log"},
+            {'path': '/var/cpanel/logs/autossl/', 'description': 'AutoSSL run logs (per-user)'},
+        ],
+        'domain_types': {
+            'main': 'Primary domain for the cPanel account. Gets its own vhost and SSL cert.',
+            'addon': 'Additional domain with its own docroot and vhost. Gets its own SSL cert via AutoSSL.',
+            'parked': 'Alias of the main domain. Shares the main domain\'s vhost and SSL cert — does NOT get its own cert.',
+            'subdomain': 'Subdomain of the main or addon domain. May share parent cert (wildcard) or get its own.',
+        },
+        'tips': [
+            'Parked domains share the main domain\'s SSL cert — adding a parked domain does NOT trigger a new AutoSSL cert',
+            'Use addon (not parked) when the domain needs its own SSL cert',
+            'whmapi1 get_domain_info is the single best command for domain troubleshooting — returns type, user, docroot',
+            'reveal cpanel://USER/domains shows all domains; combine with reveal ssl://DOMAIN --check for cert status',
+        ],
+    }
+
+
 def _parse_cpanel_userdata(path: str) -> Dict[str, str]:
     """Parse a cPanel userdata file (YAML-ish key: value format).
 
@@ -257,6 +320,7 @@ _SCHEMA_ELEMENTS = {
     'ssl': 'Disk cert health per domain from /var/cpanel/ssl/apache_tls/ (supports ?domain_type= query param)',
     'acl-check': 'nobody ACL status on every domain docroot (supports --only-failures)',
     'full-audit': 'Composite: ssl + acl-check + nginx ACME in one pass; exits 2 on any failure',
+    'help/api': 'WHM & cPanel API quick-reference — common commands, filesystem paths, domain types',
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -423,7 +487,10 @@ class CpanelAdapter(ResourceAdapter):
             self.element = element_raw
             self.query_params = {}
 
-        if not self.username:
+        # cpanel://help/api is a static reference, not a real user lookup
+        self._is_help = (self.username == 'help')
+
+        if not self._is_help and not self.username:
             raise ValueError("cpanel:// URI requires a username: cpanel://USERNAME")
 
     def _get_domains(self) -> List[Dict[str, str]]:
@@ -432,6 +499,12 @@ class CpanelAdapter(ResourceAdapter):
     def get_structure(self, dns_verified: bool = False, only_failures: bool = False,
                       check_live: bool = False, **kwargs) -> Dict[str, Any]:
         """Get cPanel user overview or element data."""
+        if self._is_help:
+            if self.element == 'api':
+                return _get_api_reference()
+            raise ValueError(
+                f"Unknown cpanel://help topic '{self.element}'. Valid: api"
+            )
         if self.element:
             if self.element == 'domains':
                 return self._get_domains_structure()
@@ -749,12 +822,17 @@ class CpanelAdapter(ResourceAdapter):
                     'uri': 'cpanel://USERNAME/ssl --format=json',
                     'description': 'JSON output for scripting',
                 },
+                {
+                    'uri': 'cpanel://help/api',
+                    'description': 'WHM & cPanel API quick-reference — common commands, paths, domain types',
+                },
             ],
             'elements': {
                 '(none)': 'Overview: domain count, SSL summary, nginx config path',
                 'domains': 'All addon/subdomain domains with docroots and type',
                 'ssl': 'Disk cert health per domain from /var/cpanel/ssl/apache_tls/',
                 'acl-check': 'nobody ACL status on every domain docroot',
+                'help/api': 'WHM & cPanel API quick-reference — common commands, filesystem paths, domain types',
             },
             'workflows': [
                 {

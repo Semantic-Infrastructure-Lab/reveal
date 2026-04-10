@@ -1008,13 +1008,31 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         Scans forward from *start_line* (1-based) and stops at the first
         heading whose level is <= *heading_level*, which signals the start of
-        a sibling or parent section.
+        a sibling or parent section.  Lines inside fenced code blocks are
+        skipped so that ``# comments`` in code don't truncate the section.
         """
+        in_fence = False
         for i in range(start_line, len(lines)):
+            stripped = lines[i].strip()
+            if stripped.startswith('```') or stripped.startswith('~~~'):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
             m = re.match(r'^(#{1,6})\s+', lines[i])
             if m and len(m.group(1)) <= heading_level:
                 return i
         return len(lines)
+
+    @staticmethod
+    def _strip_inline_formatting(text: str) -> str:
+        """Strip markdown inline formatting characters for normalized comparison.
+
+        Removes backticks, bold/italic markers (*, **), and underscores
+        so that ``How `custom.conf` is applied`` matches
+        ``How custom.conf is applied``.
+        """
+        return re.sub(r'[`*_]', '', text)
 
     def _collect_section_spans(self, patterns: List[str]) -> List[tuple]:
         """Return (start_line, end_line, heading_level) spans for headings that
@@ -1031,6 +1049,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
 
         for pattern in patterns:
             pat_lower = pattern.lower()
+            pat_normalized = self._strip_inline_formatting(pat_lower)
             exact_start = None
             exact_level = None
             sub_matches = []
@@ -1041,11 +1060,12 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                     continue
                 title = m.group(2).strip()
                 level = len(m.group(1))
-                if title.lower() == pat_lower:
+                title_normalized = self._strip_inline_formatting(title.lower())
+                if title_normalized == pat_normalized:
                     exact_start = i
                     exact_level = level
                     break
-                if pat_lower in title.lower():
+                if pat_normalized in title_normalized:
                     sub_matches.append((i, level))
 
             if exact_start is not None and exact_level is not None:
@@ -1120,6 +1140,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         # Single-pattern path (original behaviour preserved)
         pattern = patterns[0] if patterns else name
         pat_lower = pattern.lower()
+        pat_normalized = self._strip_inline_formatting(pat_lower)
         start_line = None
         heading_level = None
         substring_matches = []
@@ -1128,11 +1149,12 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             match = re.match(r'^(#{1,6})\s+(.+)$', line)
             if match:
                 title = match.group(2).strip()
-                if title.lower() == pat_lower:
+                title_normalized = self._strip_inline_formatting(title.lower())
+                if title_normalized == pat_normalized:
                     start_line = i
                     heading_level = len(match.group(1))
                     break
-                if pat_lower in title.lower():
+                if pat_normalized in title_normalized:
                     substring_matches.append((i, len(match.group(1)), title))
 
         if not start_line or heading_level is None:

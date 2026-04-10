@@ -43,6 +43,8 @@ class CpanelRenderer:
                 CpanelRenderer._render_acl(result)
             elif result_type == 'cpanel_full_audit':
                 CpanelRenderer._render_full_audit(result)
+            elif result_type == 'cpanel_api_reference':
+                CpanelRenderer._render_api_reference(result)
             else:
                 # Fallback: dump as JSON
                 print(json.dumps(result, indent=2, default=str))
@@ -328,3 +330,35 @@ class CpanelRenderer:
             print("❌ Audit complete — failures detected (exit 2)")
         else:
             print("✅ Audit complete — all checks passed")
+
+    @staticmethod
+    def _render_api_reference(r: Dict[str, Any]) -> None:
+        """Print the cpanel://help/api quick-reference."""
+        print(f"\n{r.get('title', 'WHM & cPanel API Quick Reference')}")
+        print("=" * len(r.get('title', '')))
+
+        for section in r.get('sections', []):
+            print(f"\n{section['name']}:")
+            for cmd in section.get('commands', []):
+                print(f"  {cmd['command']}")
+                print(f"    {cmd['description']}")
+
+        paths = r.get('filesystem_paths', [])
+        if paths:
+            print("\nKey Filesystem Paths:")
+            for p in paths:
+                print(f"  {p['path']}")
+                print(f"    {p['description']}")
+
+        types = r.get('domain_types', {})
+        if types:
+            print("\nDomain Types (critical for SSL troubleshooting):")
+            for name, desc in types.items():
+                print(f"  {name:<10} — {desc}")
+
+        tips = r.get('tips', [])
+        if tips:
+            print("\nTips:")
+            for tip in tips:
+                print(f"  • {tip}")
+        print()

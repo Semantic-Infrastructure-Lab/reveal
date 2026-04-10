@@ -1710,5 +1710,173 @@ class TestMarkdownLinkBrokenOnly(unittest.TestCase):
         self.assertNotIn('real.md', urls)
 
 
+class TestInlineFormattingNormalization(TestMarkdownAnalyzer):
+    """Tests for BACK-129: headings with backticks/bold/italic match without formatting."""
+
+    def test_backtick_heading_exact_match(self):
+        """Heading with backticks matches plain text query."""
+        content = "## How `custom.conf` is applied\n\nExplanation here.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            result = analyzer.extract_element('section', 'How custom.conf is applied')
+            self.assertIsNotNone(result)
+            self.assertIn('Explanation here.', result['source'])
+        finally:
+            self.teardown_file(path)
+
+    def test_backtick_heading_with_backticks_in_query(self):
+        """Query with backticks still matches backtick heading."""
+        content = "## How `custom.conf` is applied\n\nExplanation here.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            result = analyzer.extract_element('section', 'How `custom.conf` is applied')
+            self.assertIsNotNone(result)
+            self.assertIn('Explanation here.', result['source'])
+        finally:
+            self.teardown_file(path)
+
+    def test_bold_heading_match(self):
+        """Heading with **bold** matches plain text query."""
+        content = "## The **important** section\n\nBold content.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            result = analyzer.extract_element('section', 'The important section')
+            self.assertIsNotNone(result)
+            self.assertIn('Bold content.', result['source'])
+        finally:
+            self.teardown_file(path)
+
+    def test_italic_heading_match(self):
+        """Heading with *italic* matches plain text query."""
+        content = "## Using _underscore_ emphasis\n\nItalic content.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            result = analyzer.extract_element('section', 'Using underscore emphasis')
+            self.assertIsNotNone(result)
+            self.assertIn('Italic content.', result['source'])
+        finally:
+            self.teardown_file(path)
+
+    def test_multiple_backticks_in_heading(self):
+        """Heading with multiple backtick spans matches plain query."""
+        content = "## Configure `nginx` and `ssl` settings\n\nSetup guide.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            result = analyzer.extract_element('section', 'Configure nginx and ssl settings')
+            self.assertIsNotNone(result)
+            self.assertIn('Setup guide.', result['source'])
+        finally:
+            self.teardown_file(path)
+
+    def test_backtick_heading_substring_match(self):
+        """Substring match also normalizes inline formatting."""
+        content = "## How `custom.conf` is applied\n\nExplanation here.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            result = analyzer.extract_element('section', 'custom.conf')
+            self.assertIsNotNone(result)
+            self.assertIn('Explanation here.', result['source'])
+        finally:
+            self.teardown_file(path)
+
+    def test_backtick_heading_or_pattern(self):
+        """OR-pattern matching normalizes inline formatting."""
+        content = "# Doc\n\n## The `first` section\n\nFirst.\n\n## Second section\n\nSecond.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            result = analyzer.extract_element('section', 'The first section|Second section')
+            self.assertIsNotNone(result)
+            self.assertIn('First.', result['source'])
+            self.assertIn('Second.', result['source'])
+        finally:
+            self.teardown_file(path)
+
+    def test_plain_heading_still_works(self):
+        """Plain headings without formatting still match normally."""
+        content = "## Server Access\n\nAccess info.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            result = analyzer.extract_element('section', 'Server Access')
+            self.assertIsNotNone(result)
+            self.assertIn('Access info.', result['source'])
+        finally:
+            self.teardown_file(path)
+
+    def test_strip_inline_formatting_helper(self):
+        """Unit test for _strip_inline_formatting static method."""
+        sif = MarkdownAnalyzer._strip_inline_formatting
+        self.assertEqual(sif('How `custom.conf` is applied'), 'How custom.conf is applied')
+        self.assertEqual(sif('The **important** section'), 'The important section')
+        self.assertEqual(sif('Using _underscore_ emphasis'), 'Using underscore emphasis')
+        self.assertEqual(sif('`nginx` and `ssl`'), 'nginx and ssl')
+        self.assertEqual(sif('No formatting here'), 'No formatting here')
+        self.assertEqual(sif(''), '')
+
+
+class TestSectionEndCodeFence(TestMarkdownAnalyzer):
+    """Tests for BACK-132: _section_end skips # comments inside code fences."""
+
+    def test_hash_comment_in_code_block_not_treated_as_heading(self):
+        """# comment inside a code fence should not truncate the section."""
+        content = "## Via CLI\n\n```bash\n# install it\npip install reveal\n```\n\n## Next\n\nMore.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            result = analyzer.extract_element('section', 'Via CLI')
+            self.assertIsNotNone(result)
+            self.assertIn('pip install reveal', result['source'])
+            self.assertIn('# install it', result['source'])
+            self.assertNotIn('More.', result['source'])
+        finally:
+            self.teardown_file(path)
+
+    def test_multiple_hash_comments_in_code_block(self):
+        """Multiple # lines in code block are all included."""
+        content = "## Setup\n\n```bash\n# step 1\necho hello\n# step 2\necho world\n```\n\n## Done\n\nFinished.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            result = analyzer.extract_element('section', 'Setup')
+            self.assertIsNotNone(result)
+            self.assertIn('# step 1', result['source'])
+            self.assertIn('# step 2', result['source'])
+            self.assertIn('echo world', result['source'])
+        finally:
+            self.teardown_file(path)
+
+    def test_tilde_fence_also_skipped(self):
+        """~~~ fences are also recognized."""
+        content = "## Example\n\n~~~python\n# a comment\nprint('hi')\n~~~\n\n## Next\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            result = analyzer.extract_element('section', 'Example')
+            self.assertIsNotNone(result)
+            self.assertIn("# a comment", result['source'])
+            self.assertIn("print('hi')", result['source'])
+        finally:
+            self.teardown_file(path)
+
+    def test_heading_after_code_block_still_ends_section(self):
+        """A real heading after a code block still ends the section."""
+        content = "## First\n\n```\n# not a heading\n```\n\n## Second\n\nContent.\n"
+        path = self.create_temp_markdown(content)
+        try:
+            analyzer = MarkdownAnalyzer(path)
+            result = analyzer.extract_element('section', 'First')
+            self.assertIsNotNone(result)
+            self.assertNotIn('Content.', result['source'])
+        finally:
+            self.teardown_file(path)
+
+
 if __name__ == '__main__':
     unittest.main()

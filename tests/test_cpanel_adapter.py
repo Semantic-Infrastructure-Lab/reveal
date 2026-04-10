@@ -1306,5 +1306,63 @@ class TestCheckLiveIntegration:
         assert 'live:' in out
 
 
+class TestCpanelHelpApi:
+    """Tests for cpanel://help/api — BACK-131."""
+
+    def test_help_api_returns_reference(self):
+        """cpanel://help/api returns the API reference structure."""
+        adapter = CpanelAdapter('cpanel://help/api')
+        result = adapter.get_structure()
+        assert result['type'] == 'cpanel_api_reference'
+        assert 'sections' in result
+        assert 'domain_types' in result
+        assert 'tips' in result
+
+    def test_help_api_has_all_sections(self):
+        """API reference covers account, domain, SSL, and nginx sections."""
+        adapter = CpanelAdapter('cpanel://help/api')
+        result = adapter.get_structure()
+        section_names = [s['name'] for s in result['sections']]
+        assert 'Account Management' in section_names
+        assert 'Domain Management' in section_names
+        assert 'SSL / AutoSSL' in section_names
+
+    def test_help_api_domain_types_present(self):
+        """Domain types section includes all four types."""
+        adapter = CpanelAdapter('cpanel://help/api')
+        result = adapter.get_structure()
+        types = result['domain_types']
+        assert 'main' in types
+        assert 'addon' in types
+        assert 'parked' in types
+        assert 'subdomain' in types
+
+    def test_help_api_renders_text(self, capsys):
+        """Text rendering produces readable output."""
+        adapter = CpanelAdapter('cpanel://help/api')
+        result = adapter.get_structure()
+        CpanelRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'WHM & cPanel API Quick Reference' in out
+        assert 'whmapi1 listparkeddomains' in out
+        assert 'Domain Types' in out
+
+    def test_help_api_renders_json(self, capsys):
+        """JSON rendering produces valid JSON."""
+        import json
+        adapter = CpanelAdapter('cpanel://help/api')
+        result = adapter.get_structure()
+        CpanelRenderer.render_structure(result, 'json')
+        out = capsys.readouterr().out
+        parsed = json.loads(out)
+        assert parsed['type'] == 'cpanel_api_reference'
+
+    def test_help_unknown_topic_raises(self):
+        """cpanel://help/unknown raises ValueError."""
+        adapter = CpanelAdapter('cpanel://help/unknown')
+        with pytest.raises(ValueError, match="Unknown cpanel://help topic"):
+            adapter.get_structure()
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

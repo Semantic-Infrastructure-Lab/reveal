@@ -646,6 +646,16 @@ def show_structure(analyzer: FileAnalyzer, output_format: str, args=None, config
     structure = analyzer.get_structure(**kwargs)
     path = analyzer.path
 
+    # Emit --domain not-found message (BACK-130)
+    if isinstance(structure, dict) and structure.get('_domain_not_found'):
+        import sys
+        domain = structure.get('_domain_filter', '?')
+        total = structure.get('_total_server_blocks', 0)
+        print(
+            f"No server block found for '{domain}' in {total} server block(s) searched.",
+            file=sys.stderr,
+        )
+
     # Get fallback info
     is_fallback = getattr(analyzer, 'is_fallback', False)
     fallback_lang = cast(Optional[str], getattr(analyzer, 'fallback_language', None))

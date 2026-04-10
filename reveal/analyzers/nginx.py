@@ -521,6 +521,7 @@ class NginxAnalyzer(FileAnalyzer):
             filtered['locations'] = []
             filtered['_domain_filter'] = domain
             filtered['_domain_not_found'] = True
+            filtered['_total_server_blocks'] = len(all_servers)
             return filtered
 
         matching_names = {s['name'] for s in matching}

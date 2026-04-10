@@ -1693,6 +1693,11 @@ server {
         assert structure['locations'] == []
         assert structure.get('_domain_not_found') is True
 
+    def test_domain_filter_no_match_includes_total_count(self):
+        """Non-existent domain includes total server block count for messaging."""
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(domain='nothere.com')
+        assert structure.get('_total_server_blocks') == 3
+
     def test_no_domain_filter_returns_all(self):
         """Without domain kwarg, all server blocks are returned."""
         structure = self._make_analyzer(self._MULTI_SERVER).get_structure()
