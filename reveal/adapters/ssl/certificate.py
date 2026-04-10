@@ -407,6 +407,10 @@ def _check_chain_verification(verification: Dict[str, Any]) -> Dict[str, Any]:
 def _hostname_matches_san(host: str, san_list: List[str]) -> bool:
     """Check if hostname matches any SAN entry.
 
+    Wildcard SANs (``*.example.com``) match exactly one subdomain level
+    per RFC 6125 §6.4.3 — ``sub.example.com`` matches but
+    ``deep.sub.example.com`` does not.
+
     Args:
         host: Hostname to check
         san_list: List of Subject Alternative Names
@@ -414,10 +418,15 @@ def _hostname_matches_san(host: str, san_list: List[str]) -> bool:
     Returns:
         True if hostname matches any SAN entry
     """
-    return host in san_list or any(
-        san.startswith('*.') and host.endswith(san[1:])
-        for san in san_list
-    )
+    if host in san_list:
+        return True
+    for san in san_list:
+        if san.startswith('*.'):
+            # Wildcard matches one level only: host must be <label>.<san_suffix>
+            suffix = san[1:]  # e.g. ".example.com"
+            if host.endswith(suffix) and '.' not in host[:-len(suffix)]:
+                return True
+    return False
 
 
 def _check_hostname_match(

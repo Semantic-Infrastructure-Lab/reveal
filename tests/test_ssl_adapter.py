@@ -16,8 +16,36 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from reveal.adapters.ssl import SSLAdapter, SSLFetcher, CertificateInfo
-from reveal.adapters.ssl.certificate import check_ssl_health, _check_ocsp_availability
+from reveal.adapters.ssl.certificate import check_ssl_health, _check_ocsp_availability, _hostname_matches_san
 from reveal.adapters.ssl.renderer import SSLRenderer
+
+
+class TestHostnameMatchesSan(unittest.TestCase):
+    """Tests for _hostname_matches_san — RFC 6125 wildcard matching."""
+
+    def test_exact_match(self):
+        self.assertTrue(_hostname_matches_san('example.com', ['example.com']))
+
+    def test_no_match(self):
+        self.assertFalse(_hostname_matches_san('other.com', ['example.com']))
+
+    def test_wildcard_one_level(self):
+        """*.example.com matches sub.example.com."""
+        self.assertTrue(_hostname_matches_san('sub.example.com', ['*.example.com']))
+
+    def test_wildcard_does_not_match_multi_level(self):
+        """*.example.com must NOT match deep.sub.example.com (RFC 6125)."""
+        self.assertFalse(_hostname_matches_san('deep.sub.example.com', ['*.example.com']))
+
+    def test_wildcard_does_not_match_bare_domain(self):
+        """*.example.com must NOT match example.com itself."""
+        self.assertFalse(_hostname_matches_san('example.com', ['*.example.com']))
+
+    def test_multiple_san_entries(self):
+        self.assertTrue(_hostname_matches_san('app.test.io', ['other.com', '*.test.io']))
+
+    def test_empty_san_list(self):
+        self.assertFalse(_hostname_matches_san('example.com', []))
 
 
 class TestSSLAdapterInit(unittest.TestCase):
