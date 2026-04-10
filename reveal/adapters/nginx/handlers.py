@@ -505,13 +505,20 @@ def _format_match_col(match: str) -> tuple:
     return f"? {match}", False
 
 
-def _handle_cpanel_certs(analyzer) -> None:
+def _handle_cpanel_certs(analyzer, args=None) -> None:
     """Compare cPanel on-disk certs against live certs per domain (S4 -- --cpanel-certs).
 
     For each SSL domain found in the nginx config:
     - Looks up /var/cpanel/ssl/apache_tls/DOMAIN/combined (disk cert)
     - Fetches the live cert from the network
     - Compares serial numbers to detect "AutoSSL renewed but nginx hasn't reloaded"
+
+    By default uses canonical_only=True to skip www/mail/alias server_name variants —
+    they share the parent domain's cert and have no disk cert of their own, which
+    would produce ~85% no-disk-cert noise on large cPanel configs. Pass --all to
+    include all aliases.
+
+    Use --only-failures to skip rows where disk cert is not found (further noise reduction).
     """
     if not hasattr(analyzer, 'extract_ssl_domains'):
         print(f"Error: --cpanel-certs not supported for {type(analyzer).__name__}",
@@ -521,7 +528,10 @@ def _handle_cpanel_certs(analyzer) -> None:
 
     from reveal.adapters.ssl.certificate import load_certificate_from_file, check_ssl_health  # noqa: I006 — optional heavy dep
 
-    domains = analyzer.extract_ssl_domains()
+    show_all = getattr(args, 'all', False)
+    only_failures = getattr(args, 'only_failures', False)
+
+    domains = analyzer.extract_ssl_domains(canonical_only=not show_all)
     if not domains:
         print("No SSL domains found in nginx config.")
         return
@@ -540,6 +550,14 @@ def _handle_cpanel_certs(analyzer) -> None:
             'live': live,
             'match': match,
         })
+
+    # --only-failures: skip rows where disk cert is simply absent (expected for alias domains)
+    if only_failures:
+        rows = [r for r in rows if r['disk'].get('status') != 'missing']
+
+    if not rows:
+        print("✅ No failures found.")
+        return
 
     col_domain = max(len(r['domain']) for r in rows)
     header = f"  {'domain':<{col_domain}}  {'disk cert':<28}  {'live cert':<28}  match"

@@ -4,6 +4,7 @@ import json
 import sys
 from typing import Any, Dict, List
 
+from .parser import IMPEDIMENT_SHORT
 
 _STATUS_ICON = {
     'ok': '✅',
@@ -13,10 +14,7 @@ _STATUS_ICON = {
     'unknown': '⚫',
 }
 
-_IMPEDIMENT_SHORT = {
-    'TOTAL_DCV_FAILURE': 'DCV:TOTAL',
-    'NO_UNSECURED_DOMAIN_PASSED_DCV': 'DCV:PARTIAL',
-}
+_IMPEDIMENT_SHORT = IMPEDIMENT_SHORT  # alias for local use
 
 
 def _icon(status: str) -> str:

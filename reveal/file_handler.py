@@ -266,7 +266,7 @@ def _dispatch_special_flags(analyzer, path: str, output_format: str, args, confi
         return True
 
     if getattr(args, 'cpanel_certs', False):
-        _handle_cpanel_certs(analyzer)
+        _handle_cpanel_certs(analyzer, args=args)
         return True
 
     if getattr(args, 'diagnose', False):

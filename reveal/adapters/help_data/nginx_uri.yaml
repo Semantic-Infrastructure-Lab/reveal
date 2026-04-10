@@ -47,13 +47,13 @@ workflows:
       - "reveal nginx://smd-ops.mytia.net          # verify config was applied"
       - "reveal nginx://smd-ops.mytia.net/ports    # check SSL block is present"
       - "reveal nginx://smd-ops.mytia.net/upstream # verify upstream still reachable"
-      - "reveal ssl://smd-ops.mytia.net --check    # verify SSL cert intact"
+      - "reveal check ssl://smd-ops.mytia.net       # verify SSL cert intact"
 
   - name: "Diagnose unexpected redirect"
     steps:
       - "reveal nginx://smd-ops.mytia.net          # see all location blocks"
       - "reveal nginx://smd-ops.mytia.net/locations # inspect location targets"
-      - "reveal domain://smd-ops.mytia.net --check  # verify DNS + HTTP response"
+      - "reveal check domain://smd-ops.mytia.net     # verify DNS + HTTP response"
 
   - name: "Auth audit"
     steps:
@@ -75,10 +75,10 @@ anti_patterns:
 
 notes:
   - 'Searches /etc/nginx/sites-enabled/ and /etc/nginx/conf.d/ by default'
-  - 'For SSH-accessed nginx (remote servers), use file-path form: reveal /etc/nginx/... --check'
+  - 'For SSH-accessed nginx (remote servers), use file-path form: reveal check /etc/nginx/...'
   - 'Upstream reachability checks TCP only (3s timeout) — not HTTP response'
-  - 'For SSL cert status: reveal ssl://domain --check'
-  - 'For running N001-N007 rules: reveal /path/to/nginx.conf --check'
+  - 'For SSL cert status: reveal check ssl://domain'
+  - 'For running N001-N007 rules: reveal check /path/to/nginx.conf'
 
 output_formats:
   - text

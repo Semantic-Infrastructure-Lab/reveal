@@ -215,7 +215,7 @@ _SCHEMA_NOTES = [
     'Searches /etc/nginx/sites-enabled, /etc/nginx/conf.d, and common alternatives',
     'Domain lookup: matches server_name directives (exact + wildcard)',
     'Upstream reachability: TCP socket check to each backend',
-    'Complements file-path analysis: reveal /etc/nginx/conf.d/domain.conf --check',
+    'Complements file-path analysis: reveal check /etc/nginx/conf.d/domain.conf',
 ]
 
 
@@ -875,7 +875,7 @@ class NginxUriAdapter(ResourceAdapter):
 
         next_steps = [
             "Inspect a specific domain: reveal nginx://<domain>",
-            "Check SSL certs across all nginx: reveal ssl://nginx:///etc/nginx/conf.d/*.conf --check",
+            "Check SSL certs across all nginx: reveal check ssl://nginx:///etc/nginx/conf.d/*.conf",
         ]
         if artifact_files:
             next_steps.append(
@@ -946,7 +946,7 @@ class NginxUriAdapter(ResourceAdapter):
             'next_steps': [
                 f"reveal nginx://{self.domain}/upstream  # upstream health detail",
                 f"reveal nginx://{self.domain}/config    # full compiled config",
-                f"reveal ssl://{self.domain} --check     # cert detail",
+                f"reveal check ssl://{self.domain}       # cert detail",
             ],
         }
 
@@ -983,7 +983,7 @@ class NginxUriAdapter(ResourceAdapter):
             'ports': ports,
             'next_steps': [
                 f"reveal nginx://{self.domain}           # full vhost summary",
-                f"reveal ssl://{self.domain} --check     # SSL cert detail",
+                f"reveal check ssl://{self.domain}       # SSL cert detail",
             ],
         }
 
@@ -1040,7 +1040,7 @@ class NginxUriAdapter(ResourceAdapter):
             'server_block': server_block,
             'next_steps': [
                 f"reveal nginx://{self.domain}  # structured summary",
-                f"reveal {config_path} --check  # run N-rules on full file",
+                f"reveal check {config_path}    # run N-rules on full file",
             ],
         }
 

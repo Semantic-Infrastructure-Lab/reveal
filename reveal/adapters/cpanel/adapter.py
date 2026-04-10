@@ -882,6 +882,10 @@ class CpanelAdapter(ResourceAdapter):
                     'description': 'nobody ACL check on every domain docroot (required for ACME renewal)',
                 },
                 {
+                    'uri': 'cpanel://USERNAME/full-audit',
+                    'description': 'Composite one-shot: ssl + ACL + nginx ACME in one pass; exits 2 on any failure',
+                },
+                {
                     'uri': 'cpanel://USERNAME/ssl --format=json',
                     'description': 'JSON output for scripting',
                 },
@@ -895,6 +899,7 @@ class CpanelAdapter(ResourceAdapter):
                 'domains': 'All addon/subdomain domains with docroots and type',
                 'ssl': 'Disk cert health per domain from /var/cpanel/ssl/apache_tls/',
                 'acl-check': 'nobody ACL status on every domain docroot',
+                'full-audit': 'Composite: ssl + acl-check + nginx ACME in one pass; exits 2 on any failure',
                 'help/api': 'WHM & cPanel API quick-reference — common commands, filesystem paths, domain types',
             },
             'workflows': [

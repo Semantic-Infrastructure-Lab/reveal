@@ -2035,6 +2035,91 @@ server {
             _handle_cpanel_certs(analyzer)
         assert exc_info.value.code == 1
 
+    # UX-136: canonical_only=True by default to suppress alias noise
+
+    MULTI_ALIAS_CONFIG = """
+server {
+    listen 443 ssl;
+    server_name primary.example.com www.primary.example.com mail.primary.example.com;
+    ssl_certificate /etc/ssl/primary.crt;
+}
+"""
+
+    def test_canonical_only_default_one_domain_per_block(self, capsys):
+        """UX-136: by default only the first server_name is checked — no alias rows."""
+        from unittest.mock import patch
+        from reveal.file_handler import _handle_cpanel_certs
+
+        analyzer = self._make_analyzer(self.MULTI_ALIAS_CONFIG)
+
+        disk_cert = self._make_cert_info(cn='primary.example.com', days=60, serial='S1')
+        live_result = {'status': 'healthy', 'leaf': {
+            'days_until_expiry': 60, 'serial_number': 'S1', 'not_after': ''}}
+
+        with patch('os.path.exists', return_value=True), \
+             patch('reveal.adapters.ssl.certificate.load_certificate_from_file',
+                   return_value=(disk_cert, [])), \
+             patch('reveal.adapters.ssl.certificate.check_ssl_health', return_value=live_result):
+            _handle_cpanel_certs(analyzer)
+
+        out = capsys.readouterr().out
+        assert 'primary.example.com' in out
+        # Aliases must NOT appear in output by default
+        assert 'www.primary.example.com' not in out
+        assert 'mail.primary.example.com' not in out
+
+    def test_all_flag_shows_aliases(self, capsys):
+        """UX-136: --all restores full alias listing."""
+        import argparse
+        from unittest.mock import patch
+        from reveal.file_handler import _handle_cpanel_certs
+
+        analyzer = self._make_analyzer(self.MULTI_ALIAS_CONFIG)
+        args = argparse.Namespace(all=True, only_failures=False)
+
+        disk_cert = self._make_cert_info(cn='primary.example.com', days=60, serial='S1')
+        live_result = {'status': 'healthy', 'leaf': {
+            'days_until_expiry': 60, 'serial_number': 'S1', 'not_after': ''}}
+
+        with patch('os.path.exists', return_value=True), \
+             patch('reveal.adapters.ssl.certificate.load_certificate_from_file',
+                   return_value=(disk_cert, [])), \
+             patch('reveal.adapters.ssl.certificate.check_ssl_health', return_value=live_result):
+            _handle_cpanel_certs(analyzer, args=args)
+
+        out = capsys.readouterr().out
+        assert 'www.primary.example.com' in out
+        assert 'mail.primary.example.com' in out
+
+    def test_only_failures_skips_missing_disk_certs(self, capsys):
+        """UX-136: --only-failures hides rows where disk cert is absent (not a real failure)."""
+        import argparse
+        from unittest.mock import patch
+        from reveal.file_handler import _handle_cpanel_certs
+
+        analyzer = self._make_analyzer(self.SSL_CONFIG)  # two domains: alpha, beta
+        args = argparse.Namespace(all=False, only_failures=True)
+
+        disk_cert = self._make_cert_info(cn='alpha.example.com', days=60, serial='S1')
+        live_result = {'status': 'healthy', 'leaf': {
+            'days_until_expiry': 60, 'serial_number': 'S1', 'not_after': ''}}
+
+        # alpha has cert, beta does not
+        def fake_exists(p):
+            return 'alpha' in p
+
+        with patch('os.path.exists', side_effect=fake_exists), \
+             patch('reveal.adapters.ssl.certificate.load_certificate_from_file',
+                   return_value=(disk_cert, [])), \
+             patch('reveal.adapters.ssl.certificate.check_ssl_health', return_value=live_result):
+            _handle_cpanel_certs(analyzer, args=args)
+
+        out = capsys.readouterr().out
+        # alpha has a real cert — should appear
+        assert 'alpha.example.com' in out
+        # beta is just missing a disk cert — filtered out by --only-failures
+        assert 'beta.example.com' not in out
+
 
 class TestNginxDiagnose:
     """Tests for get_error_log_path(), diagnose_acme_errors(), and _handle_diagnose() — S3."""

@@ -12,6 +12,23 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.75.2] - 2026-04-10
+
+### INF Investigation Feedback — Bug Fixes + UX (zogipo-0410)
+
+#### Fixed
+- **BACK-138: `letsencrypt://` bare URI now accepted** — `LetsEncryptAdapter.__init__` no longer raises `TypeError` on empty connection string. Matches `letsencrypt://` examples in all help docs and schema. 1 updated test (`test_empty_string_is_accepted`).
+- **BACK-139: `autossl://` JSON `detail` field populated** — `_build_user_list` in `parser.py` now synthesizes `detail` from `defect_codes` + `impediments` (e.g. `"CERT_HAS_EXPIRED, DCV:TOTAL_DCV_FAILURE"`). Previously empty in JSON; text renderer built it on-the-fly. 4 new tests in `TestParseRunDetailField`.
+- **BACK-136: `--cpanel-certs` alias noise eliminated** — `_handle_cpanel_certs` now uses `canonical_only=True` by default, skipping www/mail/alias server_name variants that never have individual disk certs. `--all` flag restores full alias output. `--only-failures` suppresses `missing` rows (no disk cert = not a failure). 3 new tests in `TestCpanelCerts`.
+
+#### Documented / Exposed
+- **BACK-140/141: `autossl://` `--user` and `--only-failures` surfaced** — both were already implemented in `get_structure`/`_apply_autossl_filters` but absent from `get_schema` cli_flags and `get_help` examples. Added to both, plus new `get_help` examples: `--user=sociamonials`, `--only-failures`, combined form.
+- **BACK-143: `cpanel://USERNAME/full-audit` added to `get_help`** — was in `get_schema` and implemented, missing from `get_help` examples and elements dict. Added.
+
+#### Help / Docs
+- **BACK-142: nginx help updated to use `reveal check` form** — `nginx_uri.yaml` notes/workflow steps and nginx adapter next-step strings updated from deprecated `--check` to `reveal check <path>` / `reveal check ssl://domain`.
+
+
 ## [0.75.1] - 2026-04-10
 
 ### Doc Hygiene + Pre-Release Tooling (gladiator-overlord-0409)

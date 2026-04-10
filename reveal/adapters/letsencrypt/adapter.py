@@ -169,9 +169,7 @@ class LetsEncryptAdapter(ResourceAdapter):
     ELEMENT_NAMESPACE_ADAPTER: bool = False
 
     def __init__(self, connection_string: str = ''):
-        if not connection_string:
-            raise TypeError("LetsEncryptAdapter requires a connection string: letsencrypt://")
-        if not connection_string.startswith('letsencrypt://'):
+        if connection_string and not connection_string.startswith('letsencrypt://'):
             raise ValueError(f"Invalid letsencrypt:// URI: {connection_string}")
         self.live_dir = _LIVE_DIR
         self.nginx_dirs = list(_NGINX_CONFIG_DIRS)

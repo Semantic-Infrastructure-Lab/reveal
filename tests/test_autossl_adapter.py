@@ -322,6 +322,69 @@ class TestParseRunDCV:
 
 
 # ---------------------------------------------------------------------------
+# Tests: parse_run — detail field (BUG-137)
+# ---------------------------------------------------------------------------
+
+class TestParseRunDetailField:
+    """BUG-137: domain entries must include a synthesized `detail` field for JSON consumers."""
+
+    def test_ok_domain_has_empty_detail(self, tmp_path):
+        ts = '2026-01-01T00:00:00Z'
+        records = [_user_analyzing('alice'), _domain_analyzing('ok.com'), _tls_ok()]
+        log_dir = _write_run(tmp_path, ts, records)
+        result = parse_run(ts, log_dir)
+        domain = result['users'][0]['domains'][0]
+        assert 'detail' in domain
+        assert domain['detail'] == ''
+
+    def test_defective_domain_detail_has_defect_code(self, tmp_path):
+        ts = '2026-01-01T00:00:00Z'
+        records = [
+            _user_analyzing('alice'),
+            _domain_analyzing('bad.com'),
+            _tls_defective(),
+            _defect('OPENSSL_VERIFY: failed (0:10:CERT_HAS_EXPIRED).'),
+        ]
+        log_dir = _write_run(tmp_path, ts, records)
+        result = parse_run(ts, log_dir)
+        domain = result['users'][0]['domains'][0]
+        assert domain['detail'] == 'CERT_HAS_EXPIRED'
+
+    def test_impediment_code_appears_in_detail(self, tmp_path):
+        ts = '2026-01-01T00:00:00Z'
+        records = [
+            _user_analyzing('alice'),
+            _domain_analyzing('blocked.com'),
+            _tls_defective(),
+            _user_dcv('alice'),
+            _domain_dcv('blocked.com'),
+            _impediment('TOTAL_DCV_FAILURE', 'Every domain failed DCV.'),
+        ]
+        log_dir = _write_run(tmp_path, ts, records)
+        result = parse_run(ts, log_dir)
+        domain = result['users'][0]['domains'][0]
+        # Uses same short code as text renderer (DCV:TOTAL, not full DCV:TOTAL_DCV_FAILURE)
+        assert 'DCV:TOTAL' in domain['detail']
+        assert domain['detail'] == 'DCV:TOTAL'
+
+    def test_detail_combines_defect_and_impediment(self, tmp_path):
+        ts = '2026-01-01T00:00:00Z'
+        records = [
+            _user_analyzing('alice'),
+            _domain_analyzing('combo.com'),
+            _tls_defective(),
+            _defect('OPENSSL_VERIFY: failed (0:10:CERT_HAS_EXPIRED).'),
+            _user_dcv('alice'),
+            _domain_dcv('combo.com'),
+            _impediment('TOTAL_DCV_FAILURE', 'Every domain failed DCV.'),
+        ]
+        log_dir = _write_run(tmp_path, ts, records)
+        result = parse_run(ts, log_dir)
+        domain = result['users'][0]['domains'][0]
+        assert domain['detail'] == 'CERT_HAS_EXPIRED, DCV:TOTAL'
+
+
+# ---------------------------------------------------------------------------
 # Tests: parse_run — summary
 # ---------------------------------------------------------------------------
 

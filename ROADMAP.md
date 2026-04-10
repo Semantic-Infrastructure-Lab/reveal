@@ -7,6 +7,14 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.75.2
+- ✅ **BACK-138: `letsencrypt://` bare URI accepted** — removed empty-string guard in `LetsEncryptAdapter.__init__`; bare `letsencrypt://` now works as all docs show.
+- ✅ **BACK-139: `autossl://` JSON `detail` field populated** — `parser.py` synthesizes `detail` from defect codes + impediment short codes; JSON and text output now identical.
+- ✅ **BACK-136: `--cpanel-certs` alias noise eliminated** — `canonical_only=True` by default; `--all` restores aliases; `--only-failures` skips missing-cert rows. 3 tests.
+- ✅ **BACK-140/141: `autossl://` `--user` and `--only-failures` surfaced** — already implemented, now in `get_schema` cli_flags and `get_help` examples.
+- ✅ **BACK-142: nginx help updated from `--check` to `reveal check` form** — `nginx_uri.yaml`, adapter next-step strings.
+- ✅ **BACK-143: `cpanel://USERNAME/full-audit` added to `get_help`** — examples + elements dict.
+
 ### v0.75.1
 - ✅ **Doc hygiene: 38 fixes** — broken links (11), private-doc references (13), personal leaks (10), plus 4 false-positive fixes in link checker. Pre-release hygiene script (`check_doc_hygiene.py`) wired into `pre-release-check.sh` (step 6/9).
 
@@ -915,6 +923,7 @@ These violate reveal's mission ("reveal reveals, doesn't modify") or have unclea
 | `semantic://` embedding search | Requires ML infrastructure; over-engineered |
 | `trace://` execution traces | Wrong domain (debugging tools) |
 | `live://` real-time monitoring | Wrong domain (observability tools) |
+| `ssh://user@host/adapter://` meta-adapter (SSH proxy mode) | Wrong layer. Filesystem adapters (`cpanel://`, `autossl://`, `letsencrypt://`) read local files — SSH is a transport workaround, not a native protocol like TLS or TCP. Solve it at the SSH config layer: `ProxyJump` in `~/.ssh/config` eliminates the double-hop quoting hell in 3 lines without touching Reveal. Decision: cataclysmic-eagle-0410. |
 | Parquet/Arrow | Binary formats, not human-readable. Use pandas. |
 
 ---

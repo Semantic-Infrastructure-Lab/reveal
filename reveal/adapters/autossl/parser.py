@@ -62,6 +62,12 @@ _RE_DEFECT = re.compile(r'^Defect:\s+(.+)')
 _RE_IMPEDIMENT = re.compile(r'^Impediment:\s+(\w+):\s*(.+)')
 _RE_OPENSSL_CODE = re.compile(r'\(0:\d+:(\w+)\)')
 
+# Short display codes for impediments — shared with renderer so JSON `detail` matches text output
+IMPEDIMENT_SHORT = {
+    'TOTAL_DCV_FAILURE': 'DCV:TOTAL',
+    'NO_UNSECURED_DOMAIN_PASSED_DCV': 'DCV:PARTIAL',
+}
+
 
 def list_runs(log_dir: str = AUTOSSL_LOG_DIR) -> List[str]:
     """Return list of run timestamps, newest first."""
@@ -238,6 +244,11 @@ def _build_user_list(users: Dict[str, Any]) -> tuple:
         )
         for d in domains_list:
             d['defect_codes'] = [_extract_defect_code(x) for x in d['defects']]
+            # Synthesize detail: mirrors text renderer column so JSON has same info density
+            parts = list(d['defect_codes'][:2])
+            for imp in d.get('impediments', [])[:1]:
+                parts.append(IMPEDIMENT_SHORT.get(imp['code'], imp['code']))
+            d['detail'] = ', '.join(parts)
 
         user_summary: Dict[str, int] = {}
         for d in domains_list:

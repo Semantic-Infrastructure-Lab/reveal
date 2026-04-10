@@ -251,7 +251,7 @@ class AutosslAdapter(ResourceAdapter):
             'uri_syntax': 'autossl://[TIMESTAMP]',
             'query_params': {},
             'elements': {},
-            'cli_flags': ['--format=json'],
+            'cli_flags': ['--format=json', '--only-failures', '--user=USERNAME', '--summary'],
             'supports_batch': False,
             'output_types': [
                 {
@@ -298,6 +298,10 @@ class AutosslAdapter(ResourceAdapter):
                                                         'enum': ['ok', 'incomplete', 'defective'],
                                                     },
                                                     'cert_expiry_days': {'type': ['number', 'null']},
+                                                    'detail': {
+                                                        'type': 'string',
+                                                        'description': 'Synthesized summary: defect codes + impediment codes (e.g. "CERT_HAS_EXPIRED, DCV:TOTAL_DCV_FAILURE")',
+                                                    },
                                                     'defect_codes': {'type': 'array', 'items': {'type': 'string'}},
                                                     'impediments': {'type': 'array'},
                                                 },
@@ -356,6 +360,8 @@ class AutosslAdapter(ResourceAdapter):
                 'Defect codes extracted (e.g. SELF_SIGNED_CERT, CERT_HAS_EXPIRED)',
                 'DCV impediment codes (TOTAL_DCV_FAILURE, NO_UNSECURED_DOMAIN_PASSED_DCV)',
                 'Summary by user + overall counts',
+                'Filter to one user with --user=USERNAME',
+                'Filter to failures only with --only-failures',
                 'JSON output for scripting and filtering',
             ],
             'examples': [
@@ -370,6 +376,18 @@ class AutosslAdapter(ResourceAdapter):
                 {
                     'uri': 'autossl://2026-03-03T23:26:01Z',
                     'description': 'Parse a specific AutoSSL run by timestamp',
+                },
+                {
+                    'uri': 'autossl://latest --only-failures',
+                    'description': 'Show only domains with errors (defective/incomplete) — hides ok domains',
+                },
+                {
+                    'uri': 'autossl://latest --user=sociamonials',
+                    'description': 'Filter to a single cPanel user — avoids 800-domain output on shared hosts',
+                },
+                {
+                    'uri': 'autossl://latest --user=sociamonials --only-failures',
+                    'description': 'One user, failures only — the most focused diagnostic view',
                 },
                 {
                     'uri': "autossl://latest --format=json | jq '[.users[].domains[] | select(.tls_status==\"defective\")]'",

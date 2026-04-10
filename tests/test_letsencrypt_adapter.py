@@ -226,9 +226,10 @@ class TestWalkLiveDir(unittest.TestCase):
 
 class TestLetsEncryptAdapter(unittest.TestCase):
 
-    def test_requires_connection_string(self):
-        with self.assertRaises(TypeError):
-            LetsEncryptAdapter('')
+    def test_empty_string_is_accepted(self):
+        """BUG-136: letsencrypt:// with no argument must work — docs show bare URI as valid."""
+        adapter = LetsEncryptAdapter('')
+        self.assertIsNotNone(adapter)
 
     def test_rejects_wrong_scheme(self):
         with self.assertRaises(ValueError):
