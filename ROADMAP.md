@@ -412,9 +412,10 @@ This document outlines reveal's development priorities and future direction. For
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: **~6,560 passing** (v0.64.x)
+- Test count: **7,652 passing** (v0.75.x) — 22 skipped (intentional: PowerPivot fixtures, network adapters)
 - UX Phases 3/4/5: ✅ **ALL COMPLETE** (query operators, field selection, element discovery)
-- Target: 80%+ coverage for core adapters — scaffold 100%, tools 100%, adapter 94%
+- Sub-function navigation: ✅ **ALL COMPLETE** (`--outline`, `--scope`, `--varflow`, `--calls` range)
+- Coverage: **85%** (34,467 statements) — target 90%+
 
 ### Stability & Polish
 - Output contract v1.1 enforcement
@@ -930,7 +931,7 @@ These violate reveal's mission ("reveal reveals, doesn't modify") or have unclea
 
 ## Language Support Status
 
-**Current**: 37 built-in analyzers + 165+ via tree-sitter fallback = 190+ languages total
+**Current**: 12 built-in-only analyzers + 173 tree-sitter = 185+ languages total
 
 ### Production-Ready
 Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Ruby, PHP, Kotlin, Swift, Dart, Zig, Scala, Lua, GDScript, Bash, SQL
@@ -942,7 +943,7 @@ Nginx, Dockerfile, TOML, YAML, JSON, JSONL, Markdown, HTML, CSV, XML, INI, HCL/T
 Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 
 ### Tree-Sitter Fallback
-165+ additional languages with basic structure extraction: Perl, R, Haskell, Elixir, OCaml, and more.
+173 languages with basic structure extraction via tree-sitter: Perl, R, Haskell, Elixir, OCaml, and more.
 
 ---
 
