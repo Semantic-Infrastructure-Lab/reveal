@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.76.0] - 2026-04-10 (session passing-breeze-0410)
+
+### Added
+- **BACK-144: `autossl://DOMAIN` domain history drill-down** — new URI mode that searches all AutoSSL runs for a specific domain and returns its full TLS history across runs. Answers "is this domain always failing or just this run?" `_parse_connection_string` detects dots to distinguish domain names from timestamps. New `_domain_history_structure` method, `autossl_domain_history` output type, `_render_domain_history` table renderer (run | user | status | expiry | detail). `get_schema` and `get_help` updated with new URI syntax, output type schema, and examples. 13 new tests in `TestAutosslDomainHistory`. 7,666 passing.
+
+---
+
 ## [0.75.2] - 2026-04-10
 
 ### INF Investigation Feedback — Bug Fixes + UX (zogipo-0410)

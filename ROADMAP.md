@@ -7,6 +7,9 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.76.0
+- ✅ **BACK-144: `autossl://DOMAIN` domain history** — new URI mode; searches all runs for a specific domain, returns TLS status history per run. Answers "is this domain always failing?" New `autossl_domain_history` output type + table renderer. 13 tests. (passing-breeze-0410)
+
 ### v0.75.2
 - ✅ **BACK-138: `letsencrypt://` bare URI accepted** — removed empty-string guard in `LetsEncryptAdapter.__init__`; bare `letsencrypt://` now works as all docs show.
 - ✅ **BACK-139: `autossl://` JSON `detail` field populated** — `parser.py` synthesizes `detail` from defect codes + impediment short codes; JSON and text output now identical.
@@ -412,7 +415,7 @@ This document outlines reveal's development priorities and future direction. For
 ## Current Focus: Path to v1.0
 
 ### Test Coverage & Quality
-- Test count: **7,652 passing** (v0.75.x) — 22 skipped (intentional: PowerPivot fixtures, network adapters)
+- Test count: **7,666 passing** (v0.76.0) — 22 skipped (intentional: PowerPivot fixtures, network adapters)
 - UX Phases 3/4/5: ✅ **ALL COMPLETE** (query operators, field selection, element discovery)
 - Sub-function navigation: ✅ **ALL COMPLETE** (`--outline`, `--scope`, `--varflow`, `--calls` range)
 - Coverage: **85%** (34,467 statements) — target 90%+
