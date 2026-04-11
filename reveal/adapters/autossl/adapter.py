@@ -459,7 +459,8 @@ class AutosslAdapter(ResourceAdapter):
                 'Summary by user + overall counts',
                 'Filter to one user with --user=USERNAME',
                 'Filter to failures only with --only-failures',
-                'Domain history: autossl://DOMAIN shows status across all runs',
+                'Domain history: autossl://DOMAIN — TLS status across all runs (capped at 20; use --all for full history)',
+                'Chronic failure detection: always shows ✅ 0 ok; prints "Failing since: DATE" when ok==0',
                 'JSON output for scripting and filtering',
             ],
             'examples': [
@@ -493,7 +494,11 @@ class AutosslAdapter(ResourceAdapter):
                 },
                 {
                     'uri': 'autossl://app.example.com',
-                    'description': 'Domain history — TLS status across all runs (is this always failing?)',
+                    'description': 'Domain history — 20 most recent runs; shows ✅ 0 ok + "Failing since: DATE" when chronic',
+                },
+                {
+                    'uri': 'autossl://app.example.com --all',
+                    'description': 'Domain history — full history across all runs (bypasses 20-row default cap)',
                 },
             ],
             'tls_status_values': {

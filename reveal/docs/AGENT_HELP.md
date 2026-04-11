@@ -1455,6 +1455,10 @@ reveal autossl://2026-03-03T23:26:01Z
 
 # Extract all defective domains as JSON
 reveal autossl://latest --format=json | jq '[.users[].domains[] | select(.tls_status=="defective")]'
+
+# Domain history — is this domain always failing?
+reveal autossl://app.example.com          # 20 most recent runs; shows ✅ 0 ok + Failing since: date
+reveal autossl://app.example.com --all    # full history (300+ runs)
 ```
 
 **TLS outcome codes:**
@@ -1462,15 +1466,20 @@ reveal autossl://latest --format=json | jq '[.users[].domains[] | select(.tls_st
 - `incomplete` — DCV not completed
 - `defective` — renewal failed; defect codes: `SELF_SIGNED_CERT`, `CERT_HAS_EXPIRED`, `TOTAL_DCV_FAILURE`, `NO_UNSECURED_DOMAIN_PASSED_DCV`
 
+**Domain history output:** summary always shows `✅ N ok` even when zero (key signal for chronic failures). When ok==0, prints "Failing since: YYYY-MM-DD" at top. Default cap: 20 most recent rows; use `--all` to see full history.
+
 **Combined workflow (AutoSSL failure investigation):**
 ```bash
 # 1. Check most recent run for failures
 reveal autossl://latest | grep -i defect
 
-# 2. Confirm nginx ACME paths are routable for affected user
+# 2. Check if a problem domain is a chronic failure or new
+reveal autossl://app.example.com
+
+# 3. Confirm nginx ACME paths are routable for affected user
 reveal cpanel://USERNAME/acl-check --only-failures
 
-# 3. Validate ACME challenge routing in nginx config
+# 4. Validate ACME challenge routing in nginx config
 reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme
 ```
 
