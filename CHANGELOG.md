@@ -12,6 +12,17 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.76.2] - 2026-04-10 (session fiery-goddess-0410)
+
+### Changed
+- **`autossl://DOMAIN` row cap** — output capped at 20 most recent rows by default; `--all` flag bypasses cap. 300-row walls for chronic failures were obscuring the pattern. When truncated, shows "… N older runs not shown  (use --all to see full history)".
+- **`autossl://DOMAIN` richer summary line** — always shows `✅ 0 ok` even when zero; the zero-ok count is the key signal for chronic failures. Other buckets shown only when non-zero. Also now counts `dcv_failed` entries (tls_status=None + impediments) in the summary dict.
+- **`autossl://DOMAIN` failing-since line** — when ok==0, prints "Failing since: YYYY-MM-DD (oldest available run)" at top of output, derived from the true history floor pre-truncation. Previously required scrolling to the bottom of 300 rows.
+
+6 new tests, 73 autossl tests total, 7,673 total passing.
+
+---
+
 ## [0.76.1] - 2026-04-10 (session passing-breeze-0410)
 
 ### Fixed
