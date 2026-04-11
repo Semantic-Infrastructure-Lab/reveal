@@ -174,7 +174,7 @@ class AutosslAdapter(ResourceAdapter):
 
     def __init__(self, connection_string: str = ""):
         if not connection_string:
-            raise TypeError("AutosslAdapter requires a connection string: autossl://[TIMESTAMP]")
+            connection_string = "autossl://"
 
         self.connection_string = connection_string
         self.timestamp: Optional[str] = None  # None → list runs

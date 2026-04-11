@@ -434,9 +434,9 @@ class TestParseRunSummary:
 # ---------------------------------------------------------------------------
 
 class TestAutosslAdapter:
-    def test_no_arg_raises(self):
-        with pytest.raises(TypeError):
-            AutosslAdapter()
+    def test_no_arg_is_list_runs(self):
+        a = AutosslAdapter()
+        assert a.timestamp is None
 
     def test_invalid_scheme_raises(self):
         with pytest.raises(ValueError):

@@ -401,9 +401,9 @@ class TestNginxUriAdapterInit:
         adapter = NginxUriAdapter("nginx://api.staging.example.com")
         assert adapter.domain == "api.staging.example.com"
 
-    def test_empty_raises(self):
-        with pytest.raises(TypeError):
-            NginxUriAdapter("")
+    def test_empty_is_overview(self):
+        adapter = NginxUriAdapter("")
+        assert adapter.domain is None
 
     def test_bare_slash_is_overview(self):
         adapter = NginxUriAdapter("nginx:///")

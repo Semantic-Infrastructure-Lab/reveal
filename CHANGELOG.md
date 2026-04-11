@@ -12,6 +12,17 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.76.3] - 2026-04-11 (session burning-nebula-0411)
+
+### Fixed
+- **BACK-145: `nginx://` bare URI now works** — `NginxUriAdapter.__init__` was raising `TypeError` on empty connection string, blocking the `_default_from_uri` dispatch chain before the overview path was reached. Empty string is now normalized to `"nginx://"`. `reveal nginx://` and `reveal nginx:// --audit` work as documented. 1 test updated (`test_empty_is_overview`). Resolves BACK-145.
+- **BACK-146: `autossl://` bare URI now works** — Same root cause as BACK-145. `AutosslAdapter.__init__` now normalizes empty string to `"autossl://"` instead of raising `TypeError`. `reveal autossl://` lists available timestamps as documented. 1 test updated (`test_no_arg_is_list_runs`). Resolves BACK-146.
+
+2 tests updated, 146 nginx+autossl tests passing.
+
+---
+
+
 ## [0.76.2] - 2026-04-10 (session fiery-goddess-0410)
 
 ### Changed

@@ -778,7 +778,7 @@ class NginxUriAdapter(ResourceAdapter):
 
     def __init__(self, connection_string: str = "", **kwargs):
         if not connection_string:
-            raise TypeError("NginxUriAdapter requires a connection string")
+            connection_string = "nginx://"
 
         self.connection_string = connection_string
         self.domain: Optional[str] = None
