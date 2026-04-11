@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.76.1] - 2026-04-10 (session passing-breeze-0410)
+
+### Fixed
+- **`autossl://DOMAIN` renderer crash on `None` tls_status** — `_render_domain_history` now uses the same `tls_status or dcv_failed/unknown` fallback as `_render_domain_table`. Triggered on real gateway data where dcv_failed domains have `tls_status: None`. 1 new test.
+
+---
+
 ## [0.76.0] - 2026-04-10 (session passing-breeze-0410)
 
 ### Added

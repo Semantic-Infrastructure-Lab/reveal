@@ -7,6 +7,9 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.76.1
+- ✅ **Fix: `autossl://DOMAIN` crash on `None` tls_status** — dcv_failed domains have `None` tls_status; renderer now falls back to `dcv_failed`/`unknown` like `_render_domain_table`. Found on first gateway test. 1 test. (passing-breeze-0410)
+
 ### v0.76.0
 - ✅ **BACK-144: `autossl://DOMAIN` domain history** — new URI mode; searches all runs for a specific domain, returns TLS status history per run. Answers "is this domain always failing?" New `autossl_domain_history` output type + table renderer. 13 tests. (passing-breeze-0410)
 

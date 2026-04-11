@@ -923,3 +923,28 @@ class TestAutosslDomainHistory:
         out = capsys.readouterr().out
         assert 'missing.example.com' in out
         assert 'not found' in out
+
+    def test_renderer_domain_history_none_tls_status(self, capsys):
+        from reveal.adapters.autossl.renderer import AutosslRenderer
+        result = {
+            'contract_version': '1.0',
+            'type': 'autossl_domain_history',
+            'domain': 'app.example.com',
+            'run_count': 1,
+            'summary': {'ok': 0, 'defective': 0, 'incomplete': 1},
+            'history': [{
+                'run_timestamp': '2026-01-01T00:00:00Z',
+                'run_start': None,
+                'username': 'testuser',
+                'tls_status': None,
+                'cert_expiry_days': None,
+                'defect_codes': [],
+                'impediments': [],
+                'detail': '',
+            }],
+            'next_steps': [],
+        }
+        AutosslRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'app.example.com' in out
+        assert 'unknown' in out

@@ -226,7 +226,9 @@ class AutosslRenderer:
             if len(user) > user_width:
                 user = user[:user_width - 1] + '…'
 
-            status = h.get('tls_status', 'unknown')
+            status = h.get('tls_status') or (
+                'dcv_failed' if h.get('impediments') else 'unknown'
+            )
             icon = _icon(status)
             status_col = f"{icon} {status:<10}"
 
