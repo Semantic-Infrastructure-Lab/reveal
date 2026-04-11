@@ -7,6 +7,9 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.76.2
+- ✅ **`autossl://DOMAIN` UX polish** — row cap (20 by default, `--all` bypasses), summary line always shows `✅ 0 ok`, "Failing since: YYYY-MM-DD" at top when ok==0. 6 tests. (fiery-goddess-0410)
+
 ### v0.76.1
 - ✅ **Fix: `autossl://DOMAIN` crash on `None` tls_status** — dcv_failed domains have `None` tls_status; renderer now falls back to `dcv_failed`/`unknown` like `_render_domain_table`. Found on first gateway test. 1 test. (passing-breeze-0410)
 
