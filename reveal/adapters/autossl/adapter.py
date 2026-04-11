@@ -178,6 +178,7 @@ class AutosslAdapter(ResourceAdapter):
 
         self.connection_string = connection_string
         self.timestamp: Optional[str] = None  # None → list runs
+        self.domain: Optional[str] = None     # set → domain history mode
         self._parse_connection_string(connection_string)
 
     def _parse_connection_string(self, uri: str) -> None:
@@ -188,6 +189,9 @@ class AutosslAdapter(ResourceAdapter):
             self.timestamp = None
         elif rest == 'latest':
             self.timestamp = 'latest'
+        elif '.' in rest:
+            # Domains always contain dots; timestamps (YYYY-MM-DD...) do not
+            self.domain = rest
         else:
             self.timestamp = rest
 
@@ -202,6 +206,8 @@ class AutosslAdapter(ResourceAdapter):
                 top-level run header and summary counts.
             user: When set, filter to only the named user (case-sensitive).
         """
+        if self.domain is not None:
+            return self._domain_history_structure(self.domain)
         if self.timestamp is None:
             return self._list_runs_structure()
         if self.timestamp == 'error-codes':
@@ -239,6 +245,47 @@ class AutosslAdapter(ResourceAdapter):
             timestamp = runs[0]
         return parse_run(timestamp)
 
+    def _domain_history_structure(self, domain: str) -> Dict[str, Any]:
+        """Search all runs for a specific domain and return its full history."""
+        runs = list_runs()
+        history = []
+        for timestamp in runs:
+            result = parse_run(timestamp)
+            if result.get('error'):
+                continue
+            for user in result.get('users', []):
+                for d in user.get('domains', []):
+                    if d['domain'] == domain:
+                        history.append({
+                            'run_timestamp': timestamp,
+                            'run_start': result.get('run_start'),
+                            'username': user['username'],
+                            'tls_status': d['tls_status'],
+                            'cert_expiry_days': d.get('cert_expiry_days'),
+                            'defect_codes': d.get('defect_codes', []),
+                            'impediments': d.get('impediments', []),
+                            'detail': d.get('detail', ''),
+                        })
+        ok_count = sum(1 for h in history if h['tls_status'] == 'ok')
+        defective_count = sum(1 for h in history if h['tls_status'] == 'defective')
+        incomplete_count = sum(1 for h in history if h['tls_status'] == 'incomplete')
+        return {
+            'contract_version': '1.0',
+            'type': 'autossl_domain_history',
+            'domain': domain,
+            'run_count': len(history),
+            'summary': {
+                'ok': ok_count,
+                'defective': defective_count,
+                'incomplete': incomplete_count,
+            },
+            'history': history,
+            'next_steps': [
+                'reveal autossl://latest    # Latest full run',
+                'reveal autossl://          # List all runs',
+            ],
+        }
+
     def get_element(self, element_name: str, **kwargs: Any) -> Optional[Dict[str, Any]]:
         return None
 
@@ -248,7 +295,7 @@ class AutosslAdapter(ResourceAdapter):
         return {
             'adapter': 'autossl',
             'description': 'Inspect cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures',
-            'uri_syntax': 'autossl://[TIMESTAMP]',
+            'uri_syntax': 'autossl://[TIMESTAMP|DOMAIN]',
             'query_params': {},
             'elements': {},
             'cli_flags': ['--format=json', '--only-failures', '--user=USERNAME', '--summary'],
@@ -313,6 +360,38 @@ class AutosslAdapter(ResourceAdapter):
                         },
                     },
                 },
+                {
+                    'type': 'autossl_domain_history',
+                    'description': 'TLS history for a specific domain across all runs',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'type': {'type': 'string', 'const': 'autossl_domain_history'},
+                            'domain': {'type': 'string'},
+                            'run_count': {'type': 'integer'},
+                            'summary': {
+                                'type': 'object',
+                                'description': 'Counts by tls_status across all runs: ok/defective/incomplete',
+                            },
+                            'history': {
+                                'type': 'array',
+                                'items': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'run_timestamp': {'type': 'string'},
+                                        'run_start': {'type': ['string', 'null']},
+                                        'username': {'type': 'string'},
+                                        'tls_status': {'type': 'string'},
+                                        'cert_expiry_days': {'type': ['number', 'null']},
+                                        'defect_codes': {'type': 'array', 'items': {'type': 'string'}},
+                                        'impediments': {'type': 'array'},
+                                        'detail': {'type': 'string'},
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
             ],
             'example_queries': [
                 {
@@ -335,6 +414,11 @@ class AutosslAdapter(ResourceAdapter):
                     'description': 'Inspect the most recent AutoSSL run directly',
                     'output_type': 'autossl_run',
                 },
+                {
+                    'uri': 'reveal autossl://app.example.com',
+                    'description': 'Domain history — TLS status for one domain across all runs',
+                    'output_type': 'autossl_domain_history',
+                },
             ],
             'notes': [
                 'Reads /var/cpanel/logs/autossl/ directly — no WHM API or credentials required',
@@ -351,7 +435,7 @@ class AutosslAdapter(ResourceAdapter):
             'name': 'autossl',
             'description': "Inspect cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures",
             'stability': 'beta',
-            'syntax': 'autossl://[TIMESTAMP]',
+            'syntax': 'autossl://[TIMESTAMP|DOMAIN]',
             'features': [
                 'Filesystem-based — no WHM API or credentials required',
                 'Lists all available run timestamps',
@@ -362,6 +446,7 @@ class AutosslAdapter(ResourceAdapter):
                 'Summary by user + overall counts',
                 'Filter to one user with --user=USERNAME',
                 'Filter to failures only with --only-failures',
+                'Domain history: autossl://DOMAIN shows status across all runs',
                 'JSON output for scripting and filtering',
             ],
             'examples': [
@@ -392,6 +477,10 @@ class AutosslAdapter(ResourceAdapter):
                 {
                     'uri': "autossl://latest --format=json | jq '[.users[].domains[] | select(.tls_status==\"defective\")]'",
                     'description': 'Extract all defective domains as JSON',
+                },
+                {
+                    'uri': 'autossl://app.example.com',
+                    'description': 'Domain history — TLS status across all runs (is this always failing?)',
                 },
             ],
             'tls_status_values': {

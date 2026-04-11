@@ -757,3 +757,169 @@ class TestAutosslErrorCodes:
         out = capsys.readouterr().out
         assert 'DEPTH_ZERO_SELF_SIGNED_CERT' in out
         assert 'TOTAL_DCV_FAILURE' in out
+
+
+class TestAutosslDomainHistory:
+    """Tests for autossl://DOMAIN domain-history drill-down (BACK-144)."""
+
+    def _write_run_with_domain(self, tmp_path, timestamp, domain, status='ok'):
+        """Write a minimal run containing a specific domain."""
+        records = [
+            _user_analyzing('testuser'),
+            _domain_analyzing(domain),
+            _tls_ok() if status == 'ok' else _tls_defective(),
+        ]
+        _write_run(tmp_path, timestamp, records)
+
+    def test_domain_uri_sets_domain_attribute(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://app.example.com')
+        assert a.domain == 'app.example.com'
+        assert a.timestamp is None
+
+    def test_domain_uri_does_not_set_timestamp(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://sub.domain.io')
+        assert a.timestamp is None
+
+    def test_timestamp_uri_does_not_set_domain(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://2026-01-01T00:00:00Z')
+        assert a.domain is None
+        assert a.timestamp == '2026-01-01T00:00:00Z'
+
+    def test_latest_does_not_set_domain(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://latest')
+        assert a.domain is None
+
+    def test_empty_uri_does_not_set_domain(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://')
+        assert a.domain is None
+
+    def test_domain_history_returns_correct_type(self, tmp_path):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        ts = '2026-01-01T00:00:00Z'
+        self._write_run_with_domain(tmp_path, ts, 'app.example.com', status='ok')
+        a = AutosslAdapter('autossl://app.example.com')
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts]), \
+             patch('reveal.adapters.autossl.adapter.parse_run',
+                   side_effect=lambda t: __import__('reveal.adapters.autossl.parser',
+                       fromlist=['parse_run']).parse_run(t, log_dir=str(tmp_path))):
+            result = a.get_structure()
+        assert result['type'] == 'autossl_domain_history'
+
+    def test_domain_history_finds_domain_across_runs(self, tmp_path):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        from reveal.adapters.autossl.parser import parse_run
+        ts1 = '2026-01-02T00:00:00Z'
+        ts2 = '2026-01-01T00:00:00Z'
+        for ts in [ts1, ts2]:
+            self._write_run_with_domain(tmp_path, ts, 'app.example.com', status='ok')
+
+        a = AutosslAdapter('autossl://app.example.com')
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts1, ts2]), \
+             patch('reveal.adapters.autossl.adapter.parse_run',
+                   side_effect=lambda t: parse_run(t, log_dir=str(tmp_path))):
+            result = a.get_structure()
+        assert result['run_count'] == 2
+        assert len(result['history']) == 2
+
+    def test_domain_history_missing_domain_returns_empty(self, tmp_path):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        from reveal.adapters.autossl.parser import parse_run
+        ts = '2026-01-01T00:00:00Z'
+        self._write_run_with_domain(tmp_path, ts, 'other.example.com', status='ok')
+
+        a = AutosslAdapter('autossl://missing.example.com')
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts]), \
+             patch('reveal.adapters.autossl.adapter.parse_run',
+                   side_effect=lambda t: parse_run(t, log_dir=str(tmp_path))):
+            result = a.get_structure()
+        assert result['run_count'] == 0
+        assert result['history'] == []
+
+    def test_domain_history_summary_counts(self, tmp_path):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        from reveal.adapters.autossl.parser import parse_run
+        ts1 = '2026-01-02T00:00:00Z'
+        ts2 = '2026-01-01T00:00:00Z'
+        self._write_run_with_domain(tmp_path, ts1, 'app.example.com', status='ok')
+        self._write_run_with_domain(tmp_path, ts2, 'app.example.com', status='defective')
+
+        a = AutosslAdapter('autossl://app.example.com')
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts1, ts2]), \
+             patch('reveal.adapters.autossl.adapter.parse_run',
+                   side_effect=lambda t: parse_run(t, log_dir=str(tmp_path))):
+            result = a.get_structure()
+        assert result['summary']['ok'] == 1
+        assert result['summary']['defective'] == 1
+
+    def test_domain_history_entry_has_expected_fields(self, tmp_path):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        from reveal.adapters.autossl.parser import parse_run
+        ts = '2026-01-01T00:00:00Z'
+        self._write_run_with_domain(tmp_path, ts, 'app.example.com', status='ok')
+
+        a = AutosslAdapter('autossl://app.example.com')
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts]), \
+             patch('reveal.adapters.autossl.adapter.parse_run',
+                   side_effect=lambda t: parse_run(t, log_dir=str(tmp_path))):
+            result = a.get_structure()
+        entry = result['history'][0]
+        assert 'run_timestamp' in entry
+        assert 'username' in entry
+        assert 'tls_status' in entry
+        assert 'defect_codes' in entry
+        assert 'impediments' in entry
+
+    def test_domain_history_no_runs_returns_empty(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://app.example.com')
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[]):
+            result = a.get_structure()
+        assert result['type'] == 'autossl_domain_history'
+        assert result['run_count'] == 0
+
+    def test_renderer_domain_history_text(self, capsys):
+        from reveal.adapters.autossl.renderer import AutosslRenderer
+        result = {
+            'contract_version': '1.0',
+            'type': 'autossl_domain_history',
+            'domain': 'app.example.com',
+            'run_count': 1,
+            'summary': {'ok': 1, 'defective': 0, 'incomplete': 0},
+            'history': [{
+                'run_timestamp': '2026-01-01T00:00:00Z',
+                'run_start': None,
+                'username': 'testuser',
+                'tls_status': 'ok',
+                'cert_expiry_days': 45.0,
+                'defect_codes': [],
+                'impediments': [],
+                'detail': '',
+            }],
+            'next_steps': [],
+        }
+        AutosslRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'app.example.com' in out
+        assert 'testuser' in out
+        assert 'ok' in out
+
+    def test_renderer_domain_history_no_results(self, capsys):
+        from reveal.adapters.autossl.renderer import AutosslRenderer
+        result = {
+            'contract_version': '1.0',
+            'type': 'autossl_domain_history',
+            'domain': 'missing.example.com',
+            'run_count': 0,
+            'summary': {'ok': 0, 'defective': 0, 'incomplete': 0},
+            'history': [],
+            'next_steps': [],
+        }
+        AutosslRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'missing.example.com' in out
+        assert 'not found' in out

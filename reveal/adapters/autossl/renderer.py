@@ -64,6 +64,8 @@ class AutosslRenderer:
                 AutosslRenderer._render_run(result)
         elif result_type == 'autossl_error_codes':
             AutosslRenderer._render_error_codes(result)
+        elif result_type == 'autossl_domain_history':
+            AutosslRenderer._render_domain_history(result)
         else:
             print(json.dumps(result, indent=2, default=str))
 
@@ -186,6 +188,70 @@ class AutosslRenderer:
             detail_col = ', '.join(details)[:40] if details else ''
 
             print(f"  {domain:<{max_domain}}  {status_col}  {expiry_col}  {detail_col}")
+
+    @staticmethod
+    def _render_domain_history(r: Dict[str, Any]) -> None:
+        domain = r.get('domain', '?')
+        run_count = r.get('run_count', 0)
+        summary = r.get('summary', {})
+        history = r.get('history', [])
+
+        print(f"Domain history: {domain}")
+        print(f"  {run_count} run{'s' if run_count != 1 else ''} found  •  {_summary_line(summary)}")
+
+        if not history:
+            print("  (domain not found in any run)")
+            steps = r.get('next_steps', [])
+            if steps:
+                print()
+                for s in steps:
+                    print(f"  → {s}")
+            return
+
+        print()
+        ts_width = max(len(h['run_timestamp']) for h in history)
+        ts_width = min(ts_width, 30)
+        user_width = max(len(h.get('username', '')) for h in history)
+        user_width = min(user_width, 20)
+
+        header = f"  {'run':<{ts_width}}  {'user':<{user_width}}  status       expiry    detail"
+        print(header)
+        print("  " + "─" * (ts_width + user_width + 40))
+
+        for h in history:
+            ts = h['run_timestamp']
+            if len(ts) > ts_width:
+                ts = ts[:ts_width - 1] + '…'
+            user = h.get('username', '')
+            if len(user) > user_width:
+                user = user[:user_width - 1] + '…'
+
+            status = h.get('tls_status', 'unknown')
+            icon = _icon(status)
+            status_col = f"{icon} {status:<10}"
+
+            days = h.get('cert_expiry_days')
+            if days is not None:
+                expiry_col = f"{days:+.0f}d".rjust(6)
+            else:
+                expiry_col = "      "
+
+            details = []
+            codes = h.get('defect_codes', [])
+            if codes:
+                details.extend(codes[:2])
+            for imp in h.get('impediments', [])[:1]:
+                short = _IMPEDIMENT_SHORT.get(imp['code'], imp['code'])
+                details.append(short)
+            detail_col = ', '.join(details)[:40] if details else ''
+
+            print(f"  {ts:<{ts_width}}  {user:<{user_width}}  {status_col}  {expiry_col}  {detail_col}")
+
+        steps = r.get('next_steps', [])
+        if steps:
+            print()
+            for s in steps:
+                print(f"  → {s}")
 
     @staticmethod
     def _render_error_codes(r: Dict[str, Any]) -> None:
