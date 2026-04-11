@@ -207,7 +207,8 @@ class AutosslAdapter(ResourceAdapter):
             user: When set, filter to only the named user (case-sensitive).
         """
         if self.domain is not None:
-            return self._domain_history_structure(self.domain)
+            show_all = kwargs.get('all', False)
+            return self._domain_history_structure(self.domain, show_all=show_all)
         if self.timestamp is None:
             return self._list_runs_structure()
         if self.timestamp == 'error-codes':
@@ -245,8 +246,9 @@ class AutosslAdapter(ResourceAdapter):
             timestamp = runs[0]
         return parse_run(timestamp)
 
-    def _domain_history_structure(self, domain: str) -> Dict[str, Any]:
+    def _domain_history_structure(self, domain: str, show_all: bool = False) -> Dict[str, Any]:
         """Search all runs for a specific domain and return its full history."""
+        _ROW_LIMIT = 20
         runs = list_runs()
         history = []
         for timestamp in runs:
@@ -269,15 +271,26 @@ class AutosslAdapter(ResourceAdapter):
         ok_count = sum(1 for h in history if h['tls_status'] == 'ok')
         defective_count = sum(1 for h in history if h['tls_status'] == 'defective')
         incomplete_count = sum(1 for h in history if h['tls_status'] == 'incomplete')
+        dcv_failed_count = sum(
+            1 for h in history if not h['tls_status'] and h.get('impediments')
+        )
+        total_run_count = len(history)
+        oldest_run_timestamp = history[-1]['run_timestamp'] if history else None
+        truncated = (not show_all) and (total_run_count > _ROW_LIMIT)
+        if truncated:
+            history = history[:_ROW_LIMIT]
         return {
             'contract_version': '1.0',
             'type': 'autossl_domain_history',
             'domain': domain,
-            'run_count': len(history),
+            'run_count': total_run_count,
+            'truncated': truncated,
+            'oldest_run_timestamp': oldest_run_timestamp,
             'summary': {
                 'ok': ok_count,
                 'defective': defective_count,
                 'incomplete': incomplete_count,
+                'dcv_failed': dcv_failed_count,
             },
             'history': history,
             'next_steps': [
@@ -298,7 +311,7 @@ class AutosslAdapter(ResourceAdapter):
             'uri_syntax': 'autossl://[TIMESTAMP|DOMAIN]',
             'query_params': {},
             'elements': {},
-            'cli_flags': ['--format=json', '--only-failures', '--user=USERNAME', '--summary'],
+            'cli_flags': ['--format=json', '--only-failures', '--user=USERNAME', '--summary', '--all'],
             'supports_batch': False,
             'output_types': [
                 {

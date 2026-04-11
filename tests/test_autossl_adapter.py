@@ -948,3 +948,114 @@ class TestAutosslDomainHistory:
         out = capsys.readouterr().out
         assert 'app.example.com' in out
         assert 'unknown' in out
+
+    # --- T0410-haunted-viper: row cap + --all ---
+
+    def test_domain_history_truncation_caps_at_20(self, tmp_path):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        from reveal.adapters.autossl.parser import parse_run
+        timestamps = [f'2026-01-{i:02d}T00:00:00Z' for i in range(1, 26)]
+        for ts in timestamps:
+            self._write_run_with_domain(tmp_path, ts, 'app.example.com', status='ok')
+        a = AutosslAdapter('autossl://app.example.com')
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=timestamps), \
+             patch('reveal.adapters.autossl.adapter.parse_run',
+                   side_effect=lambda t: parse_run(t, log_dir=str(tmp_path))):
+            result = a.get_structure()
+        assert result['run_count'] == 25
+        assert len(result['history']) == 20
+        assert result['truncated'] is True
+
+    def test_domain_history_show_all_bypasses_cap(self, tmp_path):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        from reveal.adapters.autossl.parser import parse_run
+        timestamps = [f'2026-01-{i:02d}T00:00:00Z' for i in range(1, 26)]
+        for ts in timestamps:
+            self._write_run_with_domain(tmp_path, ts, 'app.example.com', status='ok')
+        a = AutosslAdapter('autossl://app.example.com')
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=timestamps), \
+             patch('reveal.adapters.autossl.adapter.parse_run',
+                   side_effect=lambda t: parse_run(t, log_dir=str(tmp_path))):
+            result = a.get_structure(**{'all': True})
+        assert result['run_count'] == 25
+        assert len(result['history']) == 25
+        assert result['truncated'] is False
+
+    def test_renderer_shows_truncation_note(self, capsys):
+        from reveal.adapters.autossl.renderer import AutosslRenderer
+        history = [{'run_timestamp': f'2026-01-{i:02d}', 'username': 'u',
+                    'tls_status': 'defective', 'cert_expiry_days': None,
+                    'defect_codes': [], 'impediments': []} for i in range(1, 21)]
+        result = {
+            'type': 'autossl_domain_history',
+            'domain': 'app.example.com',
+            'run_count': 25,
+            'truncated': True,
+            'oldest_run_timestamp': None,
+            'summary': {'ok': 0, 'defective': 25, 'incomplete': 0, 'dcv_failed': 0},
+            'history': history,
+            'next_steps': [],
+        }
+        AutosslRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert '5 older runs not shown' in out
+        assert '--all' in out
+
+    # --- T0410-neural-panther: always show ok count ---
+
+    def test_renderer_always_shows_ok_count_when_zero(self, capsys):
+        from reveal.adapters.autossl.renderer import AutosslRenderer
+        result = {
+            'type': 'autossl_domain_history',
+            'domain': 'bad.example.com',
+            'run_count': 3,
+            'truncated': False,
+            'oldest_run_timestamp': '2026-01-01',
+            'summary': {'ok': 0, 'defective': 3, 'incomplete': 0, 'dcv_failed': 0},
+            'history': [{'run_timestamp': '2026-01-03', 'username': 'u',
+                         'tls_status': 'defective', 'cert_expiry_days': None,
+                         'defect_codes': [], 'impediments': []}],
+            'next_steps': [],
+        }
+        AutosslRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert '0 ok' in out
+
+    # --- T0410-chrome-spark: failing since ---
+
+    def test_renderer_shows_failing_since_when_no_ok(self, capsys):
+        from reveal.adapters.autossl.renderer import AutosslRenderer
+        result = {
+            'type': 'autossl_domain_history',
+            'domain': 'bad.example.com',
+            'run_count': 2,
+            'truncated': False,
+            'oldest_run_timestamp': '2026-03-12_03-00-00',
+            'summary': {'ok': 0, 'defective': 2, 'incomplete': 0, 'dcv_failed': 0},
+            'history': [{'run_timestamp': '2026-03-13', 'username': 'u',
+                         'tls_status': 'defective', 'cert_expiry_days': None,
+                         'defect_codes': [], 'impediments': []}],
+            'next_steps': [],
+        }
+        AutosslRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'Failing since' in out
+        assert '2026-03-12' in out
+
+    def test_renderer_no_failing_since_when_ok_exists(self, capsys):
+        from reveal.adapters.autossl.renderer import AutosslRenderer
+        result = {
+            'type': 'autossl_domain_history',
+            'domain': 'mixed.example.com',
+            'run_count': 2,
+            'truncated': False,
+            'oldest_run_timestamp': '2026-03-12_03-00-00',
+            'summary': {'ok': 1, 'defective': 1, 'incomplete': 0, 'dcv_failed': 0},
+            'history': [{'run_timestamp': '2026-03-13', 'username': 'u',
+                         'tls_status': 'ok', 'cert_expiry_days': 30,
+                         'defect_codes': [], 'impediments': []}],
+            'next_steps': [],
+        }
+        AutosslRenderer.render_structure(result, 'text')
+        out = capsys.readouterr().out
+        assert 'Failing since' not in out

@@ -195,9 +195,20 @@ class AutosslRenderer:
         run_count = r.get('run_count', 0)
         summary = r.get('summary', {})
         history = r.get('history', [])
+        truncated = r.get('truncated', False)
+        oldest_ts = r.get('oldest_run_timestamp')
+
+        # Always show ok bucket even when zero — it's the key signal
+        ok = summary.get('ok', 0)
+        parts = [f"{_icon('ok')} {ok} ok"]
+        for key in ('incomplete', 'defective', 'dcv_failed'):
+            n = summary.get(key, 0)
+            if n:
+                parts.append(f"{_icon(key)} {n} {key}")
+        rich_summary = '  '.join(parts)
 
         print(f"Domain history: {domain}")
-        print(f"  {run_count} run{'s' if run_count != 1 else ''} found  •  {_summary_line(summary)}")
+        print(f"  {run_count} run{'s' if run_count != 1 else ''} found  •  {rich_summary}")
 
         if not history:
             print("  (domain not found in any run)")
@@ -207,6 +218,11 @@ class AutosslRenderer:
                 for s in steps:
                     print(f"  → {s}")
             return
+
+        # Failing since — show when no ok runs exist
+        if ok == 0 and oldest_ts:
+            oldest_date = oldest_ts[:10].replace('_', '-')
+            print(f"  Failing since: {oldest_date} (oldest available run)")
 
         print()
         ts_width = max(len(h['run_timestamp']) for h in history)
@@ -248,6 +264,10 @@ class AutosslRenderer:
             detail_col = ', '.join(details)[:40] if details else ''
 
             print(f"  {ts:<{ts_width}}  {user:<{user_width}}  {status_col}  {expiry_col}  {detail_col}")
+
+        if truncated:
+            hidden = run_count - len(history)
+            print(f"\n  … {hidden} older runs not shown  (use --all to see full history)")
 
         steps = r.get('next_steps', [])
         if steps:
