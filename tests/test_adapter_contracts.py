@@ -274,18 +274,16 @@ class TestAdapterContracts(unittest.TestCase):
                         )
 
     def test_adapters_inherit_from_resource_adapter(self):
-        """Verify all adapters inherit from ResourceAdapter (optional check)."""
+        """Verify all adapters inherit from ResourceAdapter."""
         from reveal.adapters.base import ResourceAdapter
 
         for scheme in self.expected_schemes:
             with self.subTest(scheme=scheme):
                 adapter_class = get_adapter_class(scheme)
-                # Check if it's a subclass (doesn't have to be, but should be)
-                is_subclass = issubclass(adapter_class, ResourceAdapter)
-
-                # This is a recommendation, not a hard requirement
-                if not is_subclass:
-                    print(f"Note: {scheme} adapter doesn't inherit from ResourceAdapter")
+                self.assertTrue(
+                    issubclass(adapter_class, ResourceAdapter),
+                    f"{scheme} adapter does not inherit from ResourceAdapter"
+                )
 
 
 class TestAdapterErrorConsistency(unittest.TestCase):
@@ -304,25 +302,6 @@ class TestAdapterErrorConsistency(unittest.TestCase):
 
         self.assertIn("resource", str(cm.exception).lower())
 
-    def test_import_error_handling(self):
-        """Verify that ImportError is raised for adapters with missing dependencies.
-
-        Tests that the new ImportError handling in routing.py would work correctly.
-        """
-        # We can't easily test real ImportErrors without actually removing packages,
-        # but we can verify the pattern works with a mock adapter
-        class MockAdapterWithImportError:
-            def __init__(self):
-                raise ImportError("Missing dependency: pip install some-package")
-
-            def get_structure(self):
-                return {}
-
-        # Verify the exception is raised
-        with self.assertRaises(ImportError) as cm:
-            MockAdapterWithImportError()
-
-        self.assertIn("pip install", str(cm.exception))
 
 
 class TestHelpSystemContracts(unittest.TestCase):

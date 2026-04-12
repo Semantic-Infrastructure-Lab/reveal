@@ -1,7 +1,7 @@
 """Comprehensive tests for bug detection rules.
 
-Tests B001 (bare except), B002 (comparison to singletons), B003 (mutable defaults),
-B004 (unused loop variable), and B005 (exception in except handler).
+Tests B001 (bare except), B002 (@staticmethod with self), B003 (oversized @property),
+B004 (@property without return).
 """
 
 import pytest
@@ -58,9 +58,7 @@ except Exception:  # Explicit Exception - typically OK
     log_error()
 """
         detections = rule.check("test.py", None, content)
-        # Most linters allow 'except Exception:' but flag bare 'except:'
-        # Behavior may vary - just check it doesn't crash
-        assert isinstance(detections, list)
+        assert len(detections) == 0
 
     def test_b001_multiple_violations(self):
         """B001 detects multiple bare except clauses."""
@@ -81,141 +79,168 @@ except:
 
 
 class TestB002:
-    """Test B002: Comparison to singleton detection."""
+    """Test B002: @staticmethod with self parameter detection."""
 
-    def test_b002_initialization(self):
-        """B002 rule initializes correctly."""
+    def test_b002_detects_staticmethod_with_self(self):
+        """B002 detects @staticmethod methods that still declare self."""
         rule = B002()
-        assert rule.code == "B002"
-        assert '.py' in rule.file_patterns[0]  # Python-specific rule
+        structure = {
+            'functions': [{
+                'name': 'bad_static',
+                'line': 2,
+                'decorators': ['@staticmethod'],
+                'signature': '(self, x)',
+            }]
+        }
+        content = "@staticmethod\ndef bad_static(self, x):\n    return x\n"
+        detections = rule.check("test.py", structure, content)
+        assert len(detections) >= 1
+        assert any("bad_static" in d.message for d in detections)
 
-    def test_b002_check_method_exists(self):
-        """B002 has check method that can be called."""
+    def test_b002_allows_staticmethod_without_self(self):
+        """B002 allows @staticmethod with no self parameter."""
         rule = B002()
-        content = "if value == None: pass"
-        # Just verify it doesn't crash
-        detections = rule.check("test.py", None, content)
-        assert isinstance(detections, list)
+        structure = {
+            'functions': [{
+                'name': 'good_static',
+                'line': 2,
+                'decorators': ['@staticmethod'],
+                'signature': '(x, y)',
+            }]
+        }
+        content = "@staticmethod\ndef good_static(x, y):\n    return x + y\n"
+        detections = rule.check("test.py", structure, content)
+        assert len(detections) == 0
 
-    def test_b002_allows_is_none(self):
-        """B002 allows 'is None' checks."""
+    def test_b002_allows_regular_method_with_self(self):
+        """B002 does not flag regular (non-static) instance methods."""
         rule = B002()
-        content = """
-if value is None:  # GOOD
-    return
-if other is not None:  # GOOD
-    use(other)
-"""
-        detections = rule.check("test.py", None, content)
+        structure = {
+            'functions': [{
+                'name': 'instance_method',
+                'line': 2,
+                'decorators': [],
+                'signature': '(self, x)',
+            }]
+        }
+        content = "def instance_method(self, x):\n    return x\n"
+        detections = rule.check("test.py", structure, content)
+        assert len(detections) == 0
+
+    def test_b002_no_structure_returns_empty(self):
+        """B002 requires structure to detect — returns no detections when structure is None."""
+        rule = B002()
+        detections = rule.check("test.py", None, "any content")
         assert len(detections) == 0
 
 
 class TestB003:
-    """Test B003: Mutable default argument detection."""
+    """Test B003: Oversized @property detection."""
 
-    def test_b003_initialization(self):
-        """B003 rule initializes correctly."""
+    def test_b003_detects_oversized_property(self):
+        """B003 detects a @property whose line count exceeds the threshold."""
         rule = B003()
-        assert rule.code == "B003"
-        assert '.py' in rule.file_patterns[0]  # Python-specific rule
+        structure = {
+            'functions': [{
+                'name': 'big_prop',
+                'line': 2,
+                'line_count': 20,  # well above MAX_PROPERTY_LINES (8)
+                'decorators': ['@property'],
+            }]
+        }
+        content = "@property\ndef big_prop(self):\n" + "    x = 1\n" * 20
+        detections = rule.check("test.py", structure, content)
+        assert len(detections) >= 1
+        assert any("big_prop" in d.message for d in detections)
 
-    def test_b003_check_method_exists(self):
-        """B003 has check method that can be called."""
+    def test_b003_allows_short_property(self):
+        """B003 allows a @property within the line limit."""
         rule = B003()
-        content = "def func(items=[]): pass"
-        # Just verify it doesn't crash
-        detections = rule.check("test.py", None, content)
-        assert isinstance(detections, list)
-
-    def test_b003_allows_none_default(self):
-        """B003 allows None as default (common pattern)."""
-        rule = B003()
-        content = """
-def good_function(items=None):  # GOOD
-    if items is None:
-        items = []
-    return items
-"""
-        detections = rule.check("test.py", None, content)
+        structure = {
+            'functions': [{
+                'name': 'name',
+                'line': 2,
+                'line_count': 3,
+                'decorators': ['@property'],
+            }]
+        }
+        content = "@property\ndef name(self):\n    return self._name\n"
+        detections = rule.check("test.py", structure, content)
         assert len(detections) == 0
 
-    def test_b003_allows_immutable_defaults(self):
-        """B003 allows immutable defaults."""
+    def test_b003_allows_cached_property(self):
+        """B003 skips @cached_property even when oversized."""
         rule = B003()
-        content = """
-def good_function(count=0, name="default", flag=True):  # All GOOD
-    return count, name, flag
-"""
-        detections = rule.check("test.py", None, content)
+        structure = {
+            'functions': [{
+                'name': 'expensive',
+                'line': 2,
+                'line_count': 30,
+                'decorators': ['@cached_property'],
+            }]
+        }
+        content = "@cached_property\ndef expensive(self):\n" + "    x = 1\n" * 30
+        detections = rule.check("test.py", structure, content)
+        assert len(detections) == 0
+
+    def test_b003_no_structure_returns_empty(self):
+        """B003 requires structure to detect — returns no detections when structure is None."""
+        rule = B003()
+        detections = rule.check("test.py", None, "any content")
         assert len(detections) == 0
 
 
 class TestB004:
-    """Test B004: Unused loop variable detection."""
+    """Test B004: @property without return statement detection."""
 
-    def test_b004_initialization(self):
-        """B004 rule initializes correctly."""
-        rule = B004()
-        assert rule.code == "B004"
-        assert '.py' in rule.file_patterns[0]  # Python-specific rule
-
-    def test_b004_check_method_exists(self):
-        """B004 has check method that can be called."""
-        rule = B004()
-        # Just verify it doesn't crash with various inputs
-        detections = rule.check("test.py", None, "")
-        assert isinstance(detections, list)
-
-        structure = {'functions': []}
-        detections = rule.check("test.py", structure, "")
-        assert isinstance(detections, list)
-
-    def test_b004_allows_underscore_variable(self):
-        """B004 allows underscore as intentionally unused."""
+    def test_b004_detects_property_without_return(self):
+        """B004 detects a @property that never returns (will silently return None)."""
         rule = B004()
         structure = {
             'functions': [{
-                'name': 'test_func',
-                'line': 1,
-                'variables': set(),
-                'loops': [
-                    {'line': 2, 'variable': '_'}
-                ]
+                'name': 'broken_prop',
+                'line': 2,
+                'line_count': 3,
+                'decorators': ['@property'],
             }]
         }
-        content = """
-def test_func():
-    for _ in range(10):  # Underscore means "intentionally unused"
-        do_something()
-"""
+        content = "@property\ndef broken_prop(self):\n    self.compute()\n"
         detections = rule.check("test.py", structure, content)
-        # Should allow underscore
-        assert len(detections) == 0
+        assert len(detections) >= 1
+        assert any("broken_prop" in d.message for d in detections)
 
-    def test_b004_allows_used_variables(self):
-        """B004 doesn't flag variables that are actually used."""
+    def test_b004_allows_property_with_return(self):
+        """B004 does not flag a @property that has a return statement."""
         rule = B004()
         structure = {
             'functions': [{
-                'name': 'test_func',
-                'line': 1,
-                'variables': {'item'},
-                'loops': [
-                    {'line': 2, 'variable': 'item'}
-                ]
+                'name': 'value',
+                'line': 2,
+                'line_count': 3,
+                'decorators': ['@property'],
             }]
         }
-        content = """
-def test_func():
-    for item in items:
-        print(item)  # Used here
-        process(item)
-"""
+        content = "@property\ndef value(self):\n    return self._value\n"
         detections = rule.check("test.py", structure, content)
         assert len(detections) == 0
 
-    def test_b004_no_structure(self):
-        """B004 handles missing structure."""
+    def test_b004_allows_property_that_raises(self):
+        """B004 does not flag a @property that raises (raise is a valid implementation)."""
+        rule = B004()
+        structure = {
+            'functions': [{
+                'name': 'abstract_prop',
+                'line': 2,
+                'line_count': 3,
+                'decorators': ['@property'],
+            }]
+        }
+        content = "@property\ndef abstract_prop(self):\n    raise NotImplementedError\n"
+        detections = rule.check("test.py", structure, content)
+        assert len(detections) == 0
+
+    def test_b004_no_structure_returns_empty(self):
+        """B004 requires structure to detect — returns no detections when structure is None."""
         rule = B004()
         detections = rule.check("test.py", None, "")
         assert len(detections) == 0

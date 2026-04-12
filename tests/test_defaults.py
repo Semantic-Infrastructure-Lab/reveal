@@ -15,13 +15,6 @@ from reveal.defaults import (
 class TestRuleDefaults:
     """Tests for RuleDefaults class."""
 
-    def test_complexity_defaults_exist(self):
-        """Should define complexity thresholds."""
-        assert hasattr(RuleDefaults, 'CYCLOMATIC_COMPLEXITY')
-        assert hasattr(RuleDefaults, 'NESTING_DEPTH_MAX')
-        assert hasattr(RuleDefaults, 'FUNCTION_LENGTH_WARN')
-        assert hasattr(RuleDefaults, 'FUNCTION_LENGTH_ERROR')
-
     def test_complexity_defaults_values(self):
         """Should have reasonable complexity threshold values."""
         assert RuleDefaults.CYCLOMATIC_COMPLEXITY == 10
@@ -29,40 +22,16 @@ class TestRuleDefaults:
         assert RuleDefaults.FUNCTION_LENGTH_WARN == 50
         assert RuleDefaults.FUNCTION_LENGTH_ERROR == 100
 
-    def test_complexity_defaults_types(self):
-        """Should have integer complexity thresholds."""
-        assert isinstance(RuleDefaults.CYCLOMATIC_COMPLEXITY, int)
-        assert isinstance(RuleDefaults.NESTING_DEPTH_MAX, int)
-        assert isinstance(RuleDefaults.FUNCTION_LENGTH_WARN, int)
-        assert isinstance(RuleDefaults.FUNCTION_LENGTH_ERROR, int)
-
-    def test_file_quality_defaults_exist(self):
-        """Should define file quality thresholds."""
-        assert hasattr(RuleDefaults, 'FILE_LENGTH_WARN')
-        assert hasattr(RuleDefaults, 'FILE_LENGTH_ERROR')
-        assert hasattr(RuleDefaults, 'MAX_LINE_LENGTH')
-
     def test_file_quality_defaults_values(self):
         """Should have reasonable file quality values."""
         assert RuleDefaults.FILE_LENGTH_WARN == 500
         assert RuleDefaults.FILE_LENGTH_ERROR == 1000
         assert RuleDefaults.MAX_LINE_LENGTH == 100
 
-    def test_code_smell_defaults_exist(self):
-        """Should define code smell thresholds."""
-        assert hasattr(RuleDefaults, 'MAX_FUNCTION_ARGUMENTS')
-        assert hasattr(RuleDefaults, 'MAX_PROPERTY_LINES')
-
     def test_code_smell_defaults_values(self):
         """Should have reasonable code smell values."""
         assert RuleDefaults.MAX_FUNCTION_ARGUMENTS == 5
         assert RuleDefaults.MAX_PROPERTY_LINES == 8
-
-    def test_duplication_defaults_exist(self):
-        """Should define duplication detection thresholds."""
-        assert hasattr(RuleDefaults, 'MIN_FUNCTION_SIZE')
-        assert hasattr(RuleDefaults, 'MIN_SIMILARITY')
-        assert hasattr(RuleDefaults, 'MAX_DUPLICATE_CANDIDATES')
 
     def test_duplication_defaults_values(self):
         """Should have reasonable duplication detection values."""
@@ -74,20 +43,10 @@ class TestRuleDefaults:
         """MIN_SIMILARITY should be a ratio between 0 and 1."""
         assert 0.0 <= RuleDefaults.MIN_SIMILARITY <= 1.0
 
-    def test_maintainability_defaults_exist(self):
-        """Should define maintainability thresholds."""
-        assert hasattr(RuleDefaults, 'MIN_LIST_SIZE')
-        assert hasattr(RuleDefaults, 'MIN_DICT_VALUE_SIZE')
-
     def test_maintainability_defaults_values(self):
         """Should have reasonable maintainability values."""
         assert RuleDefaults.MIN_LIST_SIZE == 5
         assert RuleDefaults.MIN_DICT_VALUE_SIZE == 3
-
-    def test_link_defaults_exist(self):
-        """Should define link validation thresholds."""
-        assert hasattr(RuleDefaults, 'LINK_TIMEOUT')
-        assert hasattr(RuleDefaults, 'MIN_CROSS_REFS')
 
     def test_link_defaults_values(self):
         """Should have reasonable link validation values."""
@@ -106,23 +65,11 @@ class TestRuleDefaults:
 class TestAnalyzerDefaults:
     """Tests for AnalyzerDefaults class."""
 
-    def test_analyzer_defaults_exist(self):
-        """Should define analyzer limits."""
-        assert hasattr(AnalyzerDefaults, 'JSONL_PREVIEW_LIMIT')
-        assert hasattr(AnalyzerDefaults, 'DIRECTORY_MAX_ENTRIES')
-        assert hasattr(AnalyzerDefaults, 'RELATED_DOCS_LIMIT')
-
     def test_analyzer_defaults_values(self):
         """Should have reasonable analyzer limit values."""
         assert AnalyzerDefaults.JSONL_PREVIEW_LIMIT == 10
         assert AnalyzerDefaults.DIRECTORY_MAX_ENTRIES == 50
         assert AnalyzerDefaults.RELATED_DOCS_LIMIT == 100
-
-    def test_analyzer_defaults_types(self):
-        """Should have integer analyzer limits."""
-        assert isinstance(AnalyzerDefaults.JSONL_PREVIEW_LIMIT, int)
-        assert isinstance(AnalyzerDefaults.DIRECTORY_MAX_ENTRIES, int)
-        assert isinstance(AnalyzerDefaults.RELATED_DOCS_LIMIT, int)
 
     def test_analyzer_defaults_positive(self):
         """All analyzer limits should be positive."""
@@ -134,14 +81,6 @@ class TestAnalyzerDefaults:
 class TestAdapterDefaults:
     """Tests for AdapterDefaults class."""
 
-    def test_adapter_defaults_exist(self):
-        """Should define adapter limits."""
-        assert hasattr(AdapterDefaults, 'STATS_MAX_FILES')
-        assert hasattr(AdapterDefaults, 'CLAUDE_SESSION_SCAN_LIMIT')
-        assert hasattr(AdapterDefaults, 'GIT_COMMIT_HISTORY_LIMIT')
-        assert hasattr(AdapterDefaults, 'SSL_EXPIRY_WARNING_DAYS')
-        assert hasattr(AdapterDefaults, 'SSL_EXPIRY_CRITICAL_DAYS')
-
     def test_adapter_defaults_values(self):
         """Should have reasonable adapter limit values."""
         assert AdapterDefaults.STATS_MAX_FILES == 1000
@@ -149,14 +88,6 @@ class TestAdapterDefaults:
         assert AdapterDefaults.GIT_COMMIT_HISTORY_LIMIT == 20
         assert AdapterDefaults.SSL_EXPIRY_WARNING_DAYS == 30
         assert AdapterDefaults.SSL_EXPIRY_CRITICAL_DAYS == 7
-
-    def test_adapter_defaults_types(self):
-        """Should have integer adapter limits."""
-        assert isinstance(AdapterDefaults.STATS_MAX_FILES, int)
-        assert isinstance(AdapterDefaults.CLAUDE_SESSION_SCAN_LIMIT, int)
-        assert isinstance(AdapterDefaults.GIT_COMMIT_HISTORY_LIMIT, int)
-        assert isinstance(AdapterDefaults.SSL_EXPIRY_WARNING_DAYS, int)
-        assert isinstance(AdapterDefaults.SSL_EXPIRY_CRITICAL_DAYS, int)
 
     def test_adapter_defaults_positive(self):
         """All adapter limits should be positive."""
@@ -174,23 +105,11 @@ class TestAdapterDefaults:
 class TestDisplayDefaults:
     """Tests for DisplayDefaults class."""
 
-    def test_display_defaults_exist(self):
-        """Should define display limits."""
-        assert hasattr(DisplayDefaults, 'TREE_DIR_LIMIT')
-        assert hasattr(DisplayDefaults, 'TREE_MAX_ENTRIES')
-        assert hasattr(DisplayDefaults, 'SNIPPET_CONTEXT_LINES')
-
     def test_display_defaults_values(self):
         """Should have reasonable display limit values."""
         assert DisplayDefaults.TREE_DIR_LIMIT == 50
         assert DisplayDefaults.TREE_MAX_ENTRIES == 200
         assert DisplayDefaults.SNIPPET_CONTEXT_LINES == 3
-
-    def test_display_defaults_types(self):
-        """Should have integer display limits."""
-        assert isinstance(DisplayDefaults.TREE_DIR_LIMIT, int)
-        assert isinstance(DisplayDefaults.TREE_MAX_ENTRIES, int)
-        assert isinstance(DisplayDefaults.SNIPPET_CONTEXT_LINES, int)
 
     def test_display_defaults_positive(self):
         """All display limits should be positive."""
@@ -201,15 +120,6 @@ class TestDisplayDefaults:
 
 class TestEnvOverrides:
     """Tests for ENV_OVERRIDES mapping."""
-
-    def test_env_overrides_exists(self):
-        """Should define ENV_OVERRIDES dictionary."""
-        assert ENV_OVERRIDES is not None
-        assert isinstance(ENV_OVERRIDES, dict)
-
-    def test_env_overrides_not_empty(self):
-        """Should have environment variable mappings."""
-        assert len(ENV_OVERRIDES) > 0
 
     def test_env_overrides_structure(self):
         """Each mapping should be env_var -> (class_name, attribute_name)."""
@@ -254,27 +164,17 @@ class TestEnvOverrides:
         assert ENV_OVERRIDES['REVEAL_M101_ERROR'] == ('RuleDefaults', 'FILE_LENGTH_ERROR')
         assert ENV_OVERRIDES['REVEAL_DIR_LIMIT'] == ('DisplayDefaults', 'TREE_DIR_LIMIT')
 
-    def test_env_overrides_count(self):
-        """Should have expected number of overrides (prevents accidental removal)."""
-        # As of this test, we have 6 documented overrides
-        assert len(ENV_OVERRIDES) >= 6, "ENV_OVERRIDES should have at least 6 mappings"
+    def test_env_overrides_exact_count(self):
+        """Should have exactly the expected number of overrides — catches both accidental removal and undocumented additions."""
+        # The 6 documented overrides: C901, C905, E501, M101 warn/error, DIR_LIMIT
+        assert len(ENV_OVERRIDES) == 6, (
+            f"Expected 6 ENV_OVERRIDES entries, got {len(ENV_OVERRIDES)}. "
+            "Add a new entry to test_env_overrides_documented_mappings if you add a new override."
+        )
 
 
 class TestDefaultsIntegration:
     """Integration tests for defaults module."""
-
-    def test_all_default_classes_accessible(self):
-        """All default classes should be importable."""
-        from reveal.defaults import (
-            RuleDefaults,
-            AnalyzerDefaults,
-            AdapterDefaults,
-            DisplayDefaults,
-        )
-        assert RuleDefaults is not None
-        assert AnalyzerDefaults is not None
-        assert AdapterDefaults is not None
-        assert DisplayDefaults is not None
 
     def test_no_mutable_defaults(self):
         """Default values should not be mutable (avoid shared state bugs)."""

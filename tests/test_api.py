@@ -26,14 +26,6 @@ def _write_py(tmp_path: Path, name: str, src: str) -> Path:
 # ---------------------------------------------------------------------------
 
 class TestAnalyze:
-    def test_returns_dict(self, tmp_path):
-        f = _write_py(tmp_path, "mod.py", """\
-            def hello():
-                return 42
-        """)
-        result = analyze(str(f))
-        assert isinstance(result, dict)
-
     def test_contains_function(self, tmp_path):
         f = _write_py(tmp_path, "mod.py", """\
             def greet(name):
@@ -75,12 +67,6 @@ class TestAnalyze:
         with pytest.raises(ValueError, match="No analyzer available"):
             analyze(str(f))
 
-    def test_top_level_import_works(self, tmp_path):
-        """reveal.analyze() is importable from the package root."""
-        f = _write_py(tmp_path, "mod.py", "x = 1\n")
-        result = reveal.analyze(str(f))
-        assert isinstance(result, dict)
-
 
 # ---------------------------------------------------------------------------
 # element()
@@ -111,15 +97,6 @@ class TestElement:
         with pytest.raises(ValueError, match="No analyzer available"):
             element(str(f), "foo")
 
-    def test_top_level_import_works(self, tmp_path):
-        """reveal.element() is importable from the package root."""
-        f = _write_py(tmp_path, "mod.py", """\
-            def mul(a, b):
-                return a * b
-        """)
-        result = reveal.element(str(f), "mul")
-        assert result is not None
-
 
 # ---------------------------------------------------------------------------
 # query()
@@ -144,16 +121,11 @@ class TestQuery:
         with pytest.raises(ValueError, match="Unsupported URI scheme"):
             query("xyzscheme://something")
 
-    def test_top_level_import_works(self, tmp_path):
-        """reveal.query() is importable from the package root."""
-        _write_py(tmp_path, "mod.py", "x = 1\n")
-        result = reveal.query(f"ast://{tmp_path}/")
-        assert isinstance(result, dict)
-
     def test_env_uri(self):
-        """env:// adapter returns a dict (no file required)."""
+        """env:// adapter returns a dict containing real env vars."""
         result = query("env://")
         assert isinstance(result, dict)
+        assert len(result) > 0  # must surface actual environment content
 
 
 # ---------------------------------------------------------------------------
@@ -207,8 +179,35 @@ class TestCheck:
         with pytest.raises(FileNotFoundError):
             check("/no/such/file.py")
 
-    def test_top_level_import_works(self, tmp_path):
-        """reveal.check() is importable from the package root."""
-        f = _write_py(tmp_path, "mod.py", "x = 1\n")
-        result = reveal.check(str(f))
-        assert isinstance(result, list)
+
+
+# ---------------------------------------------------------------------------
+# Public package-root exports (reveal.analyze, .element, .query, .check)
+# ---------------------------------------------------------------------------
+
+class TestPublicApiExports:
+    """Verify all four public functions are re-exported from the package root and work end-to-end."""
+
+    def test_all_functions_exported(self, tmp_path):
+        f = _write_py(tmp_path, "mod.py", "def greet(name): return name\n")
+        path = str(f)
+
+        all_names = [
+            item.get("name")
+            for items in reveal.analyze(path).values()
+            if isinstance(items, list)
+            for item in items
+            if isinstance(item, dict)
+        ]
+        assert "greet" in all_names
+
+        elem = reveal.element(path, "greet")
+        assert elem is not None
+        assert "greet" in elem.get("source", "")
+
+        query_result = reveal.query(f"ast://{tmp_path}/")
+        assert isinstance(query_result, dict)
+        assert len(query_result) > 0
+
+        check_result = reveal.check(path)
+        assert isinstance(check_result, list)

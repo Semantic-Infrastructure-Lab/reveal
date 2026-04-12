@@ -56,17 +56,17 @@ class TestAdapterRegistry(unittest.TestCase):
             _ADAPTER_REGISTRY.pop(scheme, None)
 
     def test_register_adapter_decorator(self):
-        """Test that register_adapter decorator registers adapter."""
+        """Test that register_adapter decorator registers adapter via the public API."""
         @register_adapter('test-scheme')
         class TestAdapter(ResourceAdapter):
             def get_structure(self, **kwargs):
                 return {}
 
-        # Check adapter is registered
-        self.assertIn('test-scheme', _ADAPTER_REGISTRY)
-        self.assertEqual(_ADAPTER_REGISTRY['test-scheme'], TestAdapter)
+        # Verify retrieval through public API, not internal dict
+        result = get_adapter_class('test-scheme')
+        self.assertEqual(result, TestAdapter)
 
-        # Check scheme attribute is set
+        # Verify the decorator sets the scheme attribute on the class
         self.assertEqual(TestAdapter.scheme, 'test-scheme')
 
     def test_register_adapter_case_insensitive(self):
