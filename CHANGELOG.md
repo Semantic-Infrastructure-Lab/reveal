@@ -12,6 +12,21 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.77.0] - 2026-04-11 (session turquoise-ember-0411)
+
+### Added
+- **`ssl:// --check --probe-http`: HTTP→HTTPS redirect is now a first-class check item** — Previously `--probe-http` was silently ignored when combined with `--check` (the routing layer exited early for check mode). Now `SSLAdapter.check()` accepts `probe_http=True` and passes it to `check_ssl_health()`, which runs `_check_http_redirect()` and appends it to the checks list. A failing redirect elevates overall exit code to 2. Redirect check reports full chain, hop count, and final URL. `--probe-http` continues to work standalone (structure mode) with its security header display (HSTS, CSP, X-Frame-Options, X-Content-Type-Options) unchanged.
+- **`ssl:// --check --advanced`: cipher suite now reported alongside TLS version** — `_check_tls_version()` already opened a live TLS socket but discarded `ssock.cipher()`. Now captures cipher name and bits; message format: `Using TLSv1.3 / TLS_AES_256_GCM_SHA384 (256-bit) (recommended)`. Fields `cipher_name` and `cipher_bits` added to check result for JSON consumers.
+
+### Documentation
+- `ssl.yaml`: `--probe-http` added to flags, cli_flags, examples (standalone + combined with `--check`), new "Full TLS + Redirect Audit" workflow, two new anti-patterns, `--advanced` description updated to mention cipher.
+- `AGENT_HELP.md`: new "Live TLS + redirect checks" block with example output for both features.
+- `SSL_ADAPTER_GUIDE.md`: Advanced Health Checks section updated for cipher, new "HTTP→HTTPS Redirect Check" section, Version 1.3.0 entry.
+
+9 new tests, 7682 passing.
+
+---
+
 ## [0.76.3] - 2026-04-11 (session burning-nebula-0411)
 
 ### Fixed
