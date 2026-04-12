@@ -2038,6 +2038,25 @@ class TestExpiringWithinExitCode(unittest.TestCase):
         kwargs = _build_check_kwargs(adapter, args)
         self.assertEqual(kwargs.get('expiring_within'), '60')
 
+    def test_routing_passes_probe_http_to_check(self):
+        """_build_check_kwargs should include probe_http when set on args.
+
+        Regression test: probe_http was missing from _build_check_kwargs, so
+        --check --probe-http was silently ignored (legendary-mountain-0411).
+        """
+        from reveal.cli.routing import _build_check_kwargs
+        from argparse import Namespace
+
+        adapter = self._make_adapter()
+
+        def mock_check(**kwargs): return {}
+        adapter.check = mock_check
+
+        args = Namespace(probe_http=True, advanced=False, validate_nginx=False,
+                         local_certs=False, select=None, ignore=None, expiring_within=None)
+        kwargs = _build_check_kwargs(adapter, args)
+        self.assertTrue(kwargs.get('probe_http'))
+
 
 class TestTLSVersionCipherCapture(unittest.TestCase):
     """Tests for cipher suite capture in _check_tls_version."""

@@ -7,6 +7,9 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.77.1
+- ✅ **Fix: `ssl:// --check --probe-http` silently ignored** — `probe_http` was missing from `_build_check_kwargs`; flag was parsed but never forwarded to `SSLAdapter.check()`. Routing fix + regression test. (legendary-mountain-0411)
+
 ### v0.77.0
 - ✅ **`ssl:// --check --probe-http`: redirect check as first-class check item** — was silently dropped when `--check` was also passed (routing exited early). Now `check_ssl_health()` accepts `probe_http=True`, runs `_check_http_redirect()`, failing redirect elevates exit code to 2. 5 tests. (turquoise-ember-0411)
 - ✅ **`ssl:// --check --advanced`: cipher suite reported** — `_check_tls_version()` now captures `ssock.cipher()` from the live socket; message includes cipher name and bits (e.g. `TLS_AES_256_GCM_SHA384 (256-bit)`). 4 tests. (turquoise-ember-0411)

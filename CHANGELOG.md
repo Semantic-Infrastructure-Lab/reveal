@@ -12,6 +12,15 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.77.1] - 2026-04-11 (session legendary-mountain-0411)
+
+### Fixed
+- **`ssl:// --check --probe-http` was silently ignored** — `probe_http` was missing from `_build_check_kwargs` in `cli/routing/uri.py`, so the flag was parsed by argparse but never forwarded to `SSLAdapter.check()`. The redirect check produced no output and no change in exit code. Fixed by adding `add_if_supported('probe_http')` alongside the other check kwargs (`advanced`, `validate_nginx`, `local_certs`, `expiring_within`). Regression test added: `test_routing_passes_probe_http_to_check`. Resolves BUG-155.
+
+1 new test, 7683 passing.
+
+---
+
 ## [0.77.0] - 2026-04-11 (session turquoise-ember-0411)
 
 ### Added
