@@ -57,12 +57,14 @@ reveal letsencrypt:// --format json
 
 ### Cert inventory
 
+Certs are sorted by `days_until_expiry` ascending — imminent expirations and expired certs appear first.
+
 ```
   name                  common name            expiry     SANs
   ──────────────────────────────────────────────────────────────
+  old-app.example.com   old-app.example.com    EXPIRED    1 name(s)
   mytia.net             mytia.net              87d        3 name(s)
   api.mytia.net         api.mytia.net          87d        1 name(s)
-  old-app.example.com   old-app.example.com    EXPIRED    1 name(s)
 
   reveal letsencrypt:// --check-orphans    # find unreferenced certs
   # 1 cert(s) are EXPIRED — renew with: certbot renew
@@ -79,6 +81,13 @@ Orphan check (nginx dirs: /etc/nginx/sites-enabled, /etc/nginx/conf.d)
 
 ### Duplicate-SAN check
 
+When no duplicates are found, only the summary line is printed (no full cert table):
+```
+Duplicate SAN check
+  ✅ No duplicate-SAN certs found.
+```
+
+When duplicates exist:
 ```
 Duplicate SAN check
   ⚠️  1 group(s) with identical SANs:
@@ -212,6 +221,10 @@ reveal letsencrypt:// --check-duplicates
   ACME staging or custom cert stores.
 - **nginx only**: orphan detection scans nginx config dirs. Apache, Caddy, or
   other servers are not checked.
+- **cPanel + `--check-orphans`**: on cPanel servers, nginx `ssl_certificate` directives
+  point to `/var/cpanel/ssl/apache_tls/DOMAIN/`, not `/etc/letsencrypt/`. All LE certs
+  appear orphaned even when in active use. Use `reveal cpanel://USER/ssl` to check actual
+  cert health on cPanel.
 - **No OCSP revocation check**: expiry and SANs only. Revocation status requires
   `ssl://` with `--health` flags.
 

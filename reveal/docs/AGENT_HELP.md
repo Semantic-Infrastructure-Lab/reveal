@@ -962,7 +962,7 @@ done
 **Pattern:**
 ```bash
 # Nginx configuration
-reveal nginx.conf --check              # N001-N007 rules
+reveal check nginx.conf                # N001-N012 rules
 # - N001: Duplicate backends (upstreams with same server:port)
 # - N002: Missing SSL certificates
 # - N003: Missing proxy headers
@@ -970,10 +970,19 @@ reveal nginx.conf --check              # N001-N007 rules
 # - N005: Timeout/buffer values outside safe operational ranges
 # - N006: send_timeout too short relative to client_max_body_size (HIGH)
 # - N007: ssl_stapling on but no OCSP URL in cert (stapling silently ineffective)
+# - N008: HTTPS server block missing Strict-Transport-Security (HIGH)
+# - N009: server_tokens not disabled (nginx version exposed)
+# - N010: Deprecated X-XSS-Protection header present
+# - N011: SSL listener missing http2 (certbot strips it on renewal)
+# - N012: No rate limiting applied to server block
+
+# Focus on one rule (e.g. ACME paths only) — essential for large cPanel configs
+reveal check ea-nginx.conf --select N004     # ACME paths only
+reveal check ea-nginx.conf --ignore N011,E501  # suppress certbot/line-length noise
 
 # Tip: large generated configs (e.g. cPanel) collapse repeated rules by default
-reveal ea-nginx.conf --check          # 2,685 N003s shown as one summary line
-reveal ea-nginx.conf --check --no-group  # expand all occurrences
+reveal check ea-nginx.conf             # 2,685 N003s shown as one summary line
+reveal check ea-nginx.conf --no-group  # expand all occurrences
 # Add '# reveal: generated' to skip a file in recursive sweeps
 
 # Dockerfile
@@ -1428,9 +1437,13 @@ reveal letsencrypt:// --format=json
 ```
 
 **letsencrypt:// output includes:**
-- Common name, SANs, days remaining, expiry date
+- Common name, SANs, expiry date, `days_until_expiry` (int) — sorted expiry-first
 - `--check-orphans`: certs not referenced in nginx `sites-enabled`/`conf.d`
-- `--check-duplicates`: certs with identical SAN sets
+- `--check-duplicates`: certs with identical SAN sets (clean state shows only `✅ No duplicate-SAN certs found`)
+
+**JSON field names** (for `--format=json | jq`): `name`, `cert_path`, `common_name`, `san` (array), `days_until_expiry` (int), `not_after` (ISO string), `is_expired` (bool), `issuer`.
+
+**`--check-orphans` on cPanel servers:** nginx `ssl_certificate` directives point to `/var/cpanel/ssl/apache_tls/`, not `/etc/letsencrypt/`. All LE certs will appear orphaned even when active. Use `reveal cpanel://USER/ssl` instead.
 
 **When to use vs ssl://:**
 - `letsencrypt://` — inventory of managed certs on disk (no network, server-side only)
@@ -1467,6 +1480,8 @@ reveal autossl://app.example.com --all    # full history (300+ runs)
 - `defective` — renewal failed; defect codes: `SELF_SIGNED_CERT`, `CERT_HAS_EXPIRED`, `TOTAL_DCV_FAILURE`, `NO_UNSECURED_DOMAIN_PASSED_DCV`
 
 **Domain history output:** summary always shows `✅ N ok` even when zero (key signal for chronic failures). When ok==0, prints "Failing since: YYYY-MM-DD" at top. Default cap: 20 most recent rows; use `--all` to see full history.
+
+**JSON field names** (for `--format=json | jq`): per-domain objects have `domain`, `tls_status` (`ok`/`incomplete`/`defective`), `cert_expiry_days` (float, negative=expired, **null for `incomplete` domains** — AutoSSL didn't process the cert), `defect_codes` (array), `impediments` (array). Top-level: `users[].domains[]`.
 
 **Combined workflow (AutoSSL failure investigation):**
 ```bash
