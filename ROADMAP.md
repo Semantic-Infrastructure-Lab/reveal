@@ -7,6 +7,14 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.77.0
+- ✅ **`ssl:// --check --probe-http`: redirect check as first-class check item** — was silently dropped when `--check` was also passed (routing exited early). Now `check_ssl_health()` accepts `probe_http=True`, runs `_check_http_redirect()`, failing redirect elevates exit code to 2. 5 tests. (turquoise-ember-0411)
+- ✅ **`ssl:// --check --advanced`: cipher suite reported** — `_check_tls_version()` now captures `ssock.cipher()` from the live socket; message includes cipher name and bits (e.g. `TLS_AES_256_GCM_SHA384 (256-bit)`). 4 tests. (turquoise-ember-0411)
+
+### v0.76.3
+- ✅ **BACK-145/146: `nginx://` and `autossl://` bare URIs restored** — `__init__` normalized `""` to bare scheme URI instead of raising `TypeError`. Same root cause as BACK-138. (burning-nebula-0411)
+- ✅ **BACK-148/150/152: letsencrypt UX** — clean dup result suppresses full table; inventory sorted expiry-first; deprecation hint removed from runtime. (burning-nebula-0411)
+
 ### v0.76.2
 - ✅ **`autossl://DOMAIN` UX polish** — row cap (20 by default, `--all` bypasses), summary line always shows `✅ 0 ok`, "Failing since: YYYY-MM-DD" at top when ok==0. 6 tests. (fiery-goddess-0410)
 
