@@ -23,7 +23,11 @@ examples:
   - uri: 'ssl://example.com --check'
     description: 'Run health checks (expiry, chain, hostname)'
   - uri: 'ssl://example.com --check --advanced'
-    description: 'Advanced checks (TLS version, key strength, issuer type, self-signed detection)'
+    description: 'Advanced checks (TLS version + cipher suite, key strength, issuer type, self-signed detection)'
+  - uri: 'ssl://example.com --probe-http'
+    description: 'Verify HTTP redirects to HTTPS; show redirect chain and security headers (HSTS, CSP, etc.)'
+  - uri: 'ssl://example.com --check --probe-http'
+    description: 'Full TLS + redirect check in one pass: cert health, chain, hostname, and HTTP→HTTPS redirect'
 
   # Batch checks via stdin (Unix composable)
   - uri: 'cat domains.txt | sed ''s/^/ssl:\/\//'' | reveal --stdin --batch --check'
@@ -76,7 +80,8 @@ elements:
 
 flags:
   --check: 'Run health checks (expiry, chain validity, hostname match)'
-  --advanced: 'Run advanced checks with --check (TLS version, key strength, issuer type, self-signed) [Universal flag]'
+  --advanced: 'Run advanced checks with --check (TLS version + cipher suite, key strength, issuer type, self-signed) [Universal flag]'
+  --probe-http: 'Check HTTP→HTTPS redirect: follows redirect chain, reports result and security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options). Combinable with --check.'
   --only-failures: 'Hide healthy results, show only warnings and failures [Universal flag]'
   --batch: 'Batch mode with aggregated results (works with --stdin) [Universal flag]'
   --summary: 'Show aggregated counts instead of per-domain details (batch mode)'
@@ -113,9 +118,16 @@ workflows:
   - name: 'Debug SSL Issues'
     scenario: 'Certificate warnings in browser or app'
     steps:
-      - "reveal ssl://example.com --check --advanced # Comprehensive diagnosis"
+      - "reveal ssl://example.com --check --advanced # Comprehensive diagnosis (includes TLS version + cipher)"
       - "reveal ssl://example.com/chain              # Check chain validity"
       - "reveal ssl://example.com/issuer             # Verify issuer"
+
+  - name: 'Full TLS + Redirect Audit'
+    scenario: 'Verify complete TLS configuration: cert health, TLS version/cipher, and HTTP redirect'
+    steps:
+      - "reveal ssl://example.com --check --probe-http            # Cert health + redirect in one pass"
+      - "reveal ssl://example.com --check --advanced --probe-http # Add cipher suite + advanced checks"
+      - "reveal ssl://example.com --probe-http                    # Redirect-only (no cert check)"
 
   - name: 'Bulk SSL Health Check'
     scenario: 'Check SSL certificates for multiple domains from various sources'
@@ -164,7 +176,15 @@ anti_patterns:
 
   - bad: "curl -vvv https://example.com 2>&1 | grep -i ssl"
     good: "reveal ssl://example.com --check --advanced"
-    why: "Clear pass/fail status, TLS version check, actionable exit codes"
+    why: "Clear pass/fail status, TLS version + cipher suite, actionable exit codes"
+
+  - bad: "curl -I http://example.com 2>&1 | grep -i location"
+    good: "reveal ssl://example.com --probe-http"
+    why: "Full redirect chain with hop count, final URL, and security headers (HSTS, CSP, etc.) in one call"
+
+  - bad: "reveal ssl://example.com --check && curl -I http://example.com"
+    good: "reveal ssl://example.com --check --probe-http"
+    why: "Cert health + redirect check in a single pass; redirect failure elevates exit code"
 
   - bad: "for domain in $(cat domains.txt); do openssl s_client ...; done"
     good: "cat domains.txt | sed 's/^/ssl:\/\//' | reveal --stdin --check"
@@ -189,7 +209,9 @@ cli_flags:
   - flag: '--check'
     description: 'Run health checks (expiry, chain validation, hostname match)'
   - flag: '--advanced'
-    description: 'Advanced checks: TLS version, key strength, OCSP, self-signed detection'
+    description: 'Advanced checks: TLS version + cipher suite, key strength, OCSP, self-signed detection'
+  - flag: '--probe-http'
+    description: 'Check HTTP→HTTPS redirect: follows redirect chain from port 80, reports final URL, hop count, and security headers. Combinable with --check for a full TLS + redirect audit in one pass.'
   - flag: '--only-failures'
     description: 'Show only failed/warning certs (batch mode)'
   - flag: '--summary'

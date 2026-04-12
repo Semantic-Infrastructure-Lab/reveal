@@ -532,7 +532,7 @@ class SSLAdapter(ResourceAdapter):
 
         Args:
             **kwargs: Check options (warn_days, critical_days, advanced, only_failures,
-                      validate_nginx, local_certs)
+                      validate_nginx, local_certs, probe_http)
 
         Returns:
             Health check result dict
@@ -543,6 +543,7 @@ class SSLAdapter(ResourceAdapter):
         only_failures = kwargs.get('only_failures', False)
         validate_nginx = kwargs.get('validate_nginx', False)
         local_certs = kwargs.get('local_certs', False)
+        probe_http = kwargs.get('probe_http', False)
 
         # --expiring-within=N overrides warn_days: treat "expiring within N days" as warning threshold
         expiring_within = kwargs.get('expiring_within')
@@ -579,7 +580,8 @@ class SSLAdapter(ResourceAdapter):
             self.host, self.port,
             warn_days=warn_days,
             critical_days=critical_days,
-            advanced=advanced
+            advanced=advanced,
+            probe_http=probe_http,
         )
 
     def _check_nginx_domains(

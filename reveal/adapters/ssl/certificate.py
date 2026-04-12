@@ -605,9 +605,45 @@ def _build_ssl_health_error_result(
     }
 
 
+def _check_http_redirect(host: str) -> Dict[str, Any]:
+    """Check that HTTP redirects to HTTPS for host.
+
+    Args:
+        host: Hostname to probe (port 80)
+
+    Returns:
+        Check result dict with name 'http_redirect'
+    """
+    from .probe import probe_http_redirect
+    probe = probe_http_redirect(host)
+    redirects = probe.get('redirects_to_https', False)
+    error = probe.get('error')
+    hops = probe.get('hop_count', 0)
+
+    if error and not probe.get('redirect_chain'):
+        status = 'warning'
+        message = f'HTTP probe failed: {error}'
+    elif redirects:
+        status = 'pass'
+        message = f'HTTP redirects to HTTPS ({hops} hop{"s" if hops != 1 else ""})'
+    else:
+        final = probe.get('final_url', '')
+        status = 'failure'
+        message = f'HTTP does not redirect to HTTPS (final: {final})'
+
+    return {
+        'name': 'http_redirect',
+        'status': status,
+        'value': 'redirects' if redirects else 'no-redirect',
+        'message': message,
+        'severity': 'high',
+        'probe': probe,
+    }
+
+
 def check_ssl_health(
     host: str, port: int = 443, warn_days: int = 30, critical_days: int = 7,
-    advanced: bool = False
+    advanced: bool = False, probe_http: bool = False
 ) -> Dict[str, Any]:
     """Run SSL health checks on a host.
 
@@ -617,6 +653,7 @@ def check_ssl_health(
         warn_days: Days until expiry to trigger warning
         critical_days: Days until expiry to trigger critical
         advanced: Include advanced checks (TLS version, key strength, etc.)
+        probe_http: Check that HTTP redirects to HTTPS
 
     Returns:
         Health check result dict
@@ -636,6 +673,10 @@ def check_ssl_health(
         if advanced:
             advanced_checks = _run_advanced_checks(host, port, leaf, timeout=fetcher.timeout)
             checks.extend(advanced_checks['checks'])
+
+        # Add HTTP redirect check if requested
+        if probe_http:
+            checks.append(_check_http_redirect(host))
 
         # Calculate overall status and summary
         overall_status = _determine_overall_ssl_status(checks)
@@ -663,14 +704,19 @@ def _check_tls_version(host: str, port: int, timeout: float) -> Tuple[Dict[str, 
         with socket.create_connection((host, port), timeout=timeout) as sock:
             with context.wrap_socket(sock, server_hostname=host) as ssock:
                 tls_version = ssock.version()
+                cipher_info = ssock.cipher()  # (name, protocol, bits) or None
+        cipher_name = cipher_info[0] if cipher_info else 'Unknown'
+        cipher_bits = cipher_info[2] if cipher_info else None
+        cipher_suffix = f' / {cipher_name} ({cipher_bits}-bit)' if cipher_bits else ''
         if tls_version in ('TLSv1.3',):
-            status, message, failed = 'pass', f'Using {tls_version} (recommended)', False
+            status, message, failed = 'pass', f'Using {tls_version}{cipher_suffix} (recommended)', False
         elif tls_version in ('TLSv1.2',):
-            status, message, failed = 'pass', f'Using {tls_version} (acceptable)', False
+            status, message, failed = 'pass', f'Using {tls_version}{cipher_suffix} (acceptable)', False
         else:
-            status, message, failed = 'warning', f'Using {tls_version} (outdated, upgrade to TLS 1.2+)', True
+            status, message, failed = 'warning', f'Using {tls_version}{cipher_suffix} (outdated, upgrade to TLS 1.2+)', True
         return {'name': 'tls_version', 'status': status, 'value': tls_version,
-                'threshold': 'TLS 1.2+', 'message': message, 'severity': 'medium'}, failed
+                'threshold': 'TLS 1.2+', 'message': message, 'severity': 'medium',
+                'cipher_name': cipher_name, 'cipher_bits': cipher_bits}, failed
     except Exception as e:
         return {'name': 'tls_version', 'status': 'warning', 'value': 'Unknown',
                 'threshold': 'TLS 1.2+', 'message': f'Could not determine TLS version: {e}',

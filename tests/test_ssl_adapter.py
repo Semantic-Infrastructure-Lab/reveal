@@ -2039,5 +2039,194 @@ class TestExpiringWithinExitCode(unittest.TestCase):
         self.assertEqual(kwargs.get('expiring_within'), '60')
 
 
+class TestTLSVersionCipherCapture(unittest.TestCase):
+    """Tests for cipher suite capture in _check_tls_version."""
+
+    def _make_mock_ssock(self, version='TLSv1.3', cipher=('TLS_AES_256_GCM_SHA384', 'TLSv1.3', 256)):
+        ssock = MagicMock()
+        ssock.version.return_value = version
+        ssock.cipher.return_value = cipher
+        ssock.__enter__ = lambda s: s
+        ssock.__exit__ = MagicMock(return_value=False)
+        return ssock
+
+    @patch('reveal.adapters.ssl.certificate.socket.create_connection')
+    @patch('reveal.adapters.ssl.certificate.ssl.create_default_context')
+    def test_cipher_fields_present_in_result(self, mock_ctx, mock_conn):
+        from reveal.adapters.ssl.certificate import _check_tls_version
+        mock_ssock = self._make_mock_ssock()
+        mock_ctx.return_value.wrap_socket.return_value = mock_ssock
+        mock_conn.return_value.__enter__ = lambda s: s
+        mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+
+        result, failed = _check_tls_version('example.com', 443, 10.0)
+
+        self.assertEqual(result['cipher_name'], 'TLS_AES_256_GCM_SHA384')
+        self.assertEqual(result['cipher_bits'], 256)
+        self.assertFalse(failed)
+
+    @patch('reveal.adapters.ssl.certificate.socket.create_connection')
+    @patch('reveal.adapters.ssl.certificate.ssl.create_default_context')
+    def test_cipher_included_in_message(self, mock_ctx, mock_conn):
+        from reveal.adapters.ssl.certificate import _check_tls_version
+        mock_ssock = self._make_mock_ssock(version='TLSv1.3',
+                                           cipher=('TLS_AES_256_GCM_SHA384', 'TLSv1.3', 256))
+        mock_ctx.return_value.wrap_socket.return_value = mock_ssock
+        mock_conn.return_value.__enter__ = lambda s: s
+        mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+
+        result, _ = _check_tls_version('example.com', 443, 10.0)
+
+        self.assertIn('TLS_AES_256_GCM_SHA384', result['message'])
+        self.assertIn('256-bit', result['message'])
+
+    @patch('reveal.adapters.ssl.certificate.socket.create_connection')
+    @patch('reveal.adapters.ssl.certificate.ssl.create_default_context')
+    def test_cipher_none_handled_gracefully(self, mock_ctx, mock_conn):
+        from reveal.adapters.ssl.certificate import _check_tls_version
+        mock_ssock = self._make_mock_ssock(cipher=None)
+        mock_ctx.return_value.wrap_socket.return_value = mock_ssock
+        mock_conn.return_value.__enter__ = lambda s: s
+        mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+
+        result, _ = _check_tls_version('example.com', 443, 10.0)
+
+        self.assertEqual(result['cipher_name'], 'Unknown')
+        self.assertIsNone(result['cipher_bits'])
+
+
+class TestCheckHttpRedirect(unittest.TestCase):
+    """Tests for _check_http_redirect and probe_http integration in check_ssl_health."""
+
+    def _probe_redirects(self, host='example.com', hops=2):
+        return {
+            'host': host,
+            'start_url': f'http://{host}/',
+            'redirect_chain': [{'url': f'http://{host}/', 'status': 301},
+                                {'url': f'https://{host}/', 'status': 200}],
+            'final_url': f'https://{host}/',
+            'redirects_to_https': True,
+            'hop_count': hops,
+            'https_headers': {'hsts': 'max-age=31536000'},
+            'error': None,
+        }
+
+    def _probe_no_redirect(self, host='example.com'):
+        return {
+            'host': host,
+            'start_url': f'http://{host}/',
+            'redirect_chain': [{'url': f'http://{host}/', 'status': 200}],
+            'final_url': f'http://{host}/',
+            'redirects_to_https': False,
+            'hop_count': 1,
+            'https_headers': {},
+            'error': None,
+        }
+
+    def _probe_error(self, host='example.com'):
+        return {
+            'host': host,
+            'start_url': f'http://{host}/',
+            'redirect_chain': [],
+            'final_url': f'http://{host}/',
+            'redirects_to_https': False,
+            'hop_count': 0,
+            'https_headers': {},
+            'error': 'Connection refused',
+        }
+
+    @patch('reveal.adapters.ssl.certificate.probe_http_redirect' if False else
+           'reveal.adapters.ssl.probe.probe_http_redirect')
+    def test_redirect_pass(self, _mock):
+        from reveal.adapters.ssl.certificate import _check_http_redirect
+        with patch('reveal.adapters.ssl.probe.probe_http_redirect',
+                   return_value=self._probe_redirects()):
+            result = _check_http_redirect('example.com')
+        self.assertEqual(result['name'], 'http_redirect')
+        self.assertEqual(result['status'], 'pass')
+        self.assertIn('2 hops', result['message'])
+
+    @patch('reveal.adapters.ssl.probe.probe_http_redirect')
+    def test_redirect_failure(self, mock_probe):
+        from reveal.adapters.ssl.certificate import _check_http_redirect
+        mock_probe.return_value = self._probe_no_redirect()
+        result = _check_http_redirect('example.com')
+        self.assertEqual(result['status'], 'failure')
+        self.assertIn('does not redirect', result['message'])
+
+    @patch('reveal.adapters.ssl.probe.probe_http_redirect')
+    def test_redirect_probe_error(self, mock_probe):
+        from reveal.adapters.ssl.certificate import _check_http_redirect
+        mock_probe.return_value = self._probe_error()
+        result = _check_http_redirect('example.com')
+        self.assertEqual(result['status'], 'warning')
+        self.assertIn('Connection refused', result['message'])
+
+    @patch('reveal.adapters.ssl.probe.probe_http_redirect')
+    @patch.object(SSLFetcher, 'fetch_certificate_with_verification')
+    def test_check_ssl_health_with_probe_http(self, mock_fetch, mock_probe):
+        """probe_http=True appends http_redirect check item to results."""
+        now = datetime.now(timezone.utc)
+        cert = CertificateInfo(
+            subject={'commonName': 'example.com'},
+            issuer={'organizationName': 'Test CA'},
+            not_before=now - timedelta(days=30),
+            not_after=now + timedelta(days=60),
+            serial_number='123',
+            version=3,
+            san=['example.com'],
+        )
+        mock_fetch.return_value = (cert, [], {'verified': True, 'hostname_match': True, 'error': None})
+        mock_probe.return_value = self._probe_redirects()
+
+        result = check_ssl_health('example.com', 443, probe_http=True)
+
+        names = [c['name'] for c in result['checks']]
+        self.assertIn('http_redirect', names)
+        redirect_check = next(c for c in result['checks'] if c['name'] == 'http_redirect')
+        self.assertEqual(redirect_check['status'], 'pass')
+
+    @patch('reveal.adapters.ssl.probe.probe_http_redirect')
+    @patch.object(SSLFetcher, 'fetch_certificate_with_verification')
+    def test_check_ssl_health_probe_http_failure_affects_status(self, mock_fetch, mock_probe):
+        """A failing redirect check elevates overall status to failure."""
+        now = datetime.now(timezone.utc)
+        cert = CertificateInfo(
+            subject={'commonName': 'example.com'},
+            issuer={'organizationName': 'Test CA'},
+            not_before=now - timedelta(days=30),
+            not_after=now + timedelta(days=60),
+            serial_number='123',
+            version=3,
+            san=['example.com'],
+        )
+        mock_fetch.return_value = (cert, [], {'verified': True, 'hostname_match': True, 'error': None})
+        mock_probe.return_value = self._probe_no_redirect()
+
+        result = check_ssl_health('example.com', 443, probe_http=True)
+
+        self.assertEqual(result['status'], 'failure')
+        self.assertEqual(result['exit_code'], 2)
+
+    def test_adapter_check_passes_probe_http_to_check_ssl_health(self):
+        """SSLAdapter.check(probe_http=True) passes flag to check_ssl_health."""
+        adapter = SSLAdapter.__new__(SSLAdapter)
+        adapter.host = 'example.com'
+        adapter.port = 443
+        adapter.element = None
+        adapter._nginx_path = None
+        adapter._cert_file_path = None
+        adapter._certificate = None
+        adapter._chain = []
+        adapter._verification = None
+        adapter._fetcher = MagicMock()
+
+        with patch('reveal.adapters.ssl.adapter.check_ssl_health') as mock_check:
+            mock_check.return_value = {'status': 'pass', 'exit_code': 0}
+            adapter.check(probe_http=True)
+            call_kwargs = mock_check.call_args[1]
+            self.assertTrue(call_kwargs.get('probe_http'))
+
+
 if __name__ == '__main__':
     unittest.main()

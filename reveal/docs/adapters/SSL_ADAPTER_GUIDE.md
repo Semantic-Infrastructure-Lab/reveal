@@ -375,7 +375,7 @@ reveal ssl://example.com --check
 **Enabled with**: `--check --advanced`
 
 **Additional checks**:
-1. **TLS version** - Is TLS 1.2+ used (not SSL/TLS 1.0/1.1)?
+1. **TLS version + cipher suite** - Is TLS 1.2+ used? Reports negotiated cipher name and key bits (e.g., `TLS_AES_256_GCM_SHA384 (256-bit)`).
 2. **Key strength** - Is key size adequate (RSA 2048+, ECDSA 256+)?
 3. **Issuer type** - Is issuer a trusted CA (not self-signed)?
 4. **Self-signed detection** - Is certificate self-signed?
@@ -384,7 +384,33 @@ reveal ssl://example.com --check
 **Example**:
 ```bash
 reveal ssl://example.com --check --advanced
+# → tls_version: Using TLSv1.3 / TLS_AES_256_GCM_SHA384 (256-bit) (recommended)
 ```
+
+### HTTP→HTTPS Redirect Check
+
+**Enabled with**: `--probe-http`
+
+Makes a real HTTP request to port 80 and follows the redirect chain. Reports the full chain, final URL, hop count, and security headers at the HTTPS endpoint.
+
+**Works standalone or combined with `--check`**:
+```bash
+# Redirect check only
+reveal ssl://example.com --probe-http
+
+# Full TLS + redirect audit in one pass
+reveal ssl://example.com --check --probe-http
+
+# With advanced checks too
+reveal ssl://example.com --check --advanced --probe-http
+```
+
+**Output includes**:
+- Redirect chain with HTTP status codes at each hop
+- `✅ Redirects to HTTPS` / `❌ Does NOT redirect to HTTPS`
+- Security headers at the HTTPS endpoint: `Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`
+
+**A failing redirect elevates exit code** to 2 when combined with `--check`.
 
 ### Custom Expiry Thresholds
 
@@ -1439,6 +1465,16 @@ reveal ssl://example.com/san --format=json | jq '.wildcard_entries'
 ---
 
 ## Version History
+
+### Version 1.3.0 (2026-04-11, v0.76.3)
+
+**Cipher suite reported in `--check --advanced`**:
+The TLS version check now captures and reports the negotiated cipher suite alongside the protocol version. Output example: `Using TLSv1.3 / TLS_AES_256_GCM_SHA384 (256-bit) (recommended)`. Fields `cipher_name` and `cipher_bits` also present in JSON output.
+
+**`--probe-http` now combinable with `--check`**:
+Previously `--probe-http` was silently ignored when `--check` was also passed (routing exited early for check mode). Now `SSLAdapter.check()` accepts and passes `probe_http=True` to `check_ssl_health()`, which runs `_check_http_redirect()` and appends it as a first-class check item. A failing redirect elevates exit code to 2.
+
+---
 
 ### Version 1.2.0 (2026-02-27, v0.54.0–v0.54.3)
 

@@ -1185,6 +1185,21 @@ reveal /etc/nginx/nginx.conf --extract domains | reveal --stdin --check --expiri
 - Critical: <7 days until expiry (exit code 2)
 - Also checks: chain validity, hostname match
 
+**Live TLS + redirect checks:**
+```bash
+# TLS version + cipher suite (in --advanced)
+reveal ssl://example.com --check --advanced
+# → tls_version: Using TLSv1.3 / TLS_AES_256_GCM_SHA384 (256-bit) (recommended)
+
+# HTTP→HTTPS redirect verification (standalone)
+reveal ssl://example.com --probe-http
+# → follows chain from http://, reports hop count, final URL, HSTS/CSP headers
+
+# Full TLS + redirect audit in one pass
+reveal ssl://example.com --check --probe-http
+# → cert health + redirect check; failing redirect elevates exit code to 2
+```
+
 **Workflow: Nginx + SSL integration**
 ```bash
 # 1. Check nginx config for issues (N004 detects ACME path problems)
