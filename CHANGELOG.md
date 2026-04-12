@@ -12,12 +12,16 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.77.1] - 2026-04-11 (session legendary-mountain-0411)
+## [0.77.1] - 2026-04-11 (sessions legendary-mountain-0411, hellfire-xenon-0411)
 
 ### Fixed
 - **`ssl:// --check --probe-http` was silently ignored** — `probe_http` was missing from `_build_check_kwargs` in `cli/routing/uri.py`, so the flag was parsed by argparse but never forwarded to `SSLAdapter.check()`. The redirect check produced no output and no change in exit code. Fixed by adding `add_if_supported('probe_http')` alongside the other check kwargs (`advanced`, `validate_nginx`, `local_certs`, `expiring_within`). Regression test added: `test_routing_passes_probe_http_to_check`. Resolves BUG-155.
 
-1 new test, 7683 passing.
+### Tests
+- **B002/B003/B004 rule tests were entirely wrong** — test classes in `test_bug_rules.py` had inputs for the wrong violations (flake8 equivalents: None comparison, mutable defaults, unused loop vars) instead of the actual rules (`@staticmethod+self`, oversized `@property`, `@property` without return). All three only asserted `isinstance(list)` so they always passed. Replaced with correct detection and allows tests. B001 vacuous `isinstance` check tightened to assert count.
+- **Tautological tests removed across 5 files** — deleted 13 `*_exist`/`*_types` tests in `test_defaults.py`, 4 redundant top-level import tests, 3 wrong initialization tests, 1 mock-only test, 1 no-assertion test; `test_env_overrides_count` tightened from `>= 6` to `== 6`; public API used instead of internal `_ADAPTER_REGISTRY` dict.
+
+Net: -97 lines of test code, 7662 passing.
 
 ---
 

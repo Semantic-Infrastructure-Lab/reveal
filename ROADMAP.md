@@ -9,6 +9,7 @@ This document outlines reveal's development priorities and future direction. For
 
 ### v0.77.1
 - ✅ **Fix: `ssl:// --check --probe-http` silently ignored** — `probe_http` was missing from `_build_check_kwargs`; flag was parsed but never forwarded to `SSLAdapter.check()`. Routing fix + regression test. (legendary-mountain-0411)
+- ✅ **Test suite cleanup: B002/B003/B004 misidentified + tautological tests removed** — B002/B003/B004 were testing the wrong rules entirely; replaced with correct inputs. Removed 55+ tautological/vacuous tests across 5 files. Net -97 lines. (hellfire-xenon-0411)
 
 ### v0.77.0
 - ✅ **`ssl:// --check --probe-http`: redirect check as first-class check item** — was silently dropped when `--check` was also passed (routing exited early). Now `check_ssl_health()` accepts `probe_http=True`, runs `_check_http_redirect()`, failing redirect elevates exit code to 2. 5 tests. (turquoise-ember-0411)
