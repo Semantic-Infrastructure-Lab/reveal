@@ -17,8 +17,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **BACK-145: `nginx://` bare URI now works** — `NginxUriAdapter.__init__` was raising `TypeError` on empty connection string, blocking the `_default_from_uri` dispatch chain before the overview path was reached. Empty string is now normalized to `"nginx://"`. `reveal nginx://` and `reveal nginx:// --audit` work as documented. 1 test updated (`test_empty_is_overview`). Resolves BACK-145.
 - **BACK-146: `autossl://` bare URI now works** — Same root cause as BACK-145. `AutosslAdapter.__init__` now normalizes empty string to `"autossl://"` instead of raising `TypeError`. `reveal autossl://` lists available timestamps as documented. 1 test updated (`test_no_arg_is_list_runs`). Resolves BACK-146.
+- **BACK-152: `reveal --check` deprecation hint removed** — The runtime `hint:` print to stderr is gone; `--check` still routes to `run_check`. The hint was already removed from help docs (BACK-142, zogipo-0410); now the runtime matches. Resolves BACK-152.
+- **BACK-148: `letsencrypt:// --check-duplicates` clean result no longer shows full cert inventory** — When no duplicates are found and `--check-orphans` is not also requested, the full cert table is suppressed and only `✅ No duplicate-SAN certs found.` is printed. Resolves BACK-148.
 
-2 tests updated, 146 nginx+autossl tests passing.
+### Changed
+- **BACK-150: `letsencrypt://` inventory sorted by expiry** — Certs now sorted `days_until_expiry` ascending (imminent expirations first). Error certs (no expiry field) sort to the end. Previously alphabetical, which required scanning the full list to find near-expiry certs. Resolves BACK-150.
+
+### Documentation
+- **BACK-147: `letsencrypt://` JSON schema documented in `reveal help://letsencrypt`** — Added note listing cert object fields (`name`, `cert_path`, `common_name`, `san`, `days_until_expiry`, `not_after`, `is_expired`, `issuer`). Field is `days_until_expiry` (int), not `days_remaining` (which does not exist). Resolves BACK-147.
+- **BACK-149: `--check-orphans` cPanel limitation documented** — Added note to `reveal help://letsencrypt` explaining that on cPanel servers, nginx `ssl_certificate` directives point to `/var/cpanel/ssl/apache_tls/`, not `/etc/letsencrypt/`. All LE certs appear orphaned even when active. Alternative: `reveal cpanel://USER/ssl`. Resolves BACK-149.
+- **BACK-154: `--select`/`--ignore` already implemented** — `reveal check <path> --select N004 --ignore N011,E501` already works (added in prior session). Resolves BACK-154.
+- **BACK-151: `cert_expiry_days` null for `incomplete` domains is correct** — `cert_expiry_days` is legitimately null when AutoSSL didn't process the cert (e.g., `incomplete` status — cert still valid, no renewal triggered). Field is `cert_expiry_days`, not `days_remaining`. Already documented as `['number', 'null']` in schema. Resolves BACK-151.
+
+7673 tests passing, 0 new tests (all changes are docs/UX/routing).
 
 ---
 

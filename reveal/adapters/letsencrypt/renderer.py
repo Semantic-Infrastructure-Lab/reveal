@@ -26,19 +26,25 @@ class LetsEncryptRenderer:
             print(f"No certs found in {live_dir}")
             return
 
-        _render_cert_table(certs)
+        dup_check = result.get('duplicate_check')
+        orphan_check = result.get('orphan_check')
+
+        # When --check-duplicates returns clean, skip the full cert table — just show conclusion.
+        clean_dup_only = (dup_check is not None
+                          and dup_check.get('duplicate_group_count', 0) == 0
+                          and orphan_check is None)
+        if not clean_dup_only:
+            _render_cert_table(certs)
 
         renewal_timer = result.get('renewal_timer')
-        if renewal_timer is not None:
+        if renewal_timer is not None and not clean_dup_only:
             print()
             _render_renewal_timer(renewal_timer)
 
-        orphan_check = result.get('orphan_check')
         if orphan_check is not None:
             print()
             _render_orphan_check(orphan_check)
 
-        dup_check = result.get('duplicate_check')
         if dup_check is not None:
             print()
             _render_duplicate_check(dup_check)

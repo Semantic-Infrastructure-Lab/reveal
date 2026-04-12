@@ -299,7 +299,6 @@ def handle_file_or_directory(path_str: str, args: 'Namespace') -> None:
         args: Parsed arguments
     """
     if getattr(args, 'check', False):
-        print("hint: --check is deprecated; use `reveal check <path>` instead", file=sys.stderr)
         from ...cli.commands.check import run_check
         run_check(args)
         return

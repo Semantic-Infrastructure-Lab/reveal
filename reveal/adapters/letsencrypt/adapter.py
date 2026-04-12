@@ -188,6 +188,9 @@ class LetsEncryptAdapter(ResourceAdapter):
             check_duplicates: When True, find certs sharing identical SANs.
         """
         certs = _walk_live_dir(self.live_dir)
+        # Sort by days_until_expiry ascending — imminent expirations first.
+        # Error certs (no days_until_expiry field) sort to the end.
+        certs.sort(key=lambda c: c.get('days_until_expiry', 99999))
         live_dir_exists = Path(self.live_dir).exists()
 
         result: Dict[str, Any] = {
@@ -320,6 +323,12 @@ class LetsEncryptAdapter(ResourceAdapter):
                 f'Live dir: {_LIVE_DIR}',
                 '--check-orphans scans ' + ', '.join(_NGINX_CONFIG_DIRS),
                 'certbot renew --dry-run is out of scope',
+                'JSON schema: each cert has name, cert_path, common_name, san (list), '
+                'days_until_expiry (int), not_after (ISO str), is_expired (bool), issuer.',
+                '--check-orphans limitation: on cPanel servers, nginx ssl_certificate '
+                'directives reference /var/cpanel/ssl/apache_tls/ not /etc/letsencrypt/ — '
+                'all LE certs will appear orphaned even if active. Check actual usage via '
+                '`reveal cpanel://USER/ssl` instead.',
             ],
         }
 
