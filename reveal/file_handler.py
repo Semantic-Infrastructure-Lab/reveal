@@ -100,7 +100,14 @@ def _has_nav_flag(args) -> bool:
         getattr(args, 'outline', False)
         or getattr(args, 'scope', False)
         or bool(getattr(args, 'varflow', None))
-        or bool(getattr(args, 'calls', None))
+        or getattr(args, 'calls', None) is not None   # nargs='?' — None means absent
+        or getattr(args, 'around', None) is not None  # nargs='?' — None means absent
+        or getattr(args, 'ifmap', False)
+        or getattr(args, 'catchmap', False)
+        or getattr(args, 'exits', False)
+        or getattr(args, 'flowto', False)
+        or getattr(args, 'deps', False)
+        or getattr(args, 'mutations', False)
     )
 
 
@@ -114,7 +121,7 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
 
     if not isinstance(analyzer, TreeSitterAnalyzer) or not analyzer.tree:
         print(
-            'Error: --outline/--scope/--varflow/--calls require tree-sitter analysis.\n'
+            'Error: nav flags require tree-sitter analysis.\n'
             f'  File type may not be supported: {analyzer.path}',
             file=sys.stderr,
         )
@@ -122,7 +129,9 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
 
     from .adapters.ast.nav import (  # noqa: I006
         element_outline, scope_chain, var_flow, range_calls,
+        collect_exits, collect_deps, collect_mutations,
         render_outline, render_scope_chain, render_var_flow, render_range_calls,
+        render_branchmap, render_exits, render_deps, render_mutations,
     )
     from .display.element import _parse_element_syntax  # noqa: I006
     from .treesitter import ELEMENT_TYPE_MAP  # noqa: I006
@@ -146,30 +155,67 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         print(render_scope_chain(line_no, chain, line_text))
         return
 
-    # ---- Find the function node (needed for outline/varflow/calls) ---------
+    # ---- --around: verbatim lines centered on a target --------------------
+    if getattr(args, 'around', None) is not None:
+        syntax = _parse_element_syntax(element)
+        if syntax['type'] != 'line':
+            print(
+                f'Error: --around requires a line reference (e.g., reveal file.py :123 --around)\n'
+                f'  Got element: {element!r}',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        line_no = syntax['start_line']
+        n = args.around  # int, default 20
+        content_lines = analyzer.content.splitlines()
+        total = len(content_lines)
+        start = max(1, line_no - n)
+        end = min(total, line_no + n)
+        for i in range(start - 1, end):
+            prefix = '▶' if (i + 1) == line_no else ' '
+            print(f'{prefix}{i + 1:5}  {content_lines[i]}')
+        return
+
+    # ---- Find the function/scope node (needed for all remaining flags) -----
+    # For named functions: use the function node directly.
+    # For flat/procedural files (no named scope): fall back to root_node when
+    # the element is a line reference (:N or :N-M).  This enables --varflow,
+    # --calls, --ifmap, --catchmap, --exits, --flowto, --deps, --mutations on
+    # files that have no top-level function definitions.
     func_node = _find_element_node(analyzer, element)
     if func_node is None:
-        print(
-            f'Error: could not find function or method {element!r} in {analyzer.path}\n'
-            '  Use `reveal <file>` to list available elements.\n'
-            '  For methods, use Class.method syntax (e.g., MyClass.my_method).',
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        syntax = _parse_element_syntax(element) if element else None
+        if syntax and syntax['type'] == 'line':
+            func_node = analyzer.tree.root_node
+            # Honour the element's own range as the effective scope boundary.
+            # :N alone (no end) → start_line to end of file.
+            func_start = syntax['start_line']
+            func_end = (
+                syntax['end_line']
+                if syntax.get('end_line')
+                else len(analyzer.content.splitlines())
+            )
+        else:
+            print(
+                f'Error: could not find function or method {element!r} in {analyzer.path}\n'
+                '  Use `reveal <file>` to list available elements.\n'
+                '  For methods, use Class.method syntax (e.g., MyClass.my_method).',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        func_start = func_node.start_point[0] + 1
+        func_end = func_node.end_point[0] + 1
 
-    func_start = func_node.start_point[0] + 1
-    func_end = func_node.end_point[0] + 1
     depth = getattr(args, 'depth', 3) or 3
 
     # ---- --outline: control-flow skeleton ----------------------------------
     if getattr(args, 'outline', False):
-        # Parse optional --range to scope the outline
         range_arg = getattr(args, 'range', None)
         from_line, to_line = func_start, func_end
         if range_arg:
             from_line, to_line = _parse_line_range(range_arg, func_start, func_end)
         items = element_outline(func_node, get_text, max_depth=depth)
-        # Filter to requested range if set
         if range_arg:
             items = [i for i in items if from_line <= i['line_start'] <= to_line]
         print(render_outline(element, func_start, func_end, items, depth=depth))
@@ -188,10 +234,59 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         return
 
     # ---- --calls: call sites in a line range -------------------------------
-    if getattr(args, 'calls', None):
+    if getattr(args, 'calls', None) is not None:
+        # args.calls is 'FULL' (bare --calls), a range string (--calls 89-120), or
+        # None (flag absent).  _parse_line_range handles 'FULL' via its fallback.
         from_line, to_line = _parse_line_range(args.calls, func_start, func_end)
         calls = range_calls(func_node, from_line, to_line, get_text)
         print(render_range_calls(calls, from_line, to_line))
+        return
+
+    # ---- --ifmap / --catchmap: branching skeleton -------------------------
+    _IF_KEYWORDS: frozenset = frozenset({'IF', 'ELIF', 'ELSE', 'SWITCH', 'CASE', 'DEFAULT'})
+    _CATCH_KEYWORDS: frozenset = frozenset({'TRY', 'CATCH', 'EXCEPT', 'FINALLY'})
+    if getattr(args, 'ifmap', False) or getattr(args, 'catchmap', False):
+        keywords = _IF_KEYWORDS if getattr(args, 'ifmap', False) else _CATCH_KEYWORDS
+        range_arg = getattr(args, 'range', None)
+        from_line, to_line = func_start, func_end
+        if range_arg:
+            from_line, to_line = _parse_line_range(range_arg, func_start, func_end)
+        items = element_outline(func_node, get_text, max_depth=depth)
+        filtered = [
+            i for i in items
+            if i['keyword'] in keywords and from_line <= i['line_start'] <= to_line
+        ]
+        print(render_branchmap(filtered, from_line, to_line))
+        return
+
+    # ---- --exits / --flowto: exit-node collector --------------------------
+    if getattr(args, 'exits', False) or getattr(args, 'flowto', False):
+        range_arg = getattr(args, 'range', None)
+        from_line, to_line = func_start, func_end
+        if range_arg:
+            from_line, to_line = _parse_line_range(range_arg, func_start, func_end)
+        exits = collect_exits(func_node, from_line, to_line, get_text)
+        print(render_exits(exits, from_line, to_line, verdict=getattr(args, 'flowto', False)))
+        return
+
+    # ---- --deps: variables flowing into a range ----------------------------
+    if getattr(args, 'deps', False):
+        range_arg = getattr(args, 'range', None)
+        from_line, to_line = func_start, func_end
+        if range_arg:
+            from_line, to_line = _parse_line_range(range_arg, func_start, func_end)
+        deps = collect_deps(func_node, from_line, to_line, get_text)
+        print(render_deps(deps, from_line, to_line))
+        return
+
+    # ---- --mutations: variables written in range and read after ------------
+    if getattr(args, 'mutations', False):
+        range_arg = getattr(args, 'range', None)
+        from_line, to_line = func_start, func_end
+        if range_arg:
+            from_line, to_line = _parse_line_range(range_arg, func_start, func_end)
+        mutations = collect_mutations(func_node, from_line, to_line, get_text)
+        print(render_mutations(mutations, from_line, to_line))
         return
 
 
@@ -222,12 +317,17 @@ def _find_element_node(analyzer, element: str):
     return None
 
 
-def _parse_line_range(range_str: str, default_start: int, default_end: int):
-    """Parse 'START-END' range string into (start, end) ints.
+def _parse_line_range(range_str, default_start: int, default_end: int):
+    """Parse 'START-END' range string (or pre-parsed tuple) into (start, end) ints.
 
-    Falls back to (default_start, default_end) on parse failure.
+    Accepts either a 'START-END' string or a (start, end) tuple as produced by
+    validate_navigation_args().  Falls back to (default_start, default_end) on
+    parse failure.
     """
     import re  # noqa: I006
+    if isinstance(range_str, tuple):
+        start, end = range_str
+        return start, (end if end is not None else default_end)
     m = re.match(r'^(\d+)-(\d+)$', range_str.strip())
     if m:
         return int(m.group(1)), int(m.group(2))
@@ -312,21 +412,29 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         return
 
     if args and not element:
-        # --scope/--varflow/--calls are meaningless without an element; --outline
-        # without element falls through to show_structure which handles it.
+        # --scope requires a line ref; fail fast.
         if getattr(args, 'scope', False):
             print(
                 'Error: --scope requires a line reference (e.g., reveal file.py :123 --scope)',
                 file=sys.stderr,
             )
             sys.exit(1)
-        for flag in ('varflow', 'calls'):
+        # --around requires a line ref; fail fast.
+        if getattr(args, 'around', None) is not None:
+            print(
+                'Error: --around requires a line reference (e.g., reveal file.py :123 --around)',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        # Flat-file flags: synthesize a full-file element so _dispatch_nav can
+        # fall back to root_node.  --outline without element is handled later by
+        # show_structure, so it's intentionally not in this list.
+        _FLAT_FLAGS = ('varflow', 'calls', 'ifmap', 'catchmap', 'exits', 'flowto', 'deps', 'mutations')
+        for flag in _FLAT_FLAGS:
             if getattr(args, flag, None):
-                print(
-                    f'Error: --{flag} requires an element (e.g., reveal file.py myfunc --{flag})',
-                    file=sys.stderr,
-                )
-                sys.exit(1)
+                total = len(analyzer.content.splitlines())
+                element = f':1-{total}'
+                break
 
     if element:
         # Sub-function nav flags take priority over normal element extraction

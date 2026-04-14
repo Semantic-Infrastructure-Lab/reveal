@@ -492,9 +492,9 @@ reveal models.py --outline
 
 ---
 
-### Task: "Navigate inside a function — outline, scope, variable flow, calls" (v0.72.0+)
+### Task: "Navigate inside a function — outline, scope, variable flow, calls, and more" (v0.72.0+, extended v0.78.0+)
 
-Four flags for sub-function progressive disclosure. Use when a function is too large to read in full but you need to understand its structure, trace a variable, or find calls in a range.
+Progressive disclosure flags for navigating inside functions and flat procedural files. Use when a function (or a large flat file like a PHP controller) is too large to read in full.
 
 **`--outline` on an element → control-flow skeleton**
 ```bash
@@ -522,39 +522,131 @@ reveal app.py :5 --scope
 ```
 Useful when a stack trace or grep result gives you a line number and you need to know what scope it's inside.
 
-**`--varflow FUNC VAR` → read/write trace for a variable**
+**`--varflow VAR` → read/write trace for a variable**
 ```bash
-reveal app.py process_batch --varflow results
+reveal app.py process_batch --varflow results   # inside a named function
+reveal flat_file.php :1-2000 --varflow errormsg  # flat procedural file
 
 # Output:
 # WRITE     L2:  results = []
 # READ      L6:  results.append(value)
-# READ      L10:  results.append(value)
+# READ/COND L10:  if not results:
 # READ      L13:  return results
 ```
-Shows every place the variable is assigned (WRITE), read (READ), or tested in a condition (READ/COND). Augmented assignment (`+=`) emits READ then WRITE.
+Shows every place the variable is assigned (WRITE), read (READ), or tested in a condition (READ/COND). Works on both named functions and flat/procedural files without a function wrapper.
 
-**`--calls FUNC START-END` → call sites in a line range**
+**`--calls` → call sites in a line range**
 ```bash
-reveal app.py process_batch --calls 7-12
+reveal app.py process_batch --calls 7-12          # scoped to lines 7-12
+reveal flat_file.php :477-531 --calls             # flat file, whole element range
+reveal app.py process_batch --calls               # all calls in the function
 
 # Output:
 # L9:  retry(item)
 # L10:  results.append(value)
 # L12:  log_error(e)
 ```
-Useful for auditing what a specific branch calls without reading the whole function.
+
+**`--around N` → verbatim context centered on a line (v0.78.0+)**
+```bash
+reveal app.py :123 --around      # ±20 lines (default)
+reveal app.py :123 --around 10  # ±10 lines
+
+# Output:
+#   118  def helper(x):
+#   119      ...
+# ▶ 123      critical_call(x)
+#   124      ...
+```
+Eliminates the mental arithmetic of picking a line range when you just know a line number. The `▶` marker points to the target line.
+
+**`--ifmap` → branching skeleton (IF/ELIF/ELSE) (v0.78.0+)**
+```bash
+reveal flat_file.php :878-2130 --ifmap
+reveal app.py process_batch --ifmap
+
+# Output:
+# IF  $fb_status == 1  L878→L2130
+#   IF  !empty($fb_page_id)  L900→L1050
+#   ELSE  L1050→L1200
+```
+Filtered view of `--outline` showing only conditional branches. Useful before committing to reading a large if/elif/else chain.
+
+**`--catchmap` → exception skeleton (TRY/CATCH/FINALLY) (v0.78.0+)**
+```bash
+reveal flat_file.php :470-525 --catchmap
+reveal app.py process_batch --catchmap
+
+# Output:
+# TRY  L400→L592
+#   EXCEPT  ValueError  L477→L515
+#   EXCEPT  Exception  L516→L554
+```
+
+**`--exits` → exit nodes in a range (v0.78.0+)**
+```bash
+reveal flat_file.php :657-2200 --exits
+reveal app.py process_batch --exits
+
+# Output:
+# EXIT      L916:  die('quota exceeded')
+# RETURN    L1283: return false
+```
+Lists all return/raise/break/continue/die nodes. Useful for auditing where a large block can exit.
+
+**`--flowto` → exits + reachability verdict (v0.78.0+)**
+```bash
+reveal flat_file.php :2928-3663 --flowto
+
+# Output:
+# BREAK     L3123: break 1
+#
+# flowto L3663: ~ CONDITIONAL
+```
+Verdict: `✓ CLEAR` (no exits), `~ CONDITIONAL` (only loop breaks/continues), `⚠ BLOCKED` (hard return/raise).
+
+**`--deps` → variables flowing INTO a range (v0.78.0+)**
+```bash
+reveal flat_file.php :1136-1463 --deps
+reveal app.py process_batch --deps --range 20-80
+
+# Output:
+# PARAM  size_bytes                    first read L1136  (never written in range)
+# PARAM  file_handle                   first read L1148  (never written in range)
+```
+Shows which variables the range depends on — what would become function parameters if you extracted this block.
+
+**`--mutations` → variables written in range and read after (v0.78.0+)**
+```bash
+reveal flat_file.php :1136-1463 --mutations
+reveal app.py process_batch --mutations --range 20-80
+
+# Output:
+# RETURN chunk_upload_success          written L1455, next read L1466
+# RETURN is_rate_limit_error           written L1386, next read L1466
+```
+Shows which variables the caller would need back — what would become return values if you extracted this block. Together with `--deps`, this is a full refactoring pre-flight.
+
+**All flags work on flat/procedural files (v0.78.0+):**
+```bash
+# Flat PHP file — no named function required
+reveal rr_body.php :878-2130 --ifmap
+reveal rr_body.php :1136-1463 --deps
+reveal rr_body.php --varflow errormsg_str    # whole file
+```
 
 **Combining with `--range` to narrow scope:**
 ```bash
 reveal app.py process_batch --outline --range 7-12   # outline of just lines 7-12
 reveal app.py process_batch --varflow value --range 7-12  # trace 'value' in lines 7-12
+reveal app.py process_batch --deps --range 7-12      # deps of a sub-range
 ```
 
 **Class.method syntax works with all nav flags:**
 ```bash
 reveal app.py MyClass.process --outline
 reveal app.py MyClass.process --varflow result
+reveal app.py MyClass.process --exits
 ```
 
 **Workflow — large function investigation:**
@@ -565,9 +657,18 @@ reveal app.py process_batch --outline
 # 2. Identify the suspicious branch (say lines 7-12)
 reveal app.py process_batch --calls 7-12      # what does it call?
 reveal app.py process_batch --varflow value   # how does 'value' flow through?
+reveal app.py :9 --around                    # see ±20 lines around line 9
 
 # 3. Read only what you need
 reveal app.py process_batch --range 7-12      # full source of that branch only
+```
+
+**Workflow — refactoring pre-flight (extract function):**
+```bash
+# Planning to extract lines 1136-1463 into a function?
+reveal flat_file.php :1136-1463 --deps        # → these become parameters
+reveal flat_file.php :1136-1463 --mutations   # → these become return values
+reveal flat_file.php :1136-1463 --exits       # → check for unexpected early exits
 ```
 
 ---
@@ -2073,6 +2174,16 @@ Python, JavaScript, TypeScript, Rust, Go, Java, C, C++, C#, Scala, Swift, Kotlin
 
 **Structure provided:** Functions, classes, methods, imports, decorators, complexity
 
+**Bash/Shell scripts (`.sh`, `.bash`):** Also extracts top-level variable assignments (config vars, paths, defaults). Only top-level vars — assignments inside functions, loops, and `if` blocks are excluded. Example:
+```
+File: platform-loop.sh (134 lines)
+
+Variables (7):
+  :22     PHP = /usr/local/bin/php
+  :25     SERVICE = platform-worker
+  :28     FB_LOCK_SHARDS = ${FB_LOCK_SHARDS:-5}
+```
+
 ### Configuration & Data Formats (15+)
 Nginx, Dockerfile, TOML, YAML, JSON, JSONL, CSV, XML, INI, HCL (Terraform), GraphQL, Protocol Buffers, Batch scripts
 
@@ -2303,11 +2414,17 @@ reveal hotspots . --format json    # JSON output for CI/scripting
 
 **Symptoms:**
 ```
-File: script.py (145 lines)
-No structure found
+File: script.sh (134 lines)
+No structure available for this file type (134 lines)
 ```
 
-**Causes & Solutions:**
+The message now includes line count — use it to decide whether `Read` is worth the tokens.
+
+**Automatic fallbacks (no action needed):**
+- **≤50 lines with no structure** — reveal renders the full file inline with line numbers. No `Read` needed.
+- **Bash/shell scripts** — top-level variable assignments are extracted even if there are no functions. Flat worker scripts show their config vars automatically.
+
+**Causes & Solutions for genuine "no structure":**
 
 1. **Syntax errors in file**
    ```bash
@@ -3124,8 +3241,17 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Hierarchical view | `reveal file.py --outline` |
 | Function skeleton | `reveal file.py func_name --outline` |
 | Scope at a line | `reveal file.py :123 --scope` |
+| Lines around a line | `reveal file.py :123 --around` |
 | Trace a variable | `reveal file.py func_name --varflow result` |
+| Trace var in flat file | `reveal file.php :1-2000 --varflow errormsg` |
 | Calls in a range | `reveal file.py func_name --calls 89-120` |
+| Calls in flat file range | `reveal file.php :477-531 --calls` |
+| Branching skeleton | `reveal file.py func_name --ifmap` |
+| Exception skeleton | `reveal file.py func_name --catchmap` |
+| Exit nodes in range | `reveal file.php :657-2200 --exits` |
+| Reachability verdict | `reveal file.php :2928-3663 --flowto` |
+| Refactor deps | `reveal file.php :1136-1463 --deps` |
+| Refactor mutations | `reveal file.php :1136-1463 --mutations` |
 | Extract by name | `reveal file.py func_name` |
 | Extract class method | `reveal file.py Class.method` |
 | Extract at line | `reveal file.py 73` or `reveal file.py :73` |
@@ -3275,6 +3401,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
 - **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `stats://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `stats://` complexity no longer stuck at 1.00
+- **v0.78.0** - probe-inspired nav flags: `--around N` (verbatim context ±N lines around a target), `--ifmap` (branching skeleton), `--catchmap` (exception skeleton), `--exits` (exit-node list), `--flowto` (exit list + CLEAR/CONDITIONAL/BLOCKED verdict), `--deps` (refactoring pre-flight: variables flowing in), `--mutations` (variables written in range and read after); flat-file support for `--varflow` and `--calls` (no named function required — use with `:LINE-RANGE` syntax or no element for whole-file)
 - **v0.72.1** - M501 rule (TODO/FIXME/HACK/XXX marker detection, LOW severity, all file types); `--max-bytes` and `--max-depth` removed (were misleading/unimplemented); Complete Rules Reference now covers L, M, F, T categories (18 previously undocumented rules); adapter count corrected to 22
 - **v0.72.0** - nav flags released: `--outline` (element mode → control-flow skeleton), `--scope` (ancestor scope at a line), `--varflow` (read/write trace), `--calls` (call sites in a range); `--broken-only` and `--inline` documented; `--section NAME` flag; budget flags (`--max-items`, `--max-snippet-chars`) for token management
 - **v0.67.0** - B005 skip `try/except ImportError` optional-dep pattern; element-not-found lists available names; `--analyzer text` false suggestion removed; M102 suppress patterns + dynamic-load heuristics in agent-help; OR-pattern failure hints `--search`

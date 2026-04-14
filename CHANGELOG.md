@@ -12,6 +12,61 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.78.0] - 2026-04-13 (session celestial-hydra-0413)
+
+### Added
+- **`--around N`: verbatim context centered on a line** — `reveal file.py :123 --around` prints ±20 lines (default) around the target with a `▶` pointer. `--around 10` adjusts the window. Eliminates the mental arithmetic of manually computing a line range. Requires a `:LINE` element; errors with a clear message otherwise.
+- **`--ifmap`: branching skeleton for a line range** — `reveal file.php :878-2130 --ifmap` shows only IF/ELIF/ELSE/SWITCH nodes from `--outline`'s output, filtered by keyword. Works on named functions (`reveal file.py myfunc --ifmap`) and flat procedural files. Optionally scoped with `--range`.
+- **`--catchmap`: exception skeleton for a line range** — Same as `--ifmap` but filtered to TRY/CATCH/EXCEPT/FINALLY keywords. Equivalent to `probe catchmap`.
+- **`--exits`: exit-node list** — `reveal file.php :657-2200 --exits` collects all return/raise/throw/break/continue nodes in a range, plus `die()`/`exit()` language-construct calls (for PHP). Returns kind, line, and first-line text for each.
+- **`--flowto`: exit-node list + reachability verdict** — Same output as `--exits` plus a verdict line: `✓ CLEAR` (no exits), `~ CONDITIONAL` (only break/continue), `⚠ BLOCKED` (hard return/raise/exit). Equivalent to `probe flowto`.
+- **`--deps`: refactoring pre-flight — variables flowing in** — `reveal file.php :1136-1463 --deps` identifies variables whose first event in the range is a READ (meaning they were set before the range), making them candidates for function parameters on extraction. Shows first-read line and first-write line (or "never written in range").
+- **`--mutations`: refactoring pre-flight — variables written and read after** — `reveal file.php :1136-1463 --mutations` identifies variables written in the range that are read after it — candidates for return values on extraction. Together with `--deps`, this is a complete function-extraction pre-flight.
+- **Flat-file support for `--varflow` and `--calls`** — Previously these two flags required a named function element and failed with "Error: could not find function…" on flat procedural files (PHP, shell scripts, etc.). Now: (a) any `:LINE-RANGE` element falls back to `root_node` instead of erroring; (b) omitting the element entirely (e.g., `reveal file.php --varflow errormsg`) synthesizes `:1-N` covering the whole file. The `nav.py` functions already accepted any tree-sitter node — the limitation was purely in the CLI dispatch layer (`file_handler.py`).
+
+### Changed
+- **`--calls` is now optional-arg** (`nargs='?'`) — `reveal file.php :477-531 --calls` (no range after the flag) uses the element's line range as the scope. `reveal file.py myfunc --calls 89-120` (explicit range) continues to work unchanged.
+
+### Tests (68 new)
+- `TestCollectExits` (13) — return/raise/break/continue detection, range filtering, root-node acceptance, die/exit call detection
+- `TestRenderExits` (8) — empty, formatted, verdict variants (CLEAR/CONDITIONAL/BLOCKED)
+- `TestRenderBranchmap` (4) — empty, formatted, single-line range, depth indentation
+- `TestAllVarFlow` (6) — dict return, known vars, event format, range limits, sorted events, root-node acceptance
+- `TestCollectDeps` (8) — required fields, sorted order, param detection, non-param exclusion, write info, no-deps case, range limit
+- `TestCollectMutations` (7) — required fields, sorted order, result detection, after-write ordering, no-mutations case, range limit
+- `TestRenderDeps` (4) — empty, dep without write, dep with write, multiple deps
+- `TestRenderMutations` (3) — empty, single, multiple
+- `TestIfmapCatchmapFiltering` (4) — keyword exclusion for ifmap/catchmap, depth preservation, render output
+- `TestFlatFileFallback` (7) — all six nav functions accept root_node as scope_node
+- `TestCollectIdentifierNames` (4) — identifier discovery, range limiting, frozenset type, empty range
+
+### Files Changed
+- `reveal/adapters/ast/nav.py` — 8 new functions: `collect_exits`, `_collect_identifier_names`, `all_var_flow`, `collect_deps`, `collect_mutations`, `render_branchmap`, `render_exits`, `render_deps`, `render_mutations`
+- `reveal/cli/parser.py` — 7 new flags: `--around`, `--ifmap`, `--catchmap`, `--exits`, `--flowto`, `--deps`, `--mutations`; `--calls` changed to `nargs='?'`
+- `reveal/file_handler.py` — `_has_nav_flag()` extended; `_dispatch_nav()` extended with 6 new branches + Change A (root_node fallback); `handle_file()` Change B (flat-file element synthesis)
+- `reveal/docs/AGENT_HELP.md` — nav task section fully rewritten; quick-reference table extended; version history updated
+- `tests/adapters/test_ast_nav_probe_features.py` — new test file, 68 tests
+
+---
+
+## [0.77.2] - 2026-04-13 (session slate-shine-0413)
+
+### Added
+- **Bash/Shell: top-level variable assignments now extracted as structure** — `BashAnalyzer` previously only extracted function definitions, leaving flat worker scripts (no functions, just config vars + a loop) with "No structure available." Now overrides `get_structure()` to walk direct children of the program root for `variable_assignment` nodes. Values truncated at 60 chars. Only captures top-level vars — assignments inside functions, loops, and `if` blocks are excluded to avoid noise. Validated on 14 real-world `.sh` files across workers and bin/ tools. 3 new tests.
+- **Small-file fallback: files ≤50 lines with no structure show full content** — Instead of "No structure available for this file type," files under 50 lines are rendered inline with line numbers using `format_with_lines`. Covers entrypoint scripts, minimal deploy scripts, and other tiny files where a `Read` round-trip would be pure overhead.
+- **"No structure available" now includes line count** — For files >50 lines with no extractable structure, the message becomes `"No structure available for this file type (N lines)"` so agents can make an informed decision about whether a `Read` is worth it without a separate metadata call.
+
+### Tests
+- `test_extract_variables_no_functions` — flat script, vars extracted, inner-loop var excluded
+- `test_extract_variables_with_functions` — both vars and functions present
+- `test_variable_value_truncation` — 80-char value truncated to 60 with `...`
+- `test_empty_structure_large_file_prints_no_structure_message` — line count in message
+- `test_empty_structure_small_file_shows_content` — full content rendered, no "No structure" text
+
+6 new tests. Existing `test_empty_structure_prints_no_structure_message` split into the two above.
+
+---
+
 ## [0.77.1] - 2026-04-11 (sessions legendary-mountain-0411, hellfire-xenon-0411)
 
 ### Fixed

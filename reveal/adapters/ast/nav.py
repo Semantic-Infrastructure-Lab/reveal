@@ -1,12 +1,16 @@
 """Sub-function progressive disclosure — navigation inside large functions.
 
-Four functions that close the gap between "here's the function signature" and
+Nine functions that close the gap between "here's the function signature" and
 "here are all 200 lines":
 
   element_outline()  -- control-flow skeleton (top-down map of a function)
   scope_chain()      -- ancestor scope chain for a specific line (bottom-up)
   var_flow()         -- variable read/write trace within a function
   range_calls()      -- call sites within a specific line range
+  collect_exits()    -- exit nodes (return/raise/die/break) in a line range
+  all_var_flow()     -- single-pass all-variable events (for deps/mutations)
+  collect_deps()     -- variables flowing INTO a range (potential params)
+  collect_mutations()-- variables written in range and read after (potential returns)
 
 All functions are pure: they take tree-sitter node objects and a callable
 ``get_text(node) -> str``. No I/O, no side effects — callers handle rendering.
@@ -685,4 +689,376 @@ def render_range_calls(
         else:
             arg_part = '(...)'
         lines.append(f'L{call["line"]}:  {callee}{arg_part}')
+    return '\n'.join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Feature: collect_exits  (--exits / --flowto)
+# ---------------------------------------------------------------------------
+
+# Language-construct names treated as hard exits even when represented as calls
+_EXIT_CALL_NAMES: frozenset = frozenset({'die', 'exit'})
+
+# Mapping from exit node type to kind label
+_EXIT_KIND: Dict[str, str] = {
+    'return_statement': 'RETURN', 'return': 'RETURN',
+    'raise_statement': 'RAISE',   'raise': 'RAISE',
+    'throw_statement': 'THROW',
+    'yield_statement': 'YIELD',   'yield': 'YIELD',
+    'break_statement': 'BREAK',   'break': 'BREAK',
+    'continue_statement': 'CONTINUE', 'continue': 'CONTINUE',
+}
+
+# Kinds that unconditionally prevent reaching a subsequent line
+_HARD_EXIT_KINDS: frozenset = frozenset({'RETURN', 'RAISE', 'THROW', 'EXIT'})
+
+# Kinds that may interrupt flow but only within a loop iteration
+_SOFT_EXIT_KINDS: frozenset = frozenset({'BREAK', 'CONTINUE'})
+
+
+def collect_exits(
+    scope_node: Any,
+    from_line: int,
+    to_line: int,
+    get_text: Callable,
+    call_node_types: Optional[frozenset] = None,
+) -> List[Dict[str, Any]]:
+    """Collect exit nodes within a line range.
+
+    Handles both AST exit nodes (return_statement, raise_statement, etc.) and
+    language-construct calls like die()/exit() in PHP that tree-sitter may
+    represent as call expressions.
+
+    Each item is a dict:
+        kind -- 'RETURN', 'RAISE', 'THROW', 'YIELD', 'BREAK', 'CONTINUE', or 'EXIT'
+        line -- 1-indexed line number
+        text -- first line of the node's source text (truncated to 80 chars)
+
+    Args:
+        scope_node:      Tree-sitter node to search within.
+        from_line:       Start of range (1-indexed, inclusive).
+        to_line:         End of range (1-indexed, inclusive).
+        get_text:        Callable(node) -> str.
+        call_node_types: Override the standard call node type set.
+
+    Returns:
+        List of exit dicts sorted by line number.
+    """
+    if call_node_types is None:
+        from ...treesitter import CALL_NODE_TYPES  # noqa: PLC0415
+        call_node_types = CALL_NODE_TYPES
+
+    results: List[Dict[str, Any]] = []
+    stack = list(reversed(scope_node.children))
+    while stack:
+        node = stack.pop()
+        line = node.start_point[0] + 1
+        # Prune subtrees entirely outside range
+        if node.end_point[0] + 1 < from_line or line > to_line:
+            continue
+
+        if from_line <= line <= to_line:
+            if node.type in _EXIT_KIND:
+                kind = _EXIT_KIND[node.type]
+                text = get_text(node).splitlines()[0].strip()
+                if len(text) > 80:
+                    text = text[:77] + '...'
+                results.append({'kind': kind, 'line': line, 'text': text})
+                # Don't recurse into exit nodes — they are leaves conceptually
+                continue
+            if node.type in call_node_types:
+                callee = _extract_callee(node, get_text)
+                if callee in _EXIT_CALL_NAMES:
+                    text = get_text(node).splitlines()[0].strip()
+                    if len(text) > 80:
+                        text = text[:77] + '...'
+                    results.append({'kind': 'EXIT', 'line': line, 'text': text})
+
+        stack.extend(reversed(node.children))
+
+    results.sort(key=lambda r: r['line'])
+    return results
+
+
+def render_exits(
+    exits: List[Dict[str, Any]],
+    from_line: int,
+    to_line: int,
+    verdict: bool = False,
+) -> str:
+    """Render collect_exits results.
+
+    Args:
+        exits:    Output of collect_exits().
+        from_line, to_line: Range that was searched.
+        verdict:  If True, append a --flowto reachability verdict after the list.
+
+    Returns:
+        Multi-line string suitable for printing.
+    """
+    lines: List[str] = []
+    if not exits:
+        lines.append(f'No exits in L{from_line}→L{to_line}')
+    else:
+        for e in exits:
+            lines.append(f'{e["kind"]:<10}L{e["line"]}:  {e["text"]}')
+
+    if verdict:
+        has_hard = any(e['kind'] in _HARD_EXIT_KINDS for e in exits)
+        has_soft = any(e['kind'] in _SOFT_EXIT_KINDS for e in exits)
+        if has_hard:
+            v = '⚠ BLOCKED'
+        elif has_soft:
+            v = '~ CONDITIONAL'
+        else:
+            v = '✓ CLEAR'
+        lines.append(f'\nflowto L{to_line}: {v}')
+
+    return '\n'.join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Feature: all_var_flow, collect_deps, collect_mutations  (--deps / --mutations)
+# ---------------------------------------------------------------------------
+
+
+def _collect_identifier_names(
+    scope_node: Any,
+    from_line: int,
+    to_line: int,
+    get_text: Callable,
+) -> frozenset:
+    """Return the set of identifier names that appear in a line range.
+
+    Used to pre-scan before running var_flow for each name.
+    """
+    names: set = set()
+    stack = list(reversed(scope_node.children))
+    while stack:
+        node = stack.pop()
+        line = node.start_point[0] + 1
+        if node.end_point[0] + 1 < from_line or line > to_line:
+            continue
+        if node.type == 'identifier' and from_line <= line <= to_line:
+            text = get_text(node)
+            if text:
+                names.add(text)
+        stack.extend(reversed(node.children))
+    return frozenset(names)
+
+
+def all_var_flow(
+    scope_node: Any,
+    from_line: int,
+    to_line: int,
+    get_text: Callable,
+    full_from: int = 1,
+    full_to: Optional[int] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Collect var_flow events for every identifier that appears in a line range.
+
+    Pre-scans ``from_line``→``to_line`` for identifier names, then runs
+    var_flow(full_from, full_to) for each — capturing events outside the range
+    so that deps/mutations analysis can see what came before and after.
+
+    Args:
+        scope_node: Tree-sitter node to search within (function node or root).
+        from_line:  Start of the analysis range (1-indexed, inclusive).
+        to_line:    End of the analysis range (1-indexed, inclusive).
+        get_text:   Callable(node) -> str.
+        full_from:  Start of the broader search for each variable (default 1).
+        full_to:    End of the broader search. Defaults to the last line of scope_node.
+
+    Returns:
+        Dict mapping var_name -> list of var_flow events (sorted, deduplicated).
+    """
+    if full_to is None:
+        full_to = scope_node.end_point[0] + 1
+
+    names = _collect_identifier_names(scope_node, from_line, to_line, get_text)
+    result: Dict[str, List[Dict[str, Any]]] = {}
+    for name in sorted(names):
+        events = var_flow(scope_node, name, full_from, full_to, get_text)
+        if events:
+            result[name] = events
+    return result
+
+
+def collect_deps(
+    scope_node: Any,
+    from_line: int,
+    to_line: int,
+    get_text: Callable,
+) -> List[Dict[str, Any]]:
+    """Identify variables that flow INTO a line range (potential function parameters).
+
+    A variable is a dep if its first event in the range is a READ, meaning it
+    was set before the range began.  Equivalent to probe's ``deps`` section.
+
+    Each item is a dict:
+        var             -- variable name
+        first_read_line -- line of first read inside the range
+        first_write_line-- line of first write inside the range (or None)
+
+    Args:
+        scope_node: Tree-sitter node to search within.
+        from_line:  Start of range (1-indexed, inclusive).
+        to_line:    End of range (1-indexed, inclusive).
+        get_text:   Callable(node) -> str.
+
+    Returns:
+        List of dep dicts sorted by first_read_line.
+    """
+    all_events = all_var_flow(scope_node, from_line, to_line, get_text)
+    deps: List[Dict[str, Any]] = []
+    for var_name, events in all_events.items():
+        in_range = [e for e in events if from_line <= e['line'] <= to_line]
+        if not in_range:
+            continue
+        first_in_range = min(in_range, key=lambda e: e['line'])
+        if first_in_range['kind'].startswith('READ'):
+            first_write = next(
+                (e for e in in_range if e['kind'] == 'WRITE'), None
+            )
+            deps.append({
+                'var': var_name,
+                'first_read_line': first_in_range['line'],
+                'first_write_line': first_write['line'] if first_write else None,
+            })
+    deps.sort(key=lambda d: d['first_read_line'])
+    return deps
+
+
+def collect_mutations(
+    scope_node: Any,
+    from_line: int,
+    to_line: int,
+    get_text: Callable,
+) -> List[Dict[str, Any]]:
+    """Identify variables written in a range that are read after it.
+
+    These are potential return values if the range were extracted into a
+    function.  Equivalent to probe's ``mutations`` section.
+
+    Each item is a dict:
+        var             -- variable name
+        last_write_line -- line of last write inside the range
+        next_read_line  -- line of next read after the range
+
+    Args:
+        scope_node: Tree-sitter node to search within.
+        from_line:  Start of range (1-indexed, inclusive).
+        to_line:    End of range (1-indexed, inclusive).
+        get_text:   Callable(node) -> str.
+
+    Returns:
+        List of mutation dicts sorted by last_write_line.
+    """
+    full_to = scope_node.end_point[0] + 1
+    all_events = all_var_flow(
+        scope_node, from_line, to_line, get_text, full_to=full_to
+    )
+    mutations: List[Dict[str, Any]] = []
+    for var_name, events in all_events.items():
+        in_range = [e for e in events if from_line <= e['line'] <= to_line]
+        after_range = [e for e in events if e['line'] > to_line]
+        writes_in = [e for e in in_range if e['kind'] == 'WRITE']
+        if writes_in and after_range:
+            last_write = max(writes_in, key=lambda e: e['line'])
+            next_read = min(after_range, key=lambda e: e['line'])
+            mutations.append({
+                'var': var_name,
+                'last_write_line': last_write['line'],
+                'next_read_line': next_read['line'],
+            })
+    mutations.sort(key=lambda m: m['last_write_line'])
+    return mutations
+
+
+# ---------------------------------------------------------------------------
+# Additional renderers
+# ---------------------------------------------------------------------------
+
+
+def render_branchmap(
+    items: List[Dict[str, Any]],
+    from_line: int,
+    to_line: int,
+) -> str:
+    """Render filtered element_outline items as a branch/exception map.
+
+    Used by --ifmap and --catchmap.  Items are already filtered to only the
+    relevant keyword set (IF/ELIF/ELSE/... or TRY/CATCH/...).
+
+    Args:
+        items:    Filtered subset of element_outline() output.
+        from_line, to_line: Range that was searched (for empty-result message).
+
+    Returns:
+        Multi-line string suitable for printing.
+    """
+    if not items:
+        return f'No branch nodes found in L{from_line}→L{to_line}'
+    lines: List[str] = []
+    for item in items:
+        indent = '  ' * item['depth']
+        if item['line_start'] != item['line_end']:
+            lrange = f'L{item["line_start"]}→L{item["line_end"]}'
+        else:
+            lrange = f'L{item["line_start"]}'
+        lines.append(f'{indent}{item["label"]}  {lrange}')
+    return '\n'.join(lines)
+
+
+def render_deps(
+    deps: List[Dict[str, Any]],
+    from_line: int,
+    to_line: int,
+) -> str:
+    """Render collect_deps results.
+
+    Args:
+        deps:     Output of collect_deps().
+        from_line, to_line: Range that was analyzed.
+
+    Returns:
+        Multi-line string suitable for printing.
+    """
+    if not deps:
+        return f'No dependencies flowing into L{from_line}→L{to_line}'
+    lines: List[str] = []
+    for d in deps:
+        write_info = (
+            f'  (first write L{d["first_write_line"]})'
+            if d['first_write_line'] is not None
+            else '  (never written in range)'
+        )
+        lines.append(
+            f'PARAM  {d["var"]:<30}  first read L{d["first_read_line"]}{write_info}'
+        )
+    return '\n'.join(lines)
+
+
+def render_mutations(
+    mutations: List[Dict[str, Any]],
+    from_line: int,
+    to_line: int,
+) -> str:
+    """Render collect_mutations results.
+
+    Args:
+        mutations: Output of collect_mutations().
+        from_line, to_line: Range that was analyzed.
+
+    Returns:
+        Multi-line string suitable for printing.
+    """
+    if not mutations:
+        return f'No mutations in L{from_line}→L{to_line} that are read after'
+    lines: List[str] = []
+    for m in mutations:
+        lines.append(
+            f'RETURN {m["var"]:<30}  written L{m["last_write_line"]},'
+            f' next read L{m["next_read_line"]}'
+        )
     return '\n'.join(lines)

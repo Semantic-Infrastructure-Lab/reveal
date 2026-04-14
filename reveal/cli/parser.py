@@ -336,9 +336,31 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--scope', action='store_true',
                         help='Show ancestor scope chain for a line (use with :LINE syntax, e.g., reveal file.py :123 --scope)')
     parser.add_argument('--varflow', type=str, metavar='VAR',
-                        help='Trace reads/writes of a variable within a function (e.g., reveal file.py process_items --varflow result)')
-    parser.add_argument('--calls', type=str, metavar='START-END',
-                        help='Show calls within a line range inside a function (e.g., reveal file.py process_items --calls 89-120)')
+                        help='Trace reads/writes of a variable within a function or flat file '
+                             '(e.g., reveal file.py myfunc --varflow result  or  reveal file.php :1-2000 --varflow errormsg)')
+    parser.add_argument('--calls', nargs='?', const='FULL', type=str, metavar='START-END',
+                        help='Show call sites in a line range (e.g., reveal file.py myfunc --calls 89-120  or  reveal file.php :477-531 --calls)')
+    parser.add_argument('--around', nargs='?', const=20, type=int, metavar='N',
+                        help='Show ±N lines centered on a target line with a pointer '
+                             '(e.g., reveal file.py :123 --around  or  reveal file.py :123 --around 10; default N=20)')
+    parser.add_argument('--ifmap', action='store_true',
+                        help='Show branching skeleton (IF/ELIF/ELSE) for a function or line range '
+                             '(e.g., reveal file.php :878-2130 --ifmap  or  reveal file.py myfunc --ifmap)')
+    parser.add_argument('--catchmap', action='store_true',
+                        help='Show exception skeleton (TRY/CATCH/FINALLY) for a function or line range '
+                             '(e.g., reveal file.php :470-525 --catchmap  or  reveal file.py myfunc --catchmap)')
+    parser.add_argument('--exits', action='store_true',
+                        help='List exit nodes (return/raise/break/continue/die) in a line range '
+                             '(e.g., reveal file.php :657-2200 --exits  or  reveal file.py myfunc --exits)')
+    parser.add_argument('--flowto', action='store_true',
+                        help='Show exit nodes plus a reachability verdict for a line range '
+                             '(e.g., reveal file.php :2928-3663 --flowto  or  reveal file.py myfunc --flowto)')
+    parser.add_argument('--deps', action='store_true',
+                        help='Show variables that flow INTO a line range (potential function params) '
+                             '(e.g., reveal file.php :1136-1463 --deps  or  reveal file.py myfunc --deps)')
+    parser.add_argument('--mutations', action='store_true',
+                        help='Show variables written in a line range and read after (potential return values) '
+                             '(e.g., reveal file.php :1136-1463 --mutations  or  reveal file.py myfunc --mutations)')
 
 
 def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
