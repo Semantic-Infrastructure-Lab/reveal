@@ -712,8 +712,12 @@ _EXIT_KIND: Dict[str, str] = {
 # Kinds that unconditionally prevent reaching a subsequent line
 _HARD_EXIT_KINDS: frozenset = frozenset({'RETURN', 'RAISE', 'THROW', 'EXIT'})
 
-# Kinds that may interrupt flow but only within a loop iteration
-_SOFT_EXIT_KINDS: frozenset = frozenset({'BREAK', 'CONTINUE'})
+# Kinds that interrupt flow without hard-terminating the function.
+# YIELD suspends the generator and hands control to the caller — it is not a
+# hard exit (the function can resume on the next next() call) but it does
+# transfer control out of the current scope, so treating it as CLEAR would be
+# misleading for --flowto analysis.
+_SOFT_EXIT_KINDS: frozenset = frozenset({'BREAK', 'CONTINUE', 'YIELD'})
 
 
 def collect_exits(

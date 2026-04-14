@@ -309,6 +309,10 @@ class TestParseLineRange(unittest.TestCase):
         from reveal.file_handler import _parse_line_range
         self.parse = _parse_line_range
 
+    def test_none_returns_defaults(self):
+        """None input (--range absent) should fall back cleanly, not crash."""
+        self.assertEqual(self.parse(None, 1, 100), (1, 100))
+
     def test_string_start_end(self):
         self.assertEqual(self.parse('10-20', 1, 100), (10, 20))
 
@@ -372,41 +376,47 @@ class TestRangeWithNavFlags(unittest.TestCase):
         self.assertIn('PARAM', output)
 
     def test_mutations_with_tuple_range(self):
-        """--mutations with a pre-parsed tuple range should not crash."""
+        """--mutations with a pre-parsed tuple range should not crash.
+        Uses collect_mutations (L936) with a sub-range that leaves the return
+        statement outside, so at least one mutation qualifies."""
         import io, sys
         from reveal.file_handler import _dispatch_nav
         from reveal.analyzers.python import PythonAnalyzer
 
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
-        args = self._make_args(mutations=True, range=(886, 920))
+        # Sub-range: enough code to write locals but stop before the final return
+        args = self._make_args(mutations=True, range=(936, 970))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
         try:
-            _dispatch_nav(analyzer, 'collect_deps', 'text', args)
+            _dispatch_nav(analyzer, 'collect_mutations', 'text', args)
         finally:
             sys.stdout = old_stdout
-        # Just verifying no crash; output may be empty if no mutations qualify
-        self.assertIsNotNone(captured.getvalue())
+        # render_mutations outputs 'RETURN var  written Lx, next read Ly' lines
+        output = captured.getvalue()
+        self.assertIn('RETURN', output)
 
     def test_exits_with_tuple_range(self):
-        """--exits with a pre-parsed tuple range should not crash."""
+        """--exits with a pre-parsed tuple range should not crash and find exits.
+        collect_exits (L723) unconditionally returns at its end, so RETURN is certain."""
         import io, sys
         from reveal.file_handler import _dispatch_nav
         from reveal.analyzers.python import PythonAnalyzer
 
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
-        args = self._make_args(exits=True, range=(886, 930))
+        args = self._make_args(exits=True, range=(723, 785))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
         try:
-            _dispatch_nav(analyzer, 'collect_deps', 'text', args)
+            _dispatch_nav(analyzer, 'collect_exits', 'text', args)
         finally:
             sys.stdout = old_stdout
-        self.assertIsNotNone(captured.getvalue())
+        output = captured.getvalue()
+        self.assertIn('RETURN', output)
 
 
 if __name__ == '__main__':

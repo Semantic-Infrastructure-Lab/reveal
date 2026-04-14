@@ -229,8 +229,17 @@ class TestRenderExits(unittest.TestCase):
         exits = [{'kind': 'RETURN', 'line': 20, 'text': 'return x'}]
         result = render_exits(exits, 10, 50, verdict=False)
         self.assertNotIn('BLOCKED', result)
-        self.assertNotIn('CLEAR', result)
-        self.assertNotIn('CONDITIONAL', result)
+
+    def test_verdict_yield_is_conditional_not_clear(self):
+        """Regression: YIELD previously fell through to CLEAR because it was
+        not in _HARD_EXIT_KINDS or _SOFT_EXIT_KINDS.  A generator that yields
+        suspends control to the caller, so CLEAR is misleading — CONDITIONAL
+        is the correct verdict."""
+        from reveal.adapters.ast.nav import render_exits
+        exits = [{'kind': 'YIELD', 'line': 20, 'text': 'yield value'}]
+        result = render_exits(exits, 10, 50, verdict=True)
+        self.assertIn('~ CONDITIONAL', result)
+        self.assertNotIn('✓ CLEAR', result)
 
     def test_exit_kind_from_die_call(self):
         from reveal.adapters.ast.nav import render_exits

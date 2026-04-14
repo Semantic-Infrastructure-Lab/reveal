@@ -40,6 +40,23 @@ from .adapters.nginx.handlers import (  # noqa: F401 — re-exported for backwar
 )
 
 
+# Branch keywords for --ifmap and --catchmap filtering
+_IF_KEYWORDS: frozenset = frozenset({'IF', 'ELIF', 'ELSE', 'SWITCH', 'CASE', 'DEFAULT'})
+_CATCH_KEYWORDS: frozenset = frozenset({'TRY', 'CATCH', 'EXCEPT', 'FINALLY'})
+
+
+def _resolve_range(args, func_start: int, func_end: int):
+    """Return (from_line, to_line) for a nav flag, respecting --range if present.
+
+    ``args.range`` may be a pre-parsed (start, end) tuple (set by
+    validate_navigation_args) or None when --range was not supplied.
+    """
+    range_arg = getattr(args, 'range', None)
+    if range_arg:
+        return _parse_line_range(range_arg, func_start, func_end)
+    return func_start, func_end
+
+
 def _get_analyzer_or_exit(path: str, allow_fallback: bool):
     """Get analyzer for path or exit with error.
 
@@ -211,11 +228,9 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
 
     # ---- --outline: control-flow skeleton ----------------------------------
     if getattr(args, 'outline', False):
-        range_arg = getattr(args, 'range', None)
-        from_line, to_line = func_start, func_end
-        if range_arg:
-            from_line, to_line = _parse_line_range(range_arg, func_start, func_end)
+        from_line, to_line = _resolve_range(args, func_start, func_end)
         items = element_outline(func_node, get_text, max_depth=depth)
+        range_arg = getattr(args, 'range', None)
         if range_arg:
             items = [i for i in items if from_line <= i['line_start'] <= to_line]
         print(render_outline(element, func_start, func_end, items, depth=depth))
@@ -224,10 +239,7 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
     # ---- --varflow: variable read/write trace ------------------------------
     if getattr(args, 'varflow', None):
         var_name = args.varflow
-        range_arg = getattr(args, 'range', None)
-        from_line, to_line = func_start, func_end
-        if range_arg:
-            from_line, to_line = _parse_line_range(range_arg, func_start, func_end)
+        from_line, to_line = _resolve_range(args, func_start, func_end)
         events = var_flow(func_node, var_name, from_line, to_line, get_text)
         content_lines = analyzer.content.splitlines()
         print(render_var_flow(var_name, events, content_lines))
@@ -243,14 +255,9 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         return
 
     # ---- --ifmap / --catchmap: branching skeleton -------------------------
-    _IF_KEYWORDS: frozenset = frozenset({'IF', 'ELIF', 'ELSE', 'SWITCH', 'CASE', 'DEFAULT'})
-    _CATCH_KEYWORDS: frozenset = frozenset({'TRY', 'CATCH', 'EXCEPT', 'FINALLY'})
     if getattr(args, 'ifmap', False) or getattr(args, 'catchmap', False):
         keywords = _IF_KEYWORDS if getattr(args, 'ifmap', False) else _CATCH_KEYWORDS
-        range_arg = getattr(args, 'range', None)
-        from_line, to_line = func_start, func_end
-        if range_arg:
-            from_line, to_line = _parse_line_range(range_arg, func_start, func_end)
+        from_line, to_line = _resolve_range(args, func_start, func_end)
         items = element_outline(func_node, get_text, max_depth=depth)
         filtered = [
             i for i in items
@@ -261,30 +268,21 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
 
     # ---- --exits / --flowto: exit-node collector --------------------------
     if getattr(args, 'exits', False) or getattr(args, 'flowto', False):
-        range_arg = getattr(args, 'range', None)
-        from_line, to_line = func_start, func_end
-        if range_arg:
-            from_line, to_line = _parse_line_range(range_arg, func_start, func_end)
+        from_line, to_line = _resolve_range(args, func_start, func_end)
         exits = collect_exits(func_node, from_line, to_line, get_text)
         print(render_exits(exits, from_line, to_line, verdict=getattr(args, 'flowto', False)))
         return
 
     # ---- --deps: variables flowing into a range ----------------------------
     if getattr(args, 'deps', False):
-        range_arg = getattr(args, 'range', None)
-        from_line, to_line = func_start, func_end
-        if range_arg:
-            from_line, to_line = _parse_line_range(range_arg, func_start, func_end)
+        from_line, to_line = _resolve_range(args, func_start, func_end)
         deps = collect_deps(func_node, from_line, to_line, get_text)
         print(render_deps(deps, from_line, to_line))
         return
 
     # ---- --mutations: variables written in range and read after ------------
     if getattr(args, 'mutations', False):
-        range_arg = getattr(args, 'range', None)
-        from_line, to_line = func_start, func_end
-        if range_arg:
-            from_line, to_line = _parse_line_range(range_arg, func_start, func_end)
+        from_line, to_line = _resolve_range(args, func_start, func_end)
         mutations = collect_mutations(func_node, from_line, to_line, get_text)
         print(render_mutations(mutations, from_line, to_line))
         return
@@ -322,9 +320,11 @@ def _parse_line_range(range_str, default_start: int, default_end: int):
 
     Accepts either a 'START-END' string or a (start, end) tuple as produced by
     validate_navigation_args().  Falls back to (default_start, default_end) on
-    parse failure.
+    None input or parse failure.
     """
     import re  # noqa: I006
+    if range_str is None:
+        return default_start, default_end
     if isinstance(range_str, tuple):
         start, end = range_str
         return start, (end if end is not None else default_end)
@@ -427,8 +427,11 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
             )
             sys.exit(1)
         # Flat-file flags: synthesize a full-file element so _dispatch_nav can
-        # fall back to root_node.  --outline without element is handled later by
-        # show_structure, so it's intentionally not in this list.
+        # fall back to root_node.  Note: --outline is intentionally absent here.
+        # `reveal file.py --outline` (no element) is handled downstream by
+        # show_structure, which renders a top-level structural outline.  Adding
+        # --outline here would route it through _dispatch_nav on root_node instead,
+        # producing a different (lower-level) output and breaking existing behaviour.
         _FLAT_FLAGS = ('varflow', 'calls', 'ifmap', 'catchmap', 'exits', 'flowto', 'deps', 'mutations')
         for flag in _FLAT_FLAGS:
             if getattr(args, flag, None):
