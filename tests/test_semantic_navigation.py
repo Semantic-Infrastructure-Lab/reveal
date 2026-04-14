@@ -302,5 +302,112 @@ class TestCLIArgumentValidation(unittest.TestCase):
         pass
 
 
+class TestParseLineRange(unittest.TestCase):
+    """Unit tests for file_handler._parse_line_range."""
+
+    def setUp(self):
+        from reveal.file_handler import _parse_line_range
+        self.parse = _parse_line_range
+
+    def test_string_start_end(self):
+        self.assertEqual(self.parse('10-20', 1, 100), (10, 20))
+
+    def test_string_single_number(self):
+        self.assertEqual(self.parse('15', 1, 100), (15, 100))
+
+    def test_string_invalid_falls_back(self):
+        self.assertEqual(self.parse('bad', 1, 100), (1, 100))
+
+    def test_tuple_both_values(self):
+        """validate_navigation_args() pre-converts --range to a (start, end) tuple."""
+        self.assertEqual(self.parse((10, 20), 1, 100), (10, 20))
+
+    def test_tuple_open_ended(self):
+        """Open-ended range like '300-' produces (300, None); None should use default_end."""
+        self.assertEqual(self.parse((300, None), 1, 500), (300, 500))
+
+    def test_tuple_does_not_crash(self):
+        """Regression: tuple input previously raised AttributeError on .strip()."""
+        try:
+            self.parse((890, 920), 886, 930)
+        except AttributeError as e:
+            self.fail(f'_parse_line_range raised AttributeError on tuple input: {e}')
+
+
+class TestRangeWithNavFlags(unittest.TestCase):
+    """Integration tests: --range combined with --deps/--mutations/--exits via dispatch."""
+
+    def _make_args(self, **kwargs):
+        import argparse
+        defaults = dict(
+            scope=False, around=None, outline=False, varflow=None, calls=None,
+            ifmap=False, catchmap=False, exits=False, flowto=False,
+            deps=False, mutations=False, depth=3, range=None,
+        )
+        defaults.update(kwargs)
+        return argparse.Namespace(**defaults)
+
+    def _nav_file(self):
+        """Return path to nav.py as a test target."""
+        from pathlib import Path
+        return str(Path(__file__).parent.parent / 'reveal' / 'adapters' / 'ast' / 'nav.py')
+
+    def test_deps_with_tuple_range(self):
+        """--deps with a pre-parsed tuple range should not crash."""
+        import io, sys
+        from reveal.file_handler import _dispatch_nav
+        from reveal.analyzers.python import PythonAnalyzer
+
+        analyzer = PythonAnalyzer(self._nav_file())
+        analyzer.get_structure()
+        args = self._make_args(deps=True, range=(886, 930))
+        captured = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+        try:
+            _dispatch_nav(analyzer, 'collect_deps', 'text', args)
+        finally:
+            sys.stdout = old_stdout
+        output = captured.getvalue()
+        self.assertIn('PARAM', output)
+
+    def test_mutations_with_tuple_range(self):
+        """--mutations with a pre-parsed tuple range should not crash."""
+        import io, sys
+        from reveal.file_handler import _dispatch_nav
+        from reveal.analyzers.python import PythonAnalyzer
+
+        analyzer = PythonAnalyzer(self._nav_file())
+        analyzer.get_structure()
+        args = self._make_args(mutations=True, range=(886, 920))
+        captured = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+        try:
+            _dispatch_nav(analyzer, 'collect_deps', 'text', args)
+        finally:
+            sys.stdout = old_stdout
+        # Just verifying no crash; output may be empty if no mutations qualify
+        self.assertIsNotNone(captured.getvalue())
+
+    def test_exits_with_tuple_range(self):
+        """--exits with a pre-parsed tuple range should not crash."""
+        import io, sys
+        from reveal.file_handler import _dispatch_nav
+        from reveal.analyzers.python import PythonAnalyzer
+
+        analyzer = PythonAnalyzer(self._nav_file())
+        analyzer.get_structure()
+        args = self._make_args(exits=True, range=(886, 930))
+        captured = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+        try:
+            _dispatch_nav(analyzer, 'collect_deps', 'text', args)
+        finally:
+            sys.stdout = old_stdout
+        self.assertIsNotNone(captured.getvalue())
+
+
 if __name__ == '__main__':
     unittest.main()
