@@ -54,8 +54,8 @@ query_parameters:
   range: 'Cell range in A1 notation (e.g., A1:C10) - default: all cells'
   limit: 'Maximum number of rows to return - default: all rows'
   format: 'Output format (csv, json) - default: text table'
-  search: 'Search for text across all sheets (NOT YET IMPLEMENTED)'
-  formulas: 'Show formulas instead of calculated values (NOT YET IMPLEMENTED)'
+  search: 'Search for text across all sheets'
+  formulas: 'Show formulas instead of calculated values'
 
 flags:
   --meta: 'Show Excel file metadata (creator, dates, parts count)'

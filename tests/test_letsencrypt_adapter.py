@@ -431,9 +431,101 @@ class TestLetsEncryptRenderer(unittest.TestCase):
         buf = io.StringIO()
         data = {'type': 'letsencrypt_inventory', 'cert_count': 0, 'certs': []}
         with patch('builtins.print', side_effect=lambda *a, **kw: buf.write(str(a[0]) + '\n')):
-            self.renderer.render_structure(data, output_format='json')
+            self.renderer.render_structure(data, format='json')
         parsed = json.loads(buf.getvalue().strip())
         self.assertEqual(parsed['type'], 'letsencrypt_inventory')
+
+    def test_render_error_accepts_exception(self):
+        """BACK-168: render_error must accept Exception, not just str."""
+        import io
+        buf = io.StringIO()
+        err = ImportError("missing dependency")
+        with patch('builtins.print', side_effect=lambda *a, **kw: buf.write(str(a[0]) + '\n')):
+            self.renderer.render_error(err)
+        self.assertIn('missing dependency', buf.getvalue())
+
+    def test_render_structure_format_kwarg(self):
+        """BACK-169: render_structure parameter must be named 'format', not 'output_format'."""
+        import io, json, inspect
+        sig = inspect.signature(self.renderer.render_structure)
+        assert 'format' in sig.parameters, "render_structure must have 'format' parameter"
+        assert 'output_format' not in sig.parameters, "render_structure must not use 'output_format'"
+
+
+class TestLetsEncryptQueryParams(unittest.TestCase):
+    """BACK-175: letsencrypt:// adapter query param support."""
+
+    def test_check_orphans_via_query_param(self):
+        """?check-orphans in URI triggers orphan analysis."""
+        from reveal.adapters.letsencrypt.adapter import LetsEncryptAdapter
+        adapter = LetsEncryptAdapter('letsencrypt://?check-orphans')
+        assert adapter.query_params.get('check-orphans') is True
+
+    def test_check_duplicates_via_query_param(self):
+        """?check-duplicates in URI triggers duplicate analysis."""
+        from reveal.adapters.letsencrypt.adapter import LetsEncryptAdapter
+        adapter = LetsEncryptAdapter('letsencrypt://?check-duplicates')
+        assert adapter.query_params.get('check-duplicates') is True
+
+    def test_no_query_params_by_default(self):
+        """Bare letsencrypt:// has empty query_params."""
+        from reveal.adapters.letsencrypt.adapter import LetsEncryptAdapter
+        adapter = LetsEncryptAdapter('letsencrypt://')
+        assert adapter.query_params == {}
+
+    def test_schema_documents_query_params(self):
+        """BACK-175: schema query_params lists check-orphans and check-duplicates."""
+        from reveal.adapters.letsencrypt.adapter import LetsEncryptAdapter
+        schema = LetsEncryptAdapter.get_schema()
+        qp = schema['query_params']
+        assert 'check-orphans' in qp
+        assert 'check-duplicates' in qp
+
+
+class TestLetsEncryptGetHelp:
+    """Tests for letsencrypt get_help() — loaded from help_data/letsencrypt.yaml."""
+
+    def test_get_help_returns_dict(self):
+        h = LetsEncryptAdapter.get_help()
+        assert isinstance(h, dict)
+
+    def test_get_help_required_fields(self):
+        h = LetsEncryptAdapter.get_help()
+        assert h['name'] == 'letsencrypt'
+        assert 'description' in h
+        assert 'syntax' in h
+        assert 'examples' in h
+
+    def test_get_help_has_query_params_section(self):
+        """query_params key must exist and document both params."""
+        h = LetsEncryptAdapter.get_help()
+        assert 'query_params' in h, "help data must have query_params section"
+        qp = h['query_params']
+        assert 'check-orphans' in qp
+        assert 'check-duplicates' in qp
+
+    def test_get_help_examples_include_uri_param_forms(self):
+        """Examples must show ?check-orphans and ?check-duplicates URI forms."""
+        h = LetsEncryptAdapter.get_help()
+        uris = [e['uri'] for e in h['examples']]
+        all_uris = ' '.join(uris)
+        assert '?check-orphans' in all_uris, "missing ?check-orphans example"
+        assert '?check-duplicates' in all_uris, "missing ?check-duplicates example"
+
+    def test_get_help_examples_include_cli_flag_forms(self):
+        """Examples must still show --check-orphans and --check-duplicates CLI forms."""
+        h = LetsEncryptAdapter.get_help()
+        uris = [e['uri'] for e in h['examples']]
+        all_uris = ' '.join(uris)
+        assert '--check-orphans' in all_uris
+        assert '--check-duplicates' in all_uris
+
+    def test_get_help_has_flags_section(self):
+        h = LetsEncryptAdapter.get_help()
+        assert 'flags' in h
+        flags = h['flags']
+        assert '--check-orphans' in flags
+        assert '--check-duplicates' in flags
 
 
 if __name__ == '__main__':

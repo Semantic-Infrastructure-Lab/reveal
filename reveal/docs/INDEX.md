@@ -65,7 +65,7 @@ Complete guides for all URI protocol adapters.
 - `autossl://` — see [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md) (cPanel AutoSSL logs)
 - `markdown://` — see [MARKDOWN_GUIDE.md](adapters/MARKDOWN_GUIDE.md) under Analyzer Guides
 - `nginx://` — see [NGINX_GUIDE.md](adapters/NGINX_GUIDE.md)
-- `demo://` — example/testing adapter, no guide needed
+- `demo://` — scaffolding template only; not registered by default (see [SCAFFOLDING_GUIDE.md](development/SCAFFOLDING_GUIDE.md))
 - `help://` — meta-adapter for in-tool help; use `reveal help://` to explore
 
 ---

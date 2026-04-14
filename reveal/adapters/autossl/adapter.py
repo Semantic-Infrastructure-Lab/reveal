@@ -18,6 +18,8 @@ Examples:
 from typing import Any, Dict, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
+from ..help_data import load_help_data
+from ...utils.query import parse_query_params
 from .parser import AUTOSSL_LOG_DIR, list_runs, parse_run
 from .renderer import AutosslRenderer
 
@@ -179,12 +181,19 @@ class AutosslAdapter(ResourceAdapter):
         self.connection_string = connection_string
         self.timestamp: Optional[str] = None  # None → list runs
         self.domain: Optional[str] = None     # set → domain history mode
+        self.query_params: Dict[str, Any] = {}
+        if '?' in connection_string:
+            _, query_string = connection_string.split('?', 1)
+            self.query_params = parse_query_params(query_string)
         self._parse_connection_string(connection_string)
 
     def _parse_connection_string(self, uri: str) -> None:
         if not uri.startswith('autossl://'):
             raise ValueError(f"Invalid autossl:// URI: {uri}")
         rest = uri[len('autossl://'):].strip('/')
+        # Strip query string before parsing path
+        if '?' in rest:
+            rest = rest.split('?', 1)[0]
         if rest == '':
             self.timestamp = None
         elif rest == 'latest':
@@ -206,6 +215,9 @@ class AutosslAdapter(ResourceAdapter):
                 top-level run header and summary counts.
             user: When set, filter to only the named user (case-sensitive).
         """
+        only_failures = only_failures or bool(self.query_params.get('only-failures'))
+        summary = summary or bool(self.query_params.get('summary'))
+        user = user or self.query_params.get('user') or None
         if self.domain is not None:
             show_all = kwargs.get('all', False)
             return self._domain_history_structure(self.domain, show_all=show_all)
@@ -309,7 +321,11 @@ class AutosslAdapter(ResourceAdapter):
             'adapter': 'autossl',
             'description': 'Inspect cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures',
             'uri_syntax': 'autossl://[TIMESTAMP|DOMAIN]',
-            'query_params': {},
+            'query_params': {
+                'only-failures': 'Omit domains with tls_status=ok; drop users with no remaining failures (also: --only-failures)',
+                'summary': 'Strip per-user/domain detail — return only the run header and summary counts (also: --summary)',
+                'user': 'Filter to a single named user, case-sensitive (also: --user=USERNAME)',
+            },
             'elements': {},
             'cli_flags': ['--format=json', '--only-failures', '--user=USERNAME', '--summary', '--all'],
             'supports_batch': False,
@@ -418,6 +434,21 @@ class AutosslAdapter(ResourceAdapter):
                     'output_type': 'autossl_run',
                 },
                 {
+                    'uri': 'reveal autossl://latest?only-failures',
+                    'description': 'Most recent run — failures only (no ok domains)',
+                    'output_type': 'autossl_run',
+                },
+                {
+                    'uri': 'reveal autossl://latest?summary',
+                    'description': 'Most recent run — header and counts only, no per-domain detail',
+                    'output_type': 'autossl_run',
+                },
+                {
+                    'uri': 'reveal autossl://latest?user=bob&only-failures',
+                    'description': 'Most recent run filtered to a single user, failures only',
+                    'output_type': 'autossl_run',
+                },
+                {
                     'uri': "reveal autossl:// --format=json | jq '.runs[-1]'",
                     'description': 'Get timestamp of the most recent AutoSSL run',
                     'output_type': 'autossl_runs',
@@ -444,81 +475,4 @@ class AutosslAdapter(ResourceAdapter):
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
-        return {
-            'name': 'autossl',
-            'description': "Inspect cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures",
-            'stability': 'beta',
-            'syntax': 'autossl://[TIMESTAMP|DOMAIN]',
-            'features': [
-                'Filesystem-based — no WHM API or credentials required',
-                'Lists all available run timestamps',
-                'Parses NDJSON log: per-user, per-domain TLS status',
-                'TLS outcomes: ok / incomplete / defective',
-                'Defect codes extracted (e.g. SELF_SIGNED_CERT, CERT_HAS_EXPIRED)',
-                'DCV impediment codes (TOTAL_DCV_FAILURE, NO_UNSECURED_DOMAIN_PASSED_DCV)',
-                'Summary by user + overall counts',
-                'Filter to one user with --user=USERNAME',
-                'Filter to failures only with --only-failures',
-                'Domain history: autossl://DOMAIN — TLS status across all runs (capped at 20; use --all for full history)',
-                'Chronic failure detection: always shows ✅ 0 ok; prints "Failing since: DATE" when ok==0',
-                'JSON output for scripting and filtering',
-            ],
-            'examples': [
-                {
-                    'uri': 'autossl://',
-                    'description': 'List available run timestamps (newest first)',
-                },
-                {
-                    'uri': 'autossl://latest',
-                    'description': 'Parse most recent AutoSSL run — per-user/domain summary',
-                },
-                {
-                    'uri': 'autossl://2026-03-03T23:26:01Z',
-                    'description': 'Parse a specific AutoSSL run by timestamp',
-                },
-                {
-                    'uri': 'autossl://latest --only-failures',
-                    'description': 'Show only domains with errors (defective/incomplete) — hides ok domains',
-                },
-                {
-                    'uri': 'autossl://latest --user=sociamonials',
-                    'description': 'Filter to a single cPanel user — avoids 800-domain output on shared hosts',
-                },
-                {
-                    'uri': 'autossl://latest --user=sociamonials --only-failures',
-                    'description': 'One user, failures only — the most focused diagnostic view',
-                },
-                {
-                    'uri': "autossl://latest --format=json | jq '[.users[].domains[] | select(.tls_status==\"defective\")]'",
-                    'description': 'Extract all defective domains as JSON',
-                },
-                {
-                    'uri': 'autossl://app.example.com',
-                    'description': 'Domain history — 20 most recent runs; shows ✅ 0 ok + "Failing since: DATE" when chronic',
-                },
-                {
-                    'uri': 'autossl://app.example.com --all',
-                    'description': 'Domain history — full history across all runs (bypasses 20-row default cap)',
-                },
-            ],
-            'tls_status_values': {
-                'ok': 'Certificate valid and AutoSSL satisfied',
-                'incomplete': 'No cert renewal triggered (existing cert still valid)',
-                'defective': 'Certificate has a problem (expired, self-signed, chain error)',
-            },
-            'impediment_codes': {
-                'TOTAL_DCV_FAILURE': 'Every domain in the cert failed DCV — no renewal possible',
-                'NO_UNSECURED_DOMAIN_PASSED_DCV': 'No unsecured domain passed DCV — partial failure',
-            },
-            'notes': [
-                'Must run as root or with read access to /var/cpanel/logs/autossl/',
-                'Runs approximately every 3 hours; logs retained ~30 days',
-                'Use --format=json for machine-readable output and jq filtering',
-                f'Log directory: {AUTOSSL_LOG_DIR}',
-            ],
-            'see_also': [
-                'reveal cpanel://USERNAME/ssl  - Disk cert health per domain',
-                'reveal cpanel://USERNAME      - cPanel user overview',
-                'reveal ssl://DOMAIN           - Live TLS cert inspection',
-            ],
-        }
+        return load_help_data('autossl') or {}

@@ -564,6 +564,9 @@ class CpanelAdapter(ResourceAdapter):
     def get_structure(self, dns_verified: bool = False, only_failures: bool = False,
                       check_live: bool = False, **kwargs) -> Dict[str, Any]:
         """Get cPanel user overview or element data."""
+        # URI query params (?dns-verified, ?check-live) act as defaults; CLI flags take precedence
+        dns_verified = dns_verified or bool(self.query_params.get('dns-verified'))
+        check_live = check_live or bool(self.query_params.get('check-live'))
         if self._is_help:
             if self.element == 'api':
                 return _get_api_reference()
@@ -839,10 +842,14 @@ class CpanelAdapter(ResourceAdapter):
         return {
             'adapter': 'cpanel',
             'description': 'Inspect cPanel user environments — domains, SSL certs, ACL health, composite audit',
-            'uri_syntax': 'cpanel://USERNAME[/element[?domain_type=<type>]]',
-            'uri_query_params': {'domain_type': 'Filter ssl certs by type: main_domain, addon, subdomain, parked'},
+            'uri_syntax': 'cpanel://USERNAME[/element[?param=value]]',
+            'query_params': {
+                'domain_type': 'Filter ssl certs by type: main_domain, addon, subdomain, parked',
+                'dns-verified': 'Exclude domains with no DNS record (NXDOMAIN) from SSL counts (also: --dns-verified)',
+                'check-live': 'Cross-check disk certs against live TLS (also: --check-live)',
+            },
             'elements': _SCHEMA_ELEMENTS,
-            'cli_flags': ['--format=json', '--dns-verified', '--only-failures'],
+            'cli_flags': ['--format=json', '--dns-verified', '--check-live', '--only-failures'],
             'supports_batch': False,
             'output_types': _SCHEMA_OUTPUT_TYPES,
             'example_queries': _SCHEMA_EXAMPLE_QUERIES,
@@ -890,6 +897,18 @@ class CpanelAdapter(ResourceAdapter):
                 {
                     'uri': 'cpanel://USERNAME/ssl --format=json',
                     'description': 'JSON output for scripting',
+                },
+                {
+                    'uri': "cpanel://USERNAME/ssl?domain_type=addon",
+                    'description': 'Filter to addon domain certs only (URI query param form)',
+                },
+                {
+                    'uri': "cpanel://USERNAME/ssl?dns-verified",
+                    'description': 'Exclude NXDOMAIN domains from SSL counts (URI form of --dns-verified)',
+                },
+                {
+                    'uri': "cpanel://USERNAME/ssl?check-live",
+                    'description': 'Cross-check disk certs against live TLS (URI form of --check-live)',
                 },
                 {
                     'uri': 'cpanel://help/api',

@@ -96,6 +96,43 @@ class TestSSLAdapterInit(unittest.TestCase):
             SSLAdapter("ssl://example.com:notaport")
         self.assertIn("Invalid port", str(ctx.exception))
 
+    def test_query_param_expiring_within(self):
+        """?expiring-within=30 is parsed into query_params."""
+        adapter = SSLAdapter("ssl://example.com?expiring-within=30")
+        self.assertEqual(adapter.host, "example.com")
+        self.assertEqual(adapter.query_params.get('expiring-within'), '30')
+
+    def test_query_param_summary(self):
+        """?summary (no value) is parsed as True in query_params."""
+        adapter = SSLAdapter("ssl://example.com?summary")
+        self.assertEqual(adapter.host, "example.com")
+        self.assertIs(adapter.query_params.get('summary'), True)
+
+    def test_query_params_with_element(self):
+        """?params after element are extracted without corrupting element."""
+        adapter = SSLAdapter("ssl://example.com/san?expiring-within=14")
+        self.assertEqual(adapter.host, "example.com")
+        self.assertEqual(adapter.element, "san")
+        self.assertEqual(adapter.query_params.get('expiring-within'), '14')
+
+    def test_query_params_empty_by_default(self):
+        """No query string → query_params is empty dict."""
+        adapter = SSLAdapter("ssl://example.com")
+        self.assertEqual(adapter.query_params, {})
+
+    def test_query_param_expiring_within_affects_warn_days(self):
+        """?expiring-within=60 in URI sets warn_days in check() without --expiring-within flag."""
+        from unittest.mock import patch, MagicMock
+        adapter = SSLAdapter("ssl://example.com?expiring-within=60")
+        captured = {}
+        def fake_check_ssl_health(host, port, warn_days, **kw):
+            captured['warn_days'] = warn_days
+            return {'type': 'ssl_check', 'exit_code': 0}
+        with patch('reveal.adapters.ssl.adapter.check_ssl_health', side_effect=fake_check_ssl_health):
+            adapter._certificate = MagicMock()
+            adapter.check()
+        self.assertEqual(captured.get('warn_days'), 60)
+
 
 class TestCertificateInfo(unittest.TestCase):
     """Test CertificateInfo dataclass."""

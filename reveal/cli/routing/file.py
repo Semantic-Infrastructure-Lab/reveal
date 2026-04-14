@@ -215,6 +215,22 @@ def _guard_nginx_flags(args: 'Namespace', path_str: str) -> None:
             sys.exit(1)
 
 
+_SSL_FLAG_EXAMPLES = {
+    'expiring_within': (
+        "  reveal ssl://example.com --expiring-within 30   # single domain (CLI flag)\n"
+        "  reveal 'ssl://example.com?expiring-within=30' --check  # URI param form (preferred for pipelines)\n"
+        "  reveal ssl://nginx:///etc/nginx --check --expiring-within 30  # batch"
+    ),
+    'summary': (
+        "  reveal ssl://nginx:///etc/nginx --check --summary   # batch summary counts\n"
+        "  reveal ssl://example.com --check                    # single domain check"
+    ),
+    'validate_nginx': (
+        "  reveal ssl://example.com --validate-nginx   # cross-validate cert vs nginx config"
+    ),
+}
+
+
 def _guard_ssl_flags(args: 'Namespace') -> None:
     """Exit with error if ssl:// adapter flags are used on plain file paths."""
     for attr, flag in _SSL_ADAPTER_FLAGS.items():
@@ -222,8 +238,7 @@ def _guard_ssl_flags(args: 'Namespace') -> None:
             print(f"❌ Error: {flag} only works with the ssl:// adapter", file=sys.stderr)
             print(file=sys.stderr)
             print("Examples:", file=sys.stderr)
-            print(f"  reveal ssl://example.com {flag}           # with a domain", file=sys.stderr)
-            print(f"  reveal ssl://example.com?{attr.replace('_', '-')}=true  # URI param", file=sys.stderr)
+            print(_SSL_FLAG_EXAMPLES[attr], file=sys.stderr)
             print(file=sys.stderr)
             print("Learn more: reveal help://ssl", file=sys.stderr)
             sys.exit(1)
@@ -285,8 +300,13 @@ def _handle_file_path(path: Path, element_from_path: Optional[str], args: 'Names
         if path.suffix.lower() in ('.md', '.markdown'):
             element = args.section
         else:
-            print("Error: --section only works with markdown files (.md, .markdown)", file=sys.stderr)
-            print(f"For other files, use: reveal {path} \"element_name\"", file=sys.stderr)
+            print("❌ Error: --section only works with markdown files (.md, .markdown)", file=sys.stderr)
+            print(file=sys.stderr)
+            print("Examples:", file=sys.stderr)
+            print(f"  reveal {path}.md --section 'Heading Name'   # markdown section extraction", file=sys.stderr)
+            print(f"  reveal {path} \"element_name\"                # for non-markdown, use element syntax", file=sys.stderr)
+            print(file=sys.stderr)
+            print("Learn more: reveal help://ux", file=sys.stderr)
             sys.exit(1)
     handle_file(str(path), element, args.meta, args.format, args)
 

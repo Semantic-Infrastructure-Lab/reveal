@@ -22,15 +22,15 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 | **claude://** | `summary`, `errors`, `tools`, `contains`, `role`, `search`, `tail`, `last`, `tokens` | `claude://session?summary` |
 | **depends://** | `top`, `format` | `depends://src?top=10` |
 | **xlsx://** | `sheet`, `range`, `search`, `format`, `limit`, `formulas`, `powerpivot`, `powerquery`, `names`, `connections` | `xlsx://model.xlsx?sheet=Sales` |
-| **cpanel://** | `domain_type` (on ssl element) | `cpanel://USER/ssl?domain_type=addon` |
+| **cpanel://** | `domain_type`, `dns-verified`, `check-live` | `cpanel://USER/ssl?domain_type=addon` |
+| **ssl://** | `expiring-within`, `summary` | `ssl://host?expiring-within=30` |
 | **diff://** | none | N/A |
 | **env://** | none | N/A |
 | **sqlite://** | none | N/A |
 | **mysql://** | none | N/A |
-| **ssl://** | none (uses CLI flags) | N/A |
-| **autossl://** | none | N/A |
-| **letsencrypt://** | none | N/A |
-| **nginx://** | none (uses CLI flags) | N/A |
+| **autossl://** | `only-failures`, `summary`, `user=NAME` | `autossl://latest?only-failures` |
+| **letsencrypt://** | `check-orphans`, `check-duplicates` | `letsencrypt://?check-orphans` |
+| **nginx://** | none (CLI flags only; unrecognized `?params` stripped with warning) | N/A |
 | **python://** | none | N/A |
 | **domain://** | none | N/A |
 | **reveal://** | none | N/A |
@@ -472,14 +472,28 @@ reveal 'stats://.?hotspots&code_only'
 
 **Purpose**: Inspect cPanel user environments — domains, SSL certs, ACL health
 
-**Query Parameters** (on `ssl` element only):
+**Query Parameters**:
 
-- **`domain_type=<type>`** (string) - Filter SSL certs by domain type
+- **`domain_type=<type>`** (string, on `ssl` element) - Filter SSL certs by domain type
   - Values: `main_domain`, `addon`, `subdomain`, `parked`
   ```bash
   reveal 'cpanel://USERNAME/ssl?domain_type=addon'
   reveal 'cpanel://USERNAME/ssl?domain_type=main_domain'
   ```
+
+- **`dns-verified`** (flag) - Exclude domains with no DNS record (NXDOMAIN) from SSL counts
+  ```bash
+  reveal 'cpanel://USERNAME/ssl?dns-verified'
+  reveal 'cpanel://USERNAME/full-audit?dns-verified'
+  ```
+  Equivalent to `--dns-verified` CLI flag; URI form preferred when options need to travel with the resource.
+
+- **`check-live`** (flag) - Cross-check disk certs against live TLS (network call)
+  ```bash
+  reveal 'cpanel://USERNAME/ssl?check-live'
+  reveal 'cpanel://USERNAME/full-audit?check-live'
+  ```
+  Equivalent to `--check-live` CLI flag; URI form preferred in batch/pipeline workflows.
 
 ---
 
@@ -493,17 +507,30 @@ The following adapters use **element paths** for navigation — query params are
 - **python://** - `python://packages` (element = topic)
 - **reveal://** - `reveal://adapters` (element = topic)
 - **diff://** - Element path selects comparison side
-- **autossl://** - `autossl://TIMESTAMP` (element = run timestamp)
-- **letsencrypt://** - Inventory of all certs; no sub-selection needed
 
-The following adapters have **adapter-specific options expressed as CLI flags** rather than query params. This is a known design tension — the direction is to migrate these to URI query params so options travel with the resource:
+The following adapters use CLI flags that switch routing mode (not URI filters) — they are documented in `--discover` under `cli_only_flags` but do not support query params:
+
+- **nginx://**, **domain://**, **mysql://**, **sqlite://** — `--check`, `--only-failures` are check-mode switches; migrating to query params would require routing-layer changes
+
+The following adapters still have adapter-specific options expressed as CLI flags rather than query params. These are known migration targets — the direction is to move them to URI query params so options travel with the resource:
 
 | Adapter | Current (CLI flag) | Target (query param) |
 |---------|-------------------|----------------------|
-| `ssl://` | `reveal ssl://host --expiring-within 30` | `reveal 'ssl://host?expiring-within=30'` |
-| `ssl://` | `reveal ssl://nginx:///etc/nginx/*.conf --summary` | `reveal 'ssl://nginx:///etc/nginx/*.conf?summary'` |
-| `nginx://` | `reveal nginx://host --check` | `reveal 'nginx://host?check'` |
 | `claude://` | `reveal claude:// --base-path /path` | `reveal 'claude://?base-path=/path'` |
+
+**Already migrated** — both CLI flag and URI query param now work:
+
+| Adapter | CLI flag | URI query param |
+|---------|---------|-----------------|
+| `ssl://` | `reveal ssl://host --expiring-within 30` | `reveal 'ssl://host?expiring-within=30'` ✅ |
+| `ssl://` | `reveal ssl://nginx:///etc/nginx/*.conf --summary` | `reveal 'ssl://nginx:///etc/nginx/*.conf?summary'` ✅ |
+| `cpanel://` | `reveal cpanel://USER/ssl --dns-verified` | `reveal 'cpanel://USER/ssl?dns-verified'` ✅ |
+| `cpanel://` | `reveal cpanel://USER/ssl --check-live` | `reveal 'cpanel://USER/ssl?check-live'` ✅ |
+| `letsencrypt://` | `reveal letsencrypt:// --check-orphans` | `reveal 'letsencrypt://?check-orphans'` ✅ |
+| `letsencrypt://` | `reveal letsencrypt:// --check-duplicates` | `reveal 'letsencrypt://?check-duplicates'` ✅ |
+| `autossl://` | `reveal autossl://latest --only-failures` | `reveal 'autossl://latest?only-failures'` ✅ |
+| `autossl://` | `reveal autossl://latest --summary` | `reveal 'autossl://latest?summary'` ✅ |
+| `autossl://` | `reveal autossl://latest --user=NAME` | `reveal 'autossl://latest?user=NAME'` ✅ |
 
 The `ast://` adapter is the **reference implementation** — all filtering options are query parameters. New URI adapters should follow this pattern. See [ADAPTER_CONSISTENCY.md](../development/ADAPTER_CONSISTENCY.md#adapter-specific-flags-vs-query-parameters) for the full rationale.
 

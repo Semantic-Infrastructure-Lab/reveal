@@ -99,6 +99,7 @@ reveal file.py --search authenticate --type function
 reveal file.py --search authenticate --type function --sort=-complexity
 
 # Step 4: Need complex conditions? Use URI syntax
+# Note: --search <pattern> becomes ?name~=<pattern> in URI form (intentional rename)
 reveal 'ast://file.py?name~=authenticate&type=function&complexity>10&lines>50&sort=-complexity'
 ```
 

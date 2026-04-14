@@ -1059,3 +1059,159 @@ class TestAutosslDomainHistory:
         AutosslRenderer.render_structure(result, 'text')
         out = capsys.readouterr().out
         assert 'Failing since' not in out
+
+
+# ---------------------------------------------------------------------------
+# Tests: AutosslQueryParams
+# ---------------------------------------------------------------------------
+
+class TestAutosslQueryParams:
+    """Query params (?only-failures, ?summary, ?user=X) expose CLI flags as URI params."""
+
+    def _make_run_with_ok_and_failure(self, tmp_path):
+        """Write a run with one ok domain and one defective domain under user 'alice'."""
+        ts = '2026-01-01T00:00:00Z'
+        records = [
+            _user_analyzing('alice'),
+            _domain_analyzing('ok.example.com'),
+            _tls_ok(),
+            _domain_analyzing('bad.example.com'),
+            _tls_defective(),
+            _defect('SOME_ERROR'),
+        ]
+        log_dir = _write_run(tmp_path, ts, records)
+        return ts, log_dir
+
+    def test_query_params_empty_by_default(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://latest')
+        assert a.query_params == {}
+
+    def test_only_failures_via_query_param(self, tmp_path):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        from reveal.adapters.autossl.parser import parse_run
+        ts, log_dir = self._make_run_with_ok_and_failure(tmp_path)
+        a = AutosslAdapter('autossl://latest?only-failures')
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts]), \
+             patch('reveal.adapters.autossl.adapter.parse_run',
+                   side_effect=lambda t: parse_run(t, log_dir=log_dir)):
+            result = a.get_structure()
+        # With only-failures, ok.example.com should be gone
+        alice = result['users'][0]
+        domain_names = [d['domain'] for d in alice['domains']]
+        assert 'ok.example.com' not in domain_names
+        assert 'bad.example.com' in domain_names
+
+    def test_summary_via_query_param(self, tmp_path):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        from reveal.adapters.autossl.parser import parse_run
+        ts, log_dir = self._make_run_with_ok_and_failure(tmp_path)
+        a = AutosslAdapter('autossl://latest?summary')
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts]), \
+             patch('reveal.adapters.autossl.adapter.parse_run',
+                   side_effect=lambda t: parse_run(t, log_dir=log_dir)):
+            result = a.get_structure()
+        assert 'users' not in result
+
+    def test_user_via_query_param(self, tmp_path):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        from reveal.adapters.autossl.parser import parse_run
+        ts = '2026-01-01T00:00:00Z'
+        records = [
+            _user_analyzing('alice'),
+            _domain_analyzing('alice.com'),
+            _tls_ok(),
+            _user_analyzing('bob'),
+            _domain_analyzing('bob.com'),
+            _tls_ok(),
+        ]
+        log_dir = _write_run(tmp_path, ts, records)
+        a = AutosslAdapter('autossl://latest?user=alice')
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts]), \
+             patch('reveal.adapters.autossl.adapter.parse_run',
+                   side_effect=lambda t: parse_run(t, log_dir=log_dir)):
+            result = a.get_structure()
+        usernames = [u['username'] for u in result['users']]
+        assert usernames == ['alice']
+
+    def test_combined_only_failures_and_summary(self, tmp_path):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        from reveal.adapters.autossl.parser import parse_run
+        ts, log_dir = self._make_run_with_ok_and_failure(tmp_path)
+        a = AutosslAdapter('autossl://latest?only-failures&summary')
+        with patch('reveal.adapters.autossl.adapter.list_runs', return_value=[ts]), \
+             patch('reveal.adapters.autossl.adapter.parse_run',
+                   side_effect=lambda t: parse_run(t, log_dir=log_dir)):
+            result = a.get_structure()
+        assert 'users' not in result
+        assert result['summary']['defective'] >= 1
+
+    def test_query_param_does_not_corrupt_timestamp_parsing(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://2026-01-01_03-00-00?only-failures')
+        assert a.timestamp == '2026-01-01_03-00-00'
+        assert a.domain is None
+        assert a.query_params.get('only-failures') is not None
+
+    def test_query_param_does_not_corrupt_latest_parsing(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        a = AutosslAdapter('autossl://latest?summary')
+        assert a.timestamp == 'latest'
+        assert a.query_params.get('summary') is not None
+
+    def test_schema_documents_query_params(self):
+        from reveal.adapters.autossl.adapter import AutosslAdapter
+        schema = AutosslAdapter.get_schema()
+        qp = schema['query_params']
+        assert 'only-failures' in qp
+        assert 'summary' in qp
+        assert 'user' in qp
+
+
+class TestAutosslGetHelp:
+    """Tests for autossl get_help() — loaded from help_data/autossl.yaml."""
+
+    def test_get_help_returns_dict(self):
+        help_data = AutosslAdapter.get_help()
+        assert isinstance(help_data, dict)
+
+    def test_get_help_required_fields(self):
+        h = AutosslAdapter.get_help()
+        assert h['name'] == 'autossl'
+        assert 'description' in h
+        assert 'syntax' in h
+        assert 'examples' in h
+
+    def test_get_help_has_query_params_section(self):
+        """query_params key must exist and document all three params."""
+        h = AutosslAdapter.get_help()
+        assert 'query_params' in h, "help data must have query_params section"
+        qp = h['query_params']
+        assert 'only-failures' in qp
+        assert 'summary' in qp
+        assert 'user' in qp
+
+    def test_get_help_examples_include_uri_param_forms(self):
+        """Examples must show ?only-failures, ?summary, ?user= URI forms."""
+        h = AutosslAdapter.get_help()
+        uris = [e['uri'] for e in h['examples']]
+        all_uris = ' '.join(uris)
+        assert '?only-failures' in all_uris, "missing ?only-failures example"
+        assert '?summary' in all_uris, "missing ?summary example"
+        assert '?user=' in all_uris, "missing ?user= example"
+
+    def test_get_help_examples_include_cli_flag_forms(self):
+        """Examples must still show --only-failures and --user= CLI forms."""
+        h = AutosslAdapter.get_help()
+        uris = [e['uri'] for e in h['examples']]
+        all_uris = ' '.join(uris)
+        assert '--only-failures' in all_uris
+        assert '--user=' in all_uris
+
+    def test_get_help_documents_tls_status_values(self):
+        h = AutosslAdapter.get_help()
+        assert 'tls_status_values' in h
+        tv = h['tls_status_values']
+        assert 'ok' in tv
+        assert 'incomplete' in tv
+        assert 'defective' in tv

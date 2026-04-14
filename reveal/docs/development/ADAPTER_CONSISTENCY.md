@@ -165,6 +165,11 @@ Display flags filter **the view** of the same resource:
 ```
 
 > **Note**: `limit` and `offset` are URI query parameters (`ast://src?limit=10&offset=20`), not CLI flags. The CLI equivalent for `limit` is `--max-items N`.
+>
+> **`--head`/`--tail` vs `?limit=`/`?offset=` are intentionally different mechanisms:**
+> - `--head N` / `--tail N` are **output-stream slicing** — they operate on semantic units (functions, results) after the adapter runs. `--tail` has no clean URI equivalent.
+> - `?limit=N` / `?offset=M` are **query result control** — they constrain what the adapter returns before output, equivalent to SQL `LIMIT`/`OFFSET`.
+> These are not interchangeable. Use `--head` for quick "show me the first N results" on any target; use `?limit=` when building queries for URI adapters that support filtering.
 
 ---
 
@@ -361,6 +366,9 @@ Some adapters have unique flags:
 ```bash
 --expiring-within=30        # Show certs expiring within 30 days
 --validate-nginx            # Cross-validate with nginx config
+# URI query param forms (preferred for batch/pipeline):
+ssl://host?expiring-within=30
+ssl://nginx:///path/*.conf?summary
 ```
 
 **mysql://**:
@@ -416,13 +424,15 @@ reveal 'ast://src?complexity>10&type=function&sort=-lines'
 
 ### Current state vs target
 
-| Flag | Current | Target |
-|------|---------|--------|
-| `--dns-verified` | `cpanel://U/ssl --dns-verified` | `cpanel://U/ssl?dns-verified` |
-| `--expiring-within N` | `ssl://host --expiring-within 30` | `ssl://host?expiring-within=30` |
-| `--validate-nginx` | `ssl://host --validate-nginx` | stay as flag (cross-tool operation) |
-| `--diagnose` | `reveal /etc/nginx/foo.conf --diagnose` | stay as flag (file target) |
-| `--base-path DIR` | `claude:// --base-path /path` | `claude://?base-path=/path` |
+| Flag | CLI form | URI query param | Status |
+|------|---------|-----------------|--------|
+| `--dns-verified` | `cpanel://U/ssl --dns-verified` | `cpanel://U/ssl?dns-verified` | ✅ Both work |
+| `--check-live` | `cpanel://U/ssl --check-live` | `cpanel://U/ssl?check-live` | ✅ Both work |
+| `--expiring-within N` | `ssl://host --expiring-within 30` | `ssl://host?expiring-within=30` | ✅ Both work |
+| `--summary` | `ssl://nginx://... --summary` | `ssl://nginx://...?summary` | ✅ Both work |
+| `--validate-nginx` | `ssl://host --validate-nginx` | stay as flag | cross-tool op, not a filter |
+| `--diagnose` | `reveal /etc/nginx/foo.conf --diagnose` | stay as flag | file target, correct |
+| `--base-path DIR` | `claude:// --base-path /path` | `claude://?base-path=/path` | 🔲 CLI only |
 
 ### For adapter authors
 
@@ -436,7 +446,7 @@ Document adapter-specific query params in `get_schema()` under `query_params` an
 
 Planned improvements:
 
-1. **Query params for URI adapters** - Migrate adapter-specific flags to URI query params (cpanel, ssl, domain, claude)
+1. **Query params for remaining URI adapters** — `ssl://`, `cpanel://`, `letsencrypt://`, and `autossl://` are done. Only `claude://?base-path=` remains. See UX_CONSISTENCY_PLAN.md.
 2. **Argument groups in --help** - Surface the existing flag taxonomy visually in `--help` output
 3. **Flag applicability warnings** - Warn when an adapter-specific flag is applied to a non-matching target
 4. **Element discovery hints** - Show available elements in overview

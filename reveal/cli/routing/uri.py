@@ -28,9 +28,10 @@ def handle_uri(uri: str, element: Optional[str], args: 'Namespace') -> None:
 
     scheme, resource = uri.split('://', 1)
 
-    # Inject --sort/--desc CLI flags into URI query string for adapters that support them
+    # Inject --sort/--desc CLI flags into URI query string for adapters that support them.
+    # Skip injection if URI already has an explicit sort= param — URI takes precedence.
     sort_field = getattr(args, 'sort', None)
-    if sort_field:
+    if sort_field and 'sort=' not in resource:
         if getattr(args, 'desc', False) and not sort_field.startswith('-'):
             sort_field = f"-{sort_field}"
         sep = '&' if '?' in resource else '?'
@@ -136,12 +137,13 @@ def _build_check_kwargs(adapter, args: 'Namespace') -> dict:
     return kwargs
 
 
-def _build_render_opts(renderer_class: type[Any], args: 'Namespace') -> dict:
+def _build_render_opts(renderer_class: type[Any], args: 'Namespace', query_params: Optional[dict] = None) -> dict:
     """Build render options by inspecting renderer signature.
 
     Args:
         renderer_class: Renderer class
         args: CLI arguments
+        query_params: Optional URI query params (e.g. from adapter.query_params); CLI args take precedence
 
     Returns:
         Dict of options to pass to render method
@@ -160,6 +162,14 @@ def _build_render_opts(renderer_class: type[Any], args: 'Namespace') -> dict:
             value = getattr(args, opt_name)
             if value is not None:
                 opts[opt_name] = value
+
+    # Merge URI query params as base defaults — CLI args already set above take precedence
+    if query_params:
+        for opt_name in ['only_failures', 'summary', 'expiring_within']:
+            if opt_name not in opts and opt_name in render_sig.parameters:
+                raw = query_params.get(opt_name) or query_params.get(opt_name.replace('_', '-'))
+                if raw is not None:
+                    opts[opt_name] = raw if not isinstance(raw, bool) else raw
 
     return opts
 
@@ -180,7 +190,8 @@ def _handle_check_mode(adapter, renderer_class: type[Any], args: 'Namespace') ->
 
     # Render check results
     if hasattr(renderer_class, 'render_check'):
-        render_opts = _build_render_opts(renderer_class, args)
+        adapter_qp = getattr(adapter, 'query_params', {})
+        render_opts = _build_render_opts(renderer_class, args, query_params=adapter_qp)
         renderer_class.render_check(result, args.format, **render_opts)
     else:
         # Fallback to generic JSON rendering

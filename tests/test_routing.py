@@ -424,6 +424,47 @@ class TestHandleUri(unittest.TestCase):
 
             mock_exit.assert_called_once_with(1)
 
+    def test_sort_injection_skipped_when_uri_has_sort(self):
+        """URI ?sort= takes precedence — --sort flag must NOT be injected when URI already has sort=."""
+        captured = {}
+
+        def capture_adapter(adapter_class, scheme, resource, element, args):
+            captured['resource'] = resource
+
+        mock_args = Namespace(format='text', sort='complexity', desc=False)
+        with patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
+            handle_uri('ast://src?sort=name', None, mock_args)
+
+        # URI sort= must not be duplicated — resource should still have exactly one sort=
+        self.assertIn('sort=name', captured['resource'])
+        self.assertNotIn('sort=complexity', captured['resource'])
+
+    def test_sort_injection_applied_when_uri_has_no_sort(self):
+        """--sort is injected into URI when URI has no sort= param."""
+        captured = {}
+
+        def capture_adapter(adapter_class, scheme, resource, element, args):
+            captured['resource'] = resource
+
+        mock_args = Namespace(format='text', sort='lines', desc=False)
+        with patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
+            handle_uri('ast://src?complexity>10', None, mock_args)
+
+        self.assertIn('sort=lines', captured['resource'])
+
+    def test_sort_desc_prefix_applied(self):
+        """--sort with --desc prepends '-' to sort field when injecting into URI."""
+        captured = {}
+
+        def capture_adapter(adapter_class, scheme, resource, element, args):
+            captured['resource'] = resource
+
+        mock_args = Namespace(format='text', sort='lines', desc=True)
+        with patch('reveal.cli.routing.uri.handle_adapter', side_effect=capture_adapter):
+            handle_uri('ast://src', None, mock_args)
+
+        self.assertIn('sort=-lines', captured['resource'])
+
 
 class TestHandleAdapter(unittest.TestCase):
     """Tests for handle_adapter function."""

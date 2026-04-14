@@ -164,7 +164,7 @@ def _add_global_options(target) -> None:
                         help='Copy output to clipboard (also prints normally)')
     target.add_argument('--verbose', '-v', action='store_true',
                         help='Show detailed output (e.g., all results instead of truncated summary for imports://)')
-    target.add_argument('--no-breadcrumbs', '-q', '--quiet', action='store_true',
+    target.add_argument('--no-breadcrumbs', '-q', action='store_true',
                         help='Disable breadcrumb navigation hints (scripting mode)')
     target.add_argument('--disable-breadcrumbs', action='store_true',
                         help='Permanently disable breadcrumbs in user config')
@@ -330,7 +330,7 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--since', type=str, metavar='DATE',
                         help='Filter results since date (YYYY-MM-DD, e.g., reveal claude:// --since 2026-02-27)')
     parser.add_argument('--base-path', dest='base_path', type=_strip_path_quotes, metavar='DIR',
-                        help='Point claude:// at a different Claude install — pass the projects dir and all paths (history, config, plans) derive from it (e.g., --base-path /mnt/wsl/.claude/projects). Windows: do not wrap in quotes (use --base-path C:/Users/... not \'C:/Users/...\')')
+                        help='Point claude:// at a different Claude install — pass the projects dir and all paths (history, config, plans) derive from it (e.g., --base-path /mnt/wsl/.claude/projects)')
 
     # Sub-function progressive disclosure (nav.py)
     parser.add_argument('--scope', action='store_true',
@@ -372,7 +372,7 @@ def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--broken-only', action='store_true', dest='broken_only',
                         help='Show only broken internal links (requires --links or implies it)')
     parser.add_argument('--domain', type=str,
-                        help='Filter links by domain (requires --links); for nginx configs, filter output to the matching server block')
+                        help='Filter links by domain (requires --links)')
     parser.add_argument('--code', action='store_true',
                         help='Extract code blocks from markdown files')
     parser.add_argument('--language', type=str,
@@ -452,9 +452,9 @@ def _add_universal_filter_flags(parser: argparse.ArgumentParser) -> None:
 def _add_ssl_options(parser: argparse.ArgumentParser) -> None:
     """Add SSL-specific options for batch checks."""
     parser.add_argument('--summary', action='store_true',
-                        help='Show aggregated summary instead of full details')
+                        help='Show aggregated summary instead of full details (URI form: ?summary)')
     parser.add_argument('--expiring-within', type=str, metavar='DAYS',
-                        help='Only show certificates expiring within N days (e.g., 7, 30)')
+                        help='Only show certificates expiring within N days (e.g., 7, 30) (URI form: ?expiring-within=30)')
     parser.add_argument('--validate-nginx', action='store_true',
                         help='Cross-validate SSL certificates against nginx configuration')
     parser.add_argument('--local-certs', action='store_true', dest='local_certs',
@@ -468,6 +468,8 @@ def _add_extraction_options(parser: argparse.ArgumentParser) -> None:
                         help='Extract specific data for piping (nginx: "domains" extracts SSL domains as ssl:// URIs; "acme-roots" extracts ACME challenge roots with nobody ACL status)')
     parser.add_argument('--canonical-only', action='store_true', dest='canonical_only',
                         help='With --extract domains: return one URI per vhost (primary server_name only) instead of all aliases; eliminates www/mail/alias expansion')
+    parser.add_argument('--server-name', type=str, dest='server_name',
+                        help='Filter nginx config output to the server block(s) matching this server_name directive (nginx only)')
     parser.add_argument('--check-acl', action='store_true', dest='check_acl',
                         help='Check nobody user ACL access for all root directives (nginx only)')
     parser.add_argument('--validate-nginx-acme', action='store_true', dest='validate_nginx_acme',
@@ -533,23 +535,23 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     _add_input_output_options(g_output)
 
     # ── Discovery ─────────────────────────────────────────────────────────────
-    g_discovery = parser.add_argument_group('Discovery')
+    g_discovery = parser.add_argument_group('Discovery  [global — introspection, agent helpers]')
     _add_discovery_options(g_discovery)
 
     # ── Navigation ────────────────────────────────────────────────────────────
-    g_nav = parser.add_argument_group('Navigation  [semantic slicing and element search]')
+    g_nav = parser.add_argument_group('Navigation  [global — semantic slicing, flow analysis]')
     _add_navigation_options(g_nav)
 
     # ── Display ───────────────────────────────────────────────────────────────
-    g_display = parser.add_argument_group('Display  [tree depth, filtering, layout]')
+    g_display = parser.add_argument_group('Display  [global — tree depth, filtering, layout]')
     _add_display_options(g_display)
 
     # ── Type-aware output ─────────────────────────────────────────────────────
-    g_typed = parser.add_argument_group('Type-aware output')
+    g_typed = parser.add_argument_group('Type-aware output  [file-specific — --typed, Python containment]')
     _add_type_aware_options(g_typed)
 
     # ── Quality checks ────────────────────────────────────────────────────────
-    g_quality = parser.add_argument_group('Quality checks  [--check, rules, config]')
+    g_quality = parser.add_argument_group('Quality checks  [--check universal; rules/config are file-specific]')
     _add_pattern_detection_options(g_quality)
 
     # ── Universal adapter options ─────────────────────────────────────────────
@@ -561,22 +563,22 @@ def create_argument_parser(version: str) -> argparse.ArgumentParser:
     _add_universal_filter_flags(g_universal)
 
     # ── File-type specific ────────────────────────────────────────────────────
-    g_md = parser.add_argument_group('Markdown  [file-specific: --links, --frontmatter, --section]')
+    g_md = parser.add_argument_group('Markdown  [file-specific — --links, --frontmatter, --section]')
     _add_markdown_options(g_md)
 
-    g_html = parser.add_argument_group('HTML  [file-specific: --metadata, --semantic, --scripts]')
+    g_html = parser.add_argument_group('HTML  [file-specific — --metadata, --semantic, --scripts]')
     _add_html_options(g_html)
 
-    g_schema = parser.add_argument_group('Schema validation  [--validate-schema, --list-schemas]')
+    g_schema = parser.add_argument_group('Schema validation  [file-specific — YAML front matter validation]')
     _add_schema_validation_options(g_schema)
 
     # ── Adapter-specific ──────────────────────────────────────────────────────
     # Only meaningful for a specific URI adapter. Silently ignored on wrong targets.
-    g_ssl = parser.add_argument_group('SSL adapter  [ssl:// specific options]')
+    g_ssl = parser.add_argument_group('SSL adapter  [adapter-specific — ssl:// only]')
     _add_ssl_options(g_ssl)
 
     g_nginx = parser.add_argument_group(
-        'Nginx / cPanel adapter  [nginx config files and cpanel:// URIs]'
+        'Nginx / cPanel  [adapter-specific — nginx config files and cpanel:// URIs]'
     )
     _add_extraction_options(g_nginx)
 

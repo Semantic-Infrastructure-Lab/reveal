@@ -9,6 +9,7 @@ from .certificate import SSLFetcher, CertificateInfo, check_ssl_health, load_cer
 from .probe import probe_http_redirect
 from .renderer import SSLRenderer
 from reveal.analyzers.nginx import NginxAnalyzer
+from ...utils.query import parse_query_params
 
 _SCHEMA_ELEMENTS = {
     'san': 'Subject Alternative Names (all domain names)',
@@ -142,7 +143,10 @@ class SSLAdapter(ResourceAdapter):
             'adapter': 'ssl',
             'description': 'SSL/TLS certificate inspection and health monitoring',
             'uri_syntax': 'ssl://<host>[:<port>][/<element>]',
-            'query_params': {},
+            'query_params': {
+                'expiring-within': 'Filter to certs expiring within N days (e.g., ssl://host?expiring-within=30)',
+                'summary': 'Show aggregated counts instead of per-domain details (e.g., ssl://nginx://...?summary)',
+            },
             'elements': _SCHEMA_ELEMENTS,
             'cli_flags': _SCHEMA_CLI_FLAGS,
             'supports_batch': True,
@@ -177,6 +181,7 @@ class SSLAdapter(ResourceAdapter):
         self._fetcher = SSLFetcher()
         self._nginx_path: Optional[str] = None  # For ssl://nginx:///path mode
         self._cert_file_path: Optional[str] = None  # For ssl://file:///path mode
+        self.query_params: Dict[str, Any] = {}
 
         self._parse_connection_string(connection_string)
 
@@ -192,6 +197,11 @@ class SSLAdapter(ResourceAdapter):
         # Remove ssl:// prefix
         if uri.startswith("ssl://"):
             uri = uri[6:]
+
+        # Extract query params before path splitting (?expiring-within=N, ?summary, etc.)
+        if '?' in uri:
+            uri, query_string = uri.split('?', 1)
+            self.query_params = parse_query_params(query_string)
 
         # Check for nginx:// special syntax (ssl://nginx:///path/to/config)
         # This syntax is useful for batch audits with built-in aggregation
@@ -545,8 +555,8 @@ class SSLAdapter(ResourceAdapter):
         local_certs = kwargs.get('local_certs', False)
         probe_http = kwargs.get('probe_http', False)
 
-        # --expiring-within=N overrides warn_days: treat "expiring within N days" as warning threshold
-        expiring_within = kwargs.get('expiring_within')
+        # --expiring-within=N (or ?expiring-within=N in URI) overrides warn_days
+        expiring_within = kwargs.get('expiring_within') or getattr(self, 'query_params', {}).get('expiring-within')
         if expiring_within:
             try:
                 warn_days = int(str(expiring_within).rstrip('d'))

@@ -183,11 +183,12 @@ class MySQLAdapter(ResourceAdapter):
                 'slow-queries': 'Slow query log entries and stats',
                 'health': 'Overall server health summary',
             },
-            'cli_flags': [
-                '--check',      # Run health checks
-                '--advanced',   # Include advanced metrics
-                '--only-failures'  # Show only failed health checks
-            ],
+            'cli_flags': ['--check', '--advanced', '--only-failures'],
+            'cli_only_flags': {
+                '--check': 'Run health checks with pass/warn/fail thresholds (switches to check mode)',
+                '--advanced': 'Reserved for future enhanced check metrics (no-op today)',
+                '--only-failures': 'Show only warnings/failures in check output (use with --check)',
+            },
             'supports_batch': False,
             'supports_advanced': True,
             'output_types': _SCHEMA_OUTPUT_TYPES,

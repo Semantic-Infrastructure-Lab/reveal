@@ -14,7 +14,7 @@ examples:
     description: 'All DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)'
 
   - uri: 'domain://example.com/whois'
-    description: 'WHOIS data (registrar, expiry, nameservers) - TODO: requires python-whois'
+    description: 'WHOIS data (registrar, expiry, nameservers) — not yet available (requires python-whois)'
 
   - uri: 'domain://example.com/ssl'
     description: 'SSL certificate status (delegates to ssl:// adapter)'
@@ -41,7 +41,7 @@ examples:
 
 elements:
   dns: 'DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA)'
-  whois: 'WHOIS registration data (TODO: requires python-whois)'
+  whois: 'WHOIS registration data — not yet available (requires python-whois)'
   ssl: 'SSL certificate status (delegates to ssl:// adapter)'
   registrar: 'Registrar and nameserver information'
 
@@ -122,6 +122,8 @@ notes:
 output_formats:
   - text
   - json
+
+query_params: {}
 
 see_also:
   - 'reveal help://ssl - SSL certificate inspection'

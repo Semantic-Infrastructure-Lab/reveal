@@ -1,0 +1,111 @@
+# Let's Encrypt Adapter Help Data
+# Migrated from letsencrypt/adapter.py::get_help() — orbital-shuttle-0414
+
+name: letsencrypt
+description: "Let's Encrypt certificate inventory — orphan and duplicate SAN detection"
+stability: beta
+syntax: 'letsencrypt://'
+
+examples:
+  # Full inventory
+  - uri: 'letsencrypt://'
+    description: 'Full cert inventory (sorted by expiry, imminent first)'
+
+  # Orphan detection — CLI flag form
+  - uri: 'letsencrypt:// --check-orphans'
+    description: 'Certs not referenced by any nginx ssl_certificate directive'
+
+  # Orphan detection — URI query param form (preferred for pipelines)
+  - uri: "letsencrypt://?check-orphans"
+    description: 'URI query param form — option travels with the resource'
+
+  # Duplicate SAN detection — CLI flag form
+  - uri: 'letsencrypt:// --check-duplicates'
+    description: 'Certs sharing identical SAN sets'
+
+  # Duplicate SAN detection — URI query param form
+  - uri: "letsencrypt://?check-duplicates"
+    description: 'URI query param form — option travels with the resource'
+
+  # Both checks combined
+  - uri: 'letsencrypt:// --check-orphans --check-duplicates'
+    description: 'Run both checks in a single call'
+  - uri: "letsencrypt://?check-orphans&check-duplicates"
+    description: 'Both checks via URI query params'
+
+  # JSON output
+  - uri: 'letsencrypt:// --format json'
+    description: 'Full structured JSON output for scripting'
+  - uri: 'letsencrypt:// --check-orphans --format json'
+    description: 'Orphan check with JSON output'
+
+query_params:
+  check-orphans: 'Cross-reference certs against nginx ssl_certificate directives — URI form: letsencrypt://?check-orphans (same as --check-orphans)'
+  check-duplicates: 'Find certs with identical SAN sets — URI form: letsencrypt://?check-duplicates (same as --check-duplicates)'
+
+flags:
+  --check-orphans: 'Cross-reference certs against nginx ssl_certificate directives. URI form: ?check-orphans'
+  --check-duplicates: 'Find certs with identical SAN sets. URI form: ?check-duplicates'
+  --format json: 'Machine-readable JSON output (full structured result)'
+
+features:
+  - 'Walks /etc/letsencrypt/live/*/cert.pem for all managed certs'
+  - 'Shows SANs, expiry, common name, days remaining'
+  - 'Sorted by days_until_expiry ascending — imminent expirations appear first'
+  - 'Expiry labels: 87d (healthy) / ~14d (warning) / ⚠️  5d (urgent) / EXPIRED (Nd ago)'
+  - '--check-orphans: certs not referenced by nginx ssl_certificate'
+  - '--check-duplicates: certs sharing identical SANs'
+  - 'URI query param forms: ?check-orphans, ?check-duplicates (preferred for pipelines)'
+  - 'JSON output for scripting'
+
+try_now:
+  - "reveal letsencrypt://"
+  - "reveal letsencrypt:// --check-orphans"
+  - "reveal 'letsencrypt://?check-orphans&check-duplicates'"
+
+workflows:
+  - name: 'Cert health sweep before deploying'
+    scenario: 'Verify no orphaned or duplicate certs before a migration'
+    steps:
+      - "reveal letsencrypt://                               # Full inventory"
+      - "reveal letsencrypt:// --check-orphans              # Any unreferenced certs?"
+      - "reveal letsencrypt:// --check-duplicates           # Any duplicate SANs?"
+      - "reveal letsencrypt:// --check-orphans --format json  # Export for audit log"
+
+  - name: 'Clean up after a domain migration'
+    scenario: 'Domain was removed; find and prune leftover certs'
+    steps:
+      - "reveal letsencrypt:// --check-orphans  # Certs not in nginx config anymore"
+      - "reveal letsencrypt:// --format json | jq '.certs[] | select(.is_expired)'"
+
+  - name: 'Pipeline usage (URI query param form)'
+    scenario: 'Embed check options in the URI so they travel with the resource string'
+    steps:
+      - "reveal 'letsencrypt://?check-orphans'              # Orphan check via URI"
+      - "reveal 'letsencrypt://?check-orphans&check-duplicates'  # Both checks via URI"
+      - "reveal 'letsencrypt://?check-orphans' --format json  # Combine with flag"
+
+anti_patterns:
+  - bad: "certbot certificates"
+    good: "reveal letsencrypt://"
+    why: "Structured output with expiry labels, SANs, and progressive disclosure; no sudo required for reads"
+
+  - bad: "ls /etc/letsencrypt/live/ && ls /etc/nginx/sites-enabled/"
+    good: "reveal letsencrypt:// --check-orphans"
+    why: "Automatic cross-reference between cert inventory and nginx config; prints orphaned certs directly"
+
+notes:
+  - 'Live dir: /etc/letsencrypt/live/'
+  - '--check-orphans scans /etc/nginx/sites-enabled/, /etc/nginx/conf.d/'
+  - 'certbot renew --dry-run is out of scope'
+  - 'JSON schema: each cert has name, cert_path, common_name, san (list), days_until_expiry (int), not_after (ISO str), is_expired (bool), issuer'
+  - 'cPanel limitation: on cPanel servers nginx ssl_certificate directives reference /var/cpanel/ssl/apache_tls/ not /etc/letsencrypt/ — all LE certs will appear orphaned even if active. Check actual usage via `reveal cpanel://USER/ssl` instead.'
+
+output_formats:
+  - text
+  - json
+
+see_also:
+  - 'reveal cpanel://USER/ssl  — disk cert health per domain (cPanel servers)'
+  - 'reveal ssl://DOMAIN       — live TLS cert inspection'
+  - "reveal 'ssl://nginx:///etc/nginx/conf.d/*.conf --check'  — nginx SSL audit"

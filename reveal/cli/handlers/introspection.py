@@ -356,6 +356,7 @@ def handle_discover():
             ]
             entry['query_params'] = list(schema.get('query_params', {}).keys())
             entry['cli_flags'] = schema.get('cli_flags', [])
+            entry['cli_only_flags'] = schema.get('cli_only_flags', {})
             entry['supports_batch'] = schema.get('supports_batch', False)
             entry['supports_advanced'] = schema.get('supports_advanced', False)
             entry['example_queries'] = [
@@ -369,6 +370,7 @@ def handle_discover():
             entry.setdefault('output_types', [])
             entry.setdefault('query_params', [])
             entry.setdefault('cli_flags', [])
+            entry.setdefault('cli_only_flags', {})
             entry.setdefault('supports_batch', False)
             entry.setdefault('supports_advanced', False)
             entry.setdefault('example_queries', [])

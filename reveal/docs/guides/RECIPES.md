@@ -851,8 +851,8 @@ reveal /etc/nginx/conf.d/users/USERNAME.conf --extract acme-roots
 # Detect location block routing surprises (prefix overlap, regex shadowing prefix)
 reveal /etc/nginx/conf.d/users/USERNAME.conf --check-conflicts
 
-# Filter output to a single domain (essential for 1,500-line cPanel user configs)
-reveal /etc/nginx/conf.d/users/USERNAME.conf --domain example.com
+# Filter output to a single server block (essential for 1,500-line cPanel user configs)
+reveal /etc/nginx/conf.d/users/USERNAME.conf --server-name example.com
 
 # Full composed audit: ACME paths + ACL status + live SSL cert per domain
 reveal /etc/nginx/conf.d/users/USERNAME.conf --validate-nginx-acme

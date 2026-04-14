@@ -155,6 +155,7 @@ class HelpAdapter(ResourceAdapter):
         'adapter-authoring': 'development/ADAPTER_AUTHORING_GUIDE.md',
         'tricks': 'guides/RECIPES.md',   # Merged into RECIPES.md (task-based workflows)
         'recipes': 'guides/RECIPES.md',
+        'ux': 'guides/UX_GUIDE.md',
         'configuration': 'guides/CONFIGURATION_GUIDE.md',
         'config': 'guides/CONFIGURATION_GUIDE.md',
         'codebase-review': 'guides/RECIPES.md',  # CODEBASE_REVIEW.md archived; content merged into RECIPES.md

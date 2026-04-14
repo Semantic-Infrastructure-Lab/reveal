@@ -519,6 +519,11 @@ class DomainAdapter(ResourceAdapter):
             'query_params': {},
             'elements': _SCHEMA_ELEMENTS,
             'cli_flags': ['--check', '--advanced', '--only-failures'],
+            'cli_only_flags': {
+                '--check': 'Run domain health checks (DNS, SSL expiry, registrar status)',
+                '--advanced': 'Include extended check metrics',
+                '--only-failures': 'Show only warnings/failures in check output (use with --check)',
+            },
             'supports_batch': False,
             'supports_advanced': True,
             'output_types': _SCHEMA_OUTPUT_TYPES,
@@ -568,6 +573,12 @@ class DomainAdapter(ResourceAdapter):
         # Remove domain:// prefix
         if uri.startswith("domain://"):
             uri = uri[9:]
+
+        # Strip query params — domain:// does not support them yet
+        if '?' in uri:
+            import sys
+            uri, qs = uri.split('?', 1)
+            print(f"Warning: domain:// does not support query parameters (?{qs}) — ignoring", file=sys.stderr)
 
         # Split domain from element
         parts = uri.split('/', 1)

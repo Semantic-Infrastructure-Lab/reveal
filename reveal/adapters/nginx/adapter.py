@@ -794,6 +794,12 @@ class NginxUriAdapter(ResourceAdapter):
             self.domain = None
             return
 
+        # Strip query params — nginx:// does not support them yet
+        if '?' in uri:
+            import sys
+            uri, qs = uri.split('?', 1)
+            print(f"Warning: nginx:// does not support query parameters (?{qs}) — ignoring", file=sys.stderr)
+
         parts = uri.split('/', 1)
         self.domain = parts[0] if parts[0] else None
         if len(parts) > 1 and parts[1]:

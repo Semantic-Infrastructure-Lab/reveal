@@ -1,0 +1,136 @@
+# AutoSSL Adapter Help Data
+# Migrated from autossl/adapter.py::get_help() — orbital-shuttle-0414
+
+name: autossl
+description: "Inspect cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures"
+stability: beta
+syntax: 'autossl://[TIMESTAMP|DOMAIN]'
+
+examples:
+  # List available runs
+  - uri: 'autossl://'
+    description: 'List available run timestamps (newest first)'
+
+  # Latest run — CLI forms
+  - uri: 'autossl://latest'
+    description: 'Parse most recent AutoSSL run — per-user/domain summary'
+  - uri: 'autossl://latest --only-failures'
+    description: 'Show only domains with errors (defective/incomplete)'
+  - uri: 'autossl://latest --user=sociamonials'
+    description: 'Filter to a single cPanel user — avoids 800-domain output on shared hosts'
+  - uri: 'autossl://latest --user=sociamonials --only-failures'
+    description: 'One user, failures only — the most focused diagnostic view'
+  - uri: 'autossl://latest --summary'
+    description: 'Aggregated counts only — fastest overview on large hosts'
+
+  # Latest run — URI query param forms (preferred for pipelines)
+  - uri: "autossl://latest?only-failures"
+    description: 'Failures only — URI query param form (option travels with resource)'
+  - uri: "autossl://latest?summary"
+    description: 'Summary only — URI query param form'
+  - uri: "autossl://latest?user=sociamonials"
+    description: 'Filter to one user — URI query param form'
+  - uri: "autossl://latest?user=sociamonials&only-failures"
+    description: 'One user, failures only — fully composed URI'
+
+  # Specific run by timestamp
+  - uri: 'autossl://2026-03-03T23:26:01Z'
+    description: 'Parse a specific AutoSSL run by timestamp'
+
+  # Domain history
+  - uri: 'autossl://app.example.com'
+    description: 'Domain history — 20 most recent runs; shows "Failing since: DATE" when chronic'
+  - uri: 'autossl://app.example.com --all'
+    description: 'Domain history — full history across all runs (bypasses 20-row default cap)'
+
+  # JSON scripting
+  - uri: "autossl://latest --format=json | jq '[.users[].domains[] | select(.tls_status==\"defective\")]'"
+    description: 'Extract all defective domains as JSON'
+
+query_params:
+  only-failures: 'Show only domains with defective/incomplete TLS status — URI form: autossl://latest?only-failures (same as --only-failures)'
+  summary: 'Aggregated counts only, no per-domain rows — URI form: autossl://latest?summary (same as --summary)'
+  user: 'Filter to a single cPanel user — URI form: autossl://latest?user=NAME (same as --user=NAME)'
+
+flags:
+  --only-failures: 'Hide ok domains, show only defective/incomplete. URI form: ?only-failures'
+  --summary: 'Aggregated counts only (fastest overview). URI form: ?summary'
+  --user: 'Filter to a single cPanel user. URI form: ?user=NAME'
+  --all: 'Domain history: show full history across all runs (bypasses 20-row default cap)'
+  --format json: 'Machine-readable JSON output for scripting and jq filtering'
+
+features:
+  - 'Filesystem-based — no WHM API or credentials required'
+  - 'Lists all available run timestamps'
+  - 'Parses NDJSON log: per-user, per-domain TLS status'
+  - 'TLS outcomes: ok / incomplete / defective'
+  - 'Defect codes extracted (e.g. SELF_SIGNED_CERT, CERT_HAS_EXPIRED)'
+  - 'DCV impediment codes (TOTAL_DCV_FAILURE, NO_UNSECURED_DOMAIN_PASSED_DCV)'
+  - 'Summary by user + overall counts'
+  - 'Filter to one user with --user=USERNAME or ?user=NAME'
+  - 'Filter to failures only with --only-failures or ?only-failures'
+  - 'Summary mode with --summary or ?summary'
+  - 'Domain history: autossl://DOMAIN — TLS status across all runs (capped at 20; use --all for full history)'
+  - 'Chronic failure detection: shows "Failing since: DATE" when ok==0 across runs'
+  - 'JSON output for scripting and filtering'
+
+tls_status_values:
+  ok: 'Certificate valid and AutoSSL satisfied'
+  incomplete: 'No cert renewal triggered (existing cert still valid)'
+  defective: 'Certificate has a problem (expired, self-signed, chain error)'
+
+impediment_codes:
+  TOTAL_DCV_FAILURE: 'Every domain in the cert failed DCV — no renewal possible'
+  NO_UNSECURED_DOMAIN_PASSED_DCV: 'No unsecured domain passed DCV — partial failure'
+
+try_now:
+  - "reveal autossl://"
+  - "reveal autossl://latest"
+  - "reveal 'autossl://latest?only-failures'"
+
+workflows:
+  - name: 'Quick failure triage'
+    scenario: 'SSL renewal failures on a shared host — find the problems fast'
+    steps:
+      - "reveal autossl://                          # See available runs"
+      - "reveal 'autossl://latest?only-failures'   # Failures only (URI form)"
+      - "reveal 'autossl://latest?user=baduser&only-failures'  # Scope to one user"
+      - "reveal autossl://latest --format=json | jq '[.users[].domains[] | select(.tls_status==\"defective\")]'"
+
+  - name: 'Chronic failure investigation'
+    scenario: 'A domain keeps failing AutoSSL — check its full history'
+    steps:
+      - "reveal autossl://app.example.com          # History (last 20 runs)"
+      - "reveal autossl://app.example.com --all    # Full history"
+      - "reveal ssl://app.example.com --check      # Live cert inspection"
+
+  - name: 'Pipeline usage (URI query param form)'
+    scenario: 'Compose options into URI so they travel with the resource string'
+    steps:
+      - "reveal 'autossl://latest?only-failures'                      # Failures only"
+      - "reveal 'autossl://latest?user=myuser&only-failures'          # Scoped failures"
+      - "reveal 'autossl://latest?summary'                            # Overview only"
+
+anti_patterns:
+  - bad: "cat /var/cpanel/logs/autossl/$(ls -t /var/cpanel/logs/autossl/ | head -1)"
+    good: "reveal autossl://latest"
+    why: "Parses NDJSON, aggregates by user, extracts defect codes — no manual jq required"
+
+  - bad: "grep defective /var/cpanel/logs/autossl/latest.log"
+    good: "reveal 'autossl://latest?only-failures'"
+    why: "Structured per-domain output with defect codes and user context"
+
+notes:
+  - 'Must run as root or with read access to /var/cpanel/logs/autossl/'
+  - 'Runs approximately every 3 hours; logs retained ~30 days'
+  - 'Use --format=json for machine-readable output and jq filtering'
+  - 'Log directory: /var/cpanel/logs/autossl/'
+
+output_formats:
+  - text
+  - json
+
+see_also:
+  - 'reveal cpanel://USERNAME/ssl  — disk cert health per domain'
+  - 'reveal cpanel://USERNAME      — cPanel user overview'
+  - 'reveal ssl://DOMAIN           — live TLS cert inspection'

@@ -1627,11 +1627,11 @@ class TestCheckNobodyAccess:
             d.rmdir()
 
 # ---------------------------------------------------------------------------
-# N3: get_structure(domain=...) — server block filter
+# N3: get_structure(server_name=...) — server block filter
 # ---------------------------------------------------------------------------
 
-class TestNginxDomainFilter:
-    """Tests for get_structure(domain=...) — N3 filter."""
+class TestNginxServerNameFilter:
+    """Tests for get_structure(server_name=...) — N3 filter (--server-name flag)."""
 
     def _make_analyzer(self, config: str):
         f = tempfile.NamedTemporaryFile(mode='w', suffix='.conf', delete=False)
@@ -1660,45 +1660,45 @@ server {
 }
 """
 
-    def test_domain_filter_returns_only_matching_server(self):
+    def test_server_name_filter_returns_only_matching_server(self):
         """Filtering by 'alpha.com' returns only alpha server block."""
-        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(domain='alpha.com')
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(server_name='alpha.com')
         servers = structure['servers']
         assert len(servers) == 1
         assert servers[0]['name'] == 'alpha.com'
 
-    def test_domain_filter_returns_matching_locations(self):
+    def test_server_name_filter_returns_matching_locations(self):
         """Locations are filtered to only those in the matching server block."""
-        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(domain='beta.com')
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(server_name='beta.com')
         location_servers = {loc['server'] for loc in structure['locations']}
         assert 'alpha.com' not in location_servers
         assert 'beta.com' in location_servers
 
-    def test_domain_filter_matches_alias(self):
+    def test_server_name_filter_matches_alias(self):
         """Filtering by an alias in server_name (www.alpha.com) resolves correctly."""
-        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(domain='www.alpha.com')
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(server_name='www.alpha.com')
         servers = structure['servers']
         assert len(servers) == 1
         assert 'www.alpha.com' in servers[0]['domains']
 
-    def test_domain_filter_multiple_server_blocks_same_name(self):
+    def test_server_name_filter_multiple_server_blocks_same_name(self):
         """Two server blocks for beta.com (80 + 443) are both returned."""
-        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(domain='beta.com')
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(server_name='beta.com')
         assert len(structure['servers']) == 2
 
-    def test_domain_filter_no_match_returns_empty(self):
+    def test_server_name_filter_no_match_returns_empty(self):
         """Non-existent domain returns empty servers and locations."""
-        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(domain='nothere.com')
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(server_name='nothere.com')
         assert structure['servers'] == []
         assert structure['locations'] == []
         assert structure.get('_domain_not_found') is True
 
-    def test_domain_filter_no_match_includes_total_count(self):
+    def test_server_name_filter_no_match_includes_total_count(self):
         """Non-existent domain includes total server block count for messaging."""
-        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(domain='nothere.com')
+        structure = self._make_analyzer(self._MULTI_SERVER).get_structure(server_name='nothere.com')
         assert structure.get('_total_server_blocks') == 3
 
-    def test_no_domain_filter_returns_all(self):
+    def test_no_server_name_filter_returns_all(self):
         """Without domain kwarg, all server blocks are returned."""
         structure = self._make_analyzer(self._MULTI_SERVER).get_structure()
         assert len(structure['servers']) == 3

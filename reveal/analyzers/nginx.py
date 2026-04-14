@@ -501,8 +501,8 @@ class NginxAnalyzer(FileAnalyzer):
         if events_directives:
             result['events_directives'] = events_directives
 
-        # N3: filter to a single domain if requested
-        domain_filter = kwargs.get('domain')
+        # N3: filter to a single server block if requested (--server-name)
+        domain_filter = kwargs.get('server_name')
         if domain_filter:
             result = self._filter_structure_by_domain(result, domain_filter)
 

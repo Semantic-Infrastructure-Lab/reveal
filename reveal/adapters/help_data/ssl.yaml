@@ -70,6 +70,12 @@ examples:
   - uri: 'reveal --stdin --check --expiring-within=30'
     description: 'Filter to certs expiring within 30 days'
 
+  # URI query param form — options travel with the URI (preferred for batch/pipeline)
+  - uri: "ssl://example.com?expiring-within=30 --check"
+    description: 'URI param form: expiry filter baked into the URI (useful when piping URIs)'
+  - uri: "ssl://nginx:///etc/nginx/conf.d/*.conf?summary --check"
+    description: 'URI param form: summary mode baked into the URI'
+
 elements:
   san: 'Subject Alternative Names (all domains covered by cert)'
   chain: 'Certificate chain information'
@@ -78,14 +84,18 @@ elements:
   dates: 'Certificate validity dates'
   full: 'Full certificate details (JSON)'
 
+query_params:
+  expiring-within: 'Filter to certs expiring within N days — URI form: ssl://host?expiring-within=30 (same as --expiring-within)'
+  summary: 'Show aggregated counts instead of per-domain details — URI form: ssl://nginx://...?summary (same as --summary)'
+
 flags:
   --check: 'Run health checks (expiry, chain validity, hostname match)'
   --advanced: 'Run advanced checks with --check (TLS version + cipher suite, key strength, issuer type, self-signed) [Universal flag]'
   --probe-http: 'Check HTTP→HTTPS redirect: follows redirect chain, reports result and security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options). Combinable with --check.'
   --only-failures: 'Hide healthy results, show only warnings and failures [Universal flag]'
   --batch: 'Batch mode with aggregated results (works with --stdin) [Universal flag]'
-  --summary: 'Show aggregated counts instead of per-domain details (batch mode)'
-  --expiring-within: 'Filter to certs expiring within N days (e.g., --expiring-within=30)'
+  --summary: 'Show aggregated counts instead of per-domain details (batch mode). URI form: ?summary'
+  --expiring-within: 'Filter to certs expiring within N days (e.g., --expiring-within=30). URI form: ?expiring-within=30'
   --validate-nginx: 'Cross-validate nginx SSL config against actual certificates (nginx mode only)'
   --stdin: 'Read URIs from stdin for batch processing (one URI per line)'
 

@@ -8,8 +8,8 @@ class LetsEncryptRenderer:
     """Renders Let's Encrypt cert inventory output."""
 
     @staticmethod
-    def render_structure(result: Dict[str, Any], output_format: str = 'text') -> None:
-        if output_format == 'json':
+    def render_structure(result: Dict[str, Any], format: str = 'text') -> None:
+        if format == 'json':
             print(json.dumps(result, default=str))
             return
         LetsEncryptRenderer._render_text(result)
@@ -56,7 +56,7 @@ class LetsEncryptRenderer:
                 print(f"  {step}")
 
     @staticmethod
-    def render_error(error: str) -> None:
+    def render_error(error: Exception) -> None:
         print(f"Error: {error}")
 
 

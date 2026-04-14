@@ -1091,6 +1091,46 @@ class TestCpanelUriQueryParams:
         result = a.get_structure()
         assert result['certs'] == []
 
+    def test_query_param_dns_verified_parsed(self):
+        """?dns-verified in URI is stored in query_params."""
+        a = CpanelAdapter('cpanel://myuser/ssl?dns-verified')
+        assert a.query_params.get('dns-verified') is True
+
+    def test_query_param_check_live_parsed(self):
+        """?check-live in URI is stored in query_params."""
+        a = CpanelAdapter('cpanel://myuser/ssl?check-live')
+        assert a.query_params.get('check-live') is True
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    @patch('reveal.adapters.cpanel.adapter._dns_resolve_ips')
+    def test_dns_verified_from_uri_query_param(self, mock_resolve, mock_status, mock_domains):
+        """?dns-verified in URI enables dns_verified without CLI flag."""
+        mock_domains.return_value = [
+            {'domain': 'main.com', 'docroot': '/home/u', 'serveralias': '', 'type': 'main_domain'},
+        ]
+        mock_status.return_value = {'status': 'ok', 'days_until_expiry': 60, 'not_after': '2026-06-01',
+                                    'cert_path': '/etc/cpanel/ssl/installed/main.com/combined'}
+        mock_resolve.return_value = ['1.2.3.4']
+        a = CpanelAdapter('cpanel://myuser/ssl?dns-verified')
+        result = a.get_structure()  # no dns_verified=True arg — comes from URI
+        assert result['dns_verified'] is True
+
+    @patch('reveal.adapters.cpanel.adapter._list_user_domains')
+    @patch('reveal.adapters.cpanel.adapter._get_disk_cert_status')
+    @patch('reveal.adapters.cpanel.adapter._dns_resolve_ips')
+    def test_dns_verified_uri_param_activates_from_false_kwarg(self, mock_resolve, mock_status, mock_domains):
+        """?dns-verified in URI activates dns_verified even when kwarg is False (OR semantics)."""
+        mock_domains.return_value = [
+            {'domain': 'main.com', 'docroot': '/home/u', 'serveralias': '', 'type': 'main_domain'},
+        ]
+        mock_status.return_value = {'status': 'ok', 'days_until_expiry': 60, 'not_after': '2026-06-01',
+                                    'cert_path': '/etc/cpanel/ssl/installed/main.com/combined'}
+        mock_resolve.return_value = ['1.2.3.4']
+        a = CpanelAdapter('cpanel://myuser/ssl?dns-verified')
+        result = a.get_structure(dns_verified=False)  # URI param wins via OR
+        assert result['dns_verified'] is True
+
 
 # ---------------------------------------------------------------------------
 # full-audit element
@@ -1583,6 +1623,20 @@ class TestCpanelSchema:
         help_info = adapter.get_help()
         uris = [ex['uri'] for ex in help_info['examples']]
         assert 'cpanel://help/api' in uris
+
+    def test_schema_uses_query_params_key_not_uri_query_params(self):
+        """BACK-167: get_schema() must use 'query_params' key, not 'uri_query_params'."""
+        schema = CpanelAdapter.get_schema()
+        assert 'query_params' in schema, "Schema must use 'query_params' key"
+        assert 'uri_query_params' not in schema, "Schema must not use 'uri_query_params' key"
+
+    def test_schema_query_params_includes_expected_params(self):
+        """BACK-167: query_params lists domain_type, dns-verified, check-live."""
+        schema = CpanelAdapter.get_schema()
+        qp = schema['query_params']
+        assert 'domain_type' in qp
+        assert 'dns-verified' in qp
+        assert 'check-live' in qp
 
 
 if __name__ == '__main__':

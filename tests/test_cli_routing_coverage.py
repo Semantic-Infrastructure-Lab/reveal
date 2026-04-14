@@ -70,6 +70,23 @@ class TestHandleUriSortDesc:
         resource_arg = mock_handler.call_args[0][2]  # positional: adapter_cls, scheme, resource, ...
         assert 'sort=-name' in resource_arg
 
+    def test_uri_sort_takes_precedence_over_flag(self):
+        """BACK-161: --sort is not injected when URI already has sort= param."""
+        mock_adapter_cls = MagicMock()
+        mock_renderer_cls = MagicMock()
+
+        with patch('reveal.adapters.base.get_adapter_class', return_value=mock_adapter_cls):
+            with patch('reveal.adapters.base.get_renderer_class', return_value=mock_renderer_cls):
+                with patch('reveal.cli.routing.uri.handle_adapter') as mock_handler:
+                    from reveal.cli.routing import handle_uri
+                    args = _args(sort='complexity', desc=False, base_path=None)
+                    handle_uri('ast://src?sort=name', None, args)
+        assert mock_handler.called
+        resource_arg = mock_handler.call_args[0][2]
+        # URI sort param must be preserved; CLI --sort must not be appended
+        assert 'sort=name' in resource_arg
+        assert resource_arg.count('sort=') == 1
+
 
 # ─── generic_adapter_handler — base_path override ────────────────────────────
 
@@ -488,6 +505,33 @@ class TestGuardSslFlags:
             _guard_ssl_flags(args)
         captured = capsys.readouterr()
         assert '--expiring-within' in captured.err
+
+    def test_ssl_flag_expiring_within_shows_numeric_example(self, capsys):
+        """BACK-162: expiring_within message must show a number, not =true."""
+        args = _args(expiring_within=30, summary=False, validate_nginx=False)
+        with pytest.raises(SystemExit):
+            _guard_ssl_flags(args)
+        captured = capsys.readouterr()
+        assert '=true' not in captured.err
+        assert '30' in captured.err
+
+    def test_ssl_flag_summary_shows_no_uri_param_form(self, capsys):
+        """BACK-162: --summary message must not suggest ?summary= URI form."""
+        args = _args(expiring_within=None, summary=True, validate_nginx=False)
+        with pytest.raises(SystemExit):
+            _guard_ssl_flags(args)
+        captured = capsys.readouterr()
+        assert '?summary' not in captured.err
+        assert '--summary' in captured.err
+
+    def test_ssl_flag_validate_nginx_shows_no_uri_param_form(self, capsys):
+        """BACK-162: --validate-nginx must not suggest URI param form (stays CLI-only)."""
+        args = _args(expiring_within=None, summary=False, validate_nginx=True)
+        with pytest.raises(SystemExit):
+            _guard_ssl_flags(args)
+        captured = capsys.readouterr()
+        assert '?validate-nginx' not in captured.err
+        assert '--validate-nginx' in captured.err
 
     def test_no_ssl_flags_passes(self):
         args = _args(expiring_within=None, summary=False, validate_nginx=False)

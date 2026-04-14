@@ -131,6 +131,9 @@ class SQLiteAdapter(ResourceAdapter):
             'query_params': {},
             'elements': {},
             'cli_flags': ['--check'],
+            'cli_only_flags': {
+                '--check': 'Run SQLite integrity checks (PRAGMA integrity_check, foreign key violations)',
+            },
             'supports_batch': False,
             'supports_advanced': False,
             'output_types': _SCHEMA_OUTPUT_TYPES,

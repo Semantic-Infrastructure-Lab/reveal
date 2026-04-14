@@ -10,10 +10,13 @@ Usage:
 """
 
 import re
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
+from ..help_data import load_help_data
+from ...utils.query import parse_query_params
 from .renderer import LetsEncryptRenderer
 
 _LIVE_DIR = '/etc/letsencrypt/live'
@@ -173,6 +176,10 @@ class LetsEncryptAdapter(ResourceAdapter):
             raise ValueError(f"Invalid letsencrypt:// URI: {connection_string}")
         self.live_dir = _LIVE_DIR
         self.nginx_dirs = list(_NGINX_CONFIG_DIRS)
+        self.query_params: Dict[str, Any] = {}
+        if connection_string and '?' in connection_string:
+            _, query_string = connection_string.split('?', 1)
+            self.query_params = parse_query_params(query_string)
 
     def get_structure(
         self,
@@ -180,6 +187,8 @@ class LetsEncryptAdapter(ResourceAdapter):
         check_duplicates: bool = False,
         **kwargs: Any,
     ) -> Dict[str, Any]:
+        check_orphans = check_orphans or bool(self.query_params.get('check-orphans'))
+        check_duplicates = check_duplicates or bool(self.query_params.get('check-duplicates'))
         """Return cert inventory, optionally with orphan/duplicate analysis.
 
         Args:
@@ -231,7 +240,10 @@ class LetsEncryptAdapter(ResourceAdapter):
             'adapter': 'letsencrypt',
             'description': "Let's Encrypt certificate inventory — orphan and duplicate SAN detection",
             'uri_syntax': 'letsencrypt://',
-            'query_params': {},
+            'query_params': {
+                'check-orphans': 'Find certs not referenced by any nginx ssl_certificate (also: --check-orphans)',
+                'check-duplicates': 'Find certs with identical SANs (also: --check-duplicates)',
+            },
             'elements': {},
             'cli_flags': ['--check-orphans', '--check-duplicates', '--format=json'],
             'supports_batch': False,
@@ -300,37 +312,7 @@ class LetsEncryptAdapter(ResourceAdapter):
 
     @staticmethod
     def get_help() -> Dict[str, Any]:
-        return {
-            'name': 'letsencrypt',
-            'description': "Let's Encrypt certificate inventory — orphan and duplicate SAN detection",
-            'stability': 'beta',
-            'syntax': 'letsencrypt://',
-            'features': [
-                f'Walks {_LIVE_DIR}/*/cert.pem for all managed certs',
-                'Shows SANs, expiry, common name, days remaining',
-                '--check-orphans: certs not referenced by nginx ssl_certificate',
-                '--check-duplicates: certs sharing identical SANs',
-                'JSON output for scripting',
-            ],
-            'examples': [
-                {'uri': 'letsencrypt://', 'description': 'Full cert inventory'},
-                {'uri': 'letsencrypt:// --check-orphans',
-                 'description': 'Certs not in use by any nginx vhost'},
-                {'uri': 'letsencrypt:// --check-duplicates',
-                 'description': 'Certs with identical SANs'},
-            ],
-            'notes': [
-                f'Live dir: {_LIVE_DIR}',
-                '--check-orphans scans ' + ', '.join(_NGINX_CONFIG_DIRS),
-                'certbot renew --dry-run is out of scope',
-                'JSON schema: each cert has name, cert_path, common_name, san (list), '
-                'days_until_expiry (int), not_after (ISO str), is_expired (bool), issuer.',
-                '--check-orphans limitation: on cPanel servers, nginx ssl_certificate '
-                'directives reference /var/cpanel/ssl/apache_tls/ not /etc/letsencrypt/ — '
-                'all LE certs will appear orphaned even if active. Check actual usage via '
-                '`reveal cpanel://USER/ssl` instead.',
-            ],
-        }
+        return load_help_data('letsencrypt') or {}
 
 
 def _build_next_steps(certs: List[Dict], check_orphans: bool, check_duplicates: bool) -> List[str]:

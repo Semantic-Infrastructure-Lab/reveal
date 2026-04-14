@@ -361,16 +361,19 @@ The scaffolding system:
 See the demo adapter created by scaffolding:
 
 ```bash
-# Generate demo adapter
-reveal scaffold adapter demo demo://
+# Generate a new adapter (e.g. myapp://)
+reveal scaffold adapter myapp myapp://
 
 # Test it
-pytest tests/test_demo_adapter.py  # 17/17 pass
-reveal demo://                      # Works immediately
+pytest tests/test_myapp_adapter.py  # 17/17 pass
+reveal myapp://                      # Works immediately
 
-# Read the code
-reveal reveal/adapters/demo.py
+# Read the generated code
+reveal reveal/adapters/myapp.py
 ```
+
+> **Note:** `demo://` ships as an unregistered scaffolding template in `reveal/adapters/demo.py`.
+> It is not available via `reveal demo://` — scaffold a new adapter name instead.
 
 All scaffolded components follow the same high-quality pattern.
 

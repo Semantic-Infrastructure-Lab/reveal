@@ -40,12 +40,15 @@ reveal letsencrypt://
 
 # Find certs not in use by any nginx vhost
 reveal letsencrypt:// --check-orphans
+reveal 'letsencrypt://?check-orphans'      # URI query param form (preferred for pipelines)
 
 # Find certs covering duplicate hostnames
 reveal letsencrypt:// --check-duplicates
+reveal 'letsencrypt://?check-duplicates'   # URI query param form
 
 # Run both checks at once
 reveal letsencrypt:// --check-orphans --check-duplicates
+reveal 'letsencrypt://?check-orphans&check-duplicates'
 
 # Machine-readable output
 reveal letsencrypt:// --format json
@@ -111,13 +114,13 @@ Duplicate SAN check
 
 ## Flags Reference
 
-| Flag | Description |
-|------|-------------|
-| `--check-orphans` | Cross-reference certs against nginx `ssl_certificate` directives |
-| `--check-duplicates` | Find certs with identical SAN sets |
-| `--format json` | JSON output (full structured result) |
+| Flag | URI query param | Description |
+|------|----------------|-------------|
+| `--check-orphans` | `?check-orphans` | Cross-reference certs against nginx `ssl_certificate` directives |
+| `--check-duplicates` | `?check-duplicates` | Find certs with identical SAN sets |
+| `--format json` | — | JSON output (full structured result) |
 
-Both checks can be combined in a single call.
+Both checks can be combined in a single call. The URI query param form is preferred for pipelines and scripting because the option travels with the resource string.
 
 ---
 

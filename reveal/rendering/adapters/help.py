@@ -15,7 +15,7 @@ GUIDE_CATEGORIES = {
     'getting_started': ['quick-start'],
     'ai_guides': ['agent', 'agent-full', 'mcp'],
     'feature_guides': ['python-guide', 'markdown', 'reveal-guide', 'html', 'configuration', 'schemas', 'duplicates'],
-    'best_practices': ['anti-patterns', 'tricks'],
+    'best_practices': ['anti-patterns', 'tricks', 'ux'],
     'dev_guides': ['adapter-authoring', 'help'],
 }
 
@@ -32,6 +32,7 @@ TOKEN_ESTIMATES = {
     'duplicates': '~5,500',
     'anti-patterns': '~2,000',
     'tricks': '~3,500',
+    'ux': '~3,000',
     'adapter-authoring': '~2,500',
     'help': '~2,500',
 }
@@ -327,6 +328,7 @@ def _get_guide_description(topic: str) -> str:
         'anti-patterns': 'Common mistakes to avoid',
         'adapter-authoring': 'Build your own adapters',
         'tricks': 'Cool tricks and hidden features',
+        'ux': 'CLI flags vs URI query params — when to use each, progressive escalation, flag-to-param translation',
         'help': 'How the help system works (meta!)',
         'mcp': 'MCP server setup — 5 tools for Claude Code, Cursor, Windsurf',
         'mcp-setup': 'Alias for mcp',
