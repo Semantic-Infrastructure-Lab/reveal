@@ -7,6 +7,12 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.78.0
+- ✅ **7 new nav flags: --around, --ifmap, --catchmap, --exits, --flowto, --deps, --mutations** — probe-inspired navigation for control-flow, exit analysis, and refactor pre-flight. (celestial-hydra-0413, shimmering-brush-0413)
+- ✅ **Flat-file --varflow and --calls** — work without a named function scope via root_node fallback. Enables nav on procedural PHP, shell scripts, and module-level Python. (celestial-hydra-0413)
+- ✅ **Bug fix: --range + nav flags crash** — `validate_navigation_args()` pre-converts `--range` to a tuple; `_parse_line_range()` now accepts both string and tuple. (shimmering-brush-0413)
+- ✅ **YIELD verdict fix** — `--flowto` now gives `~ CONDITIONAL` for generator functions instead of misleading `✓ CLEAR`. (shimmering-brush-0413)
+
 ### v0.77.2
 - ✅ **Bash: top-level variable assignments extracted as structure** — flat worker scripts (no functions) now show config vars instead of "No structure available." Top-level only; loop/if body vars excluded. 3 tests. (slate-shine-0413)
 - ✅ **Small-file fallback: ≤50 lines with no structure shows full content inline** — entrypoint scripts and tiny deploy scripts rendered with line numbers instead of a dead-end message. (slate-shine-0413)
