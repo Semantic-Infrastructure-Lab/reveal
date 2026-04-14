@@ -12,6 +12,228 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.79.0] - 2026-04-14 (sessions orbital-shuttle-0414, ivory-dawn-0414)
+
+### Breaking Changes
+- **`--domain` renamed to `--server-name` for nginx** — `--domain` previously meant two unrelated things: filter markdown/HTML links by domain, and filter nginx server blocks by `server_name`. These are now separate flags. `--domain` unchanged for link filtering; `--server-name DOMAIN` is the new flag for nginx file analysis. (BACK-173)
+- **`--quiet` alias removed from `--no-breadcrumbs`** — `--quiet` implied global quiet mode but only suppressed breadcrumbs; removed to avoid confusion. `-q` shorthand retained. (BACK-178)
+- **`demo://` removed from public adapter registry** — scaffolding template only; was never intended as a user-facing adapter. `demo://` no longer appears in `--adapters`. File remains as a developer reference. (BACK-177)
+
+### Added
+- **URI query param support for `ssl://`, `cpanel://`, `letsencrypt://`, `autossl://`** — adapter-specific options now travel with the URI. `ssl://host?expiring-within=30`, `cpanel://USER/ssl?dns-verified`, `letsencrypt://?check-orphans`, `autossl://latest?only-failures` all work. Enables per-URI option control in batch/pipeline workflows. CLI flags still work. (BACK-164, BACK-165, BACK-170, BACK-175)
+- **`help://ux` guide** — new static guide covering the CLI-vs-URI mental model: when to use file paths vs URIs, CLI flags vs query params, the `--search` = `?name~=` rename, `--head`/`--tail` vs `?limit=`/`?offset=` semantic difference, and the progressive escalation pattern. Accessible as `reveal help://ux`. (turbulent-wind-0413)
+- **`cli_only_flags` in `--discover` schema** — `mysql://`, `domain://`, and `sqlite://` schemas now expose adapter-specific CLI flags (check-mode flags that can't be URI query params) to AI agents via `--discover`. (BACK-175)
+
+### Fixed
+- **`--sort` + `?sort=` duplicate injection** — URI-explicit sort takes precedence; CLI `--sort` only injects when URI has no sort param. (BACK-167)
+- **`domain://` and `nginx://` URI query string stripping** — bare query params on adapters that don't support them no longer cause confusing DNS errors; both adapters strip `?...` and warn to stderr. (BACK-171)
+- **cpanel `get_schema()` key rename** — `uri_query_params` → `query_params` for consistency with all other adapters. (BACK-167)
+- **`--help` group label taxonomy** — all 12 argument groups now show scope tier (`[global — ...]`, `[file-specific — ...]`, `[adapter-specific — ...]`, `[universal — ...]`). Previously 6 of 12 groups had no scope hint.
+- **`autossl` and `letsencrypt` `get_help()` migrated to YAML** — consistent with mysql/ssl/sqlite; includes `query_params` section and URI param examples. `reveal help://autossl` and `reveal help://letsencrypt` now show current examples.
+- Various doc and schema fixes: `QUERY_PARAMETER_REFERENCE.md`, `LETSENCRYPT_ADAPTER_GUIDE.md`, `AGENT_HELP.md`, `INDEX.md`, `SCAFFOLDING_GUIDE.md`, `ADAPTER_CONSISTENCY.md`.
+
+### Tests (+33 since v0.78.0)
+- 8 new tests: `TestAutosslQueryParams`
+- 10 new tests: letsencrypt/cpanel/domain URI param coverage (v0.78.3)
+- 3 new tests: `--sort` dedup regression (v0.78.2)
+- 12 new tests: `TestAutosslGetHelp` + `TestLetsEncryptGetHelp` YAML structure pins
+
+---
+
+## [0.78.7] - 2026-04-14 (session orbital-shuttle-0414)
+
+### Fixed
+- **`mysql://`, `domain://`, `sqlite://` schemas now expose adapter-specific CLI flags to `--discover`** — These adapters have check-mode flags (`--check`, `--advanced`, `--only-failures`) that can't be URI query params because they switch routing mode, not filter results. Added `cli_only_flags` dict (flag → description) to each schema; wired into `_get_schema_v1()` so `--discover` surfaces them for AI agents. (BACK-175 completion — the letsencrypt half shipped in v0.78.3; this closes the mysql/domain/sqlite half)
+- **`AGENT_HELP.md` version header updated to 0.78.6** — was still showing 0.78.0.
+- **`AGENT_HELP.md` `--quiet` reference removed** — comment on `-q` example still said `/ --quiet`; alias was removed in v0.78.6 (BACK-178).
+- **`INDEX.md` `demo://` entry corrected** — said "example/testing adapter"; now clarifies it's an unregistered scaffolding template since BACK-177 (v0.78.6).
+- **`SCAFFOLDING_GUIDE.md` demo example updated** — `reveal demo://` example replaced with `myapp://`; added note that `demo://` ships unregistered.
+- **`QUERY_PARAMETER_REFERENCE.md` corrected for autossl:// and letsencrypt://** — both were listed as "none" in the quick-reference table and in the "Adapters Without Query Parameters" section, despite having query param support since v0.78.3/v0.78.4. Table updated; both added to "Already migrated" table. nginx:// note updated to mention param stripping.
+- **`LETSENCRYPT_ADAPTER_GUIDE.md` updated with query param forms** — Quick Start and Flags Reference now show URI query param equivalents (`?check-orphans`, `?check-duplicates`) alongside CLI flags.
+- **`autossl` and `letsencrypt` `get_help()` migrated from inline dicts to YAML** — both adapters now load from `help_data/autossl.yaml` and `help_data/letsencrypt.yaml`, consistent with mysql/ssl/sqlite. YAML files include URI query param forms in examples and a `query_params` section. `reveal help://autossl` and `reveal help://letsencrypt` now show up-to-date examples.
+
+### Tests (12 new)
+- `TestAutosslGetHelp::test_get_help_returns_dict` — YAML loads as dict
+- `TestAutosslGetHelp::test_get_help_required_fields` — name/description/syntax/examples present
+- `TestAutosslGetHelp::test_get_help_has_query_params_section` — only-failures/summary/user documented
+- `TestAutosslGetHelp::test_get_help_examples_include_uri_param_forms` — ?only-failures/?summary/?user= in examples
+- `TestAutosslGetHelp::test_get_help_examples_include_cli_flag_forms` — CLI forms still present
+- `TestAutosslGetHelp::test_get_help_documents_tls_status_values` — ok/incomplete/defective documented
+- `TestLetsEncryptGetHelp::test_get_help_returns_dict` — YAML loads as dict
+- `TestLetsEncryptGetHelp::test_get_help_required_fields` — name/description/syntax/examples present
+- `TestLetsEncryptGetHelp::test_get_help_has_query_params_section` — check-orphans/check-duplicates documented
+- `TestLetsEncryptGetHelp::test_get_help_examples_include_uri_param_forms` — ?check-orphans/?check-duplicates in examples
+- `TestLetsEncryptGetHelp::test_get_help_examples_include_cli_flag_forms` — CLI forms still present
+- `TestLetsEncryptGetHelp::test_get_help_has_flags_section` — flags section present
+
+### Files Changed
+- `reveal/adapters/mysql/adapter.py` — added `cli_only_flags` to schema
+- `reveal/adapters/domain/adapter.py` — added `cli_only_flags` to schema
+- `reveal/adapters/sqlite/adapter.py` — added `cli_only_flags` to schema
+- `reveal/cli/handlers/introspection.py` — `_get_schema_v1()` now includes `cli_only_flags`
+- `reveal/docs/AGENT_HELP.md` — version header 0.78.0 → 0.78.7; removed `/ --quiet` from `-q` comment
+- `reveal/docs/INDEX.md` — demo:// entry updated
+- `reveal/docs/development/SCAFFOLDING_GUIDE.md` — demo example replaced; note added
+- `reveal/docs/guides/QUERY_PARAMETER_REFERENCE.md` — autossl/letsencrypt rows corrected; section restructured
+- `reveal/docs/adapters/LETSENCRYPT_ADAPTER_GUIDE.md` — query param forms added to Quick Start and Flags Reference
+- `reveal/adapters/autossl/adapter.py` — `get_help()` migrated to `load_help_data('autossl')`
+- `reveal/adapters/letsencrypt/adapter.py` — `get_help()` migrated to `load_help_data('letsencrypt')`; `load_help_data` import added
+- `reveal/adapters/help_data/autossl.yaml` — new; comprehensive help with query_params section and URI param examples
+- `reveal/adapters/help_data/letsencrypt.yaml` — new; comprehensive help with query_params section and URI param examples
+- `tests/test_autossl_adapter.py` — `TestAutosslGetHelp` class (6 tests)
+- `tests/test_letsencrypt_adapter.py` — `TestLetsEncryptGetHelp` class (6 tests)
+- `internal-docs/planning/UX_CONSISTENCY_PLAN.md` — Priority 9/10/11 headings marked ✅ DONE; Priority 11 description updated to reflect two-track implementation
+
+---
+
+## [0.78.6] - 2026-04-14 (session cusiki-0414)
+
+### Fixed
+- **`demo://` removed from public adapter registry** — The demo adapter is a scaffolding template for developers and was never intended to be a user-facing adapter. Removed import from `adapters/__init__.py`; file stays as a reference template but `demo://` no longer appears in `--adapters`. (BACK-177)
+- **`--quiet` alias removed from `--no-breadcrumbs`** — `--quiet` implied global quiet mode but only suppressed breadcrumbs. Removed the `--quiet` alias; `-q` shorthand retained. (BACK-178)
+- **`--base-path` inline Windows note removed** — Stripped `Windows: do not wrap in quotes (...)` from the `--base-path` help text. Cross-platform flag; OS-specific guidance belongs in docs. (BACK-179)
+- **`--summary` guard example no longer suggests URI param form** — `cli/routing/file.py` error message for `--summary`-on-plain-path now shows only CLI flag examples, not `?summary` URI param form. (pre-existing BACK-162 test gap)
+
+### Files Changed
+- `reveal/adapters/__init__.py` — removed `from .demo import DemoAdapter` and `'DemoAdapter'` from `__all__`
+- `reveal/cli/parser.py` — removed `'--quiet'` from `--no-breadcrumbs` aliases; trimmed Windows note from `--base-path` help
+- `reveal/cli/routing/file.py` — `summary` guard example: removed `?summary` URI param line
+
+---
+
+## [0.78.5] - 2026-04-14 (session garnet-palette-0414)
+
+### Fixed
+- **`--domain` overload resolved: nginx use renamed to `--server-name`** — `--domain` previously meant two unrelated things: filter markdown/HTML links by domain, and filter nginx server blocks by `server_name`. These are now separate flags. `--domain` remains for link filtering (unchanged); `--server-name DOMAIN` is the new flag for nginx file analysis. (BACK-173)
+
+### Files Changed
+- `reveal/cli/parser.py` — `--domain` help text cleaned to markdown/HTML-only; new `--server-name` flag added to extraction options group (nginx only)
+- `reveal/display/formatting.py` — nginx N3 dispatch reads `args.server_name` instead of `args.domain`
+- `reveal/analyzers/nginx.py` — `get_structure` reads `kwargs.get('server_name')` instead of `kwargs.get('domain')`
+- `tests/test_nginx_analyzer_pytest.py` — `TestNginxDomainFilter` → `TestNginxServerNameFilter`; all `get_structure(domain=)` calls → `get_structure(server_name=)`; test method names updated
+- `reveal/docs/adapters/NGINX_GUIDE.md` — `--domain` → `--server-name` throughout; section heading updated
+- `reveal/docs/AGENT_HELP.md` — `--domain` → `--server-name` in nginx examples and quick reference table
+- `reveal/docs/guides/RECIPES.md` — `--domain` → `--server-name` in nginx recipes
+
+---
+
+## [0.78.4] - 2026-04-14 (session garnet-palette-0414)
+
+### Fixed
+- **`autossl://` query param support** — `?only-failures`, `?summary`, and `?user=NAME` now work in URI form (e.g. `reveal 'autossl://latest?only-failures'`), matching the cpanel/ssl/letsencrypt pattern. CLI flags still work. Schema `query_params` updated from `{}` to documented entries. (BACK-170)
+
+### Tests (8 new — `TestAutosslQueryParams`)
+- `test_query_params_empty_by_default` — bare `autossl://latest` has empty query_params dict
+- `test_only_failures_via_query_param` — `?only-failures` removes ok domains from run output
+- `test_summary_via_query_param` — `?summary` strips per-domain detail (no `users` key)
+- `test_user_via_query_param` — `?user=alice` filters to single user
+- `test_combined_only_failures_and_summary` — both params compose correctly
+- `test_query_param_does_not_corrupt_timestamp_parsing` — `autossl://2026-01-01_03-00-00?only-failures` sets timestamp, not domain
+- `test_query_param_does_not_corrupt_latest_parsing` — `autossl://latest?summary` sets timestamp='latest'
+- `test_schema_documents_query_params` — schema has `only-failures`, `summary`, `user` keys
+
+### Files Changed
+- `reveal/adapters/autossl/adapter.py` — added `parse_query_params` import; `__init__` parses query string into `self.query_params`; `_parse_connection_string` strips `?...` before path parsing; `get_structure()` ORs query params with CLI flags; `get_schema()` `query_params` populated; example queries expanded with 3 URI query param examples
+- `tests/test_autossl_adapter.py` — 8 new tests in `TestAutosslQueryParams`
+
+---
+
+## [0.78.3] - 2026-04-14 (session warp-onslaught-0413)
+
+### Fixed
+- **cpanel `get_schema()` key rename** — `uri_query_params` → `query_params`. Any tooling iterating schemas (AI agents via `--discover`) previously saw cpanel as having no query params. (BACK-167)
+- **LetsEncrypt renderer contract fixes** — `render_error(error: str)` → `render_error(error: Exception)` to match the adapter contract; `render_structure(output_format=)` → `render_structure(format=)` to match the calling convention in `uri.py:407`. Both worked by duck typing; now correct by contract. (BACK-168, BACK-169)
+- **`letsencrypt://` query param support** — `?check-orphans` and `?check-duplicates` now work in URI form (e.g. `reveal 'letsencrypt://?check-orphans'`), matching the cpanel/ssl pattern. CLI flags still work. Schema `query_params` updated. (BACK-175)
+- **`domain://` and `nginx://` URI stripping** — query params on adapters that don't support them (`domain://example.com?foo=bar`) previously tried to resolve `example.com?foo=bar` as a hostname, causing a confusing DNS error. Both adapters now strip `?...` from the resource and warn to stderr. (BACK-171)
+- **`--section` guard error format** — `file.py` guard for `--section` on non-markdown files now uses the standard format: ❌ emoji + examples + "Learn more: reveal help://ux" hint. Previously used a bare `Error:` with no examples. (BACK-172)
+- **`domain.yaml` TODO comments** — `"WHOIS data ... - TODO: requires python-whois"` replaced with `"... — not yet available (requires python-whois)"` in examples and elements dict. Raw TODO was visible to users via `reveal help://domain`. (BACK-174)
+- **`xlsx.yaml` NOT YET IMPLEMENTED noise** — removed `(NOT YET IMPLEMENTED)` suffix from `search` and `formulas` entries in `query_parameters` section. These entries remain in `future_features`. (BACK-176)
+- **`domain.yaml` `query_params:` section added** — aligns with all other help YAML files. (BACK-180)
+
+### Tests (10 new)
+- `TestCpanelSchema::test_schema_uses_query_params_key_not_uri_query_params` — BACK-167 schema key contract
+- `TestCpanelSchema::test_schema_query_params_includes_expected_params` — domain_type/dns-verified/check-live present
+- `TestLetsEncryptRenderer::test_render_error_accepts_exception` — BACK-168 signature contract
+- `TestLetsEncryptRenderer::test_render_structure_format_kwarg` — BACK-169 parameter name contract
+- `TestLetsEncryptRenderer::test_renders_json` — updated to use `format=` keyword (was `output_format=`)
+- `TestLetsEncryptQueryParams::test_check_orphans_via_query_param` — BACK-175 URI param parsed
+- `TestLetsEncryptQueryParams::test_check_duplicates_via_query_param` — BACK-175 URI param parsed
+- `TestLetsEncryptQueryParams::test_no_query_params_by_default` — bare letsencrypt:// has empty query_params
+- `TestLetsEncryptQueryParams::test_schema_documents_query_params` — BACK-175 schema documents both params
+
+### Files Changed
+- `reveal/adapters/cpanel/adapter.py` — `uri_query_params` → `query_params` in `get_schema()`
+- `reveal/adapters/letsencrypt/renderer.py` — `render_error(str)` → `render_error(Exception)`; `output_format` → `format` in `render_structure`
+- `reveal/adapters/letsencrypt/adapter.py` — added `parse_query_params` import + `self.query_params` init; `get_structure()` ORs query params with CLI flags; schema `query_params` populated
+- `reveal/adapters/domain/adapter.py` — `_parse_connection_string` strips `?...` with stderr warning
+- `reveal/adapters/nginx/adapter.py` — `_parse_connection_string` strips `?...` with stderr warning
+- `reveal/cli/routing/file.py` — `--section` guard upgraded to standard format
+- `reveal/adapters/help_data/domain.yaml` — TODO → "not yet available"; `query_params: {}` section added
+- `reveal/adapters/help_data/xlsx.yaml` — `(NOT YET IMPLEMENTED)` suffix removed from query_parameters
+- `tests/test_cpanel_adapter.py` — 2 new schema key tests
+- `tests/test_letsencrypt_adapter.py` — existing json test fixed; 8 new tests in 2 classes
+
+---
+
+## [0.78.2] - 2026-04-13 (session turbulent-wind-0413)
+
+### Added
+- **`help://ux` guide** — new static guide covering the CLI-vs-URI mental model: when to use file paths vs URIs, CLI flags vs query params, the `--search` = `?name~=` rename, `--head`/`--tail` vs `?limit=`/`?offset=` semantic difference, and the progressive escalation pattern. Accessible as `reveal help://ux`. Added to "Best Practices" category in `reveal help://` index.
+
+### Fixed
+- **`ADAPTER_CONSISTENCY.md` "Current state vs target"** — `--dns-verified`, `--check-live`, `--expiring-within`, `--summary` all show ✅ (both CLI and URI form work). Previously showed aspirational "target" state. `claude://` remains 🔲 (CLI only).
+- **`ADAPTER_CONSISTENCY.md` "Future Enhancements"** — item 1 updated to reflect ssl/cpanel done, only nginx/claude remain.
+- **`ADAPTER_CONSISTENCY.md` head/tail note** — clarified that `--head`/`--tail` are output-stream slicing (post-run) while `?limit=`/`?offset=` are query result control (pre-output); they are not interchangeable.
+- **`ADAPTER_CONSISTENCY.md` ssl "Adapter-Specific Features"** — URI query param forms added to the ssl example block.
+- **`parser.py` ssl option help text** — `--summary` and `--expiring-within` now mention the URI query param equivalent in their `--help` output.
+
+### Tests (3 new)
+- `TestHandleUri::test_sort_injection_skipped_when_uri_has_sort` — URI `?sort=` takes precedence over `--sort` flag (regression test for dedup guard in `handle_uri:34`)
+- `TestHandleUri::test_sort_injection_applied_when_uri_has_no_sort` — `--sort` injected when URI has no sort param
+- `TestHandleUri::test_sort_desc_prefix_applied` — `--sort` + `--desc` produces `sort=-field` in injected URI
+
+### Files Changed
+- `reveal/docs/guides/UX_GUIDE.md` — new file (auto-registered as `help://ux`)
+- `reveal/adapters/help.py` — `'ux': 'guides/UX_GUIDE.md'` added to `STATIC_HELP`
+- `reveal/rendering/adapters/help.py` — `ux` added to `best_practices` category, token estimate, description
+- `reveal/cli/parser.py` — `--summary` and `--expiring-within` help text now mentions URI form
+- `reveal/docs/development/ADAPTER_CONSISTENCY.md` — 4 targeted updates (current state table, future enhancements, head/tail note, ssl features)
+- `tests/test_routing.py` — 3 new tests in `TestHandleUri`
+
+---
+
+## [0.78.1] - 2026-04-13 (session turbo-zephyr-0413 / turbulent-wind-0413)
+
+### Added
+- **`ssl://` URI query params: `?expiring-within=N` and `?summary`** — adapter-specific options now travel with the URI. `ssl://host?expiring-within=30` is equivalent to `--expiring-within 30`; `ssl://nginx://...?summary` is equivalent to `--summary`. Enables per-URI option control in batch/pipeline workflows where a global CLI flag applies to all URIs. CLI flags still work (backward compat). (BACK-164)
+- **`cpanel://` URI query params: `?dns-verified` and `?check-live`** — same URI-first architecture. `cpanel://USER/ssl?dns-verified` replaces `--dns-verified`; `cpanel://USER/ssl?check-live` replaces `--check-live`. Infrastructure (`parse_query_params` in `_parse_connection_string`) already existed; only the reading of these two params was added. (BACK-165)
+
+### Fixed
+- **`--sort` + `?sort=` duplicate injection** — `handle_uri` now skips `--sort` injection if `sort=` already appears in the URI query string. Previously both would be appended producing `?sort=X&sort=Y` with undefined behavior. URI-explicit sort takes precedence; CLI flag only injects when URI has no sort. (BACK-167 / Priority 4 from UX_CONSISTENCY_PLAN)
+
+### Documentation
+- `QUERY_PARAMETER_REFERENCE.md` Quick Reference: ssl now shows `expiring-within`, `summary`; cpanel now shows `dns-verified`, `check-live`. (BACK-166)
+- `QUERY_PARAMETER_REFERENCE.md` cpanel section: `?dns-verified` and `?check-live` fully documented with examples.
+- `QUERY_PARAMETER_REFERENCE.md` "Adapters Without Query Parameters": `ssl://` removed from CLI-flag table; "Already migrated" section added for ssl + cpanel.
+- `ssl.yaml` help data: `query_params` block added; flag descriptions note URI equivalents; URI-form examples added.
+- `ssl adapter get_schema()`: `query_params` dict populated (was `{}`).
+- `cpanel adapter get_schema()`: `uri_query_params` expanded; `uri_syntax` updated.
+- `cpanel adapter get_help()`: three URI query param examples added.
+
+### Tests
+- 9 new tests: 5 in `TestSSLAdapterInit` (expiring-within and summary query params, both URI and check() routing), 4 in `TestCpanelUriQueryParams` (dns-verified and check-live)
+
+### Files Changed
+- `reveal/adapters/ssl/adapter.py` — `parse_query_params` import, `self.query_params` in `__init__`, `?` split in `_parse_connection_string`, `expiring-within` fallback in `check()`, `get_schema()` query_params dict
+- `reveal/cli/routing/uri.py` — `_build_render_opts` query_params kwarg, `_handle_check_mode` passes adapter.query_params; `handle_uri` sort dedup guard
+- `reveal/adapters/cpanel/adapter.py` — `get_structure()` OR-merge for dns_verified/check_live; `get_schema()` and `get_help()` updated
+- `reveal/docs/guides/QUERY_SYNTAX_GUIDE.md` — Step 4 inline comment: `--search` → `?name~=` rename note
+- `reveal/docs/guides/QUERY_PARAMETER_REFERENCE.md` — Quick Reference, cpanel section, Adapters Without section
+- `reveal/adapters/help_data/ssl.yaml` — query_params block, flag notes, URI examples
+- `tests/test_ssl_adapter.py`, `tests/test_cpanel_adapter.py` — 9 new tests
+
+---
+
 ## [0.78.0] - 2026-04-13 (session celestial-hydra-0413)
 
 ### Added

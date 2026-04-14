@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.78.0
+**Version:** 0.79.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -1134,8 +1134,8 @@ reveal /etc/nginx/conf.d/users/USERNAME.conf --check-conflicts
 # regex_shadows_prefix: regex pattern can match a prefix location's path
 # Exit 2 on regex conflicts; prefix overlap is info-only
 
-# N3: Filter output to a specific domain (essential for 1,500-line cPanel configs)
-reveal /etc/nginx/conf.d/users/USERNAME.conf --domain example.com
+# N3: Filter output to a specific server block (essential for 1,500-line cPanel configs)
+reveal /etc/nginx/conf.d/users/USERNAME.conf --server-name example.com
 ```
 
 **cPanel nginx audit commands:**
@@ -1890,7 +1890,7 @@ reveal file.py --copy
 reveal file.py process_request --copy
 
 # Suppress breadcrumb hints (clean output for scripts / agents)
-reveal file.py -q                    # -q / --no-breadcrumbs / --quiet
+reveal file.py -q                    # -q / --no-breadcrumbs
 ```
 
 **Token budget flags (URI adapters — limits list fields like items/results/checks/commits):**
@@ -3280,7 +3280,7 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Nginx nobody ACL check | `reveal /path/user.conf --check-acl` |
 | Nginx ACME roots table | `reveal /path/user.conf --extract acme-roots` |
 | Nginx location conflicts | `reveal /path/user.conf --check-conflicts` |
-| Filter to one domain | `reveal /path/user.conf --domain example.com` |
+| Filter to one server block | `reveal /path/user.conf --server-name example.com` |
 | Full ACME+ACL+SSL audit | `reveal /path/user.conf --validate-nginx-acme` |
 | ACME audit, failures only | `reveal /path/user.conf --validate-nginx-acme --only-failures` |
 | Disk vs live cert compare | `reveal /path/user.conf --cpanel-certs` |

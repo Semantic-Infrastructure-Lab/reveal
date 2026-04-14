@@ -1,11 +1,35 @@
 # Reveal Roadmap
-> **Last updated**: 2026-04-06 (infinite-satellite-0406 — v0.72.2 released)
+> **Last updated**: 2026-04-14 (ivory-dawn-0414 — v0.79.0 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.79.0
+- ✅ **URI query params for `ssl://`, `cpanel://`, `letsencrypt://`, `autossl://`** — adapter options now travel with the URI. Enables per-URI control in batch/pipeline workflows. CLI flags still work. (BACK-164, BACK-165, BACK-170, BACK-175)
+- ✅ **`--help` group taxonomy** — all 12 argument groups now show scope tier (`[global — ...]`, `[file-specific — ...]`, `[adapter-specific — ...]`). (ivory-dawn-0414)
+- ✅ **`cli_only_flags` in `--discover` schema** — mysql/domain/sqlite expose check-mode flags to AI agents. (orbital-shuttle-0414, BACK-175)
+- ✅ **`autossl` and `letsencrypt` help migrated to YAML** — `reveal help://autossl` and `reveal help://letsencrypt` now show URI param forms. (orbital-shuttle-0414)
+- ✅ **`help://ux` guide** — CLI-vs-URI mental model, progressive escalation, flag-to-param table. (turbulent-wind-0413)
+- ⚠️ **Breaking: `--domain` → `--server-name` for nginx** — disambiguates nginx server block filtering from link domain filtering. (garnet-palette-0414, BACK-173)
+- ⚠️ **Breaking: `--quiet` alias removed** — was a misleading alias for `--no-breadcrumbs`; `-q` retained. (cusiki-0414, BACK-178)
+- ⚠️ **Breaking: `demo://` removed from public registry** — scaffolding template only, unregistered. (cusiki-0414, BACK-177)
+- ✅ **+33 tests** — URI query param coverage, YAML help structure pins, sort dedup regression.
+
+### v0.78.2
+- ✅ **`help://ux` guide** — CLI-vs-URI mental model, flag-to-param translation table, progressive escalation, head/tail vs limit/offset explained. Listed under "Best Practices" in `reveal help://`. (turbulent-wind-0413)
+- ✅ **`--sort` dedup regression tests (3)** — locks in the `handle_uri` guard that prevents `?sort=X&sort=Y` when URI already has sort=. (turbulent-wind-0413)
+- ✅ **`ADAPTER_CONSISTENCY.md` current-state table corrected** — dns-verified, check-live, expiring-within, summary all marked ✅. (turbulent-wind-0413)
+- ✅ **`--help` text for --summary / --expiring-within** — now mentions URI query param form inline. (turbulent-wind-0413)
+
+### v0.78.1
+- ✅ **`ssl://` URI query params: `?expiring-within=N` and `?summary`** — options now travel with the URI instead of requiring global CLI flags. Enables per-URI option control in batch/pipeline. CLI flags still work. (turbo-zephyr-0413, BACK-164)
+- ✅ **`cpanel://` URI query params: `?dns-verified` and `?check-live`** — same URI-first architecture. (turbo-zephyr-0413, BACK-165)
+- ✅ **`--sort` + `?sort=` duplicate injection fixed** — URI-explicit sort takes precedence; CLI `--sort` only injects when URI has no sort param. (turbo-zephyr-0413)
+- ✅ **Docs: `--search` = `?name~=` rename noted** — Step 4 of Progressive Escalation in QUERY_SYNTAX_GUIDE.md. (turbo-zephyr-0413, BACK-166)
+- ✅ **QUERY_PARAMETER_REFERENCE.md fully updated** — ssl/cpanel Quick Reference corrected, cpanel section expanded, "Adapters Without" table updated. (turbulent-wind-0413)
 
 ### v0.78.0
 - ✅ **7 new nav flags: --around, --ifmap, --catchmap, --exits, --flowto, --deps, --mutations** — probe-inspired navigation for control-flow, exit analysis, and refactor pre-flight. (celestial-hydra-0413, shimmering-brush-0413)
