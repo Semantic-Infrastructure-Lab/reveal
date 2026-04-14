@@ -455,6 +455,102 @@ log_info "Build complete!"
         finally:
             os.unlink(temp_path)
 
+    def test_extract_variables_no_functions(self):
+        """Should extract top-level variables when script has no function definitions."""
+        code = '''#!/bin/bash
+PHP=/usr/local/bin/php
+SERVICE=platform-worker
+ITER=0
+FB_LOCK_SHARDS=${FB_LOCK_SHARDS:-5}
+
+while true; do
+    INNER_VAR=ignored
+    $PHP /var/www/html/worker.php
+done
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+
+        try:
+            analyzer = BashAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            # Variables extracted, no functions
+            self.assertIn('variables', structure)
+            self.assertNotIn('functions', structure)
+
+            var_names = [v['name'] for v in structure['variables']]
+            self.assertIn('PHP', var_names)
+            self.assertIn('SERVICE', var_names)
+            self.assertIn('FB_LOCK_SHARDS', var_names)
+            # Inner loop variable should NOT appear (not top-level)
+            self.assertNotIn('INNER_VAR', var_names)
+
+            # Each variable has line, name, signature
+            for var in structure['variables']:
+                self.assertIn('line', var)
+                self.assertIn('name', var)
+                self.assertIn('signature', var)
+                self.assertTrue(var['signature'].startswith(' = '))
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_extract_variables_with_functions(self):
+        """Should extract both functions and variables when both are present."""
+        code = '''#!/bin/bash
+APP_NAME=myapp
+VERSION=1.0.0
+
+function deploy() {
+    echo "Deploying $APP_NAME $VERSION"
+}
+
+deploy
+'''
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+
+        try:
+            analyzer = BashAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            self.assertIn('variables', structure)
+            self.assertIn('functions', structure)
+
+            var_names = [v['name'] for v in structure['variables']]
+            self.assertIn('APP_NAME', var_names)
+            self.assertIn('VERSION', var_names)
+
+            func_names = [f['name'] for f in structure['functions']]
+            self.assertIn('deploy', func_names)
+
+        finally:
+            os.unlink(temp_path)
+
+    def test_variable_value_truncation(self):
+        """Long variable values should be truncated at 60 chars."""
+        long_val = 'x' * 80
+        code = f'#!/bin/bash\nLONG_VAR={long_val}\n'
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False, encoding='utf-8') as f:
+            f.write(code)
+            temp_path = f.name
+
+        try:
+            analyzer = BashAnalyzer(temp_path)
+            structure = analyzer.get_structure()
+
+            self.assertIn('variables', structure)
+            sig = structure['variables'][0]['signature']
+            # " = " + truncated value
+            self.assertTrue(sig.endswith('...'))
+            self.assertLessEqual(len(sig), 3 + 60)  # " = " + max 60 chars
+
+        finally:
+            os.unlink(temp_path)
+
 
 class TestCrossPlatformCompatibility(unittest.TestCase):
     """Test that all new analyzers work on all platforms."""

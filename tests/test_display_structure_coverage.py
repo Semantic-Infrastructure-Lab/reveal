@@ -422,17 +422,29 @@ class TestBuildOutlineHierarchy:
 # ─── _handle_outline_mode ────────────────────────────────────────────────────
 
 class TestHandleOutlineMode:
-    def _make_analyzer(self):
+    def _make_analyzer(self, line_count=100):
         a = MagicMock()
         a.path = Path(str(Path('/fake/x.py')))
         a.is_fallback = False
         a.fallback_language = None
+        a.lines = ['line'] * line_count
+        a.content = '\n'.join(['line'] * line_count)
+        a.format_with_lines.return_value = '\n'.join(
+            f'   {i+1:4d}  line' for i in range(line_count)
+        )
         return a
 
-    def test_empty_structure_prints_no_structure_message(self):
-        analyzer = self._make_analyzer()
+    def test_empty_structure_large_file_prints_no_structure_message(self):
+        analyzer = self._make_analyzer(line_count=100)
         out = _capture(_handle_outline_mode, analyzer, {}, Path('/fake/x.py'), False, None)
         assert 'No structure' in out
+        assert '100 lines' in out
+
+    def test_empty_structure_small_file_shows_content(self):
+        analyzer = self._make_analyzer(line_count=10)
+        out = _capture(_handle_outline_mode, analyzer, {}, Path('/fake/x.py'), False, None)
+        assert 'No structure' not in out
+        analyzer.format_with_lines.assert_called_once_with(analyzer.content, 1)
 
     def test_non_empty_structure_calls_render_outline(self):
         analyzer = self._make_analyzer()
@@ -716,13 +728,18 @@ class TestBuildOutlineHierarchyToml:
 # ─── _handle_standard_output ─────────────────────────────────────────────────
 
 class TestHandleStandardOutput:
-    def _make_analyzer(self, structure=None):
+    def _make_analyzer(self, structure=None, line_count=100):
         a = MagicMock()
         a.path = Path(str(Path('/fake/x.py')))
         a.is_fallback = False
         a.fallback_language = None
         a.__class__.__name__ = 'PythonAnalyzer'
         a._extract_relationships.return_value = None
+        a.lines = ['line'] * line_count
+        a.content = '\n'.join(['line'] * line_count)
+        a.format_with_lines.return_value = '\n'.join(
+            f'   {i+1:4d}  line' for i in range(line_count)
+        )
         if structure is not None:
             a.get_structure.return_value = structure
         return a
@@ -743,12 +760,21 @@ class TestHandleStandardOutput:
             _handle_standard_output(analyzer, structure, 'typed', False, None)
         mock_rt.assert_called_once_with(analyzer, structure, 'json')
 
-    def test_empty_structure_prints_no_structure_message(self):
-        """Lines 612-615: empty structure → no structure message."""
-        analyzer = self._make_analyzer()
+    def test_empty_structure_large_file_prints_no_structure_message(self):
+        """Empty structure on large file (>50 lines) → 'No structure available (N lines)'."""
+        analyzer = self._make_analyzer(line_count=100)
         with patch('reveal.display.structure._print_file_header'):
             out = _capture(_handle_standard_output, analyzer, {}, 'text', False, None)
         assert 'No structure available' in out
+        assert '100 lines' in out
+
+    def test_empty_structure_small_file_shows_content(self):
+        """Empty structure on small file (<=50 lines) → full file content displayed."""
+        analyzer = self._make_analyzer(line_count=7)
+        with patch('reveal.display.structure._print_file_header'):
+            out = _capture(_handle_standard_output, analyzer, {}, 'text', False, None)
+        assert 'No structure available' not in out
+        analyzer.format_with_lines.assert_called_once_with(analyzer.content, 1)
 
     def test_text_output_renders_categories(self):
         """Lines 618-624: text output renders categories and breadcrumbs."""

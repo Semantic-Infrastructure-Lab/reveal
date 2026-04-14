@@ -7,6 +7,11 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### v0.77.2
+- ✅ **Bash: top-level variable assignments extracted as structure** — flat worker scripts (no functions) now show config vars instead of "No structure available." Top-level only; loop/if body vars excluded. 3 tests. (slate-shine-0413)
+- ✅ **Small-file fallback: ≤50 lines with no structure shows full content inline** — entrypoint scripts and tiny deploy scripts rendered with line numbers instead of a dead-end message. (slate-shine-0413)
+- ✅ **"No structure available" includes line count** — agents can judge `Read` cost without an extra metadata call. (slate-shine-0413)
+
 ### v0.77.1
 - ✅ **Fix: `ssl:// --check --probe-http` silently ignored** — `probe_http` was missing from `_build_check_kwargs`; flag was parsed but never forwarded to `SSLAdapter.check()`. Routing fix + regression test. (legendary-mountain-0411)
 - ✅ **Test suite cleanup: B002/B003/B004 misidentified + tautological tests removed** — B002/B003/B004 were testing the wrong rules entirely; replaced with correct inputs. Removed 55+ tautological/vacuous tests across 5 files. Net -97 lines. (hellfire-xenon-0411)

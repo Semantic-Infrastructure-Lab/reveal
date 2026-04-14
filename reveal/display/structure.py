@@ -574,7 +574,12 @@ def _handle_outline_mode(analyzer: FileAnalyzer, structure: Dict[str, List[Dict[
     _print_file_header(path, is_fallback, fallback_lang)
 
     if not structure:
-        print("No structure available for this file type")
+        line_count = len(analyzer.lines)
+        if line_count <= 50:
+            print()
+            print(analyzer.format_with_lines(analyzer.content, 1))
+        else:
+            print(f"No structure available for this file type ({line_count} lines)")
         return
 
     hierarchy = _build_outline_hierarchy(structure)
@@ -612,7 +617,12 @@ def _handle_standard_output(analyzer: FileAnalyzer, structure: Dict[str, List[Di
     # Handle empty structure
     if not structure:
         _print_file_header(path, is_fallback, fallback_lang)
-        print("No structure available for this file type")
+        line_count = len(analyzer.lines)
+        if line_count <= 50:
+            print()
+            print(analyzer.format_with_lines(analyzer.content, 1))
+        else:
+            print(f"No structure available for this file type ({line_count} lines)")
         return
 
     # Text output: show header, categories, and navigation hints
