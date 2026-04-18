@@ -45,7 +45,9 @@ mcp = FastMCP(
     ),
 )
 
-# Thread-local stdout capture to support concurrent requests safely
+# Used by reveal_structure, reveal_element, reveal_query — the three tools whose
+# underlying functions still print to stdout rather than returning structured data.
+# reveal_check and reveal_pack have been converted to direct API calls (BACK-182/193).
 _capture_lock = threading.Lock()
 
 

@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **V024: Adapter guide coverage rule** — `reveal reveal:// --check` now flags any registered public adapter missing a guide file in `docs/adapters/`. Prefix-matched (NGINX_GUIDE.md satisfies nginx://). Exempts help://, demo, test. 7 tests. (BACK-191)
 - **`AUTOSSL_ADAPTER_GUIDE.md`** — static guide for `autossl://` adapter. Covers defect codes (SELF_SIGNED_CERT, CERT_HAS_EXPIRED, etc.), DCV impediment codes (TOTAL_DCV_FAILURE, DNS_RESOLVES_TO_ANOTHER_SERVER, etc.), shared-host `--user` workflow, domain history, JSON output, combos with `ssl://`/`nginx://`/`cpanel://`/`letsencrypt://`. `reveal reveal:// --check` now fully clean (0 V024 violations). (BACK-192)
 
+### Maintenance
+- **I002 circular dependency ceiling documented** — `reveal check reveal/ --select I002 --format json` baseline is **23 violations**. Added to `RELEASING.md` pre-flight checklist. CI gate was evaluated and removed (12.5 min runtime). (BACK-183)
+
 ### Docs
 - **RECIPES.md major expansion** — added "Start Here: Distinctive Capabilities" orientation section, "Large-Function Navigation" (all nav flags: `--outline`, `--around`, `--scope`, `--ifmap`, `--catchmap`, `--exits`, `--flowto`, `--varflow`, `--deps`, `--mutations`), "Spreadsheet & BI Inspection" (xlsx/PowerPivot/PowerQuery), "Inspect Claude Install State" (`claude://info/config/history/plans/memory/agents/hooks`), and "Cross-adapter orientation". All examples validated at runtime.
 
