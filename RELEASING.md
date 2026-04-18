@@ -307,6 +307,7 @@ Follow [Semantic Versioning](https://semver.org/):
 
 **Pre-flight:**
 - [ ] **Self-check passes**: `reveal reveal:// --check` (no errors)
+- [ ] **I002 budget holds**: `reveal check reveal/ --select I002 --format json` → total ≤ 23 (ceiling; raise deliberately if needed)
 - [ ] **Version check**: `git tag | grep vX.Y.Z` returns nothing (or use `--resume` if it exists)
 - [ ] All features merged to master
 - [ ] Tests passing: `pytest`
