@@ -12,16 +12,18 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (session fractal-zealot-0417)
+## [Unreleased] - (sessions fractal-zealot-0417, jade-beam-0417)
 
 ### Fixed
 - **`help://schemas --format=json` now returns structured listing** — bare `help://schemas` with `--format=json` previously returned `{"error": "No adapter specified"}`. Now returns `{"type":"adapter_schema","available_adapters":[...],"usage":"..."}`. Text rendering unchanged. (BACK-188)
 - **`claude://` help text shows all URI forms** — `help://claude` and `help://adapters` previously showed only `claude://session/{name}`. Now documents all 10 forms: bare listing, `?search=`, session-scoped, `info`, `config`, `history`, `plans`, `memory`, `agents`, `hooks`. (BACK-190)
 - **`depends://` missing from `help://relationships` cluster** — adapter was registered but absent from all clusters, causing the dynamic count to read 22 instead of 23. Added to Code Analysis cluster with `imports↔depends` pair. (BACK-189)
 - **Hardcoded "22 adapters" in `mcp_server.py` and `MCP_SETUP.md`** — updated to 23. (BACK-189)
+- **`review.py` subprocess calls replaced with direct internal API** — `_run_check`, `_run_hotspots`, `_run_complexity`, `_run_diff` previously shelled out to `reveal` via subprocess. Now call `_check_files_json`, `StatsAdapter`, `AstAdapter`, `DiffAdapter` directly. Also fixed latent bug: `_run_check` was calling `data.get('violations', [])` but `reveal check --format=json` emits `{files, summary}`, so checks always returned `[]`. (BACK-181)
 
 ### Added
-- **V024: Adapter guide coverage rule** — `reveal reveal:// --check` now flags any registered public adapter missing a guide file in `docs/adapters/`. Prefix-matched (NGINX_GUIDE.md satisfies nginx://). Exempts help://, demo, test. Currently fires for autossl:// — the only adapter without a static guide. 7 tests. (BACK-191)
+- **V024: Adapter guide coverage rule** — `reveal reveal:// --check` now flags any registered public adapter missing a guide file in `docs/adapters/`. Prefix-matched (NGINX_GUIDE.md satisfies nginx://). Exempts help://, demo, test. 7 tests. (BACK-191)
+- **`AUTOSSL_ADAPTER_GUIDE.md`** — static guide for `autossl://` adapter. Covers defect codes (SELF_SIGNED_CERT, CERT_HAS_EXPIRED, etc.), DCV impediment codes (TOTAL_DCV_FAILURE, DNS_RESOLVES_TO_ANOTHER_SERVER, etc.), shared-host `--user` workflow, domain history, JSON output, combos with `ssl://`/`nginx://`/`cpanel://`/`letsencrypt://`. `reveal reveal:// --check` now fully clean (0 V024 violations). (BACK-192)
 
 ### Docs
 - **RECIPES.md major expansion** — added "Start Here: Distinctive Capabilities" orientation section, "Large-Function Navigation" (all nav flags: `--outline`, `--around`, `--scope`, `--ifmap`, `--catchmap`, `--exits`, `--flowto`, `--varflow`, `--deps`, `--mutations`), "Spreadsheet & BI Inspection" (xlsx/PowerPivot/PowerQuery), "Inspect Claude Install State" (`claude://info/config/history/plans/memory/agents/hooks`), and "Cross-adapter orientation". All examples validated at runtime.
