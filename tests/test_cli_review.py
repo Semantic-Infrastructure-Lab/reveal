@@ -259,89 +259,90 @@ class TestDetectSourceRoot(unittest.TestCase):
 
 class TestRunDiff(unittest.TestCase):
 
-    @patch('reveal.cli.commands.review.subprocess.run')
-    def test_success_returns_ok_status(self, mock_run):
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout=json.dumps({'diff': 'data'}), stderr=''
-        )
+    @patch('reveal.adapters.diff.adapter.DiffAdapter')
+    def test_success_returns_ok_status(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = {'type': 'diff_comparison'}
         result = _run_diff('main..feature')
         self.assertEqual(result['status'], 'ok')
 
     @patch('reveal.cli.commands.review.subprocess.run')
-    def test_fallback_to_git_diff(self, mock_run):
-        # First call (reveal diff) fails, second (git diff) succeeds
-        mock_run.side_effect = [
-            MagicMock(returncode=1, stdout='', stderr=''),
-            MagicMock(returncode=0, stdout='a.py\nb.py\n', stderr=''),
-        ]
+    @patch('reveal.adapters.diff.adapter.DiffAdapter', side_effect=Exception("parse error"))
+    def test_fallback_to_git_diff(self, _mock_adapter, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout='a.py\nb.py\n', stderr='')
         result = _run_diff('main..feature')
         self.assertEqual(result['status'], 'ok')
         self.assertEqual(result['count'], 2)
 
-    @patch('reveal.cli.commands.review.subprocess.run')
-    def test_all_failures_returns_unavailable(self, mock_run):
-        mock_run.side_effect = Exception("no subprocess")
+    @patch('reveal.cli.commands.review.subprocess.run', side_effect=Exception("no subprocess"))
+    @patch('reveal.adapters.diff.adapter.DiffAdapter', side_effect=Exception("parse error"))
+    def test_all_failures_returns_unavailable(self, _mock_adapter, _mock_run):
         result = _run_diff('main..feature')
         self.assertEqual(result['status'], 'unavailable')
 
 
 class TestRunCheck(unittest.TestCase):
 
-    @patch('reveal.cli.commands.review.subprocess.run')
-    def test_returns_violations(self, mock_run):
-        data = {'violations': [{'rule': 'B001', 'severity': 'error'}]}
-        mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(data))
+    @patch('reveal.cli.file_checker._check_files_json')
+    @patch('reveal.cli.file_checker.collect_files_to_check', return_value=[Path('/tmp/f.py')])
+    @patch('reveal.cli.file_checker.load_gitignore_patterns', return_value=[])
+    def test_returns_violations(self, _pats, _files, mock_check):
+        mock_check.return_value = (1, 1, [{
+            'file': 'f.py',
+            'issues': 1,
+            'detections': [{'rule_code': 'B001', 'severity': 'error', 'line': 5, 'message': 'bad'}],
+        }])
         result = _run_check(Path('/tmp'), 'B,S')
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]['rule'], 'B001')
 
-    @patch('reveal.cli.commands.review.subprocess.run')
-    def test_empty_stdout_returns_empty_list(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout='')
+    @patch('reveal.cli.file_checker._check_files_json')
+    @patch('reveal.cli.file_checker.collect_files_to_check', return_value=[])
+    @patch('reveal.cli.file_checker.load_gitignore_patterns', return_value=[])
+    def test_no_files_returns_empty_list(self, _pats, _files, mock_check):
+        mock_check.return_value = (0, 0, [])
         result = _run_check(Path('/tmp'), 'B,S')
         self.assertEqual(result, [])
 
-    @patch('reveal.cli.commands.review.subprocess.run')
-    def test_exception_returns_empty_list(self, mock_run):
-        mock_run.side_effect = Exception("timeout")
+    @patch('reveal.cli.file_checker.load_gitignore_patterns', side_effect=Exception("fail"))
+    def test_exception_returns_empty_list(self, _mock):
         result = _run_check(Path('/tmp'), 'B,S')
         self.assertEqual(result, [])
 
 
 class TestRunHotspots(unittest.TestCase):
 
-    @patch('reveal.cli.commands.review.subprocess.run')
-    def test_returns_top_10(self, mock_run):
-        data = {'hotspots': [{'file': f'f{i}.py'} for i in range(15)]}
-        mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(data))
+    @patch('reveal.adapters.stats.adapter.StatsAdapter')
+    def test_returns_top_10(self, MockAdapter):
+        hotspots = [{'file': f'f{i}.py'} for i in range(15)]
+        MockAdapter.return_value.get_structure.return_value = {'hotspots': hotspots}
         result = _run_hotspots(Path('/tmp'))
         self.assertEqual(len(result), 10)
 
-    @patch('reveal.cli.commands.review.subprocess.run')
-    def test_exception_returns_empty(self, mock_run):
-        mock_run.side_effect = Exception("fail")
+    @patch('reveal.adapters.stats.adapter.StatsAdapter', side_effect=Exception("fail"))
+    def test_exception_returns_empty(self, _mock):
         self.assertEqual(_run_hotspots(Path('/tmp')), [])
 
 
 class TestRunComplexity(unittest.TestCase):
 
-    @patch('reveal.cli.commands.review.subprocess.run')
-    def test_returns_elements(self, mock_run):
-        data = {'elements': [{'name': 'fn', 'complexity': 12}]}
-        mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(data))
+    @patch('reveal.adapters.ast.adapter.AstAdapter')
+    def test_returns_elements(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = {
+            'results': [{'name': 'fn', 'complexity': 12}]
+        }
         result = _run_complexity(Path('/tmp'))
         self.assertEqual(result[0]['name'], 'fn')
 
-    @patch('reveal.cli.commands.review.subprocess.run')
-    def test_handles_results_key(self, mock_run):
-        data = {'results': [{'name': 'fn2', 'complexity': 15}]}
-        mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(data))
+    @patch('reveal.adapters.ast.adapter.AstAdapter')
+    def test_handles_elements_key(self, MockAdapter):
+        MockAdapter.return_value.get_structure.return_value = {
+            'elements': [{'name': 'fn2', 'complexity': 15}]
+        }
         result = _run_complexity(Path('/tmp'))
         self.assertEqual(result[0]['name'], 'fn2')
 
-    @patch('reveal.cli.commands.review.subprocess.run')
-    def test_exception_returns_empty(self, mock_run):
-        mock_run.side_effect = Exception("fail")
+    @patch('reveal.adapters.ast.adapter.AstAdapter', side_effect=Exception("fail"))
+    def test_exception_returns_empty(self, _mock):
         self.assertEqual(_run_complexity(Path('/tmp')), [])
 
 

@@ -2128,13 +2128,10 @@ class TestV024AdapterGuideCoverage(unittest.TestCase):
             detections = self.rule.check('reveal://', None, '')
         self.assertEqual(len(detections), 0)
 
-    def test_live_registry_fires_for_autossl(self):
-        """Integration: running against live reveal:// finds exactly the autossl gap."""
+    def test_live_registry_all_adapters_have_guides(self):
+        """Integration: all public adapters now have guides — V024 should fire zero times."""
         detections = self.rule.check('reveal://', None, '')
-        missing = [d for d in detections if 'autossl' in d.message]
-        self.assertEqual(len(missing), 1)
-        # No other adapters should be flagged
-        self.assertEqual(len(detections), 1)
+        self.assertEqual(len(detections), 0)
 
 
 if __name__ == '__main__':

@@ -6,7 +6,7 @@ import subprocess
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Dict, Any, List, cast
+from typing import Any, Dict, List, cast
 
 
 def create_review_parser() -> argparse.ArgumentParser:
@@ -92,17 +92,15 @@ def run_review(args: Namespace) -> None:
 def _run_diff(git_range: str) -> Dict[str, Any]:
     """Run diff analysis for a git range."""
     try:
-        result = subprocess.run(
-            ['reveal', f'diff://git://{git_range.replace("..", "/.:git://")}/.', '--format=json'],
-            capture_output=True, text=True, timeout=30
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            data = json.loads(result.stdout)
-            return {'status': 'ok', 'data': data}
+        from reveal.adapters.diff.adapter import DiffAdapter
+        resource = f"git://{git_range.replace('..', '/.:git://')}/."
+        adapter = DiffAdapter(resource)
+        data = adapter.get_structure()
+        return {'status': 'ok', 'data': data}
     except Exception:
         pass
 
-    # Fallback: use git log to count changed files
+    # Fallback: git for changed file list
     try:
         parts = git_range.split('..', 1)
         result = subprocess.run(
@@ -118,15 +116,29 @@ def _run_diff(git_range: str) -> Dict[str, Any]:
 def _run_check(path: Path, select: str) -> List[Dict[str, Any]]:
     """Run quality check and return violations."""
     try:
-        result = subprocess.run(
-            ['reveal', 'check', str(path), f'--select={select}',
-             '--only-failures', '--format=json'],
-            capture_output=True, text=True, timeout=60
+        from reveal.cli.file_checker import (
+            collect_files_to_check, load_gitignore_patterns, _check_files_json,
         )
-        if result.stdout.strip():
-            data = json.loads(result.stdout)
-            return cast(List[Dict[str, Any]], data.get('violations', []))
-        return []
+        if path.is_dir():
+            directory = path.resolve()
+            gitignore_patterns = load_gitignore_patterns(directory)
+            files = collect_files_to_check(directory, gitignore_patterns)
+        else:
+            directory = path.parent.resolve()
+            files = [path.resolve()]
+        select_list = select.split(',') if select else None
+        _, _, file_results = _check_files_json(files, directory, select_list, None)
+        violations: List[Dict[str, Any]] = []
+        for fr in file_results:
+            for d in fr.get('detections', []):
+                violations.append({
+                    'file': fr['file'],
+                    'line': d.get('line', ''),
+                    'rule': d.get('rule_code', ''),
+                    'severity': d.get('severity', 'warning'),
+                    'message': d.get('message', ''),
+                })
+        return violations
     except Exception:
         return []
 
@@ -134,15 +146,11 @@ def _run_check(path: Path, select: str) -> List[Dict[str, Any]]:
 def _run_hotspots(path: Path) -> List[Dict[str, Any]]:
     """Run hotspot analysis."""
     try:
-        result = subprocess.run(
-            ['reveal', f'stats://{path}?hotspots=true', '--format=json'],
-            capture_output=True, text=True, timeout=30
-        )
-        if result.stdout.strip():
-            data = json.loads(result.stdout)
-            hotspots = data.get('hotspots', data.get('files', []))
-            return cast(List[Dict[str, Any]], hotspots[:10])  # Top 10
-        return []
+        from reveal.adapters.stats.adapter import StatsAdapter
+        adapter = StatsAdapter(str(path), 'hotspots=true')
+        data = adapter.get_structure(hotspots=True)
+        hotspots = data.get('hotspots', data.get('files', []))
+        return cast(List[Dict[str, Any]], hotspots[:10])
     except Exception:
         return []
 
@@ -150,15 +158,10 @@ def _run_hotspots(path: Path) -> List[Dict[str, Any]]:
 def _run_complexity(path: Path) -> List[Dict[str, Any]]:
     """Run complexity analysis."""
     try:
-        result = subprocess.run(
-            ['reveal', f'ast://{path}?complexity>10&sort=-complexity&limit=10',
-             '--format=json'],
-            capture_output=True, text=True, timeout=30
-        )
-        if result.stdout.strip():
-            data = json.loads(result.stdout)
-            return cast(List[Dict[str, Any]], data.get('elements', data.get('results', []))[:10])
-        return []
+        from reveal.adapters.ast.adapter import AstAdapter
+        adapter = AstAdapter(str(path), 'complexity>10&sort=-complexity&limit=10')
+        data = adapter.get_structure()
+        return cast(List[Dict[str, Any]], data.get('results', data.get('elements', []))[:10])
     except Exception:
         return []
 
