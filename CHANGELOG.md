@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions fractal-zealot-0417, jade-beam-0417, vobage-0417)
+## [Unreleased] - (sessions fractal-zealot-0417, jade-beam-0417, vobage-0417, kotowiro-0417)
 
 ### Fixed
 - **`help://schemas --format=json` now returns structured listing** — bare `help://schemas` with `--format=json` previously returned `{"error": "No adapter specified"}`. Now returns `{"type":"adapter_schema","available_adapters":[...],"usage":"..."}`. Text rendering unchanged. (BACK-188)
@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`review.py` subprocess calls replaced with direct internal API** — `_run_check`, `_run_hotspots`, `_run_complexity`, `_run_diff` previously shelled out to `reveal` via subprocess. Now call `_check_files_json`, `StatsAdapter`, `AstAdapter`, `DiffAdapter` directly. Also fixed latent bug: `_run_check` was calling `data.get('violations', [])` but `reveal check --format=json` emits `{files, summary}`, so checks always returned `[]`. (BACK-181)
 - **`reveal_check()` MCP tool no longer uses `_capture()`** — replaced `_capture(run_check, args)` with direct `_check_files_json` call. Violations serialized to human-readable text at the MCP boundary. No global lock, no stdout redirection, no `SystemExit` catching. Proof-of-concept for BACK-182; remaining 4 MCP tools need display-layer structured returns before the same refactor applies. (BACK-182 partial)
 - **`reveal_pack()` MCP tool no longer uses `_capture()`** — calls `_parse_budget`, `_get_changed_files`, `_collect_candidates`, `_apply_budget`, `_collect_file_contents` directly. Content and file listing rendered as text at the MCP boundary. No global lock, no stdout capture. (BACK-193 partial)
+- **`reveal_element()` MCP tool no longer uses `_capture()`** — calls `get_analyzer` + `_parse_element_syntax` + `_extract_by_syntax` directly; formats result dict at the MCP boundary. No global lock, no stdout redirection. 3 of 5 MCP tools now use direct APIs; only `reveal_structure` and `reveal_query` remain on `_capture()`. (BACK-182 partial)
 
 ### Added
 - **V024: Adapter guide coverage rule** — `reveal reveal:// --check` now flags any registered public adapter missing a guide file in `docs/adapters/`. Prefix-matched (NGINX_GUIDE.md satisfies nginx://). Exempts help://, demo, test. 7 tests. (BACK-191)
@@ -29,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Maintenance
 - **I002 circular dependency ceiling documented** — `reveal check reveal/ --select I002 --format json` baseline is **23 violations**. Added to `RELEASING.md` pre-flight checklist. CI gate was evaluated and removed (12.5 min runtime). (BACK-183)
+- **`utils/query.py` (762 lines) split into 3 focused modules** — `query_parser.py` (coerce/parse/QueryFilter), `query_eval.py` (compare_values/apply_filter), `query_control.py` (ResultControl/sort/budget). `query.py` is now a re-export shim; all 24 import sites unchanged. (BACK-184)
+- **`treesitter.py` complexity metrics extracted** — `_calculate_complexity_and_depth` (79 lines, pure node function) moved to `reveal/complexity.py` as a standalone function. `_calculate_complexity` and `_get_nesting_depth` on `TreeSitterAnalyzer` become thin wrappers. (BACK-187)
+- **`adapters/ast/nav.py` (1068 lines) split into 4 modules** — `nav_outline.py` (element_outline, scope_chain), `nav_varflow.py` (var_flow, _walk_var), `nav_calls.py` (range_calls), `nav_exits.py` (collect_exits, collect_deps, collect_mutations). `nav.py` is now a re-export shim. Cross-module deps explicit: nav_exits imports from nav_calls and nav_varflow. (BACK-185)
 
 ### Docs
 - **RECIPES.md major expansion** — added "Start Here: Distinctive Capabilities" orientation section, "Large-Function Navigation" (all nav flags: `--outline`, `--around`, `--scope`, `--ifmap`, `--catchmap`, `--exits`, `--flowto`, `--varflow`, `--deps`, `--mutations`), "Spreadsheet & BI Inspection" (xlsx/PowerPivot/PowerQuery), "Inspect Claude Install State" (`claude://info/config/history/plans/memory/agents/hooks`), and "Cross-adapter orientation". All examples validated at runtime.
