@@ -45,9 +45,9 @@ mcp = FastMCP(
     ),
 )
 
-# Used by reveal_structure, reveal_element, reveal_query — the three tools whose
-# underlying functions still print to stdout rather than returning structured data.
-# reveal_check and reveal_pack have been converted to direct API calls (BACK-182/193).
+# Used by reveal_structure and reveal_query — the two tools whose underlying
+# functions still print to stdout rather than returning structured data.
+# reveal_check, reveal_pack, reveal_element have been converted to direct API calls.
 _capture_lock = threading.Lock()
 
 
@@ -232,10 +232,27 @@ def reveal_element(path: str, element: str) -> str:
         path: File path containing the element
         element: Function or class name to extract (e.g., 'validate_token')
     """
-    from .file_handler import handle_file
+    from .registry import get_analyzer
+    from .display.element import _parse_element_syntax, _extract_by_syntax
 
-    args = _default_args(path=path, element=element)
-    return _capture(handle_file, path, element, False, 'text', args=args)
+    analyzer_class = get_analyzer(path, allow_fallback=True)
+    if not analyzer_class:
+        return f"[reveal error: no analyzer found for {path}]"
+
+    analyzer = analyzer_class(path)
+    syntax = _parse_element_syntax(element)
+    result = _extract_by_syntax(analyzer, element, syntax)
+
+    if not result:
+        return f"[reveal error: element '{element}' not found in {path}]"
+
+    line_start = result.get('line_start', 1)
+    line_end = result.get('line_end', line_start)
+    source = result.get('source', '')
+    name = result.get('name', element)
+
+    header = f"{path}:{line_start}-{line_end} | {name}\n"
+    return f"{header}\n{analyzer.format_with_lines(source, line_start)}"
 
 
 @mcp.tool()
