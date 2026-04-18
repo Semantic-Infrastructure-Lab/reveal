@@ -12,6 +12,19 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - (session fractal-zealot-0417)
+
+### Fixed
+- **`help://schemas --format=json` now returns structured listing** — bare `help://schemas` with `--format=json` previously returned `{"error": "No adapter specified"}`. Now returns `{"type":"adapter_schema","available_adapters":[...],"usage":"..."}`. Text rendering unchanged. (BACK-188)
+- **`claude://` help text shows all URI forms** — `help://claude` and `help://adapters` previously showed only `claude://session/{name}`. Now documents all 10 forms: bare listing, `?search=`, session-scoped, `info`, `config`, `history`, `plans`, `memory`, `agents`, `hooks`. (BACK-190)
+- **`depends://` missing from `help://relationships` cluster** — adapter was registered but absent from all clusters, causing the dynamic count to read 22 instead of 23. Added to Code Analysis cluster with `imports↔depends` pair. (BACK-189)
+- **Hardcoded "22 adapters" in `mcp_server.py` and `MCP_SETUP.md`** — updated to 23. (BACK-189)
+
+### Docs
+- **RECIPES.md major expansion** — added "Start Here: Distinctive Capabilities" orientation section, "Large-Function Navigation" (all nav flags: `--outline`, `--around`, `--scope`, `--ifmap`, `--catchmap`, `--exits`, `--flowto`, `--varflow`, `--deps`, `--mutations`), "Spreadsheet & BI Inspection" (xlsx/PowerPivot/PowerQuery), "Inspect Claude Install State" (`claude://info/config/history/plans/memory/agents/hooks`), and "Cross-adapter orientation". All examples validated at runtime.
+
+---
+
 ## [0.79.0] - 2026-04-14 (sessions orbital-shuttle-0414, ivory-dawn-0414)
 
 ### Breaking Changes

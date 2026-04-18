@@ -1011,9 +1011,9 @@ Excel (.xlsx), Word (.docx), PowerPoint (.pptx), LibreOffice (ODF)
 | `ast://` | Query code as database (complexity, size, type filters) |
 | `autossl://` | cPanel AutoSSL run logs — per-domain TLS outcomes, DCV failures |
 | `calls://` | Cross-file call graph — callers, callees, coupling metrics, Graphviz export |
-| `claude://` | Claude conversation analysis |
+| `claude://` | Claude conversation analysis and install introspection |
 | `cpanel://` | cPanel user environments — domains, SSL certs, ACL health |
-| `demo://` | Demo resources (internal/examples) |
+| `depends://` | Reverse module dependency graph — find everything that imports a given module |
 | `diff://` | Compare files or git revisions |
 | `domain://` | Domain registration, DNS records, health status + HTTP response check |
 | `env://` | Environment variable inspection |
