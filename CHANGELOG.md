@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`depends://` missing from `help://relationships` cluster** — adapter was registered but absent from all clusters, causing the dynamic count to read 22 instead of 23. Added to Code Analysis cluster with `imports↔depends` pair. (BACK-189)
 - **Hardcoded "22 adapters" in `mcp_server.py` and `MCP_SETUP.md`** — updated to 23. (BACK-189)
 
+### Added
+- **V024: Adapter guide coverage rule** — `reveal reveal:// --check` now flags any registered public adapter missing a guide file in `docs/adapters/`. Prefix-matched (NGINX_GUIDE.md satisfies nginx://). Exempts help://, demo, test. Currently fires for autossl:// — the only adapter without a static guide. 7 tests. (BACK-191)
+
 ### Docs
 - **RECIPES.md major expansion** — added "Start Here: Distinctive Capabilities" orientation section, "Large-Function Navigation" (all nav flags: `--outline`, `--around`, `--scope`, `--ifmap`, `--catchmap`, `--exits`, `--flowto`, `--varflow`, `--deps`, `--mutations`), "Spreadsheet & BI Inspection" (xlsx/PowerPivot/PowerQuery), "Inspect Claude Install State" (`claude://info/config/history/plans/memory/agents/hooks`), and "Cross-adapter orientation". All examples validated at runtime.
 
