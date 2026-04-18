@@ -226,7 +226,7 @@ All adapters support result manipulation:
 
 ### Implementation Details
 
-- **File**: `reveal/utils/query.py` (`compare_values()` function)
+- **File**: `reveal/utils/query_eval.py` (`compare_values()` function) — `utils/query.py` is a re-export shim (BACK-184)
 - **Code reduction**: 299 lines → 163 lines (-45.5%)
 - **Test coverage**: 179/182 tests passing (98.4%)
 - **Documentation**: See [QUERY_SYNTAX_GUIDE.md](../guides/QUERY_SYNTAX_GUIDE.md) for comprehensive details
