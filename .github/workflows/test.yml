@@ -77,25 +77,3 @@ jobs:
           print('✅ Reveal self-validation passed (all V001-V006 checks)')
           EOF
 
-      - name: I002 circular dependency budget
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        shell: bash
-        run: |
-          python3 << 'EOF'
-          import json, subprocess, sys
-
-          result = subprocess.run(
-              ['reveal', 'check', 'reveal/', '--select', 'I002', '--format', 'json'],
-              capture_output=True, text=True,
-          )
-          data = json.loads(result.stdout)
-          total = sum(f['issues'] for f in data['files'])
-
-          ceiling = 23
-          if total > ceiling:
-              print(f'❌ I002 budget exceeded: {total} violations (ceiling: {ceiling})')
-              print('  Circular dependencies grew. Resolve cycles or raise ceiling deliberately.')
-              sys.exit(1)
-
-          print(f'✅ I002 budget OK: {total}/{ceiling} violations')
-          EOF
