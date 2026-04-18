@@ -19,7 +19,8 @@ _SCHEMA_QUERY_PARAMS = {
     'sort=field': 'Sort results by field',
     'sort=-field': 'Sort descending',
     'limit=N': 'Limit results to N',
-    'offset=M': 'Skip first M results'
+    'offset=M': 'Skip first M results',
+    'fields=f1,f2': 'Append additional frontmatter fields as columns in listing output (e.g. fields=book,cohort)',
 }
 
 _SCHEMA_OUTPUT_TYPES = [

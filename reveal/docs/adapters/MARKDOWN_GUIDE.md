@@ -106,17 +106,17 @@ $ reveal README.md --outline
 
 File: README.md
 
-Project Title (README.md:1)
-  ├─ Installation (line 5)
-  │  ├─ Prerequisites (line 7)
-  │  └─ Quick Install (line 12)
-  ├─ Usage (line 15)
-  │  ├─ Basic Example (line 17)
-  │  └─ Advanced Usage (line 21)
-  ├─ Configuration (line 25)
-  └─ API Reference (line 35)
-     ├─ Core Functions (line 37)
-     └─ Utilities (line 45)
+Project Title (README.md:1, 50 lines)
+  ├─ Installation (line 5, 10 lines)
+  │  ├─ Prerequisites (line 7, 3 lines)
+  │  └─ Quick Install (line 12, 3 lines)
+  ├─ Usage (line 15, 10 lines)
+  │  ├─ Basic Example (line 17, 3 lines)
+  │  └─ Advanced Usage (line 21, 4 lines)
+  ├─ Configuration (line 25, 10 lines)
+  └─ API Reference (line 35, 16 lines)
+     ├─ Core Functions (line 37, 7 lines)
+     └─ Utilities (line 45, 6 lines)
 ```
 
 **Use Cases**:
@@ -781,6 +781,13 @@ reveal doc.md "Install"        # ✅ Substring match → "## Installation"
 reveal doc.md "Bug"            # ✅ Substring match → all "## Bug *" sections concatenated
 ```
 
+When multiple sections match, a count prefix is shown before the content:
+
+```
+# 3 sections matched "Bug" — showing all
+doc.md:45-212 | Bug
+```
+
 **OR-alternation with `|`**: use pipe-separated terms to pull multiple named
 sections in one call:
 
@@ -791,6 +798,10 @@ reveal doc.md "Bug 11\|social_repost_log\|Action"  # grep-style \| also accepted
 
 Each term is resolved independently; results are deduplicated and returned in
 document order.
+
+**Short-result hint**: when a section returns 5 lines or fewer and a next heading
+follows immediately, reveal warns to stderr that it may be a label-only section
+and suggests the next section by name.
 
 ## Output Formats
 
@@ -928,6 +939,25 @@ reveal 'markdown://docs/?type=guide&body-contains=nginx&limit=10'
 - Multiple `body-contains=` params are AND'd (all must appear)
 - Files without frontmatter are also matched
 - Combines with all frontmatter filters and result control (`sort=`, `limit=`, `offset=`)
+
+### Extra Frontmatter Columns (`?fields=`)
+
+Add arbitrary frontmatter fields as inline columns in listing output:
+
+```bash
+# Show book and cohort for each matched primitive
+reveal 'markdown://primitives/?type=framework&fields=book,cohort'
+
+# Output:
+# Matched: 3 of 47 files
+#
+#   primitives/gsbs-kernel.md [framework] - The Kernel of Good Strategy book=good-strategy-bad-strategy cohort=strategy
+#   primitives/kahneman-system2.md [framework] - System 2 Thinking book=thinking-fast-and-slow cohort=decision-making
+```
+
+- Fields missing from a file's frontmatter are silently omitted
+- List-valued fields are rendered as `field=v1,v2`
+- Combines with all filters and result control
 
 ## Notes
 

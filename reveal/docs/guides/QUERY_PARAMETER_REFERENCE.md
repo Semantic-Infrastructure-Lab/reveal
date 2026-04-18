@@ -198,6 +198,12 @@ reveal 'markdown://docs/?body-contains=nginx&body-contains=ssl'  # Both terms (A
 ```
 `body-contains=` is case-insensitive substring match. Multiple values are AND'd. Combines with frontmatter filters and result control (`sort=`, `limit=`).
 
+**Extra columns** (markdown-specific):
+```bash
+reveal 'markdown://primitives/?type=framework&fields=book,cohort'  # Append book= cohort= inline per result
+```
+`fields=f1,f2` appends comma-separated frontmatter values as `field=value` on each result row. Fields absent from a file are silently omitted.
+
 ---
 
 ### stats:// - Code Statistics
