@@ -213,11 +213,11 @@ class TestRevealCheckTool(unittest.TestCase):
 
 
 class TestCaptureHelper(unittest.TestCase):
-    """Tests for the _capture() internal helper."""
+    """Tests for the _run_and_capture() internal helper."""
 
     def setUp(self):
-        from reveal.mcp_server import _capture
-        self._capture = _capture
+        from reveal.mcp_server import _run_and_capture
+        self._capture = _run_and_capture
 
     def test_captures_stdout(self):
         def fn():

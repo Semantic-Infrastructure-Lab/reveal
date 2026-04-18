@@ -20,15 +20,11 @@ Configuration example (Claude Code settings.json):
 import io
 import os
 import sys
-import threading
 from argparse import Namespace
 
 from mcp.server.fastmcp import FastMCP
 
-# Suppress update-check prints from appearing in MCP tool responses.
-# reveal's check_for_updates() prints to stdout; since _capture() redirects
-# sys.stdout before invoking reveal functions, the notice would be injected
-# into tool output and corrupt the response seen by the MCP client.
+# Suppress update-check prints that would corrupt MCP tool responses.
 os.environ.setdefault('REVEAL_NO_UPDATE_CHECK', '1')
 
 mcp = FastMCP(
@@ -45,52 +41,45 @@ mcp = FastMCP(
     ),
 )
 
-# Used by reveal_structure and reveal_query — the two tools whose underlying
-# functions still print to stdout rather than returning structured data.
-# reveal_check, reveal_pack, reveal_element have been converted to direct API calls.
-_capture_lock = threading.Lock()
+def _run_and_capture(fn, *args, **kwargs) -> str:
+    """Run fn with stdout+stderr captured; return captured text.
 
-
-def _capture(fn, *args, **kwargs) -> str:
-    """Run *fn* with stdout+stderr captured; return captured text.
-
-    Thread-safe: acquires lock so concurrent calls don't interleave.
+    Used only for tools where the underlying display layer prints rather than
+    returning strings.  No global lock — MCP tool calls are sequential.
     Swallows SystemExit(0) (reveal uses it for clean exit on some paths).
-    Stderr is appended to the result so MCP clients see error messages
-    rather than a blank response or a bare exit-code string.
+    Stderr is appended so MCP clients see error messages instead of silence.
     """
-    with _capture_lock:
-        out_buf = io.StringIO()
-        err_buf = io.StringIO()
-        old_stdout, old_stderr = sys.stdout, sys.stderr
-        sys.stdout = out_buf
-        sys.stderr = err_buf
-        exit_code = None
-        exc_msg = None
-        try:
-            fn(*args, **kwargs)
-        except SystemExit as e:
-            exit_code = e.code
-        except Exception as exc:  # noqa: BLE001
-            exc_msg = str(exc)
-        finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
+    out_buf = io.StringIO()
+    err_buf = io.StringIO()
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    sys.stdout = out_buf
+    sys.stderr = err_buf
+    exit_code = None
+    exc_msg = None
+    try:
+        fn(*args, **kwargs)
+    except SystemExit as e:
+        exit_code = e.code
+    except Exception as exc:  # noqa: BLE001
+        exc_msg = str(exc)
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
 
-        out = out_buf.getvalue()
-        err = err_buf.getvalue().strip()
+    out = out_buf.getvalue()
+    err = err_buf.getvalue().strip()
 
-        if exc_msg is not None:
-            return f"[reveal error: {exc_msg}]"
-        if exit_code not in (0, None):
-            detail = err or out.strip()
-            msg = f"[reveal exited with code {exit_code}]"
-            return f"{msg}: {detail}" if detail else msg
-        if err and not out.strip():
-            return f"[stderr: {err}]"
-        if err:
-            return f"{out}\n[stderr: {err}]"
-        return out
+    if exc_msg is not None:
+        return f"[reveal error: {exc_msg}]"
+    if exit_code not in (0, None):
+        detail = err or out.strip()
+        msg = f"[reveal exited with code {exit_code}]"
+        return f"{msg}: {detail}" if detail else msg
+    if err and not out.strip():
+        return f"[stderr: {err}]"
+    if err:
+        return f"{out}\n[stderr: {err}]"
+    return out
 
 
 def _default_args(**overrides) -> Namespace:
@@ -214,10 +203,35 @@ def reveal_structure(path: str) -> str:
     Args:
         path: File or directory path to inspect (absolute or relative to cwd)
     """
-    from .cli.routing import handle_file_or_directory
+    from pathlib import Path
 
-    args = _default_args(path=path)
-    return _capture(handle_file_or_directory, path, args)
+    p = Path(path)
+    if not p.exists():
+        return f"[reveal error: path not found: {path}]"
+
+    args = _default_args(path=str(p))
+
+    if p.is_dir():
+        from .tree_view import show_directory_tree
+        return show_directory_tree(
+            str(p),
+            depth=args.depth,
+            max_entries=args.max_entries,
+            dir_limit=args.dir_limit,
+            fast=args.fast,
+            respect_gitignore=args.respect_gitignore,
+            exclude_patterns=args.exclude,
+        )
+
+    from .registry import get_analyzer
+    from .display.structure import show_structure
+
+    analyzer_class = get_analyzer(str(p), allow_fallback=True)
+    if not analyzer_class:
+        return f"[reveal error: no analyzer found for {path}]"
+
+    analyzer = analyzer_class(str(p))
+    return _run_and_capture(show_structure, analyzer, 'text', args)
 
 
 @mcp.tool()
@@ -283,7 +297,7 @@ def reveal_query(uri: str) -> str:
     from .cli.routing import handle_uri
 
     args = _default_args(path=uri)
-    return _capture(handle_uri, uri, None, args)
+    return _run_and_capture(handle_uri, uri, None, args)
 
 
 @mcp.tool()
