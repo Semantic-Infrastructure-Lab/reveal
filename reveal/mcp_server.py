@@ -295,16 +295,95 @@ def reveal_pack(
         content: Include file structure in output (default True)
         focus: Emphasize files matching this name pattern (e.g., 'auth', 'api')
     """
-    from .cli.commands.pack import run_pack
-
-    args = _default_args(
-        path=path,
-        budget=str(budget),
-        since=since or None,
-        content=content,
-        focus=focus or None,
+    from pathlib import Path
+    from .cli.commands.pack import (
+        _parse_budget, _get_changed_files, _collect_candidates,
+        _apply_budget, _collect_file_contents,
     )
-    return _capture(run_pack, args)
+
+    p = Path(path)
+    if not p.exists():
+        return f"[reveal error: {path}: not found]"
+
+    budget_tokens, budget_lines = _parse_budget(str(budget))
+    focus_val = focus or None
+    since_val = since or None
+
+    changed_files: set = set()
+    since_error = None
+    if since_val:
+        changed_files, since_error = _get_changed_files(p, since_val)
+
+    candidates = _collect_candidates(p, focus_val, changed_files)
+    selected, meta = _apply_budget(candidates, budget_tokens, budget_lines, p)
+
+    if since_val:
+        meta['since'] = since_val
+        meta['changed_files_count'] = len(changed_files)
+
+    # Render text at MCP boundary
+    budget_desc = f"~{budget_tokens} tokens" if budget_tokens else f"{budget_lines} lines"
+    since_desc = f"  [since {since_val}]" if since_val else ""
+    lines = [f"Pack: {p}  [{budget_desc} budget]{since_desc}"]
+    if since_val:
+        lines.append(f"Changed files:  {meta.get('changed_files_count', 0)} (boosted to top priority)")
+    if since_error:
+        lines.append(f"Warning: --since: {since_error}")
+    lines.append(
+        f"Selected {meta['selected']} of {meta['total_candidates']} files "
+        f"(~{meta['used_tokens_approx']} tokens, {meta['used_lines']} lines)"
+    )
+    lines.append("")
+
+    if not selected:
+        lines.append("No files fit within budget.")
+    else:
+        def _file_line(f):
+            return f"  {f['relative']:50} {f['tokens_approx']:5} tokens  {f['lines']:4} lines"
+
+        changed_f = [f for f in selected if f.get('changed')]
+        high_f = [f for f in selected if not f.get('changed') and f['priority'] >= 8]
+        medium_f = [f for f in selected if not f.get('changed') and 2 <= f['priority'] < 8]
+        low_f = [f for f in selected if not f.get('changed') and f['priority'] < 2]
+
+        if changed_f:
+            lines.append(f"── Changed files (since {since_val}) ──")
+            lines.extend(_file_line(f) for f in changed_f)
+            lines.append("")
+        if high_f:
+            lines.append("── Entry points / focus files ──")
+            lines.extend(_file_line(f) for f in high_f)
+            lines.append("")
+        if medium_f:
+            lines.append("── Key modules ──")
+            lines.extend(_file_line(f) for f in medium_f)
+            lines.append("")
+        if low_f:
+            lines.append("── Other files ──")
+            lines.extend(_file_line(f) for f in low_f)
+            lines.append("")
+        if meta['skipped'] > 0:
+            lines.append(f"[{meta['skipped']} files excluded — exceeded budget]")
+
+    if content and selected:
+        content_data = _collect_file_contents(selected)
+        lines.append("")
+        lines.append("━" * 70)
+        lines.append("CONTENT  (changed=full · key files=structure · low priority=names)")
+        lines.append("━" * 70)
+        name_only = []
+        for entry in content_data:
+            if entry['content_type'] == 'name_only':
+                name_only.append(entry['file'])
+                continue
+            marker = "  ◀ CHANGED (full content)" if entry['content_type'] == 'full' else ""
+            lines.append(f"\n── {entry['file']}{marker} ──")
+            lines.append(entry['content'].rstrip() if entry['content'].strip() else "[unreadable]")
+        if name_only:
+            lines.append("\n── Low-priority files (selected, structure omitted) ──")
+            lines.extend(f"  {f}" for f in name_only)
+
+    return "\n".join(lines)
 
 
 @mcp.tool()
