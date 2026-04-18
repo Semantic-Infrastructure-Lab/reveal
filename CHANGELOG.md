@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - (session majevebo-0417)
+
+### Maintenance
+- **`reveal_structure` and `reveal_query` MCP tools off `_capture()`** — `reveal_structure` directory case now calls `show_directory_tree()` directly (returns a string; no stdout capture at all). File case and `reveal_query` use `_run_and_capture()`, a lock-free replacement for `_capture()`. Global `_capture_lock` and `threading` import removed. All 5 MCP tools no longer use the global-lock capture helper. (BACK-193)
+
+---
+
 ## [0.80.0] - 2026-04-17 (sessions fractal-zealot-0417, jade-beam-0417, vobage-0417, kotowiro-0417, butajiko-0417)
 
 ### Fixed
