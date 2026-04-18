@@ -352,9 +352,9 @@ class TestRangeWithNavFlags(unittest.TestCase):
         return argparse.Namespace(**defaults)
 
     def _nav_file(self):
-        """Return path to nav.py as a test target."""
+        """Return path to nav_exits.py as a test target (functions moved from nav.py, BACK-185)."""
         from pathlib import Path
-        return str(Path(__file__).parent.parent / 'reveal' / 'adapters' / 'ast' / 'nav.py')
+        return str(Path(__file__).parent.parent / 'reveal' / 'adapters' / 'ast' / 'nav_exits.py')
 
     def test_deps_with_tuple_range(self):
         """--deps with a pre-parsed tuple range should not crash."""
@@ -364,7 +364,7 @@ class TestRangeWithNavFlags(unittest.TestCase):
 
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
-        args = self._make_args(deps=True, range=(886, 930))
+        args = self._make_args(deps=True, range=(106, 133))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
@@ -385,8 +385,8 @@ class TestRangeWithNavFlags(unittest.TestCase):
 
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
-        # Sub-range: enough code to write locals but stop before the final return
-        args = self._make_args(mutations=True, range=(936, 970))
+        # Sub-range: covers writes to `mutations` but stops before the sort/return read
+        args = self._make_args(mutations=True, range=(136, 158))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
@@ -407,7 +407,7 @@ class TestRangeWithNavFlags(unittest.TestCase):
 
         analyzer = PythonAnalyzer(self._nav_file())
         analyzer.get_structure()
-        args = self._make_args(exits=True, range=(723, 785))
+        args = self._make_args(exits=True, range=(30, 75))
         captured = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = captured
