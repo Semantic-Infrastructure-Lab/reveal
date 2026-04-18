@@ -322,17 +322,46 @@ def reveal_check(path: str, severity: str = '') -> str:
         path: File or directory to check (recurses into directories)
         severity: Minimum severity to show: 'low', 'medium', 'high', or 'critical'
     """
-    from .cli.commands.check import run_check
+    from pathlib import Path
+    from .cli.file_checker import collect_files_to_check, load_gitignore_patterns, _check_files_json
 
-    args = _default_args(
-        path=path,
-        severity=severity or None,
-        format='text',
-        verbose=False,
-        select=None,
-        ignore=None,
+    p = Path(path)
+    if not p.exists():
+        return f"[reveal error: {path}: no such file or directory]"
+
+    severity_filter = severity or None
+
+    if p.is_dir():
+        directory = p.resolve()
+        gitignore_patterns = load_gitignore_patterns(directory)
+        files = collect_files_to_check(directory, gitignore_patterns)
+        if not files:
+            return f"No files found to check in {path}"
+    else:
+        directory = p.parent.resolve()
+        files = [p.resolve()]
+
+    total_issues, _, file_results = _check_files_json(
+        files, directory, None, None, severity=severity_filter
     )
-    return _capture(run_check, args)
+
+    if total_issues == 0:
+        return "No issues found."
+
+    lines = []
+    for fr in file_results:
+        n = fr['issues']
+        lines.append(f"\n{fr['file']}: Found {n} issue{'s' if n != 1 else ''}\n")
+        for d in fr['detections']:
+            loc = f"L{d['line']}"
+            if d.get('column'):
+                loc += f" C{d['column']}"
+            lines.append(f"  {loc} [{d['rule_code']}] {d['message']} ({d['severity']})")
+            if d.get('suggestion'):
+                lines.append(f"  → {d['suggestion']}")
+
+    lines.append(f"\n{total_issues} issue{'s' if total_issues != 1 else ''} found.")
+    return "\n".join(lines)
 
 
 def main() -> None:
