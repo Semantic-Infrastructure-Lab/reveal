@@ -1,11 +1,22 @@
 # Reveal Roadmap
-> **Last updated**: 2026-04-14 (ivory-dawn-0414 — v0.79.0 released)
+> **Last updated**: 2026-04-17 (cursed-hammer-0417 — v0.80.0 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.80.0
+- ✅ **MCP tools off `_capture()`** — `reveal_check`, `reveal_pack`, `reveal_element` now call internal APIs directly; no global lock, no stdout redirection. (BACK-181, BACK-182, BACK-193 partial)
+- ✅ **Section match count prefix** — multi-section results begin with `# N sections matched "QUERY" — showing all`. (BACK-191b)
+- ✅ **`--outline` section sizes** — markdown headings show `, N lines` in outline view. (BACK-191c)
+- ✅ **`markdown://` `?fields=` param** — appends frontmatter columns inline on each result row. (BACK-191d)
+- ✅ **Short-result warning** — single-section extractions ≤ 5 lines print a next-section hint to stderr. (BACK-191e)
+- ✅ **V024: Adapter guide coverage rule** — `reveal reveal:// --check` flags any public adapter missing a guide. (BACK-191)
+- ✅ **`AUTOSSL_ADAPTER_GUIDE.md`** — full guide for `autossl://`; `reveal reveal:// --check` now 0 V024 violations. (BACK-192)
+- ✅ **Help/docs fixes** — `help://schemas --format=json`, `help://claude` URI forms, `depends://` cluster count. (BACK-188, BACK-189, BACK-190)
+- ✅ **Module splits** — `utils/query.py` → 3 modules, `ast/nav.py` → 4 modules, complexity metrics extracted. (BACK-184, BACK-185, BACK-187)
 
 ### v0.79.0
 - ✅ **URI query params for `ssl://`, `cpanel://`, `letsencrypt://`, `autossl://`** — adapter options now travel with the URI. Enables per-URI control in batch/pipeline workflows. CLI flags still work. (BACK-164, BACK-165, BACK-170, BACK-175)

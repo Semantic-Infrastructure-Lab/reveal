@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions fractal-zealot-0417, jade-beam-0417, vobage-0417, kotowiro-0417, butajiko-0417)
+## [0.80.0] - 2026-04-17 (sessions fractal-zealot-0417, jade-beam-0417, vobage-0417, kotowiro-0417, butajiko-0417)
 
 ### Fixed
 - **`help://schemas --format=json` now returns structured listing** — bare `help://schemas` with `--format=json` previously returned `{"error": "No adapter specified"}`. Now returns `{"type":"adapter_schema","available_adapters":[...],"usage":"..."}`. Text rendering unchanged. (BACK-188)
