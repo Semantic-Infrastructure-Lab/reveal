@@ -2080,7 +2080,18 @@ class ClaudeAdapter(ResourceAdapter):
         return {
             'name': 'claude',
             'description': 'Navigate and analyze Claude Code conversations - progressive session exploration',
-            'syntax': 'claude://session/{name}[/resource][?query]',
+            'syntax': (
+                'claude://                                          # list all sessions\n'
+                'claude://?search=<term>                            # search across sessions\n'
+                'claude://session/{name}[/resource][?query]        # session-scoped access\n'
+                'claude://info                                      # install overview\n'
+                'claude://config[?key=<name>]                      # config flags and MCP registrations\n'
+                'claude://history[?search=<term>]                  # prompt history\n'
+                'claude://plans[/{name}]                           # saved plans\n'
+                'claude://memory                                    # memory files\n'
+                'claude://agents                                    # agent definitions\n'
+                'claude://hooks                                     # hook configurations'
+            ),
             'examples': ClaudeAdapter._get_help_examples(),
             'features': [
                 'Progressive disclosure (overview → details → specifics)',
@@ -2095,6 +2106,8 @@ class ClaudeAdapter(ResourceAdapter):
             'workflows': ClaudeAdapter._get_help_workflows(),
             'try_now': [
                 'reveal claude://                                   # list all sessions',
+                'reveal claude://info                               # install overview',
+                'reveal claude://config                            # config flags and MCP registrations',
                 'reveal claude://session/infernal-earth-0118',
                 'reveal claude://session/infernal-earth-0118?summary',
                 'reveal claude://session/infernal-earth-0118/thinking'

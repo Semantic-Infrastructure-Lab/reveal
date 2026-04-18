@@ -327,9 +327,13 @@ class HelpAdapter(ResourceAdapter):
             return {
                 'type': 'adapter_schema',
                 'adapter': '',
-                'error': 'No adapter specified',
-                'message': f"Specify an adapter. Available: {', '.join(adapters)}",
                 'available_adapters': adapters,
+                'usage': 'reveal help://schemas/<adapter>',
+                'examples': [
+                    'reveal help://schemas/ast',
+                    'reveal help://schemas/ssl',
+                    'reveal help://schemas/git',
+                ],
             }
         if topic.startswith('schemas/'):
             adapter_name = topic.split('/', 1)[1]
@@ -658,7 +662,7 @@ class HelpAdapter(ResourceAdapter):
                 },
                 {
                     'cmd': 'reveal help://adapters',
-                    'description': 'List all 22 adapters with syntax and examples',
+                    'description': 'List all 23 adapters with syntax and examples',
                 },
             ],
             'decision_tree': [
@@ -700,13 +704,14 @@ class HelpAdapter(ResourceAdapter):
             'clusters': [
                 {
                     'name': 'Code Analysis',
-                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'git'],
+                    'adapters': ['ast', 'calls', 'diff', 'stats', 'imports', 'depends', 'git'],
                     'pairs': [
                         ('ast', 'calls', 'structure feeds call-graph queries'),
                         ('ast', 'diff', 'compare element complexity across versions'),
                         ('ast', 'stats', 'same code, different lens: quality metrics'),
                         ('ast', 'imports', 'structure + dependency graph'),
                         ('calls', 'diff', 'impact analysis: who calls what changed'),
+                        ('imports', 'depends', 'forward imports + reverse dependency graph'),
                         ('stats', 'git', 'quality score over commit history'),
                         ('git', 'diff', 'git history drives structural diff views'),
                     ],

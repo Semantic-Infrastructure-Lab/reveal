@@ -238,7 +238,7 @@ def reveal_element(path: str, element: str) -> str:
 
 @mcp.tool()
 def reveal_query(uri: str) -> str:
-    """Run a reveal URI query across any of 22 adapters.
+    """Run a reveal URI query across any of 23 adapters.
 
     Full access to all reveal adapters using the ``scheme://resource?query`` syntax.
     Same operators, same output format across all adapters.

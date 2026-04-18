@@ -785,7 +785,7 @@ def _render_schema_footer(adapter: str) -> None:
 
 def _render_adapter_schema(data: Dict[str, Any]) -> None:
     """Render help://schemas/<adapter> — machine-readable adapter schema."""
-    if 'error' in data:
+    if 'error' in data or (not data.get('adapter') and data.get('available_adapters')):
         _render_schema_error(data)
         return
 

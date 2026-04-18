@@ -12,9 +12,11 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
 
 ## Table of Contents
 
+- [Start Here: Distinctive Capabilities](#start-here-distinctive-capabilities)
 - [Code Review](#code-review)
 - [Onboarding & Exploration](#onboarding-exploration)
 - [Debugging & Troubleshooting](#debugging-troubleshooting)
+- [Large-Function Navigation](#large-function-navigation)
 - [Refactoring & Quality](#refactoring-quality)
   - [Trace call relationships](#trace-call-relationships)
 - [Documentation Maintenance](#documentation-maintenance)
@@ -26,8 +28,10 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
   - [Search across sessions](#search-across-sessions)
   - [Track file history across sessions](#track-file-history-across-sessions)
   - [Inspect a session](#inspect-a-session)
+  - [Inspect Claude install state](#inspect-claude-install-state)
 - [JSON Navigation](#json-navigation)
 - [Database Operations](#database-operations)
+- [Spreadsheet & BI Inspection](#spreadsheet--bi-inspection)
 - [Infrastructure](#infrastructure)
   - [SSL certificate inspection](#ssl-certificate-inspection)
   - [On-disk certificate inspection](#on-disk-certificate-inspection)
@@ -40,6 +44,67 @@ Find your task, get the commands. This guide organizes reveal by workflow, not b
 - [AI Agent Patterns](#ai-agent-patterns)
 - [Multi-Language Support](#multi-language-support)
 - [Quick Reference](#quick-reference)
+
+---
+
+## Start Here: Distinctive Capabilities
+
+If you only have two minutes, these are the commands that most quickly explain
+what Reveal does that normal code utilities do not.
+
+### Architectural gravity and impact radius
+
+```bash
+reveal 'calls://src/?rank=callers&top=20'
+reveal 'calls://src/?uncalled&type=function'
+reveal 'calls://src/?target=main&format=dot' | dot -Tsvg > callgraph.svg
+```
+
+**Why this matters:** `calls://` gives you coupling hotspots, dead-code
+candidates, and graph export from the CLI.
+
+### Agent-ready PR context
+
+```bash
+reveal pack src/ --since main --budget 8000 --content
+reveal review main..HEAD
+```
+
+**Why this matters:** `pack` curates token-budgeted context, and `review`
+composes structural diff, checks, hotspots, and complexity delta in one pass.
+
+### Adapter graph + documentation graph
+
+```bash
+reveal help://relationships
+reveal 'markdown://docs/?link-graph'
+```
+
+**Why this matters:** `help://relationships` shows the adapter ecosystem and
+power pairs; `markdown://?link-graph` turns docs into a bidirectional graph with
+orphan detection.
+
+### Session archaeology
+
+```bash
+reveal claude://
+reveal 'claude://sessions/?search=auth'
+reveal claude://config
+```
+
+**Why this matters:** `claude://` treats AI work history and Claude Code install
+state as queryable data.
+
+### BI workbook reverse engineering
+
+```bash
+reveal xlsx:///data/report.xlsx?powerpivot=relationships
+reveal xlsx:///data/report.xlsx?powerquery=list
+reveal xlsx:///data/report.xlsx?connections=show
+```
+
+**Why this matters:** Reveal can inspect Power Pivot models, Power Query M code,
+and workbook connection strings from the same interface.
 
 ---
 
@@ -261,6 +326,56 @@ reveal reveal://analyzers/markdown.py MarkdownAnalyzer
 # Learn adapter patterns by extracting adapter code
 reveal reveal://adapters/reveal.py get_element
 ```
+
+### Cross-adapter orientation
+
+```bash
+# See how the adapters fit together
+reveal help://relationships
+
+# Find the best adapter family for the task
+reveal help://adapters
+```
+
+**Why this matters:** Reveal is strongest when you combine adapters instead of
+staying in one domain. `help://relationships` is the fastest map of the
+high-value combinations.
+
+---
+
+## Large-Function Navigation
+
+When a function is too large to read line by line, use the nav flags to inspect
+control flow, context, and data flow first.
+
+```bash
+# Control-flow skeleton
+reveal src/processor.py process_batch --outline
+
+# Exact context around a line from a stack trace
+reveal src/processor.py :123 --around
+reveal src/processor.py :123 --around 10
+
+# Branching and exception skeletons
+reveal src/processor.py process_batch --ifmap
+reveal src/processor.py process_batch --catchmap
+
+# Exit points and reachability verdict
+reveal src/processor.py process_batch --exits
+reveal src/processor.py process_batch --flowto
+
+# Variable and dependency analysis for a sub-range
+reveal src/processor.py process_batch --varflow result
+reveal src/processor.py process_batch --deps --range 20-80
+reveal src/processor.py process_batch --mutations --range 20-80
+
+# Scope lookup from a line number
+reveal src/processor.py :123 --scope
+```
+
+**Why this matters:** these commands let you debug and refactor giant functions
+the way experienced engineers actually do it: structure first, then the one
+branch, variable, or range that matters.
 
 ---
 
@@ -765,6 +880,45 @@ reveal diff://sqlite://./dev.db:sqlite://./prod.db
 
 ---
 
+## Spreadsheet & BI Inspection
+
+### Explore an Excel workbook like a dataset
+
+```bash
+# Workbook overview
+reveal xlsx:///data/report.xlsx
+
+# Inspect a sheet or range
+reveal xlsx:///data/report.xlsx?sheet=Summary
+reveal xlsx:///data/report.xlsx?sheet=Sales&range=A1:C10
+
+# Search across all sheets
+reveal xlsx:///data/report.xlsx?search=revenue
+```
+
+### Reverse-engineer a Power BI / Power Pivot export
+
+```bash
+# Tables, columns, measures, DAX, and relationships
+reveal xlsx:///data/report.xlsx?powerpivot=tables
+reveal xlsx:///data/report.xlsx?powerpivot=schema
+reveal xlsx:///data/report.xlsx?powerpivot=dax
+reveal xlsx:///data/report.xlsx?powerpivot=relationships
+
+# Power Query M code
+reveal xlsx:///data/report.xlsx?powerquery=list
+reveal xlsx:///data/report.xlsx?powerquery=show
+
+# Named ranges and external connections
+reveal xlsx:///data/report.xlsx?names=list
+reveal xlsx:///data/report.xlsx?connections=show
+```
+
+**Why this matters:** this turns opaque finance and BI workbooks into something
+you can inspect structurally: data model, ETL queries, and source systems.
+
+---
+
 ## Infrastructure
 
 ### SSL certificate inspection
@@ -1004,6 +1158,31 @@ reveal 'claude://my-session-name?last'
 # Last 5 turns
 reveal 'claude://my-session-name?tail=5'
 ```
+
+### Inspect Claude install state
+
+```bash
+# Where does Claude store everything?
+reveal claude://info
+
+# MCP registrations and install flags
+reveal claude://config
+reveal 'claude://config?key=installMethod'
+
+# Prompt history across all projects
+reveal claude://history
+reveal 'claude://history?search=deploy'
+
+# Saved plans, memory, agents, and hooks
+reveal claude://plans
+reveal claude://memory
+reveal claude://agents
+reveal claude://hooks
+```
+
+**Why this matters:** `claude://` is not only for replaying sessions. It also
+gives you observability into your Claude Code install, memory footprint, and
+automation surface.
 
 ---
 
