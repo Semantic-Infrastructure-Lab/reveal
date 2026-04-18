@@ -4,6 +4,7 @@ import os
 from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Tuple
 from .base import FileAnalyzer
+from .complexity import calculate_complexity_and_depth
 from .core import suppress_treesitter_warnings
 
 # Suppress tree-sitter deprecation warnings (centralized in core module)
@@ -411,7 +412,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
         line_start = bounds_node.start_point[0] + 1
         line_end = bounds_node.end_point[0] + 1
 
-        complexity, depth = self._calculate_complexity_and_depth(node)
+        complexity, depth = calculate_complexity_and_depth(node)
         return {
             'line': line_start,
             'line_end': line_end,
@@ -752,104 +753,22 @@ class TreeSitterAnalyzer(FileAnalyzer):
         return first_line
 
     def _get_nesting_depth(self, node) -> int:
-        """Calculate maximum nesting depth within a function node.
-
-        Delegates to _calculate_complexity_and_depth for a single-pass traversal.
-        """
+        """Return maximum nesting depth within a function node."""
         if not node:
             return 0
-        _, depth = self._calculate_complexity_and_depth(node)
+        _, depth = calculate_complexity_and_depth(node)
         return int(depth)
 
     def _calculate_complexity(self, node) -> int:
-        """Calculate cyclomatic complexity for a function node.
-
-        Delegates to _calculate_complexity_and_depth for a single-pass traversal.
-        """
+        """Return cyclomatic complexity for a function node."""
         if not node:
             return 1
-        complexity, _ = self._calculate_complexity_and_depth(node)
+        complexity, _ = calculate_complexity_and_depth(node)
         return int(complexity)
 
     def _calculate_complexity_and_depth(self, node) -> tuple:
-        """Compute cyclomatic complexity and max nesting depth in one iterative pass.
-
-        Replaces separate recursive _calculate_complexity and _get_nesting_depth
-        traversals with a single iterative stack walk, halving the node visits.
-
-        Returns:
-            (complexity, depth) where complexity = decision_count + 1
-        """
-        # Decision point node types across languages
-        decision_types = {
-            # Conditionals
-            'if_statement', 'if_expression', 'if',
-            'elif_clause', 'elsif',
-            'else_if_clause',
-            'case_statement', 'case',
-            'when',
-            'switch_case',
-            'unless',
-            # Loops
-            'for_statement', 'for_expression', 'for',
-            'while_statement', 'while',
-            'until',
-            'do_statement',
-            # Boolean operators
-            'boolean_operator',
-            'and', 'or',
-            'logical_and', 'logical_or',
-            # Ternary
-            'conditional_expression', 'ternary_expression',
-            # Exception handling
-            'except_clause', 'catch_clause',
-            'rescue',
-            # Pattern matching
-            'match_statement', 'case_clause',
-        }
-
-        # Nesting types for depth calculation
-        nesting_types = {
-            'if_statement', 'if_expression', 'if',
-            'for_statement', 'for_expression', 'for', 'while_statement', 'while',
-            'try_statement', 'try', 'with_statement', 'with',
-            'match_statement', 'match_expression', 'case_statement',
-            'do_statement', 'switch_statement',
-        }
-
-        # Keyword-container pairs not to double-count
-        keyword_pairs = {
-            ('if_statement', 'if'),
-            ('if_expression', 'if'),
-            ('elif_clause', 'elif'),
-            ('for_statement', 'for'),
-            ('for_expression', 'for'),
-            ('while_statement', 'while'),
-            ('case_statement', 'case'),
-            ('boolean_operator', 'or'),
-            ('boolean_operator', 'and'),
-        }
-
-        decision_count = 0
-        max_depth = 0
-
-        # Stack entries: (node, n_type, current_depth)
-        # n_type = type of this node (used as parent context for its children)
-        stack = [(node, None, 0)]
-        while stack:
-            n, n_type, depth = stack.pop()
-            if depth > max_depth:
-                max_depth = depth
-            for child in n.children:
-                child_type = child.type
-                # Count decision points (skip keyword children of their containers)
-                if child_type in decision_types and (n_type is None or (n_type, child_type) not in keyword_pairs):
-                    decision_count += 1
-                # Increase depth when entering a nesting construct
-                child_depth = depth + 1 if child_type in nesting_types else depth
-                stack.append((child, child_type, child_depth))
-
-        return decision_count + 1, max_depth
+        """Compute cyclomatic complexity and max nesting depth."""
+        return calculate_complexity_and_depth(node)
 
     def _get_callee_name(self, call_node) -> Optional[str]:
         """Extract the callee name from a call expression node.
