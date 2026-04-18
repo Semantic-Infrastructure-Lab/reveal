@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions fractal-zealot-0417, jade-beam-0417)
+## [Unreleased] - (sessions fractal-zealot-0417, jade-beam-0417, vobage-0417)
 
 ### Fixed
 - **`help://schemas --format=json` now returns structured listing** — bare `help://schemas` with `--format=json` previously returned `{"error": "No adapter specified"}`. Now returns `{"type":"adapter_schema","available_adapters":[...],"usage":"..."}`. Text rendering unchanged. (BACK-188)
@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`depends://` missing from `help://relationships` cluster** — adapter was registered but absent from all clusters, causing the dynamic count to read 22 instead of 23. Added to Code Analysis cluster with `imports↔depends` pair. (BACK-189)
 - **Hardcoded "22 adapters" in `mcp_server.py` and `MCP_SETUP.md`** — updated to 23. (BACK-189)
 - **`review.py` subprocess calls replaced with direct internal API** — `_run_check`, `_run_hotspots`, `_run_complexity`, `_run_diff` previously shelled out to `reveal` via subprocess. Now call `_check_files_json`, `StatsAdapter`, `AstAdapter`, `DiffAdapter` directly. Also fixed latent bug: `_run_check` was calling `data.get('violations', [])` but `reveal check --format=json` emits `{files, summary}`, so checks always returned `[]`. (BACK-181)
+- **`reveal_check()` MCP tool no longer uses `_capture()`** — replaced `_capture(run_check, args)` with direct `_check_files_json` call. Violations serialized to human-readable text at the MCP boundary. No global lock, no stdout redirection, no `SystemExit` catching. Proof-of-concept for BACK-182; remaining 4 MCP tools need display-layer structured returns before the same refactor applies. (BACK-182 partial)
 
 ### Added
 - **V024: Adapter guide coverage rule** — `reveal reveal:// --check` now flags any registered public adapter missing a guide file in `docs/adapters/`. Prefix-matched (NGINX_GUIDE.md satisfies nginx://). Exempts help://, demo, test. 7 tests. (BACK-191)
