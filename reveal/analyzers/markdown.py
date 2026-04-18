@@ -268,6 +268,9 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                     'name': title,
                 })
 
+        for h in headings:
+            h['size'] = self._section_end(self.lines, h['line'], h['level']) - (h['line'] - 1)
+
         return headings
 
     def _extract_headings_regex(self) -> List[Dict[str, Any]]:
@@ -289,6 +292,9 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                     'level': level,
                     'name': title,
                 })
+
+        for h in headings:
+            h['size'] = self._section_end(self.lines, h['line'], h['level']) - (h['line'] - 1)
 
         return headings
 
@@ -1158,12 +1164,15 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
             if not spans:
                 return None
             sources = ['\n'.join(self.lines[sl - 1:el]) for sl, el, _ in spans]
-            return {
+            result: Dict[str, Any] = {
                 'name': name,
                 'line_start': spans[0][0],
                 'line_end': spans[-1][1],
                 'source': '\n\n'.join(sources),
             }
+            if len(spans) > 1:
+                result['match_count'] = len(spans)
+            return result
 
         # Single-pattern path (original behaviour preserved)
         pattern = patterns[0] if patterns else name
@@ -1181,6 +1190,7 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
                     'line_start': spans[0][0],
                     'line_end': spans[-1][1],
                     'source': '\n\n'.join(sources),
+                    'match_count': len(spans),
                 }
             else:
                 return super().extract_element(element_type, name)
@@ -1191,9 +1201,18 @@ class MarkdownAnalyzer(TreeSitterAnalyzer):
         # Extract the section
         source = '\n'.join(self.lines[start_line-1:end_line])
 
-        return {
+        result = {
             'name': name,
             'line_start': start_line,
             'line_end': end_line,
             'source': source,
         }
+
+        # Detect the next heading for short-result hints
+        if end_line < len(self.lines):
+            m = re.match(r'^(#{1,6})\s+(.+)$', self.lines[end_line])
+            if m:
+                next_name = self._strip_inline_formatting(m.group(2).strip())
+                result['next_section'] = {'name': next_name, 'line': end_line + 1}
+
+        return result

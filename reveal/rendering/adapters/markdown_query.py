@@ -143,10 +143,24 @@ def _render_result_row(result: Dict[str, Any]) -> None:
         parts.append(f"({result['status']})")
     if result.get('title'):
         parts.append(f"- {result['title']}")
+
+    # Append extra_fields as key=value pairs on the same line
+    extra_fields = result.get('_extra_fields') or []
+    _INLINE_FIELDS = {'type', 'status', 'title', 'tags', 'topics'}
+    for field in extra_fields:
+        if field in _INLINE_FIELDS:
+            continue
+        value = result.get(field)
+        if value is not None:
+            if isinstance(value, list):
+                parts.append(f"{field}={','.join(str(v) for v in value)}")
+            else:
+                parts.append(f"{field}={value}")
+
     print("  " + " ".join(parts))
 
     for field in ['tags', 'topics']:
-        if field in result:
+        if field in result and field not in extra_fields:
             values = result[field]
             if isinstance(values, list):
                 print(f"      {field}: {', '.join(str(v) for v in values)}")

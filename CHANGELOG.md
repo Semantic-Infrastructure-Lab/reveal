@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions fractal-zealot-0417, jade-beam-0417, vobage-0417, kotowiro-0417)
+## [Unreleased] - (sessions fractal-zealot-0417, jade-beam-0417, vobage-0417, kotowiro-0417, butajiko-0417)
 
 ### Fixed
 - **`help://schemas --format=json` now returns structured listing** — bare `help://schemas` with `--format=json` previously returned `{"error": "No adapter specified"}`. Now returns `{"type":"adapter_schema","available_adapters":[...],"usage":"..."}`. Text rendering unchanged. (BACK-188)
@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`reveal_element()` MCP tool no longer uses `_capture()`** — calls `get_analyzer` + `_parse_element_syntax` + `_extract_by_syntax` directly; formats result dict at the MCP boundary. No global lock, no stdout redirection. 3 of 5 MCP tools now use direct APIs; only `reveal_structure` and `reveal_query` remain on `_capture()`. (BACK-182 partial)
 
 ### Added
+- **Section extraction: match count prefix for multi-section results** — when a substring query matches N sections (e.g., `reveal book.md "CHAPTER"` matches 16 headings), output now begins with `# N sections matched "QUERY" — showing all`. Mirrors the `Matched: N of M files` pattern already used by `markdown://`. (BACK-191b, M1)
+- **`--outline` shows section size in lines for markdown headings** — each heading in `reveal file.md --outline` now shows `, N lines` after the line number (e.g., `THE KERNEL (file.md:1347, 153 lines)`). Size is computed via `_section_end` — spans all content including sub-headings. Mirrors the `[N lines, depth:M]` already shown for code elements. (BACK-191c, M2)
+- **`markdown://` listing: `?fields=f1,f2` param adds frontmatter columns** — `reveal 'markdown://primitives/?type=framework&fields=book,cohort'` appends `book=X cohort=Y` inline on each result row. Fields missing from a file's frontmatter are silently omitted. Combines with all existing filters. (BACK-191d, M3)
+- **Section extraction: short-result warning with next-section hint** — when a single section returns ≤ 5 lines and a next heading follows immediately, stderr shows `⚠ Short result (N lines) — this section may be a label only. Next section: NAME (line L)`. Turns a dead end into a navigable suggestion. (BACK-191e, M4)
 - **V024: Adapter guide coverage rule** — `reveal reveal:// --check` now flags any registered public adapter missing a guide file in `docs/adapters/`. Prefix-matched (NGINX_GUIDE.md satisfies nginx://). Exempts help://, demo, test. 7 tests. (BACK-191)
 - **`AUTOSSL_ADAPTER_GUIDE.md`** — static guide for `autossl://` adapter. Covers defect codes (SELF_SIGNED_CERT, CERT_HAS_EXPIRED, etc.), DCV impediment codes (TOTAL_DCV_FAILURE, DNS_RESOLVES_TO_ANOTHER_SERVER, etc.), shared-host `--user` workflow, domain history, JSON output, combos with `ssl://`/`nginx://`/`cpanel://`/`letsencrypt://`. `reveal reveal:// --check` now fully clean (0 V024 violations). (BACK-192)
 

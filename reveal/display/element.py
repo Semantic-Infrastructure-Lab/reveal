@@ -685,6 +685,11 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
     line_end = result.get('line_end', line_start)
     source = result.get('source', '')
     name = result.get('name', element)
+    match_count = result.get('match_count')
+
+    # Match count prefix for multi-section results
+    if match_count and match_count > 1 and output_format not in ('json', 'grep'):
+        print(f"# {match_count} sections matched \"{name}\" — showing all\n")
 
     # Header
     print(f"{path}:{line_start}-{line_end} | {name}\n")
@@ -698,8 +703,17 @@ def _output_result(analyzer, result, element: str, output_format: str, config=No
         formatted = analyzer.format_with_lines(source, line_start)
         print(formatted)
 
+        # Short-result hint for single-section extractions that look like label-only sections
+        line_count = line_end - line_start + 1
+        next_section = result.get('next_section')
+        if next_section and line_count <= 5 and output_format not in ('json', 'grep'):
+            import sys
+            print(f"\n⚠ Short result ({line_count} lines) — this section may be a label only.",
+                  file=sys.stderr)
+            print(f"   Next section: {next_section['name']} (line {next_section['line']})",
+                  file=sys.stderr)
+
         # Navigation hints
         file_type = get_file_type_from_analyzer(analyzer)
-        line_count = line_end - line_start + 1
         print_breadcrumbs('element', path, file_type=file_type, config=config,
                          element_name=name, line_count=line_count, line_start=line_start)

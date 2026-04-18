@@ -495,3 +495,66 @@ No frontmatter here but mentions nginx configuration.
         adapter = MarkdownQueryAdapter(str(body_docs), query='body-contains=nginx&limit=1')
         result = adapter.get_structure()
         assert len(result['results']) == 1
+
+
+@pytest.fixture
+def fields_docs(tmp_path):
+    """Markdown files with various frontmatter fields for ?fields= tests."""
+    (tmp_path / "alpha.md").write_text(
+        "---\ntitle: Alpha Doc\ntype: guide\nbook: good-strategy\ncohort: strategy\n---\n\nContent.\n"
+    )
+    (tmp_path / "beta.md").write_text(
+        "---\ntitle: Beta Doc\ntype: reference\nbook: poor-charlie\ncohort: investing\n---\n\nContent.\n"
+    )
+    (tmp_path / "gamma.md").write_text(
+        "---\ntitle: Gamma Doc\ntype: guide\n---\n\nNo book or cohort here.\n"
+    )
+    return tmp_path
+
+
+class TestMarkdownAdapterExtraFields:
+    """?fields= query param adds arbitrary frontmatter columns to listing (M3)."""
+
+    def test_fields_parsed_into_extra_fields(self, fields_docs):
+        adapter = MarkdownQueryAdapter(str(fields_docs), query='fields=book,cohort')
+        assert adapter.extra_fields == ['book', 'cohort']
+
+    def test_fields_not_in_extra_fields_when_absent(self, fields_docs):
+        adapter = MarkdownQueryAdapter(str(fields_docs), query='type=guide')
+        assert adapter.extra_fields is None
+
+    def test_extra_fields_present_in_result_items(self, fields_docs):
+        adapter = MarkdownQueryAdapter(str(fields_docs), query='fields=book,cohort')
+        result = adapter.get_structure()
+        alpha = next(r for r in result['results'] if 'alpha' in r['path'])
+        assert alpha.get('book') == 'good-strategy'
+        assert alpha.get('cohort') == 'strategy'
+
+    def test_extra_fields_missing_when_not_in_frontmatter(self, fields_docs):
+        adapter = MarkdownQueryAdapter(str(fields_docs), query='fields=book,cohort')
+        result = adapter.get_structure()
+        gamma = next(r for r in result['results'] if 'gamma' in r['path'])
+        assert 'book' not in gamma
+        assert 'cohort' not in gamma
+
+    def test_extra_fields_marker_stored_in_item(self, fields_docs):
+        adapter = MarkdownQueryAdapter(str(fields_docs), query='fields=book')
+        result = adapter.get_structure()
+        alpha = next(r for r in result['results'] if 'alpha' in r['path'])
+        assert alpha.get('_extra_fields') == ['book']
+
+    def test_fields_combined_with_filter(self, fields_docs):
+        adapter = MarkdownQueryAdapter(str(fields_docs), query='type=guide&fields=book')
+        result = adapter.get_structure()
+        assert result['matched_files'] == 2
+        paths = [r['path'] for r in result['results']]
+        assert not any('beta' in p for p in paths)
+
+    def test_standard_fields_not_duplicated_in_extra(self, fields_docs):
+        # 'type' is already a standard field — requesting it via fields= shouldn't break anything
+        adapter = MarkdownQueryAdapter(str(fields_docs), query='fields=type,book')
+        result = adapter.get_structure()
+        alpha = next(r for r in result['results'] if 'alpha' in r['path'])
+        # 'type' is already in result from standard inclusion
+        assert alpha.get('type') == 'guide'
+        assert alpha.get('book') == 'good-strategy'

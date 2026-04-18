@@ -1959,5 +1959,158 @@ class TestFindHeadingMatch(TestMarkdownAnalyzer):
             self.teardown_file(path)
 
 
+class TestMarkdownSectionSizes(unittest.TestCase):
+    """Section size field added to heading extraction (M2)."""
+
+    CONTENT = (
+        "# Alpha\n"
+        "content alpha\n"
+        "\n"
+        "## Beta\n"
+        "content beta\n"
+        "\n"
+        "## Gamma\n"
+        "content gamma\n"
+        "\n"
+        "# Delta\n"
+        "content delta\n"
+    )
+
+    def setUp(self):
+        import tempfile
+        self.temp_dir = tempfile.mkdtemp()
+        path = os.path.join(self.temp_dir, 'sized.md')
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(self.CONTENT)
+        self.analyzer = MarkdownAnalyzer(path)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_headings_have_size_field(self):
+        structure = self.analyzer.get_structure()
+        headings = structure['headings']
+        self.assertTrue(all('size' in h for h in headings), "All headings should have a 'size' field")
+
+    def test_size_values_are_positive(self):
+        structure = self.analyzer.get_structure()
+        for h in structure['headings']:
+            self.assertGreater(h['size'], 0)
+
+    def test_parent_size_includes_children(self):
+        # Alpha (H1) spans lines 1-9 (Beta + Gamma are children)
+        structure = self.analyzer.get_structure()
+        headings = {h['name']: h for h in structure['headings']}
+        alpha_size = headings['Alpha']['size']
+        beta_size = headings['Beta']['size']
+        gamma_size = headings['Gamma']['size']
+        self.assertGreater(alpha_size, beta_size)
+        self.assertGreater(alpha_size, gamma_size)
+
+    def test_last_heading_size_reaches_end_of_file(self):
+        structure = self.analyzer.get_structure()
+        headings = structure['headings']
+        last = next(h for h in headings if h['name'] == 'Delta')
+        total_lines = len(self.CONTENT.splitlines())
+        self.assertEqual(last['size'], total_lines - last['line'] + 1)
+
+
+class TestMarkdownSectionMatchCount(unittest.TestCase):
+    """match_count field on multi-section extraction (M1)."""
+
+    CONTENT = (
+        "# Chapter One\n"
+        "content one\n"
+        "\n"
+        "# Chapter Two\n"
+        "content two\n"
+        "\n"
+        "# Appendix\n"
+        "appendix content\n"
+    )
+
+    def setUp(self):
+        import tempfile
+        self.temp_dir = tempfile.mkdtemp()
+        path = os.path.join(self.temp_dir, 'chapters.md')
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(self.CONTENT)
+        self.analyzer = MarkdownAnalyzer(path)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_substring_multi_match_has_match_count(self):
+        result = self.analyzer.extract_element('section', 'Chapter')
+        self.assertIsNotNone(result)
+        self.assertEqual(result.get('match_count'), 2)
+
+    def test_or_pattern_multi_match_has_match_count(self):
+        result = self.analyzer.extract_element('section', 'Chapter One|Appendix')
+        self.assertIsNotNone(result)
+        self.assertEqual(result.get('match_count'), 2)
+
+    def test_single_exact_match_has_no_match_count(self):
+        result = self.analyzer.extract_element('section', 'Chapter One')
+        self.assertIsNotNone(result)
+        self.assertNotIn('match_count', result)
+
+    def test_or_pattern_single_result_has_no_match_count(self):
+        result = self.analyzer.extract_element('section', 'Chapter One|Nonexistent')
+        self.assertIsNotNone(result)
+        self.assertNotIn('match_count', result)
+
+
+class TestMarkdownSectionNextSection(unittest.TestCase):
+    """next_section hint for label-only short results (M4)."""
+
+    CONTENT = (
+        "# CHAPTER ONE\n"
+        "\n"
+        "# The Real Content\n"
+        "real content here\n"
+        "more content\n"
+        "\n"
+        "# CHAPTER TWO\n"
+        "\n"
+        "# More Real Content\n"
+        "yet more\n"
+    )
+
+    def setUp(self):
+        import tempfile
+        self.temp_dir = tempfile.mkdtemp()
+        path = os.path.join(self.temp_dir, 'chaps.md')
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(self.CONTENT)
+        self.analyzer = MarkdownAnalyzer(path)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.temp_dir)
+
+    def test_label_section_has_next_section(self):
+        result = self.analyzer.extract_element('section', 'CHAPTER ONE')
+        self.assertIsNotNone(result)
+        self.assertIn('next_section', result)
+        self.assertEqual(result['next_section']['name'], 'The Real Content')
+
+    def test_next_section_line_is_after_current(self):
+        result = self.analyzer.extract_element('section', 'CHAPTER ONE')
+        self.assertGreater(result['next_section']['line'], result['line_end'])
+
+    def test_long_section_also_has_next_section(self):
+        result = self.analyzer.extract_element('section', 'The Real Content')
+        self.assertIn('next_section', result)
+        self.assertEqual(result['next_section']['name'], 'CHAPTER TWO')
+
+    def test_last_section_has_no_next_section(self):
+        result = self.analyzer.extract_element('section', 'More Real Content')
+        self.assertIsNotNone(result)
+        self.assertNotIn('next_section', result)
+
+
 if __name__ == '__main__':
     unittest.main()

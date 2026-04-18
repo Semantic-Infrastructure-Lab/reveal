@@ -7,12 +7,17 @@ from typing import Dict, Any, Optional, List
 from ...utils.results import ResultBuilder
 
 
-def build_result_item(path: Path, frontmatter: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def build_result_item(
+    path: Path,
+    frontmatter: Optional[Dict[str, Any]],
+    extra_fields: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Build result item dict with path and frontmatter fields.
 
     Args:
         path: Path to markdown file
         frontmatter: Parsed frontmatter dict (or None)
+        extra_fields: Additional frontmatter field names to include in result
 
     Returns:
         Result item dict
@@ -33,6 +38,13 @@ def build_result_item(path: Path, frontmatter: Optional[Dict[str, Any]]) -> Dict
         for key in ['title', 'type', 'status', 'tags', 'topics']:
             if key in frontmatter:
                 result[key] = frontmatter[key]
+
+        # Include any caller-requested extra fields
+        if extra_fields:
+            for key in extra_fields:
+                if key in frontmatter and key not in result:
+                    result[key] = frontmatter[key]
+            result['_extra_fields'] = extra_fields
 
     return result
 

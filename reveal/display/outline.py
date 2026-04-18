@@ -163,14 +163,16 @@ def _print_outline_item(item: Dict[str, Any], path: Path,
     """
     line = item.get('line_start', item.get('line', '?'))
     display = _build_item_display(item)
+    size = item.get('size')
+    size_str = f", {size} lines" if size is not None else ""
 
     if is_root:
         # Root items - no tree chars, show full path
-        print(f"{display} ({path}:{line})")
+        print(f"{display} ({path}:{line}{size_str})")
     else:
         # Child items - use tree chars
         tree_char = '└─ ' if is_last_item else '├─ '
-        print(f"{indent}{tree_char}{display} (line {line})")
+        print(f"{indent}{tree_char}{display} (line {line}{size_str})")
 
 
 def _get_child_indent(indent: str, is_root: bool, is_last_item: bool) -> str:

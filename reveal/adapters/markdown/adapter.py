@@ -51,6 +51,25 @@ def _extract_link_graph(filter_query: str) -> tuple:
     return link_graph, '&'.join(remaining_parts)
 
 
+def _extract_fields(filter_query: str) -> tuple:
+    """Extract fields=<f1,f2,...> param from filter query.
+
+    Returns:
+        (fields_list_or_None, remaining_query_string)
+    """
+    fields = None
+    remaining_parts = []
+    for part in filter_query.split('&'):
+        stripped = part.strip()
+        if stripped.startswith('fields='):
+            value = stripped[len('fields='):]
+            if value:
+                fields = [f.strip() for f in value.split(',') if f.strip()]
+        else:
+            remaining_parts.append(part)
+    return fields, '&'.join(remaining_parts)
+
+
 def _extract_body_contains(filter_query: str) -> tuple:
     """Extract body-contains= params from filter query.
 
@@ -141,6 +160,11 @@ class MarkdownQueryAdapter(ResourceAdapter):
         if filter_query:
             self.body_contains, filter_query = _extract_body_contains(filter_query)
 
+        # Extract fields= param (extra frontmatter columns to show in listing)
+        self.extra_fields = None
+        if filter_query:
+            self.extra_fields, filter_query = _extract_fields(filter_query)
+
         # Parse query filters conditionally (only if new operators present)
         # This prevents legacy parameters from being misinterpreted
         self.query_filters = []
@@ -199,6 +223,7 @@ class MarkdownQueryAdapter(ResourceAdapter):
             self.query_filters,
             self.result_control,
             self.body_contains or None,
+            self.extra_fields,
         )
         return {
             'contract_version': '1.0',

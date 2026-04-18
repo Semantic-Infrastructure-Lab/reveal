@@ -15,6 +15,7 @@ def get_structure(
     query_filters: list,
     result_control: Any,
     body_contains: Optional[list] = None,
+    extra_fields: Optional[list] = None,
 ) -> Dict[str, Any]:
     """Query markdown files and return matching results.
 
@@ -25,6 +26,7 @@ def get_structure(
         query_filters: New query filters
         result_control: ResultControl object with sort/limit/offset
         body_contains: Optional list of terms that must appear in body text
+        extra_fields: Optional list of additional frontmatter fields to include in results
 
     Returns:
         Dict containing matched files with frontmatter summary
@@ -46,7 +48,7 @@ def get_structure(
             continue
         if body_contains and not filtering.matches_body_contains(path, body_contains):
             continue
-        result = results.build_result_item(path, frontmatter)
+        result = results.build_result_item(path, frontmatter, extra_fields)
         matched_results.append(result)
 
     # Apply result control (sort, limit, offset)
