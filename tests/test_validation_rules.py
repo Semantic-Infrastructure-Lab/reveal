@@ -22,6 +22,7 @@ from reveal.rules.validation.V012 import V012
 from reveal.rules.validation.V013 import V013
 from reveal.rules.validation.V015 import V015
 from reveal.rules.validation.V016 import V016
+from reveal.rules.validation.V024 import V024
 from reveal.rules.validation.V017 import V017
 from reveal.rules.validation.V018 import V018
 from reveal.rules.validation.V019 import V019
@@ -2070,6 +2071,70 @@ name_types = ['identifier']
         self.assertIn("node type", description.lower())
         # Should mention tree-sitter
         self.assertIn("tree-sitter", description.lower())
+
+
+class TestV024AdapterGuideCoverage(unittest.TestCase):
+    """Test V024: Adapter guide coverage validation."""
+
+    def setUp(self):
+        self.rule = V024()
+
+    def test_metadata(self):
+        self.assertEqual(self.rule.code, "V024")
+        self.assertEqual(self.rule.severity.name, "MEDIUM")
+        self.assertIn("guide", self.rule.message.lower())
+
+    def test_non_reveal_uri_ignored(self):
+        detections = self.rule.check(
+            file_path="/some/file.py",
+            structure=None,
+            content=""
+        )
+        self.assertEqual(len(detections), 0)
+
+    def test_adapter_with_guide_passes(self):
+        """Adapter whose name prefix matches a guide file produces no detection."""
+        with patch.object(self.rule, '_get_public_schemes', return_value=['ast', 'ssl']), \
+             patch.object(self.rule, '_get_existing_guide_names',
+                          return_value=['AST_ADAPTER_GUIDE.MD', 'SSL_ADAPTER_GUIDE.MD']), \
+             patch('reveal.rules.validation.V024.find_reveal_root', return_value=Path('/fake')):
+            detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(len(detections), 0)
+
+    def test_adapter_missing_guide_flagged(self):
+        """Adapter with no matching guide file produces a detection."""
+        with patch.object(self.rule, '_get_public_schemes', return_value=['autossl']), \
+             patch.object(self.rule, '_get_existing_guide_names', return_value=[]), \
+             patch('reveal.rules.validation.V024.find_reveal_root', return_value=Path('/fake')):
+            detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(len(detections), 1)
+        self.assertIn('autossl', detections[0].message)
+
+    def test_exempt_adapters_not_flagged(self):
+        """help, demo, and test adapters are never flagged."""
+        with patch.object(self.rule, '_get_public_schemes',
+                          return_value=['help', 'demo', 'test']), \
+             patch.object(self.rule, '_get_existing_guide_names', return_value=[]), \
+             patch('reveal.rules.validation.V024.find_reveal_root', return_value=Path('/fake')):
+            detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(len(detections), 0)
+
+    def test_prefix_matching(self):
+        """NGINX_GUIDE.md satisfies nginx:// (prefix match, not exact)."""
+        with patch.object(self.rule, '_get_public_schemes', return_value=['nginx']), \
+             patch.object(self.rule, '_get_existing_guide_names',
+                          return_value=['NGINX_GUIDE.MD']), \
+             patch('reveal.rules.validation.V024.find_reveal_root', return_value=Path('/fake')):
+            detections = self.rule.check('reveal://', None, '')
+        self.assertEqual(len(detections), 0)
+
+    def test_live_registry_fires_for_autossl(self):
+        """Integration: running against live reveal:// finds exactly the autossl gap."""
+        detections = self.rule.check('reveal://', None, '')
+        missing = [d for d in detections if 'autossl' in d.message]
+        self.assertEqual(len(missing), 1)
+        # No other adapters should be flagged
+        self.assertEqual(len(detections), 1)
 
 
 if __name__ == '__main__':
