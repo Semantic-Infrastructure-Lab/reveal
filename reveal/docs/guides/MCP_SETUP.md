@@ -17,8 +17,10 @@ native integration with Claude Code, Cursor, Windsurf, and any MCP-compatible ag
 ## Installation
 
 ```bash
-pip install "reveal-cli[mcp]"
+pip install reveal-cli
 ```
+
+The `reveal-mcp` command is included as an entry point in `reveal-cli` — no separate package needed.
 
 Or if reveal is already installed and `mcp` isn't:
 ```bash
@@ -118,6 +120,21 @@ violations, broken links.
 reveal_check("src/")
 reveal_check("src/auth.py", severity="high")
 ```
+
+### `reveal_nav(path, element, flag)`
+
+Navigate inside a function using analysis flags — the final level of progressive
+disclosure. Routes all `--flag` options to agents without subprocess overhead.
+
+```
+reveal_nav("src/auth.py", "validate_token", "boundary")     → inputs + environment + effects
+reveal_nav("src/auth.py", "validate_token", "sideeffects")  → classified outbound calls (db/http/cache/log/file)
+reveal_nav("src/auth.py", "validate_token", "returns")      → exit paths with gate conditions
+reveal_nav("src/auth.py", "validate_token", "ifmap")        → conditional branch map
+reveal_nav("src/auth.py", "validate_token", "varflow")      → variable data-flow
+```
+
+Answers "what does this function touch outside itself?" without ever reading source.
 
 ## Recommended Agent Workflow
 
