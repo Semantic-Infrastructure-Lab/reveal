@@ -125,6 +125,8 @@ def _has_nav_flag(args) -> bool:
         or getattr(args, 'flowto', False)
         or getattr(args, 'deps', False)
         or getattr(args, 'mutations', False)
+        or getattr(args, 'sideeffects', False)
+        or getattr(args, 'returns', False)
     )
 
 
@@ -146,9 +148,11 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
 
     from .adapters.ast.nav import (  # noqa: I006
         element_outline, scope_chain, var_flow, range_calls,
-        collect_exits, collect_deps, collect_mutations,
+        collect_exits, collect_deps, collect_mutations, collect_gate_chains,
+        collect_effects,
         render_outline, render_scope_chain, render_var_flow, render_range_calls,
-        render_branchmap, render_exits, render_deps, render_mutations,
+        render_branchmap, render_exits, render_deps, render_mutations, render_gate_chains,
+        render_effects,
     )
     from .display.element import _parse_element_syntax  # noqa: I006
     from .treesitter import ELEMENT_TYPE_MAP  # noqa: I006
@@ -285,6 +289,20 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         from_line, to_line = _resolve_range(args, func_start, func_end)
         mutations = collect_mutations(func_node, from_line, to_line, get_text)
         print(render_mutations(mutations, from_line, to_line))
+        return
+
+    # ---- --sideeffects: side-effect taxonomy classifier --------------------
+    if getattr(args, 'sideeffects', False):
+        from_line, to_line = _resolve_range(args, func_start, func_end)
+        effects = collect_effects(func_node, from_line, to_line, get_text)
+        print(render_effects(effects, from_line, to_line))
+        return
+
+    # ---- --returns: exit paths with gate chains ----------------------------
+    if getattr(args, 'returns', False):
+        from_line, to_line = _resolve_range(args, func_start, func_end)
+        chains = collect_gate_chains(func_node, from_line, to_line, get_text)
+        print(render_gate_chains(chains, from_line, to_line))
         return
 
 
@@ -432,7 +450,7 @@ def handle_file(path: str, element: Optional[str], show_meta: bool,
         # show_structure, which renders a top-level structural outline.  Adding
         # --outline here would route it through _dispatch_nav on root_node instead,
         # producing a different (lower-level) output and breaking existing behaviour.
-        _FLAT_FLAGS = ('varflow', 'calls', 'ifmap', 'catchmap', 'exits', 'flowto', 'deps', 'mutations')
+        _FLAT_FLAGS = ('varflow', 'calls', 'ifmap', 'catchmap', 'exits', 'flowto', 'deps', 'mutations', 'sideeffects', 'returns')
         for flag in _FLAT_FLAGS:
             if getattr(args, flag, None):
                 total = len(analyzer.content.splitlines())

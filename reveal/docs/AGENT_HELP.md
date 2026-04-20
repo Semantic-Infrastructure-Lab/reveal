@@ -189,7 +189,11 @@ reveal src/main.py --format=json | jq '.structure.functions[].name'
 reveal src/main.py --format=json | jq '.structure.functions[] | select(.depth > 3)'
 ```
 
-**Note:** `--outline` has two modes — without an element it shows the file-level class/method tree; with an element it shows the control-flow skeleton of that function. See the "Navigate inside a function" task below for `--scope`, `--varflow`, and `--calls`.
+**Note:** `--outline` has two distinct modes that produce different output:
+- `reveal file.py --outline` — file-level class/method hierarchy (structural tree)
+- `reveal file.py myfunc --outline` — function-level control-flow skeleton (if/while/for/return branches)
+
+These answer different questions. The element-level mode is the entry point to all nav flags. See the "Navigate inside a function" task below.
 
 **Token impact:**
 - Traditional approach (read all files): ~5,000 tokens
@@ -535,6 +539,8 @@ reveal flat_file.php :1-2000 --varflow errormsg  # flat procedural file
 ```
 Shows every place the variable is assigned (WRITE), read (READ), or tested in a condition (READ/COND). Works on both named functions and flat/procedural files without a function wrapper.
 
+> **PHP support (v0.80.0+)**: All nav flags including `--varflow`, `--deps`, `--mutations`, `--sideeffects`, and `--returns` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround.
+
 **`--calls` → call sites in a line range**
 ```bash
 reveal app.py process_batch --calls 7-12          # scoped to lines 7-12
@@ -546,6 +552,7 @@ reveal app.py process_batch --calls               # all calls in the function
 # L10:  results.append(value)
 # L12:  log_error(e)
 ```
+> **Disambiguation**: `--calls` (this flag) lists call sites *within a line range* — it's a sub-element analysis tool. `calls://` (the URI adapter) is a project-level call graph — use `reveal 'calls://file.py?target=myfunc'` to find which functions *across the project* call `myfunc`. Different scope, different question.
 
 **`--around N` → verbatim context centered on a line (v0.78.0+)**
 ```bash
@@ -627,13 +634,48 @@ reveal app.py process_batch --mutations --range 20-80
 ```
 Shows which variables the caller would need back — what would become return values if you extracted this block. Together with `--deps`, this is a full refactoring pre-flight.
 
-**All flags work on flat/procedural files (v0.78.0+):**
+**`--sideeffects` → classified side-effect calls (db/http/cache/log/file/sleep/hard_stop) (v0.80.0+)**
+```bash
+reveal flat_file.php :477-531 --sideeffects
+reveal app.py myfunc --sideeffects
+
+# Output (flat, in line order):
+# L3       db         mysql_query("SELECT * FROM orders...")
+# L5       log        error_log("DB failed")
+# L6       hard_stop  die("fatal error")
+# L9       http       curl_exec($ch)
+# L11      sleep      sleep(1)
+# L12      file       file_put_contents("/tmp/...")
+```
+Shows what external systems a range touches. Useful for assessing blast radius, spotting unexpected I/O, or understanding retry safety. Works on PHP and Python.
+
+**`--returns` → return/exit paths with gate chains (v0.80.0+)**
+```bash
+reveal app.py process_order --returns
+reveal flat_file.php :120-340 --returns
+
+# Output:
+# RETURN    L198:  return false
+#           gate: not token (L145)
+#
+# RETURN    L280:  return result
+#           gate: token_valid (L210)
+#           gate: api_ok (L251)
+#
+# RETURN    L340:  return true  [unconditional]
+```
+For each exit point (return/raise/throw/die), shows the full condition chain that must be true to reach it. `[unconditional]` means the exit is reachable without any guard. Complements `--exits` (which locates exits) with path analysis (which conditions gate each one). Works on PHP and Python.
+
+**Most flags work on flat/procedural files (v0.78.0+):**
 ```bash
 # Flat PHP file — no named function required
 reveal rr_body.php :878-2130 --ifmap
+reveal rr_body.php :657-2200 --exits
 reveal rr_body.php :1136-1463 --deps
-reveal rr_body.php --varflow errormsg_str    # whole file
+reveal rr_body.php :477-531 --sideeffects
+reveal rr_body.php :120-340 --returns
 ```
+All flags accept `:LINE-RANGE` or no element (whole-file fallback). Exception: `--scope` and `--around` require a single `:LINE`. All variable-tracking flags (`--varflow`, `--deps`, `--mutations`) now work on PHP as well as Python (fixed in v0.80.0, BACK-203).
 
 **Combining with `--range` to narrow scope:**
 ```bash
@@ -3401,6 +3443,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
 - **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `stats://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `stats://` complexity no longer stuck at 1.00
+- **v0.79.0** - documented PHP limitation: `--varflow`, `--deps`, `--mutations` silently return empty on PHP files (BACK-203 — `variable_name` node type vs `identifier`); PHP-safe nav flags: `--calls`, `--exits`, `--flowto`, `--ifmap`, `--catchmap`, `--around`, `--scope`; added `--calls` / `calls://` disambiguation; clarified `--outline` dual-mode behavior
 - **v0.78.0** - probe-inspired nav flags: `--around N` (verbatim context ±N lines around a target), `--ifmap` (branching skeleton), `--catchmap` (exception skeleton), `--exits` (exit-node list), `--flowto` (exit list + CLEAR/CONDITIONAL/BLOCKED verdict), `--deps` (refactoring pre-flight: variables flowing in), `--mutations` (variables written in range and read after); flat-file support for `--varflow` and `--calls` (no named function required — use with `:LINE-RANGE` syntax or no element for whole-file)
 - **v0.72.1** - M501 rule (TODO/FIXME/HACK/XXX marker detection, LOW severity, all file types); `--max-bytes` and `--max-depth` removed (were misleading/unimplemented); Complete Rules Reference now covers L, M, F, T categories (18 previously undocumented rules); adapter count corrected to 22
 - **v0.72.0** - nav flags released: `--outline` (element mode → control-flow skeleton), `--scope` (ancestor scope at a line), `--varflow` (read/write trace), `--calls` (call sites in a range); `--broken-only` and `--inline` documented; `--section NAME` flag; budget flags (`--max-items`, `--max-snippet-chars`) for token management

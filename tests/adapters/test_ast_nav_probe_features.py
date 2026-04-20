@@ -817,5 +817,431 @@ class TestCollectIdentifierNames(unittest.TestCase):
         self.assertEqual(result, frozenset())
 
 
+# ---------------------------------------------------------------------------
+# BACK-199: --sideeffects taxonomy classifier
+# ---------------------------------------------------------------------------
+
+def _parse_php(code: str):
+    """Parse PHP code and return (tree, root, get_text, content_bytes)."""
+    parser = ts.get_parser('php')
+    content_bytes = textwrap.dedent(code).lstrip('\n').encode('utf-8')
+    tree = parser.parse(content_bytes)
+    root = tree.root_node
+
+    def get_text(node):
+        return content_bytes[node.start_byte:node.end_byte].decode('utf-8')
+
+    return tree, root, get_text, content_bytes
+
+
+class TestClassifyCall(unittest.TestCase):
+
+    def test_db_mysql_query(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('mysql_query'), 'db')
+
+    def test_db_execute_method(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('$pdo->execute'), 'db')
+
+    def test_http_curl_exec(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('curl_exec'), 'http')
+
+    def test_http_requests_get(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('requests.get'), 'http')
+
+    def test_cache_memcache_set(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('memcache_set'), 'cache')
+
+    def test_log_error_log(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('error_log'), 'log')
+
+    def test_file_fopen(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('fopen'), 'file')
+
+    def test_file_put_contents(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('file_put_contents'), 'file')
+
+    def test_sleep(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('sleep'), 'sleep')
+
+    def test_usleep(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('usleep'), 'sleep')
+
+    def test_hard_stop_die(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('die'), 'hard_stop')
+
+    def test_hard_stop_exit(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('exit'), 'hard_stop')
+
+    def test_unclassified_returns_none(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call('some_custom_function'))
+
+    def test_empty_string_returns_none(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call(''))
+
+    def test_none_returns_none(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertIsNone(classify_call(None))
+
+    def test_case_insensitive(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(classify_call('CURL_EXEC'), 'http')
+
+
+class TestCollectEffects(unittest.TestCase):
+
+    def setUp(self):
+        code = """\
+<?php
+function processOrder($order_id) {
+    $sql = mysql_query("SELECT * FROM orders WHERE id=" . $order_id);
+    if (!$sql) {
+        error_log("DB failed");
+        die("fatal");
+    }
+    curl_exec(curl_init("https://api.example.com"));
+    sleep(1);
+    return mysql_fetch_assoc($sql);
+}
+"""
+        self._tree, self._root, self._get_text, _ = _parse_php(code)
+
+    def _effects(self):
+        from reveal.adapters.ast.nav_effects import collect_effects
+        return collect_effects(self._root, 1, 999, self._get_text)
+
+    def test_returns_list(self):
+        self.assertIsInstance(self._effects(), list)
+
+    def test_effects_have_required_fields(self):
+        effects = self._effects()
+        for e in effects:
+            self.assertIn('line', e)
+            self.assertIn('callee', e)
+            self.assertIn('kind', e)
+
+    def test_db_calls_found(self):
+        effects = self._effects()
+        kinds = [e['kind'] for e in effects]
+        self.assertIn('db', kinds)
+
+    def test_http_calls_found(self):
+        effects = self._effects()
+        kinds = [e['kind'] for e in effects]
+        self.assertIn('http', kinds)
+
+    def test_log_calls_found(self):
+        effects = self._effects()
+        kinds = [e['kind'] for e in effects]
+        self.assertIn('log', kinds)
+
+    def test_hard_stop_found(self):
+        effects = self._effects()
+        kinds = [e['kind'] for e in effects]
+        self.assertIn('hard_stop', kinds)
+
+    def test_sleep_found(self):
+        effects = self._effects()
+        kinds = [e['kind'] for e in effects]
+        self.assertIn('sleep', kinds)
+
+    def test_sorted_by_line(self):
+        effects = self._effects()
+        classified = [e for e in effects if e['kind'] is not None]
+        lines = [e['line'] for e in classified]
+        self.assertEqual(lines, sorted(lines))
+
+    def test_range_filtering(self):
+        from reveal.adapters.ast.nav_effects import collect_effects
+        # Only lines 3-4 — should find mysql_query but not die/curl_exec
+        effects = collect_effects(self._root, 3, 4, self._get_text)
+        callees = [e['callee'] for e in effects if e['kind'] is not None]
+        self.assertTrue(any('mysql_query' in (c or '') for c in callees))
+        self.assertFalse(any('die' in (c or '') for c in callees))
+
+
+class TestRenderEffects(unittest.TestCase):
+
+    def _make_effects(self):
+        from reveal.adapters.ast.nav_effects import collect_effects
+        code = """\
+<?php
+function f() {
+    mysql_query("SELECT 1");
+    error_log("x");
+    die("stop");
+}
+"""
+        _, root, get_text, _ = _parse_php(code)
+        return collect_effects(root, 1, 999, get_text)
+
+    def test_output_is_string(self):
+        from reveal.adapters.ast.nav_effects import render_effects
+        result = render_effects(self._make_effects(), 1, 999)
+        self.assertIsInstance(result, str)
+
+    def test_output_contains_kind_labels(self):
+        from reveal.adapters.ast.nav_effects import render_effects
+        result = render_effects(self._make_effects(), 1, 999)
+        self.assertIn('db', result)
+        self.assertIn('log', result)
+        self.assertIn('hard_stop', result)
+
+    def test_output_contains_line_numbers(self):
+        from reveal.adapters.ast.nav_effects import render_effects
+        result = render_effects(self._make_effects(), 1, 999)
+        self.assertIn('L3', result)
+
+    def test_empty_effects_returns_message(self):
+        from reveal.adapters.ast.nav_effects import render_effects
+        result = render_effects([], 1, 999)
+        self.assertIn('No classified side effects', result)
+
+
+# ---------------------------------------------------------------------------
+# BACK-203: PHP varflow — variable_name node type fix
+# ---------------------------------------------------------------------------
+
+class TestPhpVarflow(unittest.TestCase):
+
+    def setUp(self):
+        code = """\
+<?php
+function process($data) {
+    $count = 0;
+    foreach ($data as $k => $row) {
+        if ($row > 0) {
+            $count += $row;
+        }
+    }
+    return $count;
+}
+"""
+        self._tree, self._root, self._get_text, _ = _parse_php(code)
+
+    def test_collect_identifier_names_finds_php_vars(self):
+        from reveal.adapters.ast.nav import _collect_identifier_names
+        names = _collect_identifier_names(self._root, 1, 999, self._get_text)
+        self.assertIn('$count', names)
+        self.assertIn('$data', names)
+        self.assertIn('$row', names)
+        self.assertIn('$k', names)
+
+    def test_var_flow_tracks_php_write(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, '$count', 1, 999, self._get_text)
+        self.assertTrue(len(events) > 0)
+        kinds = [e['kind'] for e in events]
+        self.assertIn('WRITE', kinds)
+
+    def test_var_flow_tracks_php_read(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, '$count', 1, 999, self._get_text)
+        kinds = [e['kind'] for e in events]
+        self.assertIn('READ', kinds)
+
+    def test_var_flow_write_before_read(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, '$count', 1, 999, self._get_text)
+        write_lines = [e['line'] for e in events if e['kind'] == 'WRITE']
+        read_lines = [e['line'] for e in events if e['kind'] == 'READ']
+        self.assertTrue(min(write_lines) < max(read_lines))
+
+    def test_augmented_assignment_produces_read_and_write(self):
+        from reveal.adapters.ast.nav import var_flow
+        # $count += $row is both READ and WRITE
+        events = var_flow(self._root, '$count', 1, 999, self._get_text)
+        line6_events = [e for e in events if e['line'] == 6]
+        event_kinds = {e['kind'] for e in line6_events}
+        self.assertIn('WRITE', event_kinds)
+        self.assertIn('READ', event_kinds)
+
+    def test_var_flow_not_empty_for_php(self):
+        from reveal.adapters.ast.nav import var_flow
+        events = var_flow(self._root, '$count', 1, 999, self._get_text)
+        self.assertGreater(len(events), 0)
+
+
+# ---------------------------------------------------------------------------
+# BACK-200: --returns gate-chain walker
+# ---------------------------------------------------------------------------
+
+class TestCollectGateChains(unittest.TestCase):
+
+    def setUp(self):
+        code = """\
+def process(data, token):
+    if not token:
+        return False
+    if token == 'invalid':
+        raise ValueError('bad')
+    result = fetch(data)
+    if result is None:
+        return None
+    if result > 10:
+        if result > 100:
+            return 'high'
+        return 'medium'
+    return result
+"""
+        self._tree, self._root, self._get_text, _ = _parse_python(code)
+
+    def _chains(self):
+        from reveal.adapters.ast.nav_exits import collect_gate_chains
+        return collect_gate_chains(self._root, 1, 999, self._get_text)
+
+    def test_returns_list(self):
+        self.assertIsInstance(self._chains(), list)
+
+    def test_each_item_has_required_fields(self):
+        for item in self._chains():
+            self.assertIn('kind', item)
+            self.assertIn('line', item)
+            self.assertIn('text', item)
+            self.assertIn('gates', item)
+
+    def test_unconditional_return_has_empty_gates(self):
+        chains = self._chains()
+        # Last 'return result' is unconditional
+        last = [c for c in chains if c['kind'] == 'RETURN'][-1]
+        self.assertEqual(last['gates'], [])
+
+    def test_conditional_return_has_gates(self):
+        chains = self._chains()
+        # 'return False' is gated on 'not token'
+        early_return = next(c for c in chains if 'False' in c['text'])
+        self.assertGreater(len(early_return['gates']), 0)
+
+    def test_nested_conditions_accumulate(self):
+        chains = self._chains()
+        # 'return high' is nested inside two ifs
+        high_return = next(c for c in chains if 'high' in c['text'])
+        self.assertEqual(len(high_return['gates']), 2)
+
+    def test_gates_have_line_and_text(self):
+        chains = self._chains()
+        for item in chains:
+            for gate in item['gates']:
+                self.assertIn('line', gate)
+                self.assertIn('text', gate)
+
+    def test_sorted_by_line(self):
+        chains = self._chains()
+        lines = [c['line'] for c in chains]
+        self.assertEqual(lines, sorted(lines))
+
+    def test_raise_included(self):
+        chains = self._chains()
+        kinds = [c['kind'] for c in chains]
+        self.assertIn('RAISE', kinds)
+
+    def test_range_filtering(self):
+        from reveal.adapters.ast.nav_exits import collect_gate_chains
+        # Only lines 1-5 — should find 'return False' but not 'return result'
+        chains = collect_gate_chains(self._root, 1, 5, self._get_text)
+        texts = [c['text'] for c in chains]
+        self.assertTrue(any('False' in t for t in texts))
+        self.assertFalse(any('result' in t and 'None' not in t for t in texts))
+
+    def test_empty_range_returns_empty(self):
+        from reveal.adapters.ast.nav_exits import collect_gate_chains
+        chains = collect_gate_chains(self._root, 999, 1000, self._get_text)
+        self.assertEqual(chains, [])
+
+
+class TestRenderGateChains(unittest.TestCase):
+
+    def _make_chains(self):
+        from reveal.adapters.ast.nav_exits import collect_gate_chains
+        code = """\
+def f(x):
+    if x > 0:
+        return 'pos'
+    return 'neg'
+"""
+        _, root, get_text, _ = _parse_python(code)
+        return collect_gate_chains(root, 1, 999, get_text)
+
+    def test_output_is_string(self):
+        from reveal.adapters.ast.nav_exits import render_gate_chains
+        result = render_gate_chains(self._make_chains(), 1, 999)
+        self.assertIsInstance(result, str)
+
+    def test_unconditional_label_present(self):
+        from reveal.adapters.ast.nav_exits import render_gate_chains
+        result = render_gate_chains(self._make_chains(), 1, 999)
+        self.assertIn('[unconditional]', result)
+
+    def test_gate_label_present(self):
+        from reveal.adapters.ast.nav_exits import render_gate_chains
+        result = render_gate_chains(self._make_chains(), 1, 999)
+        self.assertIn('gate:', result)
+
+    def test_line_numbers_present(self):
+        from reveal.adapters.ast.nav_exits import render_gate_chains
+        result = render_gate_chains(self._make_chains(), 1, 999)
+        self.assertIn('L3', result)
+
+    def test_empty_chains_returns_message(self):
+        from reveal.adapters.ast.nav_exits import render_gate_chains
+        result = render_gate_chains([], 1, 999)
+        self.assertIn('No return/exit paths', result)
+
+
+class TestPhpGateChains(unittest.TestCase):
+
+    def setUp(self):
+        code = """\
+<?php
+function send($user_id, $tpl) {
+    if (!$user_id) {
+        return false;
+    }
+    if ($tpl === 'welcome') {
+        return sendWelcome($user_id);
+    }
+    return sendGeneric($user_id, $tpl);
+}
+"""
+        self._tree, self._root, self._get_text, _ = _parse_php(code)
+
+    def _chains(self):
+        from reveal.adapters.ast.nav_exits import collect_gate_chains
+        return collect_gate_chains(self._root, 1, 999, self._get_text)
+
+    def test_php_returns_found(self):
+        chains = self._chains()
+        self.assertGreater(len(chains), 0)
+
+    def test_php_gated_return_has_gate(self):
+        chains = self._chains()
+        gated = [c for c in chains if c['gates']]
+        self.assertGreater(len(gated), 0)
+
+    def test_php_unconditional_return_exists(self):
+        chains = self._chains()
+        uncond = [c for c in chains if not c['gates']]
+        self.assertGreater(len(uncond), 0)
+
+    def test_php_condition_text_extracted(self):
+        chains = self._chains()
+        for c in chains:
+            for gate in c['gates']:
+                self.assertGreater(len(gate['text']), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

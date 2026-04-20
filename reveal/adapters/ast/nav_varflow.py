@@ -50,16 +50,17 @@ def _walk_var(
         if n.end_point[0] + 1 < from_line or line > to_line:
             return
 
-        if ntype == 'identifier' and get_text(n) == var_name:
+        if ntype in ('identifier', 'variable_name') and get_text(n) == var_name:
             if from_line <= line <= to_line:
                 events.append({'kind': c, 'line': line, 'node': n})
             return
 
-        if ntype in ('assignment', 'augmented_assignment'):
+        if ntype in ('assignment', 'augmented_assignment',
+                     'assignment_expression', 'augmented_assignment_expression'):
             _walk_assignment(n, ntype, c)
         elif ntype == 'named_expression':
             _walk_named_expression(n)
-        elif ntype == 'for_statement':
+        elif ntype in ('for_statement', 'foreach_statement'):
             _walk_for(n, c)
         elif ntype == 'with_statement':
             _walk_with(n, c)
@@ -73,7 +74,7 @@ def _walk_var(
         left = n.child_by_field_name('left')
         right = n.child_by_field_name('right')
         if left:
-            if ntype == 'augmented_assignment':
+            if ntype in ('augmented_assignment', 'augmented_assignment_expression'):
                 walk(left, 'READ')
             walk(left, 'WRITE')
         if right:
@@ -179,7 +180,7 @@ def _collect_identifier_names(
         line = node.start_point[0] + 1
         if node.end_point[0] + 1 < from_line or line > to_line:
             continue
-        if node.type == 'identifier' and from_line <= line <= to_line:
+        if node.type in ('identifier', 'variable_name') and from_line <= line <= to_line:
             text = get_text(node)
             if text:
                 names.add(text)

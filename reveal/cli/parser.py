@@ -361,6 +361,12 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--mutations', action='store_true',
                         help='Show variables written in a line range and read after (potential return values) '
                              '(e.g., reveal file.php :1136-1463 --mutations  or  reveal file.py myfunc --mutations)')
+    parser.add_argument('--sideeffects', action='store_true',
+                        help='Show classified side effects (db/http/cache/log/file/sleep/hard_stop) in a function or line range '
+                             '(e.g., reveal file.php :477-531 --sideeffects  or  reveal file.py myfunc --sideeffects)')
+    parser.add_argument('--returns', action='store_true',
+                        help='Show return/exit paths with their gate chains (conditions that must be true to reach each exit) '
+                             '(e.g., reveal file.php processOrder --returns  or  reveal file.py myfunc --returns)')
 
 
 def _add_markdown_options(parser: argparse.ArgumentParser) -> None:
