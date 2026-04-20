@@ -6,6 +6,7 @@ Split into focused modules (BACK-185):
   nav_calls.py    — range_calls, render_range_calls
   nav_exits.py    — collect_exits, collect_deps, collect_mutations, render_exits, render_deps, render_mutations
   nav_effects.py  — collect_effects, render_effects (BACK-199)
+  nav_boundary.py — collect_boundary, render_boundary (BACK-201)
 """
 
 from __future__ import annotations
@@ -58,4 +59,8 @@ from .nav_effects import (  # noqa: F401
     classify_call,
     collect_effects,
     render_effects,
+)
+from .nav_boundary import (  # noqa: F401
+    collect_boundary,
+    render_boundary,
 )

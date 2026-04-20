@@ -367,6 +367,9 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--returns', action='store_true',
                         help='Show return/exit paths with their gate chains (conditions that must be true to reach each exit) '
                              '(e.g., reveal file.php processOrder --returns  or  reveal file.py myfunc --returns)')
+    parser.add_argument('--boundary', action='store_true',
+                        help='Show boundary contract: INPUTS (undefined reads), ENVIRONMENT (superglobal reads), and EFFECTS (classified calls) '
+                             '(e.g., reveal file.php processOrder --boundary  or  reveal file.py myfunc --boundary)')
 
 
 def _add_markdown_options(parser: argparse.ArgumentParser) -> None:

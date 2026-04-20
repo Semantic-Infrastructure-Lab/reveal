@@ -539,7 +539,7 @@ reveal flat_file.php :1-2000 --varflow errormsg  # flat procedural file
 ```
 Shows every place the variable is assigned (WRITE), read (READ), or tested in a condition (READ/COND). Works on both named functions and flat/procedural files without a function wrapper.
 
-> **PHP support (v0.80.0+)**: All nav flags including `--varflow`, `--deps`, `--mutations`, `--sideeffects`, and `--returns` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround.
+> **PHP support (v0.80.0+)**: All nav flags including `--varflow`, `--deps`, `--mutations`, `--sideeffects`, `--returns`, and `--boundary` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround. `--boundary` additionally detects PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) and surfaces them in a separate ENVIRONMENT section.
 
 **`--calls` → call sites in a line range**
 ```bash
@@ -666,6 +666,25 @@ reveal flat_file.php :120-340 --returns
 ```
 For each exit point (return/raise/throw/die), shows the full condition chain that must be true to reach it. `[unconditional]` means the exit is reachable without any guard. Complements `--exits` (which locates exits) with path analysis (which conditions gate each one). Works on PHP and Python.
 
+**`--boundary` → boundary contract: INPUTS / ENVIRONMENT / EFFECTS (v0.81.0+)**
+```bash
+reveal app.py process_order --boundary
+reveal flat_file.php handleRequest --boundary
+
+# Output (PHP example):
+# INPUTS (undefined reads):
+#   $config                           first read L2
+#
+# ENVIRONMENT (superglobal reads):
+#   $_SESSION                         first read L3
+#   $_GET                             first read L4
+#
+# EFFECTS:
+#   db   L5       mysql_query("SELECT * FROM items WHERE user=" . $...)
+#   log  L6       error_log("Fetched page " . $page)
+```
+Composes `--deps` + `--sideeffects` into a single boundary-contract report: what the code receives (INPUTS), what environment state it reads (ENVIRONMENT — PHP superglobals `$_GET`, `$_POST`, `$_SESSION`, etc.), and what it does to the world (EFFECTS). The ENVIRONMENT section is omitted when empty (Python files rarely have superglobals). The highest-value single-flag summary for understanding an unfamiliar code range.
+
 **Most flags work on flat/procedural files (v0.78.0+):**
 ```bash
 # Flat PHP file — no named function required
@@ -674,6 +693,7 @@ reveal rr_body.php :657-2200 --exits
 reveal rr_body.php :1136-1463 --deps
 reveal rr_body.php :477-531 --sideeffects
 reveal rr_body.php :120-340 --returns
+reveal rr_body.php :477-531 --boundary
 ```
 All flags accept `:LINE-RANGE` or no element (whole-file fallback). Exception: `--scope` and `--around` require a single `:LINE`. All variable-tracking flags (`--varflow`, `--deps`, `--mutations`) now work on PHP as well as Python (fixed in v0.80.0, BACK-203).
 
