@@ -28,6 +28,7 @@ category: reference
 | [README.md](README.md) | 147 | Documentation overview and navigation |
 | [WHY_REVEAL.md](WHY_REVEAL.md) | — | What makes Reveal powerful — key capabilities with examples |
 | [QUICK_START.md](QUICK_START.md) | 374 | 5-minute introduction for new users |
+| [WHAT_IS_REVEAL_GOOD_FOR.md](guides/WHAT_IS_REVEAL_GOOD_FOR.md) | — | Organized jobs-to-be-done guide: where Reveal is strongest |
 | [BENCHMARKS.md](BENCHMARKS.md) | — | Measured 3.9–33x token reduction — 5 real scenarios with exact numbers |
 | [MCP_SETUP.md](guides/MCP_SETUP.md) | — | MCP server setup for Claude Code, Cursor, Windsurf — 5 tools, stdio/SSE transports |
 | [CI_RECIPES.md](guides/CI_RECIPES.md) | — | GitHub Actions and GitLab CI ready-to-paste YAML: PR review, complexity gate, hotspot tracking, SSL checks |
@@ -166,6 +167,7 @@ Complete reference for AI agent integration:
 
 **By Task**:
 - "How do I start?" → [QUICK_START.md](QUICK_START.md)
+- "What is Reveal good for?" → [WHAT_IS_REVEAL_GOOD_FOR.md](guides/WHAT_IS_REVEAL_GOOD_FOR.md)
 - "What makes Reveal different?" → [WHY_REVEAL.md](WHY_REVEAL.md)
 - "What can Reveal do?" → [RECIPES.md](guides/RECIPES.md)
 - "How do I use X adapter?" → [Adapter Guides](#adapter-guides-19-files)

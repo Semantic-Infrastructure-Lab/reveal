@@ -1,11 +1,19 @@
 # Reveal Roadmap
-> **Last updated**: 2026-04-17 (cursed-hammer-0417 — v0.80.0 released)
+> **Last updated**: 2026-04-19 (pazevaxe-0419 — v0.81.0 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.81.0
+- ✅ **`--boundary` nav flag** — composite INPUTS / ENVIRONMENT / EFFECTS view; PHP superglobals surfaced in separate ENVIRONMENT section. (BACK-201)
+- ✅ **`reveal_nav` MCP tool** — single tool routing all nav flags to agents; `_NAV_BOOLEAN_FLAGS` frozenset means zero MCP changes for future boolean nav flags. (BACK-204)
+- ✅ **`--format json` for all nav flags** — `{meta, findings, warnings}` envelope across all 12 nav dispatch blocks. (BACK-202)
+- ✅ **`--sideeffects` + `--returns` nav flags** — side-effect classification (db/http/cache/log/file/sleep/hard_stop) and return/exit gate chains. (BACK-199, BACK-200)
+- ✅ **PHP `--varflow` fix** — variable tracking now works on PHP as well as Python. (BACK-203)
+- ✅ **All 5 MCP tools off `_capture()`** — `reveal_structure` and `reveal_query` complete the migration; no global lock, no stdout redirection anywhere in MCP layer. (BACK-193)
 
 ### v0.80.0
 - ✅ **MCP tools off `_capture()`** — `reveal_check`, `reveal_pack`, `reveal_element` now call internal APIs directly; no global lock, no stdout redirection. (BACK-181, BACK-182, BACK-193 partial)

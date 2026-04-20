@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.80.0
+**Version:** 0.81.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -539,7 +539,7 @@ reveal flat_file.php :1-2000 --varflow errormsg  # flat procedural file
 ```
 Shows every place the variable is assigned (WRITE), read (READ), or tested in a condition (READ/COND). Works on both named functions and flat/procedural files without a function wrapper.
 
-> **PHP support (v0.80.0+)**: All nav flags including `--varflow`, `--deps`, `--mutations`, `--sideeffects`, `--returns`, and `--boundary` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround. `--boundary` additionally detects PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) and surfaces them in a separate ENVIRONMENT section.
+> **PHP support (v0.81.0+)**: All nav flags including `--varflow`, `--deps`, `--mutations`, `--sideeffects`, `--returns`, and `--boundary` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround. `--boundary` additionally detects PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) and surfaces them in a separate ENVIRONMENT section.
 
 **`--calls` → call sites in a line range**
 ```bash
@@ -634,7 +634,7 @@ reveal app.py process_batch --mutations --range 20-80
 ```
 Shows which variables the caller would need back — what would become return values if you extracted this block. Together with `--deps`, this is a full refactoring pre-flight.
 
-**`--sideeffects` → classified side-effect calls (db/http/cache/log/file/sleep/hard_stop) (v0.80.0+)**
+**`--sideeffects` → classified side-effect calls (db/http/cache/log/file/sleep/hard_stop) (v0.81.0+)**
 ```bash
 reveal flat_file.php :477-531 --sideeffects
 reveal app.py myfunc --sideeffects
@@ -649,7 +649,7 @@ reveal app.py myfunc --sideeffects
 ```
 Shows what external systems a range touches. Useful for assessing blast radius, spotting unexpected I/O, or understanding retry safety. Works on PHP and Python.
 
-**`--returns` → return/exit paths with gate chains (v0.80.0+)**
+**`--returns` → return/exit paths with gate chains (v0.81.0+)**
 ```bash
 reveal app.py process_order --returns
 reveal flat_file.php :120-340 --returns
@@ -695,7 +695,7 @@ reveal rr_body.php :477-531 --sideeffects
 reveal rr_body.php :120-340 --returns
 reveal rr_body.php :477-531 --boundary
 ```
-All flags accept `:LINE-RANGE` or no element (whole-file fallback). Exception: `--scope` and `--around` require a single `:LINE`. All variable-tracking flags (`--varflow`, `--deps`, `--mutations`) now work on PHP as well as Python (fixed in v0.80.0, BACK-203).
+All flags accept `:LINE-RANGE` or no element (whole-file fallback). Exception: `--scope` and `--around` require a single `:LINE`. All variable-tracking flags (`--varflow`, `--deps`, `--mutations`) now work on PHP as well as Python (fixed in v0.81.0, BACK-203).
 
 **Combining with `--range` to narrow scope:**
 ```bash

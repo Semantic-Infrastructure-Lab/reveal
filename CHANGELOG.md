@@ -12,10 +12,19 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (session majevebo-0417)
+## [0.81.0] - 2026-04-19 (sessions majevebo-0417, approaching-void-0419, pazevaxe-0419)
+
+### Added
+- **`--boundary` composite nav flag** — `collect_boundary()` composes `collect_deps` + `collect_effects`, splits PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, `$_SERVER`, `$_FILES`, `$_COOKIE`, `$_ENV`, `$GLOBALS`, `$_REQUEST`) into a separate ENVIRONMENT section. Emits three sections: INPUTS / ENVIRONMENT / EFFECTS. ENVIRONMENT omitted when empty. 21 new tests. (BACK-201)
+- **`reveal_nav` MCP tool** — single MCP tool routing all nav flags (`--outline`, `--around`, `--scope`, `--ifmap`, `--catchmap`, `--exits`, `--flowto`, `--varflow`, `--deps`, `--mutations`, `--sideeffects`, `--returns`, `--boundary`) to agents. Boolean flags via `flag` string param; value-taking flags via `flag_value`. `_NAV_BOOLEAN_FLAGS` frozenset is the extension point — future boolean nav flags require zero MCP changes. 9 new tests. (BACK-204)
+- **`--format json` for all nav flags** — `_nav_json()` helper in `file_handler.py` emits `{meta, findings, warnings}` envelope. All 12 nav dispatch blocks branch on `output_format == 'json'`. Consistent findings shapes across all flags; `varflow` event `node` field stripped (raw AST Node, not serializable). 13 new tests. (BACK-202)
+- **`--sideeffects` and `--returns` nav flags** — `--sideeffects` classifies calls into db/http/cache/log/file/sleep/hard_stop categories. `--returns` shows return/exit paths with gate chains. Both work on Python and PHP. (BACK-199, BACK-200)
+
+### Fixed
+- **PHP `--varflow` tracking** — PHP variable flow was not correctly tracking assignments through certain PHP-specific constructs. Fixed; all variable-tracking flags now work on PHP as well as Python. (BACK-203)
 
 ### Maintenance
-- **`reveal_structure` and `reveal_query` MCP tools off `_capture()`** — `reveal_structure` directory case now calls `show_directory_tree()` directly (returns a string; no stdout capture at all). File case and `reveal_query` use `_run_and_capture()`, a lock-free replacement for `_capture()`. Global `_capture_lock` and `threading` import removed. All 5 MCP tools no longer use the global-lock capture helper. (BACK-193)
+- **`reveal_structure` and `reveal_query` MCP tools off `_capture()`** — `reveal_structure` directory case now calls `show_directory_tree()` directly. File case and `reveal_query` use `_run_and_capture()`, a lock-free replacement. Global `_capture_lock` and `threading` import removed. All 5 MCP tools now off the global-lock capture helper. (BACK-193)
 
 ---
 

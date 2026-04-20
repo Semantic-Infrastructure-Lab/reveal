@@ -141,6 +141,7 @@ reveal dev new-adapter <name>  # scaffold new adapters/rules
 
 - **[Why Reveal](reveal/docs/WHY_REVEAL.md)** — what makes it powerful
 - **[Quick Start](reveal/docs/QUICK_START.md)** — 5-minute introduction
+- **[What Reveal Is Good For](reveal/docs/guides/WHAT_IS_REVEAL_GOOD_FOR.md)** — organized use cases and best-fit workflows
 - **[MCP Server](reveal/docs/guides/MCP_SETUP.md)** — native integration with Claude Code, Cursor, Windsurf
 - **[CI/CD Recipes](reveal/docs/guides/CI_RECIPES.md)** — GitHub Actions and GitLab CI ready-to-paste YAML
 - **[Benchmarks](reveal/docs/BENCHMARKS.md)** — measured 3.9–15x token reduction on real scenarios

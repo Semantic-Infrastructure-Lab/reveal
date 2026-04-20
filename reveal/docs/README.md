@@ -35,6 +35,7 @@ Comprehensive guides for users, developers, and AI agents.
 | Guide | Purpose |
 |-------|---------|
 | [QUICK_START.md](QUICK_START.md) | 5-minute introduction |
+| [WHAT_IS_REVEAL_GOOD_FOR.md](guides/WHAT_IS_REVEAL_GOOD_FOR.md) | Use-case guide: where Reveal is strongest |
 | [RECIPES.md](guides/RECIPES.md) | Task-based workflows and patterns |
 | [QUERY_SYNTAX_GUIDE.md](guides/QUERY_SYNTAX_GUIDE.md) | Universal query operators and result control |
 | [FIELD_SELECTION_GUIDE.md](guides/FIELD_SELECTION_GUIDE.md) | Token reduction with --fields and budget constraints |
@@ -117,6 +118,9 @@ Complete guides for all URI adapters:
 
 **Review a codebase?**
 → See [RECIPES.md](guides/RECIPES.md) for complete workflows
+
+**What is Reveal best at?**
+→ See [WHAT_IS_REVEAL_GOOD_FOR.md](guides/WHAT_IS_REVEAL_GOOD_FOR.md)
 
 **Create custom adapter?**
 → See [ADAPTER_AUTHORING_GUIDE.md](development/ADAPTER_AUTHORING_GUIDE.md)
