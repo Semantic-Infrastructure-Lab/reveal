@@ -109,6 +109,61 @@ class TestRevealElementTool(unittest.TestCase):
             os.unlink(fpath)
 
 
+class TestRevealNavTool(unittest.TestCase):
+
+    def setUp(self):
+        from reveal.mcp_server import reveal_nav
+        self.reveal_nav = reveal_nav
+        self._orig_dir = os.getcwd()
+        os.chdir(Path(__file__).parent.parent)
+
+    def tearDown(self):
+        os.chdir(self._orig_dir)
+
+    def test_returns_string(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'deps')
+        self.assertIsInstance(result, str)
+
+    def test_deps_flag_produces_output(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'deps')
+        self.assertNotIn('[reveal error', result)
+        self.assertGreater(len(result), 0)
+
+    def test_boundary_flag_produces_sections(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'boundary')
+        self.assertIn('INPUTS', result)
+        self.assertIn('EFFECTS', result)
+
+    def test_sideeffects_flag(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'sideeffects')
+        self.assertIsInstance(result, str)
+        self.assertNotIn('[reveal error', result)
+
+    def test_varflow_requires_flag_value(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'varflow')
+        self.assertIn('[reveal error', result)
+        self.assertIn('flag_value', result)
+
+    def test_varflow_with_value(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'varflow', 'calls')
+        self.assertIsInstance(result, str)
+        self.assertNotIn('[reveal error', result)
+
+    def test_unknown_flag_returns_error(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', 'collect_effects', 'notaflag')
+        self.assertIn('[reveal error', result)
+        self.assertIn('notaflag', result)
+
+    def test_around_with_invalid_value_returns_error(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', ':70', 'around', 'notanint')
+        self.assertIn('[reveal error', result)
+
+    def test_flat_file_line_range(self):
+        result = self.reveal_nav('reveal/adapters/ast/nav_effects.py', ':68-87', 'sideeffects')
+        self.assertIsInstance(result, str)
+        self.assertNotIn('[reveal error', result)
+
+
 class TestRevealQueryTool(unittest.TestCase):
 
     def setUp(self):
@@ -296,13 +351,14 @@ class TestMcpServerRegistration(unittest.TestCase):
         tool_names = list(mcp._tool_manager._tools.keys())
         self.assertIn('reveal_structure', tool_names)
         self.assertIn('reveal_element', tool_names)
+        self.assertIn('reveal_nav', tool_names)
         self.assertIn('reveal_query', tool_names)
         self.assertIn('reveal_pack', tool_names)
         self.assertIn('reveal_check', tool_names)
 
     def test_tool_count(self):
         from reveal.mcp_server import mcp
-        self.assertEqual(len(mcp._tool_manager._tools), 5)
+        self.assertEqual(len(mcp._tool_manager._tools), 6)
 
     def test_server_name(self):
         from reveal.mcp_server import mcp

@@ -35,7 +35,14 @@ mcp = FastMCP(
         "Core workflow:\n"
         "1. reveal_structure(dir) — understand what's in a directory (50-200 tokens)\n"
         "2. reveal_structure(file) — see all functions/classes (200-500 tokens)\n"
-        "3. reveal_element(file, fn) — read one function's implementation (100-300 tokens)\n\n"
+        "3. reveal_element(file, fn) — read one function's implementation (100-300 tokens)\n"
+        "4. reveal_nav(file, fn, flag) — deep-dive analysis without reading source:\n"
+        "   boundary    — INPUTS + ENVIRONMENT + EFFECTS in one report\n"
+        "   deps        — variables flowing into the function\n"
+        "   mutations   — variables the function writes and the caller will read\n"
+        "   sideeffects — db/http/cache/log/file/sleep/hard_stop calls\n"
+        "   returns     — exit paths with gate conditions\n"
+        "   varflow     — trace one variable's reads and writes\n\n"
         "This is 3-33x more token-efficient than reading files directly. "
         "Use reveal_structure before reveal_element — always progressive disclosure."
     ),
@@ -267,6 +274,74 @@ def reveal_element(path: str, element: str) -> str:
 
     header = f"{path}:{line_start}-{line_end} | {name}\n"
     return f"{header}\n{analyzer.format_with_lines(source, line_start)}"
+
+
+# Nav flags that take no value (boolean).  New boolean nav flags are automatically
+# supported — no MCP changes needed when new flags are added.
+_NAV_BOOLEAN_FLAGS = frozenset({
+    'scope', 'ifmap', 'catchmap', 'exits', 'flowto',
+    'deps', 'mutations', 'sideeffects', 'returns', 'boundary', 'outline',
+})
+
+
+@mcp.tool()
+def reveal_nav(path: str, element: str, flag: str, flag_value: str = '') -> str:
+    """Run a nav analysis flag on a function or line range — the deep-dive layer.
+
+    Use after reveal_structure + reveal_element to analyse the internals of
+    a specific function without reading its full source.
+
+    Args:
+        path:        File containing the element (absolute or relative to cwd)
+        element:     Function/method name (e.g. 'process_order') or line ref
+                     (e.g. ':120-340' for flat/procedural files)
+        flag:        Nav analysis to run. Boolean flags (no flag_value needed):
+                       deps        — variables flowing INTO the range (inputs/params)
+                       mutations   — variables written in range and read after (outputs)
+                       sideeffects — classified side-effect calls: db/http/cache/log/file/sleep/hard_stop
+                       returns     — return/exit paths with their gate conditions
+                       boundary    — combined contract: INPUTS + ENVIRONMENT + EFFECTS
+                       exits       — all exit points (return/raise/throw/die)
+                       flowto      — exits with reachability verdict
+                       ifmap       — if/elif/else branch skeleton
+                       catchmap    — try/except/finally skeleton
+                       outline     — control-flow skeleton (for/while/if/with)
+                       scope       — ancestor scope chain (requires :LINE element)
+                     Value flags (pass flag_value):
+                       varflow     — trace one variable's reads/writes (flag_value = var name)
+                       calls       — call sites in range (flag_value = range like '89-120' or blank for all)
+                       around      — verbatim lines centred on a line (flag_value = context lines, default 20)
+        flag_value:  Required for varflow (variable name). Optional for calls
+                     (range string) and around (integer context lines).
+
+    Examples:
+        reveal_nav('app.py', 'process_order', 'boundary')
+        reveal_nav('app.py', 'process_order', 'sideeffects')
+        reveal_nav('flat.php', ':477-531', 'deps')
+        reveal_nav('app.py', 'process_order', 'varflow', 'result')
+        reveal_nav('app.py', 'process_order', 'calls', '20-60')
+    """
+    from .file_handler import handle_file  # noqa: I006
+
+    if flag in _NAV_BOOLEAN_FLAGS:
+        args = _default_args(**{flag: True})
+    elif flag == 'varflow':
+        if not flag_value:
+            return "[reveal error: varflow requires flag_value (variable name, e.g. 'result')]"
+        args = _default_args(varflow=flag_value)
+    elif flag == 'calls':
+        args = _default_args(calls=flag_value or 'FULL')
+    elif flag == 'around':
+        try:
+            n = int(flag_value) if flag_value else 20
+        except ValueError:
+            return f"[reveal error: around requires an integer flag_value, got '{flag_value}']"
+        args = _default_args(around=n)
+    else:
+        valid = sorted(_NAV_BOOLEAN_FLAGS | {'varflow', 'calls', 'around'})
+        return f"[reveal error: unknown nav flag '{flag}'. Valid flags: {valid}]"
+
+    return _run_and_capture(handle_file, path, element, False, 'text', args)
 
 
 @mcp.tool()
