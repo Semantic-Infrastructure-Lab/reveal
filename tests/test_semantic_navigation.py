@@ -419,5 +419,117 @@ class TestRangeWithNavFlags(unittest.TestCase):
         self.assertIn('RETURN', output)
 
 
+class TestNavJsonOutput(unittest.TestCase):
+    """--format json produces a consistent envelope for all nav flags."""
+
+    def _nav_file(self):
+        from pathlib import Path
+        return str(Path(__file__).parent.parent / 'reveal' / 'adapters' / 'ast' / 'nav_exits.py')
+
+    def _make_args(self, **kwargs):
+        import argparse
+        defaults = dict(
+            scope=False, around=None, outline=False, varflow=None, calls=None,
+            ifmap=False, catchmap=False, exits=False, flowto=False,
+            deps=False, mutations=False, sideeffects=False, returns=False,
+            boundary=False, depth=3, range=None,
+        )
+        defaults.update(kwargs)
+        return argparse.Namespace(**defaults)
+
+    def _run(self, element, flag_kwargs):
+        import io, json, sys
+        from reveal.file_handler import _dispatch_nav
+        from reveal.analyzers.python import PythonAnalyzer
+        analyzer = PythonAnalyzer(self._nav_file())
+        analyzer.get_structure()
+        args = self._make_args(**flag_kwargs)
+        buf = io.StringIO()
+        old = sys.stdout
+        sys.stdout = buf
+        try:
+            _dispatch_nav(analyzer, element, 'json', args)
+        finally:
+            sys.stdout = old
+        return json.loads(buf.getvalue())
+
+    def _assert_envelope(self, result, expected_flag):
+        self.assertIn('meta', result)
+        self.assertIn('findings', result)
+        self.assertIn('warnings', result)
+        self.assertEqual(result['meta']['flag'], expected_flag)
+        self.assertIsInstance(result['findings'], list)
+        self.assertIsInstance(result['warnings'], list)
+
+    def test_deps_json_envelope(self):
+        result = self._run('collect_deps', {'deps': True})
+        self._assert_envelope(result, 'deps')
+
+    def test_deps_findings_have_kind_var_line(self):
+        result = self._run('collect_deps', {'deps': True})
+        for f in result['findings']:
+            self.assertEqual(f['kind'], 'dep')
+            self.assertIn('var', f)
+            self.assertIn('line', f)
+            self.assertIn('first_write_line', f)
+
+    def test_mutations_json_envelope(self):
+        result = self._run('collect_mutations', {'mutations': True})
+        self._assert_envelope(result, 'mutations')
+
+    def test_mutations_findings_have_kind(self):
+        result = self._run('collect_mutations', {'mutations': True})
+        for f in result['findings']:
+            self.assertEqual(f['kind'], 'mutation')
+            self.assertIn('var', f)
+            self.assertIn('line', f)
+            self.assertIn('next_read_line', f)
+
+    def test_exits_json_envelope(self):
+        result = self._run('collect_exits', {'exits': True})
+        self._assert_envelope(result, 'exits')
+
+    def test_sideeffects_json_envelope(self):
+        result = self._run('collect_deps', {'sideeffects': True})
+        self._assert_envelope(result, 'sideeffects')
+
+    def test_returns_json_envelope(self):
+        result = self._run('collect_deps', {'returns': True})
+        self._assert_envelope(result, 'returns')
+
+    def test_boundary_json_envelope(self):
+        result = self._run('collect_deps', {'boundary': True})
+        self._assert_envelope(result, 'boundary')
+
+    def test_boundary_findings_kinds(self):
+        result = self._run('collect_deps', {'boundary': True})
+        kinds = {f['kind'] for f in result['findings']}
+        valid = {'input', 'superglobal', 'db', 'http', 'cache', 'log', 'file', 'sleep', 'hard_stop'}
+        self.assertTrue(kinds.issubset(valid), f"unexpected kinds: {kinds - valid}")
+
+    def test_calls_json_envelope(self):
+        result = self._run('collect_deps', {'calls': 'FULL'})
+        self._assert_envelope(result, 'calls')
+
+    def test_varflow_json_envelope(self):
+        result = self._run('collect_deps', {'varflow': 'deps'})
+        self._assert_envelope(result, 'varflow')
+        self.assertEqual(result['meta']['var'], 'deps')
+
+    def test_meta_has_file_element_range(self):
+        result = self._run('collect_deps', {'deps': True})
+        meta = result['meta']
+        self.assertIn('file', meta)
+        self.assertIn('element', meta)
+        self.assertIn('from_line', meta)
+        self.assertIn('to_line', meta)
+        self.assertIsInstance(meta['from_line'], int)
+        self.assertIsInstance(meta['to_line'], int)
+
+    def test_file_is_string_not_path(self):
+        result = self._run('collect_deps', {'deps': True})
+        self.assertIsInstance(result['meta']['file'], str)
+
+
 if __name__ == '__main__':
     unittest.main()

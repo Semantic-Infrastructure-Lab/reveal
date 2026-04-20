@@ -131,6 +131,17 @@ def _has_nav_flag(args) -> bool:
     )
 
 
+def _nav_json(flag: str, path: str, element: str, from_line: int, to_line: int,
+              findings, extra_meta: Optional[dict] = None) -> None:
+    """Serialize nav findings as a JSON envelope and print to stdout."""
+    import json  # noqa: I006
+    meta = {'flag': flag, 'file': str(path), 'element': element,
+            'from_line': from_line, 'to_line': to_line}
+    if extra_meta:
+        meta.update(extra_meta)
+    print(json.dumps({'meta': meta, 'findings': findings, 'warnings': []}, indent=2))
+
+
 def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
     """Route to a sub-function nav handler based on the active flag.
 
@@ -159,6 +170,7 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
     from .treesitter import ELEMENT_TYPE_MAP  # noqa: I006
 
     get_text = analyzer._get_node_text
+    as_json = output_format == 'json'
 
     # ---- --scope: ancestor chain for :LINE --------------------------------
     if getattr(args, 'scope', False):
@@ -172,9 +184,12 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
             sys.exit(1)
         line_no = syntax['start_line']
         chain = scope_chain(analyzer.tree.root_node, line_no, get_text)
-        content_lines = analyzer.content.splitlines()
-        line_text = content_lines[line_no - 1].strip() if 0 < line_no <= len(content_lines) else ''
-        print(render_scope_chain(line_no, chain, line_text))
+        if as_json:
+            _nav_json('scope', analyzer.path, element, line_no, line_no, chain)
+        else:
+            content_lines = analyzer.content.splitlines()
+            line_text = content_lines[line_no - 1].strip() if 0 < line_no <= len(content_lines) else ''
+            print(render_scope_chain(line_no, chain, line_text))
         return
 
     # ---- --around: verbatim lines centered on a target --------------------
@@ -193,9 +208,17 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         total = len(content_lines)
         start = max(1, line_no - n)
         end = min(total, line_no + n)
-        for i in range(start - 1, end):
-            prefix = '▶' if (i + 1) == line_no else ' '
-            print(f'{prefix}{i + 1:5}  {content_lines[i]}')
+        if as_json:
+            findings = [
+                {'line': i + 1, 'text': content_lines[i], 'is_target': (i + 1) == line_no}
+                for i in range(start - 1, end)
+            ]
+            _nav_json('around', analyzer.path, element, start, end, findings,
+                      extra_meta={'target_line': line_no, 'context': n})
+        else:
+            for i in range(start - 1, end):
+                prefix = '▶' if (i + 1) == line_no else ' '
+                print(f'{prefix}{i + 1:5}  {content_lines[i]}')
         return
 
     # ---- Find the function/scope node (needed for all remaining flags) -----
@@ -238,7 +261,10 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         range_arg = getattr(args, 'range', None)
         if range_arg:
             items = [i for i in items if from_line <= i['line_start'] <= to_line]
-        print(render_outline(element, func_start, func_end, items, depth=depth))
+        if as_json:
+            _nav_json('outline', analyzer.path, element, from_line, to_line, items)
+        else:
+            print(render_outline(element, func_start, func_end, items, depth=depth))
         return
 
     # ---- --varflow: variable read/write trace ------------------------------
@@ -246,8 +272,13 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         var_name = args.varflow
         from_line, to_line = _resolve_range(args, func_start, func_end)
         events = var_flow(func_node, var_name, from_line, to_line, get_text)
-        content_lines = analyzer.content.splitlines()
-        print(render_var_flow(var_name, events, content_lines))
+        if as_json:
+            findings = [{'kind': e['kind'], 'line': e['line']} for e in events]
+            _nav_json('varflow', analyzer.path, element, from_line, to_line, findings,
+                      extra_meta={'var': var_name})
+        else:
+            content_lines = analyzer.content.splitlines()
+            print(render_var_flow(var_name, events, content_lines))
         return
 
     # ---- --calls: call sites in a line range -------------------------------
@@ -256,61 +287,113 @@ def _dispatch_nav(analyzer, element: str, output_format: str, args) -> None:
         # None (flag absent).  _parse_line_range handles 'FULL' via its fallback.
         from_line, to_line = _parse_line_range(args.calls, func_start, func_end)
         calls = range_calls(func_node, from_line, to_line, get_text)
-        print(render_range_calls(calls, from_line, to_line))
+        if as_json:
+            _nav_json('calls', analyzer.path, element, from_line, to_line, calls)
+        else:
+            print(render_range_calls(calls, from_line, to_line))
         return
 
     # ---- --ifmap / --catchmap: branching skeleton -------------------------
     if getattr(args, 'ifmap', False) or getattr(args, 'catchmap', False):
-        keywords = _IF_KEYWORDS if getattr(args, 'ifmap', False) else _CATCH_KEYWORDS
+        flag = 'ifmap' if getattr(args, 'ifmap', False) else 'catchmap'
+        keywords = _IF_KEYWORDS if flag == 'ifmap' else _CATCH_KEYWORDS
         from_line, to_line = _resolve_range(args, func_start, func_end)
         items = element_outline(func_node, get_text, max_depth=depth)
         filtered = [
             i for i in items
             if i['keyword'] in keywords and from_line <= i['line_start'] <= to_line
         ]
-        print(render_branchmap(filtered, from_line, to_line))
+        if as_json:
+            _nav_json(flag, analyzer.path, element, from_line, to_line, filtered)
+        else:
+            print(render_branchmap(filtered, from_line, to_line))
         return
 
     # ---- --exits / --flowto: exit-node collector --------------------------
     if getattr(args, 'exits', False) or getattr(args, 'flowto', False):
+        is_flowto = getattr(args, 'flowto', False)
         from_line, to_line = _resolve_range(args, func_start, func_end)
         exits = collect_exits(func_node, from_line, to_line, get_text)
-        print(render_exits(exits, from_line, to_line, verdict=getattr(args, 'flowto', False)))
+        if as_json:
+            _nav_json('flowto' if is_flowto else 'exits',
+                      analyzer.path, element, from_line, to_line, exits)
+        else:
+            print(render_exits(exits, from_line, to_line, verdict=is_flowto))
         return
 
     # ---- --deps: variables flowing into a range ----------------------------
     if getattr(args, 'deps', False):
         from_line, to_line = _resolve_range(args, func_start, func_end)
         deps = collect_deps(func_node, from_line, to_line, get_text)
-        print(render_deps(deps, from_line, to_line))
+        if as_json:
+            findings = [
+                {'kind': 'dep', 'var': d['var'], 'line': d['first_read_line'],
+                 'first_write_line': d['first_write_line']}
+                for d in deps
+            ]
+            _nav_json('deps', analyzer.path, element, from_line, to_line, findings)
+        else:
+            print(render_deps(deps, from_line, to_line))
         return
 
     # ---- --mutations: variables written in range and read after ------------
     if getattr(args, 'mutations', False):
         from_line, to_line = _resolve_range(args, func_start, func_end)
         mutations = collect_mutations(func_node, from_line, to_line, get_text)
-        print(render_mutations(mutations, from_line, to_line))
+        if as_json:
+            findings = [
+                {'kind': 'mutation', 'var': m['var'], 'line': m['last_write_line'],
+                 'next_read_line': m['next_read_line']}
+                for m in mutations
+            ]
+            _nav_json('mutations', analyzer.path, element, from_line, to_line, findings)
+        else:
+            print(render_mutations(mutations, from_line, to_line))
         return
 
     # ---- --sideeffects: side-effect taxonomy classifier --------------------
     if getattr(args, 'sideeffects', False):
         from_line, to_line = _resolve_range(args, func_start, func_end)
         effects = collect_effects(func_node, from_line, to_line, get_text)
-        print(render_effects(effects, from_line, to_line))
+        if as_json:
+            findings = [
+                {'kind': e['kind'], 'line': e['line'], 'callee': e['callee'],
+                 'first_arg': e.get('first_arg'), 'has_more_args': e.get('has_more_args', False)}
+                for e in effects if e['kind'] is not None
+            ]
+            _nav_json('sideeffects', analyzer.path, element, from_line, to_line, findings)
+        else:
+            print(render_effects(effects, from_line, to_line))
         return
 
     # ---- --returns: exit paths with gate chains ----------------------------
     if getattr(args, 'returns', False):
         from_line, to_line = _resolve_range(args, func_start, func_end)
         chains = collect_gate_chains(func_node, from_line, to_line, get_text)
-        print(render_gate_chains(chains, from_line, to_line))
+        if as_json:
+            _nav_json('returns', analyzer.path, element, from_line, to_line, chains)
+        else:
+            print(render_gate_chains(chains, from_line, to_line))
         return
 
     # ---- --boundary: INPUTS / ENVIRONMENT / EFFECTS contract ---------------
     if getattr(args, 'boundary', False):
         from_line, to_line = _resolve_range(args, func_start, func_end)
         boundary = collect_boundary(func_node, from_line, to_line, get_text)
-        print(render_boundary(boundary, from_line, to_line))
+        if as_json:
+            findings = (
+                [{'kind': 'input', 'var': d['var'], 'line': d['first_read_line'],
+                  'first_write_line': d['first_write_line']}
+                 for d in boundary['inputs']]
+                + [{'kind': 'superglobal', 'var': d['var'], 'line': d['first_read_line']}
+                   for d in boundary['superglobals']]
+                + [{'kind': e['kind'], 'line': e['line'], 'callee': e['callee'],
+                    'first_arg': e.get('first_arg')}
+                   for e in boundary['effects'] if e['kind'] is not None]
+            )
+            _nav_json('boundary', analyzer.path, element, from_line, to_line, findings)
+        else:
+            print(render_boundary(boundary, from_line, to_line))
         return
 
 
