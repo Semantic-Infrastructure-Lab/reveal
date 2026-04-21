@@ -110,11 +110,11 @@ Core reference and technical specifications:
 
 ## Subcommand Guides (1 file)
 
-Reference guides for all reveal subcommands (`check`, `deps`, `dev`, `health`, `hotspots`, `overview`, `pack`, `review`, `scaffold`):
+Reference guides for all reveal subcommands (`architecture`, `check`, `deps`, `dev`, `health`, `hotspots`, `overview`, `pack`, `review`, `scaffold`):
 
 | File | Lines | Description |
 |------|-------|-------------|
-| [SUBCOMMANDS_GUIDE.md](guides/SUBCOMMANDS_GUIDE.md) | — | All subcommand reference: `check`, `deps`, `dev`, `health`, `hotspots`, `overview`, `pack`, `review`, `scaffold` |
+| [SUBCOMMANDS_GUIDE.md](guides/SUBCOMMANDS_GUIDE.md) | — | All subcommand reference: `architecture`, `check`, `deps`, `dev`, `health`, `hotspots`, `overview`, `pack`, `review`, `scaffold` |
 
 ---
 

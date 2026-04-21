@@ -356,6 +356,57 @@ reveal overview . --format json      # Machine-readable output
 
 ---
 
+## reveal architecture — Architectural Brief
+
+Targeted architectural briefing for a directory. Answers "what do I need to
+know before editing this code?" Composes entry points, core abstractions,
+component cohesion, circular dependency groups, and derived risks into one
+output. Designed for agent consumption and subdirectory targeting.
+
+### Usage
+
+```
+reveal architecture [PATH] [--top N] [--no-imports] [--format json]
+```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--top N` | Items to show per section (default: 5) |
+| `--no-imports` | Skip import graph analysis |
+| `--format json` | Machine-readable output: `{path, facts, risks[], next_commands[]}` |
+
+### Output Sections
+
+- **Entry Points** — files with fan-in=0, sorted by fan-out (active callers of other code)
+- **Core Abstractions** — files most imported by others (high fan-in)
+- **Components** — directory cohesion bars
+- **Risks** — derived from findings: circular groups, high-complexity entry points, load-bearing files
+- **Next Commands** — specific `reveal` follow-up commands generated from what was found
+
+### Examples
+
+```bash
+reveal architecture src/            # Brief for a specific directory
+reveal architecture .               # Whole project
+reveal architecture src/ --format json  # Machine-readable for agents
+reveal architecture src/ --no-imports   # Skip import analysis (faster)
+```
+
+### Notes
+
+Static imports only — dynamically loaded files (plugins, registries) may appear
+as entry points. High entry point counts often indicate dynamic loading patterns.
+
+### See Also
+
+- `reveal overview` — Full codebase health dashboard (stats, quality, git)
+- `reveal deps` — Dependency health: circular, unused, external packages
+- `reveal architecture --help` — Full flag reference
+
+---
+
 ## reveal deps — Dependency Health Dashboard
 
 Wraps `imports://` to give a one-pass dependency health summary: external

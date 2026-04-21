@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.81.0
+**Version:** 0.83.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -1063,6 +1063,22 @@ reveal overview . --format json    # Machine-readable output
 **Output sections:** codebase stats (files, lines, functions, classes) · language breakdown · quality pulse (avg score, hotspot count) · top hotspots with `→ reveal <file>` hints · top complex functions · recent git commits with age labels.
 
 **Use case:** Fast orientation for an unfamiliar codebase. Combined entry point before deciding which area to investigate with `reveal hotspots`, `reveal deps`, or `ast://`.
+
+---
+
+### Task: "Get an architectural brief before editing a module"
+
+**Pattern:**
+```bash
+reveal architecture src/           # Entry points, core abstractions, risks, next commands
+reveal architecture src/auth/      # Target a specific subdirectory
+reveal architecture . --format json  # Machine-readable: {facts, risks[], next_commands[]}
+reveal architecture src/ --no-imports  # Skip import analysis (faster, no graph)
+```
+
+**Output sections:** entry points (fan-in=0, by fan-out) · core abstractions (most imported) · component cohesion bars · risks (circular groups, high-complexity entry points, load-bearing files) · next commands (dynamically generated from findings).
+
+**Use case:** Pre-edit orientation for a specific module. More targeted than `reveal overview` — works on subdirectories and produces a risks + next_commands structure agents can act on directly. `next_commands` tells the agent exactly what to look at next without further reasoning.
 
 ---
 
