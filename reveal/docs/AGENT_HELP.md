@@ -1001,7 +1001,10 @@ reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
 ```
 
 **Key use cases:**
-- **Architectural orientation** — `imports://src?rank=fan-in` ranks every file by how many other files import it. High fan-in = core abstractions; fan-in=0 = entry points or dead code. No docs needed — pure structural signal.
+- **Architectural orientation** — three complementary views from the import graph:
+  - `imports://src?rank=fan-in` — ranks every file by importer count. High fan-in = core abstractions (change carefully); zero = entry points or dead code.
+  - `imports://src?entrypoints` — lists only the fan-in=0 files, sorted by fan-out. High fan-out = real CLI/runner; zero = likely dead code.
+  - `imports://src?components` — scores each directory as a component: cohesion (how self-contained), coupling (incoming/outgoing), top bridge file. Low cohesion = not a real component.
 - **Impact analysis before refactoring** — before changing `utils.py`, run `depends://src/utils.py` to see every direct importer
 - **Safe deletion** — verify `count: 0` (via `depends://`) before removing a module
 
@@ -1010,11 +1013,15 @@ reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
 | Tool | Question | Granularity |
 |------|----------|-------------|
 | `imports://src?rank=fan-in` | Which files are most central? | Codebase ranking |
+| `imports://src?entrypoints` | Where does execution start? | Fan-in=0 subset |
+| `imports://src?components` | Which directories are real components? | Per-directory |
 | `depends://src/module.py` | What exactly imports this file? | Per-file reverse |
 | `imports://src` | What does each file import? | Forward, all files |
 | `calls://src/?target=fn` | Who calls this function? | Function level |
 
-Use `rank=fan-in` for orientation; `depends://` for targeted impact analysis before a specific change.
+Use the three `imports://` views for orientation; `depends://` for targeted impact analysis before a specific change.
+
+**Scan root tip**: scan from the project root (not a subdirectory) when imports use absolute package paths (e.g. `from myapp.utils import x`). Scanning too deep causes the resolver to miss edges, producing false fan-in=0 entries.
 
 **Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked (same as `imports://`). Results are conservative — false negatives possible, never false positives.
 

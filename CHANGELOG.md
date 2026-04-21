@@ -12,9 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.81.0] - 2026-04-19 (sessions majevebo-0417, approaching-void-0419, pazevaxe-0419)
+## [0.81.0] - 2026-04-19 (sessions majevebo-0417, approaching-void-0419, pazevaxe-0419, interstellar-void-0421, ethereal-zenith-0421)
 
 ### Added
+- **`imports://src?components`** — component cohesion and coupling scores. Groups scanned files by immediate parent directory, scores each as a component: cohesion (internal/outgoing imports), coupling (incoming edges), top bridge file. High cohesion = well-encapsulated; low = files import heavily outside. Sorted cohesion-descending so real components surface first. 9 tests. (BACK-210)
+- **`imports://src?entrypoints`** — lists files with fan-in=0, sorted by fan-out descending. High fan-out = real entry point (CLI, runner); low/zero = likely dead code or test scaffold. 8 tests. (BACK-207)
+- **`imports://src?rank=fan-in`** — ranks every file by how many files import it. High fan-in = core abstractions; zero = entry points or dead code. `?top=N` to limit. 7 tests. (BACK-206)
+- **Static analysis scope documented** — all import query modes cover static imports only. Dynamic dispatch (Python `importlib.import_module`, JS `require()`, Java `Class.forName`, Ruby `autoload`, plugin registries) is invisible to the graph. Documented in `_build_graph` docstring, both new renderers, `imports.yaml` notes, and `IMPORTS_ADAPTER_GUIDE.md` Limitations §2.
 - **`--boundary` composite nav flag** — `collect_boundary()` composes `collect_deps` + `collect_effects`, splits PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, `$_SERVER`, `$_FILES`, `$_COOKIE`, `$_ENV`, `$GLOBALS`, `$_REQUEST`) into a separate ENVIRONMENT section. Emits three sections: INPUTS / ENVIRONMENT / EFFECTS. ENVIRONMENT omitted when empty. 21 new tests. (BACK-201)
 - **`reveal_nav` MCP tool** — single MCP tool routing all nav flags (`--outline`, `--around`, `--scope`, `--ifmap`, `--catchmap`, `--exits`, `--flowto`, `--varflow`, `--deps`, `--mutations`, `--sideeffects`, `--returns`, `--boundary`) to agents. Boolean flags via `flag` string param; value-taking flags via `flag_value`. `_NAV_BOOLEAN_FLAGS` frozenset is the extension point — future boolean nav flags require zero MCP changes. 9 new tests. (BACK-204)
 - **`--format json` for all nav flags** — `_nav_json()` helper in `file_handler.py` emits `{meta, findings, warnings}` envelope. All 12 nav dispatch blocks branch on `output_format == 'json'`. Consistent findings shapes across all flags; `varflow` event `node` field stripped (raw AST Node, not serializable). 13 new tests. (BACK-202)

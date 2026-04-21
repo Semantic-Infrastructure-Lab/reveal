@@ -623,6 +623,8 @@ Use `?flag` syntax for operations:
 | `violations` | Check layer violations | `imports://src?violations` |
 | `rank=fan-in` | Rank all files by fan-in (importer count) | `imports://src?rank=fan-in` |
 | `top=N` | Limit results for `?rank` (default: all) | `imports://src?rank=fan-in&top=20` |
+| `entrypoints` | Files with fan-in=0 — entry points, scripts, or dead code; sorted by fan-out | `imports://src?entrypoints` |
+| `components` | Per-directory cohesion + coupling scores; top bridge file | `imports://src?components` |
 
 **Note**: `unused`, `circular`, and `violations` are flags (no `=value` needed). `rank` and `top` take values.
 
@@ -796,6 +798,81 @@ reveal 'imports://src?unused' --format=grep | grep "api/"
 - `total` — total files in the ranked list (before any `?top=N` limit)
 - `entries[].fan_in` — number of files that import this file (higher = more central)
 - `entries[].fan_out` — number of files this file imports
+
+---
+
+### 6. entrypoints
+
+**Use case**: Find where execution starts — CLIs, runners, scripts — and surface potential dead code
+
+**Schema**:
+```json
+{
+  "contract_version": "1.0",
+  "type": "entrypoints",
+  "source": "/home/user/projects/myproject/src",
+  "source_type": "directory",
+  "total_scanned": 45,
+  "entries": [
+    { "file": "/home/user/projects/myproject/src/main.py", "fan_out": 8 },
+    { "file": "/home/user/projects/myproject/src/cli.py", "fan_out": 3 },
+    { "file": "/home/user/projects/myproject/src/legacy_util.py", "fan_out": 0 }
+  ]
+}
+```
+
+**Fields**:
+- `total_scanned` — total files analyzed (entrypoints are a subset)
+- `entries[].fan_out` — how many files this entry point imports (high = real entry point; zero = likely dead code or test scaffold)
+
+**Note**: Files loaded via dynamic dispatch (plugin registries, `importlib`, etc.) appear here as false positives — they have fan-in=0 statically but are actively loaded at runtime.
+
+---
+
+### 7. components
+
+**Use case**: Validate directory-as-component hypothesis — score how self-contained each directory is
+
+**Schema**:
+```json
+{
+  "contract_version": "1.0",
+  "type": "components",
+  "source": "/home/user/projects/myproject/src",
+  "source_type": "directory",
+  "total": 8,
+  "components": [
+    {
+      "component": "/home/user/projects/myproject/src/utils",
+      "files": 4,
+      "internal": 6,
+      "outgoing": 0,
+      "incoming": 22,
+      "cohesion": 1.0,
+      "top_bridge": null
+    },
+    {
+      "component": "/home/user/projects/myproject/src/api",
+      "files": 12,
+      "internal": 8,
+      "outgoing": 14,
+      "incoming": 3,
+      "cohesion": 0.364,
+      "top_bridge": "/home/user/projects/myproject/src/api/router.py"
+    }
+  ]
+}
+```
+
+**Fields**:
+- `total` — number of directories analyzed
+- `components[].internal` — import edges where both source and target are in this directory
+- `components[].outgoing` — import edges leaving this directory
+- `components[].incoming` — import edges arriving from outside this directory
+- `components[].cohesion` — `internal / (internal + outgoing)`; 1.0 = fully self-contained; 0.0 = all imports cross boundaries
+- `components[].top_bridge` — file in this directory with the most outgoing cross-boundary edges (null if none)
+
+**Scan root matters**: `imports://src?components` only groups files directly under the scan path. If your imports use absolute package paths (e.g. `from myapp.src.utils import x`), scan from the project root, not a subdirectory — otherwise the resolver can't match the import strings to files and edges are missed.
 
 ---
 
