@@ -256,6 +256,15 @@ class TestBuildNextCommands(unittest.TestCase):
         cmds = _build_next_commands(Path('/p'), risks, {})
         self.assertTrue(any('imports://' in c for c in cmds))
 
+    def test_next_commands_use_relative_paths(self):
+        risks = [
+            {'type': 'circular', 'severity': 'high', 'representative': '/p/a.py'},
+            {'type': 'high_complexity_entry', 'file': '/p/main.py', 'complexity': 45, 'fan_out': 8},
+        ]
+        cmds = _build_next_commands(Path('/p'), risks, {})
+        for cmd in cmds:
+            self.assertNotIn('/home/', cmd, f"absolute path found in: {cmd}")
+
     def test_cx_entry_surfaces_boundary(self):
         risks = [
             {'type': 'high_complexity_entry', 'severity': 'medium',
@@ -466,6 +475,19 @@ class TestRunArchitecture(unittest.TestCase):
         self.assertIn('Components', out)
         self.assertIn('Risks', out)
         self.assertIn('Next Commands', out)
+
+    def test_dynamic_imports_note_shown(self):
+        args = _args(path='/tmp')
+        with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=[]):
+            with patch('reveal.cli.commands.architecture._run_imports_analysis', return_value=_IMPORTS_DATA):
+                out = _capture(run_architecture, args)
+        self.assertIn('static imports only', out)
+
+    def test_dynamic_imports_note_hidden_when_no_imports(self):
+        args = _args(path='/tmp', no_imports=True)
+        with patch('reveal.cli.commands.architecture._run_complex_functions', return_value=[]):
+            out = _capture(run_architecture, args)
+        self.assertNotIn('static imports only', out)
 
 
 # ── _run_complex_functions ─────────────────────────────────────────────────────

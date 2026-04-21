@@ -6,6 +6,7 @@ Composes imports graph, complexity data, and cycle analysis into facts + risks +
 import argparse
 import json
 import logging
+import os
 import sys
 from argparse import Namespace
 from pathlib import Path
@@ -87,7 +88,7 @@ def run_architecture(args: Namespace) -> None:
         print(json.dumps(report, indent=2, default=str))
         return
 
-    _render_brief(report, top, path)
+    _render_brief(report, top, path, no_imports=no_imports)
 
 
 def _run_complex_functions(path: Path, limit: int) -> List[Dict[str, Any]]:
@@ -195,32 +196,32 @@ def _build_next_commands(
     imports_data: Dict[str, Any],
 ) -> List[str]:
     cmds: List[str] = []
-    path_str = str(path)
+    rel = os.path.relpath(path, Path.cwd())
 
     if any(r['type'] == 'circular' for r in risks):
-        cmds.append(f"reveal 'imports://{path_str}?circular'")
+        cmds.append(f"reveal 'imports://{rel}?circular'")
 
     cx_entries = [r for r in risks if r['type'] == 'high_complexity_entry']
     if cx_entries:
         worst = max(cx_entries, key=lambda r: r.get('complexity', 0))
-        cmds.append(f"reveal {worst['file']} --boundary")
+        cmds.append(f"reveal {os.path.relpath(worst['file'], Path.cwd())} --boundary")
 
     if imports_data.get('core_abstractions'):
-        cmds.append(f"reveal 'ast://{path_str}?complexity>20'")
+        cmds.append(f"reveal 'ast://{rel}?complexity>20'")
 
     lb = [r for r in risks if r['type'] == 'load_bearing']
     if lb:
         top_lb = max(lb, key=lambda r: r.get('fan_in', 0))
-        cmds.append(f"reveal {top_lb['file']}")
+        cmds.append(f"reveal {os.path.relpath(top_lb['file'], Path.cwd())}")
 
     if not cmds:
-        cmds.append(f"reveal overview {path_str}")
-        cmds.append(f"reveal {path_str}")
+        cmds.append(f"reveal overview {rel}")
+        cmds.append(f"reveal {rel}")
 
     return cmds
 
 
-def _render_brief(report: Dict[str, Any], top: int, base_path: Path) -> None:
+def _render_brief(report: Dict[str, Any], top: int, base_path: Path, no_imports: bool = False) -> None:
     path = report['path']
     facts = report['facts']
 
@@ -231,6 +232,9 @@ def _render_brief(report: Dict[str, Any], top: int, base_path: Path) -> None:
     _render_components(facts.get('components', []), top, base_path)
     _render_risks(report.get('risks', []))
     _render_next_commands(report.get('next_commands', []))
+
+    if not no_imports:
+        print("\nNote: static imports only — dynamically loaded files (plugins, registries) may appear as entry points.")
 
 
 def _render_entry_points(entry_points: List[Dict], top: int, base_path: Path) -> None:
