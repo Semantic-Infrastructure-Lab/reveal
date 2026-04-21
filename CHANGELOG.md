@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.82.0] - 2026-04-21 (session oceanic-dragon-0421)
+
+### Added
+- **`reveal overview` — Architecture section** — new section after Complex Functions. Entry points (fan-in=0, active, non-test, by fan-out), core abstractions (top-5 fan-in), component cohesion per directory (cohesion bar █░), circular import count, complexity centroid (avg top-10 complex functions). Builds graph once via `ImportsAdapter._build_graph` + 4 `_format_*` calls. `--no-imports` flag skips section. 24 new tests. (BACK-209)
+
+---
+
 ## [0.81.0] - 2026-04-19 (sessions majevebo-0417, approaching-void-0419, pazevaxe-0419, interstellar-void-0421, ethereal-zenith-0421)
 
 ### Added
