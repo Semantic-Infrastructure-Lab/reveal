@@ -100,6 +100,55 @@ class ImportGraph:
 
         return cycles
 
+    def find_cycle_groups(self) -> List[List[Path]]:
+        """Find circular dependency groups using Tarjan's SCC algorithm.
+
+        Returns one entry per strongly-connected component with >1 member,
+        sorted for determinism. This gives the correct count of distinct cycle
+        groups: N analyzers all cycling through a shared registry appear as one
+        group, not N separate cycles as find_cycles() would report.
+
+        Use this for counting and reporting cycle groups.
+        Use find_cycles() when you need per-path cycles for file-level rule checks.
+        """
+        index_counter = [0]
+        stack: List[Path] = []
+        lowlink: Dict[Path, int] = {}
+        index: Dict[Path, int] = {}
+        on_stack: Set[Path] = set()
+        sccs: List[List[Path]] = []
+
+        def strongconnect(v: Path) -> None:
+            index[v] = index_counter[0]
+            lowlink[v] = index_counter[0]
+            index_counter[0] += 1
+            stack.append(v)
+            on_stack.add(v)
+
+            for w in self.dependencies.get(v, set()):
+                if w not in index:
+                    strongconnect(w)
+                    lowlink[v] = min(lowlink[v], lowlink[w])
+                elif w in on_stack:
+                    lowlink[v] = min(lowlink[v], index[w])
+
+            if lowlink[v] == index[v]:
+                scc: List[Path] = []
+                while True:
+                    w = stack.pop()
+                    on_stack.remove(w)
+                    scc.append(w)
+                    if w == v:
+                        break
+                if len(scc) > 1:
+                    sccs.append(sorted(scc))
+
+        for v in self.files:
+            if v not in index:
+                strongconnect(v)
+
+        return sccs
+
     def find_unused_imports(self, symbols_by_file: Dict[Path, Set[str]]) -> List[ImportStatement]:
         """Find imports that are never used in the code.
 

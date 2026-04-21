@@ -355,7 +355,9 @@ def _render_architecture(
 
     live_eps = [
         e for e in entrypoints
-        if e.get('fan_out', 0) > 0 and not _is_test_file(e['file'])
+        if e.get('fan_out', 0) > 0
+        and not _is_test_file(e['file'])
+        and Path(e['file']).name != '__init__.py'
     ]
     if live_eps:
         print(f"  Entry points  ({len(entrypoints)} fan-in=0, {len(live_eps)} active)")

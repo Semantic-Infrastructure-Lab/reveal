@@ -327,24 +327,29 @@ class ImportsRenderer:
 
     @staticmethod
     def _render_circular_dependencies(result: dict, verbose: bool) -> None:
-        """Render circular dependency results."""
+        """Render circular dependency groups (one entry per SCC)."""
         count = result['count']
         print(f"\n{'='*60}")
-        print(f"Circular Dependencies: {count}")
+        print(f"Circular Dependencies: {count} cycle group{'s' if count != 1 else ''}")
         print(f"{'='*60}\n")
 
         if count == 0:
             print("  ✅ No circular dependencies found!\n")
         else:
-            if verbose:
-                for i, cycle in enumerate(result['cycles'], 1):
-                    print(f"  {i}. {' -> '.join(cycle)}")
-            else:
-                for i, cycle in enumerate(result['cycles'][:5], 1):
-                    print(f"  {i}. {' -> '.join(cycle)}")
-                if count > 5:
-                    print(f"\n  ... and {count - 5} more circular dependencies")
-                    print(f"  Run with --verbose to see all {count} cycles\n")
+            groups = result['cycles']
+            shown = groups if verbose else groups[:5]
+            for i, group in enumerate(shown, 1):
+                n = len(group)
+                # Use parent/name to disambiguate multiple __init__.py files
+                labels = ['/'.join(Path(p).parts[-2:]) if Path(p).name == '__init__.py' else Path(p).name for p in group]
+                if verbose or n <= 4:
+                    label = ', '.join(labels)
+                else:
+                    label = ', '.join(labels[:3]) + f'  [+{n - 3} more files]'
+                print(f"  {i}. {n} file{'s' if n != 1 else ''}  {label}")
+            if not verbose and count > 5:
+                print(f"\n  ... and {count - 5} more groups")
+                print(f"  Run with --verbose to see all {count} groups\n")
 
     @staticmethod
     def _render_layer_violations(result: dict, verbose: bool) -> None:
@@ -668,7 +673,7 @@ class ImportsAdapter(ResourceAdapter):
         return {
             'total_imports': self._graph.get_import_count(),
             'total_files': self._graph.get_file_count(),
-            'has_cycles': len(self._graph.find_cycles()) > 0,
+            'has_cycles': len(self._graph.find_cycle_groups()) > 0,
             'analyzer': 'imports'
         }
 
@@ -937,16 +942,16 @@ class ImportsAdapter(ResourceAdapter):
         )
 
     def _format_circular(self) -> Dict[str, Any]:
-        """Format circular dependencies."""
+        """Format circular dependency groups (one entry per SCC, not per simple path)."""
         if not self._graph:
             return {'cycles': []}
 
-        cycles = self._graph.find_cycles()
+        groups = self._graph.find_cycle_groups()
 
         return self._build_response(
             'circular_dependencies',
-            cycles=[[str(path) for path in cycle] for cycle in cycles],
-            count=len(cycles)
+            cycles=[[str(p) for p in group] for group in groups],
+            count=len(groups)
         )
 
     def _format_violations(self) -> Dict[str, Any]:

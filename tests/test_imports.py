@@ -111,6 +111,61 @@ class TestImportGraph:
         assert len(cycles) > 0
         # Should find the cycle (order may vary)
 
+    def test_find_cycle_groups_simple(self):
+        graph = ImportGraph()
+        a, b = Path('a.py'), Path('b.py')
+        graph.files[a] = []
+        graph.files[b] = []
+        graph.add_dependency(a, b)
+        graph.add_dependency(b, a)
+        groups = graph.find_cycle_groups()
+        assert len(groups) == 1
+        assert set(groups[0]) == {a, b}
+
+    def test_find_cycle_groups_empty(self):
+        graph = ImportGraph()
+        assert graph.find_cycle_groups() == []
+
+    def test_find_cycle_groups_no_cycle(self):
+        graph = ImportGraph()
+        a, b = Path('a.py'), Path('b.py')
+        graph.files[a] = []
+        graph.files[b] = []
+        graph.add_dependency(a, b)
+        assert graph.find_cycle_groups() == []
+
+    def test_find_cycle_groups_collapses_shared_hub(self):
+        # registry -> hub -> [c1, c2, c3] -> registry
+        # All 5 files are in the same SCC → 1 group
+        graph = ImportGraph()
+        registry, hub = Path('registry.py'), Path('hub.py')
+        c1, c2, c3 = Path('c1.py'), Path('c2.py'), Path('c3.py')
+        for f in [registry, hub, c1, c2, c3]:
+            graph.files[f] = []
+        graph.add_dependency(registry, hub)
+        graph.add_dependency(hub, c1)
+        graph.add_dependency(hub, c2)
+        graph.add_dependency(hub, c3)
+        graph.add_dependency(c1, registry)
+        graph.add_dependency(c2, registry)
+        graph.add_dependency(c3, registry)
+        groups = graph.find_cycle_groups()
+        assert len(groups) == 1
+        assert set(groups[0]) == {registry, hub, c1, c2, c3}
+
+    def test_find_cycle_groups_two_independent_cycles(self):
+        # A→B→A and C→D→C are independent SCCs → 2 groups
+        graph = ImportGraph()
+        a, b, c, d = Path('a.py'), Path('b.py'), Path('c.py'), Path('d.py')
+        for f in [a, b, c, d]:
+            graph.files[f] = []
+        graph.add_dependency(a, b)
+        graph.add_dependency(b, a)
+        graph.add_dependency(c, d)
+        graph.add_dependency(d, c)
+        groups = graph.find_cycle_groups()
+        assert len(groups) == 2
+
     def test_find_unused_imports(self):
         """Test detecting unused imports."""
         imports = [
