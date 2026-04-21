@@ -400,6 +400,9 @@ class ImportsRenderer:
                     pass
             print(f"  {fpath:<{col_w}}  {e['fan_in']:>7}  {e['fan_out']:>8}")
         print()
+        print("  Note: static imports only — files loaded via dynamic dispatch")
+        print("  (importlib, require(), Class.forName, autoload, etc.) show lower fan-in than actual.")
+        print()
 
     @staticmethod
     def _render_entrypoints(result: dict, resource: str) -> None:
@@ -430,6 +433,9 @@ class ImportsRenderer:
                 except ValueError:
                     pass
             print(f"  {fpath:<{col_w}}  {e['fan_out']:>8}")
+        print()
+        print("  Note: static imports only — files loaded via dynamic dispatch")
+        print("  (importlib, require(), Class.forName, autoload, etc.) are false positives here.")
         print()
 
     @staticmethod
@@ -634,6 +640,11 @@ class ImportsAdapter(ResourceAdapter):
 
         Uses plugin-based architecture to automatically detect and use
         appropriate extractor for each file type.
+
+        Only static imports are captured. Dynamic dispatch — Python's
+        importlib.import_module, JS require(), Java Class.forName, Ruby autoload,
+        and similar patterns — is invisible to this graph. All query modes
+        (fan-in, entrypoints, unused, circular, violations) share this limitation.
 
         Args:
             target_path: Directory or file to analyze

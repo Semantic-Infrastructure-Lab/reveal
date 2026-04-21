@@ -1467,10 +1467,14 @@ reveal 'imports://src?violations'
    - ⚠️ Partial: Dynamic imports (`__import__`, `require()`)
    - ❌ Not supported: Custom import mechanisms
 
-2. **Dynamic imports**
-   - Cannot detect usage in dynamically loaded modules
-   - String-based imports are not tracked
-   - Reflection-based imports are not detected
+2. **Dynamic dispatch (all languages)**
+   - All query modes analyse static imports only — the graph is built from `import`/`require`/`use` declarations in source
+   - Dynamic loading is invisible regardless of language: Python `importlib.import_module`, JS/TS `require()`/`import()`, Java `Class.forName`, Ruby `autoload`, plugin registries, CLI subcommand dispatch tables, etc.
+   - **Effect on fan-in**: dynamically-loaded files show lower fan-in than their true importer count
+   - **Effect on entrypoints**: dynamically-loaded files appear as false-positive entry points (fan-in=0)
+   - **Effect on unused**: dynamically-imported symbols may be flagged as unused
+   - **Effect on circular**: cycles that pass through a dynamic call are not detected
+   - This is a fundamental property of static analysis, not a Reveal limitation specifically
 
 3. **Type-only imports**
    - `TYPE_CHECKING` imports are not counted as cycles
@@ -1642,20 +1646,21 @@ reveal 'imports://frontend/src?unused'
 reveal 'imports://services/cmd?unused'
 ```
 
-### Q: What about dynamic imports?
+### Q: What about dynamic imports / lazy loading?
 
-**A**: Dynamic imports are not tracked:
+**A**: All query modes cover static imports only. Dynamic dispatch is not tracked in any language:
 
-```python
-# Not detected
-module_name = "os"
-__import__(module_name)
+| Language | Not tracked |
+|----------|-------------|
+| Python | `importlib.import_module(x)`, `__import__(x)` |
+| JavaScript/TypeScript | `require(variable)`, `import(variable)` |
+| Java | `Class.forName(name)` |
+| Ruby | `autoload`, `require variable` |
+| Any | Plugin registries, CLI dispatch tables, framework loaders |
 
-# Detected
-import os
-```
+The practical effect: files loaded this way appear with lower fan-in than their true importer count, and show up as false positives in `?entrypoints`. This is a fundamental property of static analysis — every import analysis tool shares this limitation.
 
-Use static imports when possible for better tooling support.
+If you know a file is dynamically loaded (not dead code), the output note flags it: `static imports only — files loaded via dynamic dispatch are false positives here.`
 
 ### Q: How often should I check import health?
 

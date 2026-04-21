@@ -133,7 +133,7 @@ notes:
   - 'Unused import detection requires parsing file content to check references'
   - 'Circular dependency detection builds full import graph'
   - 'Layer violations require .reveal.yaml configuration file'
-  - 'Fan-in ranking covers static imports only — decorator-based registration and importlib dynamic imports are not captured'
+  - 'Static imports only — dynamic dispatch (importlib.import_module, JS require(), Java Class.forName, Ruby autoload, plugin registries, etc.) is not captured by any query mode; affected files show lower fan-in than actual and may appear as false-positive entrypoints'
   - 'Supported languages: Python, JavaScript, TypeScript, Go, Rust, Java, C++, and more'
   - 'Use --verbose for detailed import chains and file paths'
 
