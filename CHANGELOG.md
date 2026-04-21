@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.83.0] - 2026-04-21 (session expanding-moon-0421)
+
+### Added
+- **`reveal architecture <path>`** — new subcommand for targeted architectural briefings. Answers "what do I need to know before editing this directory?" Composes entry points (fan-in=0, active, sorted by fan-out), core abstractions (top fan-in, `__init__.py` excluded), component cohesion map, circular dependency groups, and derived risks into one output. Risks section surfaces: circular groups (severity high >10 files / medium otherwise), high-complexity entry points (cx ≥ 20), and load-bearing files (fan-in ≥ 8, top 5). Next Commands section generates follow-up `reveal` commands dynamically based on findings — closes the agent loop. `--format json` emits `{path, facts{entry_points, core_abstractions, components, circular_groups}, risks[], next_commands[]}`. `--no-imports` skips graph analysis. `--top N` controls per-section limits. Works on subdirectories. 56 new tests. (BACK-211)
+
+---
+
 ## [0.82.0] - 2026-04-21 (session oceanic-dragon-0421)
 
 ### Added

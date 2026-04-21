@@ -75,6 +75,7 @@ def _dispatch_subcommand() -> bool:
     # Import lazily so startup cost is paid only when the subcommand is used.
     # Each entry: subcommand name -> (parser_factory, runner)
     _SUBCOMMANDS = {
+        'architecture': ('reveal.cli.commands.architecture', 'create_architecture_parser', 'run_architecture'),
         'check':    ('reveal.cli.commands.check',    'create_check_parser',    'run_check'),
         'deps':     ('reveal.cli.commands.deps',     'create_deps_parser',     'run_deps'),
         'dev':      ('reveal.cli.commands.dev',      'create_dev_parser',      'run_dev'),
