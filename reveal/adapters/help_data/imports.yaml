@@ -33,6 +33,9 @@ examples:
   - uri: "reveal 'imports://src?entrypoints'"
     description: 'List files nothing imports (fan-in=0) — entry points, CLIs, scripts, or dead code; sorted by fan-out'
 
+  - uri: "reveal 'imports://src?components'"
+    description: 'Score each directory as a component — cohesion (how self-contained), coupling (incoming/outgoing), top bridge file'
+
   # Verbose output
   - uri: "reveal imports://src --verbose"
     description: 'Show detailed import information including file paths and line numbers'
@@ -53,6 +56,7 @@ query_parameters:
   rank: 'Rank files by structural metric — only "fan-in" supported (count of files that import each file)'
   top: 'Limit results for ?rank (default: all files, e.g. ?rank=fan-in&top=20)'
   entrypoints: 'List files with fan-in=0 — nothing imports them (entry points, scripts, or dead code); sorted by fan-out descending'
+  components: 'Score each directory as a component: cohesion (internal/outgoing imports), coupling (incoming edges), top bridge file; high cohesion = well-encapsulated'
 
 flags:
   --verbose: 'Show detailed import information (file paths, line numbers, full chains)'

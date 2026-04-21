@@ -982,3 +982,150 @@ class TestEntrypoints:
         """Schema exposes entrypoints query parameter."""
         schema = ImportsAdapter.get_schema()
         assert 'entrypoints' in schema['query_params']
+
+
+class TestComponents:
+    """Tests for ?components feature (BACK-210)."""
+
+    def test_components_basic(self, tmp_path):
+        """Files grouped by directory; internal vs outgoing edges counted correctly."""
+        core = tmp_path / "core"
+        core.mkdir()
+        (core / "base.py").write_text("x = 1\n")
+        (core / "utils.py").write_text("from base import x\n")
+        ui = tmp_path / "ui"
+        ui.mkdir()
+        (ui / "app.py").write_text("from core.base import x\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'components')
+        result = adapter.get_structure()
+
+        assert result['type'] == 'components'
+        comps = {Path(c['component']).name: c for c in result['components']}
+        assert 'core' in comps
+        assert comps['core']['internal'] == 1   # base → utils
+        assert comps['core']['outgoing'] == 0
+        assert comps['ui']['internal'] == 0
+        assert comps['ui']['outgoing'] == 1     # app → core/base
+
+    def test_components_cohesion_calculation(self, tmp_path):
+        """Cohesion = internal / (internal + outgoing)."""
+        pkg = tmp_path / "pkg"
+        pkg.mkdir()
+        (pkg / "a.py").write_text("x = 1\n")
+        (pkg / "b.py").write_text("from a import x\n")   # internal
+        (pkg / "c.py").write_text("import os\n")          # external (stdlib, not scanned)
+        # pkg has 1 internal edge, 0 outgoing to scanned files → cohesion = 1.0
+
+        adapter = ImportsAdapter(str(tmp_path), 'components')
+        result = adapter.get_structure()
+
+        comps = {Path(c['component']).name: c for c in result['components']}
+        assert comps['pkg']['internal'] == 1
+        assert comps['pkg']['cohesion'] == 1.0
+
+    def test_components_sorted_cohesion_descending(self, tmp_path):
+        """High-cohesion components appear first."""
+        tight = tmp_path / "tight"
+        tight.mkdir()
+        (tight / "a.py").write_text("x = 1\n")
+        (tight / "b.py").write_text("from a import x\n")  # 100% cohesion
+
+        loose = tmp_path / "loose"
+        loose.mkdir()
+        (loose / "c.py").write_text("from tight.a import x\n")  # 0% cohesion
+
+        adapter = ImportsAdapter(str(tmp_path), 'components')
+        result = adapter.get_structure()
+
+        names = [Path(c['component']).name for c in result['components']]
+        assert names.index('tight') < names.index('loose')
+
+    def test_components_incoming_edges(self, tmp_path):
+        """Incoming counts edges arriving from outside the component."""
+        lib = tmp_path / "lib"
+        lib.mkdir()
+        (lib / "helper.py").write_text("x = 1\n")
+
+        app = tmp_path / "app"
+        app.mkdir()
+        (app / "main.py").write_text("from lib.helper import x\n")
+        (app / "other.py").write_text("from lib.helper import x\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'components')
+        result = adapter.get_structure()
+
+        comps = {Path(c['component']).name: c for c in result['components']}
+        assert comps['lib']['incoming'] == 2
+
+    def test_components_top_bridge_file(self, tmp_path):
+        """top_bridge is the file with most outgoing cross-boundary edges."""
+        src = tmp_path / "src"
+        src.mkdir()
+        ext = tmp_path / "ext"
+        ext.mkdir()
+        (ext / "x.py").write_text("a = 1\n")
+        (ext / "y.py").write_text("b = 2\n")
+        (src / "bridge.py").write_text("from ext.x import a\nfrom ext.y import b\n")
+        (src / "leaf.py").write_text("x = 1\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'components')
+        result = adapter.get_structure()
+
+        comps = {Path(c['component']).name: c for c in result['components']}
+        assert comps['src']['top_bridge'] is not None
+        assert 'bridge.py' in comps['src']['top_bridge']
+
+    def test_components_empty_dir(self, tmp_path):
+        """Empty directory returns empty components, not an error."""
+        adapter = ImportsAdapter(str(tmp_path), 'components')
+        result = adapter.get_structure()
+
+        assert result['type'] == 'components'
+        assert result['components'] == []
+        assert result['total'] == 0
+
+    def test_components_no_cross_boundary(self, tmp_path):
+        """Fully isolated component has incoming=0, outgoing=0."""
+        island = tmp_path / "island"
+        island.mkdir()
+        (island / "a.py").write_text("x = 1\n")
+        (island / "b.py").write_text("from a import x\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'components')
+        result = adapter.get_structure()
+
+        comps = {Path(c['component']).name: c for c in result['components']}
+        assert comps['island']['incoming'] == 0
+        assert comps['island']['outgoing'] == 0
+        assert comps['island']['cohesion'] == 1.0
+
+    def test_components_renderer(self, tmp_path):
+        """Renderer output contains expected columns."""
+        from reveal.adapters.imports import ImportsRenderer
+        from io import StringIO
+        import sys
+
+        pkg = tmp_path / "pkg"
+        pkg.mkdir()
+        (pkg / "a.py").write_text("x = 1\n")
+        (pkg / "b.py").write_text("from a import x\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'components')
+        result = adapter.get_structure()
+
+        old_stdout = sys.stdout
+        sys.stdout = buf = StringIO()
+        ImportsRenderer.render_structure(result, format='text', resource=str(tmp_path))
+        sys.stdout = old_stdout
+        output = buf.getvalue()
+
+        assert 'COHESION' in output
+        assert 'INTERNAL' in output
+        assert 'pkg' in output
+
+    def test_components_schema_has_param(self):
+        """Schema exposes components query parameter and output type."""
+        schema = ImportsAdapter.get_schema()
+        assert 'components' in schema['query_params']
+        assert 'components' in [t['type'] for t in schema['output_types']]

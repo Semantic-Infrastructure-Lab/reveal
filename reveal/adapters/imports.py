@@ -55,6 +55,11 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'List files with fan-in=0 — nothing imports them (entry points, scripts, or dead code); sorted by fan-out descending',
         'examples': ['imports://src?entrypoints']
     },
+    'components': {
+        'type': 'flag',
+        'description': 'Score each directory as a component: cohesion (internal/outgoing imports), coupling (incoming), top bridge file',
+        'examples': ['imports://src?components']
+    },
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -184,6 +189,35 @@ _SCHEMA_OUTPUT_TYPES = [
                             'file': {'type': 'string'},
                             'fan_in': {'type': 'integer'},
                             'fan_out': {'type': 'integer'},
+                        }
+                    }
+                }
+            }
+        }
+    },
+    {
+        'type': 'components',
+        'description': 'Per-directory cohesion and coupling scores — validates directory-as-component hypothesis',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'components'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string'},
+                'total': {'type': 'integer'},
+                'components': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'component': {'type': 'string'},
+                            'files': {'type': 'integer'},
+                            'internal': {'type': 'integer'},
+                            'outgoing': {'type': 'integer'},
+                            'incoming': {'type': 'integer'},
+                            'cohesion': {'type': 'number'},
+                            'top_bridge': {'type': ['string', 'null']},
                         }
                     }
                 }
@@ -439,6 +473,48 @@ class ImportsRenderer:
         print()
 
     @staticmethod
+    def _render_components(result: dict, resource: str) -> None:
+        """Render ?components output — per-directory cohesion and coupling scores."""
+        components = result.get('components', [])
+        source = result.get('source', resource)
+
+        print(f"\nComponent analysis: {source}")
+        print(f"Components: {len(components)}  (cohesion = internal imports ÷ outgoing imports from component)")
+        print()
+
+        if not components:
+            print("  No components found.")
+            return
+
+        source_path = Path(source) if source else None
+
+        def rel(p: str) -> str:
+            if source_path:
+                try:
+                    return str(Path(p).relative_to(source_path))
+                except ValueError:
+                    pass
+            return p
+
+        col_w = max(max(len(rel(c['component'])) for c in components) + 2, 20)
+        col_w = min(col_w, 55)
+
+        print(f"  {'COMPONENT':<{col_w}}  {'FILES':>5}  {'INTERNAL':>8}  {'OUT':>5}  {'IN':>5}  {'COHESION':>9}")
+        print(f"  {'-'*col_w}  {'-'*5}  {'-'*8}  {'-'*5}  {'-'*5}  {'-'*9}")
+
+        for c in components:
+            name = rel(c['component'])
+            bridge = c.get('top_bridge')
+            bridge_note = f"  ← {Path(bridge).name}" if bridge else ''
+            cohesion_pct = f"{c['cohesion'] * 100:.0f}%"
+            print(f"  {name:<{col_w}}  {c['files']:>5}  {c['internal']:>8}  {c['outgoing']:>5}  {c['incoming']:>5}  {cohesion_pct:>9}{bridge_note}")
+
+        print()
+        print("  Note: low cohesion = files import heavily outside this directory (may not be a real component)")
+        print("  Note: static imports only — dynamic dispatch not captured")
+        print()
+
+    @staticmethod
     def render_structure(result: dict, format: str = 'text', verbose: bool = False, resource: str = '.') -> None:
         """Render import analysis results.
 
@@ -465,6 +541,8 @@ class ImportsRenderer:
                 ImportsRenderer._render_fan_in(result, resource)
             elif result_type == 'entrypoints':
                 ImportsRenderer._render_entrypoints(result, resource)
+            elif result_type == 'components':
+                ImportsRenderer._render_components(result, resource)
             else:
                 ImportsRenderer._render_import_summary(result, resource)
         else:
@@ -553,6 +631,8 @@ class ImportsAdapter(ResourceAdapter):
             return self._format_fan_in()
         elif 'entrypoints' in query_params:
             return self._format_entrypoints()
+        elif 'components' in query_params:
+            return self._format_components()
         else:
             return self._format_all()
 
@@ -782,6 +862,66 @@ class ImportsAdapter(ResourceAdapter):
         )
 
         return self._build_response('entrypoints', entries=entries, total_scanned=len(all_files))
+
+    def _format_components(self) -> Dict[str, Any]:
+        """Score each directory as a component using import graph cohesion.
+
+        Groups scanned files by immediate parent directory. For each directory:
+        - internal: import edges where both source and target are in this directory
+        - outgoing: import edges leaving this directory
+        - incoming: import edges arriving from outside this directory
+        - cohesion: internal / (internal + outgoing) — fraction of imports that stay local
+        - top_bridge: file in this directory with most outgoing cross-boundary edges
+
+        High cohesion = well-encapsulated component.
+        Low cohesion = files import heavily outside — may not be a real component.
+        """
+        from collections import defaultdict
+
+        if not self._graph:
+            return self._build_response('components', components=[], total=0)
+
+        # Group scanned files by immediate parent — only analyze files within the scan root
+        dir_files: dict = defaultdict(set)
+        for f in self._scanned_files:
+            dir_files[f.parent].add(f)
+
+        components = []
+        for directory, file_set in dir_files.items():
+            internal = 0
+            outgoing = 0
+            incoming = 0
+            bridge_counts: dict = defaultdict(int)
+
+            for f in file_set:
+                for dep in self._graph.dependencies.get(f, set()):
+                    if dep in file_set:
+                        internal += 1
+                    else:
+                        outgoing += 1
+                        bridge_counts[f] += 1
+                for src in self._graph.reverse_deps.get(f, set()):
+                    if src not in file_set:
+                        incoming += 1
+
+            total_out = internal + outgoing
+            cohesion = internal / total_out if total_out > 0 else 0.0
+            top_bridge = str(max(bridge_counts, key=bridge_counts.get)) if bridge_counts else None
+
+            components.append({
+                'component': str(directory),
+                'files': len(file_set),
+                'internal': internal,
+                'outgoing': outgoing,
+                'incoming': incoming,
+                'cohesion': round(cohesion, 3),
+                'top_bridge': top_bridge,
+            })
+
+        # Sort: cohesion descending (best-structured first), files descending as tiebreak
+        components.sort(key=lambda c: (-c['cohesion'], -c['files'], c['component']))
+
+        return self._build_response('components', components=components, total=len(components))
 
     def _format_unused(self) -> Dict[str, Any]:
         """Format unused imports."""
