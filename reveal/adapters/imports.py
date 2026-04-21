@@ -50,6 +50,11 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'Limit results for ?rank (default: all files)',
         'examples': ['imports://src?rank=fan-in&top=20']
     },
+    'entrypoints': {
+        'type': 'flag',
+        'description': 'List files with fan-in=0 — nothing imports them (entry points, scripts, or dead code); sorted by fan-out descending',
+        'examples': ['imports://src?entrypoints']
+    },
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -178,6 +183,30 @@ _SCHEMA_OUTPUT_TYPES = [
                         'properties': {
                             'file': {'type': 'string'},
                             'fan_in': {'type': 'integer'},
+                            'fan_out': {'type': 'integer'},
+                        }
+                    }
+                }
+            }
+        }
+    },
+    {
+        'type': 'entrypoints',
+        'description': 'Files with fan-in=0 — nothing imports them (entry points, scripts, or dead code)',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'entrypoints'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string'},
+                'total_scanned': {'type': 'integer'},
+                'entries': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'file': {'type': 'string'},
                             'fan_out': {'type': 'integer'},
                         }
                     }
@@ -373,6 +402,37 @@ class ImportsRenderer:
         print()
 
     @staticmethod
+    def _render_entrypoints(result: dict, resource: str) -> None:
+        """Render ?entrypoints output — files with fan-in=0 (nothing imports them)."""
+        entries = result.get('entries', [])
+        total_scanned = result.get('total_scanned', 0)
+        source = result.get('source', resource)
+
+        print(f"\nEntry points: {source}")
+        print(f"Files: {len(entries)} of {total_scanned}  (fan-in=0: nothing imports these — entry points or dead code)")
+        print()
+
+        if not entries:
+            print("  No entry points found (every file is imported by at least one other).")
+            return
+
+        source_path = Path(source) if source else None
+        col_w = min(60, max(len(e['file']) for e in entries) - (len(source) + 1 if source_path else 0) + 2)
+        col_w = max(col_w, 20)
+
+        print(f"  {'FILE':<{col_w}}  {'FAN-OUT':>8}")
+        print(f"  {'-'*col_w}  {'-'*8}")
+        for e in entries:
+            fpath = e['file']
+            if source_path:
+                try:
+                    fpath = str(Path(fpath).relative_to(source_path))
+                except ValueError:
+                    pass
+            print(f"  {fpath:<{col_w}}  {e['fan_out']:>8}")
+        print()
+
+    @staticmethod
     def render_structure(result: dict, format: str = 'text', verbose: bool = False, resource: str = '.') -> None:
         """Render import analysis results.
 
@@ -397,6 +457,8 @@ class ImportsRenderer:
                 ImportsRenderer._render_layer_violations(result, verbose)
             elif result_type == 'fan_in_ranking':
                 ImportsRenderer._render_fan_in(result, resource)
+            elif result_type == 'entrypoints':
+                ImportsRenderer._render_entrypoints(result, resource)
             else:
                 ImportsRenderer._render_import_summary(result, resource)
         else:
@@ -483,6 +545,8 @@ class ImportsAdapter(ResourceAdapter):
             return self._format_violations()
         elif query_params.get('rank') == 'fan-in':
             return self._format_fan_in()
+        elif 'entrypoints' in query_params:
+            return self._format_entrypoints()
         else:
             return self._format_all()
 
@@ -683,6 +747,30 @@ class ImportsAdapter(ResourceAdapter):
             entries = entries[:top]
 
         return self._build_response('fan_in_ranking', entries=entries, total=total)
+
+    def _format_entrypoints(self) -> Dict[str, Any]:
+        """Return files with fan-in=0 — nothing imports them.
+
+        These are unambiguously entry points (CLIs, test runners, scripts) or dead code.
+        Sorted by fan-out descending: high fan-out = likely real entry point; low = likely dead code.
+        """
+        if not self._graph:
+            return self._build_response('entrypoints', entries=[], total_scanned=0)
+
+        all_files = self._scanned_files | set(self._graph.files.keys()) | set(self._graph.reverse_deps.keys())
+        entries = sorted(
+            [
+                {
+                    'file': str(f),
+                    'fan_out': len(self._graph.dependencies.get(f, set())),
+                }
+                for f in all_files
+                if len(self._graph.reverse_deps.get(f, set())) == 0
+            ],
+            key=lambda e: (-e['fan_out'], e['file']),
+        )
+
+        return self._build_response('entrypoints', entries=entries, total_scanned=len(all_files))
 
     def _format_unused(self) -> Dict[str, Any]:
         """Format unused imports."""

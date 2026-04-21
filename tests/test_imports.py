@@ -883,3 +883,102 @@ class TestFanInRanking:
         assert 'rank' in schema['query_params']
         assert 'top' in schema['query_params']
         assert 'fan_in_ranking' in [t['type'] for t in schema['output_types']]
+
+
+class TestEntrypoints:
+    """Tests for ?entrypoints feature (BACK-207)."""
+
+    def test_entrypoints_basic(self, tmp_path):
+        """Files with fan-in=0 are returned; imported files are excluded."""
+        (tmp_path / "utils.py").write_text("x = 1\n")
+        (tmp_path / "main.py").write_text("import utils\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'entrypoints')
+        result = adapter.get_structure()
+
+        assert result['type'] == 'entrypoints'
+        names = [e['file'].split('/')[-1] for e in result['entries']]
+        assert 'main.py' in names
+        assert 'utils.py' not in names
+
+    def test_entrypoints_sorted_by_fan_out_descending(self, tmp_path):
+        """Entry points with higher fan-out appear first."""
+        (tmp_path / "a.py").write_text("x = 1\n")
+        (tmp_path / "b.py").write_text("x = 1\n")
+        (tmp_path / "c.py").write_text("x = 1\n")
+        (tmp_path / "heavy.py").write_text("import a\nimport b\nimport c\n")
+        (tmp_path / "light.py").write_text("import a\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'entrypoints')
+        result = adapter.get_structure()
+
+        names = [e['file'].split('/')[-1] for e in result['entries']]
+        assert names.index('heavy.py') < names.index('light.py')
+
+    def test_entrypoints_fan_out_populated(self, tmp_path):
+        """fan_out field reflects how many files each entry point imports."""
+        (tmp_path / "utils.py").write_text("x = 1\n")
+        (tmp_path / "main.py").write_text("import utils\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'entrypoints')
+        result = adapter.get_structure()
+
+        entries = {e['file'].split('/')[-1]: e for e in result['entries']}
+        assert entries['main.py']['fan_out'] == 1
+
+    def test_entrypoints_total_scanned(self, tmp_path):
+        """total_scanned reflects all files, not just entry points."""
+        (tmp_path / "utils.py").write_text("x = 1\n")
+        (tmp_path / "main.py").write_text("import utils\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'entrypoints')
+        result = adapter.get_structure()
+
+        assert result['total_scanned'] == 2
+        assert len(result['entries']) == 1
+
+    def test_entrypoints_empty_dir(self, tmp_path):
+        """Empty directory returns empty entries, not an error."""
+        adapter = ImportsAdapter(str(tmp_path), 'entrypoints')
+        result = adapter.get_structure()
+
+        assert result['type'] == 'entrypoints'
+        assert result['entries'] == []
+        assert result['total_scanned'] == 0
+
+    def test_entrypoints_all_isolated(self, tmp_path):
+        """When no file imports any other, all files are entry points."""
+        (tmp_path / "a.py").write_text("x = 1\n")
+        (tmp_path / "b.py").write_text("x = 2\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'entrypoints')
+        result = adapter.get_structure()
+
+        assert len(result['entries']) == 2
+
+    def test_entrypoints_renderer(self, tmp_path):
+        """Renderer output contains FILE and FAN-OUT columns."""
+        from reveal.adapters.imports import ImportsRenderer
+        from io import StringIO
+        import sys
+
+        (tmp_path / "utils.py").write_text("x = 1\n")
+        (tmp_path / "main.py").write_text("import utils\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'entrypoints')
+        result = adapter.get_structure()
+
+        old_stdout = sys.stdout
+        sys.stdout = buf = StringIO()
+        ImportsRenderer.render_structure(result, format='text', resource=str(tmp_path))
+        sys.stdout = old_stdout
+        output = buf.getvalue()
+
+        assert 'FAN-OUT' in output
+        assert 'main.py' in output
+        assert 'utils.py' not in output
+
+    def test_entrypoints_schema_has_param(self):
+        """Schema exposes entrypoints query parameter."""
+        schema = ImportsAdapter.get_schema()
+        assert 'entrypoints' in schema['query_params']

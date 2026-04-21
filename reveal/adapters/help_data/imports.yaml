@@ -30,6 +30,9 @@ examples:
   - uri: "reveal 'imports://src?rank=fan-in&top=10'"
     description: 'Top 10 most-imported files — find the load-bearing modules before refactoring'
 
+  - uri: "reveal 'imports://src?entrypoints'"
+    description: 'List files nothing imports (fan-in=0) — entry points, CLIs, scripts, or dead code; sorted by fan-out'
+
   # Verbose output
   - uri: "reveal imports://src --verbose"
     description: 'Show detailed import information including file paths and line numbers'
@@ -49,6 +52,7 @@ query_parameters:
   violations: 'Check for layer violations per .reveal.yaml rules'
   rank: 'Rank files by structural metric — only "fan-in" supported (count of files that import each file)'
   top: 'Limit results for ?rank (default: all files, e.g. ?rank=fan-in&top=20)'
+  entrypoints: 'List files with fan-in=0 — nothing imports them (entry points, scripts, or dead code); sorted by fan-out descending'
 
 flags:
   --verbose: 'Show detailed import information (file paths, line numbers, full chains)'
