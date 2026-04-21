@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **`reveal overview` — Architecture section** — new section after Complex Functions. Entry points (fan-in=0, active, non-test, by fan-out), core abstractions (top-5 fan-in), component cohesion per directory (cohesion bar █░), circular import count, complexity centroid (avg top-10 complex functions). Builds graph once via `ImportsAdapter._build_graph` + 4 `_format_*` calls. `--no-imports` flag skips section. 24 new tests. (BACK-209)
+- **`ImportGraph.find_cycle_groups()`** — Tarjan's SCC algorithm. Returns one entry per group of mutually-dependent files; N analyzers cycling through a shared hub collapse to 1 group instead of N simple paths. `find_cycles()` retained for the I002 rule (needs per-path output for file-level suggestions).
+
+### Fixed
+- **`imports://src?circular` cycle count** — was counting simple paths (e.g. 42 for reveal's analyzer registry pattern); now counts distinct SCC groups (4 for reveal). `_format_circular` and `get_metadata` both use `find_cycle_groups()`. JSON schema: `cycles` inner arrays are sorted SCC members with no repeated last node; `count` = groups.
+- **`reveal overview` Architecture — `__init__.py` false entry points** — package init files appeared at the top of entry points when scanning a package subdirectory (scan-root resolution artifact). Now filtered from the entry-points display.
+- **Circular renderer** — shows `N files  parent/__init__.py, b.py, ...` format; uses `parent/name` for `__init__.py` disambiguation across packages.
 
 ---
 

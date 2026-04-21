@@ -252,7 +252,7 @@ reveal 'imports://src?unused' --format=json
 
 ## Circular Dependency Detection
 
-Find import cycles (A imports B, B imports A):
+Find import cycle groups (A imports B, B imports A):
 
 ```bash
 reveal 'imports://src?circular'
@@ -262,18 +262,17 @@ reveal 'imports://src?circular'
 
 ```
 ============================================================
-Circular Dependencies: 3
+Circular Dependencies: 3 cycle groups
 ============================================================
 
-  1. src/models/user.py -> src/services/auth.py -> src/models/user.py
-
-  2. src/api/routes.py -> src/handlers/users.py -> src/api/routes.py
-
-  3. src/db/models.py -> src/db/session.py -> src/db/base.py -> src/db/models.py
-
-  ... and 0 more circular dependencies
-  Run with --verbose to see all 3 cycles
+  1. 2 files  user.py, auth.py
+  2. 2 files  routes.py, users.py
+  3. 3 files  models.py, session.py, base.py
 ```
+
+Each entry is one **strongly-connected component** (SCC) — a group of files that
+mutually depend on each other. This is the meaningful count: 30 analyzers all
+cycling through a shared registry appear as 1 group, not 30 separate paths.
 
 ### Verbose Output
 
@@ -281,7 +280,7 @@ Circular Dependencies: 3
 reveal 'imports://src?circular' --verbose
 ```
 
-**Returns**: Full list of all circular dependency chains
+**Returns**: All groups, all files shown (no truncation)
 
 ### JSON Output
 
@@ -298,22 +297,9 @@ reveal 'imports://src?circular' --format=json
   "source_type": "directory",
   "count": 3,
   "cycles": [
-    [
-      "src/models/user.py",
-      "src/services/auth.py",
-      "src/models/user.py"
-    ],
-    [
-      "src/api/routes.py",
-      "src/handlers/users.py",
-      "src/api/routes.py"
-    ],
-    [
-      "src/db/models.py",
-      "src/db/session.py",
-      "src/db/base.py",
-      "src/db/models.py"
-    ]
+    ["src/models/user.py", "src/services/auth.py"],
+    ["src/api/routes.py", "src/handlers/users.py"],
+    ["src/db/base.py", "src/db/models.py", "src/db/session.py"]
   ],
   "metadata": {
     "total_imports": 238,
@@ -324,17 +310,21 @@ reveal 'imports://src?circular' --format=json
 }
 ```
 
+Each inner array is the **members of one SCC** (sorted, no repeated last node).
+`count` = number of distinct cycle groups, not number of simple paths.
+
 ### How It Works
 
 1. **Build graph**: Create directed graph of import relationships
-2. **Detect cycles**: Use depth-first search to find strongly connected components
-3. **Report chains**: Show complete path from A → B → ... → A
+2. **Detect groups**: Tarjan's SCC algorithm finds all strongly-connected components
+3. **Report members**: Show all files in each cycle group (≥2 members)
 
 **Detection notes**:
 - ✅ Detects: Direct cycles (A → B → A)
 - ✅ Detects: Indirect cycles (A → B → C → A)
+- ✅ Collapses: Hub cycles — N files cycling through a shared module = 1 group
 - ❌ Ignores: `TYPE_CHECKING` imports (not runtime cycles)
-- ✅ Reports: Complete chain showing all modules in cycle
+- ✅ Reports: All members of each cycle group, sorted
 
 **Why circular dependencies are bad**:
 - **Testing difficulty**: Can't test modules in isolation
@@ -728,11 +718,8 @@ reveal 'imports://src?unused' --format=grep | grep "api/"
   "source_type": "directory",
   "count": 3,
   "cycles": [
-    [
-      "src/models/user.py",
-      "src/services/auth.py",
-      "src/models/user.py"
-    ]
+    ["src/models/user.py", "src/services/auth.py"],
+    ["src/db/base.py", "src/db/models.py", "src/db/session.py"]
   ],
   "metadata": {
     "total_imports": 238,
@@ -741,6 +728,10 @@ reveal 'imports://src?unused' --format=grep | grep "api/"
   }
 }
 ```
+
+**Note**: `cycles` contains one entry per SCC (strongly-connected component).
+Each inner array is the sorted list of files in that cycle group — no repeated
+last node. `count` = number of distinct groups, not simple paths.
 
 ### 4. layer_violations
 
