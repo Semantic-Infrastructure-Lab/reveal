@@ -13,6 +13,7 @@ from typing import Dict, Any, List, Optional
 from reveal.adapters.stats import StatsAdapter
 from reveal.adapters.git import GitAdapter
 from reveal.adapters.ast import AstAdapter
+from reveal.adapters.imports import ImportsAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,11 @@ def create_overview_parser() -> argparse.ArgumentParser:
         help='Skip the recent git activity section'
     )
     parser.add_argument(
+        '--no-imports',
+        action='store_true',
+        help='Skip import graph analysis (architecture section)'
+    )
+    parser.add_argument(
         '--top',
         metavar='N',
         type=int,
@@ -83,16 +89,19 @@ def run_overview(args: Namespace) -> None:
 
     top = args.top
     no_git = getattr(args, 'no_git', False)
+    no_imports = getattr(args, 'no_imports', False)
 
     stats = _run_stats(path)
     git_log = [] if no_git else _run_git_log(path, top)
     complex_fns = _run_complex_functions(path, top)
+    architecture = {} if no_imports else _run_imports_analysis(path)
 
     report = {
         'path': str(path),
         'stats': stats,
         'git_log': git_log,
         'complex_functions': complex_fns,
+        'architecture': architecture,
     }
 
     if args.format == 'json':
@@ -133,6 +142,26 @@ def _run_complex_functions(path: Path, limit: int) -> List[Dict[str, Any]]:
         return []
 
 
+def _run_imports_analysis(path: Path) -> Dict[str, Any]:
+    """Build import graph once and return architectural data for overview."""
+    try:
+        adapter = ImportsAdapter(str(path))
+        adapter._build_graph(path)
+        fan_in = adapter._format_fan_in()
+        entrypoints = adapter._format_entrypoints()
+        components = adapter._format_components()
+        circular = adapter._format_circular()
+        return {
+            'fan_in': fan_in.get('entries', []),
+            'entrypoints': entrypoints.get('entries', []),
+            'components': components.get('components', []),
+            'circular_count': circular.get('count', 0),
+        }
+    except Exception as exc:
+        logger.warning("imports analysis failed for %s: %s", path, exc)
+        return {'fan_in': [], 'entrypoints': [], 'components': [], 'circular_count': 0}
+
+
 def _language_breakdown(files: List[Dict[str, Any]]) -> List[tuple]:
     """Derive language→file count from stats files list."""
     counts: Counter = Counter()
@@ -170,6 +199,7 @@ def _render_overview(report: Dict[str, Any], top: int) -> None:
     stats = report['stats']
     git_log = report['git_log']
     complex_fns = report['complex_functions']
+    architecture = report.get('architecture', {})
 
     summary = stats.get('summary', {})
     hotspots = stats.get('hotspots', [])
@@ -184,6 +214,7 @@ def _render_overview(report: Dict[str, Any], top: int) -> None:
     _render_quality_pulse(summary, hotspots)
     _render_hotspots(hotspots, top)
     _render_complex_functions(complex_fns, base_path=path)
+    _render_architecture(architecture, complex_fns, top, base_path=path)
     _render_git_log(git_log)
     _render_next_steps()
 
@@ -298,6 +329,73 @@ def _render_complex_functions(fns: List[Dict[str, Any]], base_path: Optional[Pat
         print(f"  {icon} {name}  cx:{cx}{lc_str}{loc_str}")
 
 
+def _render_architecture(
+    arch: Dict[str, Any],
+    complex_fns: List[Dict[str, Any]],
+    top: int,
+    base_path: Optional[Path] = None,
+) -> None:
+    """Render architectural overview: entry points, core abstractions, components."""
+    fan_in = arch.get('fan_in', [])
+    entrypoints = arch.get('entrypoints', [])
+    components = arch.get('components', [])
+    circular_count = arch.get('circular_count', 0)
+
+    if not fan_in and not entrypoints and not components:
+        return
+
+    print("\nArchitecture")
+
+    parts = [f"circulars: {circular_count}"]
+    if complex_fns:
+        sample = complex_fns[:10]
+        centroid = sum(f.get('complexity', 0) for f in sample) / len(sample)
+        parts.append(f"complexity centroid: {centroid:.1f}")
+    print(f"  {'  ·  '.join(parts)}")
+
+    live_eps = [
+        e for e in entrypoints
+        if e.get('fan_out', 0) > 0 and not _is_test_file(e['file'])
+    ]
+    if live_eps:
+        print(f"  Entry points  ({len(entrypoints)} fan-in=0, {len(live_eps)} active)")
+        for ep in live_eps[:top]:
+            rel = _relpath(ep['file'], base_path)
+            print(f"    {rel:<50}  fan-out {ep['fan_out']}")
+
+    core = [e for e in fan_in if e.get('fan_in', 0) > 0][:5]
+    if core:
+        print("  Core abstractions  (most imported)")
+        for e in core:
+            rel = _relpath(e['file'], base_path)
+            print(f"    {rel:<50}  fan-in {e['fan_in']}")
+
+    if components:
+        print(f"  Components  ({len(components)} directories, by cohesion)")
+        for c in components[:top]:
+            rel = _relpath(c['component'], base_path)
+            cohesion = c['cohesion']
+            bar = '█' * int(cohesion * 10) + '░' * (10 - int(cohesion * 10))
+            print(f"    {rel:<42}  {cohesion:.2f}  {bar}  {c['files']} files")
+
+
+def _is_test_file(file_str: str) -> bool:
+    """Return True if file looks like a test file."""
+    name = Path(file_str).name
+    path_norm = file_str.replace('\\', '/')
+    return name.startswith('test_') or name.endswith('_test.py') or '/test' in path_norm
+
+
+def _relpath(file_str: str, base_path: Optional[Path]) -> str:
+    """Return path relative to base_path if possible, else the original string."""
+    if base_path:
+        try:
+            return Path(file_str).relative_to(base_path).as_posix()
+        except ValueError:
+            pass
+    return file_str
+
+
 def _render_git_log(history: List[Dict[str, Any]]) -> None:
     if not history:
         return
@@ -316,7 +414,10 @@ def _render_git_log(history: List[Dict[str, Any]]) -> None:
 
 def _render_next_steps() -> None:
     print("\nNext steps")
-    print("  reveal hotspots .     # Full hotspot breakdown")
-    print("  reveal check .        # Run quality rules")
-    print("  reveal pack .         # Agent context snapshot")
+    print("  reveal hotspots .                    # Full hotspot breakdown")
+    print("  reveal check .                       # Run quality rules")
+    print("  reveal deps .                        # Dependency graph")
+    print("  reveal 'imports://.?rank=fan-in'     # Full fan-in ranking")
+    print("  reveal 'imports://.?entrypoints'     # All entry points")
+    print("  reveal pack .                        # Agent context snapshot")
     print()

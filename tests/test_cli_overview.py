@@ -11,7 +11,10 @@ from unittest.mock import MagicMock, patch, call
 
 from reveal.cli.commands.overview import (
     _age_label,
+    _is_test_file,
     _language_breakdown,
+    _relpath,
+    _render_architecture,
     _render_codebase_stats,
     _render_complex_functions,
     _render_git_log,
@@ -21,6 +24,7 @@ from reveal.cli.commands.overview import (
     _render_quality_pulse,
     _run_complex_functions,
     _run_git_log,
+    _run_imports_analysis,
     _run_stats,
     create_overview_parser,
     run_overview,
@@ -34,6 +38,7 @@ def _args(**kwargs):
         'path': '.',
         'top': 5,
         'no_git': False,
+        'no_imports': False,
         'format': 'text',
         'verbose': False,
     }
@@ -489,19 +494,40 @@ _STATS_DATA = json.loads(_STATS_JSON)
 _GIT_DATA = json.loads(_GIT_JSON)['history']
 _AST_DATA = json.loads(_AST_JSON)['results']
 
+_ARCH_DATA = {
+    'fan_in': [
+        {'file': '/proj/src/base.py', 'fan_in': 12, 'fan_out': 3},
+        {'file': '/proj/src/utils.py', 'fan_in': 8, 'fan_out': 2},
+        {'file': '/proj/src/leaf.py', 'fan_in': 0, 'fan_out': 1},
+    ],
+    'entrypoints': [
+        {'file': '/proj/src/main.py', 'fan_out': 10},
+        {'file': '/proj/src/cli.py', 'fan_out': 4},
+        {'file': '/proj/tests/test_main.py', 'fan_out': 2},
+        {'file': '/proj/src/dead.py', 'fan_out': 0},
+    ],
+    'components': [
+        {'component': '/proj/src', 'files': 5, 'internal': 8, 'outgoing': 2, 'incoming': 3, 'cohesion': 0.8, 'top_bridge': '/proj/src/main.py'},
+        {'component': '/proj/lib', 'files': 3, 'internal': 2, 'outgoing': 4, 'incoming': 1, 'cohesion': 0.33, 'top_bridge': None},
+    ],
+    'circular_count': 2,
+}
+
 
 class TestRunOverview(unittest.TestCase):
 
-    def _patch_runners(self, stats=None, git=None, ast=None):
-        """Return context managers patching all three data collectors."""
+    def _patch_runners(self, stats=None, git=None, ast=None, arch=None):
+        """Return context managers patching all four data collectors."""
         import contextlib
         stats_val = stats if stats is not None else _STATS_DATA
         git_val = git if git is not None else _GIT_DATA
         ast_val = ast if ast is not None else _AST_DATA
+        arch_val = arch if arch is not None else _ARCH_DATA
         return (
             patch('reveal.cli.commands.overview._run_stats', return_value=stats_val),
             patch('reveal.cli.commands.overview._run_git_log', return_value=git_val),
             patch('reveal.cli.commands.overview._run_complex_functions', return_value=ast_val),
+            patch('reveal.cli.commands.overview._run_imports_analysis', return_value=arch_val),
         )
 
     def test_nonexistent_path_exits_1(self):
@@ -511,8 +537,8 @@ class TestRunOverview(unittest.TestCase):
 
     def test_json_format_outputs_valid_json(self):
         import tempfile
-        p_stats, p_git, p_ast = self._patch_runners()
-        with p_stats, p_git, p_ast:
+        p_stats, p_git, p_ast, p_arch = self._patch_runners()
+        with p_stats, p_git, p_ast, p_arch:
             with tempfile.TemporaryDirectory() as tmp:
                 buf = StringIO()
                 with patch('sys.stdout', buf):
@@ -522,39 +548,177 @@ class TestRunOverview(unittest.TestCase):
                 self.assertIn('stats', data)
                 self.assertIn('git_log', data)
                 self.assertIn('complex_functions', data)
+                self.assertIn('architecture', data)
 
     def test_text_output_contains_overview_header(self):
         import tempfile
-        p_stats, p_git, p_ast = self._patch_runners()
-        with p_stats, p_git, p_ast:
+        p_stats, p_git, p_ast, p_arch = self._patch_runners()
+        with p_stats, p_git, p_ast, p_arch:
             with tempfile.TemporaryDirectory() as tmp:
                 out = _capture(run_overview, _args(path=tmp))
                 self.assertIn('Overview:', out)
 
     def test_no_git_skips_git_adapter(self):
         import tempfile
-        p_stats, p_git, p_ast = self._patch_runners()
-        with p_stats as mock_stats, p_git as mock_git, p_ast:
+        p_stats, p_git, p_ast, p_arch = self._patch_runners()
+        with p_stats as mock_stats, p_git as mock_git, p_ast, p_arch:
             with tempfile.TemporaryDirectory() as tmp:
                 out = _capture(run_overview, _args(path=tmp, no_git=True))
                 self.assertNotIn('Recent changes', out)
                 mock_git.assert_not_called()
 
+    def test_no_imports_skips_imports_analysis(self):
+        import tempfile
+        p_stats, p_git, p_ast, p_arch = self._patch_runners()
+        with p_stats, p_git, p_ast, p_arch as mock_arch:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = _capture(run_overview, _args(path=tmp, no_imports=True))
+                mock_arch.assert_not_called()
+                self.assertNotIn('Architecture', out)
+
     def test_text_output_shows_next_steps(self):
         import tempfile
-        p_stats, p_git, p_ast = self._patch_runners()
-        with p_stats, p_git, p_ast:
+        p_stats, p_git, p_ast, p_arch = self._patch_runners()
+        with p_stats, p_git, p_ast, p_arch:
             with tempfile.TemporaryDirectory() as tmp:
                 out = _capture(run_overview, _args(path=tmp))
                 self.assertIn('Next steps', out)
 
     def test_empty_data_no_crash(self):
         import tempfile
-        p_stats, p_git, p_ast = self._patch_runners(stats={}, git=[], ast=[])
-        with p_stats, p_git, p_ast:
+        p_stats, p_git, p_ast, p_arch = self._patch_runners(stats={}, git=[], ast=[], arch={})
+        with p_stats, p_git, p_ast, p_arch:
             with tempfile.TemporaryDirectory() as tmp:
                 out = _capture(run_overview, _args(path=tmp))
                 self.assertIn('Overview:', out)  # Header always shows
+
+
+class TestIsTestFile(unittest.TestCase):
+
+    def test_test_prefix(self):
+        self.assertTrue(_is_test_file('/proj/tests/test_main.py'))
+
+    def test_test_suffix(self):
+        self.assertTrue(_is_test_file('/proj/src/foo_test.py'))
+
+    def test_test_in_path(self):
+        self.assertTrue(_is_test_file('/proj/test/helpers.py'))
+
+    def test_normal_file_not_test(self):
+        self.assertFalse(_is_test_file('/proj/src/main.py'))
+
+    def test_contestable_not_matched(self):
+        self.assertFalse(_is_test_file('/proj/src/contestable.py'))
+
+
+class TestRelpath(unittest.TestCase):
+
+    def test_returns_relative_when_under_base(self):
+        base = Path('/proj/src')
+        result = _relpath('/proj/src/main.py', base)
+        self.assertEqual(result, 'main.py')
+
+    def test_returns_original_when_not_under_base(self):
+        base = Path('/other')
+        result = _relpath('/proj/src/main.py', base)
+        self.assertEqual(result, '/proj/src/main.py')
+
+    def test_returns_original_when_no_base(self):
+        result = _relpath('/proj/src/main.py', None)
+        self.assertEqual(result, '/proj/src/main.py')
+
+
+class TestRunImportsAnalysis(unittest.TestCase):
+
+    @patch('reveal.cli.commands.overview.ImportsAdapter')
+    def test_returns_structured_dict(self, MockAdapter):
+        instance = MockAdapter.return_value
+        instance._format_fan_in.return_value = {'entries': [{'file': 'a.py', 'fan_in': 5, 'fan_out': 1}]}
+        instance._format_entrypoints.return_value = {'entries': [{'file': 'main.py', 'fan_out': 3}]}
+        instance._format_components.return_value = {'components': [{'component': 'src', 'cohesion': 0.8, 'files': 4}]}
+        instance._format_circular.return_value = {'count': 2}
+        result = _run_imports_analysis(Path('/proj'))
+        self.assertEqual(result['fan_in'], [{'file': 'a.py', 'fan_in': 5, 'fan_out': 1}])
+        self.assertEqual(result['entrypoints'], [{'file': 'main.py', 'fan_out': 3}])
+        self.assertEqual(result['circular_count'], 2)
+
+    @patch('reveal.cli.commands.overview.ImportsAdapter')
+    def test_exception_returns_empty_structure(self, MockAdapter):
+        MockAdapter.side_effect = Exception("boom")
+        result = _run_imports_analysis(Path('/proj'))
+        self.assertEqual(result['fan_in'], [])
+        self.assertEqual(result['entrypoints'], [])
+        self.assertEqual(result['components'], [])
+        self.assertEqual(result['circular_count'], 0)
+
+
+class TestRenderArchitecture(unittest.TestCase):
+
+    def _arch(self, **overrides):
+        base = dict(_ARCH_DATA)
+        base.update(overrides)
+        return base
+
+    def test_empty_arch_produces_no_output(self):
+        out = _capture(_render_architecture, {}, [], 5)
+        self.assertEqual(out, '')
+
+    def test_shows_architecture_header(self):
+        out = _capture(_render_architecture, self._arch(), [], 5)
+        self.assertIn('Architecture', out)
+
+    def test_shows_circular_count(self):
+        out = _capture(_render_architecture, self._arch(), [], 5)
+        self.assertIn('circulars: 2', out)
+
+    def test_shows_complexity_centroid_when_fns_present(self):
+        fns = [{'complexity': 20}, {'complexity': 10}]
+        out = _capture(_render_architecture, self._arch(), fns, 5)
+        self.assertIn('complexity centroid: 15.0', out)
+
+    def test_no_centroid_when_no_fns(self):
+        out = _capture(_render_architecture, self._arch(), [], 5)
+        self.assertNotIn('centroid', out)
+
+    def test_shows_active_entry_points(self):
+        out = _capture(_render_architecture, self._arch(), [], 5)
+        self.assertIn('main.py', out)
+        self.assertIn('cli.py', out)
+
+    def test_filters_test_files_from_entry_points(self):
+        out = _capture(_render_architecture, self._arch(), [], 5)
+        self.assertNotIn('test_main.py', out)
+
+    def test_filters_zero_fanout_from_entry_points(self):
+        out = _capture(_render_architecture, self._arch(), [], 5)
+        self.assertNotIn('dead.py', out)
+
+    def test_shows_core_abstractions(self):
+        out = _capture(_render_architecture, self._arch(), [], 5)
+        self.assertIn('base.py', out)
+        self.assertIn('fan-in 12', out)
+
+    def test_excludes_zero_fanin_from_core(self):
+        out = _capture(_render_architecture, self._arch(), [], 5)
+        self.assertNotIn('fan-in 0', out)
+
+    def test_shows_components(self):
+        out = _capture(_render_architecture, self._arch(), [], 5)
+        self.assertIn('Components', out)
+        self.assertIn('0.80', out)
+
+    def test_respects_top_limit_on_entry_points(self):
+        arch = self._arch(entrypoints=[
+            {'file': f'/proj/src/ep{i}.py', 'fan_out': 5 - i} for i in range(10)
+        ])
+        out = _capture(_render_architecture, arch, [], 3)
+        self.assertIn('ep0.py', out)
+        self.assertNotIn('ep3.py', out)
+
+    def test_relative_paths_shown_when_base_provided(self):
+        out = _capture(_render_architecture, self._arch(), [], 5, base_path=Path('/proj'))
+        self.assertIn('src/main.py', out)
+        self.assertNotIn('/proj/src/main.py', out)
 
 
 if __name__ == '__main__':
