@@ -1,11 +1,19 @@
 # Reveal Roadmap
-> **Last updated**: 2026-04-19 (pazevaxe-0419 — v0.81.0 released)
+> **Last updated**: 2026-04-21 (expanding-moon-0421 — v0.83.0 released)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.83.0
+- ✅ **`reveal architecture <path>`** — targeted architectural brief: entry points, core abstractions, component cohesion, circular groups, derived risks, and dynamically generated next commands. `--format json` → `{facts, risks[], next_commands[]}`. Works on subdirectories. (BACK-211)
+
+### v0.82.0
+- ✅ **`reveal overview` — Architecture section** — entry points, core abstractions, component cohesion bars, circular count, complexity centroid. (BACK-209)
+- ✅ **`ImportGraph.find_cycle_groups()`** — Tarjan's SCC replaces DFS path counting; 42 "circulars" → 4 meaningful groups in reveal itself.
+- ✅ **`__init__.py` filtered from entry points** — package init files no longer appear as false entry points in Architecture display.
 
 ### v0.81.0
 - ✅ **`--boundary` nav flag** — composite INPUTS / ENVIRONMENT / EFFECTS view; PHP superglobals surfaced in separate ENVIRONMENT section. (BACK-201)
