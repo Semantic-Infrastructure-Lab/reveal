@@ -38,7 +38,18 @@ _SCHEMA_QUERY_PARAMS = {
         'type': 'flag',
         'description': 'Check for layer violations (requires config)',
         'examples': ['imports://src?violations']
-    }
+    },
+    'rank': {
+        'type': 'enum',
+        'values': ['fan-in'],
+        'description': 'Rank files by structural metric. fan-in: count of files that import each file (higher = more central; 0 = entry point or dead code)',
+        'examples': ['imports://src?rank=fan-in', 'imports://src?rank=fan-in&top=20']
+    },
+    'top': {
+        'type': 'integer',
+        'description': 'Limit results for ?rank (default: all files)',
+        'examples': ['imports://src?rank=fan-in&top=20']
+    },
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -148,6 +159,31 @@ _SCHEMA_OUTPUT_TYPES = [
                 }
             }
         }
+    },
+    {
+        'type': 'fan_in_ranking',
+        'description': 'Files ranked by fan-in (importer count) — high fan-in = core abstractions; zero fan-in = entry points or dead code',
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'contract_version': {'type': 'string'},
+                'type': {'type': 'string', 'const': 'fan_in_ranking'},
+                'source': {'type': 'string'},
+                'source_type': {'type': 'string'},
+                'total': {'type': 'integer'},
+                'entries': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'file': {'type': 'string'},
+                            'fan_in': {'type': 'integer'},
+                            'fan_out': {'type': 'integer'},
+                        }
+                    }
+                }
+            }
+        }
     }
 ]
 
@@ -179,7 +215,17 @@ _SCHEMA_EXAMPLE_QUERIES = [
         'uri': 'imports://src/main.py',
         'description': 'Analyze imports for a single file (no cycle detection)',
         'output_type': 'import_summary'
-    }
+    },
+    {
+        'uri': 'imports://src?rank=fan-in',
+        'description': 'Rank all files by fan-in — surface core abstractions and entry points',
+        'output_type': 'fan_in_ranking'
+    },
+    {
+        'uri': 'imports://src?rank=fan-in&top=20',
+        'description': 'Top-20 files by fan-in',
+        'output_type': 'fan_in_ranking'
+    },
 ]
 
 _SCHEMA_NOTES = [
@@ -187,7 +233,8 @@ _SCHEMA_NOTES = [
     'Circular dependencies can indicate architectural issues',
     'Layer violations require .reveal.yaml configuration',
     'Unused import detection works with Python, JavaScript, Go, etc.',
-    'False positives: imports that trigger side effects (e.g. decorator-based registration) will be flagged as unused — these are intentional and safe to ignore'
+    'False positives: imports that trigger side effects (e.g. decorator-based registration) will be flagged as unused — these are intentional and safe to ignore',
+    'Fan-in ranking covers static imports only — decorator-based registration and importlib dynamic imports are not captured',
 ]
 
 
@@ -288,9 +335,41 @@ class ImportsRenderer:
             print(f"  Cycles Found:  {'❌ Yes' if has_cycles else '✅ No'}")
         print()
         print("Query options:")
-        print(f"  reveal 'imports://{resource}?unused'    - Find unused imports")
-        print(f"  reveal 'imports://{resource}?circular'  - Detect circular deps")
-        print(f"  reveal 'imports://{resource}?violations' - Check layer violations")
+        print(f"  reveal 'imports://{resource}?unused'       - Find unused imports")
+        print(f"  reveal 'imports://{resource}?circular'     - Detect circular deps")
+        print(f"  reveal 'imports://{resource}?violations'   - Check layer violations")
+        print(f"  reveal 'imports://{resource}?rank=fan-in'  - Rank files by fan-in (core abstractions)")
+        print()
+
+    @staticmethod
+    def _render_fan_in(result: dict, resource: str) -> None:
+        """Render rank=fan-in output — files ranked by number of importers."""
+        entries = result.get('entries', [])
+        total = result.get('total', 0)
+        source = result.get('source', resource)
+
+        print(f"\nFan-in ranking: {source}")
+        print(f"Files: {len(entries)} of {total}  (fan-in = number of files that import this file)")
+        print()
+
+        if not entries:
+            print("  No import data found.")
+            return
+
+        source_path = Path(source) if source else None
+        col_w = min(60, max(len(e['file']) for e in entries) - (len(source) + 1 if source_path else 0) + 2)
+        col_w = max(col_w, 20)
+
+        print(f"  {'FILE':<{col_w}}  {'FAN-IN':>7}  {'FAN-OUT':>8}")
+        print(f"  {'-'*col_w}  {'-'*7}  {'-'*8}")
+        for e in entries:
+            fpath = e['file']
+            if source_path:
+                try:
+                    fpath = str(Path(fpath).relative_to(source_path))
+                except ValueError:
+                    pass
+            print(f"  {fpath:<{col_w}}  {e['fan_in']:>7}  {e['fan_out']:>8}")
         print()
 
     @staticmethod
@@ -316,6 +395,8 @@ class ImportsRenderer:
                 ImportsRenderer._render_circular_dependencies(result, verbose)
             elif result_type == 'layer_violations':
                 ImportsRenderer._render_layer_violations(result, verbose)
+            elif result_type == 'fan_in_ranking':
+                ImportsRenderer._render_fan_in(result, resource)
             else:
                 ImportsRenderer._render_import_summary(result, resource)
         else:
@@ -365,6 +446,7 @@ class ImportsAdapter(ResourceAdapter):
         """
         self._graph: Optional[ImportGraph] = None
         self._symbols_by_file: Dict[Path, set] = {}
+        self._scanned_files: set = set()
         # Handle both absolute and relative paths:
         # - netloc component from URI parsing (imports://relative/path → 'relative/path')
         # - absolute path (imports:///absolute/path → '/absolute/path')
@@ -399,6 +481,8 @@ class ImportsAdapter(ResourceAdapter):
             return self._format_circular()
         elif 'violations' in query_params or kwargs.get('violations'):
             return self._format_violations()
+        elif query_params.get('rank') == 'fan-in':
+            return self._format_fan_in()
         else:
             return self._format_all()
 
@@ -497,6 +581,8 @@ class ImportsAdapter(ResourceAdapter):
             supported_exts = frozenset(get_all_extensions())
             files = [f for f in target_path.rglob('*') if f.is_file() and f.suffix in supported_exts]
 
+        self._scanned_files = set(files)
+
         # Extract imports from all files using appropriate extractor
         all_imports = []
         for file_path in files:
@@ -565,6 +651,38 @@ class ImportsAdapter(ResourceAdapter):
         }
 
         return self._build_response('imports', files=imports_by_file)
+
+    def _format_fan_in(self) -> Dict[str, Any]:
+        """Rank files by fan-in (number of other files that import them).
+
+        High fan-in = core abstractions (base classes, shared utils).
+        Zero fan-in = entry points or dead code.
+        """
+        if not self._graph:
+            return self._build_response('fan_in_ranking', entries=[], total=0)
+
+        top_param = self._query_params.get('top')
+        top = int(top_param) if top_param else None
+
+        # Union: all scanned files + files that appear as import targets (may live outside scan root)
+        all_files = self._scanned_files | set(self._graph.files.keys()) | set(self._graph.reverse_deps.keys())
+        entries = sorted(
+            [
+                {
+                    'file': str(f),
+                    'fan_in': len(self._graph.reverse_deps.get(f, set())),
+                    'fan_out': len(self._graph.dependencies.get(f, set())),
+                }
+                for f in all_files
+            ],
+            key=lambda e: (-e['fan_in'], -e['fan_out'], e['file']),
+        )
+
+        total = len(entries)
+        if top:
+            entries = entries[:top]
+
+        return self._build_response('fan_in_ranking', entries=entries, total=total)
 
     def _format_unused(self) -> Dict[str, Any]:
         """Format unused imports."""

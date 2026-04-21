@@ -790,3 +790,96 @@ class TestImportsRenderer:
 
         # Should contain unused imports info
         assert 'unused' in output.lower() or 'import' in output.lower()
+
+
+class TestFanInRanking:
+    """Tests for ?rank=fan-in feature (BACK-206)."""
+
+    def test_fan_in_basic(self, tmp_path):
+        """Fan-in counts how many files import each file."""
+        (tmp_path / "utils.py").write_text("def helper(): pass\n")
+        (tmp_path / "a.py").write_text("from utils import helper\n")
+        (tmp_path / "b.py").write_text("from utils import helper\n")
+        (tmp_path / "main.py").write_text("import a\nimport b\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'rank=fan-in')
+        result = adapter.get_structure()
+
+        assert result['type'] == 'fan_in_ranking'
+        entries = {e['file'].split('/')[-1]: e for e in result['entries']}
+        assert entries['utils.py']['fan_in'] == 2
+        assert entries['main.py']['fan_in'] == 0
+
+    def test_fan_in_sorted_descending(self, tmp_path):
+        """Results must be sorted highest fan-in first."""
+        (tmp_path / "core.py").write_text("x = 1\n")
+        (tmp_path / "a.py").write_text("import core\n")
+        (tmp_path / "b.py").write_text("import core\n")
+        (tmp_path / "leaf.py").write_text("import a\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'rank=fan-in')
+        result = adapter.get_structure()
+
+        fan_ins = [e['fan_in'] for e in result['entries']]
+        assert fan_ins == sorted(fan_ins, reverse=True)
+
+    def test_fan_in_top_limit(self, tmp_path):
+        """?top= limits result count."""
+        for i in range(5):
+            (tmp_path / f"mod{i}.py").write_text(f"x = {i}\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'rank=fan-in&top=3')
+        result = adapter.get_structure()
+
+        assert len(result['entries']) <= 3
+        assert result['total'] == 5
+
+    def test_fan_out_populated(self, tmp_path):
+        """fan_out counts how many files this file imports."""
+        (tmp_path / "utils.py").write_text("x = 1\n")
+        (tmp_path / "importer.py").write_text("import utils\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'rank=fan-in')
+        result = adapter.get_structure()
+
+        entries = {e['file'].split('/')[-1]: e for e in result['entries']}
+        assert entries['importer.py']['fan_out'] == 1
+        assert entries['utils.py']['fan_out'] == 0
+
+    def test_fan_in_empty_dir(self, tmp_path):
+        """Empty directory returns empty entries, not an error."""
+        adapter = ImportsAdapter(str(tmp_path), 'rank=fan-in')
+        result = adapter.get_structure()
+
+        assert result['type'] == 'fan_in_ranking'
+        assert result['entries'] == []
+        assert result['total'] == 0
+
+    def test_fan_in_renderer(self, tmp_path):
+        """Renderer output contains expected columns."""
+        from reveal.adapters.imports import ImportsRenderer
+        from io import StringIO
+        import sys
+
+        (tmp_path / "utils.py").write_text("x = 1\n")
+        (tmp_path / "a.py").write_text("import utils\n")
+
+        adapter = ImportsAdapter(str(tmp_path), 'rank=fan-in')
+        result = adapter.get_structure()
+
+        old_stdout = sys.stdout
+        sys.stdout = buf = StringIO()
+        ImportsRenderer.render_structure(result, format='text', resource=str(tmp_path))
+        sys.stdout = old_stdout
+        output = buf.getvalue()
+
+        assert 'FAN-IN' in output
+        assert 'FAN-OUT' in output
+        assert 'utils.py' in output
+
+    def test_fan_in_schema_has_rank_param(self):
+        """Schema exposes rank and top query parameters."""
+        schema = ImportsAdapter.get_schema()
+        assert 'rank' in schema['query_params']
+        assert 'top' in schema['query_params']
+        assert 'fan_in_ranking' in [t['type'] for t in schema['output_types']]

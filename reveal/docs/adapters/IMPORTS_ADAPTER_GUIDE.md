@@ -350,6 +350,97 @@ reveal 'imports://src?circular' --format=json
 
 ---
 
+## Fan-in Ranking
+
+Rank files by how many other files import them — the single most useful architectural signal derivable from code alone:
+
+```bash
+reveal 'imports://src?rank=fan-in'
+reveal 'imports://src?rank=fan-in&top=20'
+```
+
+**Returns** (~200 tokens):
+
+```
+Fan-in ranking: /home/user/projects/myproject/src
+Files: 10 of 45  (fan-in = number of files that import this file)
+
+  FILE                            FAN-IN   FAN-OUT
+  ----------------------------   -------  --------
+  db/session.py                       18         2
+  utils/__init__.py                   15         3
+  models/base.py                      12         0
+  config.py                            9         1
+  api/deps.py                          7         4
+  auth/tokens.py                       5         2
+  core/exceptions.py                   4         0
+  services/cache.py                    3         3
+  api/routes.py                        0         8
+  main.py                              0         3
+```
+
+**Reading the output:**
+
+| Pattern | Meaning | Action |
+|---------|---------|--------|
+| High fan-in (top rows) | Core abstractions — base classes, shared utils, session factories | Change carefully — ripples everywhere |
+| Fan-in = 0, fan-out > 0 | Entry points — `main.py`, CLI handlers, route files | Safe starting points for exploration |
+| Fan-in = 0, fan-out = 0 | Dead code candidates or standalone scripts | Investigate before deleting |
+
+**`?top=N` parameter:**
+
+```bash
+# Top 10 most-imported files
+reveal 'imports://src?rank=fan-in&top=10'
+```
+
+### JSON Output
+
+```bash
+reveal 'imports://src?rank=fan-in' --format=json
+```
+
+**Returns**:
+```json
+{
+  "contract_version": "1.0",
+  "type": "fan_in_ranking",
+  "source": "/home/user/projects/myproject/src",
+  "source_type": "directory",
+  "total": 45,
+  "entries": [
+    { "file": "/home/user/projects/myproject/src/db/session.py", "fan_in": 18, "fan_out": 2 },
+    { "file": "/home/user/projects/myproject/src/utils/__init__.py", "fan_in": 15, "fan_out": 3 }
+  ],
+  "metadata": { "total_imports": 238, "total_files": 45, "has_cycles": false }
+}
+```
+
+### How It Works
+
+1. **Build graph**: Scan all files with supported extensions, extract import statements
+2. **Resolve imports**: Map module names to file paths using language-specific resolver
+3. **Count reverse dependencies**: For each file, count unique files in `reverse_deps` (the files that import it)
+4. **Count forward dependencies**: For each file, count unique files in `dependencies` (the files it imports)
+5. **Sort**: Descending by fan-in, then fan-out, then filename
+
+**Coverage notes**:
+- ✅ Includes files with zero imports (they appear with fan-in from others)
+- ✅ Includes files never imported (they appear with fan-in=0)
+- ❌ Dynamic imports (`importlib.import_module`) not captured
+- ❌ Decorator-based registration (e.g. `@app.route`) not captured
+
+**When to use `imports://rank=fan-in` vs `depends://`:**
+
+| Tool | Question | Granularity |
+|------|----------|-------------|
+| `imports://src?rank=fan-in` | Which files are most central? (ranked list) | Codebase-wide |
+| `depends://src/utils.py` | What exactly imports this one file? | Per-file |
+
+Use `rank=fan-in` for orientation; use `depends://` for targeted impact analysis.
+
+---
+
 ## Layer Violation Checking
 
 Enforce architectural boundaries (requires .reveal.yaml configuration):
@@ -525,13 +616,15 @@ reveal 'imports://src?unused'
 
 Use `?flag` syntax for operations:
 
-| Flag | Description | Example |
-|------|-------------|---------|
+| Flag / Param | Description | Example |
+|--------------|-------------|---------|
 | `unused` | Find unused imports | `imports://src?unused` |
 | `circular` | Detect circular dependencies | `imports://src?circular` |
 | `violations` | Check layer violations | `imports://src?violations` |
+| `rank=fan-in` | Rank all files by fan-in (importer count) | `imports://src?rank=fan-in` |
+| `top=N` | Limit results for `?rank` (default: all) | `imports://src?rank=fan-in&top=20` |
 
-**Note**: Query parameters are flags (no `=value` needed)
+**Note**: `unused`, `circular`, and `violations` are flags (no `=value` needed). `rank` and `top` take values.
 
 ```bash
 # Correct
@@ -673,6 +766,36 @@ reveal 'imports://src?unused' --format=grep | grep "api/"
   }
 }
 ```
+
+### 5. fan_in_ranking
+
+**Use case**: Architectural orientation — surface core abstractions and entry points
+
+**Schema**:
+```json
+{
+  "contract_version": "1.0",
+  "type": "fan_in_ranking",
+  "source": "/home/user/projects/myproject/src",
+  "source_type": "directory",
+  "total": 45,
+  "entries": [
+    { "file": "/home/user/projects/myproject/src/db/session.py", "fan_in": 18, "fan_out": 2 },
+    { "file": "/home/user/projects/myproject/src/utils/__init__.py", "fan_in": 15, "fan_out": 3 },
+    { "file": "/home/user/projects/myproject/src/main.py", "fan_in": 0, "fan_out": 3 }
+  ],
+  "metadata": {
+    "total_imports": 238,
+    "total_files": 45,
+    "has_cycles": false
+  }
+}
+```
+
+**Fields**:
+- `total` — total files in the ranked list (before any `?top=N` limit)
+- `entries[].fan_in` — number of files that import this file (higher = more central)
+- `entries[].fan_out` — number of files this file imports
 
 ---
 

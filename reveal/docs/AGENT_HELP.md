@@ -986,31 +986,35 @@ Fields:
 
 **Pattern:**
 ```bash
-# Who imports this file?
+# Codebase-wide fan-in ranking — which files are most central?
+reveal 'imports://src?rank=fan-in'
+reveal 'imports://src?rank=fan-in&top=10'
+
+# Who imports this specific file?
 reveal depends://src/utils.py
 
 # Who imports anything in models/?
 reveal depends://src/models/
-
-# Most-imported (high-coupling) modules — change these carefully
-reveal 'depends://src?top=10'
 
 # Full reverse graph in GraphViz DOT format
 reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
 ```
 
 **Key use cases:**
-- **Impact analysis before refactoring** — before changing `utils.py`, run `depends://src/utils.py` to see every caller
-- **Coupling metrics** — `?top=N` ranks modules by fan-in (number of files that depend on them)
-- **Safe deletion** — verify `count: 0` before removing a module
+- **Architectural orientation** — `imports://src?rank=fan-in` ranks every file by how many other files import it. High fan-in = core abstractions; fan-in=0 = entry points or dead code. No docs needed — pure structural signal.
+- **Impact analysis before refactoring** — before changing `utils.py`, run `depends://src/utils.py` to see every direct importer
+- **Safe deletion** — verify `count: 0` (via `depends://`) before removing a module
 
-**How it relates to `imports://`:**
+**How the tools relate:**
 
-| Adapter | Question | Direction |
-|---------|----------|-----------|
-| `imports://src` | "What does this code import?" | Forward |
-| `depends://src/module.py` | "What imports this module?" | Reverse |
-| `calls://src/?target=fn` | "Who calls this function?" | Reverse (function level) |
+| Tool | Question | Granularity |
+|------|----------|-------------|
+| `imports://src?rank=fan-in` | Which files are most central? | Codebase ranking |
+| `depends://src/module.py` | What exactly imports this file? | Per-file reverse |
+| `imports://src` | What does each file import? | Forward, all files |
+| `calls://src/?target=fn` | Who calls this function? | Function level |
+
+Use `rank=fan-in` for orientation; `depends://` for targeted impact analysis before a specific change.
 
 **Limitations:** Dynamic imports (`importlib.import_module`) and `TYPE_CHECKING`-only imports are not tracked (same as `imports://`). Results are conservative — false negatives possible, never false positives.
 
