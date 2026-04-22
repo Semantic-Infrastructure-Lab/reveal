@@ -982,6 +982,22 @@ Fields:
 
 ---
 
+### Task: "Find dead code (uncalled functions)"
+
+**Pattern:**
+```bash
+reveal 'calls://src/?uncalled'                 # All functions with no callers
+reveal 'calls://src/?uncalled&type=function'   # Module-level functions only (skip methods)
+reveal 'calls://src/?uncalled&type=method'     # Methods only
+reveal 'calls://src/?uncalled&top=20'          # Top 20 most-recently-added uncalled
+```
+
+**Suppression:** Add `# noqa: uncalled` to a function's definition line (or up to 3 lines after) to exclude it from results — useful for runtime-dispatched functions, plugin entry points, or framework hooks that are called dynamically.
+
+**Limitations:** Static analysis only — functions called via `getattr`, `importlib`, or string dispatch are not tracked and appear as uncalled. Private (`_prefix`) functions are flagged separately. `__dunder__` methods, `@property`, `@classmethod`, and `@staticmethod` are excluded automatically.
+
+---
+
 ### Task: "Find what depends on a module (reverse import graph)"
 
 **Pattern:**
@@ -1020,6 +1036,25 @@ reveal 'depends://src?format=dot' | dot -Tsvg > deps.svg
 | `calls://src/?target=fn` | Who calls this function? | Function level |
 
 Use the three `imports://` views for orientation; `depends://` for targeted impact analysis before a specific change.
+
+**Enforce architectural layers (`?violations`):**
+```bash
+reveal 'imports://src?violations'
+```
+Flags any import that crosses a layer boundary in the wrong direction (e.g. domain importing infrastructure). Requires `.reveal.yaml` with a `layers:` + `allowed_deps:` config:
+```yaml
+layers:
+  presentation: [src/api/, src/views/]
+  application:  [src/services/]
+  domain:       [src/models/]
+  infrastructure: [src/db/, src/cache/]
+allowed_deps:
+  presentation: [application]
+  application:  [domain]
+  domain:       []
+  infrastructure: []
+```
+Output: one line per violation with file, line, and direction. Clean output = ✅ no violations.
 
 **Scan root tip**: scan from the project root (not a subdirectory) when imports use absolute package paths (e.g. `from myapp.utils import x`). Scanning too deep causes the resolver to miss edges, producing false fan-in=0 entries.
 
@@ -1060,7 +1095,7 @@ reveal overview . --no-git         # Skip git history (useful in CI or non-git d
 reveal overview . --format json    # Machine-readable output
 ```
 
-**Output sections:** codebase stats (files, lines, functions, classes) · language breakdown · quality pulse (avg score, hotspot count) · top hotspots with `→ reveal <file>` hints · top complex functions · recent git commits with age labels.
+**Output sections:** codebase stats (files, lines, functions, classes) · language breakdown · quality pulse (avg score, hotspot count) · top hotspots with `→ reveal <file>` hints · top complex functions · architecture (entry points, core abstractions, component cohesion bars, circular count) · recent git commits with age labels. Skip architecture with `--no-imports`.
 
 **Use case:** Fast orientation for an unfamiliar codebase. Combined entry point before deciding which area to investigate with `reveal hotspots`, `reveal deps`, or `ast://`.
 
@@ -1260,6 +1295,16 @@ reveal /etc/nginx/conf.d/users/USERNAME.conf --cpanel-certs
 # ⚠️ STALE (reload nginx) when serial numbers differ
 # Exit 2 on stale or expired certs
 ```
+
+**Fleet consistency matrix (`nginx:// --audit`):**
+```bash
+reveal nginx:// --audit                    # Cross-site matrix: where does the fleet diverge?
+reveal nginx:// --audit --only-failures    # Directives with gaps only
+reveal nginx:// --audit --format json      # Machine-readable
+```
+Reads all enabled site configs + `nginx.conf`, compares each directive against the fleet majority pattern. Surfaces: missing HSTS headers, server_tokens on, deprecated X-XSS-Protection, http2 gaps, rate limiting gaps, snippet inconsistencies. Flags directives present in ≥50% of server blocks but absent from the global `http{}` block as consolidation opportunities.
+
+---
 
 **Docker security checks (S701):**
 ```

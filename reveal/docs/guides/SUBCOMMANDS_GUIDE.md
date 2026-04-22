@@ -322,7 +322,9 @@ reveal hotspots . --files-only     # Only file-level view
 ## reveal overview — Codebase Dashboard
 
 One-glance dashboard synthesising stats, language breakdown, quality pulse, top
-hotspots, complex functions, and recent git activity into a single view.
+hotspots, complex functions, architecture overview (entry points, core
+abstractions, component cohesion, circular count), and recent git activity into
+a single view.
 
 ### Usage
 
@@ -336,6 +338,7 @@ reveal overview [PATH] [--top N] [--no-git]
 |------|-------------|
 | `--top N` | Items to show per section (default: 5) |
 | `--no-git` | Skip the recent git activity section |
+| `--no-imports` | Skip the Architecture section (import graph analysis) |
 | `--format json` | Machine-readable output |
 
 ### Examples
