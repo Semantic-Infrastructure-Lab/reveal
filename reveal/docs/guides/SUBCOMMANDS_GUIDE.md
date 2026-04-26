@@ -432,6 +432,19 @@ reveal hotspots [PATH] [--top N] [--min-complexity N]
 | `--files-only` | Show only file-level hotspots, skip function analysis |
 | `--format json` | Machine-readable output |
 
+### Test Coverage Heuristic
+
+Complex functions in hotspot output include a test-coverage indicator:
+
+- **✅** — a corresponding test exists (scanned from `tests/`, `test/`, `spec/` directories)
+- **⚪** — no test found for this function name
+
+JSON output (`--format json`) includes `has_test_hint: true/false` per function, enabling scripted filtering:
+
+```bash
+reveal hotspots . --format json | jq '.function_hotspots[] | select(.has_test_hint == false and .complexity > 15)'
+```
+
 ### Examples
 
 ```bash
@@ -625,7 +638,7 @@ reveal check [path] [flags]
 | Infrastructure | N | nginx config: SSL, ACME, proxy headers, timeout mismatches |
 | Refactoring | R | Too many function arguments |
 | Security | S | Docker `:latest` tags and security anti-patterns |
-| Types | T | Missing `Optional[]` on nullable parameters |
+| Types | T | Type annotation gaps: `Optional[]` on nullable params (T001–T004), annotation coverage (T005), TypedDict suggestions for bare-dict params (T006) |
 | URLs | U | Insecure `http://` GitHub URLs, URL/canonical mismatches |
 | Validation | V | Reveal self-checks: version consistency, adapter contracts, doc accuracy |
 

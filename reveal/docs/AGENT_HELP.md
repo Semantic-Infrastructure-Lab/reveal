@@ -1147,9 +1147,14 @@ reveal hotspots . --format json    # JSON for CI/scripting
 reveal stats://. --hotspots
 ```
 
-**Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores.
+**Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores. Each function shows a test-coverage indicator: ✅ (test exists in `tests/`/`test/`/`spec/`) or ⚪ (no test found). JSON output adds `has_test_hint: true/false` per function.
 
 **Use case:** Identify the 10 worst files in a codebase — start technical debt work here. Output is the same data `reveal review` uses to surface hotspots in PR reviews.
+
+**Find complex functions without tests:**
+```bash
+reveal hotspots . --format json | jq '.function_hotspots[] | select(.has_test_hint == false and .complexity > 15)'
+```
 
 ---
 
