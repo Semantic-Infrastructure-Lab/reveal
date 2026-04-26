@@ -1148,7 +1148,7 @@ reveal hotspots . --format json    # JSON for CI/scripting
 reveal stats://. --hotspots
 ```
 
-**Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores. Each function shows a test-coverage indicator: ✅ (test exists in `tests/`/`test/`/`spec/`) or ⚪ (no test found). JSON output adds `has_test_hint: true/false` per function.
+**Output:** Files ranked by quality score (worst first) + complex functions with cyclomatic complexity scores. Each function shows a test-coverage indicator: ✅ (a `test_<func>` function exists in `tests/`/`test/`/`spec/`, or a `test_<module>.py` file covers the module) or ⚪ (no test match found). JSON output adds `has_test_hint: true/false` per function.
 
 **Use case:** Identify the 10 worst files in a codebase — start technical debt work here. Output is the same data `reveal review` uses to surface hotspots in PR reviews.
 
@@ -1198,15 +1198,15 @@ reveal architecture src/ --no-imports  # Skip import analysis (faster, no graph)
 ```bash
 reveal pack ./src --architecture            # Boost core abstractions; prepend architecture brief
 reveal pack ./src --architecture --budget 6000
-reveal pack ./src --architecture --content  # Architecture brief + structure content per file
-reveal pack ./src --since main --architecture --budget 8000  # PR context + arch brief
+reveal pack ./src --architecture --content  # Architecture hint + structure content per file
+reveal pack ./src --since main --architecture --budget 8000  # PR context + arch hint
 ```
 
 **`--architecture` does two things:**
 1. Queries `imports://` fan-in data and boosts widely-imported files in the priority score (fan-in ≥1: +1pt, ≥5: +3pt, ≥15: +5pt)
-2. Prepends an **Architecture Brief** before the tier list:
+2. Prepends an **Architecture Hint** before the tier list:
 ```
-── Architecture Brief ──
+── Architecture Hint ──
 Entry points:      main.py
 Core abstractions: utils/__init__.py(39)  base.py(27)  registry.py(14)
 ```

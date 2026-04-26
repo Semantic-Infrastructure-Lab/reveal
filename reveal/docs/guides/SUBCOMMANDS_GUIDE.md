@@ -232,7 +232,7 @@ reveal pack . --content                   # Structure content, not just file lis
 reveal pack src/ --since main --content --budget 8000  # Full agent context: changed + structure
 reveal pack src/ --since main --budget 8000    # PR context: changed files first (manifest only)
 reveal pack src/ --since HEAD~3 --budget 4000  # Since 3 commits ago
-reveal pack . --architecture              # Boost core abstractions; show architecture brief
+reveal pack . --architecture              # Boost core abstractions; show architecture hint
 reveal pack . --format json               # For agent consumption
 ```
 
@@ -441,10 +441,8 @@ reveal hotspots [PATH] [--top N] [--min-complexity N]
 
 Complex functions in hotspot output include a test-coverage indicator:
 
-- **✅** — a corresponding test exists (scanned from `tests/`, `test/`, `spec/` directories)
-- **⚪** — no test found for this function name
-
-> **Limitation (BACK-253):** The heuristic looks for `def test_<function_name>` in test files. Projects using `test_<module>_<scenario>` naming (e.g. `test_bearish_sweep_of_session_high` in `test_liquidity_sweep.py`) will show ⚪ even when a full test suite exists. A ⚪ means the heuristic didn't find a match — not that the function is definitely untested.
+- **✅** — a `test_<func>` function exists in `tests/`/`test/`/`spec/`, **or** a `test_<module>.py` file covers the module (e.g. `test_liquidity_sweep.py` covers any function in `liquidity_sweep.py`)
+- **⚪** — neither match found; the function may still be tested indirectly
 
 JSON output (`--format json`) includes `has_test_hint: true/false` per function, enabling scripted filtering:
 

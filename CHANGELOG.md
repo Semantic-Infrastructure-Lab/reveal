@@ -12,6 +12,12 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.89.0] - 2026-04-26 (session heroic-hydra-0426)
+
+### Fixed
+- **`reveal hotspots` test coverage false negatives** — functions in files covered by `test_<module>.py` (e.g. `test_liquidity_sweep.py`) now show ✅ instead of ⚪ even when no `test_<func>` function exists. `_build_test_name_index` now adds module names from test file names; `_render_function_hotspots` and `run_hotspots` fall back to module name check. 5 new tests. (BACK-253)
+- **`reveal pack --architecture` Architecture Hint** — section renamed from "Architecture Brief" to "Architecture Hint"; entry point threshold lowered from `priority ≥ 10` to `≥ 8` (includes focus-matched files); "Top files" fallback added when neither entry points nor core abstractions qualify. 4 new tests. (BACK-255)
+
 ## [0.88.0] - 2026-04-26 (session fikirazi-0426)
 
 ### Fixed
