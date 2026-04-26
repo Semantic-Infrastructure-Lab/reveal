@@ -98,72 +98,55 @@ class TestCreateHotspotsParser(unittest.TestCase):
 
 
 class TestRunFileHotspots(unittest.TestCase):
-    """_run_file_hotspots: subprocess mocked."""
+    """_run_file_hotspots: StatsAdapter mocked."""
 
-    @patch('reveal.cli.commands.hotspots.subprocess.run')
-    def test_returns_hotspots_list(self, mock_run):
-        data = {'hotspots': [_file_hotspot('a.py', 60), _file_hotspot('b.py', 75)]}
-        mock_run.return_value = MagicMock(stdout=json.dumps(data), returncode=0)
+    @patch('reveal.adapters.stats.StatsAdapter.get_structure')
+    def test_returns_hotspots_list(self, mock_gs):
+        mock_gs.return_value = {'hotspots': [_file_hotspot('a.py', 60), _file_hotspot('b.py', 75)]}
         result = _run_file_hotspots(Path('/tmp'), top=10)
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]['file'], 'a.py')
 
-    @patch('reveal.cli.commands.hotspots.subprocess.run')
-    def test_respects_top_limit(self, mock_run):
-        data = {'hotspots': [_file_hotspot(f'f{i}.py', 50) for i in range(20)]}
-        mock_run.return_value = MagicMock(stdout=json.dumps(data), returncode=0)
+    @patch('reveal.adapters.stats.StatsAdapter.get_structure')
+    def test_respects_top_limit(self, mock_gs):
+        mock_gs.return_value = {'hotspots': [_file_hotspot(f'f{i}.py', 50) for i in range(20)]}
         result = _run_file_hotspots(Path('/tmp'), top=5)
         self.assertEqual(len(result), 5)
 
-    @patch('reveal.cli.commands.hotspots.subprocess.run')
-    def test_empty_stdout_returns_empty(self, mock_run):
-        mock_run.return_value = MagicMock(stdout='', returncode=0)
+    @patch('reveal.adapters.stats.StatsAdapter.get_structure')
+    def test_missing_hotspots_key_returns_empty(self, mock_gs):
+        mock_gs.return_value = {'other': []}
         result = _run_file_hotspots(Path('/tmp'), top=10)
         self.assertEqual(result, [])
 
-    @patch('reveal.cli.commands.hotspots.subprocess.run')
-    def test_missing_hotspots_key_returns_empty(self, mock_run):
-        mock_run.return_value = MagicMock(stdout=json.dumps({'other': []}), returncode=0)
-        result = _run_file_hotspots(Path('/tmp'), top=10)
-        self.assertEqual(result, [])
-
-    @patch('reveal.cli.commands.hotspots.subprocess.run', side_effect=Exception("boom"))
+    @patch('reveal.adapters.stats.StatsAdapter.get_structure', side_effect=Exception("boom"))
     def test_exception_returns_empty(self, _mock):
         result = _run_file_hotspots(Path('/tmp'), top=10)
         self.assertEqual(result, [])
 
 
 class TestRunFunctionHotspots(unittest.TestCase):
-    """_run_function_hotspots: subprocess mocked."""
+    """_run_function_hotspots: AstAdapter mocked."""
 
-    @patch('reveal.cli.commands.hotspots.subprocess.run')
-    def test_returns_results_list(self, mock_run):
-        data = {'results': [_fn_hotspot('foo', 15), _fn_hotspot('bar', 12)]}
-        mock_run.return_value = MagicMock(stdout=json.dumps(data), returncode=0)
+    @patch('reveal.adapters.ast.AstAdapter.get_structure')
+    def test_returns_results_list(self, mock_gs):
+        mock_gs.return_value = {'results': [_fn_hotspot('foo', 15), _fn_hotspot('bar', 12)]}
         result = _run_function_hotspots(Path('/tmp'), min_complexity=10, top=10)
         self.assertEqual(len(result), 2)
 
-    @patch('reveal.cli.commands.hotspots.subprocess.run')
-    def test_falls_back_to_elements_key(self, mock_run):
-        data = {'elements': [_fn_hotspot('baz', 11)]}
-        mock_run.return_value = MagicMock(stdout=json.dumps(data), returncode=0)
+    @patch('reveal.adapters.ast.AstAdapter.get_structure')
+    def test_falls_back_to_elements_key(self, mock_gs):
+        mock_gs.return_value = {'elements': [_fn_hotspot('baz', 11)]}
         result = _run_function_hotspots(Path('/tmp'), min_complexity=10, top=10)
         self.assertEqual(len(result), 1)
 
-    @patch('reveal.cli.commands.hotspots.subprocess.run')
-    def test_respects_top_limit(self, mock_run):
-        data = {'results': [_fn_hotspot(f'fn{i}', 10 + i) for i in range(15)]}
-        mock_run.return_value = MagicMock(stdout=json.dumps(data), returncode=0)
+    @patch('reveal.adapters.ast.AstAdapter.get_structure')
+    def test_respects_top_limit(self, mock_gs):
+        mock_gs.return_value = {'results': [_fn_hotspot(f'fn{i}', 10 + i) for i in range(15)]}
         result = _run_function_hotspots(Path('/tmp'), min_complexity=10, top=5)
         self.assertEqual(len(result), 5)
 
-    @patch('reveal.cli.commands.hotspots.subprocess.run')
-    def test_empty_stdout_returns_empty(self, mock_run):
-        mock_run.return_value = MagicMock(stdout='', returncode=0)
-        result = _run_function_hotspots(Path('/tmp'), min_complexity=10, top=10)
-        self.assertEqual(result, [])
-
-    @patch('reveal.cli.commands.hotspots.subprocess.run', side_effect=Exception("oops"))
+    @patch('reveal.adapters.ast.AstAdapter.get_structure', side_effect=Exception("oops"))
     def test_exception_returns_empty(self, _mock):
         result = _run_function_hotspots(Path('/tmp'), min_complexity=10, top=10)
         self.assertEqual(result, [])

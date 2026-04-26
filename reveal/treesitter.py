@@ -536,6 +536,25 @@ class TreeSitterAnalyzer(FileAnalyzer):
 
         return classes
 
+    def _extract_class_bases(self, node) -> List[str]:
+        """Extract base class names from a class node's argument_list child.
+
+        Handles simple identifiers (ABC) and dotted attributes (abc.ABC).
+        Skips punctuation and keyword arguments (metaclass=...).
+        Returns an empty list for classes with no bases or non-Python nodes.
+        """
+        for child in node.children:
+            if child.type != 'argument_list':
+                continue
+            bases = []
+            for item in child.children:
+                if item.type in ('identifier', 'attribute'):
+                    text = self._get_node_text(item).strip()
+                    if text:
+                        bases.append(text)
+            return bases
+        return []
+
     def _build_class_dict(self, node, name: str, decorators: List[str],
                          decorated_node=None) -> Dict[str, Any]:
         """Build class dictionary.
@@ -556,6 +575,7 @@ class TreeSitterAnalyzer(FileAnalyzer):
             'line_end': line_end,
             'name': name,
             'decorators': decorators,
+            'bases': self._extract_class_bases(node),
         }
 
     def _extract_structs(self) -> List[Dict[str, Any]]:

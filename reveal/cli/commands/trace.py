@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import ast
 import json
 import os
 import sys
@@ -132,65 +131,53 @@ def _bfs_depth(name: str, root: str, bfs: Dict[str, Any]) -> int:
 
 
 def _collect_function_index(path: str) -> Dict[str, Dict[str, Any]]:
-    """Scan all Python files under *path* and return name → info dict."""
+    """Scan all files under *path* via collect_structures and return name → info dict."""
     from reveal.adapters.ast.analysis import collect_structures
+    from reveal.adapters.ast.nav_effects import classify_call
 
     structures = collect_structures(path)
     index: Dict[str, Dict[str, Any]] = {}
-    file_trees: Dict[str, ast.Module] = {}
 
     for file_struct in structures:
         file_path = file_struct.get('file', '')
-        if not file_path.endswith('.py'):
-            continue
-        if file_path not in file_trees:
-            try:
-                source = Path(file_path).read_text(encoding='utf-8', errors='ignore')
-                file_trees[file_path] = ast.parse(source)
-            except (OSError, SyntaxError):
-                continue
-
-        tree = file_trees[file_path]
-        func_nodes: Dict[str, ast.FunctionDef] = {
-            n.name: n  # type: ignore[misc]
-            for n in ast.walk(tree)
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-        }
-
         for elem in file_struct.get('elements', []):
             if elem.get('category') not in ('functions', 'methods'):
                 continue
             name = elem.get('name', '')
             if not name or name in index:
                 continue
-            node = func_nodes.get(name)
-            params: List[str] = []
-            effects: List[str] = []
-            if node:
-                params = [a.arg for a in node.args.args if a.arg != 'self']
-                effects = _extract_effects(node)
             index[name] = {
                 'file': file_path,
                 'line': elem.get('line', 0),
-                'params': params,
-                'effects': effects,
+                'params': _params_from_signature(elem.get('signature', ''), name),
+                'effects': _effects_from_calls(elem.get('calls', []), classify_call),
             }
 
     return index
 
 
-def _extract_effects(func_node: ast.FunctionDef) -> List[str]:  # type: ignore[type-arg]
-    """Return deduplicated effect labels for classified call sites in *func_node*."""
-    from reveal.adapters.ast.nav_effects import classify_call
+def _params_from_signature(signature: str, func_name: str) -> List[str]:
+    """Extract parameter names from a function signature string.
 
+    Signature format from tree-sitter: '(param1: Type, *args) -> ReturnType'
+    or just '(param1, param2)'.
+    """
+    if '(' not in signature:
+        return []
+    inner = signature.split('(', 1)[1].split(')', 1)[0]
+    params = []
+    for part in inner.split(','):
+        name = part.strip().lstrip('*').split(':')[0].split('=')[0].strip()
+        if name and name not in ('self', 'cls', ''):
+            params.append(name)
+    return params
+
+
+def _effects_from_calls(calls: List[str], classify_call) -> List[str]:
+    """Return deduplicated effect labels for a function's call list."""
     effects: List[str] = []
     seen: Set[str] = set()
-    for node in ast.walk(func_node):
-        if not isinstance(node, ast.Call):
-            continue
-        callee = _call_name(node.func)
-        if not callee:
-            continue
+    for callee in calls:
         kind = classify_call(callee)
         if kind:
             label = f"{kind}:{callee.split('.')[-1]}"
@@ -198,15 +185,6 @@ def _extract_effects(func_node: ast.FunctionDef) -> List[str]:  # type: ignore[t
                 seen.add(label)
                 effects.append(label)
     return effects
-
-
-def _call_name(node: ast.expr) -> Optional[str]:  # type: ignore[type-arg]
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        obj = _call_name(node.value)
-        return f"{obj}.{node.attr}" if obj else node.attr
-    return None
 
 
 # ---------------------------------------------------------------------------

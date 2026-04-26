@@ -118,6 +118,7 @@ def create_element_dict(
         'line_count': line_count,
         'signature': item.get('signature', ''),
         'decorators': item.get('decorators', []),
+        'bases': item.get('bases', []),
     }
 
     # Add complexity for functions/methods

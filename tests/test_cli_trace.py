@@ -1,6 +1,5 @@
 """Tests for reveal trace subcommand."""
 
-import ast
 import json
 import os
 import sys
@@ -15,9 +14,9 @@ from unittest.mock import patch
 from reveal.cli.commands.trace import (
     _bfs_depth,
     _build_trace,
-    _call_name,
     _collect_function_index,
-    _extract_effects,
+    _effects_from_calls,
+    _params_from_signature,
     _relpath,
     _render_trace,
     create_trace_parser,
@@ -76,91 +75,77 @@ class TestCreateTraceParser(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# _call_name
+# _params_from_signature
 # ---------------------------------------------------------------------------
 
-class TestCallName(unittest.TestCase):
+class TestParamsFromSignature(unittest.TestCase):
 
-    def _parse_call(self, src: str) -> ast.expr:
-        tree = ast.parse(src, mode='eval')
-        return tree.body.func  # type: ignore[attr-defined]
+    def test_empty_signature(self):
+        self.assertEqual(_params_from_signature('', 'f'), [])
 
-    def test_simple_name(self):
-        func = self._parse_call('foo()')
-        self.assertEqual(_call_name(func), 'foo')
+    def test_no_parens(self):
+        self.assertEqual(_params_from_signature('no parens here', 'f'), [])
 
-    def test_attribute_chain(self):
-        func = self._parse_call('os.path.join()')
-        self.assertEqual(_call_name(func), 'os.path.join')
+    def test_no_params(self):
+        self.assertEqual(_params_from_signature('() -> None', 'f'), [])
 
-    def test_method_call(self):
-        func = self._parse_call('obj.method()')
-        self.assertEqual(_call_name(func), 'obj.method')
+    def test_simple_params(self):
+        self.assertEqual(_params_from_signature('(name, greeting) -> str', 'f'), ['name', 'greeting'])
 
-    def test_non_name_returns_none(self):
-        # subscript call like d['key']() has no simple name
-        func = ast.parse('d["k"]()', mode='eval').body.func  # type: ignore[attr-defined]
-        self.assertIsNone(_call_name(func))
+    def test_self_stripped(self):
+        self.assertEqual(_params_from_signature('(self, x) -> None', 'bar'), ['x'])
+
+    def test_type_annotations_stripped(self):
+        params = _params_from_signature('(name: str, count: int) -> None', 'f')
+        self.assertEqual(params, ['name', 'count'])
+
+    def test_star_args_stripped(self):
+        params = _params_from_signature('(*args, **kwargs) -> None', 'f')
+        self.assertEqual(params, ['args', 'kwargs'])
+
+    def test_defaults_stripped(self):
+        params = _params_from_signature('(x=1, y=2) -> None', 'f')
+        self.assertEqual(params, ['x', 'y'])
 
 
 # ---------------------------------------------------------------------------
-# _extract_effects
+# _effects_from_calls
 # ---------------------------------------------------------------------------
 
-class TestExtractEffects(unittest.TestCase):
+class TestEffectsFromCalls(unittest.TestCase):
 
-    def _func_node(self, src: str) -> ast.FunctionDef:
-        tree = ast.parse(textwrap.dedent(src))
-        return next(n for n in ast.walk(tree)
-                    if isinstance(n, ast.FunctionDef))
+    def test_empty_calls(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(_effects_from_calls([], classify_call), [])
 
-    def test_no_effects(self):
-        node = self._func_node("""\
-            def f():
-                x = 1 + 1
-        """)
-        self.assertEqual(_extract_effects(node), [])
+    def test_unclassified_call_ignored(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        self.assertEqual(_effects_from_calls(['some_helper'], classify_call), [])
 
     def test_sys_exit_classified_hard_stop(self):
-        node = self._func_node("""\
-            def f():
-                sys.exit(1)
-        """)
-        effects = _extract_effects(node)
+        from reveal.adapters.ast.nav_effects import classify_call
+        effects = _effects_from_calls(['sys.exit'], classify_call)
         self.assertTrue(any('hard_stop' in e for e in effects))
 
-    def test_file_shutil_classified(self):
-        node = self._func_node("""\
-            def f(src, dst):
-                shutil.copy(src, dst)
-        """)
-        effects = _extract_effects(node)
+    def test_shutil_copy_classified_file(self):
+        from reveal.adapters.ast.nav_effects import classify_call
+        effects = _effects_from_calls(['shutil.copy'], classify_call)
         self.assertTrue(any('file' in e for e in effects))
 
     def test_logging_classified(self):
-        node = self._func_node("""\
-            def f():
-                logging.info("hello")
-        """)
-        effects = _extract_effects(node)
+        from reveal.adapters.ast.nav_effects import classify_call
+        effects = _effects_from_calls(['logging.info'], classify_call)
         self.assertTrue(any('log' in e for e in effects))
 
     def test_deduplicated(self):
-        node = self._func_node("""\
-            def f():
-                logging.info("a")
-                logging.info("b")
-        """)
-        log_effects = [e for e in _extract_effects(node) if 'log' in e]
+        from reveal.adapters.ast.nav_effects import classify_call
+        effects = _effects_from_calls(['logging.info', 'logging.info'], classify_call)
+        log_effects = [e for e in effects if 'log' in e]
         self.assertEqual(len(log_effects), 1)
 
     def test_multiple_kinds(self):
-        node = self._func_node("""\
-            def f():
-                sys.exit(0)
-                shutil.copy("a", "b")
-        """)
-        effects = _extract_effects(node)
+        from reveal.adapters.ast.nav_effects import classify_call
+        effects = _effects_from_calls(['sys.exit', 'shutil.copy'], classify_call)
         kinds = {e.split(':')[0] for e in effects}
         self.assertIn('hard_stop', kinds)
         self.assertIn('file', kinds)

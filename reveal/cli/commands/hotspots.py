@@ -4,7 +4,6 @@ import argparse
 import json
 import os
 import re
-import subprocess
 import sys
 from argparse import Namespace
 from pathlib import Path
@@ -109,35 +108,24 @@ def run_hotspots(args: Namespace) -> None:
 
 
 def _run_file_hotspots(path: Path, top: int) -> List[Dict[str, Any]]:
-    """Fetch file-level hotspots via stats://."""
+    """Fetch file-level hotspots via StatsAdapter."""
     try:
-        result = subprocess.run(
-            ['reveal', f'stats://{path}?hotspots=true', '--format=json'],
-            capture_output=True, text=True, timeout=60
-        )
-        if result.stdout.strip():
-            data = json.loads(result.stdout)
-            hotspots = data.get('hotspots', [])
-            return cast(List[Dict[str, Any]], hotspots[:top])
-        return []
+        from reveal.adapters.stats import StatsAdapter
+        data = StatsAdapter(str(path), 'hotspots=true').get_structure()
+        hotspots = data.get('hotspots', [])
+        return cast(List[Dict[str, Any]], hotspots[:top])
     except Exception:
         return []
 
 
 def _run_function_hotspots(path: Path, min_complexity: int, top: int) -> List[Dict[str, Any]]:
-    """Fetch high-complexity functions via ast://."""
+    """Fetch high-complexity functions via AstAdapter."""
     try:
-        result = subprocess.run(
-            ['reveal',
-             f'ast://{path}?complexity>{min_complexity - 1}&sort=-complexity&limit={top}',
-             '--format=json'],
-            capture_output=True, text=True, timeout=60
-        )
-        if result.stdout.strip():
-            data = json.loads(result.stdout)
-            results = data.get('results', data.get('elements', []))
-            return cast(List[Dict[str, Any]], results[:top])
-        return []
+        from reveal.adapters.ast import AstAdapter
+        query = f'complexity>{min_complexity - 1}&sort=-complexity&limit={top}'
+        data = AstAdapter(str(path), query).get_structure()
+        results = data.get('results', data.get('elements', []))
+        return cast(List[Dict[str, Any]], results[:top])
     except Exception:
         return []
 

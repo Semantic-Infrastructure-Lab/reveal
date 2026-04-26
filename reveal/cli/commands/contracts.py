@@ -1,9 +1,7 @@
 """reveal contracts — contract and seam inventory for a codebase."""
 
 import argparse
-import ast
 import json
-import os
 import sys
 from argparse import Namespace
 from pathlib import Path
@@ -12,11 +10,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 _CONTRACT_PATH_HINTS: frozenset = frozenset({
     'base', 'schema', 'contract', 'protocol', 'interface',
     'types', 'models', 'dto', 'abstract', 'abc',
-})
-
-_SKIP_DIRS: frozenset = frozenset({
-    '__pycache__', '.git', '.tox', '.venv', 'venv', 'env',
-    'node_modules', '.mypy_cache', '.pytest_cache', 'dist', 'build',
 })
 
 
@@ -77,8 +70,10 @@ def _scan_contracts(
     abstract_only: bool = False,
     show_implementations: bool = True,
 ) -> Dict[str, Any]:
-    py_files = _collect_python_files(path)
-    all_classes = _extract_all_classes(py_files)
+    from reveal.adapters.ast.analysis import collect_structures
+
+    structures = collect_structures(str(path))
+    all_classes = _extract_all_classes(structures)
 
     # Classify contracts
     abcs: List[Dict[str, Any]] = []
@@ -118,12 +113,10 @@ def _scan_contracts(
             basemodels.append(cls)
             contract_names.add(cls['name'])
         elif is_path_hint and not abstract_only:
-            # Only include if it looks like an abstract/base class (has abstract methods or no body)
             if cls.get('abstract_methods') or _has_pass_only_methods(cls):
                 path_heuristic.append(cls)
                 contract_names.add(cls['name'])
 
-    # Find implementations if requested
     if show_implementations:
         _add_implementations(all_classes, contract_names, abcs + protocols + path_heuristic)
 
@@ -139,37 +132,32 @@ def _scan_contracts(
     }
 
 
-def _collect_python_files(path: Path) -> List[Path]:
-    files: List[Path] = []
-    if path.is_file() and path.suffix == '.py':
-        return [path]
-    for root, dirs, filenames in os.walk(str(path)):
-        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith('.')]
-        for fname in filenames:
-            if fname.endswith('.py'):
-                files.append(Path(os.path.join(root, fname)))
-    return files
+def _extract_all_classes(structures: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Extract class dicts from collect_structures output.
 
+    Uses the 'bases' field added to class elements by TreeSitterAnalyzer._extract_class_bases.
+    Abstract methods are derived by matching function elements with @abstractmethod decorators
+    whose line falls within the class's line range.
+    """
+    classes = []
+    for file_struct in structures:
+        file_path = file_struct.get('file', '')
+        elements = file_struct.get('elements', [])
 
-def _extract_all_classes(py_files: List[Path]) -> List[Dict[str, Any]]:
-    classes: List[Dict[str, Any]] = []
-    for file_path in py_files:
-        try:
-            source = file_path.read_text(errors='replace')
-            tree = ast.parse(source, filename=str(file_path))
-        except (SyntaxError, OSError):
-            continue
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.ClassDef):
-                continue
-            bases = [_unparse_name(b) for b in node.bases]
-            decorators = [_unparse_name(d) for d in node.decorator_list]
-            abstract_methods = _find_abstract_methods(node)
+        # Partition into class elements and function elements for this file
+        cls_elems = [e for e in elements if e['category'] == 'classes']
+        func_elems = [e for e in elements if e['category'] in ('functions', 'methods')]
+
+        for cls_elem in cls_elems:
+            abstract_methods = _find_abstract_methods(cls_elem, func_elems)
+            # Normalise decorator strings — strip leading '@'
+            raw_decos = cls_elem.get('decorators', [])
+            decorators = [d.lstrip('@').split('(')[0] for d in raw_decos]
             classes.append({
-                'name': node.name,
-                'file': str(file_path),
-                'line': node.lineno,
-                'bases': bases,
+                'name': cls_elem['name'],
+                'file': file_path,
+                'line': cls_elem['line'],
+                'bases': cls_elem.get('bases', []),
                 'decorators': decorators,
                 'abstract_methods': abstract_methods,
                 'implementations': [],
@@ -177,28 +165,20 @@ def _extract_all_classes(py_files: List[Path]) -> List[Dict[str, Any]]:
     return classes
 
 
-def _unparse_name(node: ast.expr) -> str:
-    if isinstance(node, ast.Name):
-        return node.id
-    if isinstance(node, ast.Attribute):
-        return f"{_unparse_name(node.value)}.{node.attr}"
-    if isinstance(node, ast.Subscript):
-        return _unparse_name(node.value)
-    try:
-        return ast.unparse(node)
-    except Exception:
-        return '?'
-
-
-def _find_abstract_methods(cls_node: ast.ClassDef) -> List[str]:
-    methods = []
-    for node in ast.walk(cls_node):
-        if not isinstance(node, ast.FunctionDef):
+def _find_abstract_methods(cls_elem: Dict[str, Any], func_elems: List[Dict[str, Any]]) -> List[str]:
+    """Find method names with @abstractmethod within the class's line range."""
+    cls_start = cls_elem['line']
+    cls_end = cls_start + max(cls_elem.get('line_count', 0) - 1, 0)
+    abstract = []
+    for fn in func_elems:
+        fn_line = fn['line']
+        if not (cls_start < fn_line <= cls_end):
             continue
-        deco_names = {_unparse_name(d) for d in node.decorator_list}
-        if 'abstractmethod' in deco_names or 'abc.abstractmethod' in deco_names:
-            methods.append(node.name)
-    return methods
+        for d in fn.get('decorators', []):
+            if 'abstractmethod' in d:
+                abstract.append(fn['name'])
+                break
+    return abstract
 
 
 def _has_pass_only_methods(cls: Dict[str, Any]) -> bool:
@@ -250,9 +230,7 @@ def _add_implementations(
     contract_names: Set[str],
     contract_list: List[Dict[str, Any]],
 ) -> None:
-    # Build map: contract_name → contract_entry
     contract_map = {c['name']: c for c in contract_list}
-
     for cls in all_classes:
         for base in cls['bases']:
             tail = base.split('.')[-1]

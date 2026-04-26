@@ -11,6 +11,8 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from reveal.adapters.ast.analysis import collect_structures
+
 from reveal.cli.commands.contracts import (
     _add_implementations,
     _extract_all_classes,
@@ -122,7 +124,8 @@ class TestExtractAllClasses(unittest.TestCase):
                 @abstractmethod
                 def do_it(self): ...
         ''')
-        classes = _extract_all_classes([Path(os.path.join(self.tmp, 'base.py'))])
+        structures = collect_structures(self.tmp)
+        classes = _extract_all_classes(structures)
         self.assertEqual(len(classes), 1)
         self.assertEqual(classes[0]['name'], 'MyBase')
         self.assertIn('ABC', classes[0]['bases'])
@@ -134,7 +137,8 @@ class TestExtractAllClasses(unittest.TestCase):
             class Readable(Protocol):
                 def read(self) -> str: ...
         ''')
-        classes = _extract_all_classes([Path(os.path.join(self.tmp, 'proto.py'))])
+        structures = collect_structures(self.tmp)
+        classes = _extract_all_classes(structures)
         self.assertEqual(classes[0]['name'], 'Readable')
         self.assertIn('Protocol', classes[0]['bases'])
 
@@ -145,7 +149,8 @@ class TestExtractAllClasses(unittest.TestCase):
                 name: str
                 value: int
         ''')
-        classes = _extract_all_classes([Path(os.path.join(self.tmp, 'types.py'))])
+        structures = collect_structures(self.tmp)
+        classes = _extract_all_classes(structures)
         self.assertEqual(classes[0]['name'], 'Config')
         self.assertIn('TypedDict', classes[0]['bases'])
 
@@ -157,13 +162,15 @@ class TestExtractAllClasses(unittest.TestCase):
                 x: float
                 y: float
         ''')
-        classes = _extract_all_classes([Path(os.path.join(self.tmp, 'models.py'))])
+        structures = collect_structures(self.tmp)
+        classes = _extract_all_classes(structures)
         self.assertEqual(classes[0]['name'], 'Point')
         self.assertIn('dataclass', classes[0]['decorators'])
 
     def test_syntax_error_skipped(self):
         _write(self.tmp, 'bad.py', 'class Broken(\n')
-        classes = _extract_all_classes([Path(os.path.join(self.tmp, 'bad.py'))])
+        structures = collect_structures(self.tmp)
+        classes = _extract_all_classes(structures)
         self.assertEqual(classes, [])
 
 
