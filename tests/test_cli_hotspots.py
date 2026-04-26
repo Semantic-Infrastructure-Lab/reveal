@@ -434,6 +434,26 @@ class TestBuildTestNameIndex(unittest.TestCase):
             self.assertNotIn('setup', index)
             self.assertIn('something', index)
 
+    def test_includes_module_name_from_test_filename(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            tests_dir = os.path.join(d, 'tests')
+            os.makedirs(tests_dir)
+            Path(os.path.join(tests_dir, 'test_liquidity_sweep.py')).write_text(
+                'def test_bearish_sweep_of_session_high(): pass\n'
+            )
+            index = _build_test_name_index(Path(d))
+            self.assertIn('liquidity_sweep', index)
+
+    def test_module_name_not_added_for_non_test_prefix_files(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            tests_dir = os.path.join(d, 'tests')
+            os.makedirs(tests_dir)
+            Path(os.path.join(tests_dir, 'conftest.py')).write_text('pass\n')
+            index = _build_test_name_index(Path(d))
+            self.assertNotIn('conftest', index)
+
 
 class TestRenderFunctionHotspotsWithCoverage(unittest.TestCase):
     """_render_function_hotspots with test_index coverage overlay."""
@@ -465,6 +485,17 @@ class TestRenderFunctionHotspotsWithCoverage(unittest.TestCase):
         out = self._capture([_fn_hotspot('fn', 12)])
         self.assertNotIn('test found', out)
 
+    def test_module_level_coverage_shows_checkmark(self):
+        # fn named 'generate' in 'liquidity_sweep.py' — index has 'liquidity_sweep' (module hit)
+        fn = _fn_hotspot('generate', 12, file='src/liquidity_sweep.py')
+        out = self._capture([fn], test_index={'liquidity_sweep'})
+        self.assertIn('✅', out)
+
+    def test_no_module_or_function_hit_shows_circle(self):
+        fn = _fn_hotspot('generate', 12, file='src/liquidity_sweep.py')
+        out = self._capture([fn], test_index={'unrelated_module'})
+        self.assertIn('⚪', out)
+
 
 class TestRunHotspotsTestCoverage(unittest.TestCase):
     """run_hotspots annotates fn_hotspots with has_test_hint."""
@@ -476,6 +507,25 @@ class TestRunHotspotsTestCoverage(unittest.TestCase):
             os.makedirs(tests_dir)
             Path(os.path.join(tests_dir, 'test_x.py')).write_text('def test_my_func(): pass\n')
             fn = _fn_hotspot('my_func', 15)
+            args = _args(path=d, format='json')
+            with patch('reveal.cli.commands.hotspots._run_file_hotspots', return_value=[]):
+                with patch('reveal.cli.commands.hotspots._run_function_hotspots', return_value=[fn]):
+                    buf = StringIO()
+                    with patch('sys.stdout', buf):
+                        run_hotspots(args)
+                    data = json.loads(buf.getvalue())
+                    self.assertTrue(data['function_hotspots'][0]['has_test_hint'])
+
+    def test_has_test_hint_via_module_name(self):
+        # Function 'generate' in 'liquidity_sweep.py' — test file is test_liquidity_sweep.py
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            tests_dir = os.path.join(d, 'tests')
+            os.makedirs(tests_dir)
+            Path(os.path.join(tests_dir, 'test_liquidity_sweep.py')).write_text(
+                'def test_bearish_sweep_of_session_high(): pass\n'
+            )
+            fn = _fn_hotspot('generate', 15, file='src/liquidity_sweep.py')
             args = _args(path=d, format='json')
             with patch('reveal.cli.commands.hotspots._run_file_hotspots', return_value=[]):
                 with patch('reveal.cli.commands.hotspots._run_function_hotspots', return_value=[fn]):

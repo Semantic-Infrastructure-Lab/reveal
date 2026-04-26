@@ -1271,6 +1271,39 @@ class TestRenderArchitectureBrief(unittest.TestCase):
         shown = [f'mod{i}.py' for i in range(8) if f'mod{i}.py' in output]
         self.assertLessEqual(len(shown), 5)
 
+    def test_section_renamed_to_architecture_hint(self):
+        output = self._capture([
+            {'relative': 'main.py', 'priority': 10.0, 'fan_in': 0, 'changed': False},
+        ])
+        self.assertIn('Architecture Hint', output)
+        self.assertNotIn('Architecture Brief', output)
+
+    def test_focus_match_priority_8_shown_as_entry_point(self):
+        # priority=8 files (focus-matched) should appear as entry points
+        selected = [
+            {'relative': 'src/signals.py', 'priority': 8.0, 'fan_in': 0, 'changed': False},
+        ]
+        output = self._capture(selected)
+        self.assertIn('Entry points', output)
+        self.assertIn('src/signals.py', output)
+
+    def test_top_files_fallback_when_nothing_qualifies(self):
+        # No entry points (priority < 8), no core abstractions (fan_in < 5)
+        selected = [
+            {'relative': 'a.py', 'priority': 3.0, 'fan_in': 0, 'changed': False},
+            {'relative': 'b.py', 'priority': 2.0, 'fan_in': 0, 'changed': False},
+        ]
+        output = self._capture(selected)
+        self.assertIn('Top files', output)
+        self.assertIn('a.py', output)
+
+    def test_top_files_fallback_not_shown_when_core_exists(self):
+        selected = [
+            {'relative': 'utils.py', 'priority': 1.0, 'fan_in': 10, 'changed': False},
+        ]
+        output = self._capture(selected)
+        self.assertNotIn('Top files', output)
+
 
 class TestCollectCandidatesWithFanIn(unittest.TestCase):
 
@@ -1331,7 +1364,7 @@ class TestRunPackArchitecture(unittest.TestCase):
             with redirect_stdout(buf):
                 run_pack(args)
             output = buf.getvalue()
-            self.assertIn('Architecture Brief', output)
+            self.assertIn('Architecture Hint', output)
 
     def test_no_architecture_flag_no_brief(self):
         import io
@@ -1344,7 +1377,7 @@ class TestRunPackArchitecture(unittest.TestCase):
             with redirect_stdout(buf):
                 run_pack(args)
             output = buf.getvalue()
-            self.assertNotIn('Architecture Brief', output)
+            self.assertNotIn('Architecture Hint', output)
 
 
 if __name__ == '__main__':

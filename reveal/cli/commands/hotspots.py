@@ -85,7 +85,9 @@ def run_hotspots(args: Namespace) -> None:
     if not files_only:
         test_index = _build_test_name_index(path)
         for fn in fn_hotspots:
-            fn['has_test_hint'] = fn.get('name', '') in test_index
+            fn_name = fn.get('name', '')
+            module_name = Path(fn.get('file', '')).stem
+            fn['has_test_hint'] = fn_name in test_index or module_name in test_index
 
     report = {
         'path': str(path),
@@ -217,7 +219,9 @@ def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Se
 
         # Test coverage heuristic
         if has_coverage_info:
-            cov = '✅' if name in test_index else '⚪'  # type: ignore[operator]
+            module_name = Path(loc).stem if loc else ''
+            covered = name in test_index or module_name in test_index  # type: ignore[operator]
+            cov = '✅' if covered else '⚪'
             cov_str = f' {cov}'
         else:
             cov_str = ''
@@ -228,7 +232,7 @@ def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Se
 
 
 def _build_test_name_index(path: Path) -> Set[str]:
-    """Heuristic: collect base names covered by test_* functions under tests/ or test/."""
+    """Heuristic: collect base names covered by test_* functions or test_<module>.py files."""
     names: Set[str] = set()
     pattern = re.compile(r'^\s*def\s+test_(\w+)', re.MULTILINE)
     for candidate in ('tests', 'test', 'spec'):
@@ -240,6 +244,8 @@ def _build_test_name_index(path: Path) -> Set[str]:
             for fname in files:
                 if not fname.endswith('.py'):
                     continue
+                if fname.startswith('test_'):
+                    names.add(fname[5:-3])  # test_liquidity_sweep.py → liquidity_sweep
                 try:
                     content = Path(os.path.join(root, fname)).read_text(errors='replace')
                     names.update(m.group(1) for m in pattern.finditer(content))

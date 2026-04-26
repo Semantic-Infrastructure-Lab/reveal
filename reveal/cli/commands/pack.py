@@ -524,17 +524,17 @@ def _count_lines(path: Path) -> int:
 
 
 def _render_architecture_brief(selected: List[Dict[str, Any]]) -> None:
-    """Print a concise architecture brief derived from fan-in and priority."""
+    """Print a concise architecture hint derived from fan-in and priority."""
     entry_points = [
         f['relative'] for f in selected
-        if not f.get('changed') and f.get('priority', 0) >= 10
+        if not f.get('changed') and f.get('priority', 0) >= 8
     ]
     core = sorted(
         [f for f in selected if f.get('fan_in', 0) >= 5],
         key=lambda f: -f.get('fan_in', 0),
     )[:5]
 
-    print('── Architecture Brief ──')
+    print('── Architecture Hint ──')
     if entry_points:
         print(f"Entry points:      {', '.join(entry_points)}")
     if core:
@@ -542,6 +542,9 @@ def _render_architecture_brief(selected: List[Dict[str, Any]]) -> None:
             f"{f['relative']}({f['fan_in']})" for f in core
         )
         print(f"Core abstractions: {abstractions}")
+    if not entry_points and not core and selected:
+        top = sorted(selected, key=lambda f: -f.get('priority', 0))[:3]
+        print(f"Top files:         {', '.join(f['relative'] for f in top)}")
     print()
 
 
