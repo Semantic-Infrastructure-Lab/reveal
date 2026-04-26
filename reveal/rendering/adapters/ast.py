@@ -18,7 +18,7 @@ _FILTER_SHORTHANDS = {
 }
 
 # All keys that ast:// actually understands
-_KNOWN_FILTER_KEYS = {'type', 'name', 'complexity', 'size', 'lines', 'decorator', 'calls', 'callee_of', 'param_type', 'return_type', 'reveal_type'}
+_KNOWN_FILTER_KEYS = {'type', 'name', 'complexity', 'size', 'lines', 'depth', 'decorator', 'calls', 'callee_of', 'callers', 'has_annotations', 'param_type', 'return_type', 'reveal_type'}
 
 
 def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:

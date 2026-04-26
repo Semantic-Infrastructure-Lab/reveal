@@ -88,6 +88,17 @@ def matches_filters(element: Dict[str, Any], query: Dict[str, Any]) -> bool:
             if not _matches_return_type(element.get('signature', ''), condition):
                 return False
             continue
+        elif key == 'has_annotations':
+            # has_annotations=false: fully unannotated functions (no param or return hints)
+            # has_annotations=true: at least one annotation present
+            if not compare_value(_has_annotations(element.get('signature', '')), condition):
+                return False
+            continue
+        elif key == 'callers':
+            # callers>N: filter by number of inbound callers (length of called_by list)
+            if not compare_value(len(element.get('called_by', [])), condition):
+                return False
+            continue
         else:
             value = element.get(key)
 
@@ -302,3 +313,20 @@ def _matches_call_list(call_list: List[str], condition: Dict[str, Any]) -> bool:
                 if re.search(target, candidate):
                     return True
     return False
+
+
+def _has_annotations(signature: str) -> bool:
+    """Return True if the signature contains any type annotation.
+
+    Checks for return annotation (->) or param annotations (: inside parens).
+    """
+    if not signature:
+        return False
+    if '->' in signature:
+        return True
+    paren_open = signature.find('(')
+    paren_close = signature.rfind(')')
+    if paren_open == -1 or paren_close == -1:
+        return False
+    params = signature[paren_open + 1:paren_close]
+    return ':' in params

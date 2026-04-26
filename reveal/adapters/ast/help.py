@@ -92,6 +92,18 @@ _HELP_EXAMPLES = [
         'uri': 'ast://src/?show=calls',
         'description': 'Show call graph view for all functions in src/ (calls + called_by)'
     },
+    {
+        'uri': "ast://src/?depth>4",
+        'description': 'Find deeply nested functions (exceeds C905 threshold)'
+    },
+    {
+        'uri': "ast://src/?has_annotations=false&type=function",
+        'description': 'Find fully unannotated functions for type coverage audit'
+    },
+    {
+        'uri': "ast://src/?callers>5&complexity>10",
+        'description': 'Find high-coupling AND high-complexity functions (prime refactor targets)'
+    },
 ]
 
 _HELP_WORKFLOWS = [
@@ -221,6 +233,24 @@ _SCHEMA_QUERY_PARAMS = {
         'description': 'Find functions with a given return type annotation. Parses the -> TYPE suffix of the signature. Glob patterns supported.',
         'operators': ['==', 'glob', '~='],
         'examples': ['return_type=bool', 'return_type=None', 'return_type=List*', 'return_type=Dict*']
+    },
+    'depth': {
+        'type': 'integer',
+        'description': 'Maximum nesting depth within the function (same metric as C905 rule). depth>4 is the C905 threshold; depth>6 is severe.',
+        'operators': ['>', '<', '>=', '<=', '=='],
+        'examples': ['depth>4', 'depth>6', 'depth<=2']
+    },
+    'has_annotations': {
+        'type': 'boolean',
+        'description': 'Filter by presence of type annotations. has_annotations=false finds fully unannotated functions (no param or return hints). Combine with type=function for a codebase annotation coverage audit.',
+        'operators': ['=='],
+        'examples': ['has_annotations=false', 'has_annotations=true']
+    },
+    'callers': {
+        'type': 'integer',
+        'description': 'Number of inbound callers within the scanned files (length of called_by list). callers>5 finds high-coupling functions; combine with complexity>10 for refactor priorities.',
+        'operators': ['>', '<', '>=', '<=', '=='],
+        'examples': ['callers>5', 'callers>3&complexity>10', 'callers==0']
     },
     'reveal_type': {
         'type': 'string',

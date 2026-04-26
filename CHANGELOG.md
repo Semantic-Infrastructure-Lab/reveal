@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`calls://` empty-result hint** — when `find_callers()` finds 0 callers within the search root but callers exist in the parent directory, adds a `hint` field pointing upward. (BACK-222)
 - **`--writes` alias for `--mutations`** — added to parser and dispatch. Empty-result message updated to "No read-after-write hazards in L{n}→L{m}." with `--varflow` hint. (BACK-223)
 
+### Added (waliwuke-0425)
+- **`ast://` `depth>N` filter** — filter by maximum nesting depth (same metric as C905 rule). Added `depth` field to element dicts via `create_element_dict`. (BACK-242)
+- **`ast://` `has_annotations=false/true` filter** — find fully unannotated or annotated functions. Parses signature for `->` or `:` inside parens. Combine with `type=function` for codebase annotation coverage audits. (BACK-239)
+- **`ast://` `callers>N` filter** — filter by inbound caller count (length of `called_by` list). Combine with `complexity>10` for prime refactor targets. (BACK-243)
+
 ### Fixed
 - **`--narrow --format json` NameError** — `_resolve_range()` was not called before `_nav_json()` in the `--narrow` branch of `_dispatch_nav`. 3 new tests. (BACK-228)
 - **`ResultBuilder.create` / `create_error`** — now raise `ValueError` if `**extra_fields` key collides with a contract field (`contract_version`, `type`, `source`, `source_type`, `meta`). Previously silently overwrote the contract. 2 new tests. (BACK-234)

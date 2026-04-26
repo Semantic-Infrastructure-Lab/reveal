@@ -125,6 +125,7 @@ def create_element_dict(
         # Use complexity from item if available (tree-sitter calculated)
         # Otherwise calculate with heuristic
         element['complexity'] = item.get('complexity') or calculate_complexity(item, analyzer)
+        element['depth'] = item.get('depth', 0)
         # Propagate call graph fields (Phase 1 data from tree-sitter)
         calls = item.get('calls', [])
         element['calls'] = calls
