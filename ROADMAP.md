@@ -15,6 +15,7 @@ This document outlines reveal's development priorities and future direction. For
 - ✅ **Co-hosted server names** — `_extract_cohosted_names` collects server_name tokens from server blocks not containing the queried domain; `_get_vhost_summary` adds `also_serves`; renderer prints "Also serves: X, Y" below Config file line. (BACK-259)
 - ✅ **N001 intent comment hint** — `_has_intent_comment` scans 3 lines before upstream block for intentional/by-design/same-host comments; appends suppression-marker suggestion to N001 output when matched. (BACK-260)
 - ✅ **`reveal check` URI redirect guard** — detects `scheme://` input before `Path.exists()`; emits "looks like a URI — Did you mean: reveal `<uri>` --check" to stderr, exits 1. (BACK-261)
+- ✅ **`surface` adapter discipline** — all raw AST walking extracted from `surface.py` into `adapters/ast/nav_surface.py`; `scan_file_surface(file_path)` is the public entry; `surface.py` drops `import ast`. (BACK-262)
 
 ### v0.87.0
 - ✅ **Plugin auto-discovery** — drop `*_analyzer.py` into `.reveal/analyzers/` (project-local) or `~/.reveal/plugins/` (user-global); `@register`-decorated `FileAnalyzer` subclass goes live with zero registration boilerplate. (BACK-247)
