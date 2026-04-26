@@ -3,7 +3,7 @@ title: Reveal - AI Agent Reference (Complete)
 category: guide
 ---
 # Reveal - AI Agent Reference (Complete)
-**Version:** 0.87.0
+**Version:** 0.88.0
 **Purpose:** Comprehensive guide for AI code assistants
 **Token Cost:** ~12,000 tokens
 **Audience:** AI agents (Claude Code, Copilot, Cursor, etc.)
@@ -1029,7 +1029,6 @@ Each frame shows:
 Output is depth-indented so the execution tree is scannable at a glance.  Unresolved
 (external/stdlib) callees appear with an `[external]` marker.
 
-> **Known issue:** If `--from <name>` does not match any function, trace silently reports `Resolved: 0` and marks the root as `[external]` rather than erroring — verify the function name exists first with `reveal <path>` (BACK-254).
 
 ---
 

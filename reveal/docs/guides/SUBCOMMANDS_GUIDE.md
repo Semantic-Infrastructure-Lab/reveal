@@ -323,10 +323,6 @@ reveal trace src/ --from process_order --depth 3
 reveal trace . --from handle_request --format json  # Machine-readable output
 ```
 
-### Known Limitations
-
-- **Silent miss on unknown function name (BACK-254):** If `--from <name>` does not match any function in the project, trace reports `Resolved: 0` and shows the name as `[external]` with no warning. Verify the function name with `reveal <path>` before tracing.
-
 ### See Also
 
 - `calls://` adapter — raw cross-file call graph queries

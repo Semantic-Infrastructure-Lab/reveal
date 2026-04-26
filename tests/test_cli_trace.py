@@ -507,6 +507,32 @@ class TestRunTrace(unittest.TestCase):
         data = json.loads(buf.getvalue())
         self.assertGreaterEqual(data['depth'], 1)
 
+    def test_unknown_from_exits_nonzero(self):
+        self._make_project()
+        args = Namespace(path=self.tmpdir, root='nonexistent_func', depth=2, format='text')
+        with self.assertRaises(SystemExit) as ctx:
+            run_trace(args)
+        self.assertNotEqual(ctx.exception.code, 0)
+
+    def test_unknown_from_prints_helpful_message(self):
+        self._make_project()
+        args = Namespace(path=self.tmpdir, root='nonexistent_func', depth=2, format='text')
+        buf = StringIO()
+        with patch('sys.stderr', buf):
+            with self.assertRaises(SystemExit):
+                run_trace(args)
+        err = buf.getvalue()
+        self.assertIn('nonexistent_func', err)
+        self.assertIn('not found', err)
+
+    def test_known_function_does_not_exit(self):
+        self._make_project()
+        args = Namespace(path=self.tmpdir, root='start', depth=2, format='text')
+        buf = StringIO()
+        with patch('sys.stdout', buf):
+            run_trace(args)
+        self.assertIn('Trace:', buf.getvalue())
+
 
 if __name__ == '__main__':
     unittest.main()

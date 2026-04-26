@@ -50,6 +50,14 @@ def run_trace(args: Namespace) -> None:
     depth = max(1, min(args.depth, 5))
     report = _build_trace(str(path), args.root, depth)
 
+    if report['frames'] and not report['frames'][0]['resolved']:
+        print(
+            f"reveal trace: '{args.root}' not found in {path}\n"
+            f"  Check spelling or run: reveal {path}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     if args.format == 'json':
         print(json.dumps(report, indent=2))
     else:

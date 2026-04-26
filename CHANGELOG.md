@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`reveal surface` env-var false positives** — `_is_env_access()` was matching every dict `.get()` call (`trade.get`, `md.get`, etc.) as an env var read. Replaced 9-line pattern loop with 1-line membership test. 278/297 false positives on the Peyton codebase eliminated. 8 new tests. (BACK-250)
 - **`reveal trace --format json`** — trace was the only subcommand using `--json` instead of `--format {text,json}`. `reveal trace ... --format json` previously failed with `unrecognized arguments`. Parser, tests, SUBCOMMANDS_GUIDE, and AGENT_HELP all updated. (BACK-251)
 - **`reveal architecture` Next Commands use absolute paths** — generated follow-up commands used `os.path.relpath(path, cwd)`, producing broken paths like `../home/scottsen/.../file.py` when called from a different directory. All 5 templates now use `str(path.resolve())`. (BACK-252)
+- **`reveal trace --from <unknown>` now errors** — previously silently produced `Resolved: 0` output when the named function didn't exist in the project. Now prints an actionable error to stderr and exits non-zero. (BACK-254)
 
 ## [0.87.0] - 2026-04-26 (sessions quantum-overlord-0425, divine-shrine-0426)
 
