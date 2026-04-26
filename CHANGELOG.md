@@ -12,6 +12,19 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.85.0] - 2026-04-25 (session amethyst-brush-0425)
+
+### Added
+- **`reveal hotspots` test coverage heuristic** — complex functions in hotspot output now show ✅/⚪ indicating whether a `test_<name>` exists in `tests/` or `test/`. JSON output gains `has_test_hint` per function. `_build_test_name_index` scans test dirs with a regex; no external deps. (BACK-246)
+- **`calls://?root=<name>&depth=N`** — recursive callees walk. BFS forward from an entry-point function: shows what it calls, what those call, up to depth 5. Resolved (project-internal) vs unresolved (external/unknown) callees distinguished. `--format dot` produces a Graphviz digraph with dashed edges for externals. New `find_callees_recursive` in `calls/index.py`. (BACK-214)
+- **`reveal contracts src/`** — contract and seam inventory. Finds ABCs, Protocols, TypedDicts, `@dataclass` classes, Pydantic BaseModels, and path-heuristic base classes (`base.py`, `schema.py`, etc.). Lists abstract methods per contract and which classes implement each one. `--abstract-only` flag. `--format json`. New `reveal/cli/commands/contracts.py`. (BACK-212)
+- **`reveal surface src/`** — external boundary map. Scans for CLI arguments (`argparse`, `click`), HTTP routes (Flask/FastAPI decorators), MCP tool registrations, environment variables (`os.getenv`, `os.environ.get`), network I/O (import of `requests`, `httpx`, etc.), database/SDK imports, and filesystem writes (`open(…,'w')`, `Path.write_text`). `--type` filter. `--format json`. New `reveal/cli/commands/surface.py`. (BACK-215)
+- **`calls://?modules=true`** — module-level dependency graph via cross-file call resolution. Uses `build_symbol_map` + `resolve_callees` to map function calls to their source files via the import graph, then collapses to unique module→module edges with call counts. `--format dot` produces a Graphviz digraph with edge labels. `?external=true` includes stdlib/third-party edges. New `build_module_dependency_graph` in `calls/index.py`. (BACK-217 + BACK-208)
+
+### Changed
+- `calls://` adapter `get_structure` now dispatches `modules=`, `root=` before other params.
+- `calls://` missing-param error message updated to mention `root=` option.
+
 ## [0.84.0] - 2026-04-25 (sessions wise-hammer-0425, strong-pegasus-0425, nelilabo-0425, noble-altar-0425, fierce-pressure-0425)
 
 ### Added

@@ -1606,5 +1606,368 @@ class TestDirCacheKey(unittest.TestCase):
         ))
 
 
+class TestFindCalleesRecursive(unittest.TestCase):
+    """find_callees_recursive BFS forward walk tests."""
+
+    def setUp(self):
+        import shutil
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write(self, name, content):
+        path = os.path.join(self.tmp, name)
+        with open(path, 'w') as f:
+            f.write(textwrap.dedent(content))
+        return path
+
+    def test_direct_callees_level_1(self):
+        from reveal.adapters.calls.index import find_callees_recursive
+        self._write('app.py', '''\
+            def entry():
+                helper()
+                logger()
+            def helper():
+                pass
+        ''')
+        result = find_callees_recursive(self.tmp, 'entry', depth=1)
+        callees = [e['callee'] for e in result['levels'][0]['callees']]
+        self.assertIn('helper', callees)
+
+    def test_recursive_level_2(self):
+        from reveal.adapters.calls.index import find_callees_recursive
+        self._write('app.py', '''\
+            def entry():
+                helper()
+            def helper():
+                worker()
+            def worker():
+                pass
+        ''')
+        result = find_callees_recursive(self.tmp, 'entry', depth=2)
+        self.assertEqual(len(result['levels']), 2)
+        level2_callees = [e['callee'] for e in result['levels'][1]['callees']]
+        self.assertIn('worker', level2_callees)
+
+    def test_no_cycles(self):
+        from reveal.adapters.calls.index import find_callees_recursive
+        self._write('app.py', '''\
+            def a():
+                b()
+            def b():
+                a()
+        ''')
+        result = find_callees_recursive(self.tmp, 'a', depth=5)
+        # 'a' should appear at most once (not looped back in)
+        all_callees = [e['callee'] for lvl in result['levels'] for e in lvl['callees']]
+        self.assertEqual(all_callees.count('a'), 0)  # 'a' is visited root, not a callee
+
+    def test_unresolved_marked_external(self):
+        from reveal.adapters.calls.index import find_callees_recursive
+        self._write('app.py', '''\
+            def entry():
+                third_party_func()
+                local_helper()
+            def local_helper():
+                pass
+        ''')
+        result = find_callees_recursive(self.tmp, 'entry', depth=1)
+        entries = {e['callee']: e for e in result['levels'][0]['callees']}
+        self.assertTrue(entries['local_helper']['resolved'])
+        self.assertFalse(entries.get('third_party_func', {}).get('resolved', True))
+
+    def test_empty_project_returns_no_levels(self):
+        from reveal.adapters.calls.index import find_callees_recursive
+        self._write('app.py', 'def entry():\n    pass\n')
+        result = find_callees_recursive(self.tmp, 'entry', depth=2)
+        self.assertEqual(result['levels'], [])
+        self.assertEqual(result['total_resolved'], 0)
+
+    def test_total_counts(self):
+        from reveal.adapters.calls.index import find_callees_recursive
+        self._write('app.py', '''\
+            def entry():
+                known()
+                unknown_lib()
+            def known():
+                pass
+        ''')
+        result = find_callees_recursive(self.tmp, 'entry', depth=1)
+        self.assertEqual(result['total_resolved'], 1)
+        self.assertEqual(result['total_unresolved'], 1)
+
+    def test_depth_capped_at_5_via_adapter(self):
+        from reveal.adapters.calls.adapter import CallsAdapter
+        adapter = CallsAdapter(self.tmp, 'root=entry&depth=99')
+        result = adapter.get_structure()
+        self.assertLessEqual(result['depth'], 5)
+
+
+class TestCallsAdapterRoot(unittest.TestCase):
+    """CallsAdapter root= parameter integration tests."""
+
+    def setUp(self):
+        import shutil
+        self.tmp = tempfile.mkdtemp()
+        path = os.path.join(self.tmp, 'app.py')
+        with open(path, 'w') as f:
+            f.write(textwrap.dedent('''\
+                def entry():
+                    helper()
+                def helper():
+                    worker()
+                def worker():
+                    pass
+            '''))
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def test_root_param_returns_callees_recursive_type(self):
+        from reveal.adapters.calls.adapter import CallsAdapter
+        adapter = CallsAdapter(self.tmp, 'root=entry&depth=2')
+        result = adapter.get_structure()
+        self.assertEqual(result['type'], 'calls_callees_recursive')
+
+    def test_root_levels_present(self):
+        from reveal.adapters.calls.adapter import CallsAdapter
+        adapter = CallsAdapter(self.tmp, 'root=entry&depth=2')
+        result = adapter.get_structure()
+        self.assertGreater(len(result['levels']), 0)
+
+    def test_default_depth_is_2(self):
+        from reveal.adapters.calls.adapter import CallsAdapter
+        adapter = CallsAdapter(self.tmp, 'root=entry')
+        result = adapter.get_structure()
+        self.assertEqual(result['depth'], 2)
+
+
+class TestCalleesRecursiveRenderer(unittest.TestCase):
+    """Renderer tests for callees_recursive output."""
+
+    def _capture(self, data, fmt='text'):
+        import io
+        buf = io.StringIO()
+        with __import__('contextlib').redirect_stdout(buf):
+            render_calls_structure(data, fmt)
+        return buf.getvalue()
+
+    def _data(self, **kwargs):
+        base = {
+            'query': 'callees_recursive',
+            'root': 'entry',
+            'depth': 2,
+            'path': '/proj',
+            'total_resolved': 2,
+            'total_unresolved': 1,
+            'levels': [
+                {'level': 1, 'callees': [
+                    {'caller': 'entry', 'callee': 'helper', 'resolved': True,
+                     'caller_file': 'app.py', 'caller_line': 2},
+                    {'caller': 'entry', 'callee': 'lib_call', 'resolved': False,
+                     'caller_file': 'app.py', 'caller_line': 3},
+                ]},
+                {'level': 2, 'callees': [
+                    {'caller': 'helper', 'callee': 'worker', 'resolved': True,
+                     'caller_file': 'app.py', 'caller_line': 5},
+                ]},
+            ],
+        }
+        base.update(kwargs)
+        return base
+
+    def test_header_shows_root_and_depth(self):
+        out = self._capture(self._data())
+        self.assertIn('entry', out)
+        self.assertIn('depth 2', out)
+
+    def test_resolved_shows_checkmark(self):
+        out = self._capture(self._data())
+        self.assertIn('✓', out)
+
+    def test_unresolved_shows_external(self):
+        out = self._capture(self._data())
+        self.assertIn('[external]', out)
+
+    def test_level_labels_present(self):
+        out = self._capture(self._data())
+        self.assertIn('Direct callees', out)
+        self.assertIn('Level 2', out)
+
+    def test_no_levels_shows_not_found(self):
+        data = self._data(levels=[], total_resolved=0, total_unresolved=0)
+        out = self._capture(data)
+        self.assertIn("No callees found", out)
+
+    def test_dot_format_produces_digraph(self):
+        out = self._capture(self._data(), fmt='dot')
+        self.assertIn('digraph', out)
+        self.assertIn('"entry"', out)
+        self.assertIn('helper', out)
+
+    def test_dot_format_dashes_unresolved(self):
+        out = self._capture(self._data(), fmt='dot')
+        self.assertIn('dashed', out)
+
+    def test_json_format(self):
+        import json as _json
+        out = self._capture(self._data(), fmt='json')
+        parsed = _json.loads(out)
+        self.assertEqual(parsed['query'], 'callees_recursive')
+
+
+class TestBuildModuleDependencyGraph(unittest.TestCase):
+    """build_module_dependency_graph cross-file resolution tests."""
+
+    def setUp(self):
+        import shutil
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def _write(self, name, content):
+        path = os.path.join(self.tmp, name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write(textwrap.dedent(content))
+        return path
+
+    def test_cross_file_edge_detected(self):
+        from reveal.adapters.calls.index import build_module_dependency_graph
+        self._write('utils.py', '''\
+            def helper():
+                pass
+        ''')
+        self._write('app.py', '''\
+            from utils import helper
+            def main():
+                helper()
+        ''')
+        result = build_module_dependency_graph(self.tmp)
+        edge_pairs = [(e['from'], e['to']) for e in result['edges']]
+        app_path = os.path.join(self.tmp, 'app.py')
+        utils_path = os.path.join(self.tmp, 'utils.py')
+        self.assertIn((app_path, utils_path), edge_pairs)
+
+    def test_self_loops_excluded(self):
+        from reveal.adapters.calls.index import build_module_dependency_graph
+        self._write('app.py', '''\
+            from app import helper
+            def main():
+                helper()
+            def helper():
+                pass
+        ''')
+        result = build_module_dependency_graph(self.tmp)
+        app_path = os.path.join(self.tmp, 'app.py')
+        self_loops = [e for e in result['edges'] if e['from'] == e['to']]
+        self.assertEqual(self_loops, [])
+
+    def test_empty_project_returns_empty_graph(self):
+        from reveal.adapters.calls.index import build_module_dependency_graph
+        self._write('app.py', 'def fn(): pass\n')
+        result = build_module_dependency_graph(self.tmp)
+        self.assertEqual(result['total_edges'], 0)
+        self.assertEqual(result['nodes'], [])
+
+    def test_result_structure(self):
+        from reveal.adapters.calls.index import build_module_dependency_graph
+        result = build_module_dependency_graph(self.tmp)
+        self.assertIn('query', result)
+        self.assertEqual(result['query'], 'module_graph')
+        self.assertIn('nodes', result)
+        self.assertIn('edges', result)
+        self.assertIn('total_nodes', result)
+        self.assertIn('total_edges', result)
+
+
+class TestCallsAdapterModules(unittest.TestCase):
+    """CallsAdapter modules= parameter integration tests."""
+
+    def setUp(self):
+        import shutil
+        self.tmp = tempfile.mkdtemp()
+        # Create two files with a cross-file dependency
+        with open(os.path.join(self.tmp, 'utils.py'), 'w') as f:
+            f.write('def helper():\n    pass\n')
+        with open(os.path.join(self.tmp, 'app.py'), 'w') as f:
+            f.write('from utils import helper\ndef main():\n    helper()\n')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp)
+
+    def test_modules_param_returns_module_graph_type(self):
+        from reveal.adapters.calls.adapter import CallsAdapter
+        adapter = CallsAdapter(self.tmp, 'modules=true')
+        result = adapter.get_structure()
+        self.assertEqual(result['type'], 'calls_module_graph')
+
+    def test_modules_result_has_required_keys(self):
+        from reveal.adapters.calls.adapter import CallsAdapter
+        adapter = CallsAdapter(self.tmp, 'modules=true')
+        result = adapter.get_structure()
+        self.assertIn('nodes', result)
+        self.assertIn('edges', result)
+
+
+class TestModuleGraphRenderer(unittest.TestCase):
+    """Renderer tests for module_graph output."""
+
+    def _capture(self, data, fmt='text'):
+        import io
+        buf = io.StringIO()
+        with __import__('contextlib').redirect_stdout(buf):
+            render_calls_structure(data, fmt)
+        return buf.getvalue()
+
+    def _data(self, **kwargs):
+        base = {
+            'query': 'module_graph',
+            'path': '/proj',
+            'total_nodes': 2,
+            'total_edges': 1,
+            'nodes': ['/proj/a.py', '/proj/b.py'],
+            'edges': [{'from': '/proj/a.py', 'to': '/proj/b.py', 'call_count': 3}],
+        }
+        base.update(kwargs)
+        return base
+
+    def test_header_shows_node_and_edge_counts(self):
+        out = self._capture(self._data())
+        self.assertIn('2', out)  # nodes
+        self.assertIn('1', out)  # edges
+
+    def test_edge_shown_with_count(self):
+        out = self._capture(self._data())
+        self.assertIn('a.py', out)
+        self.assertIn('b.py', out)
+        self.assertIn('3', out)
+
+    def test_empty_edges_shows_message(self):
+        out = self._capture(self._data(edges=[], total_edges=0, total_nodes=0, nodes=[]))
+        self.assertIn('No cross-module', out)
+
+    def test_dot_format_produces_digraph(self):
+        out = self._capture(self._data(), fmt='dot')
+        self.assertIn('digraph', out)
+        self.assertIn('->', out)
+
+    def test_dot_shows_edge_label_when_count_gt_1(self):
+        out = self._capture(self._data(), fmt='dot')
+        self.assertIn('label', out)
+
+    def test_json_format(self):
+        import json as _json
+        out = self._capture(self._data(), fmt='json')
+        parsed = _json.loads(out)
+        self.assertEqual(parsed['query'], 'module_graph')
+
+
 if __name__ == '__main__':
     unittest.main()

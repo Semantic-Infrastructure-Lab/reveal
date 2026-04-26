@@ -21,7 +21,7 @@ import os
 from typing import Any, Dict, Optional
 
 from ..base import ResourceAdapter, register_adapter, register_renderer
-from .index import find_callers, find_callees, find_uncalled, rank_by_callers
+from .index import find_callers, find_callees, find_callees_recursive, find_uncalled, rank_by_callers, build_module_dependency_graph
 from .renderer import render_calls_structure
 from ...utils.query import parse_query_params
 from ...utils.results import ResultBuilder
@@ -268,8 +268,23 @@ class CallsAdapter(ResourceAdapter):
     def get_structure(self, **kwargs) -> Dict[str, Any]:
         target = self.query_params.get('target', '')
         callees_target = self.query_params.get('callees', '')
+        root = self.query_params.get('root', '')
         rank = self.query_params.get('rank', '')
         uncalled = self.query_params.get('uncalled', False)
+        modules = self.query_params.get('modules', False)
+
+        if modules:
+            include_external = bool(self.query_params.get('external', False))
+            result_data = build_module_dependency_graph(self.path, include_external=include_external)
+            query_format = self.query_params.get('format', '')
+            if query_format:
+                result_data['_query_format'] = query_format
+            return ResultBuilder.create(
+                result_type='calls_module_graph',
+                source=self.path,
+                contract_version='1.1',
+                data=result_data,
+            )
 
         if rank == 'callers':
             top = int(self.query_params.get('top', 10))
@@ -298,6 +313,22 @@ class CallsAdapter(ResourceAdapter):
                 data=result_data,
             )
 
+        if root:
+            depth = int(self.query_params.get('depth', '2'))
+            depth = max(1, min(depth, 5))
+            include_builtins = bool(self.query_params.get('builtins', False))
+            result_data = find_callees_recursive(self.path, root, depth=depth, include_builtins=include_builtins)
+            result_data['path'] = self.path
+            query_format = self.query_params.get('format', '')
+            if query_format:
+                result_data['_query_format'] = query_format
+            return ResultBuilder.create(
+                result_type='calls_callees_recursive',
+                source=self.path,
+                contract_version='1.1',
+                data=result_data,
+            )
+
         if not target and not callees_target:
             return ResultBuilder.create(
                 result_type='calls_query',
@@ -305,7 +336,7 @@ class CallsAdapter(ResourceAdapter):
                 contract_version='1.1',
                 data={
                     'path': self.path,
-                    'error': "Missing required parameter: target=<name>, callees=<name>, or rank=callers",
+                    'error': "Missing required parameter: target=<name>, callees=<name>, root=<name>, or rank=callers",
                     'example': f"calls://{self.path}?target=my_function",
                 }
             )

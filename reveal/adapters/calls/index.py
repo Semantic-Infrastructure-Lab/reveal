@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..ast.analysis import collect_structures, is_code_file
-from ..ast.call_graph import build_alias_map
+from ..ast.call_graph import build_alias_map, build_symbol_map, resolve_callees as _resolve_callees
 
 # Module-level LRU cache: directory → (cache_key, index)
 # cache_key is a tuple of (abspath_str, mtime_ns) pairs so it's hashable.
@@ -260,6 +260,99 @@ def find_callees(
     }
 
 
+def find_callees_recursive(
+    path: str,
+    root: str,
+    depth: int = 2,
+    include_builtins: bool = False,
+) -> Dict[str, Any]:
+    """Recursive callees walk: follow what *root* calls, then what those call.
+
+    Args:
+        path: Root directory (or file) to search.
+        root: Entry-point function name to start the walk from.
+        depth: How many levels to expand (1 = direct callees only, max 5).
+        include_builtins: When False (default), Python builtins are excluded
+            from callee lists, keeping the output focused on project code.
+
+    Returns:
+        Dict with ``root``, ``depth``, ``levels`` (one per BFS level),
+        ``total_resolved`` (callees found in the project),
+        ``total_unresolved`` (external / not-found names).
+    """
+    path_obj = Path(path)
+    directory = path_obj if path_obj.is_dir() else path_obj.parent
+    structures = collect_structures(str(directory))
+
+    # Build forward index: name → [{file, line, calls}]
+    forward: Dict[str, List[Dict[str, Any]]] = {}
+    for file_struct in structures:
+        file_path = file_struct.get('file', '')
+        for elem in file_struct.get('elements', []):
+            if elem.get('category') not in ('functions', 'methods'):
+                continue
+            name = elem.get('name', '')
+            if not name:
+                continue
+            calls = elem.get('calls', [])
+            if not include_builtins:
+                calls = [c for c in calls if c.split('.')[-1] not in PYTHON_BUILTINS]
+            forward.setdefault(name, []).append({
+                'file': file_path,
+                'line': elem.get('line', 0),
+                'calls': calls,
+            })
+
+    visited: Set[str] = {root}
+    current_names: Set[str] = {root}
+    levels: List[Dict[str, Any]] = []
+
+    for level_num in range(1, depth + 1):
+        level_entries: List[Dict[str, Any]] = []
+        next_names: Set[str] = set()
+
+        for source_name in sorted(current_names):
+            seen_callees_this_source: Set[str] = set()
+            for defn in forward.get(source_name, []):
+                for callee in defn['calls']:
+                    # Normalise: strip trailing call-syntax noise, use tail for dotted names
+                    tail = callee.split('.')[-1]
+                    resolved_name = tail if tail in forward else callee
+                    if resolved_name in seen_callees_this_source or resolved_name in visited:
+                        continue
+                    seen_callees_this_source.add(resolved_name)
+                    visited.add(resolved_name)
+                    resolved = resolved_name in forward
+                    entry: Dict[str, Any] = {
+                        'caller': source_name,
+                        'callee': resolved_name,
+                        'resolved': resolved,
+                        'caller_file': defn['file'],
+                        'caller_line': defn['line'],
+                    }
+                    level_entries.append(entry)
+                    if resolved:
+                        next_names.add(resolved_name)
+
+        if level_entries:
+            levels.append({'level': level_num, 'callees': level_entries})
+        if not next_names:
+            break
+        current_names = next_names
+
+    total_resolved = sum(sum(1 for e in lvl['callees'] if e['resolved']) for lvl in levels)
+    total_unresolved = sum(sum(1 for e in lvl['callees'] if not e['resolved']) for lvl in levels)
+
+    return {
+        'root': root,
+        'query': 'callees_recursive',
+        'depth': depth,
+        'levels': levels,
+        'total_resolved': total_resolved,
+        'total_unresolved': total_unresolved,
+    }
+
+
 def find_callers(
     path: str,
     target: str,
@@ -484,4 +577,93 @@ def rank_by_callers(
         'top': top,
         'total_unique_callees': len(entries),
         'entries': entries[:top],
+    }
+
+
+def build_module_dependency_graph(
+    path: str,
+    include_external: bool = False,
+) -> Dict[str, Any]:
+    """Build a module-level dependency graph using cross-file call resolution.
+
+    For each function call in the project, resolves the callee to its source
+    file via the import graph (``build_symbol_map`` + ``resolve_callees``).
+    Collapses the function-level edges to unique module → module edges with
+    a per-edge call count.
+
+    Args:
+        path: Root directory (or file) to scan.
+        include_external: When True, include edges where the callee resolves
+            to a file outside the project root (stdlib/third-party).  Default
+            False keeps the graph focused on project-internal dependencies.
+
+    Returns:
+        Dict with ``nodes`` (sorted list of module file paths that appear as
+        caller or callee), ``edges`` (list of ``{from, to, call_count}``
+        sorted descending by call_count), and summary counts.
+    """
+    path_obj = Path(path)
+    directory = path_obj if path_obj.is_dir() else path_obj.parent
+    dir_str = str(directory)
+    structures = collect_structures(dir_str)
+
+    # edge_counts: (from_file, to_file) → call count
+    edge_counts: Dict[Tuple[str, str], int] = {}
+    # symbol_map cache per file
+    sym_cache: Dict[str, Dict[str, Optional[str]]] = {}
+
+    for file_struct in structures:
+        from_file = file_struct.get('file', '')
+        if not from_file:
+            continue
+
+        if from_file not in sym_cache:
+            sym_cache[from_file] = build_symbol_map(from_file)
+        symbol_map = sym_cache[from_file]
+
+        for elem in file_struct.get('elements', []):
+            if elem.get('category') not in ('functions', 'methods'):
+                continue
+            raw_calls = elem.get('calls', [])
+            if not raw_calls:
+                continue
+
+            resolved = _resolve_callees(raw_calls, symbol_map)
+            for entry in resolved:
+                to_file = entry.get('resolved_file')
+                if not to_file:
+                    continue
+                if not include_external:
+                    # Skip files outside the project root
+                    try:
+                        Path(to_file).relative_to(directory)
+                    except ValueError:
+                        continue
+                # Skip self-loops
+                if to_file == from_file:
+                    continue
+                edge_key = (from_file, to_file)
+                edge_counts[edge_key] = edge_counts.get(edge_key, 0) + 1
+
+    # Build edges list
+    edges = [
+        {'from': frm, 'to': to, 'call_count': cnt}
+        for (frm, to), cnt in edge_counts.items()
+    ]
+    edges.sort(key=lambda e: e['call_count'], reverse=True)
+
+    # Nodes = all files that appear in any edge
+    node_set: Set[str] = set()
+    for e in edges:
+        node_set.add(e['from'])
+        node_set.add(e['to'])
+    nodes = sorted(node_set)
+
+    return {
+        'query': 'module_graph',
+        'path': dir_str,
+        'nodes': nodes,
+        'edges': edges,
+        'total_nodes': len(nodes),
+        'total_edges': len(edges),
     }

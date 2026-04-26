@@ -16,6 +16,20 @@ def render_calls_structure(data: Dict[str, Any], output_format: str) -> None:
         print(safe_json_dumps(data))
         return
 
+    if data.get('query') == 'callees_recursive':
+        if output_format == 'dot':
+            _render_callees_recursive_dot(data)
+        else:
+            _render_callees_recursive_text(data)
+        return
+
+    if data.get('query') == 'module_graph':
+        if output_format == 'dot':
+            _render_module_graph_dot(data)
+        else:
+            _render_module_graph_text(data)
+        return
+
     if data.get('query') == 'callees':
         _render_callees_text(data)
         return
@@ -165,6 +179,119 @@ def _render_uncalled_text(data: Dict[str, Any]) -> None:
         kind = 'method' if category == 'methods' else 'function'
         private_tag = ', private' if entry.get('is_private') else ''
         print(f"  {file_path}:{line}  {name}  ({kind}{private_tag})")
+
+
+def _render_callees_recursive_text(data: Dict[str, Any]) -> None:
+    root = data.get('root', '?')
+    depth = data.get('depth', 2)
+    path = data.get('path', '.')
+    levels = data.get('levels', [])
+    total_resolved = data.get('total_resolved', 0)
+    total_unresolved = data.get('total_unresolved', 0)
+
+    print(f"Callees of: {root}  (recursive, depth {depth})")
+    print(f"Project:    {path}")
+    print(f"Total:      {total_resolved} resolved, {total_unresolved} external/unresolved")
+    print()
+
+    if not levels:
+        print(f"  No callees found for '{root}'.")
+        return
+
+    for lvl in levels:
+        level_num = lvl['level']
+        label = "Direct callees" if level_num == 1 else f"Level {level_num} callees"
+        print(f"{label}:")
+        for entry in lvl['callees']:
+            caller = entry['caller']
+            callee = entry['callee']
+            resolved = entry['resolved']
+            file_path = entry.get('caller_file', '')
+            line = entry.get('caller_line', '')
+            status = '✓' if resolved else '✗ [external]'
+            loc = f"  {file_path}:{line}" if file_path else ''
+            print(f"  {caller} → {callee}  {status}{loc}")
+        print()
+
+
+def _render_callees_recursive_dot(data: Dict[str, Any]) -> None:
+    root = data.get('root', '?')
+    levels = data.get('levels', [])
+
+    print("digraph calls {")
+    print('  rankdir=LR;')
+    print(f'  node [shape=box fontname="monospace"];')
+    print(f'  "{root}" [style=filled fillcolor=lightblue];')
+
+    edges: set = set()
+    for lvl in levels:
+        for entry in lvl['callees']:
+            caller = entry['caller']
+            callee = entry['callee']
+            edge = (caller, callee)
+            if edge not in edges:
+                edges.add(edge)
+                style = '' if entry['resolved'] else ' [style=dashed color=gray]'
+                print(f'  "{caller}" -> "{callee}"{style};')
+
+    print("}")
+
+
+def _render_module_graph_text(data: Dict[str, Any]) -> None:
+    path = data.get('path', '.')
+    nodes = data.get('nodes', [])
+    edges = data.get('edges', [])
+    total_nodes = data.get('total_nodes', 0)
+    total_edges = data.get('total_edges', 0)
+
+    print(f"Module dependency graph: {path}")
+    print(f"Nodes (modules):         {total_nodes}")
+    print(f"Edges (dependencies):    {total_edges}")
+    print()
+
+    if not edges:
+        print("  No cross-module dependencies found.")
+        print("  Tip: ensure imports resolve within the project root, or use ?external=true")
+        return
+
+    print("Dependencies (sorted by call count):")
+    for edge in edges:
+        frm = edge['from']
+        to = edge['to']
+        count = edge['call_count']
+        calls_str = f"  ({count} call{'s' if count != 1 else ''})"
+        print(f"  {frm} → {to}{calls_str}")
+
+
+def _render_module_graph_dot(data: Dict[str, Any]) -> None:
+    path = data.get('path', '.')
+    edges = data.get('edges', [])
+
+    # Shorten file paths to relative where possible
+    def _short(p: str) -> str:
+        try:
+            import os
+            rel = os.path.relpath(p, path)
+            return rel if not rel.startswith('..') else p
+        except ValueError:
+            return p
+
+    print("digraph modules {")
+    print('  rankdir=LR;')
+    print(f'  node [shape=box fontname="monospace"];')
+
+    seen_edges: set = set()
+    for edge in edges:
+        frm = _short(edge['from'])
+        to = _short(edge['to'])
+        count = edge['call_count']
+        key = (frm, to)
+        if key not in seen_edges:
+            seen_edges.add(key)
+            label = f' [label="{count}"]' if count > 1 else ''
+            print(f'  "{frm}" -> "{to}"{label};')
+
+    print("}")
 
 
 def _render_dot(data: Dict[str, Any]) -> None:

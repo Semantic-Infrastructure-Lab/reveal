@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from reveal.cli.commands.hotspots import (
+    _build_test_name_index,
     _render_file_hotspots,
     _render_function_hotspots,
     _render_report,
@@ -387,6 +388,113 @@ class TestRunHotspots(unittest.TestCase):
                     with patch('sys.stdout', buf):
                         run_hotspots(args)
                     mock_fn.assert_not_called()
+
+
+class TestBuildTestNameIndex(unittest.TestCase):
+    """_build_test_name_index heuristic tests."""
+
+    def test_finds_test_functions_in_tests_dir(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            tests_dir = os.path.join(d, 'tests')
+            os.makedirs(tests_dir)
+            Path(os.path.join(tests_dir, 'test_foo.py')).write_text(
+                'def test_calculate():\n    pass\ndef test_render():\n    pass\n'
+            )
+            index = _build_test_name_index(Path(d))
+            self.assertIn('calculate', index)
+            self.assertIn('render', index)
+
+    def test_finds_test_functions_in_test_dir(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            test_dir = os.path.join(d, 'test')
+            os.makedirs(test_dir)
+            Path(os.path.join(test_dir, 'test_bar.py')).write_text(
+                'def test_parse_input():\n    pass\n'
+            )
+            index = _build_test_name_index(Path(d))
+            self.assertIn('parse_input', index)
+
+    def test_no_test_dir_returns_empty(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            index = _build_test_name_index(Path(d))
+            self.assertEqual(index, set())
+
+    def test_ignores_non_test_functions(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            tests_dir = os.path.join(d, 'tests')
+            os.makedirs(tests_dir)
+            Path(os.path.join(tests_dir, 'test_x.py')).write_text(
+                'def setup():\n    pass\ndef test_something():\n    pass\n'
+            )
+            index = _build_test_name_index(Path(d))
+            self.assertNotIn('setup', index)
+            self.assertIn('something', index)
+
+
+class TestRenderFunctionHotspotsWithCoverage(unittest.TestCase):
+    """_render_function_hotspots with test_index coverage overlay."""
+
+    def _capture(self, fns, test_index=None):
+        buf = StringIO()
+        with patch('sys.stdout', buf):
+            _render_function_hotspots(fns, test_index=test_index)
+        return buf.getvalue()
+
+    def test_no_index_shows_no_coverage_indicators(self):
+        out = self._capture([_fn_hotspot('foo', 12)])
+        self.assertNotIn('✅', out)
+        self.assertNotIn('⚪', out)
+
+    def test_covered_function_shows_checkmark(self):
+        out = self._capture([_fn_hotspot('foo', 12)], test_index={'foo'})
+        self.assertIn('✅', out)
+
+    def test_uncovered_function_shows_circle(self):
+        out = self._capture([_fn_hotspot('bar', 12)], test_index={'something_else'})
+        self.assertIn('⚪', out)
+
+    def test_legend_shown_when_index_provided(self):
+        out = self._capture([_fn_hotspot('fn', 12)], test_index=set())
+        self.assertIn('test found', out)
+
+    def test_no_legend_without_index(self):
+        out = self._capture([_fn_hotspot('fn', 12)])
+        self.assertNotIn('test found', out)
+
+
+class TestRunHotspotsTestCoverage(unittest.TestCase):
+    """run_hotspots annotates fn_hotspots with has_test_hint."""
+
+    def test_has_test_hint_annotated_on_json(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as d:
+            tests_dir = os.path.join(d, 'tests')
+            os.makedirs(tests_dir)
+            Path(os.path.join(tests_dir, 'test_x.py')).write_text('def test_my_func(): pass\n')
+            fn = _fn_hotspot('my_func', 15)
+            args = _args(path=d, format='json')
+            with patch('reveal.cli.commands.hotspots._run_file_hotspots', return_value=[]):
+                with patch('reveal.cli.commands.hotspots._run_function_hotspots', return_value=[fn]):
+                    buf = StringIO()
+                    with patch('sys.stdout', buf):
+                        run_hotspots(args)
+                    data = json.loads(buf.getvalue())
+                    self.assertTrue(data['function_hotspots'][0]['has_test_hint'])
+
+    def test_files_only_skips_test_index(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            args = _args(path=d, files_only=True)
+            with patch('reveal.cli.commands.hotspots._run_file_hotspots', return_value=[]):
+                with patch('reveal.cli.commands.hotspots._build_test_name_index') as mock_idx:
+                    buf = StringIO()
+                    with patch('sys.stdout', buf):
+                        run_hotspots(args)
+                    mock_idx.assert_not_called()
 
 
 if __name__ == '__main__':

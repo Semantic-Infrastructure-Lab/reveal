@@ -2,11 +2,13 @@
 
 import argparse
 import json
+import os
+import re
 import subprocess
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Dict, Any, List, cast
+from typing import Any, Dict, List, Optional, Set, cast
 
 
 def create_hotspots_parser() -> argparse.ArgumentParser:
@@ -79,6 +81,12 @@ def run_hotspots(args: Namespace) -> None:
     if not files_only:
         fn_hotspots = _run_function_hotspots(path, min_cx, top)
 
+    test_index: Optional[Set[str]] = None
+    if not files_only:
+        test_index = _build_test_name_index(path)
+        for fn in fn_hotspots:
+            fn['has_test_hint'] = fn.get('name', '') in test_index
+
     report = {
         'path': str(path),
         'file_hotspots': file_hotspots,
@@ -89,7 +97,7 @@ def run_hotspots(args: Namespace) -> None:
         print(json.dumps(report, indent=2, default=str))
         return
 
-    _render_report(report, top)
+    _render_report(report, top, test_index=test_index)
 
     # Exit with non-zero if there are serious hotspots (quality < 70 or complexity > 20)
     serious_files = [h for h in file_hotspots if h.get('quality_score', 100) < 70]
@@ -132,7 +140,7 @@ def _run_function_hotspots(path: Path, min_complexity: int, top: int) -> List[Di
         return []
 
 
-def _render_report(report: Dict[str, Any], top: int) -> None:
+def _render_report(report: Dict[str, Any], top: int, test_index: Optional[Set[str]] = None) -> None:
     """Render hotspots as human-readable text."""
     path = report['path']
     file_hotspots = report['file_hotspots']
@@ -148,7 +156,7 @@ def _render_report(report: Dict[str, Any], top: int) -> None:
         return
 
     _render_file_hotspots(file_hotspots, top)
-    _render_function_hotspots(fn_hotspots)
+    _render_function_hotspots(fn_hotspots, test_index=test_index)
     _render_summary(file_hotspots, fn_hotspots)
 
 
@@ -185,10 +193,13 @@ def _render_file_hotspots(hotspots: List[Dict[str, Any]], top: int) -> None:
         print(f"      → reveal {name}")
 
 
-def _render_function_hotspots(fns: List[Dict[str, Any]]) -> None:
+def _render_function_hotspots(fns: List[Dict[str, Any]], test_index: Optional[Set[str]] = None) -> None:
     if not fns:
         return
+    has_coverage_info = test_index is not None
     print("\nComplex functions:")
+    if has_coverage_info:
+        print("  (✅ = test found  ⚪ = no test found)")
     for fn in fns:
         name = fn.get('name', '?')
         cx = fn.get('complexity', '?')
@@ -204,9 +215,37 @@ def _render_function_hotspots(fns: List[Dict[str, Any]]) -> None:
         else:
             icon = '💡'
 
+        # Test coverage heuristic
+        if has_coverage_info:
+            cov = '✅' if name in test_index else '⚪'  # type: ignore[operator]
+            cov_str = f' {cov}'
+        else:
+            cov_str = ''
+
         loc_str = f"  {loc}" if loc else ''
         lc_str = f"  ({line_count}L)" if line_count else ''
-        print(f"  {icon} {name}  complexity: {cx}{lc_str}{loc_str}:{line}")
+        print(f"  {icon}{cov_str} {name}  complexity: {cx}{lc_str}{loc_str}:{line}")
+
+
+def _build_test_name_index(path: Path) -> Set[str]:
+    """Heuristic: collect base names covered by test_* functions under tests/ or test/."""
+    names: Set[str] = set()
+    pattern = re.compile(r'^\s*def\s+test_(\w+)', re.MULTILINE)
+    for candidate in ('tests', 'test', 'spec'):
+        test_dir = path / candidate
+        if not test_dir.is_dir():
+            continue
+        for root, dirs, files in os.walk(str(test_dir)):
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            for fname in files:
+                if not fname.endswith('.py'):
+                    continue
+                try:
+                    content = Path(os.path.join(root, fname)).read_text(errors='replace')
+                    names.update(m.group(1) for m in pattern.finditer(content))
+                except OSError:
+                    pass
+    return names
 
 
 def _render_summary(file_hotspots: List[Dict[str, Any]], fn_hotspots: List[Dict[str, Any]]) -> None:

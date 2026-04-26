@@ -76,15 +76,17 @@ def _dispatch_subcommand() -> bool:
     # Each entry: subcommand name -> (parser_factory, runner)
     _SUBCOMMANDS = {
         'architecture': ('reveal.cli.commands.architecture', 'create_architecture_parser', 'run_architecture'),
-        'check':    ('reveal.cli.commands.check',    'create_check_parser',    'run_check'),
-        'deps':     ('reveal.cli.commands.deps',     'create_deps_parser',     'run_deps'),
-        'dev':      ('reveal.cli.commands.dev',      'create_dev_parser',      'run_dev'),
-        'health':   ('reveal.cli.commands.health',   'create_health_parser',   'run_health'),
-        'hotspots': ('reveal.cli.commands.hotspots', 'create_hotspots_parser', 'run_hotspots'),
-        'overview': ('reveal.cli.commands.overview', 'create_overview_parser', 'run_overview'),
-        'pack':     ('reveal.cli.commands.pack',     'create_pack_parser',     'run_pack'),
-        'review':   ('reveal.cli.commands.review',   'create_review_parser',   'run_review'),
-        'scaffold': ('reveal.cli.commands.scaffold', 'create_scaffold_parser', 'run_scaffold'),
+        'check':        ('reveal.cli.commands.check',        'create_check_parser',        'run_check'),
+        'contracts':    ('reveal.cli.commands.contracts',    'create_contracts_parser',    'run_contracts'),
+        'deps':         ('reveal.cli.commands.deps',         'create_deps_parser',         'run_deps'),
+        'dev':          ('reveal.cli.commands.dev',          'create_dev_parser',          'run_dev'),
+        'health':       ('reveal.cli.commands.health',       'create_health_parser',       'run_health'),
+        'hotspots':     ('reveal.cli.commands.hotspots',     'create_hotspots_parser',     'run_hotspots'),
+        'overview':     ('reveal.cli.commands.overview',     'create_overview_parser',     'run_overview'),
+        'pack':         ('reveal.cli.commands.pack',         'create_pack_parser',         'run_pack'),
+        'review':       ('reveal.cli.commands.review',       'create_review_parser',       'run_review'),
+        'scaffold':     ('reveal.cli.commands.scaffold',     'create_scaffold_parser',     'run_scaffold'),
+        'surface':      ('reveal.cli.commands.surface',      'create_surface_parser',      'run_surface'),
     }
 
     if name not in _SUBCOMMANDS:
