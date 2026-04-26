@@ -6,7 +6,7 @@ category: reference
 
 **Complete catalog of all user-facing documentation**
 
-**Last Updated**: 2026-03-18
+**Last Updated**: 2026-04-26
 **Total**: 48 markdown files, ~41,000 lines
 
 ---
@@ -159,7 +159,7 @@ Complete reference for AI agent integration:
 
 **Total**: 49 files (47 user-facing + 2 maintainer reference)
 
-**Last Updated**: 2026-03-18 (Session: violet-brush-0318)
+**Last Updated**: 2026-04-26 (v0.87.0 release)
 
 ---
 
@@ -188,5 +188,5 @@ Internal maintainer documentation (planning, research, architecture) is maintain
 
 ---
 
-**Last Updated**: 2026-03-18 (Session: foggy-flood-0318)
+**Last Updated**: 2026-04-26 (v0.87.0 release)
 **Navigation**: [README](README.md) | [Project Root](../../README.md)

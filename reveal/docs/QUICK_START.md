@@ -175,7 +175,7 @@ reveal src/app.py handle_request
 
 ---
 
-## Subcommands (v0.57.0+)
+## Subcommands (v0.57.0+, expanded through v0.87.0)
 
 Reveal includes intent-based subcommands for common workflows:
 
@@ -197,6 +197,20 @@ reveal health --all               # Auto-detect targets from .reveal.yaml
 # Token-budgeted snapshot for LLM context
 reveal pack src/ --budget 8000
 reveal pack src/ --focus authentication --budget 4000
+reveal pack src/ --architecture   # + entry points and core abstractions brief
+
+# Complexity hotspots — ✅/⚪ shows test coverage per function
+reveal hotspots src/
+reveal hotspots src/ --format json | jq '.function_hotspots[] | select(.has_test_hint == false)'
+
+# Architectural analysis
+reveal architecture src/          # Entry points, core abstractions, circular groups, risks
+reveal overview .                 # One-glance dashboard: stats, quality, architecture, git
+
+# Execution and boundary analysis (v0.85.0+)
+reveal trace src/ --from main     # Depth-indented execution narrative with side-effects
+reveal contracts src/             # ABC/Protocol/TypedDict/Pydantic contract inventory
+reveal surface src/               # External boundary map: CLI args, routes, env vars, I/O
 
 # Developer tools
 reveal dev new-adapter            # Scaffold a new adapter
@@ -352,7 +366,7 @@ reveal help://anti-patterns      # What NOT to do
 2. **Progressive disclosure** - Directory → File → Element
 3. **Token efficiency** - 10-150x fewer tokens than cat/grep
 4. **Line numbers** - All output is `file:line` format (vim compatible)
-5. **Zero config** - Works out of the box on 80 languages (64 built-in + 16 tree-sitter)
+5. **Zero config** - Works out of the box on 185+ languages via tree-sitter
 
 ---
 

@@ -2,12 +2,12 @@
 title: Reveal Stability Policy
 type: documentation
 category: policy
-date: 2026-01-20
+date: 2026-04-26
 ---
 
 # Stability Policy
 
-**Last updated:** 2026-01-20
+**Last updated:** 2026-04-26
 
 ---
 

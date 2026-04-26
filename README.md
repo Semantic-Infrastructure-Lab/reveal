@@ -104,13 +104,18 @@ reveal check src/              # quality check (complexity, maintainability, lin
 reveal review main..HEAD       # PR review: diff + check + hotspots, one pass
 reveal health ssl://site.com   # health check with exit codes 0/1/2
 reveal pack src/ --budget 8000 # token-budgeted snapshot for LLM context
-reveal hotspots src/           # top complexity hotspots
+reveal pack src/ --architecture # pack + entry points + core abstractions brief
+reveal hotspots src/           # top complexity hotspots (✅/⚪ test-coverage per fn)
 reveal overview .              # one-glance dashboard: stats, quality, git activity
 reveal deps .                  # dependency health: circular imports, unused, packages
+reveal architecture src/       # architectural brief: entry points, abstractions, risks
+reveal trace src/ --from main  # execution narrative from an entry point
+reveal contracts src/          # ABC/Protocol/TypedDict/Pydantic inventory
+reveal surface src/            # external boundary map: CLI args, routes, env vars, I/O
 reveal dev new-adapter <name>  # scaffold new adapters/rules
 ```
 
-## Adapters (22 built-in)
+## Adapters (23 built-in)
 
 | Adapter | What it queries |
 |---------|-----------------|
