@@ -38,6 +38,19 @@ class N001(BaseRule):
         r'server\s+([^;]+);'
     )
 
+    _INTENT_WORDS = re.compile(r'intentional|by design|same host', re.IGNORECASE)
+
+    def _has_intent_comment(self, content: str, upstream_start_line: int) -> bool:
+        """Return True if the 3 lines before upstream_start_line contain an intent comment."""
+        lines = content.splitlines()
+        check_from = max(0, upstream_start_line - 4)
+        check_to = upstream_start_line - 1
+        for line in lines[check_from:check_to]:
+            stripped = line.lstrip()
+            if stripped.startswith('#') and self._INTENT_WORDS.search(stripped):
+                return True
+        return False
+
     def check(self,
               file_path: str,
               structure: Optional[Dict[str, Any]],
@@ -63,21 +76,28 @@ class N001(BaseRule):
                 # Normalize: remove weight, backup, etc. - just get host:port
                 backend = self._normalize_server(server_spec)
                 if backend:
-                    # Calculate line number
                     server_line = upstream_start + upstream_body[:server_match.start()].count('\n')
-                    backend_to_upstreams[backend].append((upstream_name, server_line))
+                    backend_to_upstreams[backend].append((upstream_name, server_line, upstream_start))
 
         # Find duplicates
         for backend, upstreams in backend_to_upstreams.items():
             if len(upstreams) > 1:
-                # Report on the second (and subsequent) occurrences
                 first_upstream = upstreams[0][0]
-                for upstream_name, line in upstreams[1:]:
+                for upstream_name, line, upstream_start in upstreams[1:]:
+                    suggestion = (
+                        "Verify this is intentional. If so, add"
+                        " '# reveal:allow-shared-backend' inside the upstream block to suppress."
+                    )
+                    if self._has_intent_comment(content, upstream_start):
+                        suggestion += (
+                            " (A nearby comment signals intent — if confirmed,"
+                            " add the suppression marker to formally acknowledge it.)"
+                        )
                     detections.append(self.create_detection(
                         file_path=file_path,
                         line=line,
                         message=f"Upstream '{upstream_name}' shares backend {backend} with '{first_upstream}'",
-                        suggestion="Verify this is intentional. If so, add '# reveal:allow-shared-backend' inside the upstream block to suppress.",
+                        suggestion=suggestion,
                         context=f"Both '{first_upstream}' and '{upstream_name}' → {backend}"
                     ))
 

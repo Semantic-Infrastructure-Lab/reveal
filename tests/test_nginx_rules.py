@@ -142,6 +142,37 @@ upstream app3 {
         # app2 and app3 both duplicate app1
         self.assertEqual(len(detections), 2)
 
+    def test_intent_comment_adds_suppression_hint(self):
+        """BACK-260: intent comment adjacent to upstream → suppression hint appended."""
+        content = (
+            "upstream app1 {\n    server 127.0.0.1:8000;\n}\n\n"
+            "# NOTE: Intentionally shares backend with app1\n"
+            "upstream app2 {\n    server 127.0.0.1:8000;\n}\n"
+        )
+        detections = self.rule.check("test.conf", None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertIn('suppression marker', detections[0].suggestion)
+
+    def test_no_intent_comment_no_extra_hint(self):
+        """BACK-260: no intent comment → suggestion text unchanged."""
+        content = (
+            "upstream app1 {\n    server 127.0.0.1:8000;\n}\n\n"
+            "upstream app2 {\n    server 127.0.0.1:8000;\n}\n"
+        )
+        detections = self.rule.check("test.conf", None, content)
+        self.assertEqual(len(detections), 1)
+        self.assertNotIn('suppression marker', detections[0].suggestion)
+
+    def test_by_design_comment_adds_hint(self):
+        """BACK-260: 'by design' triggers the intent comment path."""
+        content = (
+            "upstream app1 {\n    server 127.0.0.1:8000;\n}\n\n"
+            "# by design — shared with app1\n"
+            "upstream app2 {\n    server 127.0.0.1:8000;\n}\n"
+        )
+        detections = self.rule.check("test.conf", None, content)
+        self.assertIn('suppression marker', detections[0].suggestion)
+
 
 class TestN002MissingSSLCert(unittest.TestCase):
     """Tests for N002: Missing SSL certificate detection."""

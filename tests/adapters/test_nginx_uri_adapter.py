@@ -28,6 +28,7 @@ from reveal.adapters.nginx.adapter import (
     _extract_ports,
     _extract_upstreams_referenced,
     _find_upstream_definitions,
+    _extract_cohosted_names,
     _extract_auth_directives,
     _extract_location_blocks,
     _detect_warnings,
@@ -756,3 +757,141 @@ class TestSchemaViaHelpEndpoint:
         result = HelpAdapter("help://").get_element("schemas/nginx")
         assert 'output_types' in result
         assert len(result['output_types']) > 0
+
+
+# ---------------------------------------------------------------------------
+# BACK-258: conf.d upstream fallback scanning
+# ---------------------------------------------------------------------------
+
+class TestUpstreamConfDFallback:
+    def test_upstream_found_in_sibling_conf(self, tmp_path):
+        """Upstream defined in a sibling *.conf file is found and marked with found_in."""
+        (tmp_path / "example.conf").write_text(textwrap.dedent("""\
+            server {
+                listen 80;
+                server_name example.com;
+                location / { proxy_pass http://myapp; }
+            }
+        """))
+        (tmp_path / "upstreams.conf").write_text(
+            "upstream myapp { server 127.0.0.1:8000; }\n"
+        )
+        defs = _find_upstream_definitions(
+            (tmp_path / "example.conf").read_text(),
+            ['myapp'],
+            config_path=str(tmp_path / "example.conf"),
+        )
+        assert defs['myapp']['servers'] == ['127.0.0.1:8000']
+        assert defs['myapp']['found_in'] == str(tmp_path / "upstreams.conf")
+
+    def test_upstream_not_found_anywhere_remains_stub(self, tmp_path):
+        """Upstream not in vhost or conf.d → stub with raw=None."""
+        (tmp_path / "example.conf").write_text(
+            "server { location / { proxy_pass http://ghost; } }"
+        )
+        defs = _find_upstream_definitions(
+            (tmp_path / "example.conf").read_text(),
+            ['ghost'],
+            config_path=str(tmp_path / "example.conf"),
+        )
+        assert defs['ghost']['raw'] is None
+        assert defs['ghost']['found_in'] is None
+
+    def test_upstream_in_vhost_found_in_is_none(self):
+        """Upstream defined in vhost content itself → found_in=None."""
+        content = "upstream app { server 127.0.0.1:3000; }"
+        defs = _find_upstream_definitions(content, ['app'])
+        assert defs['app']['found_in'] is None
+        assert defs['app']['servers'] == ['127.0.0.1:3000']
+
+    def test_vhost_summary_warns_on_missing_upstream(self, tmp_path):
+        """Upstream referenced but not found anywhere → warning in vhost summary."""
+        (tmp_path / "example.conf").write_text(textwrap.dedent("""\
+            server {
+                listen 80;
+                server_name example.com;
+                location / { proxy_pass http://ghost; }
+            }
+        """))
+        with patch('reveal.adapters.nginx.adapter._NGINX_SEARCH_DIRS', [str(tmp_path)]):
+            result = NginxUriAdapter("nginx://example.com").get_structure()
+        assert any('ghost' in w and 'not found' in w for w in result['warnings'])
+
+    def test_vhost_summary_no_warning_when_upstream_in_sibling(self, tmp_path):
+        """Upstream found in sibling conf → no not-found warning."""
+        (tmp_path / "example.conf").write_text(textwrap.dedent("""\
+            server {
+                listen 80;
+                server_name example.com;
+                location / { proxy_pass http://myapp; }
+            }
+        """))
+        (tmp_path / "upstreams.conf").write_text(
+            "upstream myapp { server 127.0.0.1:8000; }\n"
+        )
+        with patch('reveal.adapters.nginx.adapter._NGINX_SEARCH_DIRS', [str(tmp_path)]):
+            result = NginxUriAdapter("nginx://example.com").get_structure()
+        assert not any('myapp' in w and 'not found' in w for w in result['warnings'])
+
+    def test_no_fallback_without_config_path(self):
+        """Without config_path, stub is returned even if sibling would have it."""
+        content = "server { location / { proxy_pass http://backend; } }"
+        defs = _find_upstream_definitions(content, ['backend'])
+        assert defs['backend']['raw'] is None
+
+
+# ---------------------------------------------------------------------------
+# BACK-259: multi-server-block co-hosted names
+# ---------------------------------------------------------------------------
+
+class TestCohostedServerNames:
+    def test_extracts_other_block_server_names(self):
+        content = textwrap.dedent("""\
+            server { server_name semanticinfrastructurelab.org www.semanticinfrastructurelab.org; }
+            server { server_name staging.semanticinfrastructurelab.org; }
+        """)
+        result = _extract_cohosted_names(content, 'semanticinfrastructurelab.org')
+        assert 'staging.semanticinfrastructurelab.org' in result
+        assert 'semanticinfrastructurelab.org' not in result
+        assert 'www.semanticinfrastructurelab.org' not in result
+
+    def test_empty_when_only_own_domain(self):
+        content = "server { server_name example.com www.example.com; }"
+        assert _extract_cohosted_names(content, 'example.com') == []
+
+    def test_multiple_other_blocks(self):
+        content = textwrap.dedent("""\
+            server { server_name example.com; }
+            server { server_name staging.example.com; }
+            server { server_name dev.example.com; }
+        """)
+        result = _extract_cohosted_names(content, 'example.com')
+        assert 'staging.example.com' in result
+        assert 'dev.example.com' in result
+
+    def test_vhost_summary_includes_also_serves(self, tmp_path):
+        """Multi-domain config file → also_serves present in summary."""
+        content = textwrap.dedent("""\
+            server {
+                listen 80;
+                server_name example.com;
+                location / { root /var/www; }
+            }
+            server {
+                listen 80;
+                server_name staging.example.com;
+                location / { root /var/www/staging; }
+            }
+        """)
+        (tmp_path / "example.conf").write_text(content)
+        with patch('reveal.adapters.nginx.adapter._NGINX_SEARCH_DIRS', [str(tmp_path)]):
+            result = NginxUriAdapter("nginx://example.com").get_structure()
+        assert 'also_serves' in result
+        assert 'staging.example.com' in result['also_serves']
+
+    def test_vhost_summary_no_also_serves_for_single_domain(self, tmp_path):
+        """Single-domain config → no also_serves key."""
+        (tmp_path / "example.conf").write_text(_SIMPLE_VHOST)
+        with patch('reveal.adapters.nginx.adapter._NGINX_SEARCH_DIRS', [str(tmp_path)]):
+            result = NginxUriAdapter("nginx://example.com").get_structure()
+        assert 'also_serves' not in result

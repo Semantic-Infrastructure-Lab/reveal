@@ -96,6 +96,11 @@ class NginxUriRenderer(TypeDispatchRenderer):
             for i, srv in enumerate(servers):
                 reach = reach_list[i] if i < len(reach_list) else {}
                 print(NginxUriRenderer._format_upstream_server_line(srv, reach))
+            found_in = defn.get('found_in') if defn else None
+            if found_in:
+                print(f"  (defined in {found_in})")
+            elif defn and defn.get('raw') is None:
+                print("  ⚠️  definition not found")
 
     @staticmethod
     def _print_auth(auth: dict) -> None:
@@ -150,9 +155,15 @@ class NginxUriRenderer(TypeDispatchRenderer):
             target = symlink.get('target', '?')
             ok = '✅' if symlink.get('exists') else '❌'
             print(f"Config file: {config_file}")
-            print(f"Symlinked:   {ok} → {target}\n")
+            print(f"Symlinked:   {ok} → {target}")
         else:
-            print(f"Config file: {config_file}\n")
+            print(f"Config file: {config_file}")
+
+        # BACK-259: co-hosted names in the same config file
+        also_serves = result.get('also_serves')
+        if also_serves:
+            print(f"Also serves: {', '.join(also_serves)}")
+        print()
 
         # Ports
         NginxUriRenderer._print_ports(result.get('ports', []))

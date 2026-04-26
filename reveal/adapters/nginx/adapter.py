@@ -376,24 +376,78 @@ def _extract_upstreams_referenced(server_block: str) -> List[str]:
     return names
 
 
-def _find_upstream_definitions(content: str, names: List[str]) -> Dict[str, Any]:
-    """Find upstream block definitions for the given names."""
-    upstreams = {}
-    for name in names:
+def _find_upstream_definitions(
+    content: str,
+    names: List[str],
+    config_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Find upstream block definitions for the given names.
+
+    Searches content first (the vhost file). If config_path is given and any
+    names remain unresolved, scans sibling *.conf files in the same directory.
+    Each entry gains a 'found_in' key: None means the vhost file, a path string
+    means a sibling conf file, and raw=None means not found anywhere.
+    """
+    def _parse_upstream(text: str, name: str) -> Optional[Dict[str, Any]]:
         pattern = re.compile(
             rf'upstream\s+{re.escape(name)}\s*\{{([^}}]+)\}}',
             re.MULTILINE | re.DOTALL
         )
-        m = pattern.search(content)
+        m = pattern.search(text)
         if m:
             body = m.group(1)
-            servers = []
-            for sm in re.finditer(r'server\s+([^;]+);', body):
-                servers.append(sm.group(1).strip())
-            upstreams[name] = {'servers': servers, 'raw': body.strip()}
-        else:
-            upstreams[name] = {'servers': [], 'raw': None}
+            servers = [sm.group(1).strip() for sm in re.finditer(r'server\s+([^;]+);', body)]
+            return {'servers': servers, 'raw': body.strip(), 'found_in': None}
+        return None
+
+    upstreams: Dict[str, Any] = {}
+    for name in names:
+        result = _parse_upstream(content, name)
+        upstreams[name] = result if result else {'servers': [], 'raw': None, 'found_in': None}
+
+    if config_path:
+        unresolved = [n for n, d in upstreams.items() if d['raw'] is None]
+        if unresolved:
+            search_dir = os.path.dirname(os.path.abspath(config_path))
+            norm_config = os.path.abspath(config_path)
+            for cf in sorted(glob.glob(os.path.join(search_dir, '*.conf'))):
+                if not unresolved:
+                    break
+                if os.path.abspath(cf) == norm_config:
+                    continue
+                try:
+                    cf_content = Path(cf).read_text(errors='replace')
+                except OSError:
+                    continue
+                for name in list(unresolved):
+                    result = _parse_upstream(cf_content, name)
+                    if result:
+                        result['found_in'] = cf
+                        upstreams[name] = result
+                        unresolved.remove(name)
+
     return upstreams
+
+
+def _extract_cohosted_names(content: str, domain: str) -> List[str]:
+    """Return server_names from OTHER server blocks in the same config file."""
+    SERVER_BLOCK_RE = re.compile(
+        r'(server\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\})',
+        re.MULTILINE | re.DOTALL
+    )
+    result: List[str] = []
+    for m in SERVER_BLOCK_RE.finditer(content):
+        block = m.group(1)
+        sn_match = re.search(r'server_name\s+([^;]+);', block)
+        if not sn_match:
+            continue
+        tokens = sn_match.group(1).split()
+        if domain in tokens:
+            continue
+        for token in tokens:
+            if token not in ('_', 'localhost') and token not in result:
+                result.append(token)
+    return result
 
 
 def _check_upstream_reachability(upstream_def: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -927,13 +981,25 @@ class NginxUriAdapter(ResourceAdapter):
         symlink_info = _resolve_symlink_info(config_path)
         ports = _extract_ports(server_block)
         upstream_names = _extract_upstreams_referenced(server_block)
-        upstream_defs = _find_upstream_definitions(content, upstream_names)
+        upstream_defs = _find_upstream_definitions(content, upstream_names, config_path=config_path)
         reachability = {name: _check_upstream_reachability(defn) for name, defn in upstream_defs.items()}
         auth = _extract_auth_directives(server_block)
         locations = _extract_location_blocks(server_block)
         warnings = _detect_warnings(ports, upstream_defs, reachability, auth)
 
-        return {
+        # BACK-258: warn when upstream is referenced but not found anywhere
+        for name, defn in upstream_defs.items():
+            if defn.get('raw') is None:
+                search_dir = os.path.dirname(os.path.abspath(config_path))
+                warnings.append(
+                    f"Upstream '{name}' referenced by proxy_pass but definition not found"
+                    f" — searched vhost file and {search_dir}/*.conf"
+                )
+
+        # BACK-259: surface other server names co-hosted in the same config file
+        also_serves = _extract_cohosted_names(content, self.domain)
+
+        result = {
             'type': 'nginx_vhost_summary',
             'domain': self.domain,
             'config_file': config_path,
@@ -955,6 +1021,9 @@ class NginxUriAdapter(ResourceAdapter):
                 f"reveal check ssl://{self.domain}       # cert detail",
             ],
         }
+        if also_serves:
+            result['also_serves'] = also_serves
+        return result
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         assert self.domain is not None
@@ -995,9 +1064,16 @@ class NginxUriAdapter(ResourceAdapter):
 
     def _element_upstream(self, config_path: str, content: str, server_block: str) -> Dict[str, Any]:
         upstream_names = _extract_upstreams_referenced(server_block)
-        upstream_defs = _find_upstream_definitions(content, upstream_names)
+        upstream_defs = _find_upstream_definitions(content, upstream_names, config_path=config_path)
         reachability = {name: _check_upstream_reachability(defn) for name, defn in upstream_defs.items()}
-        return {
+        upstream_warnings = []
+        for name, defn in upstream_defs.items():
+            if defn.get('raw') is None:
+                search_dir = os.path.dirname(os.path.abspath(config_path))
+                upstream_warnings.append(
+                    f"Upstream '{name}' not found in vhost file or {search_dir}/*.conf"
+                )
+        result = {
             'type': 'nginx_vhost_upstream',
             'domain': self.domain,
             'config_file': config_path,
@@ -1012,6 +1088,9 @@ class NginxUriAdapter(ResourceAdapter):
                 f"reveal nginx://{self.domain}  # full vhost summary",
             ],
         }
+        if upstream_warnings:
+            result['warnings'] = upstream_warnings
+        return result
 
     def _element_auth(self, config_path: str, content: str, server_block: str) -> Dict[str, Any]:
         auth = _extract_auth_directives(server_block)

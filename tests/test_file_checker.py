@@ -773,3 +773,46 @@ class TestCheckFilesTextSeverity:
 
         assert total == 1
         assert files_with == 1
+
+
+class TestCheckSubcommandURIDetection:
+    """BACK-261: reveal check ssl://domain should emit a redirect hint."""
+
+    def _run(self, path_str):
+        import argparse
+        from reveal.cli.commands.check import run_check
+        args = argparse.Namespace(
+            rules=False, explain=None, path=path_str,
+            no_fallback=False, format='text',
+        )
+        return run_check(args)
+
+    def test_ssl_uri_exits_with_message(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            self._run('ssl://example.com')
+        assert exc.value.code == 1
+        captured = capsys.readouterr()
+        assert 'looks like a URI' in captured.err
+        assert 'reveal ssl://example.com --check' in captured.err
+
+    def test_nginx_uri_exits_with_message(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            self._run('nginx://example.com')
+        assert exc.value.code == 1
+        captured = capsys.readouterr()
+        assert 'looks like a URI' in captured.err
+
+    def test_regular_file_not_misidentified(self, tmp_path):
+        """A normal file path must not trigger the URI guard."""
+        p = tmp_path / 'mymodule.py'
+        p.write_text('x = 1')
+        import argparse
+        from reveal.cli.commands.check import run_check
+        args = argparse.Namespace(
+            rules=False, explain=None, path=str(p),
+            no_fallback=False, format='text',
+            select=None, ignore=None, severity=None, no_fallback_analyzer=False,
+        )
+        with pytest.raises(SystemExit) as exc:
+            run_check(args)
+        assert exc.value.code == 0

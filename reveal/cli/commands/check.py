@@ -126,6 +126,13 @@ def run_check(args: Namespace) -> None:
         print("Error: path is required for reveal check", file=sys.stderr)
         sys.exit(1)
 
+    # BACK-261: detect URI where a file path was expected
+    import re as _re
+    if _re.match(r'^[a-z][a-z0-9+\-.]+://', path_str):
+        print(f"Error: '{path_str}' looks like a URI, not a file path.", file=sys.stderr)
+        print(f"  Did you mean: reveal {path_str} --check", file=sys.stderr)
+        sys.exit(1)
+
     path = Path(path_str)
     if not path.exists():
         print(f"Error: {path_str}: no such file or directory", file=sys.stderr)
