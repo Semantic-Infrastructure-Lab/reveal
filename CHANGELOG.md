@@ -12,10 +12,14 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.87.0] - 2026-04-25 (session quantum-overlord-0425)
+## [0.87.0] - 2026-04-26 (sessions quantum-overlord-0425, divine-shrine-0426)
 
 ### Added
 - **Plugin auto-discovery** — drop a `*_analyzer.py` containing a `@register`-decorated `FileAnalyzer` subclass into `.reveal/analyzers/` (project-local) or `~/.reveal/plugins/` (user-global) and it's live on the next `reveal` invocation with zero registration boilerplate. Discovery fires once per process, lazily on first `get_analyzer()` call. Bad plugin files emit a warning and are skipped without crashing. `discover_plugins(cwd=...)` and `_reset_plugin_discovery()` are exported for test isolation. (BACK-247)
+- **`reveal pack --architecture`** — appends an architecture brief to pack output: fan-in-ranked entry points (fan-in=0, scored by fan-out) and top-5 core abstractions (highest fan-in, `__init__.py` excluded) with inbound import counts. Pulls graph via `ImportsAdapter`. (BACK-213)
+
+### Refactored
+- **`claude/renderer.py` split** — monolithic renderer split into 4 thematic submodules for maintainability. (BACK-241)
 
 ## [0.86.0] - 2026-04-25 (session radioactive-vortex-0425)
 
