@@ -10,13 +10,15 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from reveal.cli.commands.surface import (
+from reveal.adapters.ast.nav_surface import (
     _get_open_mode,
     _is_cli_command,
     _is_env_access,
     _is_fs_write,
     _is_http_route,
     _is_mcp_tool,
+)
+from reveal.cli.commands.surface import (
     _render_report,
     _scan_surface,
     create_surface_parser,
