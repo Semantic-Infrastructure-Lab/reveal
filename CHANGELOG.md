@@ -12,6 +12,11 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.86.0] - 2026-04-25 (session radioactive-vortex-0425)
+
+### Added
+- **`reveal trace src/ --from <entrypoint>`** — execution narrative subcommand. Walks the call graph from a named entry point using `find_callees_recursive`, then augments each resolved function frame with its parameter list and classified side-effects (hard_stop, db, http, cache, file, log, sleep). Renders a depth-indented narrative: each frame shows function name + file:line, params, effects, and what it calls next. `--depth N` (1–5, default 2); `--json` for machine-readable output. Unresolved (external/stdlib) callees appear with `[external]` marker. (BACK-216)
+
 ## [0.85.0] - 2026-04-25 (session amethyst-brush-0425)
 
 ### Added

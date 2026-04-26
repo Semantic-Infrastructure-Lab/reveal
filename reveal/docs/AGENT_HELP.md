@@ -980,6 +980,24 @@ Fields:
 
 **See also:** `CALLS_ADAPTER_GUIDE.md` for full `calls://` documentation.
 
+**Execution narrative — `reveal trace` (v0.86.0+):**
+
+```bash
+# Depth-indented execution narrative from an entry point
+reveal trace src/ --from main
+reveal trace src/ --from main --depth 3    # expand 3 levels (max 5)
+reveal trace src/ --from process_request --json   # JSON output
+```
+
+Each frame shows:
+- Function name + file:line (relative path)
+- `params:` — function parameters
+- `effects:` — classified side-effects (hard_stop, db, http, cache, file, log, sleep)
+- `calls:` — what it calls at the next level
+
+Output is depth-indented so the execution tree is scannable at a glance.  Unresolved
+(external/stdlib) callees appear with an `[external]` marker.
+
 ---
 
 ### Task: "Find dead code (uncalled functions)"
@@ -3535,6 +3553,8 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
 - **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `stats://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `stats://` complexity no longer stuck at 1.00
+- **v0.86.0** - `reveal trace` subcommand: depth-indented execution narrative from a named entry point. Combines `calls://` recursive callees walk with per-function params and classified side-effects (hard_stop, db, http, cache, file, log, sleep). `--depth N` (1–5, default 2), `--json` output. Prunes builtins and external callees by default.
+- **v0.85.0** - 5 new features: `reveal hotspots` test-coverage heuristic (✅/⚪ per function, scans `tests/`/`test/`/`spec/`); `calls://?root=fn&depth=N` recursive callees walk (BFS, cap 5, resolved vs external); `reveal contracts src/` (ABCs, Protocols, TypedDicts, @dataclass, Pydantic BaseModels, `--abstract-only`); `reveal surface src/` (CLI args, HTTP routes, MCP tools, env vars, network/DB/SDK imports, filesystem writes, `--type` filter); `calls://?modules=true` module dependency graph (191 nodes / 248 edges on reveal's own codebase, `?external=true`, dot format).
 - **v0.79.0** - documented PHP limitation: `--varflow`, `--deps`, `--mutations` silently return empty on PHP files (BACK-203 — `variable_name` node type vs `identifier`); PHP-safe nav flags: `--calls`, `--exits`, `--flowto`, `--ifmap`, `--catchmap`, `--around`, `--scope`; added `--calls` / `calls://` disambiguation; clarified `--outline` dual-mode behavior
 - **v0.78.0** - probe-inspired nav flags: `--around N` (verbatim context ±N lines around a target), `--ifmap` (branching skeleton), `--catchmap` (exception skeleton), `--exits` (exit-node list), `--flowto` (exit list + CLEAR/CONDITIONAL/BLOCKED verdict), `--deps` (refactoring pre-flight: variables flowing in), `--mutations` (variables written in range and read after); flat-file support for `--varflow` and `--calls` (no named function required — use with `:LINE-RANGE` syntax or no element for whole-file)
 - **v0.72.1** - M501 rule (TODO/FIXME/HACK/XXX marker detection, LOW severity, all file types); `--max-bytes` and `--max-depth` removed (were misleading/unimplemented); Complete Rules Reference now covers L, M, F, T categories (18 previously undocumented rules); adapter count corrected to 22
