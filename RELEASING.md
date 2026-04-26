@@ -295,6 +295,17 @@ Follow [Semantic Versioning](https://semver.org/):
 
 **Current status:** Pre-1.0 (breaking changes allowed in minor versions)
 
+### When to Bump the Version
+
+> ⚠️ **Only bump the version as part of a PyPI release.** Never bump it mid-session as part of bug fixes or feature work.
+
+The version in `pyproject.toml` represents the **published PyPI version**, not the dev-branch state. The right model:
+
+- **During development:** Keep `pyproject.toml` at the current published version. Ship as many commits as needed without changing the version number.
+- **At release time:** Do the 4-file prep commit (CHANGELOG + AGENT_HELP + ROADMAP + pyproject.toml), then run `./scripts/release.sh X.Y.Z`.
+
+Bumping mid-session causes the doc validation test (`test_agent_help_is_current_version`) to enforce a version that hasn't shipped yet, and makes it ambiguous whether a given commit is "released" or not.
+
 ---
 
 ## Release Checklist
