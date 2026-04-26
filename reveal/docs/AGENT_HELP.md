@@ -229,7 +229,14 @@ reveal 'ast://./src?complexity>10&lines>50'
 - `type=X` - Element type (function, class, method, async_function)
 - `depth>N` - Nesting depth (complexity indicator)
 - `depth<N` - Shallow nesting
-- `decorator=X` - Has specific decorator (@property, @staticmethod, etc.)
+- `decorator=X` - Has specific decorator (exact match)
+- `has_decorator=X` - Has decorator (presence check; use when exact name uncertain)
+- `param_type=X` - Filter by parameter annotation (glob supported: `List*`)
+- `return_type=X` - Filter by return annotation (glob supported: `Optional*`)
+- `has_annotations=true/false` - `false` = fully unannotated; `true` = fully annotated
+- `callers>N` - Inbound caller count above N (combine with `complexity>10` for prime refactor targets)
+- `reveal_type=VAR` - Show type evidence for a variable without editing source
+- `show=dict-heatmap` - Rank bare-dict params by key access; suggests TypedDict names
 
 **Filter combinations:**
 ```bash
@@ -539,6 +546,28 @@ reveal flat_file.php :1-2000 --varflow errormsg  # flat procedural file
 ```
 Shows every place the variable is assigned (WRITE), read (READ), or tested in a condition (READ/COND). Works on both named functions and flat/procedural files without a function wrapper.
 
+**`--varflow VAR --cross-calls` → follow variable across function boundaries (v0.84.0+)**
+```bash
+reveal app.py process_batch --varflow results --cross-calls
+
+# Output (indented frames show cross-function propagation):
+# WRITE     L2:  results = []
+# READ      L6:  results.append(value)
+# ↳ validate(results)           # 'results' passed as arg
+#     READ      L18:  for item in results:  # tracked as param inside callee
+```
+When the tracked variable appears as an argument in a call, recursion enters the callee and tracks the corresponding parameter. DFS with cycle guard. Reveals end-to-end data flow across module boundaries.
+
+**`--narrow VAR` → type-narrowing path for a variable (v0.84.0+)**
+```bash
+reveal app.py process_request --narrow response
+
+# Output:
+# Optional[Response] → Response  (narrowed by 'if response is not None' at L47)
+# Response → None                (narrowed by 'if not response' at L62 → else branch)
+```
+Parses `Optional[X]`, `Union[X,Y,None]`, `X|Y` annotations and classifies `isinstance`, `not isinstance`, `is None`, `is not None` guards. Shows the type at each branch. Useful before editing code that handles nullable types.
+
 > **PHP support (v0.81.0+)**: All nav flags including `--varflow`, `--deps`, `--mutations`, `--sideeffects`, `--returns`, and `--boundary` work on PHP files. Note: PHP `foreach` loop variables (`$k`, `$v` in `foreach($arr as $k => $v)`) are tracked but show as READ instead of WRITE — a minor limitation with no current workaround. `--boundary` additionally detects PHP superglobals (`$_GET`, `$_POST`, `$_SESSION`, etc.) and surfaces them in a separate ENVIRONMENT section.
 
 **`--calls` → call sites in a line range**
@@ -633,6 +662,8 @@ reveal app.py process_batch --mutations --range 20-80
 # RETURN is_rate_limit_error           written L1386, next read L1466
 ```
 Shows which variables the caller would need back — what would become return values if you extracted this block. Together with `--deps`, this is a full refactoring pre-flight.
+
+> `--writes` is an alias for `--mutations` — use whichever reads more naturally. Empty-result message says "No read-after-write hazards" with a `--varflow` hint.
 
 **`--sideeffects` → classified side-effect calls (db/http/cache/log/file/sleep/hard_stop) (v0.81.0+)**
 ```bash
@@ -1152,6 +1183,29 @@ reveal architecture src/ --no-imports  # Skip import analysis (faster, no graph)
 **Output sections:** entry points (fan-in=0, by fan-out) · core abstractions (most imported) · component cohesion bars · risks (circular groups, high-complexity entry points, load-bearing files) · next commands (dynamically generated from findings).
 
 **Use case:** Pre-edit orientation for a specific module. More targeted than `reveal overview` — works on subdirectories and produces a risks + next_commands structure agents can act on directly. `next_commands` tells the agent exactly what to look at next without further reasoning.
+
+---
+
+### Task: "Build a token-budgeted context snapshot with architecture awareness"
+
+**Pattern:**
+```bash
+reveal pack ./src --architecture            # Boost core abstractions; prepend architecture brief
+reveal pack ./src --architecture --budget 6000
+reveal pack ./src --architecture --content  # Architecture brief + structure content per file
+reveal pack ./src --since main --architecture --budget 8000  # PR context + arch brief
+```
+
+**`--architecture` does two things:**
+1. Queries `imports://` fan-in data and boosts widely-imported files in the priority score (fan-in ≥1: +1pt, ≥5: +3pt, ≥15: +5pt)
+2. Prepends an **Architecture Brief** before the tier list:
+```
+── Architecture Brief ──
+Entry points:      main.py
+Core abstractions: utils/__init__.py(39)  base.py(27)  registry.py(14)
+```
+
+**Use case:** When starting work on an unfamiliar codebase — `--architecture` ensures the token budget is spent on structurally important files (widely depended-on abstractions), not just recently modified ones. Combine with `--content` for a single self-contained agent context.
 
 ---
 
@@ -3416,6 +3470,8 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Lines around a line | `reveal file.py :123 --around` |
 | Trace a variable | `reveal file.py func_name --varflow result` |
 | Trace var in flat file | `reveal file.php :1-2000 --varflow errormsg` |
+| Trace var across calls | `reveal file.py func_name --varflow result --cross-calls` |
+| Type-narrowing path | `reveal file.py func_name --narrow response` |
 | Calls in a range | `reveal file.py func_name --calls 89-120` |
 | Calls in flat file range | `reveal file.php :477-531 --calls` |
 | Branching skeleton | `reveal file.py func_name --ifmap` |
@@ -3435,6 +3491,9 @@ reveal app.py --format=json | jq -r '.structure.functions[] | "\(.name) (\(.line
 | Find by name | `reveal 'ast://./src?name=*pattern*'` |
 | Find complex code | `reveal 'ast://./src?complexity>10'` |
 | Find long functions | `reveal 'ast://./src?lines>50'` |
+| Unannotated functions | `reveal 'ast://./src?has_annotations=false'` |
+| Heavily-called functions | `reveal 'ast://./src?callers>5'` |
+| Type evidence for var | `reveal 'ast://file.py?reveal_type=result'` |
 | Debug Python env | `reveal python://` |
 | Check stale bytecode | `reveal python://debug/bytecode` |
 | Navigate JSON | `reveal json://file.json/path/to/key` |
@@ -3573,6 +3632,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
 - **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `stats://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `stats://` complexity no longer stuck at 1.00
+- **v0.84.0** - `reveal pack --architecture` (fan-in boost + architecture brief); `--varflow --cross-calls` (follow variable across function boundaries); `--narrow VAR` (type-narrowing path); `ast://` new filters: `param_type=`, `return_type=`, `has_decorator=`, `has_annotations=`, `callers>N`, `reveal_type=`, `show=dict-heatmap`, `depth>N`, `callers>N`; `imports://?circular&verbose` (cycle edge paths); T005 (annotation coverage), T006 (TypedDict suggestion) rules; `--writes` alias for `--mutations`; `reveal/types.py` Output Contract TypedDicts; `_NAV_DISPATCH` dispatch table refactor; `VarFlowWalker` dataclass.
 - **v0.87.0** - Plugin auto-discovery: drop a `*_analyzer.py` with a `@register`-decorated `FileAnalyzer` subclass into `.reveal/analyzers/` (project-local) or `~/.reveal/plugins/` (user-global) — it loads automatically on the next `reveal` run. Zero registration boilerplate.
 - **v0.86.0** - `reveal trace` subcommand: depth-indented execution narrative from a named entry point. Combines `calls://` recursive callees walk with per-function params and classified side-effects (hard_stop, db, http, cache, file, log, sleep). `--depth N` (1–5, default 2), `--json` output. Prunes builtins and external callees by default.
 - **v0.85.0** - 5 new features: `reveal hotspots` test-coverage heuristic (✅/⚪ per function, scans `tests/`/`test/`/`spec/`); `calls://?root=fn&depth=N` recursive callees walk (BFS, cap 5, resolved vs external); `reveal contracts src/` (ABCs, Protocols, TypedDicts, @dataclass, Pydantic BaseModels, `--abstract-only`); `reveal surface src/` (CLI args, HTTP routes, MCP tools, env vars, network/DB/SDK imports, filesystem writes, `--type` filter); `calls://?modules=true` module dependency graph (191 nodes / 248 edges on reveal's own codebase, `?external=true`, dot format).

@@ -12,13 +12,13 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
 
 | Adapter | Query Params | Example |
 |---------|--------------|---------|
-| **imports://** | `unused`, `circular`, `violations` | `imports://.?unused` |
+| **imports://** | `unused`, `circular`, `circular&verbose`, `violations` | `imports://.?unused` |
 | **git://** | `type`, `detail`, `element`, `author`, `email`, `message`, `hash`, `ref` | `git://file.py?type=history` |
 | **json://** | `schema`, `flatten`, `gron`, `type`, `keys`, `length`, field filters, `sort`, `limit`, `offset` | `json://data.json?type=object` |
 | **markdown://** | field filters (frontmatter), `aggregate`, `body-contains`, `sort`, `limit`, `offset` | `markdown://docs/?status=draft` |
 | **stats://** | `hotspots`, `code_only`, `min_lines`, `max_lines`, `min_complexity`, `max_complexity`, `min_functions` | `stats://.?hotspots` |
-| **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `calls`, `callee_of`, `show`, `rank` | `ast://src?complexity>10` |
-| **calls://** | `target`, `callees`, `rank`, `top`, `depth`, `format`, `builtins` | `calls://src?target=fn` |
+| **ast://** | `type`, `name`, `complexity`, `lines`, `depth`, `decorator`, `has_decorator`, `calls`, `callee_of`, `show`, `rank`, `param_type`, `return_type`, `has_annotations`, `callers`, `reveal_type` | `ast://src?complexity>10` |
+| **calls://** | `target`, `callees`, `rank`, `top`, `depth`, `format`, `builtins`, `root`, `modules`, `external` | `calls://src?target=fn` |
 | **claude://** | `summary`, `errors`, `tools`, `contains`, `role`, `search`, `tail`, `last`, `tokens` | `claude://session?summary` |
 | **depends://** | `top`, `format` | `depends://src?top=10` |
 | **xlsx://** | `sheet`, `range`, `search`, `format`, `limit`, `formulas`, `powerpivot`, `powerquery`, `names`, `connections` | `xlsx://model.xlsx?sheet=Sales` |
@@ -61,9 +61,16 @@ Query parameters allow filtering, formatting, and modifying adapter behavior usi
   ```
   Detects imports that violate architectural layer boundaries (if configured).
 
+- **`verbose`** (flag, combine with `circular`) - Show the actual cycle path (A→B→C→A) for each circular dependency group
+  ```bash
+  reveal 'imports://src?circular&verbose'
+  ```
+  Without `verbose`, circular output lists the files in each SCC. With `verbose`, shows the full edge sequence tracing one representative cycle per group.
+
 **Combining Parameters**:
 ```bash
 reveal 'imports://src?unused&circular'
+reveal 'imports://src?circular&verbose'   # Cycle paths
 ```
 
 ---
@@ -289,11 +296,54 @@ reveal 'stats://.?hotspots&code_only'
   reveal 'ast://src/file.py?show=calls'
   ```
 
+- **`show=dict-heatmap`** - Rank bare-dict params by subscript key access frequency; suggests TypedDict names
+  ```bash
+  reveal 'ast://src?show=dict-heatmap'
+  ```
+
 - **`rank`** - Sort by a field descending (e.g., `rank=-complexity`)
   ```bash
   reveal 'ast://src?rank=-complexity'    # most complex first
   reveal 'ast://src?rank=-lines'         # longest first
   ```
+
+- **`param_type=`** - Filter functions by parameter annotation (glob and regex supported)
+  ```bash
+  reveal 'ast://src?param_type=str'
+  reveal 'ast://src?param_type=List*'    # glob
+  ```
+
+- **`return_type=`** - Filter functions by return annotation (glob and regex supported)
+  ```bash
+  reveal 'ast://src?return_type=bool'
+  reveal 'ast://src?return_type=Optional*'
+  ```
+
+- **`has_decorator=`** - Filter functions that have a specific decorator (presence check, not exact match)
+  ```bash
+  reveal 'ast://src?has_decorator=property'
+  reveal 'ast://src?has_decorator=staticmethod'
+  ```
+  Use `decorator=` for exact decorator value match; use `has_decorator=` for presence.
+
+- **`has_annotations=`** - Filter by annotation presence (`true` = fully annotated, `false` = fully unannotated)
+  ```bash
+  reveal 'ast://src?has_annotations=false'   # find unannotated functions
+  reveal 'ast://src?has_annotations=true'    # only annotated functions
+  reveal 'ast://src?type=function&has_annotations=false'  # annotation coverage audit
+  ```
+
+- **`callers>N`** - Filter by inbound caller count
+  ```bash
+  reveal 'ast://src?callers>5'               # called by more than 5 functions
+  reveal 'ast://src?callers>5&complexity>10' # hot + complex = prime refactor targets
+  ```
+
+- **`reveal_type=`** - Query type evidence for a variable without editing source
+  ```bash
+  reveal 'ast://src/file.py?reveal_type=result'   # collect type evidence for 'result'
+  ```
+  Gathers annotations, assignment RHS shapes, and loop variable hints.
 
 > For cross-file call graph queries, use `calls://` (see below). `ast://` call filters (`calls=`, `callee_of=`) are within-file only.
 
@@ -336,6 +386,27 @@ reveal 'stats://.?hotspots&code_only'
 - **`builtins`** - Include Python builtins in `?callees` and `?rank` output (default: false)
   ```bash
   reveal 'calls://src?callees=fn&builtins=true'
+  ```
+
+- **`root=<func>&depth=N`** - Recursive callee walk (BFS forward from an entry point)
+  ```bash
+  reveal 'calls://src?root=main'             # everything main() calls, depth 2
+  reveal 'calls://src?root=process_order&depth=3'
+  reveal 'calls://src?root=handle_request&format=dot' | dot -Tsvg > graph.svg
+  ```
+  Resolved (project-internal) callees are distinguished from unresolved (external/stdlib). Use `reveal trace` for a narrative view with side-effect labels.
+
+- **`modules=true`** - Module-level dependency graph (collapses function calls to file→file edges)
+  ```bash
+  reveal 'calls://src?modules=true'
+  reveal 'calls://src?modules=true&format=dot' | dot -Tsvg > deps.svg
+  reveal 'calls://src?modules=true&external=true'  # include stdlib/third-party edges
+  ```
+  Outputs unique module→module edges with call counts. `--format dot` produces a Graphviz digraph with edge labels.
+
+- **`external=true`** - Include stdlib/third-party edges in `?modules=true` output (default: false)
+  ```bash
+  reveal 'calls://src?modules=true&external=true'
   ```
 
 ---

@@ -204,6 +204,7 @@ reveal pack PATH [--budget N] [--focus TOPIC] [--since REF] [--content] [--verbo
 | `--since REF` | Boost files changed since `REF` (branch, commit, or `HEAD~N`) to top priority |
 | `--focus TOPIC` | Emphasize files matching this name pattern (e.g., `--focus auth`) |
 | `--content` | Emit reveal structure output for each selected file (agent-ready context) |
+| `--architecture` | Boost high fan-in (core abstraction) files; prepend architecture brief |
 | `--verbose` | Show per-file token/line counts |
 | `--format json` | Machine-readable output |
 
@@ -231,6 +232,7 @@ reveal pack . --content                   # Structure content, not just file lis
 reveal pack src/ --since main --content --budget 8000  # Full agent context: changed + structure
 reveal pack src/ --since main --budget 8000    # PR context: changed files first (manifest only)
 reveal pack src/ --since HEAD~3 --budget 4000  # Since 3 commits ago
+reveal pack . --architecture              # Boost core abstractions; show architecture brief
 reveal pack . --format json               # For agent consumption
 ```
 
@@ -276,6 +278,136 @@ With `--content`: also includes `content` — a list of `{file, changed, structu
 
 - `reveal review` — Code quality review
 - `reveal pack --help` — Full flag reference
+
+---
+
+## reveal trace — Execution Narrative
+
+Walk the call graph forward from a named entry point and print a depth-indented execution narrative. Each frame shows the function's location, parameters, classified side-effects, and what it calls next.
+
+### Usage
+
+```
+reveal trace [PATH] --from FUNC [--depth N] [--json]
+```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--from FUNC` | Entry-point function to start the trace from (required) |
+| `--depth N` | Call levels to expand, 1–5 (default: 2) |
+| `--json` | Output JSON instead of text |
+
+### Side-Effect Classification
+
+Each frame is labelled with detected side-effects:
+
+| Tag | Meaning |
+|-----|---------|
+| `db` | Database call |
+| `http` | Outbound HTTP |
+| `cache` | Cache read/write |
+| `file` | Filesystem I/O |
+| `log` | Logging call |
+| `sleep` | Blocking sleep |
+| `hard_stop` | `sys.exit` / raise without catch |
+
+Unresolved (external/stdlib) callees appear with an `[external]` marker.
+
+### Examples
+
+```bash
+reveal trace src/ --from main               # Trace from main(), depth 2
+reveal trace src/ --from process_order --depth 3
+reveal trace . --from handle_request --json # Machine-readable output
+```
+
+### See Also
+
+- `calls://` adapter — raw cross-file call graph queries
+- `reveal trace --help` — Full flag reference
+
+---
+
+## reveal contracts — Contract & Seam Inventory
+
+Find all architectural contracts in a codebase: ABCs, Protocols, TypedDicts, `@dataclass` classes, Pydantic BaseModels, and path-heuristic base classes. Lists abstract methods per contract and which classes implement each one.
+
+### Usage
+
+```
+reveal contracts [PATH] [--abstract-only] [--no-implementations] [--format FORMAT]
+```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--abstract-only` | Show only ABCs and Protocols; skip TypedDicts, dataclasses, path-heuristic |
+| `--no-implementations` | Skip showing which classes implement each contract |
+| `--format` | `text` (default), `json`, `typed`, `grep` |
+
+### Examples
+
+```bash
+reveal contracts ./src               # All contracts in src/
+reveal contracts .                   # Entire project
+reveal contracts . --abstract-only   # Only ABCs and Protocols
+reveal contracts . --format json     # Machine-readable output
+```
+
+### See Also
+
+- `reveal surface` — External boundary map (HTTP routes, env vars, etc.)
+- `reveal contracts --help` — Full flag reference
+
+---
+
+## reveal surface — External Boundary Map
+
+Map every external surface the system touches: CLI arguments, HTTP routes, MCP tool registrations, environment variables, network I/O, database/SDK imports, and filesystem writes. Answers "what does this system touch outside itself?"
+
+### Usage
+
+```
+reveal surface [PATH] [--type TYPE] [--format FORMAT]
+```
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--type TYPE` | Filter to one surface type (see table below) |
+| `--format` | `text` (default), `json`, `typed`, `grep` |
+
+### Surface Types
+
+| Type | What it finds |
+|------|--------------|
+| `cli` | CLI arguments (`argparse`, `click`) |
+| `http` | HTTP route handlers (Flask/FastAPI decorators) |
+| `mcp` | MCP tool registrations |
+| `env` | Environment variable reads (`os.getenv`, `os.environ.get`) |
+| `network` | Outbound network imports (`requests`, `httpx`, etc.) |
+| `fs` | Filesystem writes (`open(…,'w')`, `Path.write_text`) |
+| `db` | Database/ORM imports |
+| `sdk` | Third-party SDK imports |
+
+### Examples
+
+```bash
+reveal surface ./src                 # All surfaces in src/
+reveal surface .                     # Entire project
+reveal surface . --type env          # Only env var reads
+reveal surface . --type http         # Only HTTP route handlers
+reveal surface . --format json       # Machine-readable output
+```
+
+### See Also
+
+- `reveal contracts` — Architectural contracts (ABCs, Protocols, TypedDicts)
+- `reveal surface --help` — Full flag reference
 
 ---
 

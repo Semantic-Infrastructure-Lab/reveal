@@ -18,6 +18,7 @@ Reveal's configuration system provides flexible, hierarchical control over rule 
 - [File-Specific Overrides](#file-specific-overrides)
 - [Examples](#examples)
 - [Troubleshooting](#troubleshooting)
+- [Plugin Auto-Discovery](#plugin-auto-discovery)
 
 ---
 
@@ -603,6 +604,54 @@ from reveal.config import glob_match
 path = Path("src/utils/helpers.py")
 pattern = "src/**/*.py"
 print(glob_match(path, pattern))  # Should print True
+```
+
+---
+
+## Plugin Auto-Discovery
+
+Reveal can load custom file analyzers at startup without any registration boilerplate. Drop a Python file matching `*_analyzer.py` into one of two locations:
+
+| Location | Scope |
+|----------|-------|
+| `.reveal/analyzers/` in your project root | Project-local plugins |
+| `~/.reveal/plugins/` | User-global plugins (all projects) |
+
+### Writing a Plugin
+
+A plugin file must define a `FileAnalyzer` subclass decorated with `@register`:
+
+```python
+# .reveal/analyzers/myformat_analyzer.py
+from reveal.base import FileAnalyzer
+from reveal.registry import register
+
+@register
+class MyFormatAnalyzer(FileAnalyzer):
+    extensions = ['.myext']
+
+    def get_structure(self):
+        # ... your analysis logic
+        return self.result_builder.create(entries=[...])
+```
+
+The `@register` decorator fires on import — no manual registry entry needed.
+
+### Discovery Behavior
+
+- Discovery runs once per process (lazy, on first `get_analyzer()` call)
+- Bad plugin files emit a warning and are skipped without crashing reveal
+- `reveal dev inspect-config` shows which plugins were loaded
+
+### Testing Plugins
+
+```python
+from reveal.registry import _reset_plugin_discovery, get_analyzer
+
+def test_my_plugin():
+    _reset_plugin_discovery()  # ensure clean state
+    analyzer = get_analyzer("file.myext")
+    assert analyzer is not None
 ```
 
 ---
