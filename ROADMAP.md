@@ -10,6 +10,11 @@ This document outlines reveal's development priorities and future direction. For
 ### Unreleased (working tree)
 - ✅ **Adapter plugin discovery** — `discover_adapter_plugins()` in `adapters/base.py`; scans `<cwd>/.reveal/adapters/` and `~/.reveal/adapters/` for package dirs; called lazily at top of `get_adapter_class()`. Mirrors the analyzer plugin system for the URI adapter side. Plugin adapters use absolute imports from `reveal.adapters.base`. (BACK-256)
 - ✅ **`trades://` and `signals://` moved to Peyton** — first real-world use of the plugin system; both adapters now live in `arbiter/.reveal/adapters/`, not reveal core. Adapter count: 25 → 23.
+- ✅ **Subcommand adapter discipline** — `surface`, `contracts`, `trace`, `hotspots`, `deps` all replaced raw `ast.parse` / `StatsResult` calls with `AstAdapter`/`StatsAdapter`; subcommands now go through the adapter layer consistently. (BACK-257)
+- ✅ **nginx upstream conf.d fallback** — `_find_upstream_definitions` gains `config_path` param; scans sibling `*.conf` files when upstream unresolved in vhost file; `found_in` metadata on every entry; renderer shows source path and ⚠️ stub for still-unresolved. (BACK-258)
+- ✅ **Co-hosted server names** — `_extract_cohosted_names` collects server_name tokens from server blocks not containing the queried domain; `_get_vhost_summary` adds `also_serves`; renderer prints "Also serves: X, Y" below Config file line. (BACK-259)
+- ✅ **N001 intent comment hint** — `_has_intent_comment` scans 3 lines before upstream block for intentional/by-design/same-host comments; appends suppression-marker suggestion to N001 output when matched. (BACK-260)
+- ✅ **`reveal check` URI redirect guard** — detects `scheme://` input before `Path.exists()`; emits "looks like a URI — Did you mean: reveal `<uri>` --check" to stderr, exits 1. (BACK-261)
 
 ### v0.87.0
 - ✅ **Plugin auto-discovery** — drop `*_analyzer.py` into `.reveal/analyzers/` (project-local) or `~/.reveal/plugins/` (user-global); `@register`-decorated `FileAnalyzer` subclass goes live with zero registration boilerplate. (BACK-247)
