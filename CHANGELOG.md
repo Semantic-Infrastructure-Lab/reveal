@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`calls://` empty-result hint** — when `find_callers()` finds 0 callers within the search root but callers exist in the parent directory, adds a `hint` field pointing upward. (BACK-222)
 - **`--writes` alias for `--mutations`** — added to parser and dispatch. Empty-result message updated to "No read-after-write hazards in L{n}→L{m}." with `--varflow` hint. (BACK-223)
 
+### Added (hidden-sage-0425)
+- **`reveal/types.py`** — new module: `WarningEntry`, `RevealMeta`, `RevealResult` TypedDicts document the Output Contract envelope returned by all `get_structure()` implementations. `ASTElement` and `VarFlowEvent` TypedDicts document AST boundary shapes. Python 3.10-compatible via required/optional TypedDict inheritance split. `get_structure()` now annotated `→ RevealResult`; `create_meta()` returns `RevealMeta`; `get_element()` returns `Optional[RevealResult]`. `ResultBuilder.create`, `create_error`, `_create_meta`, and module-level convenience functions all updated. (BACK-232)
+- **`_has_nav_flag` derived from `_NAV_DISPATCH`** — replaced 17-line hardcoded flag list with 3-line implementation: `scope` and `around` (pre-dispatch) are explicit; all dispatch flags derived via `any(check(args) for check, _ in _NAV_DISPATCH)`. Cannot drift from the dispatch table. (filed as follow-on to BACK-230)
+
 ### Added (waliwuke-0425)
 - **`imports://` `?circular&verbose` cycle paths** — `--verbose` now shows the actual edge sequence (A→B→C→A) under each circular dependency group, not just the file list. New `ImportGraph.find_cycle_path()` DFS-traces a representative cycle within each SCC. Non-verbose output shows a tip hint. (BACK-237)
 - **`ast://` `depth>N` filter** — filter by maximum nesting depth (same metric as C905 rule). Added `depth` field to element dicts via `create_element_dict`. (BACK-242)
