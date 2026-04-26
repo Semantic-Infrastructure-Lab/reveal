@@ -1000,6 +1000,26 @@ Output is depth-indented so the execution tree is scannable at a glance.  Unreso
 
 ---
 
+### Task: "Add a custom analyzer for a new file type" (plugin auto-discovery, v0.87.0+)
+
+Create a file named `*_analyzer.py` in `.reveal/analyzers/` (project-local) or `~/.reveal/plugins/` (user-global):
+
+```python
+# .reveal/analyzers/myformat_analyzer.py
+from reveal.base import FileAnalyzer
+from reveal.registry import register
+
+@register('.myfmt', name='MyFormat', icon='📄')
+class MyFormatAnalyzer(FileAnalyzer):
+    def get_structure(self, **kwargs):
+        content = self.path.read_text()
+        return {'type': 'myformat', 'lines': len(content.splitlines())}
+```
+
+On the next `reveal` run, `.myfmt` files are handled by `MyFormatAnalyzer` automatically — no source edits, no registration step. Bad plugin files log a warning and are skipped without crashing.
+
+---
+
 ### Task: "Find dead code (uncalled functions)"
 
 **Pattern:**
@@ -3553,6 +3573,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Real-world scenarios** - Actual situations you'll encounter
 - **Complete coverage** - All adapters, all rules, all features
 - **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `stats://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `stats://` complexity no longer stuck at 1.00
+- **v0.87.0** - Plugin auto-discovery: drop a `*_analyzer.py` with a `@register`-decorated `FileAnalyzer` subclass into `.reveal/analyzers/` (project-local) or `~/.reveal/plugins/` (user-global) — it loads automatically on the next `reveal` run. Zero registration boilerplate.
 - **v0.86.0** - `reveal trace` subcommand: depth-indented execution narrative from a named entry point. Combines `calls://` recursive callees walk with per-function params and classified side-effects (hard_stop, db, http, cache, file, log, sleep). `--depth N` (1–5, default 2), `--json` output. Prunes builtins and external callees by default.
 - **v0.85.0** - 5 new features: `reveal hotspots` test-coverage heuristic (✅/⚪ per function, scans `tests/`/`test/`/`spec/`); `calls://?root=fn&depth=N` recursive callees walk (BFS, cap 5, resolved vs external); `reveal contracts src/` (ABCs, Protocols, TypedDicts, @dataclass, Pydantic BaseModels, `--abstract-only`); `reveal surface src/` (CLI args, HTTP routes, MCP tools, env vars, network/DB/SDK imports, filesystem writes, `--type` filter); `calls://?modules=true` module dependency graph (191 nodes / 248 edges on reveal's own codebase, `?external=true`, dot format).
 - **v0.79.0** - documented PHP limitation: `--varflow`, `--deps`, `--mutations` silently return empty on PHP files (BACK-203 — `variable_name` node type vs `identifier`); PHP-safe nav flags: `--calls`, `--exits`, `--flowto`, `--ifmap`, `--catchmap`, `--around`, `--scope`; added `--calls` / `calls://` disambiguation; clarified `--outline` dual-mode behavior

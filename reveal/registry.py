@@ -58,6 +58,56 @@ TREESITTER_EXTENSION_MAP: Dict[str, str] = {
 # Registry for file type analyzers
 _ANALYZER_REGISTRY: Dict[str, type] = {}
 
+# Plugin discovery state — reset via _reset_plugin_discovery() in tests
+_plugins_loaded: bool = False
+
+
+def discover_plugins(cwd: Optional[Path] = None) -> None:
+    """Load *_analyzer.py plugins from project-local and user-global dirs.
+
+    Scans in order:
+      1. <cwd>/.reveal/analyzers/  — project-local plugins
+      2. ~/.reveal/plugins/         — user-global plugins
+
+    Each discovered file is imported; @register decorators fire as a side
+    effect, adding the analyzer to _ANALYZER_REGISTRY. Called once per
+    process (no-op on subsequent calls).
+    """
+    global _plugins_loaded
+    if _plugins_loaded:
+        return
+    _plugins_loaded = True
+
+    base = cwd if cwd is not None else Path.cwd()
+    plugin_dirs = [
+        base / '.reveal' / 'analyzers',
+        Path.home() / '.reveal' / 'plugins',
+    ]
+    for plugin_dir in plugin_dirs:
+        if not plugin_dir.is_dir():
+            continue
+        for plugin_file in sorted(plugin_dir.glob('*_analyzer.py')):
+            _load_plugin_file(plugin_file)
+
+
+def _load_plugin_file(plugin_file: Path) -> None:
+    """Import a single plugin file, logging failures without raising."""
+    import importlib.util
+    try:
+        spec = importlib.util.spec_from_file_location(plugin_file.stem, plugin_file)
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            logger.debug('Loaded plugin: %s', plugin_file)
+    except Exception as e:
+        logger.warning('Plugin load failed (%s): %s', plugin_file.name, e)
+
+
+def _reset_plugin_discovery() -> None:
+    """Reset plugin discovery state — for test isolation only."""
+    global _plugins_loaded
+    _plugins_loaded = False
+
 
 def register(*extensions, name: str = '', icon: str = ''):
     """Decorator to register an analyzer for file extensions.
@@ -189,6 +239,7 @@ def get_analyzer(path: str, allow_fallback: bool = True) -> Optional[type]:
     Returns:
         Analyzer class or None if not found
     """
+    discover_plugins()
     file_path = Path(path)
     ext = file_path.suffix.lower()
 
