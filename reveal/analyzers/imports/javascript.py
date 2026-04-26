@@ -12,12 +12,15 @@ Extracts import statements and require() calls from JavaScript and TypeScript fi
 Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
+import logging
 from pathlib import Path
 from typing import Any, List, Set, Optional
 
 from .types import ImportStatement
 from .base import LanguageExtractor, register_extractor
 from ...registry import get_analyzer
+
+logger = logging.getLogger(__name__)
 
 
 @register_extractor
@@ -54,8 +57,8 @@ class JavaScriptExtractor(LanguageExtractor):
             if not analyzer.tree:
                 return []
 
-        except Exception:
-            # Can't parse - return empty
+        except Exception as e:
+            logger.debug("extract_imports failed for %s: %s", file_path, e)
             return []
 
         imports = []
@@ -95,7 +98,8 @@ class JavaScriptExtractor(LanguageExtractor):
             if not analyzer.tree:
                 return set()
 
-        except Exception:
+        except Exception as e:
+            logger.debug("extract_symbols failed for %s: %s", file_path, e)
             return set()
 
         symbols = set()

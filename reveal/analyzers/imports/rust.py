@@ -9,8 +9,11 @@ Benefits:
 - More robust handling of complex Rust use syntax
 """
 
+import logging
 from pathlib import Path
 from typing import List, Set, Optional
+
+logger = logging.getLogger(__name__)
 
 from .types import ImportStatement
 from .base import LanguageExtractor, register_extractor
@@ -51,8 +54,8 @@ class RustExtractor(LanguageExtractor):
             if not analyzer.tree:
                 return []
 
-        except Exception:
-            # Can't parse - return empty
+        except Exception as e:
+            logger.debug("extract_imports failed for %s: %s", file_path, e)
             return []
 
         imports = []
@@ -85,7 +88,8 @@ class RustExtractor(LanguageExtractor):
             if not analyzer.tree:
                 return set()
 
-        except Exception:
+        except Exception as e:
+            logger.debug("extract_symbols failed for %s: %s", file_path, e)
             return set()
 
         symbols = set()

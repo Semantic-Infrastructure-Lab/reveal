@@ -12,6 +12,32 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.84.0] - 2026-04-25 (sessions wise-hammer-0425, strong-pegasus-0425, nelilabo-0425, noble-altar-0425, fierce-pressure-0425)
+
+### Added
+- **`--varflow VAR --cross-calls`** — cross-function variable propagation. Follows a variable across in-module call boundaries: when a tracked var appears in a call's args, recursion enters the callee and tracks the corresponding param. DFS with `(func_name, var_name)` cycle guard. Renders as depth-indented frames with `↳ callee(param)` arrows. 25 tests. (BACK-220)
+- **`--narrow VAR`** — type-narrowing path display. Parses `Optional[X]`, `Union[X,Y,None]`, `X|Y` annotations; classifies `isinstance`, `not isinstance`, `is None`, `is not None` guards; traces narrowed types per branch. New `nav_narrow.py`. No annotation → clear message. 45 tests. (BACK-226)
+- **`ast://` `reveal_type=<var>`** — inline type query without editing source. Collects type evidence from param annotations, assignments (inferred RHS shape: dict literal keys, call return, etc.), and for-loops. New `nav_reveal_type.py`. 33 tests. (BACK-225)
+- **`ast://` `show=dict-heatmap`** — bare-dict param ranking. Walks AST for `dict`/`Dict[...]` annotated params, counts subscript key accesses per param, renders ranked heatmap with suggested TypedDict name. Links to `--check --rules T006`. New `nav_dict_heatmap.py`. 22 tests. (BACK-227)
+- **`ast://` `param_type=` and `return_type=` filters** — query functions by parameter or return annotation. Glob (`List*`) and regex supported. Registered in filter schema. (BACK-218)
+- **`ast://` `has_decorator=` filter** — existing filter, now documented in schema.
+- **`--varflow VAR` `dict.update({...})` expansion** — intercepts `.update({literal})` and `.setdefault(k, v)` calls on the tracked variable; expands to per-key `WRITE` events. (BACK-219)
+- **T005 rule** — annotation coverage per-function. Fires on partially-annotated functions; emits param/return annotation gap with unannotated names. Skips fully-unannotated to avoid legacy flood. 17 tests. (BACK-224)
+- **T006 rule** — TypedDict suggestion for bare-dict params. Detects `dict`/`Dict[...]` params with ≥3 subscript key accesses overlapping a defined TypedDict's fields. 21 tests. (BACK-221)
+- **`calls://` empty-result hint** — when `find_callers()` finds 0 callers within the search root but callers exist in the parent directory, adds a `hint` field pointing upward. (BACK-222)
+- **`--writes` alias for `--mutations`** — added to parser and dispatch. Empty-result message updated to "No read-after-write hazards in L{n}→L{m}." with `--varflow` hint. (BACK-223)
+
+### Fixed
+- **`--narrow --format json` NameError** — `_resolve_range()` was not called before `_nav_json()` in the `--narrow` branch of `_dispatch_nav`. 3 new tests. (BACK-228)
+- **`ResultBuilder.create` / `create_error`** — now raise `ValueError` if `**extra_fields` key collides with a contract field (`contract_version`, `type`, `source`, `source_type`, `meta`). Previously silently overwrote the contract. 2 new tests. (BACK-234)
+- **Silent `except Exception` sites** — 14 sites across 8 files (`treesitter.py`, `api.py`, `utils/parallel.py`, `analyzers/imports/go.py` ×3, `analyzers/imports/javascript.py` ×2, `analyzers/imports/python.py`, `analyzers/imports/rust.py`, `adapters/claude/adapter.py`) now log `logger.debug("...: %s", e)`. Previously all were completely silent at DEBUG. (BACK-233)
+
+### Refactored
+- **`_dispatch_nav` dispatch table** — replaced 284-line if/elif chain (complexity 73) with 11 `_nav_*` handler functions + `_NAV_DISPATCH` dict at module level. Complexity 73→25, 284→116 lines. Adding a new nav flag is now 1 dict entry + 1 function. (BACK-230)
+- **`VarFlowWalker` dataclass** — replaced `_walk_var` (8 nested closures, complexity 68) with `@dataclass class VarFlowWalker` in `nav_varflow.py`. Each closure promoted to an independently-testable method. Max remaining method complexity: 22. (BACK-231)
+
+---
+
 ## [0.83.0] - 2026-04-21 (sessions expanding-moon-0421, seismic-fox-0421)
 
 ### Added

@@ -41,6 +41,9 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Union
 
 
+_CONTRACT_FIELDS: frozenset = frozenset({'contract_version', 'type', 'source', 'source_type', 'meta'})
+
+
 class ResultBuilder:
     """Build Output Contract v1.x compliant results."""
 
@@ -107,8 +110,13 @@ class ResultBuilder:
         if data:
             result.update(data)
 
-        # Add extra fields
+        # Add extra fields — guard against overwriting contract fields
         if extra_fields:
+            collision = _CONTRACT_FIELDS & extra_fields.keys()
+            if collision:
+                raise ValueError(
+                    f"extra_fields collides with contract fields: {sorted(collision)}"
+                )
             result.update(extra_fields)
 
         return result
@@ -153,6 +161,11 @@ class ResultBuilder:
         }
 
         if extra_fields:
+            collision = _CONTRACT_FIELDS & extra_fields.keys()
+            if collision:
+                raise ValueError(
+                    f"extra_fields collides with contract fields: {sorted(collision)}"
+                )
             result.update(extra_fields)
 
         return result

@@ -18,7 +18,7 @@ _FILTER_SHORTHANDS = {
 }
 
 # All keys that ast:// actually understands
-_KNOWN_FILTER_KEYS = {'type', 'name', 'complexity', 'size', 'lines', 'decorator', 'calls', 'callee_of'}
+_KNOWN_FILTER_KEYS = {'type', 'name', 'complexity', 'size', 'lines', 'decorator', 'calls', 'callee_of', 'param_type', 'return_type', 'reveal_type'}
 
 
 def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
@@ -30,6 +30,16 @@ def render_ast_structure(data: Dict[str, Any], output_format: str) -> None:
     """
     if output_format == 'json':
         print(safe_json_dumps(data))
+        return
+
+    # reveal_type mode: variable type-evidence view
+    if data.get('type') == 'ast_reveal_type':
+        _render_reveal_type(data, output_format)
+        return
+
+    # dict-heatmap mode: bare-dict param ranking
+    if data.get('type') == 'ast_dict_heatmap':
+        _render_dict_heatmap(data, output_format)
         return
 
     # Text/grep format
@@ -161,6 +171,44 @@ def _render_call_graph(data: Dict[str, Any]) -> None:
                 print(f"  (no calls or callers within this file)")
             print()
         print()
+
+
+def _render_dict_heatmap(data: Dict[str, Any], output_format: str) -> None:
+    """Render show=dict-heatmap bare-dict param ranking."""
+    from reveal.adapters.ast.nav_dict_heatmap import render_dict_heatmap
+    path = data.get('path', '.')
+    results = data.get('results', [])
+
+    if output_format == 'json':
+        print(safe_json_dumps(data))
+        return
+
+    if output_format == 'grep':
+        for item in results:
+            print(f"{item.get('file', '')}:{item.get('line', 0)}:{item.get('function', '')}:{item.get('param', '')}:{item.get('key_count', 0)}")
+        return
+
+    print(render_dict_heatmap(results, path))
+
+
+def _render_reveal_type(data: Dict[str, Any], output_format: str) -> None:
+    """Render reveal_type=<var> evidence view."""
+    from reveal.adapters.ast.nav_reveal_type import render_type_evidence
+    var_name = data.get('var_name', '?')
+    path = data.get('path', '.')
+    results = data.get('results', [])
+
+    if output_format == 'grep':
+        for ev in results:
+            print(f"{ev.get('file', '')}:{ev.get('line', 0)}:{var_name}")
+        return
+
+    print(render_type_evidence(var_name, results, path))
+    print()
+    print(f"  {len(results)} occurrence(s) found")
+    print()
+    print(f"  → Trace reads/writes: reveal file.py <function> --varflow {var_name}")
+    print(f"  → Find functions:     reveal 'ast://{path}?param_type={var_name}'")
 
 
 def _suggest_filter_correction(query: str) -> None:

@@ -2,7 +2,7 @@
 
 Split into focused modules (BACK-185):
   nav_outline.py  — element_outline, scope_chain, render_outline, render_scope_chain, render_branchmap
-  nav_varflow.py  — var_flow, _walk_var, render_var_flow, all_var_flow
+  nav_varflow.py  — VarFlowWalker, var_flow, render_var_flow, all_var_flow
   nav_calls.py    — range_calls, render_range_calls
   nav_exits.py    — collect_exits, collect_deps, collect_mutations, render_exits, render_deps, render_mutations
   nav_effects.py  — collect_effects, render_effects (BACK-199)
@@ -30,7 +30,7 @@ from .nav_outline import (  # noqa: F401
 )
 from .nav_varflow import (  # noqa: F401
     var_flow,
-    _walk_var,
+    VarFlowWalker,
     render_var_flow,
     _collect_identifier_names,
     all_var_flow,
@@ -63,4 +63,12 @@ from .nav_effects import (  # noqa: F401
 from .nav_boundary import (  # noqa: F401
     collect_boundary,
     render_boundary,
+)
+from .nav_cross_varflow import (  # noqa: F401
+    cross_var_flow,
+    render_cross_var_flow,
+)
+from .nav_narrow import (  # noqa: F401
+    collect_narrowing,
+    render_narrowing,
 )

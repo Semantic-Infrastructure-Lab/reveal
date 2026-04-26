@@ -338,6 +338,12 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--varflow', type=str, metavar='VAR',
                         help='Trace reads/writes of a variable within a function or flat file '
                              '(e.g., reveal file.py myfunc --varflow result  or  reveal file.php :1-2000 --varflow errormsg)')
+    parser.add_argument('--cross-calls', action='store_true',
+                        help='Follow a variable across call boundaries within the same module (use with --varflow, '
+                             'e.g., reveal file.py myfunc --varflow result --cross-calls)')
+    parser.add_argument('--narrow', type=str, metavar='VAR',
+                        help='Show how a variable\'s type narrows through control-flow branches, '
+                             'starting from its annotation (e.g., reveal file.py myfunc --narrow x)')
     parser.add_argument('--calls', nargs='?', const='FULL', type=str, metavar='START-END',
                         help='Show call sites in a line range (e.g., reveal file.py myfunc --calls 89-120  or  reveal file.php :477-531 --calls)')
     parser.add_argument('--around', nargs='?', const=20, type=int, metavar='N',
@@ -359,8 +365,11 @@ def _add_navigation_options(parser: argparse.ArgumentParser) -> None:
                         help='Show variables that flow INTO a line range (potential function params) '
                              '(e.g., reveal file.php :1136-1463 --deps  or  reveal file.py myfunc --deps)')
     parser.add_argument('--mutations', action='store_true',
-                        help='Show variables written in a line range and read after (potential return values) '
+                        help='Show read-after-write hazards: variables written in a range and read after (potential return values). '
+                             'Alias: --writes. '
                              '(e.g., reveal file.php :1136-1463 --mutations  or  reveal file.py myfunc --mutations)')
+    parser.add_argument('--writes', action='store_true',
+                        help='Alias for --mutations: show read-after-write hazards in a function or range')
     parser.add_argument('--sideeffects', action='store_true',
                         help='Show classified side effects (db/http/cache/log/file/sleep/hard_stop) in a function or line range '
                              '(e.g., reveal file.php :477-531 --sideeffects  or  reveal file.py myfunc --sideeffects)')

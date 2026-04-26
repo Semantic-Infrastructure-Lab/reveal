@@ -598,7 +598,7 @@ class TestRenderMutations(unittest.TestCase):
     def test_empty_mutations(self):
         from reveal.adapters.ast.nav import render_mutations
         result = render_mutations([], 10, 50)
-        self.assertIn('No mutations', result)
+        self.assertIn('No read-after-write hazards', result)
         self.assertIn('L10', result)
         self.assertIn('L50', result)
 

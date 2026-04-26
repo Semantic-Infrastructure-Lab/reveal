@@ -1,5 +1,6 @@
 """Tree-sitter based analyzer for multi-language support."""
 
+import logging
 import os
 from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Tuple
@@ -12,6 +13,7 @@ suppress_treesitter_warnings()
 
 from tree_sitter_language_pack import get_parser  # noqa: E402
 
+logger = logging.getLogger(__name__)
 
 # Module-level cache: (path_str, mtime_ns) -> {'tree': ..., 'node_cache': ...}
 # Eliminates redundant parses when multiple rules/callers analyze the same
@@ -219,8 +221,8 @@ class TreeSitterAnalyzer(FileAnalyzer):
             content_bytes = self.content.encode('utf-8')
             self._content_bytes = content_bytes  # cache for _get_node_text reuse
             self.tree = parser.parse(content_bytes)
-        except Exception:
-            # Parsing failed - fall back to text analysis
+        except Exception as e:
+            logger.debug("tree-sitter parse failed for %s: %s", self.path, e)
             self.tree = None
 
         if self.tree is not None:

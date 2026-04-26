@@ -9,8 +9,11 @@ Benefits:
 - More robust handling of Go import syntax variations
 """
 
+import logging
 from pathlib import Path
 from typing import List, Set, Optional
+
+logger = logging.getLogger(__name__)
 
 from .types import ImportStatement
 from .base import LanguageExtractor, register_extractor
@@ -50,8 +53,8 @@ class GoExtractor(LanguageExtractor):
             if not analyzer.tree:
                 return []
 
-        except Exception:
-            # Can't parse - return empty
+        except Exception as e:
+            logger.debug("extract_imports failed for %s: %s", file_path, e)
             return []
 
         imports = []
@@ -86,7 +89,8 @@ class GoExtractor(LanguageExtractor):
             if not analyzer.tree:
                 return set()
 
-        except Exception:
+        except Exception as e:
+            logger.debug("extract_symbols failed for %s: %s", file_path, e)
             return set()
 
         symbols = set()
@@ -344,7 +348,8 @@ class GoExtractor(LanguageExtractor):
                 line = line.strip()
                 if line.startswith('module '):
                     return line.split()[1]
-        except Exception:
+        except Exception as e:
+            logger.debug("_get_module_name failed for %s: %s", module_root, e)
             return None
 
         return None

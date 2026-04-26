@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Iterable, Sequence
+
+logger = logging.getLogger(__name__)
 
 # Files below this threshold scan sequentially; process-spawn overhead
 # outweighs the parallelism benefit for tiny inputs.
@@ -46,7 +49,8 @@ def _scan_one(args: tuple) -> Path | None:
         else:
             data_lower = data.lower()
             return path if all(n in data_lower for n in needles) else None
-    except Exception:
+    except Exception as e:
+        logger.debug("grep_file_worker failed for %s: %s", path, e)
         return None
 
 

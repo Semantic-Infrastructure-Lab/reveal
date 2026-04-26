@@ -189,7 +189,11 @@ def render_mutations(
 ) -> str:
     """Render collect_mutations results."""
     if not mutations:
-        return f'No mutations in L{from_line}→L{to_line} that are read after'
+        return (
+            f'No read-after-write hazards in L{from_line}→L{to_line}.\n'
+            f'  (--mutations / --writes: variables written here and read after — potential return values)\n'
+            f'  To see all writes to a specific variable: reveal <file> <func> --varflow <var>'
+        )
     lines: List[str] = []
     for m in mutations:
         lines.append(

@@ -8,6 +8,7 @@ from .queries import (
     parse_query, format_query,
     extract_show_param as _extract_show_param,
     extract_builtins_param as _extract_builtins_param,
+    extract_reveal_type_param as _extract_reveal_type_param,
 )
 from .analysis import collect_structures
 from .filtering import apply_filters, matches_decorator
@@ -89,15 +90,17 @@ class AstAdapter(ResourceAdapter):
         # Extract result control parameters (sort, limit, offset)
         if query_string:
             cleaned_query, self.result_control = parse_result_control(query_string)
-            # Extract show= and builtins= before parsing filters (display modes, not filters)
+            # Extract show=, builtins=, reveal_type= before parsing filters (display modes, not filters)
             cleaned_query, self.show_mode = _extract_show_param(cleaned_query)
             cleaned_query, self.include_builtins = _extract_builtins_param(cleaned_query)
+            cleaned_query, self.reveal_type_var = _extract_reveal_type_param(cleaned_query)
             self.query = parse_query(cleaned_query)
         else:
             self.query = {}
             self.result_control = ResultControl()
             self.show_mode = None
             self.include_builtins = False
+            self.reveal_type_var = None
 
         self.results: List[Any] = []
 
@@ -122,6 +125,45 @@ class AstAdapter(ResourceAdapter):
         Returns:
             Dict containing query results with metadata
         """
+        # show=dict-heatmap: ranked bare-dict param heatmap
+        if self.show_mode == 'dict-heatmap':
+            from .nav_dict_heatmap import collect_dict_heatmap
+            items = collect_dict_heatmap(self.path)
+            meta = self.create_meta(parse_mode='python_ast',
+                                    confidence=1.0, warnings=[], errors=[])
+            result = ResultBuilder.create(
+                result_type='ast_dict_heatmap',
+                source=self.path,
+                contract_version='1.1',
+                data={
+                    'path': self.path,
+                    'total_results': len(items),
+                    'results': items,
+                },
+            )
+            result['meta'] = meta
+            return result
+
+        # reveal_type=<var>: type-evidence mode — entirely different result shape
+        if self.reveal_type_var:
+            from .nav_reveal_type import collect_type_evidence
+            evidence = collect_type_evidence(self.path, self.reveal_type_var)
+            meta = self.create_meta(parse_mode='tree_sitter_full',
+                                    confidence=1.0, warnings=[], errors=[])
+            result = ResultBuilder.create(
+                result_type='ast_reveal_type',
+                source=self.path,
+                contract_version='1.1',
+                data={
+                    'path': self.path,
+                    'var_name': self.reveal_type_var,
+                    'total_results': len(evidence),
+                    'results': evidence,
+                },
+            )
+            result['meta'] = meta
+            return result
+
         # Collect all structures from path (file or directory)
         structures = collect_structures(self.path)
 

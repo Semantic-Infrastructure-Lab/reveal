@@ -570,6 +570,32 @@ class TestEdgeCases:
         # Extra fields applied after data
         assert result['field'] == 'from_extra'
 
+    def test_extra_fields_contract_collision_raises(self, tmp_path):
+        """extra_fields cannot overwrite contract fields — raises ValueError."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("# test")
+        # Only 'type', 'source_type', 'meta' can land in **extra_fields;
+        # 'source' and 'contract_version' are named parameters.
+        for field in ('type', 'source_type', 'meta'):
+            with pytest.raises(ValueError, match="contract fields"):
+                ResultBuilder.create(
+                    result_type='query',
+                    source=test_file,
+                    **{field: 'collider'}
+                )
+
+    def test_create_error_extra_fields_contract_collision_raises(self, tmp_path):
+        """create_error extra_fields cannot overwrite contract fields."""
+        test_file = tmp_path / "test.py"
+        test_file.write_text("# test")
+        with pytest.raises(ValueError, match="contract fields"):
+            ResultBuilder.create_error(
+                result_type='query',
+                source=test_file,
+                error='oops',
+                type='collider'
+            )
+
     def test_confidence_edge_values(self):
         """Test confidence boundary values."""
         # Exactly 0.0

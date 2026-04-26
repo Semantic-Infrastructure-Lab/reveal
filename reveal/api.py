@@ -25,8 +25,11 @@ Usage::
         print(f.rule_code, f.message)
 """
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def analyze(path: str, **kwargs: Any) -> Dict[str, Any]:
@@ -134,8 +137,8 @@ def element(
                     result = analyzer.extract_element(elem_type, name)
                     if result is not None:
                         return result
-    except Exception:
-        pass  # Fall through to brute-force search below
+    except Exception as e:
+        logger.debug("element() structure lookup failed for %s %r: %s", path, name, e)
 
     # Last resort: try common types in order.
     for elem_type in ("function", "class", "method", "struct", "enum",
@@ -255,8 +258,8 @@ def check(
         try:
             analyzer = analyzer_class(path_str)
             structure_data = analyzer.get_structure()
-        except Exception:
-            pass  # Rules fall back to content-only analysis
+        except Exception as e:
+            logger.debug("check() get_structure failed for %s: %s", path_str, e)
 
     return RuleRegistry.check_file(
         path_str, structure_data, content, select=select, ignore=ignore

@@ -1,8 +1,11 @@
 """Claude Code conversation adapter implementation."""
 
+import logging
 import os
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 from typing import Dict, List, Any, Optional
 from datetime import datetime, date as _date
 import json
@@ -1089,7 +1092,8 @@ class ClaudeAdapter(ResourceAdapter):
                         'ops': ops_for_file,
                         'total_ops': sum(ops_for_file.values()),
                     })
-            except Exception:
+            except Exception as e:
+                logger.debug("session parse failed for %s: %s", session.get('path'), e)
                 continue
 
         results.sort(key=lambda x: x['modified'], reverse=True)

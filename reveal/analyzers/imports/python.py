@@ -12,9 +12,12 @@ Extracts import statements and symbol usage from Python source files.
 Uses tree-sitter for consistent parsing across all language analyzers.
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import List, Set, Optional, Dict, Tuple
+
+logger = logging.getLogger(__name__)
 
 from .types import ImportStatement
 from .base import LanguageExtractor, register_extractor
@@ -290,7 +293,8 @@ class PythonExtractor(LanguageExtractor):
             if not analyzer.tree:
                 return set()
 
-        except Exception:
+        except Exception as e:
+            logger.debug("extract_symbols failed for %s: %s", file_path, e)
             return set()
 
         symbols = set()

@@ -292,12 +292,27 @@ def find_callers(
             break
         current_targets = next_targets
 
-    return {
+    total = sum(len(lvl['callers']) for lvl in levels)
+    result: Dict[str, Any] = {
         'target': target,
         'depth': depth,
-        'total_callers': sum(len(lvl['callers']) for lvl in levels),
+        'total_callers': total,
         'levels': levels,
     }
+
+    if total == 0:
+        parent = str(Path(path).parent)
+        if parent != path and os.path.isdir(parent):
+            parent_index = build_callers_index(parent)
+            potential = len(parent_index.get(target, []))
+            if potential:
+                result['hint'] = (
+                    f"0 callers found in '{path}' — "
+                    f"{potential} potential caller(s) exist in '{parent}'; "
+                    f"try widening the path"
+                )
+
+    return result
 
 
 def _has_noqa_uncalled(

@@ -210,6 +210,29 @@ _SCHEMA_QUERY_PARAMS = {
         'operators': ['==', '~='],
         'examples': ['callee_of=main', 'callee_of=process_batch', 'callee_of=*handler*']
     },
+    'param_type': {
+        'type': 'string',
+        'description': 'Find functions where any parameter has a given type annotation. Parses the signature string; glob patterns supported. Bare type name matches generics too (Dict* matches Dict[str, Any]).',
+        'operators': ['==', 'glob', '~='],
+        'examples': ['param_type=dict', 'param_type=Dict*', 'param_type=Optional*']
+    },
+    'return_type': {
+        'type': 'string',
+        'description': 'Find functions with a given return type annotation. Parses the -> TYPE suffix of the signature. Glob patterns supported.',
+        'operators': ['==', 'glob', '~='],
+        'examples': ['return_type=bool', 'return_type=None', 'return_type=List*', 'return_type=Dict*']
+    },
+    'reveal_type': {
+        'type': 'string',
+        'description': (
+            'Show all type evidence for a named variable: every parameter annotation, '
+            'assignment with inferred RHS shape (dict literal keys, call return, etc.), '
+            'and for-loop binding. Works on unannotated code — no source edits needed. '
+            'Replaces the mypy reveal_type() workflow non-destructively.'
+        ),
+        'operators': ['=='],
+        'examples': ['reveal_type=trade', 'reveal_type=result', 'reveal_type=config']
+    },
 }
 
 _SCHEMA_OUTPUT_TYPES = [
@@ -346,7 +369,10 @@ def get_help() -> Dict[str, Any]:
             'decorator': 'Decorator pattern - find decorated functions/classes (e.g., decorator=property, decorator!=property)',
             'calls': 'Find functions that call a given name (e.g., calls=validate_item, calls=*send*)',
             'callee_of': 'Find functions called by a given function (within-file reverse, e.g., callee_of=main)',
-            'show': 'Display mode: show=calls renders a compact call graph view instead of filtered results'
+            'param_type': 'Find functions where any param has this type annotation (e.g., param_type=dict, param_type=Dict*)',
+            'return_type': 'Find functions with this return annotation (e.g., return_type=bool, return_type=None)',
+            'reveal_type': 'Show type evidence for a variable: params, assignments, for-loops across the file (e.g., reveal_type=trade)',
+            'show': 'Display mode: show=calls renders call graph, show=dict-heatmap ranks bare-dict params by key access count (TypedDict migration priority list)'
         },
         'result_control': {
             'sort': 'Sort results by field (e.g., sort=complexity, sort=-lines for descending)',

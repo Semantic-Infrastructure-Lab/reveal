@@ -1,5 +1,6 @@
 """Filter matching logic for AST adapter."""
 
+import re
 from fnmatch import fnmatch
 from typing import Dict, List, Any
 from ...utils.query import compare_values
@@ -75,6 +76,16 @@ def matches_filters(element: Dict[str, Any], query: Dict[str, Any]) -> bool:
         elif key == 'callee_of':
             # callee_of=<name>: find functions whose called_by list contains <name>
             if not _matches_call_list(element.get('called_by', []), condition):
+                return False
+            continue
+        elif key == 'param_type':
+            # param_type=dict: find functions where any param has this type annotation
+            if not _matches_param_type(element.get('signature', ''), condition):
+                return False
+            continue
+        elif key == 'return_type':
+            # return_type=bool: find functions with this return annotation
+            if not _matches_return_type(element.get('signature', ''), condition):
                 return False
             continue
         else:
@@ -201,6 +212,62 @@ def compare_value(value: Any, condition: Dict[str, Any]) -> bool:
             'none_matches_not_equal': False
         }
     )
+
+
+def _matches_param_type(signature: str, condition: Dict[str, Any]) -> bool:
+    """Check if any parameter in the signature has the given type annotation.
+
+    Parses ': TYPE' patterns from the parameter section of a signature string
+    like '(x: dict, y: str) -> bool'. Supports exact match and glob patterns.
+
+    Examples:
+        param_type=dict   matches (x: dict, y: str)
+        param_type=Dict*  matches (x: Dict[str, Any])
+    """
+    param_str = signature.split(' -> ')[0] if ' -> ' in signature else signature
+    # Extract bare type names after ': ' (handles generics like Dict[str, Any])
+    types = re.findall(r':\s*([A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])*)', param_str)
+    target = str(condition['value'])
+    op = condition['op']
+    for t in types:
+        bare = t.split('[')[0]  # Dict[str, Any] → Dict for glob matching
+        for candidate in {t, bare}:
+            if op in ('==', '=') and candidate == target:
+                return True
+            elif op == 'glob' and fnmatch(candidate, target):
+                return True
+            elif op == '~=':
+                if re.search(target, candidate):
+                    return True
+    return False
+
+
+def _matches_return_type(signature: str, condition: Dict[str, Any]) -> bool:
+    """Check if the return annotation matches the condition.
+
+    Parses the ' -> TYPE' suffix of a signature string.
+    Supports exact match and glob patterns.
+
+    Examples:
+        return_type=bool   matches (...) -> bool
+        return_type=List*  matches (...) -> List[str]
+        return_type=None   matches (...) -> None
+    """
+    if ' -> ' not in signature:
+        return False
+    return_part = signature.split(' -> ', 1)[1].strip().rstrip(':').strip()
+    bare = return_part.split('[')[0]
+    target = str(condition['value'])
+    op = condition['op']
+    for candidate in {return_part, bare}:
+        if op in ('==', '=') and candidate == target:
+            return True
+        elif op == 'glob' and fnmatch(candidate, target):
+            return True
+        elif op == '~=':
+            if re.search(target, candidate):
+                return True
+    return False
 
 
 def _matches_call_list(call_list: List[str], condition: Dict[str, Any]) -> bool:

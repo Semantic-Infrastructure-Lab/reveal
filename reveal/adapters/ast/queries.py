@@ -115,6 +115,29 @@ def extract_builtins_param(query_string: str):
     return '&'.join(remaining), include_builtins
 
 
+def extract_reveal_type_param(query_string: str):
+    """Extract and remove 'reveal_type=<var>' from a query string.
+
+    Args:
+        query_string: URL query string (e.g., "reveal_type=trade")
+
+    Returns:
+        (cleaned_query_string, var_name_or_None)
+    """
+    if not query_string or 'reveal_type=' not in query_string:
+        return query_string, None
+
+    parts = query_string.split('&')
+    var_name = None
+    remaining = []
+    for part in parts:
+        if part.startswith('reveal_type='):
+            var_name = part[len('reveal_type='):]
+        else:
+            remaining.append(part)
+    return '&'.join(remaining), var_name
+
+
 def extract_show_param(query_string: str):
     """Extract and remove 'show=<value>' from a query string.
 

@@ -56,6 +56,9 @@ def _render_text(data: Dict[str, Any]) -> None:
 
     if not levels:
         print(f"  No callers found for '{target}'.")
+        hint = data.get('hint')
+        if hint:
+            print(f"\n  Hint: {hint}")
         return
 
     for lvl in levels:
