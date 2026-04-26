@@ -337,19 +337,26 @@ class ImportsRenderer:
             print("  ✅ No circular dependencies found!\n")
         else:
             groups = result['cycles']
-            shown = groups if verbose else groups[:5]
-            for i, group in enumerate(shown, 1):
+            cycle_paths = result.get('cycle_paths', [])
+            shown_groups = groups if verbose else groups[:5]
+            shown_paths = cycle_paths[:len(shown_groups)] if cycle_paths else []
+            for i, group in enumerate(shown_groups, 1):
                 n = len(group)
-                # Use parent/name to disambiguate multiple __init__.py files
                 labels = ['/'.join(Path(p).parts[-2:]) if Path(p).name == '__init__.py' else Path(p).name for p in group]
                 if verbose or n <= 4:
                     label = ', '.join(labels)
                 else:
                     label = ', '.join(labels[:3]) + f'  [+{n - 3} more files]'
                 print(f"  {i}. {n} file{'s' if n != 1 else ''}  {label}")
+                if verbose and i - 1 < len(shown_paths):
+                    path = shown_paths[i - 1]
+                    path_labels = ['/'.join(Path(p).parts[-2:]) if Path(p).name == '__init__.py' else Path(p).name for p in path]
+                    print(f"     cycle: {' → '.join(path_labels)}")
             if not verbose and count > 5:
                 print(f"\n  ... and {count - 5} more groups")
                 print(f"  Run with --verbose to see all {count} groups\n")
+            if not verbose and cycle_paths:
+                print(f"\n  Tip: add &verbose to see cycle edge sequences (A→B→C→A)")
 
     @staticmethod
     def _render_layer_violations(result: dict, verbose: bool) -> None:
@@ -533,6 +540,9 @@ class ImportsRenderer:
             print(safe_json_dumps(result))
             return
 
+        # verbose from query (?verbose) takes precedence over caller arg
+        verbose = result.get('verbose', verbose)
+
         # Text format with progressive disclosure
         if 'type' in result:
             result_type = result['type']
@@ -626,12 +636,13 @@ class ImportsAdapter(ResourceAdapter):
         self._build_graph(target_path)
 
         # Handle query parameters
+        verbose = 'verbose' in query_params or kwargs.get('verbose', False)
         if 'unused' in query_params or kwargs.get('unused'):
-            return self._format_unused()
+            result = self._format_unused()
         elif 'circular' in query_params or kwargs.get('circular'):
-            return self._format_circular()
+            result = self._format_circular()
         elif 'violations' in query_params or kwargs.get('violations'):
-            return self._format_violations()
+            result = self._format_violations()
         elif query_params.get('rank') == 'fan-in':
             return self._format_fan_in()
         elif 'entrypoints' in query_params:
@@ -640,6 +651,9 @@ class ImportsAdapter(ResourceAdapter):
             return self._format_components()
         else:
             return self._format_all()
+        if verbose:
+            result['verbose'] = True
+        return result
 
     def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
         """Get imports for a specific file.
@@ -947,10 +961,15 @@ class ImportsAdapter(ResourceAdapter):
             return {'cycles': []}
 
         groups = self._graph.find_cycle_groups()
+        cycle_paths = [
+            [str(p) for p in self._graph.find_cycle_path(group)]
+            for group in groups
+        ]
 
         return self._build_response(
             'circular_dependencies',
             cycles=[[str(p) for p in group] for group in groups],
+            cycle_paths=cycle_paths,
             count=len(groups)
         )
 

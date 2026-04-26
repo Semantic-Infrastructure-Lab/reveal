@@ -149,6 +149,31 @@ class ImportGraph:
 
         return sccs
 
+    def find_cycle_path(self, group: List[Path]) -> List[Path]:
+        """Find a representative cycle path within an SCC group.
+
+        Returns a path list [A, B, C, A] showing how the first node in the
+        group reaches itself via other group members. Used for verbose display.
+        Falls back to the group list if no path is found.
+        """
+        if len(group) < 2:
+            return group
+        group_set = set(group)
+        start = group[0]
+
+        def dfs(node: Path, path: List[Path], visited: Set[Path]):
+            for neighbor in self.dependencies.get(node, set()):
+                if neighbor == start and len(path) > 1:
+                    return path + [neighbor]
+                if neighbor in group_set and neighbor not in visited:
+                    result = dfs(neighbor, path + [neighbor], visited | {neighbor})
+                    if result:
+                        return result
+            return None
+
+        result = dfs(start, [start], {start})
+        return result if result else group
+
     def find_unused_imports(self, symbols_by_file: Dict[Path, Set[str]]) -> List[ImportStatement]:
         """Find imports that are never used in the code.
 

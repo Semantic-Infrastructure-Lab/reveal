@@ -166,6 +166,48 @@ class TestImportGraph:
         groups = graph.find_cycle_groups()
         assert len(groups) == 2
 
+    def test_find_cycle_path_simple(self):
+        # A→B→A: path should be [A, B, A]
+        graph = ImportGraph()
+        a, b = Path('a.py'), Path('b.py')
+        graph.files[a] = []
+        graph.files[b] = []
+        graph.add_dependency(a, b)
+        graph.add_dependency(b, a)
+        groups = graph.find_cycle_groups()
+        path = graph.find_cycle_path(groups[0])
+        assert path[0] == path[-1], "cycle path must close back to start"
+        assert len(path) >= 3, "path must have at least 3 nodes (A→B→A)"
+        assert set(path[:-1]).issubset({a, b})
+
+    def test_find_cycle_path_triangle(self):
+        # A→B→C→A
+        graph = ImportGraph()
+        a, b, c = Path('a.py'), Path('b.py'), Path('c.py')
+        for f in [a, b, c]:
+            graph.files[f] = []
+        graph.add_dependency(a, b)
+        graph.add_dependency(b, c)
+        graph.add_dependency(c, a)
+        groups = graph.find_cycle_groups()
+        path = graph.find_cycle_path(groups[0])
+        assert path[0] == path[-1]
+        assert len(path) == 4  # A→B→C→A
+
+    def test_find_cycle_path_closes_to_start(self):
+        # The last element must equal the first — that's the cycle definition
+        graph = ImportGraph()
+        a, b, c, d = Path('a.py'), Path('b.py'), Path('c.py'), Path('d.py')
+        for f in [a, b, c, d]:
+            graph.files[f] = []
+        graph.add_dependency(a, b)
+        graph.add_dependency(b, c)
+        graph.add_dependency(c, d)
+        graph.add_dependency(d, a)
+        groups = graph.find_cycle_groups()
+        path = graph.find_cycle_path(groups[0])
+        assert path[0] == path[-1]
+
     def test_find_unused_imports(self):
         """Test detecting unused imports."""
         imports = [
