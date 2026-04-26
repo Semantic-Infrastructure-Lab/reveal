@@ -114,23 +114,11 @@ def _build_file_cli_overrides(args: Optional['Namespace']) -> dict:
 
 def _has_nav_flag(args) -> bool:
     """Return True if any sub-function progressive disclosure flag is set."""
+    # scope and around are handled before _NAV_DISPATCH in _dispatch_nav
     return (
-        getattr(args, 'outline', False)
-        or getattr(args, 'scope', False)
-        or bool(getattr(args, 'varflow', None))
-        or getattr(args, 'calls', None) is not None   # nargs='?' — None means absent
-        or getattr(args, 'around', None) is not None  # nargs='?' — None means absent
-        or getattr(args, 'ifmap', False)
-        or getattr(args, 'catchmap', False)
-        or getattr(args, 'exits', False)
-        or getattr(args, 'flowto', False)
-        or getattr(args, 'deps', False)
-        or getattr(args, 'mutations', False)
-        or getattr(args, 'writes', False)
-        or getattr(args, 'sideeffects', False)
-        or getattr(args, 'returns', False)
-        or getattr(args, 'boundary', False)
-        or bool(getattr(args, 'narrow', None))
+        getattr(args, 'scope', False)
+        or getattr(args, 'around', None) is not None
+        or any(check(args) for check, _ in _NAV_DISPATCH)
     )
 
 

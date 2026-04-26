@@ -40,6 +40,8 @@ Usage:
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Union
 
+from reveal.types import RevealMeta, RevealResult, WarningEntry
+
 
 _CONTRACT_FIELDS: frozenset = frozenset({'contract_version', 'type', 'source', 'source_type', 'meta'})
 
@@ -55,10 +57,10 @@ class ResultBuilder:
         contract_version: str = '1.0',
         parse_mode: Optional[str] = None,
         confidence: Optional[float] = None,
-        warnings: Optional[List[Dict[str, Any]]] = None,
-        errors: Optional[List[Dict[str, Any]]] = None,
+        warnings: Optional[List[WarningEntry]] = None,
+        errors: Optional[List[WarningEntry]] = None,
         **extra_fields
-    ) -> Dict[str, Any]:
+    ) -> RevealResult:
         """Build standard Output Contract v1.x result dictionary.
 
         Args:
@@ -128,7 +130,7 @@ class ResultBuilder:
         error: str,
         contract_version: str = '1.0',
         **extra_fields
-    ) -> Dict[str, Any]:
+    ) -> RevealResult:
         """Build error result dictionary.
 
         Args:
@@ -174,9 +176,9 @@ class ResultBuilder:
     def _create_meta(
         parse_mode: Optional[str] = None,
         confidence: Optional[float] = None,
-        warnings: Optional[List[Dict[str, Any]]] = None,
-        errors: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
+        warnings: Optional[List[WarningEntry]] = None,
+        errors: Optional[List[WarningEntry]] = None
+    ) -> RevealMeta:
         """Create Output Contract v1.1 meta dict with trust metadata.
 
         For adapters that use parsing (tree-sitter, regex, heuristics) to provide
@@ -306,7 +308,7 @@ def create_result(
     source: Union[str, Path],
     data: Optional[Dict[str, Any]] = None,
     **kwargs
-) -> Dict[str, Any]:
+) -> RevealResult:
     """Convenience function for ResultBuilder.create().
 
     See ResultBuilder.create() for full documentation.
@@ -319,7 +321,7 @@ def create_error_result(
     source: Union[str, Path],
     error: str,
     **kwargs
-) -> Dict[str, Any]:
+) -> RevealResult:
     """Convenience function for ResultBuilder.create_error().
 
     See ResultBuilder.create_error() for full documentation.
@@ -330,9 +332,9 @@ def create_error_result(
 def create_meta(
     parse_mode: Optional[str] = None,
     confidence: Optional[float] = None,
-    warnings: Optional[List[Dict[str, Any]]] = None,
-    errors: Optional[List[Dict[str, Any]]] = None
-) -> Dict[str, Any]:
+    warnings: Optional[List[WarningEntry]] = None,
+    errors: Optional[List[WarningEntry]] = None
+) -> RevealMeta:
     """Convenience function for ResultBuilder._create_meta().
 
     See ResultBuilder._create_meta() for full documentation.

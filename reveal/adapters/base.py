@@ -3,6 +3,8 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List, Tuple
 
+from reveal.types import RevealMeta, RevealResult, WarningEntry
+
 
 # ---------------------------------------------------------------------------
 # Adapter initialization helpers
@@ -180,7 +182,7 @@ class ResourceAdapter(ABC):
         return _default_from_uri(cls, scheme, resource, element)
 
     @abstractmethod
-    def get_structure(self, **kwargs) -> Dict[str, Any]:
+    def get_structure(self, **kwargs) -> RevealResult:
         """Get the structure/overview of the resource.
 
         Returns:
@@ -188,7 +190,7 @@ class ResourceAdapter(ABC):
         """
         pass
 
-    def post_process(self, result: Dict[str, Any], args: Any) -> Dict[str, Any]:
+    def post_process(self, result: RevealResult, args: Any) -> RevealResult:
         """Post-process adapter result. Override in subclasses to transform output."""
         return result
 
@@ -196,9 +198,9 @@ class ResourceAdapter(ABC):
     def create_meta(
         parse_mode: Optional[str] = None,
         confidence: Optional[float] = None,
-        warnings: Optional[List[Dict[str, Any]]] = None,
-        errors: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
+        warnings: Optional[List[WarningEntry]] = None,
+        errors: Optional[List[WarningEntry]] = None
+    ) -> RevealMeta:
         """Create Output Contract v1.1 meta dict with trust metadata.
 
         For adapters that use parsing (tree-sitter, regex, heuristics) to provide
@@ -265,7 +267,7 @@ class ResourceAdapter(ABC):
 
         return meta if meta else {}
 
-    def get_element(self, element_name: str, **kwargs) -> Optional[Dict[str, Any]]:
+    def get_element(self, element_name: str, **kwargs) -> Optional[RevealResult]:
         """Get details about a specific element within the resource.
 
         Args:
