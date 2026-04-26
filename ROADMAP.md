@@ -7,6 +7,10 @@ This document outlines reveal's development priorities and future direction. For
 
 ## What We've Shipped
 
+### Unreleased (working tree)
+- ✅ **Adapter plugin discovery** — `discover_adapter_plugins()` in `adapters/base.py`; scans `<cwd>/.reveal/adapters/` and `~/.reveal/adapters/` for package dirs; called lazily at top of `get_adapter_class()`. Mirrors the analyzer plugin system for the URI adapter side. Plugin adapters use absolute imports from `reveal.adapters.base`. (BACK-256)
+- ✅ **`trades://` and `signals://` moved to Peyton** — first real-world use of the plugin system; both adapters now live in `arbiter/.reveal/adapters/`, not reveal core. Adapter count: 25 → 23.
+
 ### v0.87.0
 - ✅ **Plugin auto-discovery** — drop `*_analyzer.py` into `.reveal/analyzers/` (project-local) or `~/.reveal/plugins/` (user-global); `@register`-decorated `FileAnalyzer` subclass goes live with zero registration boilerplate. (BACK-247)
 - ✅ **`reveal pack --architecture`** — entry points + top-5 core abstractions with fan-in counts appended to pack output. (BACK-213)

@@ -8,6 +8,46 @@ category: guide
 
 ---
 
+## Writing Adapters for External Projects
+
+Domain-specific adapters (e.g., `trades://` for a trading system, `signals://` for signal configurations) often belong in *the project they serve*, not in reveal core. This section describes how that works and what's currently supported.
+
+### Plugin Discovery for Adapters (BACK-256 — shipped)
+
+Reveal auto-discovers adapter packages from project-local and user-global directories. Domain-specific adapters can live in the project they serve rather than in reveal core.
+
+Reveal auto-discovers adapter packages from:
+- `<project>/.reveal/adapters/` — project-local (discovered when you `cd` into the project)
+- `~/.reveal/adapters/` — user-global
+
+Each plugin is a **package directory** (not a single file), matching the structure of built-in adapters:
+
+```
+arbiter/.reveal/adapters/
+  trades/
+    __init__.py      # from .adapter import TradesAdapter
+    adapter.py       # @register_adapter('trades')
+    renderer.py
+  signals/
+    __init__.py
+    adapter.py       # @register_adapter('signals')
+    renderer.py
+```
+
+**One import change required** when moving an adapter out of reveal core: replace relative imports with absolute:
+```python
+# Before (only works inside reveal core):
+from ..base import ResourceAdapter, register_adapter, register_renderer
+# After (works anywhere reveal is installed):
+from reveal.adapters.base import ResourceAdapter, register_adapter, register_renderer
+```
+
+Internal package imports (`from .renderer import MyRenderer`) stay relative — those still work.
+
+See `internal-docs/BACKLOG.md §BACK-256` for history.
+
+---
+
 ## Quick Start
 
 ### Minimal Adapter
@@ -425,6 +465,7 @@ reveal help://myscheme-guide
 - [ ] If has guide: Referenced in get_help() see_also
 - [ ] Tested all examples work as documented
 - [ ] Included multi-shot examples (input + output) for LLMs
+- [ ] If domain-specific (only useful for one project): placed in `<project>/.reveal/adapters/<name>/` or `~/.reveal/adapters/<name>/` with absolute imports from `reveal.adapters.base`
 
 ---
 

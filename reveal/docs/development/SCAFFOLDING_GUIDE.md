@@ -91,6 +91,7 @@ Examples:
 2. Run tests: `pytest tests/test_<name>_adapter.py`
 3. Test manually: `reveal <uri>://`
 4. Document usage
+5. **If this adapter is domain-specific** (only useful for one project, not general-purpose): place it in `<project>/.reveal/adapters/<name>/` or `~/.reveal/adapters/<name>/` instead of reveal core. Change `from ..base import` to `from reveal.adapters.base import` in the adapter file — reveal will auto-discover it (BACK-256).
 
 ### `reveal scaffold analyzer`
 

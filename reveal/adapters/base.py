@@ -1,7 +1,12 @@
 """Base adapter interface for URI resources."""
 
+import logging
+import sys
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
+
+logger = logging.getLogger(__name__)
 
 from reveal.types import RevealMeta, RevealResult, WarningEntry
 
@@ -423,6 +428,67 @@ class ResourceAdapter(ABC):
 
 # Registry for URI scheme adapters
 _ADAPTER_REGISTRY: Dict[str, type] = {}
+_adapter_plugins_loaded: bool = False
+
+
+def _load_adapter_plugin_dir(plugin_dir: Path) -> None:
+    """Import a single adapter package directory, logging failures without raising."""
+    import importlib.util
+    init_file = plugin_dir / '__init__.py'
+    if not init_file.exists():
+        return
+    module_name = f'reveal_plugin_adapter_{plugin_dir.name}'
+    try:
+        spec = importlib.util.spec_from_file_location(
+            module_name,
+            init_file,
+            submodule_search_locations=[str(plugin_dir)],
+        )
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = mod
+            spec.loader.exec_module(mod)
+            logger.debug('Loaded adapter plugin: %s', plugin_dir.name)
+    except Exception as e:
+        logger.warning('Adapter plugin load failed (%s): %s', plugin_dir.name, e)
+
+
+def discover_adapter_plugins(cwd: Optional[Path] = None) -> None:
+    """Load adapter packages from project-local and user-global plugin dirs.
+
+    Scans in order:
+      1. <cwd>/.reveal/adapters/  — project-local plugins
+      2. ~/.reveal/adapters/       — user-global plugins
+
+    Each discovered subdirectory with an __init__.py is imported; @register_adapter
+    decorators fire as a side effect, adding the adapter to _ADAPTER_REGISTRY.
+    Called once per process (no-op on subsequent calls).
+
+    Plugin adapters must use absolute imports from reveal.adapters.base rather
+    than relative imports, since they live outside the reveal package tree.
+    """
+    global _adapter_plugins_loaded
+    if _adapter_plugins_loaded:
+        return
+    _adapter_plugins_loaded = True
+
+    base = cwd if cwd is not None else Path.cwd()
+    plugin_dirs = [
+        base / '.reveal' / 'adapters',
+        Path.home() / '.reveal' / 'adapters',
+    ]
+    for plugin_dir in plugin_dirs:
+        if not plugin_dir.is_dir():
+            continue
+        for entry in sorted(plugin_dir.iterdir()):
+            if entry.is_dir():
+                _load_adapter_plugin_dir(entry)
+
+
+def _reset_adapter_plugin_discovery() -> None:
+    """Reset plugin discovery state — for test isolation only."""
+    global _adapter_plugins_loaded
+    _adapter_plugins_loaded = False
 
 
 def register_adapter(scheme: str):
@@ -466,6 +532,7 @@ def get_adapter_class(scheme: str) -> Optional[type]:
     Returns:
         Adapter class or None if not found
     """
+    discover_adapter_plugins()
     return _ADAPTER_REGISTRY.get(scheme.lower())
 
 
