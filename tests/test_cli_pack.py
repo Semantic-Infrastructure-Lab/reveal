@@ -1141,5 +1141,211 @@ class TestRunPackContent(unittest.TestCase):
             self.assertIn('logout', output)
 
 
+# ---------------------------------------------------------------------------
+# BACK-213: --architecture / fan-in scoring
+# ---------------------------------------------------------------------------
+
+class TestComputePriorityFanIn(unittest.TestCase):
+
+    def _make_file(self, tmpdir: Path, rel: str, content: str = "x") -> tuple:
+        full = tmpdir / rel
+        full.parent.mkdir(parents=True, exist_ok=True)
+        full.write_text(content)
+        return full, Path(rel)
+
+    def test_no_fan_in_no_boost(self):
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "utils.py")
+            score_zero = _compute_priority(path, rel, focus=None, fan_in=0)
+            score_none = _compute_priority(path, rel, focus=None)
+            self.assertEqual(score_zero, score_none)
+
+    def test_low_fan_in_small_boost(self):
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "utils.py")
+            score_no_fan = _compute_priority(path, rel, focus=None, fan_in=0)
+            score_fan1 = _compute_priority(path, rel, focus=None, fan_in=1)
+            self.assertAlmostEqual(score_fan1 - score_no_fan, 1.0)
+
+    def test_mid_fan_in_medium_boost(self):
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "utils.py")
+            score_no_fan = _compute_priority(path, rel, focus=None, fan_in=0)
+            score_fan5 = _compute_priority(path, rel, focus=None, fan_in=5)
+            self.assertAlmostEqual(score_fan5 - score_no_fan, 3.0)
+
+    def test_high_fan_in_large_boost(self):
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "utils.py")
+            score_no_fan = _compute_priority(path, rel, focus=None, fan_in=0)
+            score_fan15 = _compute_priority(path, rel, focus=None, fan_in=15)
+            self.assertAlmostEqual(score_fan15 - score_no_fan, 5.0)
+
+    def test_fan_in_14_gets_mid_boost(self):
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "utils.py")
+            score_no_fan = _compute_priority(path, rel, focus=None, fan_in=0)
+            score_fan14 = _compute_priority(path, rel, focus=None, fan_in=14)
+            self.assertAlmostEqual(score_fan14 - score_no_fan, 3.0)
+
+    def test_score_never_negative_with_fan_in(self):
+        with tempfile.TemporaryDirectory() as d:
+            path, rel = self._make_file(Path(d), "tests/test_big.py", "x" * 51_000)
+            score = _compute_priority(path, rel, focus=None, fan_in=20)
+            self.assertGreaterEqual(score, 0.0)
+
+
+class TestFetchFanIn(unittest.TestCase):
+
+    def test_graceful_failure_returns_empty_dict(self):
+        from reveal.cli.commands.pack import _fetch_fan_in
+        # Non-existent path — should return {} without raising
+        result = _fetch_fan_in(Path("/nonexistent/path/that/cannot/exist"))
+        self.assertIsInstance(result, dict)
+
+    def test_returns_dict_for_valid_path(self):
+        from reveal.cli.commands.pack import _fetch_fan_in
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "a.py").write_text("import b\n")
+            (Path(d) / "b.py").write_text("X = 1\n")
+            result = _fetch_fan_in(Path(d))
+            self.assertIsInstance(result, dict)
+
+
+class TestRenderArchitectureBrief(unittest.TestCase):
+
+    def _capture(self, selected):
+        import io
+        from contextlib import redirect_stdout
+        from reveal.cli.commands.pack import _render_architecture_brief
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _render_architecture_brief(selected)
+        return buf.getvalue()
+
+    def test_shows_entry_points(self):
+        selected = [
+            {'relative': 'main.py', 'priority': 10.0, 'fan_in': 0, 'changed': False},
+        ]
+        output = self._capture(selected)
+        self.assertIn('Entry points', output)
+        self.assertIn('main.py', output)
+
+    def test_shows_core_abstractions(self):
+        selected = [
+            {'relative': 'utils.py', 'priority': 3.0, 'fan_in': 12, 'changed': False},
+        ]
+        output = self._capture(selected)
+        self.assertIn('Core abstractions', output)
+        self.assertIn('utils.py(12)', output)
+
+    def test_no_entry_points_omits_that_line(self):
+        selected = [
+            {'relative': 'utils.py', 'priority': 1.0, 'fan_in': 8, 'changed': False},
+        ]
+        output = self._capture(selected)
+        self.assertNotIn('Entry points', output)
+
+    def test_no_core_abstractions_omits_that_line(self):
+        selected = [
+            {'relative': 'main.py', 'priority': 10.0, 'fan_in': 0, 'changed': False},
+        ]
+        output = self._capture(selected)
+        self.assertNotIn('Core abstractions', output)
+
+    def test_core_abstractions_sorted_by_fan_in_desc(self):
+        selected = [
+            {'relative': 'low.py', 'priority': 1.0, 'fan_in': 5, 'changed': False},
+            {'relative': 'high.py', 'priority': 1.0, 'fan_in': 20, 'changed': False},
+        ]
+        output = self._capture(selected)
+        self.assertLess(output.index('high.py'), output.index('low.py'))
+
+    def test_core_abstractions_capped_at_five(self):
+        selected = [
+            {'relative': f'mod{i}.py', 'priority': 1.0, 'fan_in': 10 + i, 'changed': False}
+            for i in range(8)
+        ]
+        output = self._capture(selected)
+        # Only top 5 should appear
+        shown = [f'mod{i}.py' for i in range(8) if f'mod{i}.py' in output]
+        self.assertLessEqual(len(shown), 5)
+
+
+class TestCollectCandidatesWithFanIn(unittest.TestCase):
+
+    def test_fan_in_scores_boost_priority(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "utils.py").write_text("X = 1\n")
+            (Path(d) / "main.py").write_text("import utils\n")
+
+            candidates_no_fan = _collect_candidates(Path(d), focus=None)
+            utils_no_fan = next(c for c in candidates_no_fan if 'utils' in c['relative'])
+
+            abs_utils = str((Path(d) / "utils.py").resolve())
+            fan_in_scores = {abs_utils: 10}
+            candidates_fan = _collect_candidates(Path(d), focus=None, fan_in_scores=fan_in_scores)
+            utils_fan = next(c for c in candidates_fan if 'utils' in c['relative'])
+
+            self.assertGreater(utils_fan['priority'], utils_no_fan['priority'])
+
+    def test_fan_in_stored_in_candidate(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "utils.py").write_text("X = 1\n")
+            abs_utils = str((Path(d) / "utils.py").resolve())
+            fan_in_scores = {abs_utils: 7}
+            candidates = _collect_candidates(Path(d), focus=None, fan_in_scores=fan_in_scores)
+            utils = next(c for c in candidates if 'utils' in c['relative'])
+            self.assertEqual(utils['fan_in'], 7)
+
+    def test_missing_fan_in_defaults_to_zero(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "utils.py").write_text("X = 1\n")
+            candidates = _collect_candidates(Path(d), focus=None, fan_in_scores={})
+            utils = next(c for c in candidates if 'utils' in c['relative'])
+            self.assertEqual(utils['fan_in'], 0)
+
+
+class TestRunPackArchitecture(unittest.TestCase):
+
+    def _make_args(self, path, budget='2000', architecture=False):
+        return Namespace(
+            path=str(path),
+            budget=budget,
+            focus=None,
+            since=None,
+            content=False,
+            format='text',
+            verbose=False,
+            architecture=architecture,
+        )
+
+    def test_architecture_flag_shows_brief(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "main.py").write_text("import utils\n")
+            (Path(d) / "utils.py").write_text("X = 1\n")
+            args = self._make_args(d, budget='5000', architecture=True)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run_pack(args)
+            output = buf.getvalue()
+            self.assertIn('Architecture Brief', output)
+
+    def test_no_architecture_flag_no_brief(self):
+        import io
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "main.py").write_text("import utils\n")
+            (Path(d) / "utils.py").write_text("X = 1\n")
+            args = self._make_args(d, budget='5000', architecture=False)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run_pack(args)
+            output = buf.getvalue()
+            self.assertNotIn('Architecture Brief', output)
+
+
 if __name__ == '__main__':
     unittest.main()

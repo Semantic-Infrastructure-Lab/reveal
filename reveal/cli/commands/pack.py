@@ -49,6 +49,7 @@ def create_pack_parser() -> argparse.ArgumentParser:
             "  reveal pack ./src --content            # Emit structure content (agent-ready)\n"
             "  reveal pack ./src --content --since main --budget 8000  # Full agent context\n"
             "  reveal pack ./src --format json        # Structured output for tooling\n"
+            "  reveal pack ./src --architecture       # Boost core abstractions; show architecture brief\n"
             "\n"
             "Prioritization order (with --since):\n"
             "  1. Changed files (git diff vs ref)\n"
@@ -85,6 +86,12 @@ def create_pack_parser() -> argparse.ArgumentParser:
         default=False,
         help='Emit reveal structure output for each selected file (agent-ready context, not just file list).'
     )
+    parser.add_argument(
+        '--architecture',
+        action='store_true',
+        default=False,
+        help='Boost high fan-in (core abstraction) files; prepend architecture brief before content.'
+    )
     return parser
 
 
@@ -98,6 +105,7 @@ def run_pack(args: Namespace) -> None:
     budget_tokens, budget_lines = _parse_budget(args.budget)
     focus = getattr(args, 'focus', None)
     since = getattr(args, 'since', None)
+    architecture = getattr(args, 'architecture', False)
 
     # Resolve changed files for --since
     changed_files: Set[str] = set()
@@ -107,8 +115,11 @@ def run_pack(args: Namespace) -> None:
         if since_error:
             print(f"Warning: --since: {since_error}", file=sys.stderr)
 
+    # Build fan-in index when --architecture is requested
+    fan_in_scores = _fetch_fan_in(path) if architecture else None
+
     # Collect candidate files
-    candidates = _collect_candidates(path, focus, changed_files)
+    candidates = _collect_candidates(path, focus, changed_files, fan_in_scores=fan_in_scores)
 
     # Apply budget
     selected, meta = _apply_budget(candidates, budget_tokens, budget_lines, path)
@@ -131,7 +142,8 @@ def run_pack(args: Namespace) -> None:
         print(json.dumps(result, indent=2, default=str))
         return
 
-    _render_pack(path, selected, meta, args.verbose, budget_tokens, budget_lines)
+    _render_pack(path, selected, meta, args.verbose, budget_tokens, budget_lines,
+                 architecture=architecture)
     if emit_content:
         _emit_content_section(selected)
 
@@ -174,6 +186,20 @@ def _get_changed_files(path: Path, since_ref: str) -> Tuple[Set[str], Optional[s
         changed.add(str(abs_path.resolve()))
 
     return changed, None
+
+
+def _fetch_fan_in(path: Path) -> Dict[str, int]:
+    """Return {abs_path: fan_in} for all files under *path* via ImportsAdapter.
+
+    Returns empty dict on any failure — callers treat missing entries as fan_in=0.
+    """
+    try:
+        from reveal.adapters.imports import ImportsAdapter  # noqa: I006
+        adapter = ImportsAdapter(path=str(path), query='rank=fan-in')
+        result = adapter.get_structure()
+        return {e['file']: e['fan_in'] for e in result.get('entries', [])}
+    except Exception:
+        return {}
 
 
 def _get_file_raw_content(file_path: str, max_lines: int = 500) -> str:
@@ -321,6 +347,7 @@ def _collect_candidates(
     path: Path,
     focus: Optional[str],
     changed_files: Optional[Set[str]] = None,
+    fan_in_scores: Optional[Dict[str, int]] = None,
 ) -> List[Dict[str, Any]]:
     """Collect and score candidate files for the pack."""
     candidates: List[Dict[str, Any]] = []
@@ -338,7 +365,8 @@ def _collect_candidates(
         lines = _count_lines(f)
 
         is_changed = bool(changed_files and str(f.resolve()) in changed_files)
-        priority = _compute_priority(f, rel, focus, is_changed=is_changed)
+        fan_in = (fan_in_scores or {}).get(str(f.resolve()), 0)
+        priority = _compute_priority(f, rel, focus, is_changed=is_changed, fan_in=fan_in)
 
         candidates.append({
             'path': str(f),
@@ -349,6 +377,7 @@ def _collect_candidates(
             'mtime': stat.st_mtime,
             'size': stat.st_size,
             'changed': is_changed,
+            'fan_in': fan_in,
         })
 
     # Sort: priority descending, then mtime descending
@@ -356,7 +385,13 @@ def _collect_candidates(
     return candidates
 
 
-def _compute_priority(path: Path, rel: Path, focus: Optional[str], is_changed: bool = False) -> float:
+def _compute_priority(
+    path: Path,
+    rel: Path,
+    focus: Optional[str],
+    is_changed: bool = False,
+    fan_in: int = 0,
+) -> float:
     """Score a file's priority for inclusion in the pack."""
     name = path.name.lower()
     rel_str = str(rel).lower()
@@ -388,6 +423,14 @@ def _compute_priority(path: Path, rel: Path, focus: Optional[str], is_changed: b
     # positives (e.g. 'main' inside 'maintainability', 'core' inside 'decorator')
     if rel_parts & _KEY_DIR_SEGMENTS or rel_stem in _KEY_DIR_SEGMENTS:
         score += 2.0
+
+    # Fan-in boost (--architecture): widely-imported files are core abstractions
+    if fan_in >= 15:
+        score += 5.0
+    elif fan_in >= 5:
+        score += 3.0
+    elif fan_in >= 1:
+        score += 1.0
 
     # Penalize test/vendor/docs files
     for penalty in ('test_', '_test', '/tests/', '/vendor/', '/docs/', '/.', '__pycache__'):
@@ -480,6 +523,28 @@ def _count_lines(path: Path) -> int:
         return 0
 
 
+def _render_architecture_brief(selected: List[Dict[str, Any]]) -> None:
+    """Print a concise architecture brief derived from fan-in and priority."""
+    entry_points = [
+        f['relative'] for f in selected
+        if not f.get('changed') and f.get('priority', 0) >= 10
+    ]
+    core = sorted(
+        [f for f in selected if f.get('fan_in', 0) >= 5],
+        key=lambda f: -f.get('fan_in', 0),
+    )[:5]
+
+    print('── Architecture Brief ──')
+    if entry_points:
+        print(f"Entry points:      {', '.join(entry_points)}")
+    if core:
+        abstractions = '  '.join(
+            f"{f['relative']}({f['fan_in']})" for f in core
+        )
+        print(f"Core abstractions: {abstractions}")
+    print()
+
+
 def _render_pack(
     path: Path,
     selected: List[Dict[str, Any]],
@@ -487,6 +552,7 @@ def _render_pack(
     verbose: bool,
     budget_tokens: Optional[int],
     budget_lines: Optional[int],
+    architecture: bool = False,
 ) -> None:
     """Render pack output as text."""
     budget_desc = (f"~{budget_tokens} tokens" if budget_tokens
@@ -504,6 +570,9 @@ def _render_pack(
     if not selected:
         print("No files fit within budget.")
         return
+
+    if architecture:
+        _render_architecture_brief(selected)
 
     # Group by priority tier for display
     changed = [f for f in selected if f.get('changed')]
