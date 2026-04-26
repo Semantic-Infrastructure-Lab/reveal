@@ -1,11 +1,30 @@
 # Reveal Roadmap
-> **Last updated**: 2026-04-21 (expanding-moon-0421 — v0.83.0 released)
+> **Last updated**: 2026-04-26 (divine-shrine-0426 — v0.87.0)
 
 This document outlines reveal's development priorities and future direction. For contribution opportunities, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## What We've Shipped
+
+### v0.87.0
+- ✅ **Plugin auto-discovery** — drop `*_analyzer.py` into `.reveal/analyzers/` (project-local) or `~/.reveal/plugins/` (user-global); `@register`-decorated `FileAnalyzer` subclass goes live with zero registration boilerplate. (BACK-247)
+- ✅ **`reveal pack --architecture`** — entry points + top-5 core abstractions with fan-in counts appended to pack output. (BACK-213)
+- ✅ **`reveal trace --from <entrypoint>`** — execution narrative subcommand: depth-indented call walk with side-effect classification (db/http/cache/file/log/sleep) and `[external]` markers. `--depth N`, `--json`. (BACK-216)
+- ✅ **`reveal contracts src/`** — contract/seam inventory: ABCs, Protocols, TypedDicts, Pydantic BaseModels, path-heuristic base classes. `--abstract-only`, `--format json`. (BACK-212)
+- ✅ **`reveal surface src/`** — external boundary map: CLI args, HTTP routes, MCP tools, env vars, network I/O, filesystem writes. `--type`, `--format json`. (BACK-215)
+- ✅ **`calls://?root=&depth=N`** — recursive callees walk (BFS); `--format dot` → Graphviz digraph. (BACK-214)
+- ✅ **`calls://?modules=true`** — module-level dependency graph via import resolution; `?external=true` includes stdlib/third-party edges. (BACK-217, BACK-208)
+- ✅ **`reveal hotspots` test-coverage heuristic** — ✅/⚪ per function; `has_test_hint` in JSON output. (BACK-246)
+- ✅ **`--varflow --cross-calls`** — cross-function variable propagation, DFS across call boundaries. (BACK-220)
+- ✅ **`--narrow VAR`** — type-narrowing path display: Optional/Union annotation parsing + isinstance/None guards. (BACK-226)
+- ✅ **`ast://` `reveal_type=`, `show=dict-heatmap`, `param_type=`, `return_type=`, `has_annotations=`, `depth>N`, `callers>N` filters** — (BACK-225, BACK-227, BACK-218, BACK-239, BACK-242, BACK-243)
+- ✅ **T005/T006 rules** — annotation coverage per-function; TypedDict suggestion for bare-dict params. (BACK-224, BACK-221)
+- ✅ **`imports://?circular&verbose`** — actual cycle edge sequence (A→B→C→A) per group. (BACK-237)
+- ✅ **`--writes` alias for `--mutations`**; `calls://` empty-result hint pointing upward. (BACK-223, BACK-222)
+- ✅ **`reveal/types.py`** — `RevealResult`/`RevealMeta`/`WarningEntry` TypedDicts document the Output Contract. (BACK-232)
+- ✅ **`_dispatch_nav` dispatch table** — complexity 73→25; 284-line if/elif chain → 11 handler functions + dict. (BACK-230)
+- ✅ **`claude/renderer.py` split** — 4 thematic submodules. (BACK-241)
 
 ### v0.83.0
 - ✅ **`reveal architecture <path>`** — targeted architectural brief: entry points, core abstractions, component cohesion, circular groups, derived risks, and dynamically generated next commands. `--format json` → `{facts, risks[], next_commands[]}`. Works on subdirectories. (BACK-211)
