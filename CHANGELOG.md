@@ -12,6 +12,13 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.88.0] - 2026-04-26 (session fikirazi-0426)
+
+### Fixed
+- **`reveal surface` env-var false positives** — `_is_env_access()` was matching every dict `.get()` call (`trade.get`, `md.get`, etc.) as an env var read. Replaced 9-line pattern loop with 1-line membership test. 278/297 false positives on the Peyton codebase eliminated. 8 new tests. (BACK-250)
+- **`reveal trace --format json`** — trace was the only subcommand using `--json` instead of `--format {text,json}`. `reveal trace ... --format json` previously failed with `unrecognized arguments`. Parser, tests, SUBCOMMANDS_GUIDE, and AGENT_HELP all updated. (BACK-251)
+- **`reveal architecture` Next Commands use absolute paths** — generated follow-up commands used `os.path.relpath(path, cwd)`, producing broken paths like `../home/scottsen/.../file.py` when called from a different directory. All 5 templates now use `str(path.resolve())`. (BACK-252)
+
 ## [0.87.0] - 2026-04-26 (sessions quantum-overlord-0425, divine-shrine-0426)
 
 ### Added
@@ -24,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.86.0] - 2026-04-25 (session radioactive-vortex-0425)
 
 ### Added
-- **`reveal trace src/ --from <entrypoint>`** — execution narrative subcommand. Walks the call graph from a named entry point using `find_callees_recursive`, then augments each resolved function frame with its parameter list and classified side-effects (hard_stop, db, http, cache, file, log, sleep). Renders a depth-indented narrative: each frame shows function name + file:line, params, effects, and what it calls next. `--depth N` (1–5, default 2); `--json` for machine-readable output. Unresolved (external/stdlib) callees appear with `[external]` marker. (BACK-216)
+- **`reveal trace src/ --from <entrypoint>`** — execution narrative subcommand. Walks the call graph from a named entry point using `find_callees_recursive`, then augments each resolved function frame with its parameter list and classified side-effects (hard_stop, db, http, cache, file, log, sleep). Renders a depth-indented narrative: each frame shows function name + file:line, params, effects, and what it calls next. `--depth N` (1–5, default 2); `--format json` for machine-readable output. Unresolved (external/stdlib) callees appear with `[external]` marker. (BACK-216)
 
 ## [0.85.0] - 2026-04-25 (session amethyst-brush-0425)
 

@@ -1017,7 +1017,7 @@ Fields:
 # Depth-indented execution narrative from an entry point
 reveal trace src/ --from main
 reveal trace src/ --from main --depth 3    # expand 3 levels (max 5)
-reveal trace src/ --from process_request --json   # JSON output
+reveal trace src/ --from process_request --format json   # JSON output
 ```
 
 Each frame shows:
@@ -1028,6 +1028,8 @@ Each frame shows:
 
 Output is depth-indented so the execution tree is scannable at a glance.  Unresolved
 (external/stdlib) callees appear with an `[external]` marker.
+
+> **Known issue:** If `--from <name>` does not match any function, trace silently reports `Resolved: 0` and marks the root as `[external]` rather than erroring — verify the function name exists first with `reveal <path>` (BACK-254).
 
 ---
 
@@ -3638,7 +3640,7 @@ This is the redesigned complete AI agent reference (Dec 2025). Changes:
 - **Complete coverage** - All adapters, all rules, all features
 - **v0.73.0** - `depends://` adapter (23rd adapter) — inverse module dependency graph; `depends://file.py` shows who imports it, `depends://dir/?top=N` ranks most-imported modules, `?format=dot` for GraphViz; scans from project root for full cross-directory visibility. `stats://` quality score now incorporates check rule detections by severity (CRITICAL=10 pts, HIGH=5 pts, MEDIUM=2 pts, LOW=0.5 pts, cap -40); `quality.check_issues` count exposed in per-file output. PHP fixes: anonymous class detection (`anonymous_class` node type), function call tracking (`function_call_expression`), `stats://` complexity no longer stuck at 1.00
 - **v0.87.0** - Plugin auto-discovery: drop a `*_analyzer.py` with a `@register`-decorated `FileAnalyzer` subclass into `.reveal/analyzers/` (project-local) or `~/.reveal/plugins/` (user-global) — it loads automatically on the next `reveal` run. Zero registration boilerplate. `reveal pack --architecture`: fan-in-ranked entry points + top-5 core abstractions appended to pack output. `claude/renderer.py` split into 4 thematic submodules (BACK-241).
-- **v0.86.0** - `reveal trace` subcommand: depth-indented execution narrative from a named entry point. Combines `calls://` recursive callees walk with per-function params and classified side-effects (hard_stop, db, http, cache, file, log, sleep). `--depth N` (1–5, default 2), `--json` output. Prunes builtins and external callees by default.
+- **v0.86.0** - `reveal trace` subcommand: depth-indented execution narrative from a named entry point. Combines `calls://` recursive callees walk with per-function params and classified side-effects (hard_stop, db, http, cache, file, log, sleep). `--depth N` (1–5, default 2), `--format json` output. Prunes builtins and external callees by default.
 - **v0.85.0** - 5 new features: `reveal hotspots` test-coverage heuristic (✅/⚪ per function, scans `tests/`/`test/`/`spec/`); `calls://?root=fn&depth=N` recursive callees walk (BFS, cap 5, resolved vs external); `reveal contracts src/` (ABCs, Protocols, TypedDicts, @dataclass, Pydantic BaseModels, `--abstract-only`); `reveal surface src/` (CLI args, HTTP routes, MCP tools, env vars, network/DB/SDK imports, filesystem writes, `--type` filter); `calls://?modules=true` module dependency graph (191 nodes / 248 edges on reveal's own codebase, `?external=true`, dot format).
 - **v0.84.0** - `--varflow --cross-calls` (follow variable across function boundaries); `--narrow VAR` (type-narrowing path); `ast://` new filters: `param_type=`, `return_type=`, `has_decorator=`, `has_annotations=`, `callers>N`, `reveal_type=`, `show=dict-heatmap`, `depth>N`; `imports://?circular&verbose` (cycle edge paths); T005 (annotation coverage), T006 (TypedDict suggestion) rules; `--writes` alias for `--mutations`; `reveal/types.py` Output Contract TypedDicts; `_NAV_DISPATCH` dispatch table refactor; `VarFlowWalker` dataclass.
 - **v0.79.0** - documented PHP limitation: `--varflow`, `--deps`, `--mutations` silently return empty on PHP files (BACK-203 — `variable_name` node type vs `identifier`); PHP-safe nav flags: `--calls`, `--exits`, `--flowto`, `--ifmap`, `--catchmap`, `--around`, `--scope`; added `--calls` / `calls://` disambiguation; clarified `--outline` dual-mode behavior

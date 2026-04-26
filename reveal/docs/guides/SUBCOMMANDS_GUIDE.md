@@ -288,7 +288,7 @@ Walk the call graph forward from a named entry point and print a depth-indented 
 ### Usage
 
 ```
-reveal trace [PATH] --from FUNC [--depth N] [--json]
+reveal trace [PATH] --from FUNC [--depth N] [--format {text,json}]
 ```
 
 ### CLI Flags
@@ -297,7 +297,7 @@ reveal trace [PATH] --from FUNC [--depth N] [--json]
 |------|-------------|
 | `--from FUNC` | Entry-point function to start the trace from (required) |
 | `--depth N` | Call levels to expand, 1–5 (default: 2) |
-| `--json` | Output JSON instead of text |
+| `--format` | Output format: `text` (default) or `json` |
 
 ### Side-Effect Classification
 
@@ -320,8 +320,12 @@ Unresolved (external/stdlib) callees appear with an `[external]` marker.
 ```bash
 reveal trace src/ --from main               # Trace from main(), depth 2
 reveal trace src/ --from process_order --depth 3
-reveal trace . --from handle_request --json # Machine-readable output
+reveal trace . --from handle_request --format json  # Machine-readable output
 ```
+
+### Known Limitations
+
+- **Silent miss on unknown function name (BACK-254):** If `--from <name>` does not match any function in the project, trace reports `Resolved: 0` and shows the name as `[external]` with no warning. Verify the function name with `reveal <path>` before tracing.
 
 ### See Also
 
@@ -404,6 +408,11 @@ reveal surface . --type http         # Only HTTP route handlers
 reveal surface . --format json       # Machine-readable output
 ```
 
+### Known Limitations
+
+- **`env` type false positives (BACK-250):** Any dict `.get()` call (`trade.get("key")`, `config.get("val")`) is currently misclassified as an environment variable read. Until fixed, `--type env` output will be noisy on codebases that use dict `.get()` heavily. Cross-check with `grep -r 'os.getenv\|os.environ' <path>` to identify true env var reads.
+- **Python-only** — surface scans `.py` files only.
+
 ### See Also
 
 - `reveal contracts` — Architectural contracts (ABCs, Protocols, TypedDicts)
@@ -438,6 +447,8 @@ Complex functions in hotspot output include a test-coverage indicator:
 
 - **✅** — a corresponding test exists (scanned from `tests/`, `test/`, `spec/` directories)
 - **⚪** — no test found for this function name
+
+> **Limitation (BACK-253):** The heuristic looks for `def test_<function_name>` in test files. Projects using `test_<module>_<scenario>` naming (e.g. `test_bearish_sweep_of_session_high` in `test_liquidity_sweep.py`) will show ⚪ even when a full test suite exists. A ⚪ means the heuristic didn't find a match — not that the function is definitely untested.
 
 JSON output (`--format json`) includes `has_test_hint: true/false` per function, enabling scripted filtering:
 

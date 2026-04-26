@@ -84,8 +84,29 @@ class TestClassifiers(unittest.TestCase):
     def test_is_env_access_os_environ_get(self):
         self.assertTrue(_is_env_access("os.environ.get"))
 
-    def test_is_env_access_false(self):
+    def test_is_env_access_environ_get(self):
+        self.assertTrue(_is_env_access("environ.get"))
+
+    def test_is_env_access_getenv(self):
+        self.assertTrue(_is_env_access("getenv"))
+
+    def test_is_env_access_dunder_getitem(self):
+        self.assertTrue(_is_env_access("os.environ.__getitem__"))
+
+    def test_is_env_access_false_os_path_join(self):
         self.assertFalse(_is_env_access("os.path.join"))
+
+    def test_is_env_access_false_dict_get(self):
+        self.assertFalse(_is_env_access("trade.get"))
+
+    def test_is_env_access_false_md_get(self):
+        self.assertFalse(_is_env_access("md.get"))
+
+    def test_is_env_access_false_regime_get(self):
+        self.assertFalse(_is_env_access("REGIME_SIZE_MULT.get"))
+
+    def test_is_env_access_false_bare_get(self):
+        self.assertFalse(_is_env_access("get"))
 
 
 class TestScanSurface(unittest.TestCase):

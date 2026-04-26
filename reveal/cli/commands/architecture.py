@@ -196,27 +196,27 @@ def _build_next_commands(
     imports_data: Dict[str, Any],
 ) -> List[str]:
     cmds: List[str] = []
-    rel = os.path.relpath(path, Path.cwd())
+    abs_path = str(path.resolve())
 
     if any(r['type'] == 'circular' for r in risks):
-        cmds.append(f"reveal 'imports://{rel}?circular'")
+        cmds.append(f"reveal 'imports://{abs_path}?circular'")
 
     cx_entries = [r for r in risks if r['type'] == 'high_complexity_entry']
     if cx_entries:
         worst = max(cx_entries, key=lambda r: r.get('complexity', 0))
-        cmds.append(f"reveal {os.path.relpath(worst['file'], Path.cwd())} --boundary")
+        cmds.append(f"reveal {worst['file']} --boundary")
 
     if imports_data.get('core_abstractions'):
-        cmds.append(f"reveal 'ast://{rel}?complexity>20'")
+        cmds.append(f"reveal 'ast://{abs_path}?complexity>20'")
 
     lb = [r for r in risks if r['type'] == 'load_bearing']
     if lb:
         top_lb = max(lb, key=lambda r: r.get('fan_in', 0))
-        cmds.append(f"reveal {os.path.relpath(top_lb['file'], Path.cwd())}")
+        cmds.append(f"reveal {top_lb['file']}")
 
     if not cmds:
-        cmds.append(f"reveal overview {rel}")
-        cmds.append(f"reveal {rel}")
+        cmds.append(f"reveal overview {abs_path}")
+        cmds.append(f"reveal {abs_path}")
 
     return cmds
 

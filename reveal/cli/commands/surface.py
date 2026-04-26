@@ -314,14 +314,7 @@ def _is_mcp_tool(deco: str) -> bool:
 
 
 def _is_env_access(func_str: str) -> bool:
-    patterns = (
-        'os.environ.get', 'os.getenv', 'environ.get',
-        'getenv', 'os.environ.__getitem__',
-    )
-    for p in patterns:
-        if func_str == p or func_str.endswith(f'.{p.split(".")[-1]}'):
-            return func_str.endswith(p.split('.')[-1]) or func_str == p
-    return func_str in ('os.environ.get', 'os.getenv', 'environ.get', 'getenv')
+    return func_str in ('os.environ.get', 'os.getenv', 'environ.get', 'getenv', 'os.environ.__getitem__')
 
 
 def _is_fs_write(func_str: str, node: ast.Call) -> bool:

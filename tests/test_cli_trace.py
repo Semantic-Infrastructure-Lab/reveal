@@ -66,13 +66,13 @@ class TestCreateTraceParser(unittest.TestCase):
         args = create_trace_parser().parse_args(['--from', 'f', '--depth', '4'])
         self.assertEqual(args.depth, 4)
 
-    def test_json_flag(self):
-        args = create_trace_parser().parse_args(['--from', 'f', '--json'])
-        self.assertTrue(args.json)
+    def test_format_json(self):
+        args = create_trace_parser().parse_args(['--from', 'f', '--format', 'json'])
+        self.assertEqual(args.format, 'json')
 
-    def test_json_flag_default_false(self):
+    def test_format_default_text(self):
         args = create_trace_parser().parse_args(['--from', 'f'])
-        self.assertFalse(args.json)
+        self.assertEqual(args.format, 'text')
 
 
 # ---------------------------------------------------------------------------
@@ -466,13 +466,13 @@ class TestRunTrace(unittest.TestCase):
         """)
 
     def test_invalid_path_exits(self):
-        args = Namespace(path='/no/such/path', root='main', depth=2, json=False)
+        args = Namespace(path='/no/such/path', root='main', depth=2, format='text')
         with self.assertRaises(SystemExit):
             run_trace(args)
 
     def test_text_output_produced(self):
         self._make_project()
-        args = Namespace(path=self.tmpdir, root='start', depth=2, json=False)
+        args = Namespace(path=self.tmpdir, root='start', depth=2, format='text')
         buf = StringIO()
         with patch('sys.stdout', buf):
             run_trace(args)
@@ -481,7 +481,7 @@ class TestRunTrace(unittest.TestCase):
 
     def test_json_output_valid(self):
         self._make_project()
-        args = Namespace(path=self.tmpdir, root='start', depth=1, json=True)
+        args = Namespace(path=self.tmpdir, root='start', depth=1, format='json')
         buf = StringIO()
         with patch('sys.stdout', buf):
             run_trace(args)
@@ -491,7 +491,7 @@ class TestRunTrace(unittest.TestCase):
 
     def test_depth_capped_at_five(self):
         self._make_project()
-        args = Namespace(path=self.tmpdir, root='start', depth=99, json=True)
+        args = Namespace(path=self.tmpdir, root='start', depth=99, format='json')
         buf = StringIO()
         with patch('sys.stdout', buf):
             run_trace(args)
@@ -500,7 +500,7 @@ class TestRunTrace(unittest.TestCase):
 
     def test_depth_floored_at_one(self):
         self._make_project()
-        args = Namespace(path=self.tmpdir, root='start', depth=0, json=True)
+        args = Namespace(path=self.tmpdir, root='start', depth=0, format='json')
         buf = StringIO()
         with patch('sys.stdout', buf):
             run_trace(args)

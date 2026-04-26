@@ -35,8 +35,8 @@ def create_trace_parser() -> argparse.ArgumentParser:
         help='How many call levels to expand (1–5, default 2)',
     )
     parser.add_argument(
-        '--json', action='store_true',
-        help='Output JSON instead of text',
+        '--format', choices=['text', 'json'], default='text',
+        help='Output format: text (default) or json',
     )
     return parser
 
@@ -50,7 +50,7 @@ def run_trace(args: Namespace) -> None:
     depth = max(1, min(args.depth, 5))
     report = _build_trace(str(path), args.root, depth)
 
-    if args.json:
+    if args.format == 'json':
         print(json.dumps(report, indent=2))
     else:
         _render_trace(report)
