@@ -341,6 +341,66 @@ def sticker_update(job_id):
 
 
 # ---------------------------------------------------------------------------
+# Unit: cross-directory caller hint (BUG-148)
+# ---------------------------------------------------------------------------
+
+class TestFindCallersHint(unittest.TestCase):
+    """find_callers must emit a hint when 0 callers found in scoped subdir
+    but callers exist in the parent directory (BUG-148)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.subdir = os.path.join(self.tmp, 'src')
+        os.makedirs(self.subdir)
+        _write(self.subdir, 'lib.py', textwrap.dedent('''\
+            def target_fn():
+                pass
+        '''))
+        _write(self.tmp, 'bot.py', textwrap.dedent('''\
+            def run():
+                target_fn()
+        '''))
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_hint_fires_when_callers_only_in_parent(self):
+        result = find_callers(self.subdir, 'target_fn')
+        self.assertEqual(result['total_callers'], 0)
+        self.assertIn('hint', result)
+        self.assertIn('widening', result['hint'])
+        self.assertIn('potential caller', result['hint'])
+
+    def test_hint_absent_when_truly_uncalled(self):
+        result = find_callers(self.subdir, 'nonexistent_fn')
+        self.assertEqual(result['total_callers'], 0)
+        self.assertNotIn('hint', result)
+
+    def test_hint_absent_when_callers_found_in_subdir(self):
+        _write(self.subdir, 'internal.py', textwrap.dedent('''\
+            def consumer():
+                target_fn()
+        '''))
+        result = find_callers(self.subdir, 'target_fn')
+        self.assertGreater(result['total_callers'], 0)
+        self.assertNotIn('hint', result)
+
+    def test_hint_rendered_to_output(self):
+        from io import StringIO
+        from unittest.mock import patch
+        from reveal.adapters.calls.renderer import render_calls_structure
+        result = find_callers(self.subdir, 'target_fn')
+        result['path'] = self.subdir
+        buf = StringIO()
+        with patch('sys.stdout', buf):
+            render_calls_structure(result, 'text')
+        out = buf.getvalue()
+        self.assertIn('Hint:', out)
+        self.assertIn('widening', out)
+
+
+# ---------------------------------------------------------------------------
 # Unit: import alias resolution in build_callers_index / find_callers /
 #        find_uncalled  (BACK-076)
 # ---------------------------------------------------------------------------
