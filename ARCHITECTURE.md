@@ -383,6 +383,17 @@ The base `FileAnalyzer` implementation returns `{}` (no-op). Analyzers for non-c
 
 Cyclomatic complexity and nesting depth calculations live in `reveal/complexity.py` as standalone functions (BACK-187, kotowiro-0417). `TreeSitterAnalyzer._calculate_complexity_and_depth()` delegates to `calculate_complexity_and_depth(node)` — `self` is not used. This separates the structure-parsing concern from the metrics concern and allows the complexity module to be imported independently of the analyzer base class.
 
+### `staticmethod` aliases in `ClaudeAdapter` preserve test interface after handler split
+
+`reveal/adapters/claude/handlers/` contains module-level functions extracted from `ClaudeAdapter` (BACK-241, strong-scepter-0426). Tests in `test_back035_036_037.py` and `test_claude_adapter_gaps.py` call these as class methods (e.g. `ClaudeAdapter._extract_project_from_dir(...)`). Rather than update all test call sites, the class re-imports the moved functions and wraps them with `staticmethod()`:
+
+```python
+from .handlers.sessions import _extract_project_from_dir, ...
+_extract_project_from_dir = staticmethod(_extract_project_from_dir)  # type: ignore[assignment]
+```
+
+This is intentional: the `# type: ignore` suppresses mypy's complaint about re-assigning a module-level name to a descriptor. The interface is semantically correct — the function takes no `self` and is callable as both `ClaudeAdapter._extract_project_from_dir(...)` and `_extract_project_from_dir(...)`.
+
 ---
 
-*Last updated: session kotowiro-0417*
+*Last updated: session strong-scepter-0426*

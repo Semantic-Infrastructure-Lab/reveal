@@ -12,7 +12,7 @@ All notable changes to reveal will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - (sessions savage-hunter-0426, fated-sword-0426)
+## [Unreleased] - (sessions savage-hunter-0426, fated-sword-0426, strong-scepter-0426)
 
 ### Added
 - **Adapter plugin discovery** — `discover_adapter_plugins(cwd=None)` in `adapters/base.py` scans `<cwd>/.reveal/adapters/` and `~/.reveal/adapters/` for package directories and imports them lazily on first `get_adapter_class()` call. Mirrors the analyzer plugin system (BACK-247) for the URI adapter side. Plugin adapters use `from reveal.adapters.base import register_adapter` (absolute import) rather than relative imports. `_reset_adapter_plugin_discovery()` exported for test isolation. 9 tests. (BACK-256)
@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **`trades://` and `signals://` moved to Peyton** — both adapters removed from reveal core and relocated to `arbiter/.reveal/adapters/` in the Peyton project, where they belong. Reveal adapter count: 25 → 23. These are the first real-world use of the new plugin system.
+
+### Refactored
+- **`claude/adapter.py` handler split** — 12 resource handler methods extracted from the 2133-line monolith into `handlers/sessions.py`, `handlers/system.py`, and `handlers/workspace.py`. `adapter.py` reduced to 1248 lines of routing + thin wrappers. Class interface preserved via `staticmethod` aliases for zero test changes. (BACK-241, strong-scepter-0426)
 
 ## [0.89.0] - 2026-04-26 (session heroic-hydra-0426)
 

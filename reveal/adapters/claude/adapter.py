@@ -13,6 +13,25 @@ import json
 from ..base import ResourceAdapter, register_adapter, register_renderer
 from .renderer import ClaudeRenderer
 from ...utils.query import parse_query_params
+from .handlers.sessions import (
+    list_sessions as _h_list_sessions,
+    search_sessions as _h_search_sessions,
+    track_file_sessions as _h_track_file_sessions,
+    get_chain as _h_get_chain,
+    _read_session_title,
+)
+from .handlers.system import (
+    get_history as _h_get_history,
+    get_settings as _h_get_settings,
+    get_info as _h_get_info,
+    get_config as _h_get_config,
+)
+from .handlers.workspace import (
+    get_plans as _h_get_plans,
+    get_memory as _h_get_memory,
+    get_agents as _h_get_agents,
+    get_hooks as _h_get_hooks,
+)
 from .analysis import (
     extract_all_tool_results,
     get_tool_calls,
@@ -449,90 +468,8 @@ class ClaudeAdapter(ResourceAdapter):
 
         return None
 
-    @staticmethod
-    def _find_session_readme(session_name: str, sessions_dir: Optional[Path]) -> Optional[Path]:
-        """Find the most recent README for a session in the sessions directory.
-
-        Args:
-            session_name: Session identifier (e.g., 'emerald-shade-0315')
-            sessions_dir: Root directory containing per-session subdirs
-
-        Returns:
-            Path to the most recent README*.md file, or None if not found
-        """
-        if not sessions_dir or not sessions_dir.exists():
-            return None
-        session_dir = sessions_dir / session_name
-        if not session_dir.exists():
-            return None
-        readmes = sorted(session_dir.glob('README*.md'), reverse=True)
-        return readmes[0] if readmes else None
-
-    @staticmethod
-    def _parse_readme_frontmatter(readme_path: Path) -> Dict[str, Any]:
-        """Parse YAML frontmatter from a README file.
-
-        Args:
-            readme_path: Path to the README file
-
-        Returns:
-            Dict of frontmatter fields, empty dict if no frontmatter or parse error
-        """
-        import yaml
-        try:
-            text = readme_path.read_text(encoding='utf-8')
-            if text.startswith('---'):
-                end = text.find('\n---', 3)
-                if end != -1:
-                    frontmatter_text = text[3:end].strip()
-                    return yaml.safe_load(frontmatter_text) or {}
-        except Exception:  # noqa: BLE001 — README may be absent, unreadable, or malformed
-            pass
-        return {}
-
     def _get_chain(self) -> Dict[str, Any]:
-        """Traverse session continuation chain via README continuing_from: links.
-
-        Reads REVEAL_SESSIONS_DIR/<session>/README*.md for each session,
-        extracts YAML frontmatter, and follows continuing_from: until the
-        chain ends or a cycle is detected (limit: 50 sessions).
-
-        Returns:
-            Output Contract v1.0 dict with type 'claude_chain' and chain list
-        """
-        contract_base = self._get_contract_base()
-        sessions_dir = self.SESSIONS_DIR
-
-        chain: List[Dict[str, Any]] = []
-        seen: set = set()
-        current_name: Optional[str] = self.session_name
-
-        while current_name and current_name not in seen and len(chain) < 50:
-            seen.add(current_name)
-            readme_path = self._find_session_readme(current_name, sessions_dir)
-            frontmatter = self._parse_readme_frontmatter(readme_path) if readme_path else {}
-
-            entry: Dict[str, Any] = {
-                'session': current_name,
-                'readme': str(readme_path) if readme_path else None,
-                'date': frontmatter.get('date') or frontmatter.get('session_date'),
-                'badge': frontmatter.get('badge'),
-                'continuing_from': frontmatter.get('continuing_from'),
-                'tests_start': frontmatter.get('tests_start'),
-                'tests_end': frontmatter.get('tests_end'),
-                'commits': frontmatter.get('commits'),
-            }
-            chain.append(entry)
-            current_name = frontmatter.get('continuing_from')
-
-        return {
-            **contract_base,
-            'type': 'claude_chain',
-            'session': self.session_name,
-            'chain': chain,
-            'chain_length': len(chain),
-            'sessions_dir': str(sessions_dir) if sessions_dir else None,
-        }
+        return _h_get_chain(self.resource, self.session_name, self.SESSIONS_DIR, self._get_contract_base())
 
     def _load_messages(self) -> List[Dict]:
         """Load and parse conversation JSONL.
@@ -781,580 +718,26 @@ class ClaudeAdapter(ResourceAdapter):
 
         return base
 
-    @staticmethod
-    def _extract_text_from_content(content: Any) -> str:
-        """Extract plain text from a message content (str or list of content blocks)."""
-        if isinstance(content, str):
-            return content.strip()
-        if isinstance(content, list):
-            for item in content:
-                if isinstance(item, dict) and item.get('type') == 'text':
-                    return item.get('text', '').strip()
-        return ''
-
-    _BOILERPLATE_PREFIXES = ('# Session Continuation Context',)
-
-    @staticmethod
-    def _parse_jsonl_line_for_title(line: str) -> Optional[str]:
-        """Parse one JSONL line and return user text as a title candidate, or None.
-
-        Returns None to signal "skip this line, keep scanning" for boilerplate messages.
-        Returns False to signal "stop scanning" (not currently used, but reserved).
-        """
-        import json as _json
-        try:
-            rec = _json.loads(line)
-        except Exception:
-            return None
-        if rec.get('type') != 'user':
-            return None
-        content = rec.get('message', {}).get('content', '')
-        text = ClaudeAdapter._extract_text_from_content(content)
-        if not text:
-            return None
-        candidate = text.split('\n')[0].strip()
-        # Skip auto-injected boilerplate preambles; try to extract real user text after ---
-        if any(candidate.startswith(p) for p in ClaudeAdapter._BOILERPLATE_PREFIXES):
-            sep_idx = text.rfind('\n---\n')
-            if sep_idx >= 0:
-                candidate = text[sep_idx + 5:].strip().split('\n')[0].strip()
-            else:
-                return None
-        # Skip bare boot commands — the real task will be in a later message
-        if candidate.lower() == 'boot':
-            return None
-        return candidate[:80] or None
-
-    @staticmethod
-    def _scan_jsonl_for_title(jsonl_path: Path) -> Optional[str]:
-        """Scan first 50 lines of JSONL file for a user text title."""
-        with open(jsonl_path, 'r', errors='replace') as fh:
-            for i, line in enumerate(fh):
-                if i > 50:
-                    break
-                title = ClaudeAdapter._parse_jsonl_line_for_title(line)
-                if title is not None:
-                    return title
-        return None
-
-    @staticmethod
-    def _read_session_title(jsonl_path: Path) -> Optional[str]:
-        """Read first user text message from JSONL as a display title.
-
-        Reads only the first 30 lines to avoid loading entire file.
-        """
-        try:
-            return ClaudeAdapter._scan_jsonl_for_title(jsonl_path)
-        except Exception:
-            return None
-
-    @staticmethod
-    def _extract_project_from_dir(dir_name: str) -> str:
-        """Derive a short project label from an encoded Claude project directory name.
-
-        E.g. '-home-user-src-tia-sessions-hosefobe-0314' → 'tia'
-             '-home-user-src-projects-reveal-external-git' → 'reveal'
-        """
-        _SKIP = {'home', 'src', 'projects', 'external', 'internal', 'git'}
-        prefix = dir_name.split('-sessions-')[0] if '-sessions-' in dir_name else dir_name
-        parts = [p for p in prefix.lstrip('-').split('-') if p and p not in _SKIP]
-        return parts[-1] if parts else ''
-
-    @staticmethod
-    def _collect_sessions_from_dir(project_dir: Path) -> List[Dict[str, Any]]:
-        """Collect session entry dicts from one project directory."""
-        sessions = []
-        readme_present = bool(list(project_dir.glob('README*.md'))[:1])
-        project = ClaudeAdapter._extract_project_from_dir(project_dir.name)
-        for jsonl_file in project_dir.glob('*.jsonl'):
-            if jsonl_file.stem.startswith('agent-'):
-                continue
-            dir_name = project_dir.name
-            file_stem = jsonl_file.stem
-            if '-sessions-' in dir_name:
-                session_name = dir_name.split('-sessions-')[-1]
-            elif len(file_stem) == 36 and file_stem.count('-') == 4:
-                # UUID filename (Windows-style) — use the UUID as the session name
-                session_name = file_stem
-            else:
-                session_name = dir_name
-            stat = jsonl_file.stat()
-            sessions.append({
-                'session': session_name,
-                'path': str(jsonl_file),
-                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                'size_kb': stat.st_size // 1024,
-                'readme_present': readme_present,
-                'project': project,
-            })
-        return sessions
-
     def _list_sessions(self) -> Dict[str, Any]:
-        """List available Claude Code sessions.
-
-        Scans the Claude projects directory for sessions and returns
-        all sessions sorted by recency.
-
-        Supports query params when called from get_structure():
-            ?filter=term  - filter session names by substring (case-insensitive)
-            ?search=term  - alias for ?filter=term
-
-        CLI flags (applied by routing.py):
-            --head N      - show N most recent (default: 20)
-            --all         - show all sessions
-            --since DATE  - filter by modified date (e.g. 2026-02-27)
-            --search TERM - filter session names (overrides ?filter=)
-
-        Returns:
-            Dictionary with full session list (routing.py applies display limits)
-        """
-        base: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'claude_session_list',
-            'source': str(self.CONVERSATION_BASE),
-            'source_type': 'directory'
-        }
-
-        name_filter = (self.query_params.get('filter') or self.query_params.get('search', '')).lower()
-
-        sessions = []
-        try:
-            for project_dir in self.CONVERSATION_BASE.iterdir():
-                if not project_dir.is_dir():
-                    continue
-                sessions.extend(self._collect_sessions_from_dir(project_dir))
-            sessions.sort(key=lambda x: x['modified'], reverse=True)  # type: ignore[arg-type, return-value]
-        except Exception as e:
-            base['error'] = str(e)
-
-        # Apply name filter if provided
-        if name_filter:
-            sessions = [s for s in sessions if name_filter in str(s['session']).lower()]
-
-        base.update({
-            'session_count': len(sessions),
-            'recent_sessions': sessions,  # routing.py applies head/since limits
-            'usage': {
-                'overview': 'reveal claude://session/<name>',
-                'workflow': 'reveal claude://session/<name>/workflow',
-                'files': 'reveal claude://session/<name>/files',
-                'tools': 'reveal claude://session/<name>/tools',
-                'errors': 'reveal claude://session/<name>?errors',
-                'context': 'reveal claude://session/<name>/context',
-                'specific_tool': 'reveal claude://session/<name>?tools=Bash',
-                'composite': 'reveal claude://session/<name>?tools=Bash&errors',
-                'thinking': 'reveal claude://session/<name>/thinking',
-                'message': 'reveal claude://session/<name>/message/42'
-            }
-        })
-
-        return base
+        return _h_list_sessions(self.CONVERSATION_BASE, self.query_params)
 
     def _search_sessions(self) -> Dict[str, Any]:
-        """Cross-session content search using ``?search=term``.
-
-        Scans all session JSONL files for the search term using parallel
-        byte-level pre-filtering, then extracts one representative snippet per
-        matching session.
-
-        Supports ``?since=DATE`` (e.g. ``2026-03-01`` or ``today``) to scope
-        the corpus before scanning — highly recommended for large session stores.
-
-        Returns:
-            Dict of type ``claude_cross_session_search`` with ``matches`` list.
-        """
-        term = self.query_params.get('search', '')
-        since = self.query_params.get('since', '')
-
-        if since == 'today':
-            since = _date.today().isoformat()
-
-        # Collect all sessions across all project directories.
-        all_sessions: List[Dict[str, Any]] = []
-        try:
-            for project_dir in self.CONVERSATION_BASE.iterdir():
-                if project_dir.is_dir():
-                    all_sessions.extend(self._collect_sessions_from_dir(project_dir))
-        except Exception as e:
-            return {
-                'contract_version': '1.0',
-                'type': 'claude_cross_session_search',
-                'source': str(self.CONVERSATION_BASE),
-                'source_type': 'directory',
-                'term': term,
-                'error': str(e),
-                'sessions_scanned': 0,
-                'match_count': 0,
-                'matches': [],
-            }
-
-        # Apply --since before grep to shrink the corpus.
-        if since:
-            all_sessions = [s for s in all_sessions if s.get('modified', '') >= since]
-
-        whole_word = 'word' in self.query_params
-        matches = search_sessions_for_term(all_sessions, term, whole_word=whole_word)
-
-        return {
-            'contract_version': '1.0',
-            'type': 'claude_cross_session_search',
-            'source': str(self.CONVERSATION_BASE),
-            'source_type': 'directory',
-            'term': term,
-            'since': since or None,
-            'whole_word': whole_word,
-            'sessions_scanned': len(all_sessions),
-            'match_count': len(matches),
-            'matches': matches,
-        }
+        return _h_search_sessions(self.CONVERSATION_BASE, self.query_params)
 
     def _track_file_sessions(self) -> Dict[str, Any]:
-        """Cross-session file tracking using ``claude://files/<path>``.
-
-        Finds all sessions that touched a given file path using parallel
-        byte-level pre-filtering, then extracts per-session operations
-        (Read/Write/Edit counts).  Partial path matching is used so both
-        absolute and relative path fragments work.
-
-        Supports ``?since=DATE`` to scope the corpus before scanning.
-
-        Returns:
-            Dict of type ``claude_file_sessions`` with ``sessions`` list.
-        """
-        from ...utils.parallel import grep_files as _grep_files
-
-        file_path = self.resource[len('files/'):].strip('/')
-        since = self.query_params.get('since', '')
-
-        if since == 'today':
-            since = _date.today().isoformat()
-
-        _error_base: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'claude_file_sessions',
-            'source': str(self.CONVERSATION_BASE),
-            'source_type': 'directory',
-            'file_path': file_path,
-            'since': since or None,
-            'sessions_scanned': 0,
-            'match_count': 0,
-            'sessions': [],
-        }
-
-        if not file_path:
-            return {**_error_base, 'error': 'No file path provided. Usage: claude://files/path/to/file.py'}
-
-        all_sessions: List[Dict[str, Any]] = []
-        try:
-            for project_dir in self.CONVERSATION_BASE.iterdir():
-                if project_dir.is_dir():
-                    all_sessions.extend(self._collect_sessions_from_dir(project_dir))
-        except Exception as e:
-            return {**_error_base, 'error': str(e)}
-
-        if since:
-            all_sessions = [s for s in all_sessions if s.get('modified', '') >= since]
-
-        # Parallel byte-scan pre-filter.
-        matched_paths = _grep_files([Path(s['path']) for s in all_sessions], [file_path])
-        matched_path_strs = {str(p) for p in matched_paths}
-        candidates = [s for s in all_sessions if s['path'] in matched_path_strs]
-
-        results = []
-        for session in candidates:
-            try:
-                messages: List[Dict] = []
-                with open(session['path'], 'r', encoding='utf-8') as fh:
-                    for line in fh:
-                        try:
-                            messages.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            continue
-                contract_base = {
-                    'contract_version': '1.0',
-                    'source': session['path'],
-                    'source_type': 'file',
-                }
-                files_result = get_files_touched(messages, session['session'], contract_base)
-
-                # Partial path match across all ops.
-                ops_for_file: Dict[str, int] = {}
-                for op, files_dict in files_result.get('by_operation', {}).items():
-                    count = sum(v for k, v in files_dict.items() if file_path in k)
-                    if count:
-                        ops_for_file[op] = count
-
-                if ops_for_file:
-                    results.append({
-                        'session': session['session'],
-                        'project': session.get('project', ''),
-                        'modified': session['modified'],
-                        'ops': ops_for_file,
-                        'total_ops': sum(ops_for_file.values()),
-                    })
-            except Exception as e:
-                logger.debug("session parse failed for %s: %s", session.get('path'), e)
-                continue
-
-        results.sort(key=lambda x: x['modified'], reverse=True)
-
-        return {
-            'contract_version': '1.0',
-            'type': 'claude_file_sessions',
-            'source': str(self.CONVERSATION_BASE),
-            'source_type': 'directory',
-            'file_path': file_path,
-            'since': since or None,
-            'sessions_scanned': len(all_sessions),
-            'match_count': len(results),
-            'sessions': results,
-        }
+        return _h_track_file_sessions(self.CONVERSATION_BASE, self.resource, self.query_params)
 
     def _get_history(self) -> Dict[str, Any]:
-        """Read and filter ~/.claude/history.jsonl prompt history.
-
-        Streams the file line-by-line to handle large files without loading
-        everything into memory.
-
-        Supports query params:
-            ?search=term    - substring match against prompt text (case-insensitive)
-            ?project=path   - substring match against project path (case-insensitive)
-            ?since=DATE     - ISO date (e.g. 2026-03-01) or 'today'
-
-        CLI flags (applied by post_process):
-            --search TERM   - additional prompt filter
-            --since DATE    - additional date filter
-            --head N        - show N most recent (default: 50)
-            --all           - show all matches
-
-        Returns:
-            Dict of type ``claude_history`` with ``entries`` list.
-            Entries are newest-first.
-        """
-        from datetime import datetime as _dt
-
-        history_path = self.CLAUDE_HOME / 'history.jsonl'
-        search = self.query_params.get('search', '').lower()
-        project_filter = self.query_params.get('project', '').lower()
-        since = self.query_params.get('since', '')
-
-        if since == 'today':
-            since = _date.today().isoformat()
-
-        base: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'claude_history',
-            'source': str(history_path),
-            'source_type': 'file',
-            'search': search or None,
-            'project': project_filter or None,
-            'since': since or None,
-        }
-
-        if not history_path.exists():
-            return {**base, 'total_entries': 0, 'match_count': 0, 'entries': [],
-                    'error': f'History file not found: {history_path}'}
-
-        entries = []
-        total = 0
-
-        try:
-            with open(history_path, 'r', encoding='utf-8', errors='replace') as fh:
-                for line in fh:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        obj = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    total += 1
-
-                    prompt = obj.get('display', '')
-                    project = obj.get('project', '')
-                    ts_ms = obj.get('timestamp', 0)
-                    session_id = obj.get('sessionId')
-
-                    ts_iso = (
-                        _dt.fromtimestamp(ts_ms / 1000).isoformat(timespec='seconds')
-                        if ts_ms else ''
-                    )
-
-                    if since and ts_iso[:10] < since:
-                        continue
-                    if search and search not in prompt.lower():
-                        continue
-                    if project_filter and project_filter not in project.lower():
-                        continue
-
-                    entries.append({
-                        'prompt': prompt,
-                        'project': project,
-                        'timestamp': ts_iso,
-                        'session_id': session_id,
-                    })
-        except Exception as e:
-            return {**base, 'total_entries': total, 'match_count': 0, 'entries': [],
-                    'error': str(e)}
-
-        entries.reverse()  # file is oldest-first; return newest-first
-
-        return {
-            **base,
-            'total_entries': total,
-            'match_count': len(entries),
-            'entries': entries,
-        }
+        return _h_get_history(self.CLAUDE_HOME, self.query_params)
 
     def _get_info(self) -> Dict[str, Any]:
-        """Diagnostic dump of all resolved Claude Code data paths and env overrides."""
-        def _path_info(p: Path) -> Dict[str, Any]:
-            if not p.exists():
-                return {'path': str(p), 'exists': False}
-            if p.is_dir():
-                try:
-                    count = sum(1 for _ in p.iterdir())
-                except Exception:
-                    count = 0
-                return {'path': str(p), 'exists': True, 'kind': 'dir', 'count': count}
-            stat = p.stat()
-            return {'path': str(p), 'exists': True, 'kind': 'file', 'size_bytes': stat.st_size}
-
-        return {
-            'contract_version': '1.0',
-            'type': 'claude_info',
-            'source': str(self.CLAUDE_HOME),
-            'source_type': 'directory',
-            'paths': {
-                'claude_home': _path_info(self.CLAUDE_HOME),
-                'projects': _path_info(self.CONVERSATION_BASE),
-                'history': _path_info(self.CLAUDE_HOME / 'history.jsonl'),
-                'plans': _path_info(self.PLANS_DIR),
-                'settings': _path_info(self.CLAUDE_HOME / 'settings.json'),
-                'config': _path_info(self.CLAUDE_JSON),
-                'agents': _path_info(self.CLAUDE_HOME / 'agents'),
-                'hooks': _path_info(self.CLAUDE_HOME / 'hooks'),
-            },
-            'env': {
-                'REVEAL_CLAUDE_HOME': os.environ.get('REVEAL_CLAUDE_HOME', ''),
-                'REVEAL_CLAUDE_JSON': os.environ.get('REVEAL_CLAUDE_JSON', ''),
-                'REVEAL_CLAUDE_DIR': os.environ.get('REVEAL_CLAUDE_DIR', ''),
-                'REVEAL_SESSIONS_DIR': os.environ.get('REVEAL_SESSIONS_DIR', ''),
-            },
-            'sessions_dir': str(self.SESSIONS_DIR) if self.SESSIONS_DIR else None,
-        }
+        return _h_get_info(self.CLAUDE_HOME, self.CONVERSATION_BASE, self.PLANS_DIR, self.CLAUDE_JSON, self.SESSIONS_DIR)
 
     def _get_settings(self) -> Dict[str, Any]:
-        """Read and return ~/.claude/settings.json, with optional ?key= extraction."""
-        settings_path = self.CLAUDE_HOME / 'settings.json'
-        base: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'claude_settings',
-            'source': str(settings_path),
-            'source_type': 'file',
-        }
-        if not settings_path.exists():
-            return {**base, 'error': f'Not found: {settings_path}', 'settings': {}}
-        try:
-            with open(settings_path, 'r', encoding='utf-8') as fh:
-                data = json.load(fh)
-        except Exception as e:
-            return {**base, 'error': str(e), 'settings': {}}
-
-        key = self.query_params.get('key', '')
-        if key:
-            parts = key.split('.')
-            val: Any = data
-            try:
-                for part in parts:
-                    val = val[part]
-                return {**base, 'key': key, 'value': val}
-            except (KeyError, TypeError):
-                return {**base, 'key': key, 'error': f'Key not found: {key}', 'value': None}
-
-        return {**base, 'settings': data}
+        return _h_get_settings(self.CLAUDE_HOME, self.query_params)
 
     def _get_plans(self) -> Dict[str, Any]:
-        """List or read plans from ~/.claude/plans/."""
-        plans_dir = self.PLANS_DIR
-        base: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'claude_plans',
-            'source': str(plans_dir),
-            'source_type': 'directory',
-        }
-
-        # claude://plans/<name> — read specific plan
-        parts = self.resource.split('/', 1)
-        plan_name = parts[1].strip() if len(parts) > 1 else ''
-        if plan_name:
-            plan_path = plans_dir / plan_name
-            if not plan_path.suffix:
-                plan_path = plans_dir / (plan_name + '.md')
-            if not plan_path.exists():
-                matches = sorted(plans_dir.glob(f'{plan_name}*.md')) if plans_dir.exists() else []
-                if len(matches) == 1:
-                    plan_path = matches[0]
-                elif len(matches) > 1:
-                    return {**base, 'type': 'claude_plans', 'ambiguous': True,
-                            'matches': [p.stem for p in matches], 'query': plan_name}
-                else:
-                    return {**base, 'type': 'claude_plan', 'error': f'Plan not found: {plan_name}', 'name': plan_name}
-            try:
-                content = plan_path.read_text(encoding='utf-8', errors='replace')
-            except Exception as e:
-                return {**base, 'type': 'claude_plan', 'error': str(e), 'name': plan_name}
-            stat = plan_path.stat()
-            return {
-                **base,
-                'type': 'claude_plan',
-                'source': str(plan_path),
-                'name': plan_path.stem,
-                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-                'content': content,
-            }
-
-        # claude://plans — list all plans
-        if not plans_dir.exists():
-            return {**base, 'plans': [], 'total': 0, 'error': f'Plans directory not found: {plans_dir}'}
-
-        search = self.query_params.get('search', '').lower()
-        all_files = sorted(plans_dir.glob('*.md'), key=lambda p: p.stat().st_mtime, reverse=True)
-        plans = []
-        for plan_file in all_files:
-            try:
-                stat = plan_file.stat()
-                modified = datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds')
-                title = ''
-                with open(plan_file, 'r', encoding='utf-8', errors='replace') as fh:
-                    for line in fh:
-                        stripped = line.strip()
-                        if stripped.startswith('#'):
-                            title = stripped.lstrip('#').strip()
-                            break
-                        elif stripped:
-                            title = stripped
-                            break
-                if search:
-                    content = plan_file.read_text(encoding='utf-8', errors='replace')
-                    if search not in content.lower():
-                        continue
-                plans.append({
-                    'name': plan_file.stem,
-                    'modified': modified,
-                    'size_kb': round(stat.st_size / 1024, 1),
-                    'title': title,
-                })
-            except Exception:
-                continue
-
-        return {
-            **base,
-            'plans': plans,
-            'total': len(all_files),
-            'displayed': len(plans),
-            'search': search or None,
-        }
+        return _h_get_plans(self.PLANS_DIR, self.resource, self.query_params)
 
     _SECRET_PATTERNS = ('api_key', 'apikey', 'api-key', 'secret', 'token', 'password', 'credential', 'auth')
 
@@ -1376,302 +759,34 @@ class ClaudeAdapter(ResourceAdapter):
         return obj
 
     def _get_config(self) -> Dict[str, Any]:
-        """Read ~/.claude.json — per-install config (projects, MCP servers, feature flags)."""
-        config_path = self.CLAUDE_JSON
-        base: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'claude_config',
-            'source': str(config_path),
-            'source_type': 'file',
-        }
-
-        if not config_path.exists():
-            return {**base, 'error': f'Config not found: {config_path}', 'projects': [], 'flags': {}}
-
-        try:
-            data = json.loads(config_path.read_text(encoding='utf-8', errors='replace'))
-        except Exception as e:
-            return {**base, 'error': str(e), 'projects': [], 'flags': {}}
-
-        # ?key=dotpath — drill into a specific value
-        key = self.query_params.get('key', '').strip()
-        if key:
-            val: Any = data
-            for part in key.split('.'):
-                val = val.get(part) if isinstance(val, dict) else None
-            return {**base, 'key': key, 'value': val}
-
-        # Build per-project MCP server summary
-        projects_raw = data.get('projects', {})
-        project_list = []
-        for path, proj in projects_raw.items():
-            if not isinstance(proj, dict):
-                continue
-            mcp = proj.get('mcpServers', {})
-            project_list.append({
-                'path': path,
-                'mcp_servers': list(mcp.keys()) if isinstance(mcp, dict) else [],
-                'allowed_tools': proj.get('allowedTools', []),
-            })
-
-        # Key operational flags (skip noise like tipsHistory, cachedStatsig*)
-        flag_keys = [
-            'autoUpdates', 'autoCompactEnabled', 'verbose', 'installMethod',
-            'numStartups', 'autoConnectIde', 'showSpinnerTree',
-        ]
-        flags = {k: data[k] for k in flag_keys if k in data}
-
-        return {
-            **base,
-            'projects_count': len(projects_raw),
-            'projects': project_list,
-            'flags': flags,
-        }
-
-    def _parse_agent_frontmatter(self, content: str) -> Dict[str, Any]:
-        """Extract YAML-ish frontmatter from an agent markdown file."""
-        fm: Dict[str, Any] = {}
-        if not content.startswith('---'):
-            return fm
-        end = content.find('\n---', 3)
-        if end < 0:
-            return fm
-        for line in content[3:end].splitlines():
-            if ':' in line:
-                k, _, v = line.partition(':')
-                k = k.strip()
-                v = v.strip()
-                if k == 'tools':
-                    fm[k] = [t.strip() for t in v.split(',') if t.strip()]
-                else:
-                    fm[k] = v
-        return fm
+        return _h_get_config(self.CLAUDE_JSON, self.query_params)
 
     def _get_memory(self) -> Dict[str, Any]:
-        """Walk ~/.claude/projects/ for memory/ subdirs and list memory files."""
-        base: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'claude_memory',
-            'source': str(self.CONVERSATION_BASE),
-            'source_type': 'directory',
-        }
-
-        # claude://memory/<project-fragment> — filter to matching projects
-        parts = self.resource.split('/', 1)
-        filter_project = parts[1].strip() if len(parts) > 1 else ''
-
-        search = self.query_params.get('search', '').lower()
-
-        projects_dir = self.CONVERSATION_BASE
-        if not projects_dir.exists():
-            return {**base, 'memories': [], 'total': 0,
-                    'error': f'Projects dir not found: {projects_dir}'}
-
-        memories = []
-        for project_dir in sorted(projects_dir.iterdir()):
-            if not project_dir.is_dir():
-                continue
-            project_name = project_dir.name
-            if filter_project and filter_project not in project_name:
-                continue
-            memory_dir = project_dir / 'memory'
-            if not memory_dir.is_dir():
-                continue
-            for mem_file in sorted(memory_dir.glob('*.md'),
-                                   key=lambda p: p.stat().st_mtime, reverse=True):
-                try:
-                    content = mem_file.read_text(encoding='utf-8', errors='replace')
-                    if search and search not in content.lower():
-                        continue
-                    stat = mem_file.stat()
-                    fm = self._parse_agent_frontmatter(content)
-                    memories.append({
-                        'project': project_name,
-                        'name': mem_file.stem,
-                        'type': fm.get('type', ''),
-                        'description': fm.get('description', ''),
-                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-                        'size_bytes': stat.st_size,
-                        'path': str(mem_file),
-                    })
-                except Exception:
-                    continue
-
-        return {
-            **base,
-            'memories': memories,
-            'total': len(memories),
-            'filter_project': filter_project or None,
-            'search': search or None,
-        }
+        return _h_get_memory(self.CONVERSATION_BASE, self.resource, self.query_params)
 
     def _get_agents(self) -> Dict[str, Any]:
-        """List or read agent definitions from ~/.claude/agents/."""
-        agents_dir = self.AGENTS_DIR
-        base: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'claude_agents',
-            'source': str(agents_dir),
-            'source_type': 'directory',
-        }
-
-        # claude://agents/<name> — read specific agent
-        parts = self.resource.split('/', 1)
-        agent_name = parts[1].strip() if len(parts) > 1 else ''
-        if agent_name:
-            agent_path = agents_dir / agent_name
-            if not agent_path.suffix:
-                agent_path = agents_dir / (agent_name + '.md')
-            if not agent_path.exists():
-                matches = sorted(agents_dir.glob(f'{agent_name}*.md')) if agents_dir.exists() else []
-                if len(matches) == 1:
-                    agent_path = matches[0]
-                elif len(matches) > 1:
-                    return {**base, 'type': 'claude_agents', 'ambiguous': True,
-                            'matches': [p.stem for p in matches], 'query': agent_name}
-                else:
-                    return {**base, 'type': 'claude_agent',
-                            'error': f'Agent not found: {agent_name}', 'name': agent_name}
-            try:
-                content = agent_path.read_text(encoding='utf-8', errors='replace')
-            except Exception as e:
-                return {**base, 'type': 'claude_agent', 'error': str(e), 'name': agent_name}
-            stat = agent_path.stat()
-            fm = self._parse_agent_frontmatter(content)
-            return {
-                **base,
-                'type': 'claude_agent',
-                'source': str(agent_path),
-                'name': agent_path.stem,
-                'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-                'description': fm.get('description', ''),
-                'tools': fm.get('tools', []),
-                'model': fm.get('model', ''),
-                'content': content,
-            }
-
-        # claude://agents — list all agents
-        if not agents_dir.exists():
-            return {**base, 'agents': [], 'total': 0,
-                    'error': f'Agents directory not found: {agents_dir}'}
-
-        search = self.query_params.get('search', '').lower()
-        all_files = sorted(agents_dir.glob('*.md'), key=lambda p: p.stat().st_mtime, reverse=True)
-        agents = []
-        for agent_file in all_files:
-            try:
-                content = agent_file.read_text(encoding='utf-8', errors='replace')
-                if search and search not in content.lower():
-                    continue
-                stat = agent_file.stat()
-                fm = self._parse_agent_frontmatter(content)
-                agents.append({
-                    'name': agent_file.stem,
-                    'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-                    'size_kb': round(stat.st_size / 1024, 1),
-                    'description': fm.get('description', ''),
-                    'tools': fm.get('tools', []),
-                    'model': fm.get('model', ''),
-                })
-            except Exception:
-                continue
-
-        return {
-            **base,
-            'agents': agents,
-            'total': len(all_files),
-            'displayed': len(agents),
-            'search': search or None,
-        }
+        return _h_get_agents(self.AGENTS_DIR, self.resource, self.query_params)
 
     def _get_hooks(self) -> Dict[str, Any]:
-        """List or read hook scripts from ~/.claude/hooks/."""
-        hooks_dir = self.HOOKS_DIR
-        base: Dict[str, Any] = {
-            'contract_version': '1.0',
-            'type': 'claude_hooks',
-            'source': str(hooks_dir),
-            'source_type': 'directory',
-        }
+        return _h_get_hooks(self.HOOKS_DIR, self.resource)
 
-        if not hooks_dir.exists():
-            return {**base, 'hooks': [], 'total': 0,
-                    'error': f'Hooks directory not found: {hooks_dir}'}
-
-        # claude://hooks/<event> — read or list scripts for a specific event
-        parts = self.resource.split('/', 1)
-        event_name = parts[1].strip() if len(parts) > 1 else ''
-        if event_name:
-            event_path = hooks_dir / event_name
-            if not event_path.exists():
-                return {**base, 'error': f'Hook event not found: {event_name}', 'event': event_name}
-            if event_path.is_file():
-                # Single script file directly under hooks/
-                try:
-                    content = event_path.read_text(encoding='utf-8', errors='replace')
-                except Exception as e:
-                    return {**base, 'type': 'claude_hooks', 'error': str(e), 'event': event_name}
-                stat = event_path.stat()
-                is_exec = bool(stat.st_mode & 0o111)
-                return {
-                    **base,
-                    'event': event_name,
-                    'kind': 'file',
-                    'path': str(event_path),
-                    'size_bytes': stat.st_size,
-                    'executable': is_exec,
-                    'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-                    'content': content,
-                }
-            # Directory: list scripts within it
-            scripts = []
-            for script in sorted(event_path.iterdir()):
-                try:
-                    stat = script.stat()
-                    is_exec = bool(stat.st_mode & 0o111)
-                    scripts.append({
-                        'name': script.name,
-                        'path': str(script),
-                        'size_bytes': stat.st_size,
-                        'executable': is_exec,
-                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-                    })
-                except Exception:
-                    continue
-            return {**base, 'event': event_name, 'kind': 'directory', 'scripts': scripts}
-
-        # claude://hooks — list all event types
-        hooks = []
-        for entry in sorted(hooks_dir.iterdir(), key=lambda p: p.name):
-            try:
-                stat = entry.stat()
-                if entry.is_file():
-                    is_exec = bool(stat.st_mode & 0o111)
-                    hooks.append({
-                        'event': entry.name,
-                        'kind': 'file',
-                        'path': str(entry),
-                        'size_bytes': stat.st_size,
-                        'executable': is_exec,
-                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-                    })
-                elif entry.is_dir():
-                    script_count = sum(1 for _ in entry.iterdir())
-                    hooks.append({
-                        'event': entry.name,
-                        'kind': 'directory',
-                        'path': str(entry),
-                        'script_count': script_count,
-                        'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(timespec='seconds'),
-                    })
-            except Exception:
-                continue
-
-        return {
-            **base,
-            'hooks': hooks,
-            'total': len(hooks),
-        }
+    # Static aliases — delegate to handlers/sessions.py; kept for test compatibility
+    from .handlers.sessions import (  # type: ignore[misc]
+        _extract_project_from_dir,
+        _collect_sessions_from_dir,
+        _read_session_title,
+        _extract_text_from_content,
+        _parse_jsonl_line_for_title,
+        _find_session_readme,
+        _parse_readme_frontmatter,
+    )
+    _extract_project_from_dir = staticmethod(_extract_project_from_dir)  # type: ignore[assignment]
+    _collect_sessions_from_dir = staticmethod(_collect_sessions_from_dir)  # type: ignore[assignment]
+    _read_session_title = staticmethod(_read_session_title)  # type: ignore[assignment]
+    _extract_text_from_content = staticmethod(_extract_text_from_content)  # type: ignore[assignment]
+    _parse_jsonl_line_for_title = staticmethod(_parse_jsonl_line_for_title)  # type: ignore[assignment]
+    _find_session_readme = staticmethod(_find_session_readme)  # type: ignore[assignment]
+    _parse_readme_frontmatter = staticmethod(_parse_readme_frontmatter)  # type: ignore[assignment]
 
     # Wrapper methods for backward compatibility with tests
     def _get_overview(self, messages: List[Dict]) -> Dict[str, Any]:
@@ -2049,7 +1164,7 @@ class ClaudeAdapter(ResourceAdapter):
 
         for s in sessions:
             if 'title' not in s and s.get('path'):
-                s['title'] = ClaudeAdapter._read_session_title(Path(s['path']))
+                s['title'] = _read_session_title(Path(s['path']))
 
     @staticmethod
     def _post_process_messages(result: Dict[str, Any], args: Any) -> None:
