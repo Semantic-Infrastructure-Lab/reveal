@@ -296,28 +296,74 @@ class TestFileInspection:
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_get_file_at_ref(self, git_repo):
-        """Test getting file contents at a ref."""
+        """Test getting file structure at a ref (default behaviour)."""
         adapter = GitAdapter(path=str(git_repo), ref='HEAD', subpath='README.md')
+        structure = adapter.get_structure()
+
+        assert structure['type'] == 'git_file_structure'
+        assert structure['contract_version'] == '1.0'
+        assert structure['source_type'] == 'file'
+        assert structure['path'] == 'README.md'
+        assert 'structure' in structure
+        assert 'commit_info' in structure
+        assert 'content' not in structure
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_get_file_at_ref_raw(self, git_repo):
+        """Test ?raw=1 returns file contents instead of structure."""
+        adapter = GitAdapter(path=str(git_repo), ref='HEAD', subpath='README.md',
+                             query={'raw': '1'})
         structure = adapter.get_structure()
 
         assert structure['type'] == 'git_file'
         assert structure['contract_version'] == '1.0'
-        assert structure['source_type'] == 'file'
-        assert structure['path'] == 'README.md'
         assert 'content' in structure
         assert 'Updated content' in structure['content']
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_get_file_at_tag(self, git_repo):
-        """Test getting file contents at a tag."""
+        """Test getting file structure at a tag."""
         adapter = GitAdapter(path=str(git_repo), ref='v1.0.0', subpath='README.md')
         structure = adapter.get_structure()
 
-        assert structure['type'] == 'git_file'
+        assert structure['type'] == 'git_file_structure'
         assert structure['contract_version'] == '1.0'
         assert structure['source_type'] == 'file'
         assert structure['path'] == 'README.md'
-        assert 'content' in structure
+        assert 'structure' in structure
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_get_file_at_ref_has_commit_info(self, git_repo):
+        """File structure result includes commit metadata."""
+        adapter = GitAdapter(path=str(git_repo), ref='HEAD', subpath='README.md')
+        structure = adapter.get_structure()
+
+        ci = structure['commit_info']
+        assert 'hash' in ci
+        assert 'author' in ci
+        assert 'date' in ci
+        assert 'message' in ci
+
+    @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
+    def test_get_file_diff(self, git_repo):
+        """?type=diff returns a commit diff for the file."""
+        # Get a non-HEAD commit that touched README.md
+        import pygit2
+        repo = pygit2.Repository(str(git_repo))
+        head = repo.head.peel(pygit2.Commit)
+        ref = str(head.id)
+
+        adapter = GitAdapter(path=str(git_repo), ref=ref, subpath='README.md',
+                             query={'type': 'diff'})
+        structure = adapter.get_structure()
+
+        assert structure['type'] == 'git_file_diff'
+        assert structure['contract_version'] == '1.0'
+        assert structure['path'] == 'README.md'
+        assert 'diff_text' in structure
+        assert 'commit_info' in structure
+        ci = structure['commit_info']
+        assert 'hash' in ci and 'author' in ci and 'message' in ci
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_file_not_found(self, git_repo):
@@ -411,12 +457,12 @@ class TestGetElement:
 
     @pytest.mark.skipif(not PYGIT2_AVAILABLE, reason="pygit2 not available")
     def test_get_element_file(self, git_repo):
-        """Test getting a file element."""
+        """Test getting a file element returns structural view."""
         adapter = GitAdapter(path=str(git_repo), ref='HEAD')
         element = adapter.get_element('README.md')
 
         assert element is not None
-        assert element['type'] == 'git_file'
+        assert element['type'] == 'git_file_structure'
         assert element['path'] == 'README.md'
 
 
@@ -788,6 +834,61 @@ class TestGitAdapterBugFixes:
         # Bug value (3/10) would show 30.0% — must not appear
         assert '30.0%' not in output
 
+    def test_blame_element_percentage_clips_oversized_hunk(self, git_repo):
+        """Element blame % should clip oversized hunks to the element span.
+
+        Bug: when a blame hunk spans more lines than the element (e.g. a mass
+        line-ending normalization commit owns 344 lines but the element is 27),
+        the numerator was the full hunk size → 344/27 = 1274.1%. The fix clips
+        the hunk count to its intersection with the element range.
+        """
+        from io import StringIO
+        from reveal.adapters.git.renderer import GitRenderer
+
+        # Element spans lines 10-12 (3 lines).
+        # Hunk spans lines 1-100 (100 lines) — a mass-formatting commit.
+        # _apply_element_blame_filter clips the intersection to 3 lines.
+        # Correct: 3/3 = 100.0%. Bug (no clipping): 100/3 = 3333.3%.
+        result = {
+            'type': 'git_file_blame',
+            'path': 'src/utils.py',
+            'lines': 100,
+            'hunks': [
+                {
+                    'lines': {'start': 1, 'count': 100},
+                    'clipped_lines': 3,  # set by _apply_element_blame_filter
+                    'commit': {
+                        'hash': 'def5678',
+                        'author': 'Format Bot',
+                        'email': 'bot@example.com',
+                        'date': '2025-05-01 00:00:00',
+                        'message': 'Normalize line endings',
+                    },
+                }
+            ],
+            'element': {
+                'name': 'helper',
+                'line_start': 10,
+                'line_end': 12,
+            },
+            'file_content': ['line'] * 100,
+            'detail': False,
+            'ref': 'HEAD',
+            'commit': 'def5678',
+            'contract_version': '1.0',
+            'source_type': 'file',
+            'source': 'src/utils.py@HEAD',
+        }
+
+        old_stdout = sys.stdout
+        sys.stdout = captured = StringIO()
+        GitRenderer.render_structure(result, format='text')
+        sys.stdout = old_stdout
+        output = captured.getvalue()
+
+        assert '100.0%' in output
+        assert '3333' not in output
+
     def test_dotslash_uri_form_parses_to_subpath(self):
         """'./path/file.py' URI form should set subpath, not be treated as repo root.
 
@@ -810,6 +911,59 @@ class TestGitAdapterBugFixes:
             parsed = GitAdapter._parse_resource_string(resource)
             assert parsed['path'] == resource
             assert parsed['subpath'] is None
+
+
+class TestApplyElementBlameFilter(unittest.TestCase):
+    """Unit tests for _apply_element_blame_filter clipped_lines computation."""
+
+    def _get_range_func(self, el_start, el_end):
+        return lambda name, path, subpath: {'line': el_start, 'line_end': el_end}
+
+    def _make_hunk(self, start, count):
+        return {
+            'lines': {'start': start, 'count': count},
+            'commit': {'hash': 'abc', 'author': 'A', 'date': '2026-01-01', 'message': 'msg'},
+        }
+
+    def test_hunk_exactly_matches_element(self):
+        from reveal.adapters.git.files import _apply_element_blame_filter
+        hunk = self._make_hunk(5, 3)  # lines 5-7
+        _, filtered = _apply_element_blame_filter(
+            'func', [hunk], 'repo', 'f.py', self._get_range_func(5, 7)
+        )
+        assert filtered[0]['clipped_lines'] == 3
+
+    def test_hunk_larger_than_element(self):
+        from reveal.adapters.git.files import _apply_element_blame_filter
+        hunk = self._make_hunk(1, 100)  # lines 1-100
+        _, filtered = _apply_element_blame_filter(
+            'func', [hunk], 'repo', 'f.py', self._get_range_func(10, 12)
+        )
+        assert filtered[0]['clipped_lines'] == 3  # only lines 10-12 are in the element
+
+    def test_hunk_partially_overlaps_start(self):
+        from reveal.adapters.git.files import _apply_element_blame_filter
+        hunk = self._make_hunk(8, 5)  # lines 8-12; element is 10-15
+        _, filtered = _apply_element_blame_filter(
+            'func', [hunk], 'repo', 'f.py', self._get_range_func(10, 15)
+        )
+        assert filtered[0]['clipped_lines'] == 3  # overlap: lines 10-12
+
+    def test_hunk_partially_overlaps_end(self):
+        from reveal.adapters.git.files import _apply_element_blame_filter
+        hunk = self._make_hunk(13, 5)  # lines 13-17; element is 10-15
+        _, filtered = _apply_element_blame_filter(
+            'func', [hunk], 'repo', 'f.py', self._get_range_func(10, 15)
+        )
+        assert filtered[0]['clipped_lines'] == 3  # overlap: lines 13-15
+
+    def test_hunk_outside_element_excluded(self):
+        from reveal.adapters.git.files import _apply_element_blame_filter
+        hunk = self._make_hunk(20, 5)  # lines 20-24; element is 10-12
+        _, filtered = _apply_element_blame_filter(
+            'func', [hunk], 'repo', 'f.py', self._get_range_func(10, 12)
+        )
+        assert filtered == []
 
 
 class TestGitAdapterSchema(unittest.TestCase):

@@ -28,6 +28,10 @@ class GitRenderer:
             GitRenderer._render_ref_structure(result)
         elif result_type in ('file', 'git_file'):
             GitRenderer._render_file(result)
+        elif result_type == 'git_file_structure':
+            GitRenderer._render_file_structure(result)
+        elif result_type == 'git_file_diff':
+            GitRenderer._render_file_diff(result)
         elif result_type in ('file_history', 'git_file_history'):
             GitRenderer._render_file_history(result)
         elif result_type in ('file_blame', 'git_file_blame'):
@@ -146,7 +150,7 @@ class GitRenderer:
         contributors = {}
         for hunk in result['hunks']:
             author = hunk['commit']['author']
-            lines = hunk['lines']['count']
+            lines = hunk.get('clipped_lines', hunk['lines']['count'])
             if author not in contributors:
                 contributors[author] = {'lines': 0, 'hunks': 0, 'latest_date': hunk['commit']['date']}
             contributors[author]['lines'] += lines
@@ -185,6 +189,60 @@ class GitRenderer:
         print()
 
         print(f"Use: reveal git://{result['path']}?type=blame&detail=full for line-by-line view")
+
+    @staticmethod
+    def _render_file_structure(result: dict) -> None:
+        """Render structural view of a file at a historical ref."""
+        ci = result.get('commit_info', {})
+        print(f"File: {result['path']} @ {result['ref']}")
+        print(f"Commit: {result['commit']}  {ci.get('date', '')}  {ci.get('author', '')} — \"{ci.get('message', '')}\"")
+        print(f"Size: {result['size']:,} bytes, {result['lines']:,} lines")
+        print()
+
+        structure = result.get('structure', {})
+        if not structure:
+            print("(no structured analysis available for this file type — use ?raw=1 for contents)")
+            return
+
+        functions = structure.get('functions', [])
+        classes = structure.get('classes', [])
+        imports = structure.get('imports', [])
+
+        if classes:
+            print(f"Classes ({len(classes)}):")
+            for cls in classes:
+                line_count = cls.get('line_end', cls['line']) - cls['line'] + 1
+                print(f"  :{cls['line']:<6} {cls['name']} [{line_count} lines]")
+            print()
+
+        if functions:
+            print(f"Functions ({len(functions)}):")
+            for fn in functions:
+                line_count = fn.get('line_end', fn['line']) - fn['line'] + 1
+                print(f"  :{fn['line']:<6} {fn['name']} [{line_count} lines]")
+            print()
+
+        if imports:
+            print(f"Imports ({len(imports)}):")
+            for imp in imports[:10]:
+                name = imp if isinstance(imp, str) else imp.get('name', str(imp))
+                print(f"  {name}")
+            if len(imports) > 10:
+                print(f"  ... and {len(imports) - 10} more")
+            print()
+
+        print(f"Use: reveal 'git://{result['path']}@{result['ref']}?raw=1' for full file contents")
+
+    @staticmethod
+    def _render_file_diff(result: dict) -> None:
+        """Render a commit diff for a single file."""
+        ci = result['commit_info']
+        print(f"Diff: {result['path']} @ {result['commit']} (vs parent)")
+        print(f"Commit: {ci['hash']}  {ci['date']}  {ci['author']} — \"{ci['message']}\"")
+        if result.get('element_filter'):
+            print(f"Element filter: {result['element_filter']}")
+        print()
+        print(result['diff_text'])
 
     @staticmethod
     def render_error(error: Exception) -> None:

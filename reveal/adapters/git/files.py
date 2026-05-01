@@ -12,9 +12,10 @@ if TYPE_CHECKING:
 def get_file_at_ref(
     repo: 'pygit2.Repository',
     ref: str,
-    subpath: str
+    subpath: str,
+    raw: bool = False,
 ) -> Dict[str, Any]:
-    """Get file contents at specific ref."""
+    """Get file structure (or raw contents when raw=True) at a specific ref."""
     import pygit2
 
     try:
@@ -35,18 +36,43 @@ def get_file_at_ref(
         if entry.type_str == 'blob':
             blob = cast('pygit2.Blob', repo[entry.id])
             content = blob.data.decode('utf-8', errors='replace')
+            short_hash = str(commit.id)[:7]
+            line_count = len(content.splitlines())
+            commit_info = {
+                'hash': short_hash,
+                'author': commit.author.name,
+                'date': datetime.fromtimestamp(commit.commit_time).strftime('%Y-%m-%d'),
+                'message': commit.message.split('\n')[0].strip(),
+            }
 
+            if raw:
+                return {
+                    'contract_version': '1.0',
+                    'type': 'git_file',
+                    'source': f"{subpath}@{ref}",
+                    'source_type': 'file',
+                    'path': subpath,
+                    'ref': ref,
+                    'commit': short_hash,
+                    'commit_info': commit_info,
+                    'size': blob.size,
+                    'content': content,
+                    'lines': line_count,
+                }
+
+            structure = _analyze_blob_content(content, subpath)
             return {
                 'contract_version': '1.0',
-                'type': 'git_file',
+                'type': 'git_file_structure',
                 'source': f"{subpath}@{ref}",
                 'source_type': 'file',
                 'path': subpath,
                 'ref': ref,
-                'commit': str(commit.id)[:7],
+                'commit': short_hash,
+                'commit_info': commit_info,
                 'size': blob.size,
-                'content': content,
-                'lines': len(content.splitlines()),
+                'lines': line_count,
+                'structure': structure,
             }
         else:
             raise ValueError(
@@ -58,6 +84,125 @@ def get_file_at_ref(
 
     except (KeyError, pygit2.GitError) as e:
         raise ValueError(f"File not found at {ref}: {subpath}") from e
+
+
+def _analyze_blob_content(content: str, subpath: str) -> Dict[str, Any]:
+    """Write blob content to a temp file and run the reveal analyzer on it."""
+    import tempfile
+    from pathlib import Path
+    from reveal.registry import get_analyzer
+
+    suffix = Path(subpath).suffix
+    with tempfile.NamedTemporaryFile(mode='w', suffix=suffix, delete=False) as f:
+        f.write(content)
+        temp_path = f.name
+
+    try:
+        analyzer_class = get_analyzer(temp_path, allow_fallback=False)
+        if not analyzer_class:
+            return {}
+        structure = analyzer_class(temp_path).get_structure()
+        return cast(Dict[str, Any], structure.get('structure', structure))
+    finally:
+        os.unlink(temp_path)
+
+
+def get_file_diff(
+    repo: 'pygit2.Repository',
+    ref: str,
+    subpath: str,
+    query: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Get a unified diff of a file at a commit vs its parent.
+
+    Returns commit metadata + the raw diff text. Supports:
+    - ?context=N  — context lines (default 3)
+    - ?element=func_name  — pre-filter to hunks touching that element
+    """
+    import subprocess
+    import pygit2
+
+    try:
+        obj = repo.revparse_single(ref)
+        while hasattr(obj, 'peel') and not isinstance(obj, pygit2.Commit):
+            obj = obj.peel(pygit2.Commit)  # type: ignore[assignment]
+        if not isinstance(obj, pygit2.Commit):
+            raise ValueError(f"Cannot resolve ref to commit: {ref}")
+        commit = cast('pygit2.Commit', obj)
+    except (KeyError, pygit2.GitError) as e:
+        raise ValueError(f"Cannot resolve ref: {ref}") from e
+
+    short_hash = str(commit.id)[:7]
+    context = int(query.get('context', 3))
+    element = query.get('element')
+    repo_root = repo.workdir.rstrip('/\\') if repo.workdir else '.'
+
+    if commit.parents:
+        cmd = ['git', '-C', repo_root, 'diff', f'-U{context}',
+               str(commit.parents[0].id), str(commit.id), '--', subpath]
+    else:
+        # First commit — diff against the empty tree
+        empty_tree = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+        cmd = ['git', '-C', repo_root, 'diff', f'-U{context}',
+               empty_tree, str(commit.id), '--', subpath]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    diff_text = result.stdout
+
+    if not diff_text:
+        diff_text = f"(no changes to {subpath} in this commit)"
+
+    if element:
+        diff_text = _filter_diff_to_element(diff_text, element)
+
+    commit_info = {
+        'hash': short_hash,
+        'author': commit.author.name,
+        'date': datetime.fromtimestamp(commit.commit_time).strftime('%Y-%m-%d %H:%M:%S'),
+        'message': commit.message.split('\n')[0].strip(),
+    }
+
+    return {
+        'contract_version': '1.0',
+        'type': 'git_file_diff',
+        'source': f"{subpath}@{ref}",
+        'source_type': 'file',
+        'path': subpath,
+        'ref': ref,
+        'commit': short_hash,
+        'commit_info': commit_info,
+        'diff_text': diff_text,
+        'element_filter': element,
+    }
+
+
+def _filter_diff_to_element(diff_text: str, element: str) -> str:
+    """Return only the hunks from diff_text whose context or body mention element."""
+    lines = diff_text.splitlines(keepends=True)
+    header_lines: List[str] = []
+    hunks: List[List[str]] = []
+    current: List[str] = []
+    in_header = True
+
+    for line in lines:
+        if line.startswith('@@'):
+            in_header = False
+            if current:
+                hunks.append(current)
+            current = [line]
+        elif in_header:
+            header_lines.append(line)
+        else:
+            current.append(line)
+
+    if current:
+        hunks.append(current)
+
+    matching = [h for h in hunks if any(element in l for l in h)]
+    if not matching:
+        return f"(no hunks in this diff mention '{element}')\n\n" + diff_text
+
+    return ''.join(header_lines) + ''.join(''.join(h) for h in matching)
 
 
 def get_file_history(
@@ -135,11 +280,15 @@ def _apply_element_blame_filter(element_name, hunks, path, subpath, get_range_fu
         'line_start': element_range['line'],
         'line_end': element_range['line_end'],
     }
-    filtered = [
-        h for h in hunks
-        if h['lines']['start'] <= element_range['line_end']
-        and h['lines']['start'] + h['lines']['count'] - 1 >= element_range['line']
-    ]
+    el_start = element_range['line']
+    el_end = element_range['line_end']
+    filtered = []
+    for h in hunks:
+        h_start = h['lines']['start']
+        h_end = h_start + h['lines']['count'] - 1
+        if h_start <= el_end and h_end >= el_start:
+            clipped = min(h_end, el_end) - max(h_start, el_start) + 1
+            filtered.append({**h, 'clipped_lines': clipped})
     return element_info, filtered
 
 

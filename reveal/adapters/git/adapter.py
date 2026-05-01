@@ -215,6 +215,9 @@ class GitAdapter(ResourceAdapter):
             # ?ref= overrides the starting ref (alias for @ref in the URI)
             elif k == 'ref':
                 self.ref = v
+            # ?since=YYYY-MM-DD — ergonomic alias for date>=YYYY-MM-DD
+            elif k == 'since':
+                filter_parts.append(f"date>={v}")
             # Filter parameters
             else:
                 # Check if key already ends with an operator character (~, !, >, <, .)
@@ -414,8 +417,11 @@ class GitAdapter(ResourceAdapter):
                     repo, self.ref, git_subpath, self.query, self.path,
                     lambda en, _path, _sub: files.get_element_line_range(en, self.path, self.subpath)
                 )
+            elif query_type == 'diff':
+                return files.get_file_diff(repo, self.ref, git_subpath, self.query)
             else:
-                return files.get_file_at_ref(repo, self.ref, git_subpath)
+                raw = self.query.get('raw') in ('1', 'true', 'yes')
+                return files.get_file_at_ref(repo, self.ref, git_subpath, raw=raw)
         elif self.ref != 'HEAD' or query_type:
             return refs.get_ref_structure(
                 repo, self.ref, self.query, self.query_filters,
@@ -507,7 +513,11 @@ class GitAdapter(ResourceAdapter):
                 {'uri': 'git://.', 'description': 'Repository overview (branches, tags, commits)'},
                 {'uri': 'git://.@main', 'description': 'Branch/commit history'},
                 {'uri': 'git://.@abc1234', 'description': 'Specific commit details'},
-                {'uri': 'git://src/app.py@v1.0', 'description': 'File contents at tag'},
+                {'uri': 'git://src/app.py@v1.0', 'description': 'File structure at tag (functions, classes, imports)'},
+                {'uri': 'git://src/app.py@v1.0?raw=1', 'description': 'File raw contents at tag'},
+                {'uri': 'git://src/app.py@abc1234?type=diff', 'description': 'What this commit changed in the file (vs parent)'},
+                {'uri': 'git://src/app.py@abc1234?type=diff&element=load_config', 'description': 'Diff scoped to hunks touching a named element'},
+                {'uri': 'git://src/app.py@abc1234?type=diff&context=10', 'description': 'Diff with more context lines'},
                 {'uri': 'git://src/app.py?type=history', 'description': 'File commit history (50 commits)'},
                 {'uri': 'git://src/app.py?type=blame', 'description': 'File blame summary (contributors + key hunks)'},
                 {'uri': 'git://src/app.py?type=blame&detail=full', 'description': 'File blame detailed (line-by-line)'},
@@ -515,16 +525,22 @@ class GitAdapter(ResourceAdapter):
                 {'uri': 'git://.?author=John', 'description': 'Filter commits by author name'},
                 {'uri': 'git://.?message~=bug', 'description': 'Filter commits with "bug" in message (regex)'},
                 {'uri': 'git://.?author=John&message~=fix', 'description': 'Filter by author AND message'},
+                {'uri': 'git://src/app.py?type=history&date>2026-01-01', 'description': 'File history since a date (ISO format, operator form)'},
+                {'uri': 'git://src/app.py?type=history&since=2026-01-01', 'description': 'File history since a date (since= alias, equivalent)'},
+                {'uri': 'git://src/app.py?type=history&since=2026-01-01&author=John', 'description': 'History since date AND by author'},
             ],
             'query_parameters': {
-                'type': 'Operation type: history (file history) or blame (line annotations)',
+                'type': 'Operation type: history, blame, or diff. Default (no type): structural view of file at ref.',
+                'raw': 'For file-at-ref: "1" returns raw file contents instead of structural view',
                 'detail': 'For blame: "full" shows line-by-line (default is summary)',
-                'element': 'For blame: function/class name for semantic blame',
+                'element': 'For blame/diff: function/class name to scope output to that element',
+                'context': 'For diff: number of context lines (default 3)',
                 'limit': 'Limit number of results (default: 50 for history, 20 for refs)',
                 'author': 'Filter commits by author name (case-insensitive, use ~= for regex)',
                 'email': 'Filter commits by author email (case-insensitive, use ~= for regex)',
                 'message': 'Filter commits by message (use ~= for regex matching)',
                 'hash': 'Filter commits by hash prefix',
+                'date': 'Filter commits by date — supports >, <, >=, <= with ISO date string (e.g. date>2026-01-01). Use since=YYYY-MM-DD as an ergonomic alias for date>=YYYY-MM-DD.',
             },
             'notes': [
                 'Requires pygit2: pip install reveal-cli[git]',
