@@ -5,6 +5,7 @@ to the appropriate adapter + renderer pair.
 """
 
 import logging
+import os
 import sys
 from typing import Any, Optional, TYPE_CHECKING
 
@@ -85,7 +86,8 @@ def generic_adapter_handler(adapter_class: type, renderer_class: type[Any],
         sys.exit(1)
 
     # Apply --base-path override for adapters that support it (e.g., claude://)
-    path_override = getattr(args, 'base_path', None)
+    # REVEAL_CLAUDE_BASE_PATH env var acts as a persistent default for --base-path.
+    path_override = getattr(args, 'base_path', None) or os.environ.get('REVEAL_CLAUDE_BASE_PATH')
     if path_override and hasattr(adapter, 'reconfigure_base_path'):
         from pathlib import Path as _Path
         try:
