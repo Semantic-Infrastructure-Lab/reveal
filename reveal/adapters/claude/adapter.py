@@ -93,8 +93,10 @@ _SCHEMA_ELEMENTS = {
     'files': 'All files read, written, or edited',
     'tools': 'All tool usage with success rates',
     'thinking': 'All thinking blocks with content previews and token estimates',
-    'errors': 'All errors and exceptions',
-    'timeline': 'Chronological message timeline',
+    'errors': 'All errors and exceptions (path alias for ?errors)',
+    'timeline': 'Chronological message timeline (path alias for ?timeline)',
+    'summary': 'Session summary with key events (path alias for ?summary)',
+    'tokens': 'Token usage breakdown (path alias for ?tokens)',
     'context': 'Context window changes over session',
     'user': 'User messages: initial prompt full text + tool-result turn summaries',
     'assistant': 'Assistant messages: text blocks only (skips thinking/tool_use)',
@@ -567,6 +569,15 @@ class ClaudeAdapter(ResourceAdapter):
             return get_session_agents(messages, self.session_name, contract_base)
         if '/context' in self.resource:
             return get_context_changes(messages, self.session_name, contract_base)
+        # Path aliases for query-routed views (BACK-270): /errors, /summary, /timeline, /tokens
+        if '/errors' in self.resource:
+            return get_errors(messages, self.session_name, contract_base)
+        if '/summary' in self.resource:
+            return get_summary(messages, self.session_name, conversation_path_str, contract_base)
+        if '/timeline' in self.resource:
+            return get_timeline(messages, self.session_name, contract_base)
+        if '/tokens' in self.resource:
+            return get_token_breakdown(messages, self.session_name, contract_base)
         if '/user' in self.resource:
             return filter_by_role(messages, 'user', self.session_name, contract_base)
         if '/assistant' in self.resource:
